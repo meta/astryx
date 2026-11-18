@@ -245,6 +245,8 @@
  * @property {string} [lang]
  * @property {boolean} [zh]
  * @property {boolean} [dense]
+ * @property {boolean} [list] return the topic list, the same as giving no
+ *   topic; docs() refuses a topic or section beside it
  * @property {boolean} [index] return a topic's section index instead of its
  *   whole doc
  * @property {number | 'all'} [depth] how many levels below a docs-tree

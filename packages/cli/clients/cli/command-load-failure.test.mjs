@@ -75,6 +75,19 @@ describe('a command that fails to load', () => {
     expect(stderr).toMatch(/blog.*failed to load.*simulated load failure/s);
   });
 
+  it('reports the load failure whatever options and words the run passed', () => {
+    const {status, stderr} = run([
+      'blog',
+      'some-post',
+      '--list',
+      '--limit',
+      '3',
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/blog.*failed to load.*simulated load failure/s);
+    expect(stderr).not.toMatch(/unknown option|too many arguments/);
+  });
+
   it('leaves the other commands working', () => {
     const {status, stdout} = run(['docs', '--json']);
     expect(status).toBe(0);

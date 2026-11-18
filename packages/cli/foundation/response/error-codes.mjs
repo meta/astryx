@@ -75,6 +75,7 @@
  *   | 'ERR_FILE_EXISTS'
  *   | 'ERR_PATH_TRAVERSAL'
  *   | 'ERR_WRITE_FAILED'
+ *   | 'ERR_READ_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
  *   | 'ERR_THEME_STALE'
@@ -91,6 +92,9 @@
  *   | 'ERR_SIGNAL_TERMINATED'
  *   | 'ERR_VERSIONS_UNAVAILABLE'
  *   | 'ERR_PROJECT_REQUIRED'
+ *   | 'ERR_BASE_CAPABILITY'
+ *   | 'ERR_BASE_NOT_FOUND'
+ *   | 'ERR_BASE_AMBIGUOUS'
  *   | 'ERR_RENDER_COMPILE'
  *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
  *   | 'ERR_RENDER_MISSING_DEPENDENCY'
@@ -100,6 +104,8 @@
  *   | 'ERR_RENDER_FAILED'
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_RENDER_NEWER_FORMAT'
+ *   | 'ERR_RENDER_SCRIPT'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -214,6 +220,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_PATH_TRAVERSAL: 'ERR_PATH_TRAVERSAL',
   /** Writing output files failed (and was rolled back). */
   ERR_WRITE_FAILED: 'ERR_WRITE_FAILED',
+  /** An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system. */
+  ERR_READ_FAILED: 'ERR_READ_FAILED',
 
   // ── Theme build ──────────────────────────────────────────────────
   /** A theme definition or contributed theme descriptor is invalid. */
@@ -279,9 +287,27 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_PROJECT_REQUIRED: 'ERR_PROJECT_REQUIRED',
 
+  // ── Bases ────────────────────────────────────────────────────────
+  /**
+   * The command, or an option or argument value given to it, needs a step
+   * the run's base does not serve. Nothing was written. The envelope's
+   * `requirement` names the command, the steps, and the base.
+   */
+  ERR_BASE_CAPABILITY: 'ERR_BASE_CAPABILITY',
+  /**
+   * `--base` names a package that is not installed where the run can read
+   * it, or that is not Core and does not declare `base`. Nothing was done.
+   */
+  ERR_BASE_NOT_FOUND: 'ERR_BASE_NOT_FOUND',
+  /**
+   * The project installs two or more bases and no Core, and the run named
+   * none with `--base`. Nothing was done.
+   */
+  ERR_BASE_AMBIGUOUS: 'ERR_BASE_AMBIGUOUS',
+
   // ── Render (experimental) ────────────────────────────────────────
   /**
-   * The page given to `astryx experimental render` does not compile (a syntax
+   * The page given to `astryx experimental export` does not compile (a syntax
    * or type-syntax error). Nothing was written.
    */
   ERR_RENDER_COMPILE: 'ERR_RENDER_COMPILE',
@@ -290,8 +316,9 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_NO_DEFAULT_EXPORT: 'ERR_RENDER_NO_DEFAULT_EXPORT',
   /**
-   * The page imports a package that is not installed where the page is.
-   * Nothing was written.
+   * The page imports a package that is not installed where the page is, or
+   * the esbuild the CLI depends on to build the page's script is missing from
+   * the CLI's install. Nothing was written.
    */
   ERR_RENDER_MISSING_DEPENDENCY: 'ERR_RENDER_MISSING_DEPENDENCY',
   /**
@@ -314,23 +341,35 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_FAILED: 'ERR_RENDER_FAILED',
   /**
-   * `render --reverse` was given an HTML file that a render did not write and
+   * `export --reverse` was given an HTML file that a render did not write and
    * that holds no Astryx markup and no embedded source, so there is nothing
    * to rebuild. Nothing was written.
    */
   ERR_RENDER_NOT_ASTRYX: 'ERR_RENDER_NOT_ASTRYX',
   /**
-   * `render --reverse` refused the received file: its embedded source is
+   * `export --reverse` refused the received file: its embedded source is
    * damaged (not valid, or a file does not match its checksum), lists a path
    * twice, carries a module, stylesheet or JSON file the page does not
    * import or an image, font or media file whose bytes are not one, or
    * carries a file a
    * render never embeds (a dotfile, node_modules, a manifest, lockfile or
    * tool configuration, a file a test, story or benchmark runner would run,
-   * or any kind but a page module, stylesheet, JSON file or image). Nothing
+   * or any kind but a module, stylesheet, JSON file or image). Nothing
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * `export --reverse` was given a file in a newer render format than this
+   * CLI reads. Nothing was written. The message names the CLI version that
+   * wrote the file, which reads it.
+   */
+  ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
+  /**
+   * `render` could not build the page's script for the browser: a module
+   * the page loads needs Node (`fs`, `path`), or cannot be found or compiled
+   * for the browser. Nothing was written. The message names the module.
+   */
+  ERR_RENDER_SCRIPT: 'ERR_RENDER_SCRIPT',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

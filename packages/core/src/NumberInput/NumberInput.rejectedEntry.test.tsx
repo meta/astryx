@@ -12,7 +12,7 @@
  */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {useState} from 'react';
+import {useState, type ReactElement} from 'react';
 import {
   fireEvent,
   render,
@@ -20,6 +20,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {InputGroup} from '../InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
 import {InternationalizationProvider} from '../i18n';
@@ -841,5 +842,96 @@ describe('NumberInput form value while a rejected draft stays', () => {
     expect(formData(container)).toEqual([['seats', '1234']]);
     fireEvent.focus(input);
     expect(formData(container)).toEqual([['seats', '1234']]);
+  });
+});
+
+describe('NumberInput entryErrorBehavior', () => {
+  const configurations: [string, (props: FieldProps) => ReactElement][] = [
+    ['no prop', props => field(props)],
+    ['complete', props => field({...props, entryErrorBehavior: 'complete'})],
+    [
+      'blur-or-enter',
+      props => field({...props, entryErrorBehavior: 'blur-or-enter'}),
+    ],
+    [
+      'a blur-or-enter FormLayout default',
+      props => (
+        <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+          {field(props)}
+        </FormLayout>
+      ),
+    ],
+    [
+      'complete under a blur-or-enter FormLayout default',
+      props => (
+        <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+          {field({...props, entryErrorBehavior: 'complete'})}
+        </FormLayout>
+      ),
+    ],
+  ];
+  const cases = configurations.flatMap(([name, render]) =>
+    (['Enter', 'blur'] as const).map(commit => [name, commit, render] as const),
+  );
+
+  it.each(cases)(
+    'with %s, shows and reports nothing while typing, every signal together and announced once at %s, and clears at once',
+    async (_name, commit, renderField) => {
+      const announced = recordAssertiveAnnouncements();
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(renderField({onEntryErrorChange}));
+      const input = getInput();
+      const isStyledInvalid = () => /\.inputInvalid\b/.test(input.className);
+      fireEvent.focus(input);
+      typeEach(input, '1a', () => {
+        expect(input).not.toHaveAttribute('aria-invalid');
+        expect(isStyledInvalid()).toBe(false);
+        expect(screen.queryByText(MESSAGE)).not.toBeInTheDocument();
+        expect(getAlert(container)).toHaveTextContent('');
+      });
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+
+      if (commit === 'Enter') {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      } else {
+        fireEvent.blur(input);
+      }
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(isStyledInvalid()).toBe(true);
+      expect(screen.getByText(MESSAGE)).toBeInTheDocument();
+      expect(onEntryErrorChange).toHaveBeenCalledExactlyOnceWith({
+        kind: 'unreadable',
+        text: '1a',
+      });
+      await waitFor(() => {
+        expect(announced).toEqual([MESSAGE]);
+      });
+
+      fireEvent.change(input, {target: {value: ''}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+      await settle();
+      expect(announced).toEqual([MESSAGE]);
+    },
+  );
+
+  it.each(['complete', 'blur-or-enter'] as const)(
+    'under %s, clamps 150 in a 10–100 field at commit and reveals nothing',
+    entryErrorBehavior => {
+      const onChange = vi.fn();
+      render(field({min: 10, max: 100, entryErrorBehavior, onChange}));
+      const input = getInput();
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '150'}});
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(100);
+      expect(input).not.toHaveAttribute('aria-invalid');
+    },
+  );
+
+  it('keeps the prop off the input', () => {
+    render(field({entryErrorBehavior: 'blur-or-enter'}));
+    expect(getInput()).not.toHaveAttribute('entryerrorbehavior');
+    expect(getInput()).not.toHaveAttribute('entryErrorBehavior');
   });
 });

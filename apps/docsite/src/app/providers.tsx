@@ -37,6 +37,8 @@ export function useThemeMode(): {
    * resolves (#2713).
    */
   themeMode: 'system' | ThemeMode;
+  /** The OS color scheme, whatever mode the visitor set. */
+  osMode: ThemeMode;
   toggleMode: () => void;
 } {
   const {themeMode, toggleMode} = useContext(ThemeModeContext);
@@ -48,6 +50,7 @@ export function useThemeMode(): {
   return {
     mode: themeMode === 'system' ? osMode : themeMode,
     themeMode,
+    osMode,
     toggleMode,
   };
 }

@@ -12,7 +12,7 @@ import {
 import {stockData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/Candlestick',
+  title: 'Charts/Marks/Candlestick',
   component: Chart,
 };
 export default meta;

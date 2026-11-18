@@ -37,7 +37,9 @@ images, posters, and videos. It covers their authored references, maintainer
 previews, copied output, and fallbacks. It also owns demo-content elements:
 repository-only elements that stand in for docs-only demo contents, such as a
 playing-card face, that a real Astryx component wraps in a motion or gesture
-example.
+example. It also owns demonstration actions: the response a page or block
+template gives when a person uses a control whose real action belongs to the
+consumer.
 
 It does not own icons. Icons may be component props, registry values, imported
 modules, inline symbols, or product assets, and their conversion and portability
@@ -151,6 +153,15 @@ concerns require a separate contract.
   How a demo-content element is marked and replaced belongs to
   `architecture:template-authoring`.
 
+### Demonstration actions
+
+- **FR14 — A demo action shows a demo toast, never a native dialog.** A page or
+  block template control whose real action belongs to the consumer MUST show a
+  toast whose message starts with `Demo:` and says what would happen. No
+  template source may call `alert()`, `confirm()`, or `prompt()`: a page shown in
+  a sandboxed frame without modal permission ignores them, so the control would
+  do nothing there.
+
 ### Boundary with icons
 
 - **FR12 — Icons are excluded by role, not file extension.** Component icons,
@@ -185,6 +196,9 @@ fixture media both replaced, each as a visibly marked placeholder, and its
 registry item description says how many were replaced. Its
 `.astryx/<item>.json` receipt keeps the v2 shape until CLN-0027.
 
+FR14 gap: some block demo actions log to the console or do nothing instead of
+showing a demo toast, such as the ChatComposer blocks' send handlers.
+
 ## Verification
 
 | Contract | Verification                                                                                       | Representative cases                                                                                                                                                                                                                                                                                                                             | Failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -196,6 +210,7 @@ registry item description says how many were replaced. Its
 | FR11     | Human and structured copy-receipt tests                                                            | no replacement; one image; mixed media                                                                                                                                                                                                                                                                                                           | The consumer is not told what must be replaced or is told assets were installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR12     | Scope guard tests and review                                                                       | Icon prop, registry icon, imported SVG component, static hero image                                                                                                                                                                                                                                                                              | Icon behavior is silently folded into the static-fixture transformer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR13     | End-to-end CLI copy, show, and `--showcase` tests, a shadcn install test, and a real preview check | a motion or gesture example whose `Card` wraps one demo-content element; one with two; one whose `Card` sits in a docs-only hint wrapper; an example with none; its `template show` response; its `--showcase` output; its shadcn install into a project, its registry item description, and its `.astryx/<item>.json` receipt; its live preview | Copied, shown, or installed output still references a demo-content element or keeps a docs-only wrapper or its hint text (a hinted example copies to exactly the `Card` plus its placeholder), the code that defines it, or `/template-assets/`; `--showcase` output references a demo-content element or changes its fixture media; the outer component or its props change; the copy receipt or the `template show` response omits or miscounts `demoContentReplaced`; a shadcn install leaves a replaced element or media reference without a visibly marked placeholder, or its registry item description does not disclose the replacement; the installed `.astryx/<item>.json` receipt gains a field or fails the released strict v2 reader before CLN-0027; or the live preview stops rendering the original |
+| FR14     | Template contract test over every page and block source                                            | a bare, `window.`, or `globalThis.` call to `alert`, `confirm`, or `prompt`; a method of another object with the same name                                                                                                                                                                                                                       | A template source that calls a native dialog fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Completion criteria
 

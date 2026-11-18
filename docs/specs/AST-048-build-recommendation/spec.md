@@ -68,20 +68,35 @@ own ranking and output, and template owners own what each template is.
   narrowed to components or hooks names no start, and neither does a project
   that offers no page template.
 - **FR2 — A shell when nothing leads.** When no template has the evidence to
-  lead, the start MUST be the neutral app shell, or a blank page template when
-  the project has no shell. The start never falls back to "compose from
-  components".
+  lead, the start MUST be the app shell, or a blank page template when the
+  project has no shell. The app shell is the ready, shown Shell-family
+  template the request describes when one leads, and otherwise the default
+  shell; a request describes a shell variant only when it names one of that
+  variant's own keywords as a whole phrase. The start never falls back to "compose from components".
 - **FR3 — A part starts where it lives.** A request for a part of a page (a
   control, a state, a widget, a section) MUST start from the page template the
   request places that part in, when the request gives that page, and from the
-  app shell (FR2) when it gives no page. The blocks and components in the kit
+  app shell (FR2) when it gives no page. A family's base template is that page
+  only when the ranker leads with it, and never when the family word heads the
+  request and also ends a component's name: the request then asks for that
+  piece, not for a part of the family's page (DEC-13). The blocks and components in the kit
   carry the part itself. A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
-  no template scaffolds it.
+  no template scaffolds it. A request that adds something to a place that
+  names no page, only the app or product as a whole, changes no page the
+  builder has: build reads what it adds as if the request gave no place. One
+  exception: when the start would be the app shell, search matched no ready
+  template directly, and build's fixed shell-start decision reads the request as a
+  whole page (DEC-10), the start is the best-ranked page template even when
+  the request reads as a part. A request with an edit phrase keeps the app
+  shell.
 - **FR4 — Never an unready start.** A template marked not ready MUST NOT be the
-  start or an alternative. When search matches one directly, the start's
-  reason MUST name it and say the start is the closest ready template or the
-  app shell instead.
+  start or an alternative. When the request names one that search matches
+  directly, the start's reason MUST say it is not ready yet and name the
+  template build started from instead. A not-ready template the request does
+  not name MUST NOT appear anywhere in build's response, and a not-ready
+  template MUST NOT change which template build starts from: it is never
+  search's direct match for build, and it never holds back the shell lift.
 - **FR5 — The start is exact and runnable.** The start and every alternative
   MUST carry the scaffold command that selects exactly that template in the
   project where build ran. A template an integration provides in place of a
@@ -93,6 +108,8 @@ own ranking and output, and template owners own what each template is.
   shell.
 - **FR7 — The builder can overrule.** Beside every start, build MUST offer the
   next best page templates, at most two, each with its scaffold command.
+  Templates that rank the same keep one fixed order on every host, so the same
+  request gets the same start and alternatives on any machine.
 - **FR8 — The kit fills the template.** Build MUST list the blocks that fill
   the start before the components, and name the always-on frame and
   foundation components. The order of the listed blocks follows
@@ -137,16 +154,23 @@ own ranking and output, and template owners own what each template is.
   directory that declares a workspace, by a `pnpm-workspace.yaml` or a
   package.json `workspaces` field; outside a workspace it is the directory of
   the nearest package.json, and with no package.json the project declares
-  nothing. `missingPackages` MUST list each needed package (FR14) that the
-  project does not declare, once, and is empty when none is missing.
+  nothing. Outside a project, in a hosted run, each package that the
+  `package.json` of the root serving the run lists in `dependencies` or
+  `optionalDependencies` counts as declared too (`spec:AST-081` FR3).
+  `missingPackages` MUST list each needed package (FR14) that the project does
+  not declare, once, and is empty when none is missing.
 - **FR16 — Astryx packages count like any other.** An Astryx package MUST count
   under FR14 and FR15 like any other package: a source that imports one the
   project does not declare lists it in `missingPackages`, and in the install
   command when there is one (FR17). No package is exempt by name.
 - **FR17 — One install command, in the project's package manager.** When
-  `missingPackages` is not empty and the package manager is not ambiguous
-  (FR19), `installCommand` MUST be one command that installs every missing
-  package with the project's package manager; otherwise it is null. The nearest
+  `missingPackages` is not empty, the package manager is not ambiguous (FR19),
+  and a package.json holds the target directory, `installCommand` MUST be one
+  command that installs every missing package with the project's package
+  manager; otherwise it is null. In a target directory that no package.json
+  holds, an install would make the directory a project (`spec:AST-081` FR3), so
+  `notes` names the missing packages for the project that uses the source
+  instead. The nearest
   directory, from the target directory up to the workspace root, that has a
   package.json `packageManager` field or a lockfile decides the package manager.
   The field names it. Without the field, the lockfiles name the package manager
@@ -189,8 +213,10 @@ own ranking and output, and template owners own what each template is.
   fields, with the values the receipt carries when that template is scaffolded
   into the directory where build ran, from the source its scaffold command (FR5)
   writes. `notes` holds one line for each thing the project lacks: the missing
-  packages with their install command or the reason there is none (FR19), and a
-  missing StyleX compiler (FR20); the receipt's `notes` is empty when the
+  packages with their install command, or in its place the install guidance a
+  loaded integration gives (`spec:AST-039` FR16), the reason there is none
+  (FR19), or the project that installs them (FR17), and a missing StyleX
+  compiler (FR20); the receipt's `notes` is empty when the
   project lacks nothing. One exception keeps build's response additive (FR22):
   on build's start and alternatives, `notes` is present only when it holds a
   line. Text shows each template's readiness beside it, as FR12 and
@@ -248,27 +274,27 @@ This record changes these surfaces:
 
 ## Verification
 
-| Contract   | Verification                                    | Representative states                                                                                                                                                                                                        | Mutation or failure expectation                                                                                                                                        |
-| ---------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2   | Build kit tests                                 | a request that names a template; a loose request; a request no template fits                                                                                                                                                 | A page build with no start, or a start that is not a page template                                                                                                     |
-| FR3        | Build kit tests                                 | a part placed in a page; a part with no page; a change to an existing page                                                                                                                                                   | A part with no page starting from a page template, or a change to an existing page starting from that page's template                                                  |
-| FR4        | Build kit tests                                 | search's direct match is not ready                                                                                                                                                                                           | An unready template as the start or an alternative, or a reason that hides it                                                                                          |
-| FR5        | Template integration tests                      | an integration template that replaces a Core one; a block sharing a page template's id                                                                                                                                       | A start or alternative command that selects another template, or none                                                                                                  |
-| FR6, FR7   | Build kit tests                                 | direct, closest, and fallback starts                                                                                                                                                                                         | A start without a basis or reason, or without its alternatives                                                                                                         |
-| FR8, FR12  | Text field tests                                | default and `--verbose` text for a build with every field populated                                                                                                                                                          | A response field the text never shows, or text out of the required order                                                                                               |
-| FR9        | CLI text tests                                  | any page build                                                                                                                                                                                                               | Text without the keep-your-page line                                                                                                                                   |
-| FR10, FR11 | Response type and build tests                   | the canonical response type, the response docs, and existing fields on a page build                                                                                                                                          | A missing recommendation field, or an existing field whose shape changes                                                                                               |
-| FR13       | Playbook and agent docs tests                   | the playbook steps and the generated agent docs block                                                                                                                                                                        | A surface that tells builders to compose a page from primitives before a template                                                                                      |
-| FR14       | Readiness fixture tests                         | every import form, a type-only import, and a scoped subpath; an import inside a comment, a string, and a template literal; a Node built-in, a relative path, a URL, and a `~/` path alias                                    | An import inside a comment or a string that counts, a path alias that counts as a package, or a real import that does not                                              |
-| FR15       | Readiness fixture tests                         | a package declared only at the workspace root; one in each dependency field; a target in a nested package; a package.json above the workspace root; no package.json                                                          | A declared package reported missing, or a package.json above the workspace root that counts                                                                            |
-| FR16       | Readiness fixture tests                         | a source that imports an Astryx package and a framework package the project does not declare                                                                                                                                 | An undeclared package left out of `missingPackages` because of its name                                                                                                |
-| FR17       | Readiness fixture tests                         | a lockfile only at the workspace root; a `packageManager` field beside another lockfile; two lockfiles and a workspace file; no lockfile                                                                                     | A command in a package manager the deciding directory does not name                                                                                                    |
-| FR18       | Readiness fixture tests and shell quoting tests | ranges with spaces, a caret, comparison operators, a wildcard, and a union; a protocol value; a template an integration ships that imports its own package; a command run outside the target's package                       | A range the shipping package does not declare, an argument a common shell splits, expands, or redirects, or a package not added to the package.json nearest the target |
-| FR19       | Readiness fixture tests                         | two lockfiles in one directory: with and without a `packageManager` field, with one file only one package manager reads, with two such files for different package managers, and with only a package.json `workspaces` field | A command printed for an ambiguous package manager, or a note that names no lockfile                                                                                   |
-| FR20       | Readiness fixture tests                         | a source that imports StyleX at run time and one that imports only its types, with and without a declared compiler                                                                                                           | A missing compiler with no note, a note beside a declared compiler or for a type-only import, or a compiler in the install command                                     |
-| FR21       | Build kit and template copy tests               | the start and each alternative against the receipt for the same template and directory; default and `--verbose` text                                                                                                         | A recommended template without the fields, a value the receipt would not carry, an empty `notes` on a build entry, or a field the text never shows                     |
-| FR22       | CLI exit-code and response type tests           | a scaffold and a build with packages and a compiler missing                                                                                                                                                                  | A changed exit status, or an existing field whose name or type changes                                                                                                 |
-| FR23       | CLI text and JSON tests                         | `--type doc` and `--type theme`, with and without a query, in text and JSON mode; `--type component`                                                                                                                         | A note on stdout, a second note, a note in JSON mode or for a kind the kit has, or stdout, JSON or exit status that differs from the same build without the note       |
+| Contract   | Verification                                            | Representative states                                                                                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                                      |
+| ---------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2   | Build kit tests                                         | a request that names a template; a loose request; a request no template fits                                                                                                                                                 | A page build with no start, or a start that is not a page template                                                                                                                                                                                   |
+| FR3        | Build kit tests                                         | a part placed in a page; a part with no page; a change to an existing page; a whole page the kind call reads as a part                                                                                                       | A part with no page starting from a page template when the shell-start decision does not read it as a whole page, or a request with an edit phrase or a change to an existing page starting from a page template                                     |
+| FR4        | Build kit tests                                         | search's direct match is not ready, named and not named by the request                                                                                                                                                       | An unready template as the start or an alternative, a reason that hides one the request names, or one the request does not name anywhere in the response, or a start, direct match or shell lift that changes when a not-ready template leads search |
+| FR5        | Template integration tests                              | an integration template that replaces a Core one; a block sharing a page template's id                                                                                                                                       | A start or alternative command that selects another template, or none                                                                                                                                                                                |
+| FR6, FR7   | Build kit tests; the `build.test.mjs` host-locale check | direct, closest, and fallback starts; the same requests under English, Czech, Hawaiian and Turkish host locales                                                                                                              | A start without a basis or reason, or without its alternatives; a start or alternatives that differ between host locales                                                                                                                             |
+| FR8, FR12  | Text field tests                                        | default and `--verbose` text for a build with every field populated                                                                                                                                                          | A response field the text never shows, or text out of the required order                                                                                                                                                                             |
+| FR9        | CLI text tests                                          | any page build                                                                                                                                                                                                               | Text without the keep-your-page line                                                                                                                                                                                                                 |
+| FR10, FR11 | Response type and build tests                           | the canonical response type, the response docs, and existing fields on a page build                                                                                                                                          | A missing recommendation field, or an existing field whose shape changes                                                                                                                                                                             |
+| FR13       | Playbook and agent docs tests                           | the playbook steps and the generated agent docs block                                                                                                                                                                        | A surface that tells builders to compose a page from primitives before a template                                                                                                                                                                    |
+| FR14       | Readiness fixture tests                                 | every import form, a type-only import, and a scoped subpath; an import inside a comment, a string, and a template literal; a Node built-in, a relative path, a URL, and a `~/` path alias                                    | An import inside a comment or a string that counts, a path alias that counts as a package, or a real import that does not                                                                                                                            |
+| FR15       | Readiness fixture tests                                 | a package declared only at the workspace root; one in each dependency field; a target in a nested package; a package.json above the workspace root; no package.json                                                          | A declared package reported missing, or a package.json above the workspace root that counts                                                                                                                                                          |
+| FR16       | Readiness fixture tests                                 | a source that imports an Astryx package and a framework package the project does not declare                                                                                                                                 | An undeclared package left out of `missingPackages` because of its name                                                                                                                                                                              |
+| FR17       | Readiness fixture tests                                 | a lockfile only at the workspace root; a `packageManager` field beside another lockfile; two lockfiles and a workspace file; no lockfile                                                                                     | A command in a package manager the deciding directory does not name                                                                                                                                                                                  |
+| FR18       | Readiness fixture tests and shell quoting tests         | ranges with spaces, a caret, comparison operators, a wildcard, and a union; a protocol value; a template an integration ships that imports its own package; a command run outside the target's package                       | A range the shipping package does not declare, an argument a common shell splits, expands, or redirects, or a package not added to the package.json nearest the target                                                                               |
+| FR19       | Readiness fixture tests                                 | two lockfiles in one directory: with and without a `packageManager` field, with one file only one package manager reads, with two such files for different package managers, and with only a package.json `workspaces` field | A command printed for an ambiguous package manager, or a note that names no lockfile                                                                                                                                                                 |
+| FR20       | Readiness fixture tests                                 | a source that imports StyleX at run time and one that imports only its types, with and without a declared compiler                                                                                                           | A missing compiler with no note, a note beside a declared compiler or for a type-only import, or a compiler in the install command                                                                                                                   |
+| FR21       | Build kit and template copy tests                       | the start and each alternative against the receipt for the same template and directory; default and `--verbose` text                                                                                                         | A recommended template without the fields, a value the receipt would not carry, an empty `notes` on a build entry, or a field the text never shows                                                                                                   |
+| FR22       | CLI exit-code and response type tests                   | a scaffold and a build with packages and a compiler missing                                                                                                                                                                  | A changed exit status, or an existing field whose name or type changes                                                                                                                                                                               |
+| FR23       | CLI text and JSON tests                                 | `--type doc` and `--type theme`, with and without a query, in text and JSON mode; `--type component`                                                                                                                         | A note on stdout, a second note, a note in JSON mode or for a kind the kit has, or stdout, JSON or exit status that differs from the same build without the note                                                                                     |
 
 ## Decision log
 
@@ -391,6 +417,60 @@ the existing fields as they are (DEC-5).
 
 Rejected: failing the scaffold when a package is missing, which blocks a
 builder who installs afterwards.
+
+### DEC-10 — A whole page reads past the part call
+
+**Reference:** `spec:AST-048/DEC-10`
+**Decider:** `josephfarina`, `2026-11-13`
+
+Build's kind call reads some whole-page requests as parts, which leaves them on
+the empty app shell. When the start would be the app shell and search matched
+no ready template directly, a fixed decision over build's own ranking scores and a
+fixed word table reads the whole request; when its whole-page probability is
+at least 0.30, the start is the best-ranked page template. This is not DEC-2's best weak match:
+one shared word never decides it, and it never applies to a direct match or to
+a request with an edit phrase, so DEC-4 still holds for changes to an existing
+page.
+
+Rejected: lifting only requests the kind call reads as pages, which keeps whole
+pages the kind call misreads on the empty shell.
+
+### DEC-11 — The page pick reads past weak ranker evidence
+
+**Reference:** `spec:AST-048/DEC-11`
+**Decider:** `josephfarina`, `2026-11-14`
+
+When build's fixed word tables read a request as a whole page, its page-pick
+model chooses among the ready page templates even when the page ranker's own
+evidence is too weak for the ranker to lead alone. The pick model reads the
+whole request, so its choice rests on many words rather than one shared word,
+and across representative requests its starts on weak ranker evidence help the
+builder more often than the empty app shell does. DEC-2 still holds when no
+part of build's ranking leads: the start is the app shell. Requests build reads
+as parts or as changes to an existing page keep their placement rules (DEC-4);
+the edit-phrase check belongs to DEC-10's shell lift, not to the page pick.
+
+Rejected: sending every start the ranker cannot lead alone to the app shell,
+which leaves more whole pages on the empty shell than it keeps parts off a page
+template.
+
+### DEC-13 — A family base hosts a part only as the place it goes
+
+**Reference:** `spec:AST-048/DEC-13`
+**Decider:** `josephfarina`, `2026-11-16`
+
+A part starts from a family's base template only when the ranker leads with
+that base and the request names the family as where the part goes. A family
+word that heads the request and also ends a component's name names the piece
+itself: "a sortable table" asks for a table, not for a part of the table page.
+Both facts come from the catalog: the families from the page templates, and
+the piece words from the components' names. So a new family or a new component
+follows the rule with no list to update.
+
+Rejected: hosting on any base whose family word appears anywhere in the
+request, which starts every request that mentions a table from the table page
+once a table base is ready; and a list of family words that never host, which
+needs an update for each new family.
 
 ## Open questions
 

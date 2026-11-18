@@ -1,11 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for render() (`astryx experimental render`): a page to one
+ * @file Tests for render() (`astryx experimental export`): a page to one
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
 import {spawn, spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -13,8 +14,11 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
+import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
+import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -102,11 +106,14 @@ describe('render(): page to one HTML file', () => {
     expect(result.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
   });
 
-  it('is one static file: no external references, no running script', () => {
+  it("is one file: no external references, and no script but the embedded source and the page's own", () => {
     expect(html).not.toMatch(/<link\b/i);
     expect(html).not.toMatch(/\ssrc="(?!data:)/);
-    const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map(m => m[1]);
-    expect(scripts).toEqual([' type="application/x-astryx-source"']);
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
+    expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
+    expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
+    // The page's script follows the note after the embedded source.
+    expect(html).toMatch(/ -->\n<script>[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -204,6 +211,236 @@ describe('render(): page to one HTML file', () => {
     expect(await codeOf(() => render('damaged.html', {cwd: dir, reverse: true}))).toBe(
       'ERR_RENDER_SOURCE_DAMAGED',
     );
+  });
+
+  it('refuses a rendered file cut short before its embedded source, instead of rebuilding part of the page', async () => {
+    put('cut-short.html', html.slice(0, html.indexOf('<script type="application/x-astryx-source"') - 40));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('cut-short.html', {cwd: dir, reverse: true, out: 'cut-short-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('cut-short.html is cut short');
+    expect(fs.existsSync(path.join(dir, 'cut-short-back'))).toBe(false);
+    // A whole file a host added to after </html> is not cut short.
+    put('added-to.html', `${html}<script>track()</script>\n`);
+    const back = /** @type {any} */ (await render('added-to.html', {cwd: dir, reverse: true, out: 'added-to-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true});
+  });
+
+  it('refuses a file a merge left with conflict markers, instead of choosing a side', async () => {
+    const lines = html.split('\n');
+    const at = lines.findIndex(line => line.includes('application/x-astryx-source'));
+    put('conflicted.html', [...lines.slice(0, at), '<<<<<<< HEAD', lines[at], '=======', lines[at], '>>>>>>> theirs', ...lines.slice(at + 1)].join('\n'));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('conflicted.html', {cwd: dir, reverse: true, out: 'conflicted-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('merge conflict markers');
+    expect(fs.existsSync(path.join(dir, 'conflicted-back'))).toBe(false);
+    // A page that is not an Astryx page is still named as such.
+    put('plain-conflicted.html', '<html><body>\n<<<<<<< HEAD\n<p>a</p>\n=======\n<p>b</p>\n>>>>>>> theirs\n</body></html>\n');
+    expect(await codeOf(() => render('plain-conflicted.html', {cwd: dir, reverse: true}))).toBe('ERR_RENDER_NOT_ASTRYX');
+  });
+
+  it('gives back a file whose markup a hand edit left with an open comment, and says it was edited', async () => {
+    put('open-comment.html', html.replace('</h1>', '</h1><!-- todo: reword'));
+    const back = /** @type {any} */ (await render('open-comment.html', {cwd: dir, reverse: true, out: 'open-comment-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: true});
+    expect(fs.readFileSync(path.join(dir, 'open-comment-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
+
+  it('gives back a file a minifier rewrote: comments gone, the tag unquoted, its attributes reordered', async () => {
+    const minified = html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace('<script type="application/x-astryx-source">', '<script data-kind=source type=application/x-astryx-source>');
+    put('minified.html', minified);
+    const back = /** @type {any} */ (await render('minified.html', {cwd: dir, reverse: true, out: 'minified-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(fs.readFileSync(path.join(dir, 'minified-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
+});
+
+describe('render(): every write takes its place in one step', () => {
+  const BIN = path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs');
+  /**
+   * Run the CLI in a process of its own.
+   * @param {string[]} args
+   * @returns {Promise<{code: number | null, out: string}>}
+   */
+  const cliRun = args =>
+    new Promise(resolve => {
+      const child = spawn(process.execPath, [BIN, '--json', ...args], {cwd: dir, stdio: ['ignore', 'pipe', 'ignore']});
+      let out = '';
+      child.stdout.on('data', chunk => (out += chunk));
+      child.on('close', code => resolve({code, out}));
+    });
+
+  it('replaces a rendered file in one step: a reader that has the old file open keeps reading all of it', async () => {
+    put('swap-a.tsx', 'export default function A() {\n  return <p>First page</p>;\n}\n');
+    put('swap-b.tsx', 'export default function B() {\n  return <p>Second page</p>;\n}\n');
+    await render('swap-a.tsx', {cwd: dir, out: 'swap.html'});
+    const file = path.join(dir, 'swap.html');
+    const before = fs.readFileSync(file);
+    const fd = fs.openSync(file, 'r');
+    try {
+      await render('swap-b.tsx', {cwd: dir, out: 'swap.html'});
+      const held = Buffer.alloc(before.length + 1);
+      expect(held.subarray(0, fs.readSync(fd, held, 0, held.length, 0))).toEqual(before);
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(fs.readFileSync(file, 'utf8')).toContain('Second page');
+  }, 60_000);
+
+  it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'export', '--reverse', 'page.html'])));
+    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
+    const pages = runs.map(r => JSON.parse(r.out).data.output);
+    expect(new Set(pages.map(p => path.dirname(p))).size).toBe(8);
+    for (const p of pages) expect(fs.readFileSync(path.join(dir, p), 'utf8')).toBe(PAGE);
+  }, 120_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'says a file it cannot read cannot be read, not that it does not exist',
+    async () => {
+      put('unreadable/page.tsx', 'export default function Page() {\n  return <p>Unreadable</p>;\n}\n');
+      await render('unreadable/page.tsx', {cwd: dir});
+      const files = ['unreadable/page.tsx', 'unreadable/page.html'];
+      for (const file of files) fs.chmodSync(path.join(dir, file), 0o000);
+      try {
+        for (const [file, options] of [[files[0], {}], [files[1], {reverse: true}]]) {
+          /** @type {any} */
+          let refused;
+          try {
+            await render(file, {cwd: dir, ...options});
+          } catch (e) {
+            refused = e;
+          }
+          expect(refused?.code, file).toBe('ERR_READ_FAILED');
+          expect(refused.message).toBe(`${file} cannot be read (EACCES: no permission); nothing was written.`);
+        }
+      } finally {
+        for (const file of files) fs.chmodSync(path.join(dir, file), 0o644);
+      }
+      expect(await codeOf(() => render('unreadable/missing.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
+      // A folder or a pipe given as the file is refused before it is opened,
+      // so nothing waits on a pipe no one writes.
+      fs.mkdirSync(path.join(dir, 'unreadable/folder.tsx'));
+      const entries = [['unreadable/folder.tsx', 'it is a folder']];
+      if (spawnSync('mkfifo', [path.join(dir, 'unreadable/pipe.tsx')]).status === 0) entries.push(['unreadable/pipe.tsx', 'it is not a regular file']);
+      for (const [file, why] of entries) {
+        /** @type {any} */
+        let refused;
+        try {
+          await render(file, {cwd: dir});
+        } catch (e) {
+          refused = e;
+        }
+        expect(refused?.code, file).toBe('ERR_READ_FAILED');
+        expect(refused.message).toBe(`${file} cannot be read (${why}); nothing was written.`);
+      }
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves a file this user cannot write as it is, and keeps the permission bits of a file it replaces',
+    async () => {
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      const file = path.join(dir, 'modes.html');
+      fs.chmodSync(file, 0o444);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'modes.html'}))).toBe('ERR_WRITE_FAILED');
+      fs.chmodSync(file, 0o640);
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      expect(fs.statSync(file).mode & 0o777).toBe(0o640);
+    },
+    60_000,
+  );
+
+  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+    put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
+    put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
+    const page = "import {label} from '../lib/helper';\nexport const title = 'Loop';\nexport default function Page() { return <p>{label}</p>; }\n";
+    put('alias-loop/src/app/page.tsx', page);
+    const cwd = path.join(dir, 'alias-loop');
+    await render('src/app/page.tsx', {cwd});
+    /** @type {any} */
+    let refused;
+    try {
+      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(refused.message).toContain('src/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('names the folder that takes no new file, not a temporary one', async () => {
+    fs.mkdirSync(path.join(dir, 'locked'), {recursive: true});
+    fs.chmodSync(path.join(dir, 'locked'), 0o555);
+    /** @type {any} */
+    let refused;
+    try {
+      await render('page.tsx', {cwd: dir, out: 'locked/page.html'});
+    } catch (e) {
+      refused = e;
+    } finally {
+      fs.chmodSync(path.join(dir, 'locked'), 0o755);
+    }
+    expect(refused?.code).toBe('ERR_WRITE_FAILED');
+    expect(refused.message).toBe('Could not write locked/page.html: locked does not take a new file (EACCES); nothing was written.');
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'a restore with --overwrite replaces a file this user cannot write, as it did',
+    async () => {
+      const solo = 'export default function Solo() {\n  return <p>Solo</p>;\n}\n';
+      put('solo.tsx', solo);
+      await render('solo.tsx', {cwd: dir});
+      const file = put('read-only-back/solo.tsx', 'old\n');
+      fs.chmodSync(file, 0o444);
+      await render('solo.html', {cwd: dir, reverse: true, out: 'read-only-back/solo.tsx', overwrite: true});
+      expect(fs.readFileSync(file, 'utf8')).toBe(solo);
+    },
+    60_000,
+  );
+
+  it('removes a temporary that a stopped run in this process space left beside its target, and keeps any other', async () => {
+    const {pidSpace} = await import('../../foundation/release/cache.mjs');
+    const space = `${os.hostname()}-${/\[(\d+)\]/.exec(pidSpace() ?? '')?.[1] ?? 'x'}`;
+    // A process id no system gives out, so its run is gone.
+    const left = path.join(dir, `.stale.html.tmp-${space}-999999999-${randomUUID()}`);
+    const running = path.join(dir, `.stale.html.tmp-${space}-${process.pid}-${randomUUID()}`);
+    // A run in another process-ID namespace cannot be seen from here, so its
+    // temporary stays, whatever its process id.
+    const elsewhere = path.join(dir, `.stale.html.tmp-${os.hostname()}-1-999999999-${randomUUID()}`);
+    const leftFolder = path.join(dir, `.page-restored.tmp-${space}-999999999-${randomUUID()}`);
+    for (const temporary of [left, running, elsewhere]) fs.writeFileSync(temporary, 'part of a file');
+    put(path.relative(dir, path.join(leftFolder, 'page.tsx')), 'part of a folder');
+    await render('page.tsx', {cwd: dir, out: 'stale.html'});
+    const restored = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true}));
+    expect(fs.existsSync(left)).toBe(false);
+    expect(fs.existsSync(leftFolder)).toBe(false);
+    expect(fs.existsSync(running)).toBe(true);
+    expect(fs.existsSync(elsewhere)).toBe(true);
+    fs.rmSync(running);
+    fs.rmSync(elsewhere);
+    fs.rmSync(path.join(dir, path.dirname(restored.data.output)), {recursive: true});
+  }, 60_000);
+
+  it('leaves no temporary file or folder behind', () => {
+    expect(fs.readdirSync(dir).filter(name => name.includes('.tmp-'))).toEqual([]);
   });
 });
 
@@ -340,6 +577,108 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('aliased/src/bad.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
   }, 60_000);
 
+  it('reads the aliases of the referenced project that holds the page, behind a solution-style tsconfig.json', async () => {
+    const vite = (/** @type {string} */ name) => {
+      put(`${name}/package.json`, `{"name":"${name}","private":true}`);
+      put(`${name}/tsconfig.json`, '{\n  "files": [],\n  "references": [{"path": "./tsconfig.app.json"}, {"path": "./tsconfig.node.json"}]\n}\n');
+      put(`${name}/tsconfig.app.json`, '{\n  "compilerOptions": {"paths": {"@/*": ["./src/*"]}},\n  "include": ["src"],\n}\n');
+      put(`${name}/tsconfig.node.json`, '{"compilerOptions": {"paths": {"@/*": ["./config/*"]}}, "include": ["vite.config.ts"]}\n');
+    };
+    vite('solution');
+    put('solution/src/components/Header.tsx', 'export function Header() { return <p>Solution header</p>; }\n');
+    put('solution/src/pages/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const r = /** @type {any} */ (await render('solution/src/pages/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(['pages/page.tsx', 'components/Header.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'solution/src/pages/page.html'), 'utf8')).toContain('Solution header');
+    // A project laid out the same way takes it back where its own alias points.
+    vite('solution-to');
+    fs.copyFileSync(path.join(dir, 'solution/src/pages/page.html'), path.join(dir, 'solution-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'solution-to'), reverse: true, out: 'src/pages/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['src/pages/page.tsx', 'src/components/Header.tsx']});
+  }, 60_000);
+
+  it('reads aliases through extends: a path without .json, a package, and a list whose later config wins', async () => {
+    // A base config above the project: its baseUrl is read from its own folder.
+    put('ext/tsconfig.base.json', '{"compilerOptions": {"baseUrl": "apps/web", "paths": {"@data/*": ["src/data/*"]}}}\n');
+    put('ext/apps/web/package.json', '{"name":"web","private":true}');
+    put('ext/apps/web/tsconfig.json', '{"extends": "../../tsconfig.base"}\n');
+    put('ext/apps/web/src/data/rows.ts', "export const rows = ['North', 'South'];\n");
+    put('ext/apps/web/src/pages/page.tsx', "import {rows} from '@data/rows';\nexport default function Page() { return <ul>{rows.map(r => <li key={r}>{r}</li>)}</ul>; }\n");
+    const web = /** @type {any} */ (await render('ext/apps/web/src/pages/page.tsx', {cwd: dir}));
+    expect(web.data.files).toEqual(['pages/page.tsx', 'data/rows.ts']);
+    // A package's config, after one of the project's own: the later one wins,
+    // and ${configDir} is the folder of the config the project reads.
+    put('ext-pkg/package.json', '{"name":"ext-pkg","private":true}');
+    put('ext-pkg/node_modules/@acme/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-pkg/node_modules/@acme/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-pkg/tsconfig.first.json', '{"compilerOptions": {"paths": {"@ui/*": ["./elsewhere/*"]}}}\n');
+    put('ext-pkg/tsconfig.json', '{"extends": ["./tsconfig.first.json", "@acme/tsconfig/base.json"]}\n');
+    put('ext-pkg/src/ui/Panel.tsx', 'export function Panel() { return <section>Panel from the package alias</section>; }\n');
+    put('ext-pkg/src/page.tsx', "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+    const pkg = /** @type {any} */ (await render('ext-pkg/src/page.tsx', {cwd: dir}));
+    expect(pkg.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'ext-pkg/src/page.html'), 'utf8')).toContain('Panel from the package alias');
+    // A package named alone: its tsconfig field, else its tsconfig.json,
+    // never its code `main`.
+    const config = '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n';
+    for (const [name, files, extendsName = name] of [
+      ['js-main', {'package.json': '{"name":"js-main","version":"1.0.0","main":"index.js"}', 'index.js': 'module.exports = {};\n', 'tsconfig.json': config}],
+      ['field', {'package.json': '{"name":"field","version":"1.0.0","main":"index.js","tsconfig":"./configs/base.json"}', 'index.js': 'module.exports = {};\n', 'configs/base.json': config}],
+      // A package whose exports send "." to its config, or a pattern a subpath matches.
+      ['dot', {'package.json': '{"name":"dot","version":"1.0.0","exports":{".":{"import":"./esm.json","require":"./configs/base.json"}}}', 'configs/base.json': config}],
+      ['star', {'package.json': '{"name":"star","version":"1.0.0","exports":{"./*":"./configs/*.json"}}', 'configs/strict.json': config}, 'star/strict'],
+      // Of two patterns, the one with the longer part before the `*` wins, as in Node.
+      ['order', {'package.json': '{"name":"order","version":"1.0.0","exports":{"./*.json":"./wrong/*.json","./a*":"./right/a*"}}', 'right/ab.json': config, 'wrong/ab.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/nowhere/*"]}}}\n'}, 'order/ab.json'],
+    ]) {
+      const root = `ext-${name}`;
+      put(`${root}/package.json`, `{"name":"${root}","private":true}`);
+      for (const [file, text] of Object.entries(files)) put(`${root}/node_modules/${name}/${file}`, text);
+      put(`${root}/tsconfig.json`, `{"extends": "${extendsName}"}\n`);
+      put(`${root}/src/ui/Panel.tsx`, 'export function Panel() { return <section>Panel</section>; }\n');
+      put(`${root}/src/page.tsx`, "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+      const r = /** @type {any} */ (await render(`${root}/src/page.tsx`, {cwd: dir}));
+      expect(r.data.files, name).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    }
+    // A config package read through a link: from where it really is, so a
+    // package it extends in turn, and paths that climb out of it, resolve
+    // from there; and a nearer copy without the config is passed by.
+    const panel = 'export function Panel() { return <section>Panel</section>; }\n';
+    const page = "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n";
+    put('ext-store/package.json', '{"name":"ext-store","private":true}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/package.json', '{"name":"cfg","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/tsconfig.json', '{"extends": "cfg-base"}\n');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/package.json', '{"name":"cfg-base","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    fs.symlinkSync(path.join(dir, 'ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg'), path.join(dir, 'ext-store/node_modules/cfg'), 'junction');
+    put('ext-store/tsconfig.json', '{"extends": "cfg"}\n');
+    put('ext-store/src/ui/Panel.tsx', panel);
+    put('ext-store/src/page.tsx', page);
+    const store = /** @type {any} */ (await render('ext-store/src/page.tsx', {cwd: dir}));
+    expect(store.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    put('ext-ws/package.json', '{"name":"ext-ws","private":true}');
+    put('ext-ws/packages/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-ws/packages/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["../ui/src/*"]}}}\n');
+    put('ext-ws/packages/ui/src/Panel.tsx', panel);
+    put('ext-ws/apps/web/package.json', '{"name":"web","private":true}');
+    fs.mkdirSync(path.join(dir, 'ext-ws/apps/web/node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'ext-ws/packages/tsconfig'), path.join(dir, 'ext-ws/apps/web/node_modules/@acme/tsconfig'), 'junction');
+    put('ext-ws/apps/web/tsconfig.json', '{"extends": "@acme/tsconfig/base"}\n');
+    put('ext-ws/apps/web/src/page.tsx', page);
+    // The alias leads out of the app, to the workspace package it names.
+    await render('ext-ws/apps/web/src/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'ext-ws/apps/web/src/page.html'), 'utf8')).toContain('<section>Panel</section>');
+    put('ext-near/package.json', '{"name":"ext-near","private":true}');
+    put('ext-near/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"1.0.0"}');
+    put('ext-near/node_modules/shared-cfg/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-near/app/package.json', '{"name":"app","private":true}');
+    put('ext-near/app/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"0.1.0"}');
+    put('ext-near/app/tsconfig.json', '{"extends": "shared-cfg"}\n');
+    put('ext-near/app/src/ui/Panel.tsx', panel);
+    put('ext-near/app/src/page.tsx', page);
+    const near = /** @type {any} */ (await render('ext-near/app/src/page.tsx', {cwd: dir}));
+    expect(near.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+  }, 60_000);
+
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {
     put('aliased-src/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
     put('aliased-src/package.json', '{"name":"aliased-src","private":true}');
@@ -373,12 +712,156 @@ describe('render(): every write stays inside the current folder', () => {
     const again = /** @type {any} */ (await render('src/app/page.tsx', {cwd}));
     expect(again.type).toBe('render.page');
     expect(fs.readFileSync(path.join(cwd, 'src/app/page.html'), 'utf8')).toContain('Alias header');
-    // Without the alias, the file it names is refused, naming why.
+    // Without the alias, the file comes back in the page's own layout inside
+    // the new folder, and the result names the import and its file.
     put('no-alias/package.json', '{"name":"no-alias","private":true}');
     fs.copyFileSync(path.join(dir, 'aliased-src/src/app/page.html'), path.join(dir, 'no-alias/page.html'));
-    expect(
-      await codeOf(() => render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true, out: 'page.tsx'})),
-    ).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    const away = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true}));
+    expect(away.data).toMatchObject({
+      exact: true,
+      files: ['page-restored/app/page.tsx', 'page-restored/components/Header.tsx'],
+      aliased: {
+        config: 'tsconfig.json',
+        paths: {'@/*': ['./page-restored/*']},
+        imports: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}],
+      },
+    });
+    expect(fs.readFileSync(path.join(dir, 'no-alias/page-restored/components/Header.tsx'))).toEqual(
+      fs.readFileSync(path.join(dir, 'aliased-src/src/components/Header.tsx')),
+    );
+  }, 60_000);
+
+  it('names the whole paths a page needs: every target of an alias, and the entries a config inherits', async () => {
+    put('multi/package.json', '{"name":"multi","private":true}');
+    put('multi/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*", "./generated/*"]}}}\n');
+    put('multi/src/components/Header.tsx', 'export function Header() { return <h1>Multi</h1>; }\n');
+    put('multi/generated/api/client.ts', "export const client = 'generated client';\n");
+    put(
+      'multi/src/app/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {client} from '@/api/client';\nexport default function Page() { return <main><Header />{client}</main>; }\n",
+    );
+    await render('multi/src/app/page.tsx', {cwd: dir});
+    // A project whose config takes its paths from the config it extends.
+    put('multi-to/package.json', '{"name":"multi-to","private":true}');
+    put('multi-to/tsconfig.base.json', '{"compilerOptions": {"paths": {"$lib/*": ["./lib/*"]}}}\n');
+    put('multi-to/tsconfig.json', '{"extends": "./tsconfig.base.json"}\n');
+    fs.copyFileSync(path.join(dir, 'multi/src/app/page.html'), path.join(dir, 'multi-to/multi.html'));
+    const back = /** @type {any} */ (await render('multi.html', {cwd: path.join(dir, 'multi-to'), reverse: true}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {
+        '$lib/*': ['./lib/*'],
+        '@/*': ['./multi-restored/generated/*', './multi-restored/src/*'],
+        '@/api/client': ['./multi-restored/generated/api/client.ts'],
+        '@/components/Header': ['./multi-restored/src/components/Header.tsx'],
+      },
+      imports: [
+        {import: '@/api/client', file: 'multi-restored/generated/api/client.ts'},
+        {import: '@/components/Header', file: 'multi-restored/src/components/Header.tsx'},
+      ],
+    });
+    // An alias whose first target overrides files of the second: the page
+    // renders again with the override, once the printed paths are set.
+    put('ov/package.json', '{"name":"ov","private":true}');
+    put('ov/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/overrides/*", "./src/*"]}}}\n');
+    put('ov/src/Zed.tsx', "export function Zed() { return <p>base Zed</p>; }\n");
+    put('ov/src/overrides/Zed.tsx', "import {Zed as Base} from '../Zed';\nexport function Zed() { return <section>override <Base /></section>; }\n");
+    put('ov/src/Apple.tsx', "export function Apple() { return <p>Apple</p>; }\n");
+    put('ov/src/page.tsx', "import {Zed} from '@/Zed';\nimport {Apple} from '@/Apple';\nexport default function Page() { return <main><Apple /><Zed /></main>; }\n");
+    await render('ov/src/page.tsx', {cwd: dir});
+    put('ov-to/package.json', '{"name":"ov-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'ov/src/page.html'), path.join(dir, 'ov-to/ov.html'));
+    const ov = /** @type {any} */ (await render('ov.html', {cwd: path.join(dir, 'ov-to'), reverse: true}));
+    expect(ov.data.aliased.paths['@/Zed']).toEqual(['./ov-restored/overrides/Zed.tsx']);
+    put('ov-to/tsconfig.json', JSON.stringify({compilerOptions: {paths: ov.data.aliased.paths}}));
+    await render('ov-restored/page.tsx', {cwd: path.join(dir, 'ov-to'), out: 'again.html'});
+    expect(fs.readFileSync(path.join(dir, 'ov-to/again.html'), 'utf8')).toContain('override');
+  }, 60_000);
+
+  it('gives back an aliased page where no alias of the project names its imports: in its own layout, naming the paths to add', async () => {
+    const {sourceBlock: sourceBlockOf} = await import('../../foundation/render/source-block.mjs');
+    put('alias-home/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"], "@members": ["./src/lib/members.ts"]}}}\n');
+    put('alias-home/package.json', '{"name":"alias-home","private":true}');
+    put('alias-home/src/components/Header.tsx', 'export function Header() { return <h1>Team</h1>; }\n');
+    put('alias-home/src/lib/members.ts', "export const members = ['Ana', 'Bo'];\n");
+    put(
+      'alias-home/src/app/team/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {members} from '@members';\nexport default function Page() { return <main><Header />{members.join(', ')}</main>; }\n",
+    );
+    await render('alias-home/src/app/team/page.tsx', {cwd: dir});
+    // Someone with only the HTML file, in a project with no tsconfig.json.
+    const cwd = path.join(dir, 'alias-away');
+    put('alias-away/package.json', '{"name":"alias-away","private":true}');
+    fs.copyFileSync(path.join(dir, 'alias-home/src/app/team/page.html'), path.join(cwd, 'team.html'));
+    const back = /** @type {any} */ (await render('team.html', {cwd, reverse: true}));
+    expect(back.data).toMatchObject({
+      mode: 'embedded',
+      exact: true,
+      output: 'team-restored/app/team/page.tsx',
+      aliased: {
+        config: 'tsconfig.json',
+        paths: {'@/*': ['./team-restored/*'], '@members': ['./team-restored/lib/members.ts']},
+        imports: [
+          {import: '@/components/Header', file: 'team-restored/components/Header.tsx'},
+          {import: '@members', file: 'team-restored/lib/members.ts'},
+        ],
+      },
+    });
+    for (const name of ['app/team/page.tsx', 'components/Header.tsx', 'lib/members.ts']) {
+      expect(fs.readFileSync(path.join(cwd, 'team-restored', name))).toEqual(fs.readFileSync(path.join(dir, 'alias-home/src', name)));
+    }
+    const {stdout} = await runCli(['experimental', 'export', '--reverse', 'team.html'], {cwd});
+    expect(stdout).toContain('set the "paths" of tsconfig.json (create it if it is not there) to: "@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"].');
+    // The entries are written for the config TypeScript reads there, from
+    // its baseUrl.
+    put('alias-base/package.json', '{"name":"alias-base","private":true}');
+    put('alias-base/tsconfig.json', '{"compilerOptions": {"baseUrl": "src"}}\n');
+    fs.copyFileSync(path.join(dir, 'alias-home/src/app/team/page.html'), path.join(dir, 'alias-base/team.html'));
+    const based = /** @type {any} */ (await render('team.html', {cwd: path.join(dir, 'alias-base'), reverse: true, out: 'src/team/app/team/page.tsx'}));
+    expect(based.data.aliased).toMatchObject({config: 'tsconfig.json', paths: {'@/*': ['./team/*'], '@members': ['./team/lib/members.ts']}});
+    // A record never remaps a package: a forged entry for `react` is not
+    // followed, and the file it names is refused.
+    put(
+      'alias-away/forged-react.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import React from 'react';\nexport default function Page() { return React.createElement('p', null, 'x'); }\n")},
+          {path: 'lib/react.ts', bytes: Buffer.from('export default {};\n')},
+        ],
+        {aliases: {react: 'lib/react.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged-react.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(fs.existsSync(path.join(cwd, 'forged-react-restored'))).toBe(false);
+    // Nor a package's own subpath import, which its package.json may map.
+    put(
+      'alias-away/forged-hash.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {u} from '#utils';\nexport default function Page() { return <p>{u}</p>; }\n")},
+          {path: 'lib/utils.ts', bytes: Buffer.from("export const u = 'x';\n")},
+        ],
+        {aliases: {'#utils': 'lib/utils.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged-hash.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(fs.existsSync(path.join(cwd, 'forged-hash-restored'))).toBe(false);
+    // A record entry that names no carried file counts for nothing.
+    put(
+      'alias-away/forged.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {X} from '@/x';\nexport default function Page() { return <X />; }\n")},
+          {path: 'other.ts', bytes: Buffer.from('export const other = 1;\n')},
+        ],
+        {aliases: {'@/x': 'missing.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
   }, 60_000);
 
   it('never writes through a symbolic link or over a protected file, even with --overwrite', async () => {
@@ -463,6 +946,74 @@ describe('render(): every write stays inside the current folder', () => {
     );
     const again = /** @type {any} */ (await render('by-path-back/page.tsx', {cwd: dir}));
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves out a named image it cannot read, and says so, instead of ending the render',
+    async () => {
+      put('locked-name/locked.png', PNG);
+      put('locked-name/names.ts', "export const locked = './locked.png';\n");
+      put('locked-name/page.tsx', "import {locked} from './names';\nexport default function Page() {\n  return <p>{locked.length}</p>;\n}\n");
+      fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o000);
+      try {
+        const result = /** @type {any} */ (await render('locked-name/page.tsx', {cwd: dir}));
+        expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+        expect(result.data.warnings).toContainEqual({
+          code: 'not-embedded',
+          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so experimental import cannot give it back.',
+        });
+      } finally {
+        fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o644);
+      }
+    },
+    60_000,
+  );
+
+  it('renders a page whose module names a path the system cannot look up', async () => {
+    put('long-name/names.ts', `export const far = './${'a'.repeat(300)}.png';\n`);
+    put('long-name/page.tsx', "import {far} from './names';\nexport default function Page() {\n  return <p>{far.length}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('long-name/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+  }, 60_000);
+
+  it('leaves out a named image outside the folder that holds the carried files, so the layout stays', async () => {
+    // A page under a tests/ folder: were the layout to move above it, its
+    // module would land under tests/, which a render never carries.
+    put('shared/far.png', PNG);
+    put('up/tests/icons.ts', "export const icons = {far: '../../shared/far.png'};\n");
+    put('up/tests/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('up/tests/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'icons.ts']);
+    const back = /** @type {any} */ (await render('up/tests/page.html', {cwd: dir, reverse: true, out: 'up-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['up-back/page.tsx', 'up-back/icons.ts']});
+  }, 60_000);
+
+  it('leaves out a named image larger than a render carries, and says so', async () => {
+    put('named-big/huge.png', Buffer.concat([PNG, Buffer.alloc(9 * 1024 * 1024)]));
+    put('named-big/icons.ts', "export const icons = {big: './huge.png'};\n");
+    put('named-big/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('named-big/page.tsx', {cwd: dir}));
+    expect(result.data.files).not.toContain('huge.png');
+    expect(result.data.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({code: 'not-embedded', message: expect.stringContaining('huge.png is named in icons.ts but not carried in the file: it is larger than 8 MB')}),
+      ]),
+    );
+  }, 60_000);
+
+  it('carries an image a module or a stylesheet names that the page did not show, and gives every file back', async () => {
+    put('named/img/shown.png', PNG);
+    put('named/img/other.png', PNG);
+    put('named/img/unused-bg.png', PNG);
+    put('named/icons.ts', "export const icons = {shown: './img/shown.png', other: './img/other.png'};\n");
+    put('named/styles.css', '.used { color: red; }\n.unused { background: url("./img/unused-bg.png"); }\n');
+    put('named/page.tsx', "import './styles.css';\nimport {icons} from './icons';\nexport default function Page() { return <img className=\"used\" src={icons.shown} alt=\"\" />; }\n");
+    const r = /** @type {any} */ (await render('named/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['img/shown.png', 'img/other.png', 'img/unused-bg.png']));
+    const back = /** @type {any} */ (await render('named/page.html', {cwd: dir, reverse: true, out: 'named-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.missing).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, 'named-back/img/other.png'))).toEqual(PNG);
   }, 60_000);
 
   it('gives back images named any way the render carried them', async () => {
@@ -1211,7 +1762,7 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.type).toBe('render.page');
     put('fwd/.gitignore', 'page.html\n');
     expect(await codeOf(() => render('page.tsx', {cwd}))).toBe('ERR_FILE_EXISTS');
-  }, 60_000);
+  }, 120_000);
 
   it('refuses a received file that lists one path twice', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
@@ -1227,6 +1778,50 @@ describe('render(): every write stays inside the current folder', () => {
     fs.mkdirSync(path.join(dir, 'a-folder.html'), {recursive: true});
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'a-folder.html'}))).toBe('ERR_WRITE_FAILED');
   }, 60_000);
+
+  it('writes to an absolute --out in another folder, and never replaces a file there that a render did not write', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'share', 'page.html');
+      const result = /** @type {any} */ (await render('page.tsx', {cwd: dir, out}));
+      expect(result.data.output).toBe(out);
+      expect(fs.readFileSync(out, 'utf8')).toContain('<meta name="generator" content="Astryx');
+      // A render again replaces the file a render wrote.
+      await render('page.tsx', {cwd: dir, out});
+      const other = path.join(elsewhere, 'notes.html');
+      fs.writeFileSync(other, '<p>mine</p>');
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: other}))).toBe('ERR_FILE_EXISTS');
+      expect(fs.readFileSync(other, 'utf8')).toBe('<p>mine</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a symbolic link at an absolute --out, and leaves the file it points to', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const target = path.join(elsewhere, 'precious.html');
+      fs.writeFileSync(target, '<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+      const link = path.join(elsewhere, 'page.html');
+      fs.symlinkSync(target, link);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: link}))).toBe('ERR_PATH_TRAVERSAL');
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe('<meta name="generator" content="Astryx 0.0.0"><p>kept</p>');
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('refuses a relative --out outside the current folder, saying an absolute path works', async () => {
+    let error;
+    try {
+      await render('page.tsx', {cwd: dir, out: '../escaped.html'});
+    } catch (e) {
+      error = /** @type {any} */ (e);
+    }
+    expect(error?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(error?.message).toContain('or name an absolute path');
+  });
 
   it('refuses --out outside the current folder, and a write through a symlink that leaves it', async () => {
     expect(await codeOf(() => render('page.tsx', {cwd: dir, out: '../escaped.html'}))).toBe('ERR_PATH_TRAVERSAL');
@@ -1246,6 +1841,65 @@ describe('render(): every write stays inside the current folder', () => {
   });
 });
 
+describe('render(): imports with a query, as Vite gives them', () => {
+  it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
+    put('queries/notes.css', '.note { color: teal; --note-marker: 1; }\n');
+    put('queries/dot.png', PNG);
+    put('queries/data.json', '{"a": 1}\n');
+    put(
+      'queries/page.tsx',
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport * as whole from './data.json?raw';\nimport {default as named} from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre className=\"note\">{sheet}</pre><pre>{text}</pre><pre>{whole.default === text && named === text ? 'every import gets the text' : 'no'}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
+    expect(html).toContain('.note { color: teal; --note-marker: 1; }');
+    expect(html).toContain('every import gets the text');
+    expect(html).toContain('{&quot;a&quot;: 1}');
+    expect(html).toContain('src="data:image/png;base64,');
+    // A stylesheet imported with ?inline is text, not a sheet of the page:
+    // the class it styles is used, and no rule of it is in the page's styles.
+    expect(html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1]).not.toContain('--note-marker');
+    expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
+    const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 60_000);
+
+  it('loads a file with any other query as it loads without one: an image as its address, a module as itself', async () => {
+    put('queries/w.ts', "export const label = 'from the worker module';\n");
+    put(
+      'queries/others.tsx',
+      "import a from './dot.png?w=400';\nimport b from './dot.png?no-inline';\nimport c from './dot.png?url&inline';\nimport * as w from './w.ts?worker';\nexport default function Page() {\n  return <main><img src={a} alt=\"\" /><img src={b} alt=\"\" /><img src={c} alt=\"\" /><p>{w.label}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/others.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/others.html'), 'utf8');
+    expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(3);
+    expect(html).toContain('from the worker module');
+    expect(result.data.files.sort()).toEqual(['dot.png', 'others.tsx', 'w.ts']);
+  }, 60_000);
+});
+
+describe('render(): ordinary files named like configuration', () => {
+  it('carries modules and JSON data named config or ending in rc, and gives them back exactly', async () => {
+    put('names/config.ts', "export const site = {title: 'Named config'};\n");
+    put('names/lib/arc.ts', "export const arc = 'an arc';\n");
+    put('names/data/chart-config.json', '{"series": ["North", "South"]}\n');
+    put('names/data/config.json', '{"footer": "From config.json"}\n');
+    put(
+      'names/page.tsx',
+      "import {site} from './config';\nimport {arc} from './lib/arc';\nimport chart from './data/chart-config.json';\nimport config from './data/config.json';\nexport default function Page() {\n  return <main><h1>{site.title}</h1><p>{arc} {chart.series.join(' ')} {config.footer}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('names/page.tsx', {cwd: dir}));
+    expect(result.data.files.sort()).toEqual(['config.ts', 'data/chart-config.json', 'data/config.json', 'lib/arc.ts', 'page.tsx']);
+    expect(result.data.warnings.filter((/** @type {any} */ w) => w.code === 'not-embedded')).toEqual([]);
+    // Format 1 readers refuse these names, so the file says format 2.
+    const back = /** @type {any} */ (await render('names/page.html', {cwd: dir, reverse: true, out: 'names-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, format: 2});
+    for (const name of ['config.ts', 'lib/arc.ts', 'data/chart-config.json', 'data/config.json']) {
+      expect(fs.readFileSync(path.join(dir, 'names-back', name))).toEqual(fs.readFileSync(path.join(dir, 'names', name)));
+    }
+  }, 60_000);
+});
+
 describe('render --reverse: a received file may carry only what a render embeds', () => {
   /** @param {string} name @param {{path: string, text: string}[]} files */
   const crafted = async (name, files) => {
@@ -1263,6 +1917,8 @@ describe('render --reverse: a received file may carry only what a render embeds'
     ['the Astryx configuration', 'astryx.config.mjs', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['the package manifest', 'package.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a TypeScript configuration', 'tsconfig.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a TypeScript project configuration', 'tsconfig.app.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a JSON tool configuration by its config name', 'renovate.config.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a package inside node_modules', 'node_modules/react/index.js', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a shell script', 'scripts/install.sh', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a climbing path', '../escape.css', 'ERR_PATH_TRAVERSAL'],
@@ -1357,7 +2013,12 @@ describe('render --reverse: a received file may carry only what a render embeds'
     put('cfg/page.tsx', "import pkg from './package.json';\nexport default function Page() { return <p>v{pkg.version}</p>; }\n");
     const r = /** @type {any} */ (await render('cfg/page.tsx', {cwd: dir}));
     expect(r.data.files).toEqual(['page.tsx']);
-    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
+    expect(r.data.notCarried).toEqual(['package.json']);
+    expect(r.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "package.json is not carried: it is a tool's configuration, which experimental import never writes. The page shows what it reads from it, but experimental import cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
+    });
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
     const back = /** @type {any} */ (await render('cfg/page.html', {cwd: dir, reverse: true}));
@@ -1366,19 +2027,19 @@ describe('render --reverse: a received file may carry only what a render embeds'
   }, 60_000);
 });
 
-describe('astryx experimental render (CLI)', () => {
+describe('astryx experimental export (CLI)', () => {
   it('refuses an unknown experimental subcommand with exit 1', async () => {
     const r = await runCli(['--json', 'experimental', 'nope'], dir);
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
     expect(
-      out.suggestions.some((/** @type {any} */ s) => /experimental render$/.test(s.name)),
+      out.suggestions.some((/** @type {any} */ s) => /experimental export$/.test(s.name)),
     ).toBe(true);
   });
 
   it('fails with exit 1 and a readable message without --json', async () => {
-    const r = await runCli(['experimental', 'render', '--reverse', 'plain.html'], dir);
+    const r = await runCli(['experimental', 'export', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('is not an Astryx page');
     expect(r.stderr).toContain('astryx build');
@@ -1386,7 +2047,7 @@ describe('astryx experimental render (CLI)', () => {
 
 
   it('answers --json with the render.page envelope and --title', async () => {
-    const r = await runCli(['--json', 'experimental', 'render', 'page.tsx', '--out', 'cli.html', '--title', 'From the CLI'], dir);
+    const r = await runCli(['--json', 'experimental', 'export', 'page.tsx', '--out', 'cli.html', '--title', 'From the CLI'], dir);
     expect(r.status).toBe(0);
     const json = JSON.parse(r.stdout);
     expect(json.type).toBe('render.page');
@@ -1394,8 +2055,36 @@ describe('astryx experimental render (CLI)', () => {
     expect(fs.readFileSync(path.join(dir, 'cli.html'), 'utf8')).toContain('<title>From the CLI</title>');
   }, 60_000);
 
+  it('prints a command to give back a file rendered to another folder that runs from here', async () => {
+    const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-elsewhere-')));
+    try {
+      const out = path.join(elsewhere, 'shared report.html');
+      // Twice: the second round trip names the next free folder.
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        const rendered = await runCli(['experimental', 'export', 'page.tsx', '--out', out], dir);
+        expect(rendered.status, rendered.stderr).toBe(0);
+        const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
+        expect(line).toBeDefined();
+        // The printed command, run as printed after the CLI's own name.
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental import ')[1];
+        const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
+        expect(args).toEqual([out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'import', ...args], dir);
+        expect(back.status, back.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
+          fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
+        );
+      }
+    } finally {
+      fs.rmSync(elsewhere, {recursive: true, force: true});
+      for (const folder of ['shared report-restored', 'shared report-restored-2']) {
+        fs.rmSync(path.join(dir, folder), {recursive: true, force: true});
+      }
+    }
+  }, 120_000);
+
   it('fails with exit 1 and a JSON error envelope', async () => {
-    const r = await runCli(['--json', 'experimental', 'render', '--reverse', 'plain.html'], dir);
+    const r = await runCli(['--json', 'experimental', 'export', '--reverse', 'plain.html'], dir);
     expect(r.status).toBe(1);
     const json = JSON.parse(r.stdout);
     expect(json.code).toBe('ERR_RENDER_NOT_ASTRYX');
@@ -1404,8 +2093,30 @@ describe('astryx experimental render (CLI)', () => {
 
   it('marks itself experimental in help', async () => {
     const r = await runCli(['experimental', '--help'], dir);
-    expect(r.stdout).toMatch(/render[^\n]*\[experimental\]/);
+    expect(r.stdout).toMatch(/export[^\n]*\[experimental\]/);
   });
+
+  it('names at most 10 restored files in text and keeps every file in JSON', async () => {
+    const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
+    const sheets = Array.from({length: 12}, (_, i) => `styles/s${String(i + 1).padStart(2, '0')}.css`);
+    const page = {
+      path: 'page.tsx',
+      text: `${sheets.map(s => `import './${s}';`).join('\n')}\nexport default () => null;\n`,
+    };
+    const files = [page, ...sheets.map(s => ({path: s, text: 'p{}\n'}))];
+    put(
+      'many-files.html',
+      `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', files.map(f => ({path: f.path, bytes: Buffer.from(f.text)})))}</body>`,
+    );
+    const text = await runCli(['experimental', 'export', '--reverse', 'many-files.html', '--out', 'many-text/page.tsx'], dir);
+    expect(text.status).toBe(0);
+    const line = text.stdout.split('\n').find(l => /^\s*files\b/.test(l)) ?? '';
+    expect(line).toContain('styles/s09.css');
+    expect(line).not.toContain('styles/s10.css');
+    expect(line).toContain('... and 3 more in many-text/styles/');
+    const json = await runCli(['--json', 'experimental', 'export', '--reverse', 'many-files.html', '--out', 'many-json/page.tsx'], dir);
+    expect(JSON.parse(json.stdout).data.files).toHaveLength(13);
+  }, 60_000);
 });
 
 describe('render(): refusals', () => {
@@ -1419,6 +2130,171 @@ describe('render(): refusals', () => {
   ])('%s', async (_, name, source, code) => {
     put(name, source);
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
+  }, 30_000);
+
+  it("gives the run folder's integration line only for a page in the run folder's package", async () => {
+    put('acme-app/package.json', '{"name":"acme-app","private":true}');
+    put('acme-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('acme-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    put('guided.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    recordDeclaredSettings(dir, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let own;
+      try {
+        await render('guided.tsx', {cwd: dir});
+      } catch (e) {
+        own = e;
+      }
+      expect(own?.suggestions?.[0]?.name).toBe('acme add not-real-a-xyz');
+      /** @type {any} */
+      let other;
+      try {
+        await render('acme-app/page.tsx', {cwd: dir});
+      } catch (e) {
+        other = e;
+      }
+      expect(other?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(other?.suggestions ?? []).toEqual([]);
+      expect(other?.message).toBe(
+        'The page imports not-real-a-xyz, which is not installed. Install it in acme-app, the package that holds this page: from there, run pnpm add not-real-a-xyz',
+      );
+    } finally {
+      recordDeclaredSettings(dir, []);
+    }
+  }, 60_000);
+
+  it("suggests one install line for every missing package, in the project's package manager", async () => {
+    put('pnpm-app/package.json', '{"name":"pnpm-app","private":true}');
+    put('pnpm-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('pnpm-app/page.tsx', "import a from 'not-real-a-xyz';\nimport b from 'not-real-b-xyz';\nexport default () => <p>{String(a)}{String(b)}</p>;\n");
+    put('npm-app/package.json', '{"name":"npm-app","private":true}');
+    put('npm-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any[]} */
+    const errors = [];
+    // Rendered from the page's own package, the line runs as printed.
+    for (const [page, cwd] of [
+      ['page.tsx', path.join(dir, 'pnpm-app')],
+      ['page.tsx', path.join(dir, 'npm-app')],
+      // Rendered from the package above, the same line would add the packages
+      // there, so the message names the page's package instead.
+      ['pnpm-app/page.tsx', dir],
+    ]) {
+      try {
+        await render(page, {cwd});
+      } catch (e) {
+        errors.push(e);
+      }
+    }
+    expect(errors.map(e => [e.code, e.message, e.suggestions?.[0]?.name ?? null])).toEqual([
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed', 'pnpm add not-real-a-xyz not-real-b-xyz'],
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz, which is not installed', 'npm install not-real-a-xyz'],
+      [
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed. Install them in pnpm-app, the package that holds this page: from there, run pnpm add not-real-a-xyz not-real-b-xyz',
+        null,
+      ],
+    ]);
+  }, 60_000);
+
+  it('gives no install line when the project\'s lockfiles disagree, naming their folder from where the render runs', async () => {
+    put('two-locks/package.json', '{"name":"two-locks","private":true}');
+    put('two-locks/package-lock.json', '{}\n');
+    put('two-locks/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('two-locks/src/app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('src/app/page.tsx', {cwd: path.join(dir, 'two-locks')});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(error.message).toBe(
+      'The page imports not-real-a-xyz, which is not installed. Install missing dependencies: not-real-a-xyz. No install command: . has pnpm-lock.yaml and package-lock.json, and nothing there says which package manager to use.',
+    );
+    expect(error.suggestions ?? []).toEqual([]);
+  }, 60_000);
+
+  it('names the file and the line a compile error points at', async () => {
+    put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
+    put('broken/page.tsx', "import {Card} from './Card';\nexport default function Page() { return <Card />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('broken/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(/^The page does not compile \((?:broken\/)?Card\.tsx, line 1\): Unterminated JSX contents/);
+    // No machine path: the file is named from the project.
+    expect(error.message).not.toContain(dir);
+  }, 30_000);
+
+  it('names the value and the import when StyleX cannot read an imported value at build time', async () => {
+    put('sx/tokens.ts', 'export const gap = 8;\n');
+    put(
+      'sx/Row.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {\n  gap,\n} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap}});\nexport function Row() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+    );
+    put('sx/page.tsx', "import {Row} from './Row';\nexport default function Page() { return <Row />; }\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/page.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?Row\.tsx, line 3\): StyleX could not read `gap` from \.\/tokens at build time\. A value a style uses must be written in the style, or come from a \.stylex\.ts or \.stylex\.js file that defines it with stylex\.defineVars or stylex\.defineConsts\.$/,
+    );
+  }, 30_000);
+
+  it('reads the error the same with colour forced on, and names an aliased import by its local name', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      put(
+        'sx/AliasRow.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {gap as space} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap: space}});\nexport function AliasRow() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+      );
+      put('sx/alias.tsx', "import {AliasRow} from './AliasRow';\nexport default function Page() { return <AliasRow />; }\n");
+      /** @type {any} */
+      let error;
+      try {
+        await render('sx/alias.tsx', {cwd: dir});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_COMPILE');
+      expect(error.message).toMatch(
+        /^The page does not compile \((?:sx\/)?AliasRow\.tsx, line 2\): StyleX could not read `space` from \.\/tokens at build time\./,
+      );
+      expect(error.message).not.toContain('\u001b[');
+    } finally {
+      if (previous === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previous;
+    }
+  }, 30_000);
+
+  it('says which .stylex file StyleX could not find', async () => {
+    put(
+      'sx/missing.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {tones} from './gone.stylex';\nconst styles = stylex.create({text: {color: tones.ink}});\nexport default function Page() {\n  return <p {...stylex.props(styles.text)}>Hi</p>;\n}\n",
+    );
+    /** @type {any} */
+    let error;
+    try {
+      await render('sx/missing.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error.message).toMatch(
+      /^The page does not compile \((?:sx\/)?missing\.tsx, line 2\): StyleX could not find \.\/gone\.stylex, which `tones` comes from, at build time\. Check that the file exists, or that its package is installed where the page is\.$/,
+    );
   }, 30_000);
 
   it('refuses wrong inputs and flags', async () => {
@@ -1463,7 +2339,7 @@ describe('render(): a crash of Node itself', () => {
       `${name}.tsx`,
       `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(path.join(dir, `${name}.pid`))}, String(process.pid));\nwhile (true) {}\nexport default () => <p>Hi</p>;\n`,
     );
-    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'render', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
+    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'export', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
     const pidFile = path.join(dir, `${name}.pid`);
     const until = async (/** @type {() => boolean} */ done, /** @type {number} */ ms) => {
       for (const start = Date.now(); !done() && Date.now() - start < ms; ) await new Promise(r => setTimeout(r, 50));
@@ -1582,16 +2458,409 @@ describe('render(): a page outside a project', () => {
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
     fs.writeFileSync(path.join(away, 'dot.png'), PNG);
-    const run = runBin(away, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(away, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('no-astryx-styles');
     const html = fs.readFileSync(path.join(away, 'page.html'), 'utf8');
     expect(html).toContain('Café ✓ report');
     expect(html).toContain('astryx-button');
-    const back = runBin(away, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(away, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.json.data.exact).toBe(true);
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
+  }, 60_000);
+
+  it('carries the modules a page imports from above its own folder, as a restore lays them out', () => {
+    const tree = path.join(away, 'tree');
+    fs.mkdirSync(path.join(tree, 'app/x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'components'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'components/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above the page</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'app/x/page.tsx'), "import {Banner} from '../../components/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'export', 'app/x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'app/x/page.html']);
+    expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+    // The note names the page by its path among the files it lists.
+    const note = fs.readFileSync(path.join(tree, 'app/x/page.html'), 'utf8');
+    expect(note).toContain('Page: app/x/page.tsx\n');
+    expect(note).toContain('Carried files (2): app/x/page.tsx, components/Banner.tsx');
+    expect(note).toContain('edit app/x/page.tsx there instead');
+    // The page's own folder still holds the tsconfig.json and the public/
+    // images it is rendered with.
+    fs.mkdirSync(path.join(tree, 'site/public'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site/tsconfig.json'), '{"compilerOptions": {"paths": {"@/*": ["./*"]}}}\n');
+    fs.writeFileSync(path.join(tree, 'site/public/logo.png'), PNG);
+    fs.writeFileSync(path.join(tree, 'site/Note.tsx'), 'export function Note() {\n  return <p>Note by alias</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'site/page.tsx'), "import {Note} from '@/Note';\nexport default function Page() {\n  return <main><Note /><img src=\"/logo.png\" alt=\"\" /></main>;\n}\n");
+    const site = runBin(tree, ['experimental', 'export', 'site/page.tsx']);
+    expect(site.status).toBe(0);
+    const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
+    expect(siteHtml).toContain('Note by alias');
+    expect(siteHtml).toContain('src="data:image/png;base64,');
+    // A page that imports nothing above its own folder is named as it is
+    // listed among the files.
+    expect(siteHtml).toContain('Page: page.tsx\n');
+  }, 60_000);
+
+  it('names an imported *.config.json it does not carry in the warnings, the note and notCarried', () => {
+    const tree = path.join(away, 'config-named');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['chart.config.json']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "chart.config.json is not carried: its name reads as a tool's configuration, which experimental import never writes. The page shows it, but experimental import cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
+    });
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Sales in USD');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (experimental import cannot give them back)\n');
+    expect(note).not.toContain('come back exactly');
+    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; experimental import gives back the rest.');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
+  }, 60_000);
+
+  it('names every file it leaves out in the note and notCarried, whatever the reason', () => {
+    const tree = path.join(away, 'left-out');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'rows.test.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(path.join(tree, 'fake.png'), 'console.log(1)\n');
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {rows} from './rows.test';\nimport cfg from './chart.config.json';\nexport default function Page() {\n  return <main><h1>{cfg.title}</h1><p>{rows.join(' ')}</p><img src=\"fake.png\" alt=\"\" /></main>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect([...run.json.data.notCarried].sort()).toEqual(['chart.config.json', 'fake.png', 'rows.test.ts']);
+    const codes = run.json.data.warnings.map((/** @type {any} */ w) => w.code);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-carried')).toHaveLength(1);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-embedded')).toHaveLength(2);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    const line = note.split('\n').find(l => l.trim().startsWith('Not carried:'));
+    expect(line?.trim().replace(/^Not carried: | \(experimental import cannot give them back\)$/g, '').split(', ').sort()).toEqual([
+      'chart.config.json',
+      'fake.png',
+      'rows.test.ts',
+    ]);
+    expect(note).not.toContain('come back exactly');
+  }, 60_000);
+
+  it('lists notCarried in the text output, as the reverse view lists missing', () => {
+    const tree = path.join(away, 'config-named-text');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, [BIN, 'experimental', 'export', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(run.status).toBe(0);
+    expect(run.stdout).toMatch(/notCarried\W+chart\.config\.json/);
+    fs.renameSync(path.join(tree, 'chart.config.json'), path.join(tree, 'chart-data.json'));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const renamed = spawnSync(process.execPath, [BIN, 'experimental', 'export', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(renamed.status).toBe(0);
+    expect(renamed.stdout).not.toContain('notCarried');
+  }, 60_000);
+
+  it('names a module the page imports from outside the folder it carries from', () => {
+    const tree = path.join(away, 'outside-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    // The module it imports from there, and the one that module imports.
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+    });
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html).toContain('North South');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (experimental import cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    // The import and the record name rows.ts, which is named once; the
+    // record also names helper.ts, which only rows.ts imports.
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows', '../lib/helper.ts']});
+    // Rendered from the folder that holds both, the module is carried.
+    const whole = runBin(tree, ['experimental', 'export', 'page/page.tsx', '--out', 'whole.html']);
+    expect(whole.status).toBe(0);
+    expect(whole.json.data).not.toHaveProperty('notCarried');
+    expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
+  }, 60_000);
+
+  it('names a folder the page imports from above the carried folder once on the way back', () => {
+    const tree = path.join(away, 'outside-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+  }, 60_000);
+
+  it('names an extensionless JSON import the render leaves out once on the way back', () => {
+    const tree = path.join(away, 'extensionless-json');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import site from './site.config';\nexport default function Page() {\n  return <h1>{site.title}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.config.json']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['site.config']});
+  }, 60_000);
+
+  it('keeps a recorded JSON file that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-json');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import data from './rows.json';\nexport const rows: string[] = data;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.json', '../lib/rows.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    // The import names rows.ts, the file it resolves to first; rows.json is
+    // named by itself.
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.json']);
+  }, 60_000);
+
+  it('keeps a recorded folder index beside a same-named module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './rows/index';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.ts', '../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows/index.ts']);
+  }, 60_000);
+
+  it('keeps a recorded image that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.tsx'), "export const Rows = () => <img src=\"../lib/rows.png\" alt=\"\" />;\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {Rows} from '../lib/rows';\nexport default function Page() {\n  return <main><Rows /></main>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.png', '../lib/rows.tsx']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.png']);
+  }, 60_000);
+
+  it('follows a TypeScript-style .js import in a module from outside the carried folder to its source', () => {
+    const tree = path.join(away, 'outside-ts-js');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south: string = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper.js';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8')).toContain('North South');
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
+  }, 60_000);
+
+  it('in a project, tells the reader to move a file from outside the project inside it', () => {
+    const tree = path.join(away, 'outside-project');
+    fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'app/package.json'), JSON.stringify({name: 'app', private: true}));
+    fs.writeFileSync(path.join(tree, 'shared/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'app/src/page.tsx'),
+      "import {rows} from '../../shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'app/src'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../../shared/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Move it inside the project's folder.",
+    });
+  }, 60_000);
+
+  it('names a module the page imports through a path alias from outside the folder it carries from', () => {
+    const tree = path.join(away, 'outside-alias');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'shared/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/tsconfig.json'),
+      JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@shared/*': ['../shared/*']}}}),
+    );
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '@shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['../shared/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+    });
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html).toContain('North South');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: ../shared/rows.ts (experimental import cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    // --reverse cannot resolve the alias, but the file records what the
+    // render left out, so it names the module as missing.
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../shared/rows.ts']});
+  }, 60_000);
+
+  it('carries a JSON file and a stylesheet from above the page folder, and names an image from there as not carried', () => {
+    const tree = path.join(away, 'above-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'data'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'data/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'data/site.css'), '.rows { color: teal; }\n');
+    fs.writeFileSync(path.join(tree, 'data/dot.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nimport '../data/site.css';\nexport default function Page() {\n  return <p className=\"rows\">{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page/page.tsx', 'data/rows.json', 'data/site.css']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings).toEqual([]);
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html.slice(0, html.indexOf('-->'))).not.toContain('Not carried');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, output: 'page-restored/page/page.tsx'});
+    expect(back.json.data).not.toHaveProperty('missing');
+
+    // An image the page shows from there is not carried (only the page's
+    // folder's images are), so it is named.
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nexport default function Page() {\n  return <p><img src=\"../data/dot.png\" alt=\"\" />{rows.join(' ')}</p>;\n}\n",
+    );
+    const shown = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx', '--out', 'shown.html']);
+    expect(shown.status).toBe(0);
+    expect(shown.json.data.files).toEqual(['page/page.tsx', 'data/rows.json']);
+    expect(shown.json.data.notCarried).toEqual(['data/dot.png']);
+    expect(shown.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['not-embedded']);
+  }, 60_000);
+
+  it('names a Sass stylesheet the page imports as not carried', () => {
+    const tree = path.join(away, 'sass-import');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.scss'), '$c: teal;\np { color: $c; }\n');
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import './site.scss';\nexport default function Page() {\n  return <p>Sales</p>;\n}\n");
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.scss']);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: site.scss (experimental import cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.json.data.exact).toBe(false);
+    expect(back.json.data.missing).toEqual(['site.scss']);
+  }, 60_000);
+
+  it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
+    const tree = path.join(away, 'config-renamed');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart-data.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'chart-data.json']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-carried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).not.toContain('Not carried');
+    expect(html).toContain('so the page can come back exactly.');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, files: expect.arrayContaining(['page-restored/page.tsx', 'page-restored/chart-data.json'])});
+    expect(back.json.data).not.toHaveProperty('missing');
+  }, 60_000);
+
+  it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {
+    const tree = path.join(away, 'dots');
+    fs.mkdirSync(path.join(tree, '..x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'shared/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, '..x/page.tsx'), "import {Banner} from '../shared/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'export', '..x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
+    const back = runBin(path.join(tree, '..x'), ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
 
   it('loads one React outside a project, even when the folder holds its own copy', () => {
@@ -1605,7 +2874,7 @@ describe('render(): a page outside a project', () => {
       path.join(sub, 'page.jsx'),
       "import {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core';\nexport default function Page() {\n  const [v] = useState('typed');\n  return <TextInput label=\"Name\" value={v} onChange={() => {}} />;\n}\n",
     );
-    const run = runBin(sub, ['experimental', 'render', 'page.jsx']);
+    const run = runBin(sub, ['experimental', 'export', 'page.jsx']);
     expect(run.status).toBe(0);
     expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
   }, 60_000);
@@ -1634,7 +2903,7 @@ describe('render(): a page outside a project', () => {
       `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n${body}  return <Button label={a + ' ' + b} />;\n}\n`,
     );
     for (const page of ['plain', 'core']) {
-      const run = runBin(sub, ['experimental', 'render', `${page}.jsx`]);
+      const run = runBin(sub, ['experimental', 'export', `${page}.jsx`]);
       expect(run.status).toBe(0);
       const html = fs.readFileSync(path.join(sub, `${page}.html`), 'utf8');
       expect(html).toContain('cjs-hook');
@@ -1655,8 +2924,8 @@ describe('render(): a page outside a project', () => {
 const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
 const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
 const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
-const inside = textOf(await renderPage(entry, {served: null}));
-const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+const inside = textOf(await renderPage(entry, {served: null, markupOnly: true}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}, markupOnly: true}));
 console.log(JSON.stringify({inside, outside}));
 `;
     const {NODE_PATH: _, ...env} = process.env;
@@ -1666,10 +2935,108 @@ console.log(JSON.stringify({inside, outside}));
     expect(outside).toContain('and the CLI runs without one');
   }, 60_000);
 
+  it("compiles a page's StyleX that reads Core's theme variables, with the names Core's stylesheet defines", () => {
+    const sub = path.join(away, 'tokens');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(sub, 'page.tsx'),
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        "import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';",
+        "import {Text} from '@astryxdesign/core/Text';",
+        '',
+        "const styles = stylex.create({box: {backgroundColor: colorVars['--color-background-surface'], padding: spacingVars['--spacing-2']}});",
+        '',
+        'export default function Page() {',
+        '  return <div {...stylex.props(styles.box)}><Text>Themed box</Text></div>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const run = runBin(sub, ['experimental', 'export', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    for (const name of ['--color-background-surface', '--spacing-2']) {
+      expect(style).toContain(`var(${name})`);
+      expect(style).toContain(`${name}:`);
+    }
+  }, 60_000);
+
   it('still names a package the CLI does not carry as not installed', () => {
     fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
-    const run = runBin(away, ['experimental', 'render', 'dep.jsx']);
+    const run = runBin(away, ['experimental', 'export', 'dep.jsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+  }, 60_000);
+
+  it('names every package the page and its own modules need in one refusal, with no install line outside a project', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'export', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    // No package.json holds this folder, so an install would make it a
+    // project: the message names the packages for the project that uses the
+    // page, with no install line.
+    expect(run.json.error).toBe(
+      'The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+    expect(run.json.suggestions ?? []).toEqual([]);
+  }, 60_000);
+
+  it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
+    fs.writeFileSync(
+      path.join(away, 'used-deps.tsx'),
+      "import {Metadata} from 'not-real-next-xyz';\nimport {unused} from 'not-real-unused-xyz';\nimport {size} from './used-deps-shapes';\nimport logo from 'not-real-brand-xyz/logo.png';\nimport mark from 'not-real-mark-xyz/mark.svg';\nexport const metadata: Metadata = {title: 'x'};\nexport default () => <img src={logo} data-mark={mark} width={size} alt=\"\" />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'used-deps-shapes.ts'),
+      "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
+    );
+    const run = runBin(away, ['experimental', 'export', 'used-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+  }, 60_000);
+
+  it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
+    fs.writeFileSync(
+      path.join(away, 'js-deps.jsx'),
+      "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
+    );
+    const run = runBin(away, ['experimental', 'export', 'js-deps.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+  }, 60_000);
+
+  it('counts a re-export of a package whose type the module also imports without `import type`', () => {
+    fs.writeFileSync(
+      path.join(away, 're-export-deps.tsx'),
+      "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
+    );
+    const run = runBin(away, ['experimental', 'export', 're-export-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed. Install it in the project that uses this page.');
+  }, 60_000);
+
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'export', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
   }, 60_000);
 
   it("uses only the project's own packages inside a project", async () => {
@@ -1682,10 +3049,112 @@ console.log(JSON.stringify({inside, outside}));
   }, 60_000);
 });
 
+describe('render(): media queries asked in JavaScript', () => {
+  it("names each media query the page asks with Core's hook or matchMedia, and says to fold the layout with CSS", async () => {
+    put(
+      'screen-query.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
+function useDark() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(window.matchMedia(\`(prefers-color-scheme: dark)\`).matches), []);
+  return dark;
+}
+export default function Page() {
+  const narrow = useMediaQuery('(max-width: 768px)');
+  const alsoNarrow = useMediaQuery('(max-width: 768px)');
+  const dark = useDark();
+  return <main>{narrow && alsoNarrow ? 'One column' : 'Two columns'}{dark ? ' dark' : ''}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query.tsx', {cwd: dir}));
+    const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toBe(
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 60_000);
+
+  it("names the hook imported from Core's root entry, and an optional matchMedia call", async () => {
+    put(
+      'screen-query-root.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core';
+export default function Page() {
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const [motion, setMotion] = useState(true);
+  useEffect(() => setMotion(!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches), []);
+  return <main>{wide ? 'Wide' : 'Narrow'}{motion ? '' : ' still'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-root.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks useMediaQuery('(min-width: 1024px)'), matchMedia('(prefers-reduced-motion: reduce)') in JavaScript");
+  }, 60_000);
+
+  it("names the hook called through a namespace import of Core, and a call with no query, without failing the render", async () => {
+    put(
+      'screen-query-namespace.tsx',
+      `import * as core from '@astryxdesign/core';
+function never() {
+  return [window.matchMedia?.(), matchMedia(), core.useMediaQuery()];
+}
+export default function Page() {
+  const narrow = core.useMediaQuery('(max-width: 600px)');
+  return <main>{narrow ? 'Narrow' : 'Wide'}{typeof never}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-namespace.tsx', {cwd: dir}));
+    expect(result.type).toBe('render.page');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks matchMedia(), useMediaQuery(), useMediaQuery('(max-width: 600px)') in JavaScript");
+  }, 60_000);
+
+  it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
+    put(
+      'no-screen-query.tsx',
+      `function useMediaQuery(query: string) {
+  return query.length > 100;
+}
+export default function Page() {
+  return <main>{useMediaQuery('(max-width: 768px)') ? 'narrow' : 'wide'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('no-screen-query.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('screen-query');
+  }, 60_000);
+});
+
 describe('render(): charts', () => {
   const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
+  /**
+   * Each drawing in a page, in order: its picture's size and its markup.
+   * @param {string} html
+   */
+  const drawingsIn = html =>
+    html
+      .split(/(?=<div\b[^>]*class="recharts-wrapper")/)
+      .slice(1)
+      .map(part => {
+        const surface = /<svg\b(?![^>]*legend icon)[^>]*class="recharts-surface"[^>]*>/.exec(part)?.[0] ?? '';
+        const [, width, height] = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(surface) ?? [];
+        return {width: Number(width), height: Number(height), html: part};
+      });
+  /**
+   * Each container chart's drawings, by the container's place in the page.
+   * @param {string} html
+   */
+  const containersIn = html =>
+    html
+      .split(/(?=<div\b[^>]*class="recharts-responsive-container")/)
+      .slice(1)
+      .map(part => drawingsIn(part).slice(0, CHART_WIDTHS.length));
 
-  it('draws a chart sized by its container and a chart of fixed size, and lets the first fit the width', async () => {
+  it('draws a chart sized by its container at each width, and a chart of fixed size once', async () => {
     put(
       'charts.tsx',
       `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
@@ -1705,16 +3174,73 @@ export default function Page() {
     const result = /** @type {any} */ (await render('charts.tsx', {cwd: dir}));
     expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
     const html = fs.readFileSync(path.join(dir, 'charts.html'), 'utf8');
-    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(2);
     expect(html).toContain('recharts-line-curve');
     expect(html).toContain('recharts-bar-rectangle');
-    // A container 200 pixels high starts two and a half times as wide.
-    expect(html).toContain('viewBox="0 0 500 200"');
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important');
+    // The container is drawn at each width, all 200 pixels high, in a box
+    // with the size the container gives itself in a browser.
+    const [container] = containersIn(html);
+    expect(container.map(d => [d.width, d.height])).toEqual(CHART_WIDTHS.map(w => [w, 200]));
+    expect(html).toContain('<div data-astryx-chart-widths="" style="width:100%;height:200px" class="recharts-responsive-container">');
+    // The chart of fixed size is drawn once, as its props give it.
+    expect(drawingsIn(html).map(d => [d.width, d.height]).slice(-1)).toEqual([[300, 120]]);
+    expect(html).toContain('@container (width <= 71px)');
     expect(html).not.toContain('<astryx-chart');
   }, 60_000);
 
-  it('keeps room for a fixed chart\'s legend where its props place it, and gives a container chart\'s legend its own row', async () => {
+  it('draws a chart that fills its box at the height the box states', async () => {
+    put(
+      'charts-box.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <div style={{height: 280}}>
+        <ResponsiveContainer width="100%" height="100%"><LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart></ResponsiveContainer>
+      </div>
+      <section>
+        <ResponsiveContainer width="100%" height="50%"><LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart></ResponsiveContainer>
+      </section>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-box.tsx', {cwd: dir});
+    const [fills, unstated] = containersIn(fs.readFileSync(path.join(dir, 'charts-box.html'), 'utf8'));
+    expect(new Set(fills.map(d => d.height))).toEqual(new Set([280]));
+    // A box that states no height gives none to share: the chart is drawn
+    // 300 high and fits the box a browser gives it.
+    expect(new Set(unstated.map(d => d.height))).toEqual(new Set([300]));
+  }, 60_000);
+
+  it('gives each drawing of a container chart its own ids, so a gradient the page defines in it fills every drawing', async () => {
+    put(
+      'charts-gradient.tsx',
+      `import {ResponsiveContainer, AreaChart, Area, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data}>
+        <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
+        <XAxis dataKey="d" /><Area dataKey="v" fill="url(#fade)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+`,
+    );
+    await render('charts-gradient.tsx', {cwd: dir});
+    const [container] = containersIn(renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8')) ?? '');
+    for (const {width, html: part} of container) {
+      expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-chart0-at-${width}"`));
+      expect(part).toContain(`fill="url(#fade-chart0-at-${width})"`);
+      expect(part).not.toMatch(/id="fade"|url\(#fade\)/);
+    }
+  }, 60_000);
+
+  it("keeps room for a chart's legend where its props place it, and puts a container chart's legend inside its picture", async () => {
     put(
       'charts-legend.tsx',
       `import {ResponsiveContainer, LineChart, Line, XAxis, Legend} from 'recharts';
@@ -1734,7 +3260,7 @@ export default function Page() {
         <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Wins" /><Legend layout="vertical" align="left" verticalAlign="bottom" /></LineChart>
       </ResponsiveContainer>
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Ties" /><Legend layout="vertical" align="center" verticalAlign="bottom" /></LineChart>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Bold" /><Legend wrapperStyle={{fontSize: 12, fontWeight: 700}} /></LineChart>
       </ResponsiveContainer>
     </div>
   );
@@ -1744,38 +3270,46 @@ export default function Page() {
     const result = /** @type {any} */ (await render('charts-legend.tsx', {cwd: dir}));
     expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
     const html = fs.readFileSync(path.join(dir, 'charts-legend.html'), 'utf8');
-    const axes = [...html.matchAll(/<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/g)].map(m => ({
-      y: Number(/\by1="([\d.]+)"/.exec(m[0])?.[1]),
-      x2: Number(/\bx2="([\d.]+)"/.exec(m[0])?.[1]),
-    }));
-    // A container chart keeps no room in its picture: its legend takes its
-    // own row under it, so the x-axis sits at 200 - 5 - 30 = 165.
-    expect(axes[0].y).toBe(165);
-    // A fixed chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
-    expect(axes[1].y).toBe(141);
-    // A legend at the side keeps room on the right: the plot ends before it.
-    expect(axes[2].x2).toBeLessThan(550 - 40);
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important');
-    expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
-    // A vertical legend in a container chart sits beside the picture, centered.
-    const sided = [...html.matchAll(/<div\b[^>]*class="recharts-wrapper"[^>]*>/g)].map(m => m[0]).filter(tag => tag.includes('data-legend-side'));
-    // Right and middle, then left and bottom; a vertical legend centered
-    // across takes its own row, unmarked.
-    expect(sided).toHaveLength(2);
-    expect(sided[0]).toContain('data-legend-side="right"');
-    expect(sided[0]).toContain('data-legend-middle=""');
-    expect(sided[1]).toContain('data-legend-side="left"');
-    expect(sided[1]).not.toContain('data-legend-middle');
-    expect(sided[1]).toContain('data-legend-bottom=""');
-    // A bottom legend goes under the picture only when it is not beside it.
-    expect(html).toContain('.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}');
-    expect(html).toContain('[data-legend-side]{flex-direction:row');
-    // A side is physical: a right-to-left page reverses the row.
-    expect(html).toContain('[data-legend-side]:dir(rtl){flex-direction:row-reverse}');
-    expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
-    // Only the chart's own picture scales; a legend's icons keep their size.
-    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
-    expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
+    /** @param {string} part */
+    const axis = part => {
+      const line = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(part)?.[0] ?? '';
+      return {y: Number(/\by1="([\d.]+)"/.exec(line)?.[1]), x2: Number(/\bx2="([\d.]+)"/.exec(line)?.[1])};
+    };
+    /** @param {string} part */
+    const legendBox = part => {
+      const tag = /<foreignObject\b[^>]*>/.exec(part)?.[0] ?? '';
+      /** @param {string} name */
+      const n = name => Number(new RegExp(`\\b${name}="([\\d.]+)"`).exec(tag)?.[1]);
+      return {x: n('x'), y: n('y'), width: n('width'), height: n('height')};
+    };
+    const fixed = drawingsIn(html);
+    const [bottom, right, left, styled] = containersIn(html);
+    const wide = bottom.find(d => d.width === 960);
+    // Each chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
+    expect(axis(/** @type {any} */ (wide).html).y).toBe(141);
+    expect(axis(fixed.find(d => d.width === 400)?.html ?? '').y).toBe(141);
+    // A container chart's legend sits in that row, inside the picture, so it
+    // scales with the drawing and never covers it.
+    expect(legendBox(/** @type {any} */ (wide).html)).toEqual({x: 5, y: 200 - 5 - 24, width: 950, height: 24});
+    expect(/** @type {any} */ (wide).html).toMatch(/<foreignObject\b[^>]*><div style="width:100%" class="recharts-legend-wrapper">/);
+    // A legend at the side keeps room there: the plot ends before it, and
+    // the legend sits at that edge, at the height recharts gives it.
+    const sided = /** @type {any} */ (right.find(d => d.width === 960));
+    expect(axis(sided.html).x2).toBeLessThan(960 - 40);
+    const box = legendBox(sided.html);
+    expect(box.x + box.width).toBe(960 - 5);
+    const low = legendBox(/** @type {any} */ (left.find(d => d.width === 960)).html);
+    expect(low.x).toBe(5);
+    expect(low.y + low.height).toBe(220 - 5);
+    // Inside the picture a legend keeps the rest of its own style.
+    const styledLegend = /<div style="([^"]*)" class="recharts-legend-wrapper">/.exec(/** @type {any} */ (styled.find(d => d.width === 960)).html)?.[1];
+    expect(styledLegend).toContain('font-size:12px');
+    expect(styledLegend).toContain('font-weight:700');
+    expect(styledLegend).toContain('width:100%');
+    expect(styledLegend).not.toMatch(/position|left|bottom/);
+    // A chart of fixed size keeps its legend in the layer recharts puts it in.
+    expect(fixed.find(d => d.width === 550)?.html).not.toContain('<foreignObject');
+    expect(html).not.toContain('data-legend-side');
   }, 60_000);
 
   it("draws a chart's parts in the React context the page gives them", async () => {
@@ -1958,7 +3492,7 @@ export default function Page() {
 `,
     );
     await render('charts-effect-provider.tsx', {cwd: dir});
-    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    const html = renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8')) ?? '';
     expect(html).toContain('Unit: items');
     expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
     expect(html).toMatch(/a (items|km)/);
@@ -2007,16 +3541,16 @@ export default function Page() {
     // Five names of about 120 px each wrap into two rows in 470 px, so the
     // axis sits two legend rows up: 240 - 5 - 48 - 30 = 157.
     expect(Number(/\by1="([\d.]+)"/.exec(axis)?.[1])).toBe(157);
-    // In a container chart the same legend takes its own row under the
-    // picture, which keeps no room for it, so it cannot cover the axis.
+    // A container chart drawn 480 wide keeps the same room.
     put('charts-wrap-rc.tsx', fs.readFileSync(path.join(dir, 'charts-wrap.tsx'), 'utf8')
       .replace("import {LineChart,", "import {ResponsiveContainer, LineChart,")
       .replace('<LineChart width={480} height={240} data={data}>', '<ResponsiveContainer width="100%" height={240}><LineChart data={data}>')
       .replace('</LineChart>', '</LineChart></ResponsiveContainer>'));
     await render('charts-wrap-rc.tsx', {cwd: dir});
     const rc = fs.readFileSync(path.join(dir, 'charts-wrap-rc.html'), 'utf8');
-    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(rc)?.[0] ?? '';
-    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(240 - 5 - 30);
+    const at480 = drawingsIn(rc).find(d => d.width === 480)?.html ?? '';
+    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(at480)?.[0] ?? '';
+    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(157);
     expect(rc).toContain('recharts-legend-wrapper');
   }, 60_000);
 
@@ -2042,17 +3576,29 @@ export default function Page() {
     );
     await render('charts-axis.tsx', {cwd: dir});
     const html = fs.readFileSync(path.join(dir, 'charts-axis.html'), 'utf8');
-    const ticks = [...html.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
-      x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
-      anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
-      text: m[2],
-    }));
-    const timeTicks = ticks.filter(t => t.text.startsWith('Apr'));
-    const last = timeTicks[timeTicks.length - 1];
-    // The drawing is 750 wide; an 11-character label at 14 px is about 92 wide.
-    expect(last.anchor).toBe('middle');
-    expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(750);
-    expect(timeTicks.length).toBeLessThan(25);
+    /** @param {string} part */
+    const ticksIn = part =>
+      [...part.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
+        x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
+        anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
+        text: m[2],
+      }));
+    const drawings = drawingsIn(html);
+    // In each drawing of the container chart, the last label stays inside:
+    // an 11-character label at 14 px is about 92 wide. A drawing too narrow
+    // for one label shows none, as a browser that narrow does.
+    for (const {width, html: part} of drawings.filter(d => d.width !== 400)) {
+      const timeTicks = ticksIn(part).filter(t => t.text.startsWith('Apr'));
+      const last = timeTicks[timeTicks.length - 1];
+      if (width < 240 && !last) continue;
+      expect(last.anchor).toBe('middle');
+      expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(width);
+      expect(timeTicks.length).toBeLessThan(25);
+    }
+    // A narrower drawing shows fewer labels, as a narrower browser does.
+    const count = (/** @type {number} */ w) => ticksIn(drawings.find(d => d.width === w)?.html ?? '').length;
+    expect(count(339)).toBeLessThan(count(1358));
+    const ticks = ticksIn(drawings.find(d => d.width === 400)?.html ?? '');
     const catTicks = ticks.filter(t => t.text.startsWith('Category'));
     expect(catTicks.length).toBeGreaterThan(1);
     expect(catTicks.length).toBeLessThan(24);

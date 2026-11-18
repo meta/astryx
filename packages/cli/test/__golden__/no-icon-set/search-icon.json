@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 235,
+    "matchCount": 234,
     "results": [
       {
         "domain": "component",
@@ -134,6 +134,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BaseTypeaheadCustomSearch --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -146,6 +147,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BaseTypeaheadMenu --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -158,6 +160,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BottomSheetSnapPoints --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -170,6 +173,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BreadcrumbsDeepHierarchy --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -182,6 +186,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BreadcrumbsWithIcons --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -194,6 +199,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonFloating --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -206,6 +212,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonGroupShowcase --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -218,6 +225,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -230,6 +238,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterHorizontal --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -242,6 +251,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterInsideACard --type block",
+        "isReady": true,
         "mentions": []
       }
     ]

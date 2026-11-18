@@ -323,6 +323,13 @@ function jsonContainsKey(obj, target) {
  * @property {(dir: string) => void} [setup] - Prepare a tmpDir before the run.
  * @property {string[]} [jsonFieldAllowlist] - JSON keys forgiven from text.
  * @property {boolean} [skipFieldChecks] - Skip both record-key and field checks.
+ * @property {string} [dir] - The tmpDir folder `setup` writes, when cases
+ *   of one command each need their own (default: the name).
+ * @property {string[]} [textBlockAllowlist] - Text blocks forgiven from the
+ *   JSON, each `<block> — why` (a code line the text shows: the JSON carries
+ *   its parts).
+ * @property {string[]} [expectData] - Data fields the JSON must carry: the
+ *   command succeeds, so the field checks run on its receipt.
  * @property {boolean} [errorExpected] - The command is expected to error.
  * @property {() => Promise<string>} [prepare] - Make the working directory (instead of `cwd`).
  * @property {(cwd: string) => Promise<void>} [beforeEachRun] - Run before the text run and before the JSON run.
@@ -502,8 +509,8 @@ const CASES = [
     ],
   },
   {
-    name: 'experimental render',
-    args: ['experimental', 'render', 'page.jsx'],
+    name: 'experimental export',
+    args: ['experimental', 'export', 'page.jsx'],
     cwd: '__TMP__',
     // A page with no imports, in a folder that can resolve React and Core, so
     // the page gets Core's stylesheets in every runner.
@@ -530,10 +537,10 @@ const CASES = [
   },
   {
     // The --reverse projection (same command, same folder as the case above).
-    name: 'experimental render',
+    name: 'experimental export',
     args: [
       'experimental',
-      'render',
+      'export',
       '--reverse',
       'carried.html',
       '--out',
@@ -542,6 +549,39 @@ const CASES = [
     ],
     cwd: '__TMP__',
     // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
+  },
+  {
+    // The way back as its own command: the --reverse projection above.
+    name: 'experimental import',
+    args: [
+      'experimental',
+      'import',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
+    cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
         'export default function Page() { return <h1>Hello</h1>; }\n',
@@ -578,6 +618,7 @@ const CASES = [
       'score — only shown with --verbose',
       'reason — only shown with --verbose',
       'kind — internal domain subtype, not shown in default text',
+      'isReady — an unready template\'s kind reads "(not ready)"',
     ],
   },
   {
@@ -592,7 +633,7 @@ const CASES = [
     skipFieldChecks: true,
     jsonFieldAllowlist: [
       'id — not shown in text records (#6265)',
-      'isReady — folded into name as "(WIP)" suffix (#6265)',
+      'isReady — folded into name as "(not ready)" suffix (#6265)',
     ],
   },
   {
@@ -600,6 +641,81 @@ const CASES = [
     args: ['theme', 'add', '--list'],
     // Themes are rendered as list items, not records.
     skipFieldChecks: true,
+  },
+  {
+    // The receipt of a first add in an app whose installed package names
+    // the provider that wires its themes (AST-017 FR13): its note in text
+    // and JSON.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    dir: 'theme add provider',
+    setup: providerApp,
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</Theme> — the closing tag of the wiring the text shows',
+    ],
+    // Each run is a first add.
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd);
+    },
+  },
+  {
+    // The same, when the provider takes the theme through a prop: the one
+    // change that passes it, in text and JSON.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    dir: 'theme add provider theme prop',
+    setup: dir => providerApp(dir, 'theme'),
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme');
+    },
+  },
+  {
+    // And for a theme with one color mode, when the provider takes the mode.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    setup: dir =>
+      providerApp(dir, 'theme', {modeProp: 'themeMode', oneMode: true}),
+    dir: 'theme add provider mode prop',
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme', {modeProp: 'themeMode', oneMode: true});
+    },
+  },
+  {
+    // The removal of the last theme in an app whose one provider takes the
+    // theme (and names a mode prop the module never used): its receipt.
+    name: 'theme remove',
+    args: ['theme', 'remove', 'brand'],
+    cwd: '__TMP__',
+    dir: 'theme remove provider',
+    jsonFieldAllowlist: [
+      "default — '' once the last theme is removed: the text says the module was deleted",
+    ],
+    setup: dir => providerApp(dir, 'theme', {modeProp: 'themeMode'}),
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
+    // Each run removes the theme a fresh add put there.
+    beforeEachRun: async cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme', {modeProp: 'themeMode'});
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], {cwd});
+    },
   },
   {
     name: 'theme remove',
@@ -760,11 +876,14 @@ const CASES = [
       'neutral',
     ],
     prepare: themeProject,
-    beforeEachRun: async cwd =>
-      fs.rmSync(path.join(cwd, 'themes', 'fresh'), {
-        recursive: true,
-        force: true,
-      }),
+    // The theme and its app copy go, so each run is the same first write.
+    beforeEachRun: async cwd => {
+      for (const dir of [
+        path.join(cwd, 'themes', 'fresh'),
+        path.join(cwd, 'src', 'themes', 'fresh'),
+      ])
+        fs.rmSync(dir, {recursive: true, force: true});
+    },
   },
   {
     name: 'experimental theme editor new',
@@ -782,11 +901,17 @@ const CASES = [
       'round',
     ],
     prepare: themeProject,
-    beforeEachRun: async cwd =>
-      fs.rmSync(path.join(cwd, 'themes', 'flagged'), {
-        recursive: true,
-        force: true,
-      }),
+    // The theme and its app copy go, so each run is the same first write.
+    beforeEachRun: async cwd => {
+      for (const dir of [
+        path.join(cwd, 'themes', 'flagged'),
+        path.join(cwd, 'src', 'themes', 'flagged'),
+      ])
+        fs.rmSync(dir, {recursive: true, force: true});
+    },
+    jsonFieldAllowlist: [
+      'missedParts — a small count the missed line says as "on N parts", next to the parts it names',
+    ],
   },
   {
     name: 'experimental theme editor set',
@@ -909,8 +1034,75 @@ const CASES = [
     name: 'upgrade',
     args: ['upgrade', '--list'],
     cwd: '__TMP__',
+    jsonFieldAllowlist: [
+      'optional — printed as "(optional)" after the title of a codemod that runs only on request',
+    ],
   },
 ];
+
+/**
+ * An app whose installed package, `@acme/ui`, names the provider that wires
+ * its one theme, `brand`, and, with `themeProp`, the prop it takes a theme
+ * object through.
+ * @param {string} dir
+ * @param {string} [themeProp]
+ * @param {{modeProp?: string, oneMode?: boolean}} [more] the provider's mode
+ *   prop, and a theme with one color mode
+ */
+function providerApp(dir, themeProp, more = {}) {
+  /** @param {string} rel @param {string} content */
+  const put = (rel, content) => {
+    const file = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, content);
+  };
+  put('tsconfig.json', '{}\n');
+  put(
+    'package.json',
+    JSON.stringify({
+      name: 'provider-app',
+      private: true,
+      dependencies: {'@acme/ui': '1.0.0'},
+    }),
+  );
+  put(
+    'node_modules/@acme/ui/package.json',
+    JSON.stringify({
+      name: '@acme/ui',
+      version: '1.0.0',
+      type: 'module',
+      exports: {
+        './theme': './dist/theme.js',
+        './themes/brand': './dist/brand.js',
+        './themes/brand.css': './dist/brand.css',
+      },
+    }),
+  );
+  put(
+    'node_modules/@acme/ui/astryx.integration.mjs',
+    `export default {themes: './themes', themeProvider: ${JSON.stringify({export: 'AcmeThemeProvider', from: '@acme/ui/theme', ...(themeProp ? {themeProp} : {}), ...(more.modeProp ? {modeProp: more.modeProp} : {})})}};\n`,
+  );
+  put(
+    'node_modules/@acme/ui/dist/theme.js',
+    'export function AcmeThemeProvider({children}) { return children; }\n',
+  );
+  put(
+    'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
+    "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
+  );
+  put(
+    'node_modules/@acme/ui/themes/brand/brandTheme.ts',
+    "export const brandTheme = {name: 'brand', tokens: {}};\n",
+  );
+  put(
+    'node_modules/@acme/ui/dist/brand.js',
+    `export const brandTheme = {name: 'brand', tokens: {}};\n${more.oneMode ? 'export const colorModes = ["dark"];\n' : ''}`,
+  );
+  put(
+    'node_modules/@acme/ui/dist/brand.css',
+    '[data-astryx-theme="brand"] { --color-text: black; }\n',
+  );
+}
 
 // ─── Suite ──────────────────────────────────────────────────────────────────
 
@@ -958,7 +1150,10 @@ describe('text-json-parity', () => {
         async () => {
           let cwd = tc.cwd === '__TMP__' ? tmpDir : tc.cwd || REPO_ROOT;
           if (tc.cwd === '__TMP__') {
-            const sub = path.join(tmpDir, tc.name.replace(/\s+/g, '-'));
+            const sub = path.join(
+              tmpDir,
+              (tc.dir ?? tc.name).replace(/\s+/g, '-'),
+            );
             fs.mkdirSync(sub, {recursive: true});
             if (tc.setup) tc.setup(sub);
             cwd = sub;
@@ -1010,6 +1205,13 @@ describe('text-json-parity', () => {
         if (VERBATIM_TYPES.has(run.json.type)) return;
         expect(run.text).toContain(run.json.package);
       });
+
+      if (tc.expectData)
+        it('returns the receipt with its fields', () => {
+          expect(run.json?.error).toBeUndefined();
+          for (const field of tc.expectData ?? [])
+            expect(run.json?.data, field).toHaveProperty(field);
+        });
 
       if (!tc.skipFieldChecks && !tc.errorExpected) {
         it('every text record key exists in the JSON data', () => {
@@ -1077,6 +1279,8 @@ describe('text-json-parity', () => {
           const items = extractListItems(run.text);
           const textBlocks = extractTextBlocks(run.text);
           const violations = [];
+          /** @type {Set<string>} */
+          const usedBlocks = new Set();
           for (const item of items) {
             // Each list item should match (or be a substring of) some JSON value.
             const found = [...jsonValues].some(
@@ -1098,9 +1302,20 @@ describe('text-json-parity', () => {
               [...jsonValues].some(jv => jv.includes(w)),
             );
             if (!anyOverlap && words.length > 0) {
-              violations.push(`[text] ${block.slice(0, 80)}`);
+              const forgiven = (tc.textBlockAllowlist ?? []).find(
+                a => a.split(' — ')[0] === block,
+              );
+              if (forgiven) usedBlocks.add(forgiven);
+              else violations.push(`[text] ${block.slice(0, 80)}`);
             }
           }
+          const staleBlocks = (tc.textBlockAllowlist ?? []).filter(
+            a => !usedBlocks.has(a),
+          );
+          expect(
+            staleBlocks,
+            `Stale text block allowlist entries — remove them:\n${staleBlocks.join('\n')}`,
+          ).toEqual([]);
           expect(
             violations,
             `Text content not found in JSON data:\n${violations.join('\n')}`,

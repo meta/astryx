@@ -4,8 +4,8 @@
  * @file Tests for the import specifier a theme build prints.
  * @input Output folders relative to the cwd, as path.relative gives them on
  *   this platform.
- * @output The specifier in the install snippet: `./` plus a `/`-joined path,
- *   with a leading `src/` dropped.
+ * @output The specifier in the install snippet, relative to a file in src/:
+ *   `./…` for an output under src/, `../…` for one beside it, `/`-joined.
  * @position Unit coverage for importSpecifier in build.mjs.
  */
 
@@ -19,15 +19,25 @@ describe('importSpecifier', () => {
       './themes/ocean/ocean',
     );
     expect(importSpecifier(path.join('themes', 'ocean'), 'ocean')).toBe(
-      './themes/ocean/ocean',
+      '../themes/ocean/ocean',
     );
   });
 
-  it('drops a leading src/ and keeps the rest', () => {
+  it('reads only a parent step as one, never a folder named ..something', () => {
+    expect(importSpecifier('src/..cache', 'x')).toBe('./..cache/x');
+    expect(importSpecifier('..cache', 'x')).toBe('../..cache/x');
+  });
+
+  it('is relative to a file in src/', () => {
     expect(importSpecifier('src/themes/gothic', 'gothic')).toBe(
       './themes/gothic/gothic',
     );
     expect(importSpecifier('src', 'ocean')).toBe('./ocean');
-    expect(importSpecifier('.', 'ocean')).toBe('./ocean');
+    // Outside src/, the path goes up out of it first.
+    expect(importSpecifier('.', 'ocean')).toBe('../ocean');
+    expect(importSpecifier('themes/d', 'd')).toBe('../themes/d/d');
+    expect(importSpecifier('../shared/themes', 'x')).toBe(
+      '../../shared/themes/x',
+    );
   });
 });

@@ -25,6 +25,7 @@ affects_consumer_docs: [DateInput, DateTimeInput, TimeInput, NumberInput]
   "paths": [
     "packages/core/src/DateInput/useTypedDate.ts",
     "packages/core/src/Field/useEntryErrorReport.ts",
+    "packages/core/src/Field/useValueReplacesEntry.ts",
     "packages/core/src/DateInput/DateInput.tsx",
     "packages/core/src/DateInput/NativeDateField.tsx",
     "packages/core/src/DateTimeInput/**",
@@ -185,7 +186,7 @@ interface TimeInputEntryError {
   as it does there. The hidden input carries `name` until
   the person edits the kept text, or a new `value` or a pick replaces it; the
   typed input then carries `name` again. A `value` that the caller passes in
-  the same update as the Enter or blur that reveals a rejection, as a caller
+  the same update as an Enter or blur that keeps rejected text, as a caller
   that restores its own value at that commit does, does not replace the kept
   text: the text, its rejection, and its message stay, and a later new
   `value` replaces it (DEC-14). Unreadable date text that Enter or blur
@@ -226,9 +227,9 @@ interface TimeInputEntryError {
   another, is announced once, and the same message is not announced again. A
   new `value` from the caller, or a date or time the member accepts picked from
   a Calendar, sheet, or native picker, replaces the entry and clears its
-  rejection, except a `value` that the caller passes in the same update as the
-  Enter or blur that reveals the rejection, which leaves the entry and its
-  rejection in place (FR4, DEC-14).
+  rejection, except a `value` that the caller passes in the same update as an
+  Enter or blur that keeps the entry or its rejection, which leaves the entry
+  and its rejection in place (FR4, DEC-14).
 - **FR7 — A caller status never hides a rejection behind a warning.** A
   `warning` or `success` caller status never replaces a rejection's message, on
   any member, with or without `onEntryErrorChange`, and a caller `error` status
@@ -255,7 +256,7 @@ interface TimeInputEntryError {
   `outOfRange`. Typing, Enter, blur, a new `value`, `min`, `max`, or
   `isIntegerOnly`, and disabling, which hides the rejection, each report a
   changed rejection; a `value` that the caller passes in the same update as
-  the Enter or blur that reveals a rejection changes no rejection, so it
+  an Enter or blur that keeps a rejection changes no rejection, so it
   reports nothing, not `null` (FR4, DEC-14); an unchanged rejection never
   reports again; a field that
   unmounts while a reported rejection stands reports `null`. `TimeInput`'s
@@ -387,25 +388,6 @@ behavior made for accessibility conformance to FR53.
 Requirement gaps, each a WCAG 2.2 Level A mismatch that FR53 fixes unless it
 says otherwise:
 
-- FR1–FR3 gap: `TimeInput` and `DateTimeInput`'s time segment mark every
-  draft that is not an accepted value invalid and announce it on each
-  keystroke, unfinished drafts included.
-- FR4 gap (WCAG 2.2 3.3.1): a `TimeInput` or `DateTimeInput` time draft that
-  does not parse, or is out of range, reverts on blur. It does not say so on
-  screen.
-- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `TimeInput`,
-  `DateTimeInput`'s time segment, and the native time controls set
-  `aria-invalid` and announce through a visually hidden region with no visible
-  message; the text only turns secondary.
-- FR7 gap: with a caller `status`, `TimeInput` announces the rejection on
-  every keystroke rather than once, and a `warning` or `success` status stays
-  shown over a rejection.
-- FR8 gap: `TimeInput` has no `onEntryErrorChange`.
-- FR4, FR6 gap: `DateInput` drops kept date text and its rejection when the
-  caller passes a new `value` in the same update as the Enter or blur that
-  reveals the rejection.
-- FR9 gap: `TimeInput` takes no commit on Enter, and `DateTimeInput`'s time
-  segment commits on Enter only while its preset-time list is open.
 - AR3 gap (WCAG 2.2 3.3.1), outside this fix: inside an InputGroup, a member's
   own rejection is announced and sets `aria-invalid` but shows no visible
   message.
@@ -418,7 +400,7 @@ says otherwise:
 | FR2, FR3 | Keystroke-by-keystroke suites                 | Each value and text rejection of each member; native date year typing; pasted text                                                                                                                                                  | A rejection appears before the entry is complete, a text rejection appears while typing, or a complete value rejection waits                 |
 | FR4      | Enter and blur suites; native form submission | Each rejection kind; empty entry; `NumberInput` past a bound; a kept `NumberInput` draft in a decimal-comma locale, posted focused and unfocused; a native restore; a form posted after Enter and after blur on each kept rejection | Text reverts or commits, `onChange` fires, a form posts other than FR4 says, a native restore drops its rejection, or a clamp is reported    |
 | FR5, FR7 | Accessibility-tree and live-region assertions | Standalone, horizontal-labels; InputGroup (alert only); each status placement; no caller `status`; an `error`, `warning`, and `success` status; callback or none                                                                    | The signals appear or clear apart, a `warning` or `success` status hides a rejection, the wrong message wins, or an announcement repeats     |
-| FR6      | Edit suites after a shown rejection           | Edit to valid; to empty; to incomplete; to another rejection; caller `value` change; calendar pick                                                                                                                                  | A fixed entry keeps its rejection, an incomplete edit clears it or announces it again, or a pick leaves it                                   |
+| FR6      | Edit suites after a shown rejection           | Edit to valid; to empty; to incomplete; to another rejection; caller `value` change, and one at each commit that keeps the entry; calendar pick                                                                                     | A fixed entry keeps its rejection, an incomplete edit clears it or announces it again, or a pick leaves it                                   |
 | FR8      | `NumberInput` and `TimeInput` callback suites | Each kind; the rejection ending by typing, a new `value`, or a new bound; disabling; unmount; an unchanged rejection; native and sheet surfaces                                                                                     | A report is missing, repeats an unchanged rejection, carries the wrong `kind` or `value`, or comes from a surface with no typed text         |
 | FR9      | Enter suites in a form                        | `TimeInput` and the `DateTimeInput` time segment with a rejected draft, a valid draft, and no draft; the preset-time list open                                                                                                      | Enter reveals nothing for a rejected draft, a closed time field prevents the form's submission, or Enter in the open list submits            |
 | FR10     | Disabled and busy suites                      | Rejection shown, then disabled; DateInput text kept while busy; a `NumberInput` draft when disabled                                                                                                                                 | A locked field reveals or reports a rejection, kept DateInput text loses its rejection once editable, or a dropped draft's rejection returns |
@@ -575,19 +557,23 @@ stays an accessibility behavior fix under `spec:AST-017` FR53 (FR4).
 Rejected: the committed value's text in every case, because it changes what a
 released form posts, which `spec:AST-017` FR1 classes as breaking.
 
-### DEC-14 — A value passed at the revealing commit keeps the rejected entry
+### DEC-14 — A value passed at a commit that keeps the entry keeps it
 
 **Reference:** `spec:AST-118/DEC-14`
 **Decider:** `nynexman4464`, `2026-11-12`
 
-A caller can pass a new `value` from the Enter or blur that reveals a
-rejection, as a live filter does when it restores the value it had before the
+A caller can pass a new `value` from an Enter or blur that keeps rejected
+text, as a live filter does when it restores the value it had before the
 edit. A field that took that `value` as a replacement would erase the text the
 commit just kept and discard the entry with no message (FR4, AR4). Keeping an
 invalid entry with a chance to correct it is preferred to removing it. A
-`value` passed in the same update as the revealing commit therefore leaves the
-entry, its rejection, and its message, and reports no change; a later new
-`value` replaces the entry (FR4, FR6, FR8).
+`value` passed in the same update as any Enter or blur that keeps rejected
+text, the first or a later one, therefore leaves the entry, its rejection, and
+its message, and reports no change; a later new `value` replaces the entry
+(FR4, FR6, FR8).
+
+Rejected: sparing only the commit that reveals the rejection, because Enter
+and then a blur that restores the value would erase the text.
 
 ## Open questions
 

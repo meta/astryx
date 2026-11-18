@@ -32,7 +32,7 @@ const anatomy = [
     name: 'Caption',
     required: false,
     description:
-      'Caller-provided caption displayed below the active media. In a gallery it shows at most two lines; a longer caption ends in an inline "more" link that opens it in full over the photo.',
+      'Caller-provided caption displayed below the active media, in a band at the bottom of the viewer. It shows at most two lines, for a single photo as for a gallery; a longer caption ends in an inline "more" link that opens it in full over the photo.',
   },
   {
     name: 'Counter',

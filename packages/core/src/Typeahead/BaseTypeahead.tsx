@@ -1110,6 +1110,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [onOpenChange, dismiss, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
+    surfaceTarget: 'typeahead-popup',
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the
@@ -1229,9 +1230,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       let shownRows: T[] | null = null;
       let shownState: T[] | null = null;
       let shownEntryCount = 0;
+      // The result count names every match, not only the rows shown.
+      let hiddenMatchCount = 0;
 
       const showList = (list: T[], isFinal: boolean): T[] => {
         const fetched = list.slice(0, maxMenuItems);
+        // A kept list is already capped, so it keeps the earlier count.
+        if (list !== shownRows) {
+          hiddenMatchCount = list.length - fetched.length;
+        }
         if (
           shownRows != null &&
           !startsWithRows(displayOrder(fetched), displayOrder(shownRows))
@@ -1334,7 +1341,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         if (dismissed) {
           keptAnswerRef.current = true;
           if (searchQuery.length > 0) {
-            keptCountRef.current = shown.length;
+            keptCountRef.current = shown.length + hiddenMatchCount;
           }
           return;
         }
@@ -1347,7 +1354,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           // would follow it, so it is dropped (spec:AST-086 FR8).
           settleBusyAnnouncement();
         }
-        announceCount(shown.length);
+        announceCount(shown.length + hiddenMatchCount);
       } catch {
         if (searchGenRef.current !== gen) {
           return;
@@ -1374,7 +1381,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           if (shownRows != null) {
             // A failed server answer keeps the last non-empty list the source
             // showed for this query, which settles it.
-            announceCount(showList(shownRows, true).length);
+            announceCount(showList(shownRows, true).length + hiddenMatchCount);
           } else {
             replaceResults([]);
             setHighlightedIndex(-1);
@@ -2323,11 +2330,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 // the option the user was shown, not the one that
                 // happened to appear under the cursor.
                 onMouseMove={() => highlightOnHover(index)}
-                {...stylex.props(
-                  styles.item,
-                  itemSizeStyles[size],
-                  index === highlightedIndex && styles.itemHighlighted,
-                  isSelected && styles.itemSelected,
+                {...mergeProps(
+                  themeProps('typeahead-option', {
+                    size,
+                    highlighted:
+                      index === highlightedIndex ? 'highlighted' : null,
+                    selected: isSelected ? 'selected' : null,
+                  }),
+                  stylex.props(
+                    styles.item,
+                    itemSizeStyles[size],
+                    index === highlightedIndex && styles.itemHighlighted,
+                    isSelected && styles.itemSelected,
+                  ),
                 )}>
                 <span {...stylex.props(styles.itemContent)}>
                   {renderItem ? (

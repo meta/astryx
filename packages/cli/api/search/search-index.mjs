@@ -38,6 +38,12 @@ import {searchView} from './_named-keywords.mjs';
 const LOCAL_FIELDS = ['_docPath'];
 
 /**
+ * Fields a gathered candidate holds only for `build`, which reads them from
+ * the gather itself. They never rank, so an index leaves them out.
+ */
+const BUILD_FIELDS = ['_category'];
+
+/**
  * A component candidate's description as `search` prints it: its inline
  * `{@link}`, `{@pm}` and `{@command}` tokens resolved in the folder the index
  * is made in. The raw description stays the one that is scored.
@@ -54,7 +60,7 @@ const STORED_CORE = 'stored-index';
 function portable(candidate) {
   /** @type {Record<string, unknown>} */
   const out = JSON.parse(JSON.stringify(candidate));
-  for (const field of LOCAL_FIELDS) delete out[field];
+  for (const field of [...LOCAL_FIELDS, ...BUILD_FIELDS]) delete out[field];
   return out;
 }
 
@@ -188,10 +194,11 @@ export async function rankSearchIndex(query, indexes, options = {}) {
   const {type} = options;
   // Keywords read as search() reads them (_named-keywords.mjs). The names
   // come from every stored entry, before the `type` cut.
-  const view = searchView({
+  const viewed = searchView({
     all,
     components: all.filter(candidate => candidate.domain === 'component'),
-  }).all;
+  });
+  const view = viewed.all;
   const wanted =
     type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
@@ -208,6 +215,8 @@ export async function rankSearchIndex(query, indexes, options = {}) {
         outside: false,
         coreSkipped,
         coreSkippedCode: null,
+        // Search's reading of other entries' names, as the view marks it.
+        ownEvidence: viewed.ownEvidence,
         data: loadSearchData(),
       },
     )

@@ -7,27 +7,51 @@
  *
  * @input Template and component discovery for `cwd` — the CLI's own templates
  *   and Core's components, plus any that the project's configured integrations
- *   contribute.
+ *   contribute; the project's generated theme module and installed theme
+ *   packages.
  * @output Ready page templates as `{name, displayName, description, category,
  *   keywords, command}`, where `command` is the `astryx template` command that
  *   selects exactly that template; blocks as search names them; components as
  *   `{name, keywords}`; the kit's matcher weights, the root's classifier
  *   weights, and the block picker's weights; `keptBlockCatalog`, which keeps
- *   the picker's per-block vectors beside the kept search catalog.
+ *   the picker's per-block vectors beside the kept search catalog; and
+ *   `appThemeWiring`, how the project wires its theme.
  * @position Beside build.mjs (api/build/). The kit leaf reads templates and
  *   components only through here, because a subject's `_adapter.mjs` is its
  *   only environment access. This adds no discovery of its own: templates come
- *   from the template subject's, components from search's.
+ *   from the template subject's, components from search's, themes from the
+ *   theme subject's.
  */
 
 import fs from 'node:fs';
+import {renderTokens} from '../../foundation/doc-compiler/links.mjs';
+import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
 import {componentKeywords} from '../search/search.mjs';
-import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {coreContentDir, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
+import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {isWordModel} from './kit/word-model.mjs';
+import {
+  listAvailableThemeState,
+  themeOwnerInstalled,
+} from '../theme/_adapter.mjs';
+import {providerLine, providersOf} from '../theme/_app-provider.mjs';
+import {
+  ThemeImportError,
+  resolveThemeImports,
+} from '../../foundation/discovery/theme-imports.mjs';
+import {
+  ThemeStateError,
+  readThemeState,
+} from '../../foundation/config/theme-state.mjs';
+import {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
+import {AstryxError} from '../error.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -47,6 +71,9 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} category The template's own `Family - Variant` label; empty when it declares none.
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
+ * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
+ * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
+ * @property {boolean} [isReady] Whether its doc calls it ready; the kit lists only ready pages.
  */
 
 /**
@@ -54,6 +81,8 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @typedef {object} ComponentWords
  * @property {string} name The component's name, e.g. `DateRangeInput`.
  * @property {string[]} keywords The keywords its own doc declares.
+ * @property {string} [category] The category its own doc files it under,
+ *   e.g. `Table & List`.
  */
 
 /**
@@ -80,47 +109,66 @@ export async function loadPageTemplates(cwd) {
  * @property {string} displayName Human-facing name.
  * @property {string} description What the block is.
  * @property {string} command `astryx template <id> --type block`, as search prints it.
+ * @property {boolean} isReady Whether its doc calls it ready, as search reports it.
  */
 
 /**
  * Every ready page template and every block the project can scaffold, from one
  * discovery: pages as {@link loadPageTemplates} returns them, blocks as
- * {@link BlockTemplate}. Discovery failures leave both empty.
+ * {@link BlockTemplate}, and the page templates that are not ready yet, by
+ * their name and descriptor words. Discovery failures leave all three empty.
  *
  * @param {string} cwd
- * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[]}>}
+ * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[], notReadyPages: import('./kit/words.mjs').NamedTemplate[]}>}
  */
 export async function loadTemplates(cwd) {
   let templates;
   try {
     templates = await discoverTemplates(cwd);
   } catch {
-    return {pages: [], blocks: []};
+    return {pages: [], blocks: [], notReadyPages: []};
   }
-  const pages = templates
-    .filter(t => t.type === 'page' && t.isReady !== false)
+  const notReadyPages = templates
+    .filter(t => t.type === 'page' && t.isReady === false)
     .map(t => ({
       name: t.dirName,
       displayName: t.displayName || t.name,
-      description: t.description || '',
-      package: t.package ?? '@astryxdesign/core',
       category: t.category || '',
       keywords: t.keywords ?? [],
-      filePath: t.filePath,
-      // The id `template()` resolves back to this entry: an active replacement
-      // owns the Core id it names, so that id selects it, not its own.
-      command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+      description: renderTokens(t.description || ''),
     }));
+  const pages = templates
+    .filter(t => t.type === 'page' && t.isReady !== false)
+    .map(t =>
+      withComponents(
+        {
+          name: t.dirName,
+          displayName: t.displayName || t.name,
+          description: renderTokens(t.description || ''),
+          package: t.package ?? '@astryxdesign/core',
+          category: t.category || '',
+          keywords: t.keywords ?? [],
+          hidden: t.hidden === true,
+          isReady: t.isReady !== false,
+          filePath: t.filePath,
+          // The id `template()` resolves back to this entry: an active
+          // replacement owns the Core id it names, so that id selects it.
+          command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+        },
+        t.filePath,
+      ),
+    );
   const blocks = templates
     .filter(t => t.type === 'block')
     .map(t => ({
       name: t.dirName,
       package: t.package ?? '@astryxdesign/core',
       displayName: t.name,
-      description: t.description || '',
+      description: renderTokens(t.description || ''),
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
+      isReady: t.isReady !== false,
     }));
-  return {pages, blocks};
+  return {pages, blocks, notReadyPages};
 }
 
 /**
@@ -162,6 +210,30 @@ export function loadWeights() {
     }
   }
   return weights ?? null;
+}
+
+/** @type {{threshold: number, weights: Record<string, number>} | null | undefined} */
+let shellWeights;
+
+/**
+ * The fixed word table of the shell-start check (kit/shell.weights.json), read
+ * once. Null when the file is missing or unreadable.
+ * @returns {{threshold: number, weights: Record<string, number>} | null}
+ */
+export function loadShellWeights() {
+  if (shellWeights === undefined) {
+    try {
+      shellWeights = JSON.parse(
+        fs.readFileSync(
+          new URL('./kit/shell.weights.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      shellWeights = null;
+    }
+  }
+  return shellWeights ?? null;
 }
 
 /** @type {import('../../foundation/route/route.mjs').ClassifierWeights | undefined} */
@@ -237,28 +309,7 @@ export function loadBlockPicker() {
  */
 export function isWeightsFile(file) {
   const n = Array.isArray(file?.candidates) ? file.candidates.length : 0;
-  return (
-    n > 0 &&
-    Array.isArray(file.tables) &&
-    file.tables.length > 0 &&
-    file.tables.every(
-      (/** @type {any} */ t) =>
-        Array.isArray(t?.words) &&
-        Array.isArray(t.rows) &&
-        t.rows.length === t.words.length &&
-        t.rows.every(
-          (/** @type {any} */ r) => typeof r === 'string' && r.length === n,
-        ) &&
-        Array.isArray(t.bias) &&
-        t.bias.length === n &&
-        t.bias.every((/** @type {any} */ b) => Number.isFinite(b)) &&
-        Number.isFinite(t.clip) &&
-        Number.isFinite(t.step),
-    ) &&
-    Array.isArray(file.blend) &&
-    file.blend.length === 3 * (file.tables.length + 1) + 1 &&
-    file.blend.every((/** @type {any} */ x) => Number.isFinite(x))
-  );
+  return isWordModel(file, n);
 }
 
 /** The ranking coefficients the picker reads. */
@@ -329,12 +380,153 @@ export function templateSetupNotes(template, cwd) {
 }
 
 /**
+ * Where a page template goes in the project where build ran, quoted for a
+ * printed command: the path `astryx template` names for it from the
+ * project's layout (in a Next app, the App Router folder). Null when that
+ * folder has no package.json, so no project layout is known.
+ *
+ * @param {string} id the template's own id
+ * @param {string} cwd the folder build ran in
+ * @returns {string | null}
+ */
+export function pageDestination(id, cwd) {
+  if (!fs.existsSync(path.join(cwd, 'package.json'))) return null;
+  return quoteCommandArgument(templateDestination(cwd, 'page', id));
+}
+
+/**
  * The Core a build answers from: the project's, else the release's own,
  * installed into the per-user cache first when needed (a network install
  * and an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does.
+ * Null in a run whose base is not Core, which builds from its integrations.
  * @param {string} cwd
- * @returns {string}
+ * @returns {string | null}
  */
-export function requireBuildCoreDir(cwd) {
-  return requireCoreDir(cwd);
+export function buildCoreContentDir(cwd) {
+  return coreContentDir(cwd);
+}
+
+/**
+ * Adds a lazy, non-enumerable `components` getter to a page entry: the page's
+ * source is read and parsed only when a caller reads it, once, so loading the
+ * catalog stays cheap and the entry's own fields are unchanged.
+ * @template {object} T
+ * @param {T} entry
+ * @param {string | undefined} filePath
+ * @returns {T & {readonly components: string[]}}
+ */
+function withComponents(entry, filePath) {
+  /** @type {string[] | undefined} */
+  let components;
+  return /** @type {T & {readonly components: string[]}} */ (
+    Object.defineProperty(entry, 'components', {
+      get() {
+        if (components === undefined) {
+          try {
+            components = filePath ? extractComponents(filePath) : [];
+          } catch {
+            components = [];
+          }
+        }
+        return components;
+      },
+    })
+  );
+}
+
+/**
+ * The provider the app passes its theme to instead of `<Theme>`, as
+ * `theme add` names it: the one an installed package declares, when it takes
+ * a theme object. `line` is its opening tag, built as the `theme add`
+ * receipt builds it.
+ * @typedef {{export: string, from: string, line: string}} ThemeProvider
+ */
+
+/**
+ * @typedef {({state: 'wired', modulePath: string, hasModes: boolean}
+ *   | {state: 'installed', slug: string, hasModes: boolean}
+ *   | {state: 'none', slug: string, package: string})
+ *   & {provider: ThemeProvider | null}} AppThemeWiring
+ */
+
+/**
+ * How the project at `cwd` wires its theme, read the way `theme add` reads
+ * it: `wired` when `theme add` has written the generated module, `installed`
+ * when a theme it can add is installed but not added, and otherwise the
+ * starter theme. `hasModes` says the module records a theme's one color mode,
+ * or will once `theme add` adds the installed theme, read from its built
+ * module as `theme add` reads it. `provider` is set when an installed package
+ * names the provider that takes the theme.
+ * @param {string} cwd
+ * @returns {Promise<AppThemeWiring>}
+ */
+export async function appThemeWiring(cwd) {
+  /** @type {ThemeProvider | null} */
+  let starterProvider = null;
+  try {
+    const {themes} = await listAvailableThemeState(cwd);
+    const {taking} = providersOf(themes);
+    /** @param {boolean} oneMode @returns {ThemeProvider | null} */
+    const provide = oneMode =>
+      taking?.provider.themeProp
+        ? {
+            export: taking.provider.export,
+            from: taking.provider.from,
+            line: providerLine(taking.provider, oneMode),
+          }
+        : null;
+    starterProvider = provide(false);
+    const state = readThemeState(cwd);
+    const source = state.module.expectedOriginal;
+    if (state.configured && source) {
+      const hasModes = /\bexport const themeModes\b/u.test(
+        source.toString('utf-8'),
+      );
+      return {
+        state: 'wired',
+        modulePath: state.module.path,
+        hasModes,
+        provider: provide(hasModes),
+      };
+    }
+    const installed = themes.find(theme =>
+      themeOwnerInstalled(theme, state.projectDir),
+    );
+    if (installed) {
+      const hasModes = oneColorModeOf(installed, cwd);
+      return {
+        state: 'installed',
+        slug: installed.slug,
+        hasModes,
+        provider: provide(hasModes),
+      };
+    }
+  } catch (error) {
+    // Outside a project, or with theme state the theme commands refuse, the
+    // playbook names the starter theme; those commands report the problem.
+    if (!(error instanceof ThemeStateError || error instanceof AstryxError))
+      throw error;
+  }
+  return {
+    state: 'none',
+    slug: STARTER_THEME.slug,
+    package: STARTER_THEME.package,
+    provider: starterProvider,
+  };
+}
+
+/**
+ * Whether `theme add` records one color mode for a theme: its built module
+ * exports one. A theme whose built module cannot be resolved has none here;
+ * `theme add` reports that problem.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ */
+function oneColorModeOf(theme, cwd) {
+  try {
+    return resolveThemeImports(theme, {cwd}).mode != null;
+  } catch (error) {
+    if (error instanceof ThemeImportError) return false;
+    throw error;
+  }
 }

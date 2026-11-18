@@ -5,8 +5,10 @@
 /**
  * @file useTypedDate.ts
  * @input Provider locale and calendar, a field's format, bounds and constraints;
- *   calendarDateParser, parseDateInput for other Gregorian text, and
- *   Field/useEntryErrorReport for the rejection status, alert and report
+ *   calendarDateParser, parseDateInput for other Gregorian text,
+ *   Field/useEntryErrorReport for the rejection status, alert and report,
+ *   Field/useValueReplacesEntry for when a new value replaces a kept entry, and
+ *   the field's resolved entry error behavior
  * @output Typed-date reading, committed text, the format hint, the calendar
  *   description and rejection messages for a date text field, the typed
  *   entry state that DateInput and DateTimeInput share, the
@@ -17,7 +19,9 @@
 
 import {useCallback, useMemo, useState} from 'react';
 import type {InputStatus} from '../Field/types';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {useEntryErrorReport} from '../Field/useEntryErrorReport';
+import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
@@ -121,13 +125,14 @@ export interface TypedDate {
 }
 
 /**
- * The rejection a result shows: the error of a complete date, or of text that
- * Enter or blur committed. Text that is not a date is never complete, so its
- * error waits for the commit.
+ * The rejection a result shows: the error of text that Enter or blur
+ * committed, or, under `'complete'`, of a complete date. Text that is not a
+ * date is never complete, so its error waits for the commit.
  */
 export function typedDateError(
   result: CalendarDateParseResult | null,
   isCommitted: boolean,
+  entryErrorBehavior: EntryErrorBehavior,
 ): TypedDateError | null {
   if (result == null) {
     return null;
@@ -140,7 +145,7 @@ export function typedDateError(
   }
   if (
     (result.kind === 'nonexistent' || result.kind === 'outOfRange') &&
-    (result.isComplete || isCommitted)
+    (isCommitted || (result.isComplete && entryErrorBehavior === 'complete'))
   ) {
     return result.kind;
   }
@@ -159,8 +164,9 @@ function dateEntryError(
   text: string,
   min: ISODateString | undefined,
   max: ISODateString | undefined,
+  entryErrorBehavior: EntryErrorBehavior,
 ): DateInputEntryError | null {
-  const error = typedDateError(result, isCommitted);
+  const error = typedDateError(result, isCommitted, entryErrorBehavior);
   if (error == null || result == null) {
     return null;
   }
@@ -347,6 +353,12 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   onEntryErrorChange?: (error: DateInputEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
+  /**
+   * Under `'blur-or-enter'`, typing reveals no rejection: only Enter or blur
+   * does. An edit that makes the text a date or empties it still clears a
+   * revealed rejection at once.
+   */
+  entryErrorBehavior: EntryErrorBehavior;
 }
 
 export interface TypedDateField {
@@ -391,6 +403,7 @@ export function useTypedDateField({
   isStatusAnnounced,
   onEntryErrorChange,
   hasPlaceholder,
+  entryErrorBehavior,
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
   const typedDate = useTypedDate(options);
@@ -398,6 +411,8 @@ export function useTypedDateField({
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   // Set when Enter or blur keeps rejected text so the person can correct it.
   const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
+  // Counts each Enter or blur that keeps rejected text.
+  const [keptCommits, setKeptCommits] = useState(0);
   // Rejected text whose rejection stays shown while an edit leaves the entry
   // rejected or unfinished.
   const [keptText, setKeptText] = useState<string | null>(null);
@@ -418,7 +433,11 @@ export function useTypedDateField({
     pendingInput !== null && pendingInput.trim()
       ? typedDate.parse(pendingInput)
       : null;
-  const ownError = typedDateError(typedResult, isRejectionCommitted);
+  const ownError = typedDateError(
+    typedResult,
+    isRejectionCommitted,
+    entryErrorBehavior,
+  );
   const keptResult =
     ownError == null &&
     keptText !== null &&
@@ -434,14 +453,21 @@ export function useTypedDateField({
       ? {text: pendingInput, result: typedResult}
       : keptResult != null &&
           keptText !== null &&
-          typedDateError(keptResult, true) != null
+          typedDateError(keptResult, true, entryErrorBehavior) != null
         ? {text: keptText, result: keptResult}
         : null;
   const errorMessage =
     shown != null ? typedDate.errorMessage(shown.result) : null;
   const entryError =
     shown != null
-      ? dateEntryError(shown.result, true, shown.text, options.min, options.max)
+      ? dateEntryError(
+          shown.result,
+          true,
+          shown.text,
+          options.min,
+          options.max,
+          entryErrorBehavior,
+        )
       : null;
   const shownText = shown?.text ?? null;
   // Unreadable text that Enter or blur kept: the form posts the committed
@@ -465,15 +491,19 @@ export function useTypedDateField({
     reportEntryError(null);
   }, [reportEntryError]);
 
-  // A value from outside drops typed text. Adjusted during render, so it
-  // takes no extra commit; state, so a render React discards takes its
-  // adjustment with it.
+  // A new value drops typed text. A value that arrives with an Enter or blur
+  // that keeps rejected text does not drop it. A caller can restore its own
+  // value there.
+  const isEntryReplaced = useValueReplacesEntry(value, keptCommits);
+  // A value from outside also retires the date that typing last reported, so
+  // a retyped date reports again. Adjusted during render, so it takes no extra
+  // commit; state, so a render React discards takes its adjustment with it.
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
     if (value !== lastFiredDate) {
       setFiredEpoch(epoch => epoch + 1);
-      if (pendingInput !== null) {
+      if (pendingInput !== null && isEntryReplaced) {
         setPendingInput(null);
         setIsRejectionCommitted(false);
         setKeptText(null);
@@ -522,7 +552,14 @@ export function useTypedDateField({
       const isEmpty = !text.trim();
       const error = isEmpty
         ? null
-        : dateEntryError(result, false, text, options.min, options.max);
+        : dateEntryError(
+            result,
+            false,
+            text,
+            options.min,
+            options.max,
+            entryErrorBehavior,
+          );
       // An edit that leaves the entry rejected or unfinished keeps the shown
       // rejection.
       const nextKeptText =
@@ -546,6 +583,7 @@ export function useTypedDateField({
       reportEntryError,
       options.min,
       options.max,
+      entryErrorBehavior,
       report,
       onTypedDate,
     ],
@@ -570,9 +608,17 @@ export function useTypedDateField({
       // Keep the text and show why it cannot commit; never finish or adjust
       // the date.
       setIsRejectionCommitted(true);
+      setKeptCommits(count => count + 1);
       setKeptText(null);
       reportEntryError(
-        dateEntryError(result, true, pendingInput, options.min, options.max),
+        dateEntryError(
+          result,
+          true,
+          pendingInput,
+          options.min,
+          options.max,
+          entryErrorBehavior,
+        ),
       );
       return;
     }
@@ -590,6 +636,7 @@ export function useTypedDateField({
     reportEntryError,
     options.min,
     options.max,
+    entryErrorBehavior,
     report,
     reset,
     firedEpoch,
@@ -694,12 +741,14 @@ export function useNativeDateRejection({
     held: ISODateString | null;
     shown: ISODateString | null;
   }>(NO_REFUSAL);
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    if (refusal !== NO_REFUSAL) {
-      setRefusal(NO_REFUSAL);
-    }
+  // Counts each Enter or blur, which shows a refused date that stands.
+  const [commits, setCommits] = useState(0);
+  // A new value ends the rejection. A value that arrives with an Enter or blur
+  // that shows the rejection does not end it. A caller can restore its own
+  // value there.
+  const isRefusalReplaced = useValueReplacesEntry(value, commits);
+  if (isRefusalReplaced && refusal !== NO_REFUSAL) {
+    setRefusal(NO_REFUSAL);
   }
 
   const refuse = useCallback((date: PlainDate) => {
@@ -709,6 +758,7 @@ export function useNativeDateRejection({
   const clear = useCallback(() => setRefusal(NO_REFUSAL), []);
   const commit = useCallback(() => {
     if (!isLocked) {
+      setCommits(count => count + 1);
       setRefusal(prev =>
         prev.held === null ? prev : {held: null, shown: prev.held},
       );

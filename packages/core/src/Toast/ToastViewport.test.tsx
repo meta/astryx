@@ -124,6 +124,10 @@ function ShowToastButton({
   );
 }
 
+function RenderedToastBody({text}: {text: string}) {
+  return <span>{text}</span>;
+}
+
 const INFO_A: ToastOptions = {body: 'Toast A'};
 const INFO_B: ToastOptions = {body: 'Toast B'};
 const AUTO_TOAST: ToastOptions = {body: 'Auto toast', autoHideDuration: 3000};
@@ -3175,6 +3179,89 @@ describe('toast announcements via singleton live regions', () => {
       expect(assertiveRegion()).toHaveTextContent('Upload failed');
     });
     expect(politeRegion()).toHaveTextContent('');
+  });
+
+  it('announces component-rendered body text once under StrictMode', async () => {
+    render(
+      <React.StrictMode>
+        <ToastViewport isTopLayer={false}>
+          <ShowToastButton
+            options={{body: <RenderedToastBody text="Draft saved" />}}
+            triggerLabel="Show"
+          />
+        </ToastViewport>
+      </React.StrictMode>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledTimes(1);
+      expect(politeRegion()).toHaveTextContent('Draft saved');
+    });
+    expect(announceSpy).toHaveBeenCalledWith('Draft saved', 'polite');
+    expect(assertiveRegion()).toHaveTextContent('');
+  });
+
+  it('announces a component body in full, its link included', async () => {
+    function SavedToDrafts() {
+      return (
+        <span>
+          Saved to <a href="/drafts">Drafts</a>
+        </span>
+      );
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{body: <SavedToDrafts />}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Saved to Drafts');
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
+    expect(announceSpy).toHaveBeenCalledWith('Saved to Drafts', 'polite');
+  });
+
+  it('announces rendered custom content without its controls under StrictMode', async () => {
+    render(
+      <React.StrictMode>
+        <ToastViewport isTopLayer={false}>
+          <ShowToastButton
+            options={{
+              body: 'Stale body text',
+              renderContent: () => (
+                <div>
+                  <span>Upload complete</span>
+                  <button type="button">Undo upload</button>
+                </div>
+              ),
+            }}
+            triggerLabel="Show"
+          />
+        </ToastViewport>
+      </React.StrictMode>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledTimes(1);
+      expect(politeRegion()).toHaveTextContent('Upload complete');
+    });
+    expect(announceSpy).toHaveBeenCalledWith('Upload complete', 'polite');
+    expect(announceSpy).not.toHaveBeenCalledWith('Stale body text', 'polite');
+    expect(announceSpy).not.toHaveBeenCalledWith(
+      'Upload complete Undo upload',
+      'polite',
+    );
   });
 
   it('announces exactly once at dispatch, even under StrictMode', () => {

@@ -16,7 +16,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {cliDoor, declaredCliCommand} from './cli-command.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, pnpDependsOn} from '../fs/paths.mjs';
 import {cliVersion, runChoice} from '../release/run-context.mjs';
 import {isGlobalCopy} from '../release/choose.mjs';
 import {isInReleaseCache} from '../release/cache.mjs';
@@ -328,6 +328,27 @@ export function getRunPrefix(targetDir) {
 /** The published CLI package name — used for one-off (uninstalled) invocations. */
 export const CLI_PACKAGE = '@astryxdesign/cli';
 
+/** The command that installs a project's dependencies, by package manager. */
+const INSTALL_DEPENDENCIES = /** @type {Record<string, string>} */ ({
+  npm: 'npm install',
+  pnpm: 'pnpm install',
+  yarn: 'yarn install',
+  bun: 'bun install',
+});
+
+/**
+ * The command that installs the dependencies of the project at `targetDir`,
+ * with its package manager; npm's when none is detected.
+ * @param {string} [targetDir=process.cwd()]
+ * @returns {string}
+ */
+export function installDependenciesCommand(targetDir = process.cwd()) {
+  return (
+    INSTALL_DEPENDENCIES[detectPackageManager(targetDir)] ??
+    INSTALL_DEPENDENCIES.npm
+  );
+}
+
 /** The CLI binary name — only resolves once the CLI is installed (or run via CLI_PACKAGE). */
 export const CLI_BIN = 'astryx';
 
@@ -389,6 +410,17 @@ function isYarnClassic({dir}) {
     String(process.env.npm_config_user_agent ?? ''),
   );
   return agent ? agent[1] === '1' : false;
+}
+
+/**
+ * Is the Yarn of the project holding `targetDir` the classic line (1.x)?
+ * The same reading as the dlx choice: the declared version, then the
+ * lockfile header, then a committed config, then the runner.
+ * @param {string} targetDir
+ * @returns {boolean}
+ */
+export function isYarnClassicAt(targetDir) {
+  return isYarnClassic(explainPackageManager(targetDir));
 }
 
 /**
@@ -460,8 +492,10 @@ const CLI_BIN_LINKS = [CLI_BIN, `${CLI_BIN}.cmd`, `${CLI_BIN}.ps1`];
  * `yarn astryx` fail. A global install, or a workspace install running in a
  * fresh package, is exactly that case.
  *
- * A false negative (a layout without `node_modules/.bin`, such as Yarn Plug'n'Play)
- * is safe: the caller suggests the scoped package, which always resolves.
+ * Yarn Plug'n'Play keeps no `node_modules/.bin`: there, `yarn astryx` runs the
+ * CLI when the workspace that holds `targetDir` depends on it. A run outside
+ * the project's runtime cannot ask, and the caller then suggests the scoped
+ * package, which always resolves.
  *
  * @param {string} [targetDir=process.cwd()]
  * @returns {boolean}
@@ -474,9 +508,10 @@ export function cliBinResolves(targetDir = process.cwd()) {
       return true;
     }
     const parent = path.dirname(dir);
-    if (parent === dir) return false;
+    if (parent === dir) break;
     dir = parent;
   }
+  return pnpDependsOn(targetDir, CLI_PACKAGE);
 }
 
 /**
@@ -549,10 +584,17 @@ export function guessCliInvocation(targetDir) {
   // Who answered this run decides the stem, so every command one run prints
   // reaches the same release, whichever folder a line names.
   const choice = runChoice(process.cwd());
-  if (choice.copy === 'project' && !isCliOneOff() && cliBinResolves(targetDir)) {
+  if (
+    choice.copy === 'project' &&
+    !isCliOneOff() &&
+    cliBinResolves(targetDir)
+  ) {
     return `${getRunPrefix(targetDir)} ${CLI_BIN}`;
   }
-  if (!choice.inProject && (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))) {
+  if (
+    !choice.inProject &&
+    (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))
+  ) {
     return CLI_BIN;
   }
   return `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${cliVersion()}`;

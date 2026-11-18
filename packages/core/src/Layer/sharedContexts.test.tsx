@@ -223,10 +223,11 @@ describe('every Core context is registered under a versioned key', () => {
           /\bcreate(?:Shared|LayerScoped)Context\b(?:<[\s\S]*?>)?\(\s*'([^']+)',\s*\d+\s*,/g,
         ),
       ];
-      // Every call names its key and version; imports name the factory too.
+      // Every call names its key and version; imports and named re-exports
+      // (an internal entry) name the factory too.
       const imports = (
         text.match(
-          /import[^;]*\bcreate(?:Shared|LayerScoped)Context\b[^;]*;/g,
+          /import[^;]*\bcreate(?:Shared|LayerScoped)Context\b[^;]*;|export\s*\{[^}]*\bcreate(?:Shared|LayerScoped)Context\b[^}]*\}\s*from\b/g,
         ) ?? []
       ).length;
       expect(keyed.length, path.relative(SRC, file)).toBe(

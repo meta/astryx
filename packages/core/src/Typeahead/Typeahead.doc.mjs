@@ -45,6 +45,12 @@ const anatomy = [
       'Shared clear action that removes the selected item when hasClear is enabled.',
   },
   {
+    name: 'Popup surface',
+    required: false,
+    description:
+      'The layer the Dropdown opens in, above the page and anchored below the input.',
+  },
+  {
     name: 'Dropdown',
     required: false,
     description:
@@ -280,8 +286,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'SVG icon component displayed at the start of the input.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',
@@ -323,7 +329,13 @@ export const docs = {
     targets: [
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
+      {className: 'astryx-typeahead-popup'},
       {className: 'astryx-typeahead-empty-state'},
+      {
+        className: 'astryx-typeahead-option',
+        visualProps: ['size'],
+        states: ['highlighted', 'selected'],
+      },
       {className: 'astryx-typeahead-item'},
     ],
   },

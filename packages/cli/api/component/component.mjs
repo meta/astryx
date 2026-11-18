@@ -21,7 +21,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {
   CORE_PACKAGE,
-  requireCoreDir,
+  coreContentDir,
   loadIntegrationsSafely,
   resolveOwners,
   scopeIntegrationMember,
@@ -32,6 +32,7 @@ import {
   resolveCoreSourcePath,
   resolveUnscopedDoc,
   withExampleBlockPointer,
+  withOtherCommandHint,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
@@ -138,7 +139,7 @@ function parseComponentSelector(value, packageScope) {
  * version. Its structured suggestion points at the command that can discover
  * the requested package release.
  * @param {{package?: string, version?: string}} target
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @returns {void}
  */
@@ -210,7 +211,7 @@ function batchFailure(selector, error) {
  * @param {string|null} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {Promise<import('./component.type.mjs').ComponentBatchResponse>}
  */
 async function componentBatch(selectors, options, coreDir) {
@@ -249,7 +250,7 @@ async function componentBatch(selectors, options, coreDir) {
  * @param {boolean} [options.source]
  * @param {boolean} [options.showcase]
  * @param {boolean} [options.blocks]
- * @param {'full'|'compact'|'brief'} [options.detail] - Defaults to 'full' for a single component, 'brief' for list views (list/category/no name), matching the CLI.
+ * @param {'full'|'compact'|'brief'} [options.detail] - The level of a list view's entries; defaults to 'brief' for list views (list/category/no name) and 'full' otherwise. A named component's JSON is the same at every level; only the CLI's text projection (default 'compact' for a component read) depends on it.
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
@@ -305,9 +306,9 @@ async function componentRead(name, options = {}) {
   const selectorList = Array.isArray(name) ? name : null;
   const noName = selectorList == null && !name;
 
-  // Default detail level mirrors the CLI (see commands/component.mjs):
-  // single-component views default to 'full', list-style views (--list,
-  // --category, or no name) default to 'brief' (scannable name lists).
+  // List-style views (--list, --category, or no name) default to 'brief'
+  // (scannable name lists). A named read returns the same JSON at every
+  // level; the CLI picks its text level (see commands/component.mjs).
   // An explicit array remains a batch even when it is empty or a caller also
   // passes a list-only option.
   const isListView =
@@ -339,7 +340,7 @@ async function componentRead(name, options = {}) {
     );
   }
 
-  const coreDir = requireCoreDir(cwd);
+  const coreDir = coreContentDir(cwd);
 
   // A public API caller could pass a non-string category; the list leaf does
   // `category.toLowerCase()`, so guard it up front (same class as the name
@@ -628,8 +629,20 @@ async function componentRead(name, options = {}) {
     coreDir,
     cwd,
     name,
+    loadedIntegrations,
   }).catch(async error => {
-    throw await withExampleBlockPointer(error, dirName, {coreDir, cwd});
+    const pointed = await withExampleBlockPointer(error, dirName, {
+      coreDir,
+      cwd,
+    });
+    // A block's pointer already names `astryx template`.
+    throw pointed === error
+      ? await withOtherCommandHint(error, dirName, {
+          coreDir,
+          cwd,
+          loadedIntegrations,
+        })
+      : pointed;
   });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 

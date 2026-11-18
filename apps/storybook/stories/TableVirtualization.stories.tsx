@@ -9,6 +9,7 @@ import {
   VStack,
   pixel,
   useTableColumnsVirtualization,
+  useTableRowIndex,
   useTableRowsVirtualization,
   useTableSelection,
   useTableSelectionState,
@@ -171,4 +172,65 @@ function ColumnWindowingFocusExample() {
 }
 export const ColumnWindowingFocus: StoryObj = {
   render: () => <ColumnWindowingFocusExample />,
+};
+
+// Each row computes its metric values on read, so 10,000 rows of 300
+// columns stay cheap to create.
+class LargeRow {
+  constructor(
+    readonly id: string,
+    readonly name: string,
+    readonly position: number,
+  ) {}
+}
+for (let index = 1; index < 300; index++) {
+  Object.defineProperty(LargeRow.prototype, `metric${index}`, {
+    get(this: LargeRow) {
+      return `${this.position + 1}.${index}`;
+    },
+  });
+}
+const largeRows = Array.from(
+  {length: 10000},
+  (_, row) =>
+    new LargeRow(String(row), `Account ${row + 1}`, row) as unknown as WideRow,
+);
+
+function RowsAndColumnsExample() {
+  const rowsVirtualization = useTableRowsVirtualization({
+    rowHeight: 56,
+    initialViewportHeight: 480,
+  });
+  const columnsVirtualization = useTableColumnsVirtualization({
+    initialViewportWidth: 900,
+  });
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const {selectionConfig} = useTableSelectionState<WideRow>({
+    data: largeRows,
+    idKey: 'id',
+    selectedKeys,
+    setSelectedKeys,
+  });
+  const selection = useTableSelection<WideRow>(selectionConfig);
+  const rowIndex = useTableRowIndex<WideRow>();
+  const sticky = useTableStickyColumns<WideRow>({endKeys: ['metric299']});
+  // 10,000 rows and 300 columns: only the cells near the viewport mount.
+  return (
+    <VStack width={900} height={480}>
+      <Table
+        aria-label="Account metrics by row"
+        data={largeRows}
+        columns={wideColumns}
+        idKey="id"
+        plugins={{selection, rowIndex, sticky}}
+        virtualization={[rowsVirtualization, columnsVirtualization]}
+        dividers="grid"
+      />
+    </VStack>
+  );
+}
+export const RowsAndColumnsWindowing: StoryObj = {
+  render: () => <RowsAndColumnsExample />,
 };

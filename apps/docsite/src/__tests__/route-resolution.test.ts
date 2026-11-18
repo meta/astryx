@@ -94,7 +94,8 @@ describe('route resolution', () => {
     // `cli-host-entry` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
     // `use-integrations` is the guide for apps that install one;
-    // `cli-experimental-render-pages` is the experimental render guide;
+    // `cli-experimental-export-pages` is the experimental export guide and
+    // `cli-experimental-share-a-page` the task guide that uses it;
     // `calendars` is the calendar systems page.
     // `styling` shows under `styling-overview`, and
     // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
@@ -109,7 +110,8 @@ describe('route resolution', () => {
         'browser-support',
         'calendars',
         'cli-component-lookups',
-        'cli-experimental-render-pages',
+        'cli-experimental-export-pages',
+        'cli-experimental-share-a-page',
         'cli-host-entry',
         'global',
         'internationalization',
