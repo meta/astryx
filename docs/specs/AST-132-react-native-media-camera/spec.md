@@ -33,9 +33,9 @@ no camera.
 
 This record details the `media` and `camera` capabilities of `spec:AST-112`:
 the platform layer and its opt-in capabilities (`spec:AST-112/FR1`,
-`spec:AST-112/FR3`), the result vocabulary (`spec:AST-112/FR6`), the
+`spec:AST-112/FR3`), the result vocabulary (`spec:AST-140/FR3`), the
 capability shape (`spec:AST-112/FR7`), and additive evolution
-(`spec:AST-112/FR8`). It specifies the
+(`spec:AST-140/FR5`). It specifies the
 audio module (`AstryxAudio`), the video view (`AstryxVideoView`), and the
 camera view (`AstryxCameraView`), and how the library's `VideoView`,
 `useVideoPlayer`, and `useAudioPlayer` use them. The capabilities' other
@@ -304,7 +304,7 @@ isPossible})`.
     of `VideoView`'s presentation belongs to its own component record.
 - **FR13 — Results and fallbacks.**
   - No call throws. `open` and the player's controls answer at once; `levels`
-    and `takePhoto` resolve and never reject (`spec:AST-112/FR6`). `open`
+    and `takePhoto` resolve and never reject (`spec:AST-140/FR3`). `open`
     fails with `busy` or `bad-source` or a common reason; a reason the
     JavaScript does not know reads `error`. `message` never carries a URL's
     query.
@@ -334,7 +334,7 @@ isPossible})`.
     status changes (`ready`, `permission-required`, `denied`, `error`). Codes
     found and photos taken reach the person through the app's own UI.
 - **FR15 — Contract baseline.** Every contract in the group is at revision 1
-  and grows by named features (`spec:AST-112/FR8`). The group has no named
+  and grows by named features (`spec:AST-140/FR5`). The group has no named
   features; the picture-in-picture differences between platforms are feature
   rows of `AstryxPlatformInfo` (FR8).
 
@@ -360,9 +360,10 @@ isPossible})`.
 
 ## Current-state impact
 
-- None beyond `spec:AST-112`. This record details its FR3 (`media` and
-  `camera` stay opt-in), FR6 (the group's closed reasons), FR7 (the probes and a
-  camera view that never prompts), and FR8 (the group's revision-1 baseline).
+- None beyond `spec:AST-112` and `spec:AST-140`. This record details
+  `spec:AST-112`'s FR3 (`media` and `camera` stay opt-in) and FR7 (the probes
+  and a camera view that never prompts), and `spec:AST-140`'s FR3 (the
+  group's closed reasons) and FR5 (the group's revision-1 baseline).
 - `spec:AST-130` FR8 (`AstryxPlatformInfo`), FR9 (`AstryxPermissions`), and
   FR13 (camera capture belongs to `camera`) apply unchanged.
 - `spec:AST-093/FR5` (every native component is tested and validated the same
