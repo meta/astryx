@@ -767,7 +767,22 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
 }
 
 /** When a transition's animations start, as the animator's call options. */
-type TransitionClock = {at?: number; start?: 'next-frame'};
+type TransitionClock = {at?: number; start?: 'next-frame' | 'presented'};
+
+/**
+ * Whether the page runs in WebKit, whose UI process applies a commit late.
+ * There, a transition from rest that starts at its commit or at the next
+ * frame skips into its curve after a heavy commit on iOS. A page cannot
+ * detect late commits as a capability, so this is a narrow engine
+ * workaround. Read it on the client, at transition time.
+ * Remove it when WebKit applies commits on time: re-check at each Safari
+ * major version, when the WebKit busy-thread fixture passes with
+ * `next-frame`. A capability probe in the animator can replace it.
+ */
+function appliesCommitsLate(view: Window | null | undefined): boolean {
+  const userAgent = view?.navigator.userAgent ?? '';
+  return userAgent.includes('AppleWebKit') && !userAgent.includes('Chrome');
+}
 
 /**
  * The clock of a transition. A finger's release keeps its release time, so
@@ -775,14 +790,21 @@ type TransitionClock = {at?: number; start?: 'next-frame'};
  * leaves its start to the animator. The browser's commit then dates it. So a
  * heavy commit or a later listener's block delays the motion. It never skips
  * ahead. In an input event's own task (a tap on a row, a key), the motion
- * starts at the first frame after that task.
+ * starts at the first frame after that task. In WebKit it starts once the
+ * frame at rest has been presented.
  */
 function transitionClock(
   releasedAt: number | undefined,
   isInputTask: boolean,
+  commitsLate: boolean,
 ): TransitionClock {
   if (releasedAt != null) {
     return {at: releasedAt};
+  }
+  // WebKit: the animations come two frames later, once the frame at rest
+  // has been presented, and start at their commit.
+  if (commitsLate) {
+    return {start: 'presented'};
   }
   return isInputTask ? {start: 'next-frame'} : {};
 }
@@ -1175,10 +1197,11 @@ export function NavigationStack<T>({
       const values = layersAt(to, width, direction);
       const velocity =
         dp == null ? null : layerVelocities(dp, width, direction);
+      const view = containerRef.current?.ownerDocument.defaultView;
       const clock = transitionClock(
         releasedAt,
-        inputTaskRef.current ||
-          isDispatchingInput(containerRef.current?.ownerDocument.defaultView),
+        inputTaskRef.current || isDispatchingInput(view),
+        appliesCommitsLate(view),
       );
       const topLayers = layersOf(top);
       const underLayers = layersOf(under);

@@ -1218,6 +1218,71 @@ test('a push whose commit blocks the main thread starts from its first frame', a
   expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
 });
 
+test("a push from rest after a heavy commit starts on the engine's clock: at rest for its presented frames in WebKit, moving at once elsewhere", async ({
+  page,
+  browserName,
+}) => {
+  // WebKit's UI process applies a commit late, so there the push waits until
+  // the frame at rest has been presented and starts at its own commit. Other
+  // engines start at the first frame after the task, as before. Either way,
+  // the first frame that moves shows the push near its start, never skipped
+  // into its curve.
+  const {driver, width} = await openStack(page, 'settings');
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector('[data-navigation-screen="screen-General"]') ==
+        null
+      ) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + 300;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  // The pushed card's offset in each of the first six frames after the task.
+  const offsets = await page.evaluate(
+    () =>
+      new Promise<number[]>(resolve => {
+        const read: number[] = [];
+        const step = () => {
+          const pushed = document.querySelector(
+            '[data-navigation-screen="screen-General"]',
+          );
+          const value =
+            pushed == null ? 'none' : getComputedStyle(pushed).translate;
+          read.push(value === 'none' ? 0 : Math.abs(parseFloat(value)));
+          if (read.length < 6) {
+            requestAnimationFrame(step);
+          } else {
+            resolve(read);
+          }
+        };
+        requestAnimationFrame(step);
+      }),
+  );
+  const travelled = offsets.map(offset => 1 - offset / width);
+  const firstMoving = travelled.findIndex(share => share > 0.005);
+  expect(firstMoving).toBeGreaterThanOrEqual(0);
+  if (browserName === 'webkit') {
+    // At rest until its frame at rest has been presented: two frames, then
+    // its commit.
+    expect(firstMoving).toBeGreaterThanOrEqual(2);
+  } else {
+    // Unchanged: the first frame after the task starts it, and the next one
+    // shows it moving.
+    expect(firstMoving).toBeLessThanOrEqual(2);
+  }
+  // Never skipped into its curve: the first frame that moves shows less
+  // than a third of the travel.
+  expect(travelled[firstMoving]).toBeLessThan(1 / 3);
+});
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
