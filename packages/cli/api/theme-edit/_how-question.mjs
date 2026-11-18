@@ -43,6 +43,7 @@ import {
 import {baseInstalled, installLine, packageInstalled} from './_project.mjs';
 import {
   PALETTE_DIALS,
+  STATUS_TOKEN,
   familyRamp,
   isGraySeed,
   nearestShade,
@@ -6151,6 +6152,15 @@ export function draftAnswer(ctx, env, question) {
           ? `${Number((100 / times).toFixed(3))}% of now ${down[word]}`
           : _m;
       },
+    )
+    // ("success messages in smaller text", "warning notes"): a status's
+    // messages are its text, read as "success text" is.
+    .replace(
+      new RegExp(
+        String.raw`\b(${[...new Set(Object.entries(STATUS_TOKEN).flat())].join('|')})\s+(?:messages?|notes?)\b`,
+        'gi',
+      ),
+      '$1 text',
     )
     // "exactly 36px": the value said.
     .replace(/\bexactly\s+(?=\d*\.?\d+\s?(?:px|rem|em|%)\b)/gi, '')
