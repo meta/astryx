@@ -309,11 +309,11 @@ var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
   surface rules again for that attribute, after both sides' own, under the
   conditions that make the page dark: a dark root, a system root while the
   page root names dark, and the reader's preference while it names none.
-  The surface still names its light-page side there, so the copy also undoes
-  what only that side's overrides set: a token inherits again, and a
-  component property takes the theme root's value for the same style key,
-  else the base style. A root color-mode block follows the dark-page side
-  inside the surface the same way. The compiler
+  The surface still names its light-page side there, so that side's rules
+  that the copy does not write again leave such a surface out on a dark
+  page; the theme root's rules apply to it as they would without them. A
+  root color-mode block follows the dark-page side inside the surface the
+  same way. The compiler
   picks each side by the rule the painted surface is measured with, from the
   theme's tokens for each mode, and writes these rules only for a theme whose
   surfaces take different sides in the two page modes. Toast is the first

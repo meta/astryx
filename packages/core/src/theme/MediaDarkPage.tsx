@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file theme/MediaDarkPage.tsx
  * @input The media side a surface takes on a dark page, or null, and children

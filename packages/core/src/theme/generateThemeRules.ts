@@ -94,8 +94,19 @@ const THEME_SCOPE_TO = `[data-${dataAttrNamespace}-theme]`;
  */
 function mediaSelector(surface: MediaSurface): string {
   const [side, page] = surface.split('@') as [MediaSide, string | undefined];
+  const own = `[data-${dataAttrNamespace}-media="${side}"]`;
   if (page === undefined) {
-    return `[data-${dataAttrNamespace}-media="${side}"]`;
+    return own;
+  }
+  if (page.startsWith('unflipped')) {
+    // The side a surface names for a light page, except where a dark page
+    // takes the other side on it: there, none of this side's rules applies.
+    const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+    const flipped = [
+      ...darkPageConditions(false),
+      ...(page === 'unflipped-preference' ? darkPageConditions(true) : []),
+    ].map(condition => `${condition} ${mediaDarkPageIs(other)}`);
+    return `${own}:where(:not(${flipped.join(', ')}))`;
   }
   return darkPageConditions(page === 'dark-page-preference')
     .map(condition => `${condition} ${mediaDarkPageIs(side)}`)
@@ -140,7 +151,11 @@ type MediaSide = 'dark' | 'light';
  * (written beside the light-page side when the two differ).
  */
 type MediaSurface =
-  MediaSide | `${MediaSide}@dark-page` | `${MediaSide}@dark-page-preference`;
+  | MediaSide
+  | `${MediaSide}@dark-page`
+  | `${MediaSide}@dark-page-preference`
+  | `${MediaSide}@unflipped`
+  | `${MediaSide}@unflipped-preference`;
 
 /** Scope a component selector to an inverted media surface when requested. */
 function componentSelector(
@@ -1658,77 +1673,6 @@ function resolvedAdaptationRules(
 }
 
 /**
- * The style values that undo, on a surface of one side, what the other
- * side's component overrides set and this side's do not: each such property
- * takes the theme root's value for the same style key and state, else
- * `revert-layer` (the base style). Null when there is nothing to undo.
- */
-function undoneComponentStyles(
-  from: ComponentStyleMap,
-  own: ComponentStyleMap | undefined,
-  root: ComponentStyleMap | undefined,
-): Record<string, Record<string, StyleOverrides>> | null {
-  /** A style block's own properties and its pseudo-class blocks. */
-  const undo = (
-    theirs: Record<string, unknown>,
-    mine: Record<string, unknown> | undefined,
-    rooted: Record<string, unknown> | undefined,
-  ): Record<string, unknown> | null => {
-    const out: Record<string, unknown> = {};
-    for (const [prop, value] of Object.entries(theirs)) {
-      if (prop.startsWith('@')) {
-        continue;
-      }
-      if (prop.startsWith(':')) {
-        if (value == null || typeof value !== 'object') {
-          continue;
-        }
-        const nested = undo(
-          value as Record<string, unknown>,
-          mine?.[prop] as Record<string, unknown> | undefined,
-          rooted?.[prop] as Record<string, unknown> | undefined,
-        );
-        if (nested) {
-          out[prop] = nested;
-        }
-        continue;
-      }
-      if (mine != null && prop in mine) {
-        continue;
-      }
-      const kept = rooted?.[prop];
-      out[prop] =
-        typeof kept === 'string' || typeof kept === 'number'
-          ? kept
-          : 'revert-layer';
-    }
-    return Object.keys(out).length > 0 ? out : null;
-  };
-  const result: Record<string, Record<string, StyleOverrides>> = {};
-  for (const [component, keys] of Object.entries(from)) {
-    if (keys == null) {
-      continue;
-    }
-    for (const [key, block] of Object.entries(keys)) {
-      if (block == null || typeof block !== 'object') {
-        continue;
-      }
-      const ownKeys = own?.[component] as Record<string, unknown> | undefined;
-      const rootKeys = root?.[component] as Record<string, unknown> | undefined;
-      const undone = undo(
-        block,
-        ownKeys?.[key] as Record<string, unknown> | undefined,
-        rootKeys?.[key] as Record<string, unknown> | undefined,
-      );
-      if (undone) {
-        (result[component] ??= {})[key] = undone as StyleOverrides;
-      }
-    }
-  }
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-/**
  * Generate CSS for on-media token and component overrides.
  *
  * Emitted in an unbounded @scope (no `to` limit) so the rules can reach
@@ -1754,7 +1698,8 @@ export function generateOnMediaCSS(
   // A dark-page copy repeats rules already checked, so it reports nothing.
   const quiet: DiagnosticSink = () => {};
   const emitSurface = (surface: MediaSurface, out: string[]): void => {
-    const surfaceSink = surface.includes('@') ? quiet : sink;
+    const surfaceSink =
+      surface.includes('@') && !surface.endsWith('@unflipped') ? quiet : sink;
     const side = sideOf(surface);
     const onMedia = side === 'dark' ? theme.__onDark : theme.__onLight;
     if (!onMedia) {
@@ -1776,46 +1721,15 @@ export function generateOnMediaCSS(
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
     ];
-    // A dark-page copy sits on a surface that still names its light-page
-    // side, whose rules match it too: what that side sets and this one does
-    // not goes back to what the surface would have without it. A token
-    // inherits again; a component property takes the theme root's value for
-    // the same style key, else the base style.
-    const flippedFrom = surface.includes('@dark-page')
-      ? side === 'dark'
-        ? theme.__onLight
-        : theme.__onDark
-      : undefined;
-    const tokenResets: [string, string][] = flippedFrom
-      ? Object.keys(flippedFrom.tokens)
-          .filter(token => !tokenEntries.some(([own]) => own === token))
-          .map(token => [token, 'revert-layer'])
-      : [];
-    if (tokenEntries.length > 0 || tokenResets.length > 0) {
+    if (tokenEntries.length > 0) {
       // The surface re-declares font sizes the way a theme's root does, so they
       // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        [...readerTextSizeEntries(tokenEntries), ...tokenResets],
+        readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
         surfaceSink,
       );
       out.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
-    }
-
-    const componentResets = flippedFrom?.components
-      ? undoneComponentStyles(
-          flippedFrom.components,
-          onMedia.components,
-          theme.components,
-        )
-      : null;
-    if (componentResets) {
-      generateComponentRules(componentResets, out, {
-        resetInheritedPaddingSpecificity: true,
-        surface,
-        sink: surfaceSink,
-        location,
-      });
     }
 
     // Component overrides use the same lowering as root and adaptations so a
@@ -1846,8 +1760,41 @@ export function generateOnMediaCSS(
   const flipped = darkPageSides(
     resolveModes({...theme.localTokens, ...theme.tokens}),
   );
+  /** Every token this side writes, the other side's copy writes again. */
+  const coveredBy = (side: MediaSide, other: MediaSide): boolean => {
+    const own = side === 'dark' ? theme.__onDark : theme.__onLight;
+    const its = other === 'dark' ? theme.__onDark : theme.__onLight;
+    if (!own) {
+      return true;
+    }
+    if (!its || own.components) {
+      return false;
+    }
+    return Object.keys(own.tokens).every(token => token in its.tokens);
+  };
   for (const side of ['dark', 'light'] as const) {
-    emitSurface(side, parts);
+    const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+    if (!flipped.has(other) || coveredBy(side, other)) {
+      emitSurface(side, parts);
+      continue;
+    }
+    // Where a dark page flips the surface to the other side, this side's
+    // rules leave it out, so what only this side sets (a fill it gives a
+    // button) never reaches it there and the theme root's rules apply.
+    const byScheme: string[] = [];
+    emitSurface(`${side}@unflipped`, byScheme);
+    if (byScheme.length > 0) {
+      parts.push(
+        `  @media not all and (prefers-color-scheme: dark) {\n${byScheme.join('\n\n')}\n  }`,
+      );
+    }
+    const byPreference: string[] = [];
+    emitSurface(`${side}@unflipped-preference`, byPreference);
+    if (byPreference.length > 0) {
+      parts.push(
+        `  @media (prefers-color-scheme: dark) {\n${byPreference.join('\n\n')}\n  }`,
+      );
+    }
   }
   for (const side of flipped) {
     emitSurface(`${side}@dark-page`, parts);

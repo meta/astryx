@@ -17,6 +17,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function topLevelCSSBlocks(css: string): string[] {
   const blocks: string[] = [];
   let depth = 0;
@@ -864,6 +873,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('re-emits explicit weight overrides after media-specific type rules', () => {
     const themed = defineTheme({
       name: 'media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -878,11 +888,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const all = generateOnMediaCSS(themed);
-    // The surfaces' own rules, before the dark-page copy of the light side
-    // (which undoes the dark side's weight with the root's).
-    const copyAt = all.indexOf('data-astryx-media-dark-page');
-    const css = copyAt === -1 ? all : all.slice(0, copyAt);
+    const css = generateOnMediaCSS(themed);
     const typeIndex = css.indexOf('.astryx-heading[data-type="hero"]');
     const boldIndex = css.lastIndexOf('.astryx-heading[data-weight="bold"]');
 
@@ -894,6 +900,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('carries an authored main weight past a media-specific type rule', () => {
     const themed = defineTheme({
       name: 'inherited-media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -907,11 +914,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const all = generateOnMediaCSS(themed);
-    // The surfaces' own rules, before the dark-page copy of the light side
-    // (which undoes the dark side's weight with the root's).
-    const copyAt = all.indexOf('data-astryx-media-dark-page');
-    const css = copyAt === -1 ? all : all.slice(0, copyAt);
+    const css = generateOnMediaCSS(themed);
     const typeIndex = css.indexOf('.astryx-heading[data-type="hero"]');
     const boldIndex = css.lastIndexOf('.astryx-heading[data-weight="bold"]');
 
@@ -923,6 +926,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('scopes Text color and size guards after each media-surface type rule', () => {
     const themed = defineTheme({
       name: 'media-text-prop-guards',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           text: {'type:large': {color: '#fff', fontSize: '4rem'}},
@@ -1183,6 +1187,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('keeps onDark and onLight weight guards after adaptation guards', () => {
     const themed = defineTheme({
       name: 'surface-adapted-heading-weight',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -1206,11 +1211,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
         },
       },
     });
-    const all = generateThemeCSS(themed).component;
-    // The surfaces' own rules, before the dark-page copy of the light side.
-    const copyAt = all.indexOf('data-astryx-media-dark-page');
-    const css = copyAt === -1 ? all : all.slice(0, copyAt);
-    expect(all.slice(copyAt)).toContain('font-weight: 600');
+    const css = generateThemeCSS(themed).component;
 
     expect(css.lastIndexOf('font-weight: 800')).toBeLessThan(
       css.lastIndexOf('font-weight: 700'),
@@ -2181,6 +2182,7 @@ describe('declaration assembly keeps values as values', () => {
     const {css} = generate(
       defineTheme({
         name: 'brand',
+        tokens: KEEPS_SIDE,
         components: {heading: {'weight:bold': {fontWeight: payload}}},
         onDark: {components: {heading: {'level:1': {fontSize: '2rem'}}}},
       }),
@@ -2340,29 +2342,30 @@ describe('a media surface that flips with the page', () => {
     ).toBe(true);
   });
 
-  it("undoes, on the dark-page copy, what only the light-page side's overrides set", () => {
+  it("leaves the light-page side's overrides out of a surface a dark page flips", () => {
     const css = generateOnMediaCSS(
       defineTheme({
-        name: 'flip-undo',
+        name: 'flip-scope',
         tokens: {
           '--color-background-inverted': ['#0a1317', '#f4f0e8'],
           '--color-on-dark': ['#ffffff', '#ffffff'],
           '--color-on-light': ['#111111', '#111111'],
         },
-        components: {button: {base: {color: '#222222'}}},
         onDark: {
-          tokens: {'--color-border': '#000000'},
-          components: {
-            button: {base: {backgroundColor: '#000000', color: '#eeeeee'}},
-          },
+          components: {button: {base: {backgroundColor: '#000000'}}},
         },
       }),
     );
-    const copy = css.slice(css.indexOf('data-astryx-media-dark-page'));
-    expect(copy).toContain('--color-border: revert-layer');
-    expect(copy).toMatch(/background-color: revert-layer/);
-    // A property the theme root sets for the same key takes the root's value.
-    expect(copy).toMatch(/color: #222222/);
+    const rules = css.split('}').map(rule => rule.trim());
+    const fill = rules.filter(rule =>
+      rule.includes('background-color: #000000'),
+    );
+    expect(fill.length).toBeGreaterThan(0);
+    // Each dark-side fill rule leaves out a surface a dark page flips light.
+    for (const rule of fill)
+      expect(rule).toContain(
+        ':where(:not(:scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+      );
   });
 
   it('writes no dark-page rules when every inverted surface keeps its side', () => {
