@@ -75,7 +75,7 @@ import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 /**
  * The track box of each size, px (width × height), for the touch
  * presentation's thumb geometry.
- * SYNC: wrapperSizeStyles and trackSizeStyles below.
+ * SYNC: trackSizeStyles below.
  */
 const TRACK_SIZE = {sm: [32, 20], md: [40, 24]} as const;
 
@@ -108,17 +108,6 @@ const HIT_TOP = 'var(--astryx-hit-inset-top, 0px)';
 const HIT_RIGHT = 'var(--astryx-hit-inset-right, 0px)';
 const HIT_BOTTOM = 'var(--astryx-hit-inset-bottom, 0px)';
 const HIT_LEFT = 'var(--astryx-hit-inset-left, 0px)';
-
-const wrapperSizeStyles = stylex.create({
-  sm: {
-    width: 32,
-    height: 20,
-  },
-  md: {
-    width: 40,
-    height: 24,
-  },
-});
 
 // Every touch value sits in the same property as the mouse value, as a
 // nested condition, never in a later style. A later style that names a
@@ -297,6 +286,9 @@ const styles = stylex.create({
   statusGap: {
     marginTop: spacingVars['--spacing-2'],
   },
+  // The control's box is the track's: it takes no size of its own, so a
+  // theme that sizes the track (`width` and `height` on `switch`) sizes the
+  // box the invisible input covers and the row it sits in.
   switchWrapper: {
     position: 'relative',
     display: 'flex',
@@ -1023,7 +1015,6 @@ export function Switch({
       ref={surfaceRef}
       {...stylex.props(
         styles.switchWrapper,
-        wrapperSizeStyles[size],
         !isDisabled && !isBusy && styles.switchWrapperInteractive,
       )}>
       <input
