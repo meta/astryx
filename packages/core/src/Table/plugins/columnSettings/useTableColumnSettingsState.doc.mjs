@@ -56,7 +56,7 @@ export const docs = {
       name: 'columnSettingsConfig',
       type: 'UseTableColumnSettingsStateConfig<TColumnKey>',
       description:
-        'Ready-to-use config to pass directly to useTableColumnSettings(columnSettingsConfig).',
+        'Ready-to-use config to pass to useTableColumnSettings<Row, TColumnKey>(columnSettingsConfig); pass the row type and this hook\'s column-key type, because TypeScript cannot infer them there.',
     },
     {
       name: 'activeColumnKeys',

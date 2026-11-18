@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableColumnResize',
   description:
-    'Hook that returns a TablePlugin adding draggable resize handles to column header borders. Supports pointer + keyboard (WAI-ARIA window splitter) resizing, RTL, per-column min/max widths, and proportional-column preservation (resizes the neighbor so the table stays full-width). Commits widths on release.',
+    'Hook that returns a TablePlugin adding draggable resize handles to column header borders. T is the row type; TypeScript cannot infer it from the config, so it defaults to Record<string, unknown>, which a Table with typed rows rejects: pass it, as in `useTableColumnResize<Walk>(…)` for `<Table<Walk>>`. Supports pointer + keyboard (WAI-ARIA window splitter) resizing, RTL, per-column min/max widths, and proportional-column preservation (resizes the neighbor so the table stays full-width). Commits widths on release.',
   props: [
     {
       name: 'columnWidths',
@@ -46,7 +46,7 @@ export const docsZh = {
   name: 'useTableColumnResize',
   displayName: 'useTableColumnResize',
   description:
-    '返回 TablePlugin 的 Hook，为列表头边框添加可拖动的调整手柄。支持指针 + 键盘（WAI-ARIA 窗口分隔符）调整、RTL、每列最小/最大宽度，以及比例列保留（调整相邻列以保持表格全宽）。在释放时提交宽度。',
+    '返回 TablePlugin 的 Hook，为列表头边框添加可拖动的调整手柄。T 是行类型；TypeScript 无法从配置推断它，因此默认为 Record<string, unknown>，带类型行的 Table 不接受：请传入，例如 `useTableColumnResize<Walk>(…)` 对应 `<Table<Walk>>`。支持指针 + 键盘（WAI-ARIA 窗口分隔符）调整、RTL、每列最小/最大宽度，以及比例列保留（调整相邻列以保持表格全宽）。在释放时提交宽度。',
   props: [
     {
       name: 'columnWidths',
@@ -83,7 +83,7 @@ export const docsDense = {
   name: 'useTableColumnResize',
   displayName: 'useTableColumnResize',
   description:
-    'Hook returning TablePlugin w/ draggable column resize handles. Pointer + keyboard (WAI-ARIA splitter), RTL, per-column min/max, proportional-preserving (resizes neighbor). Commits on release.',
+    'Hook returning TablePlugin w/ draggable column resize handles. T = row type, not inferred from config (defaults to Record<string, unknown>, rejected by typed Table): pass it, e.g. `useTableColumnResize<Walk>(…)`. Pointer + keyboard (WAI-ARIA splitter), RTL, per-column min/max, proportional-preserving (resizes neighbor). Commits on release.',
   propDescriptions: {
     columnWidths: 'Controlled pixel-width overrides keyed by column key.',
     onColumnResizeEnd:
