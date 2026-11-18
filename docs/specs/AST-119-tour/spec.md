@@ -152,20 +152,30 @@ happens between pages.
 
 - `component:Tour`: Public concepts gains Steps, Active step, Anchor and
   Missing anchor rows; its Ownership boundary takes placement, step focus and
-  controls from FR6–FR17; AR1 points to FR14. DEC-1 and FR1 are unchanged.
+  controls from FR6–FR17; AR1 points to FR14. Its Compatibility and Public
+  contract lines name `activeId`, `onActiveIdChange` and `onEnd` (FR4, FR5) in
+  place of `isActive` and `onDismiss`. DEC-1 and FR1 are unchanged.
 - `family:overlay-dismissal`: its Tour row says Escape ends the tour only
-  while focus is in the callout or on its anchor (FR14).
+  while focus is in the callout or on its anchor (FR14). Its
+  `component:TourStep` and Lab TourStep rows stay for the lab Tour; the core
+  Tour has no TourStep.
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
 - Lab `Tour` and `TourStep` take `<TourStep>` children. Core `Tour` takes a
   `steps` array; its doc carries a migration example from the lab.
 
 FR1 gap: lab steps are `<TourStep>` children, ordered by mount order.
+FR3 gap: lab steps follow an index; removing an earlier step moves the active
+step, and removing the active last step shows nothing and reports no end.
+FR4 gap: the app cannot name the active lab step; it can only start the tour
+or move it by one.
 FR6 gap: a lab step takes only a ref; it has no lookup function and no
 centered step without an anchor.
 FR7 gap: the lab does not scroll an anchor into view.
 FR8 gap: when a lab anchor is not in the document as its step starts, the
 callout shows unanchored, the ring never appears, and nothing reports it.
+FR9 gap: a lab step has no preparation before it shows.
+FR10 gap: a lab callout and ring stay on a removed anchor's last box.
 FR11 gap: lab control labels are English only.
 FR12 gap: the lab has no Skip control.
 FR14 gap: lab Escape ends the tour wherever focus is.
@@ -191,7 +201,7 @@ description.
 ### DEC-1 — Steps are data the app controls by id
 
 **Reference:** `spec:AST-119/DEC-1`
-**Decider:** proposed under `nynexman4464`'s direction to pick the best step model (2026-11-11), pending his and owner review
+**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
 
 Steps are an array of plain objects with stable ids, and the app names the
 active step. The app can then advance from its own handlers, resume a tour,
@@ -204,7 +214,7 @@ step builder.
 ### DEC-2 — A step is conditional by being absent
 
 **Reference:** `spec:AST-119/DEC-2`
-**Decider:** proposed under `nynexman4464`'s direction that steps be conditional (2026-11-11), pending his and owner review
+**Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
 
 The app knows at render time whether a step applies, so it leaves the step out
 of the array, and the count and the controls follow.
