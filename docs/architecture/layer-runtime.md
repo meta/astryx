@@ -265,15 +265,17 @@ finished animation's start time is counted again from now while its held end
 time is kept.
 Once the anchor has left the viewport the runtime pins the layer's
 self-alignment `unsafe` toward the anchor, so the layer holds the position its
-flips give it and holds its size rather than sliding to the edge. Components
-pass no fallbacks of their own to an anchor-mode layer.
+flips give it and holds its size rather than sliding to the edge. A layer that
+no person is using is hidden while its anchor is out of view, and the pin
+holds a layer that a person is using (`spec:AST-059` FR5; FR5 gap there).
+Components pass no fallbacks of their own to an anchor-mode layer.
 
 Every one of these inputs is resolved by the browser's style and layout in the
 same frame as the render that produced it; apart from the one case below, the
 runtime measures nothing after paint to apply them. Anchor visibility is read
 synchronously in a layout effect before the layer's first paint and then
 observed while the layer is open, so a layer opened with its anchor already out
-of view holds from its first frame. Whether a layer that keeps its anchor clear
+of view is hidden or holds from its first frame. Whether a layer that keeps its anchor clear
 covers its anchor or leaves the viewport, judged from its box without its own
 transform (so an entry animation that starts it closer to the anchor does not
 count), is read inside `show()` and the
@@ -317,8 +319,9 @@ Public `useLayer` defaults to `popover="manual"`; Popover-family APIs normally
 select `popover="auto"`. Browser-initiated closes are observed through the queued
 `toggle` event. The browser may already have hidden the surface before `isOpen`,
 `onHide`, or controlled-state synchronization catches up. A show from another
-trigger while such a close is in flight moves the layer to that trigger, unless
-a separate anchor is named; that close is not reported.
+trigger while such a close is in flight moves the layer to that trigger, and
+a `usePopover` `show()` moves it to the element its `anchorRef` holds
+(`spec:AST-116` FR9; FR9 gap there); that close is not reported.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
 `useLayer` records the gesture and the trigger associated with a browser close,
@@ -548,7 +551,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   that closes a layer cannot reopen it from the trigger it was open for; a press
   on another trigger of the same layer may show it, anchored to that trigger: a
   show in the same gesture from another trigger moves the layer to that trigger,
-  unless a separate anchor is named, which keeps the layer on that anchor;
+  and a `usePopover` `show()` in the same gesture moves the layer to the
+  element its `anchorRef` holds, or keeps it open there when that element is
+  unchanged (`spec:AST-116` FR9; FR9 gap there);
   menu-hover also
   suppresses exposure-induced hover. A one-finger touch that starts outside an
   open light-dismiss popover and travels the shared pan distance is a gesture,
@@ -607,7 +612,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
   viewport geometry is measured after paint and then applied, with two
   exceptions. The runtime observes anchor visibility for every layer (which
-  drives `spec:AST-116` FR7's hide once FR7 ships; FR7 gap there), and,
+  drives `spec:AST-059` FR5's hide; FR5 gap there), and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
   leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the
@@ -811,7 +816,8 @@ it on the surface inside the layer and run no layout while it plays.
   Chromium at a desktop and a phone viewport, an explicit size near an edge,
   content that fits and content that does not fit beside the trigger, a trigger
   where neither side fits, a layer wider than the viewport, an anchor that
-  leaves the viewport or is already out of view, an app-declared inset arriving
+  leaves the viewport or is already out of view with the layer in use and not
+  in use, an app-declared inset arriving
   or changing, and the first painted frame against the settled one.
 - A software keyboard cap change verifies the cap's timing (a rising keyboard
   that arrives, a falling one, one that changes at once, and a press in

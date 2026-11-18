@@ -198,11 +198,7 @@ one pending load per module, caches a success, and resets after a failure.
   boundary check prints it, 1,024 bytes) of
   first-load JavaScript to a page that renders its component without it, the
   same wiring allowance as INV7. A larger feature takes INV7's route (its own
-  import) or a deferred load (DEC-1, DEC-4). `usePopover`'s `anchor`,
-  `onOutsidePress` and `anchorOutOfViewBehavior` are an exception: they load
-  with `usePopover` and add at most 0.4 KB, 0.4 KB and 0.6 KB gzip, the last
-  counting the shared focus-return code its focus move uses (`spec:AST-116`
-  FR24, DEC-9). A pull request that adds or grows
+  import) or a deferred load (DEC-1, DEC-4). A pull request that adds or grows
   an optional feature reports that page's first-load gzip delta. A pull
   request that grows a shared module reports the first-load gzip delta, for
   apps that do not use the new code, on the four reference pages. Each
@@ -395,9 +391,6 @@ Rejected: keeping public-component-api INV19's advice to weigh resource cost,
 without a budget or a report, because a feature's cost to other apps then
 stays invisible.
 
-Amended: `spec:AST-116` DEC-9 excepts three `usePopover` inputs from INV10's
-allowance, at the costs INV10 names.
-
 ## Open questions
 
 - **OQ1 — Is 0.3 KB the right wiring allowance for INV7?** Proposed from the
@@ -419,4 +412,4 @@ allowance, at the costs INV10 names.
 | INV6       | Tests with a rejecting loader                                                                                                                                                                                                                                                                                                                                                                                                                                                      | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                                                                                                                  |
 | INV8       | `scripts/touch-support-bundle.test.mjs` extended over lazy chunks: two deferred surfaces and one base component on one page                                                                                                                                                                                                                                                                                                                                                        | A second copy of a touch module on one page; an `import()` whose target is a touch module; a touch module in an entry's eager graph only for a deferred surface                                                                                                      |
 | INV9       | The check's own tests: a stale allowlist row, an unlisted crossing, and the printed import chain                                                                                                                                                                                                                                                                                                                                                                                   | A crossing passes unlisted; a stale row passes; a failure without its import chain                                                                                                                                                                                   |
-| INV10      | The per-page first-load report from `pnpm size:pages` on INV10's four reference pages (docs, form, menu, table, each defined by its component set), base against head, for a page that renders each changed component without its optional feature; the entry-boundary check (INV9) against the "Must not reach" table, with its own tests: a fixture entry that reaches a listed module, a row for an entry the check does not build, and a removed row reported against the base | An unused optional feature adds first-load JavaScript over its INV10 allowance, or a pull request that grows a shared module reports no per-page delta; an entry reaches a module its "Must not reach" row lists and the check passes; a removed row is not reported |
+| INV10      | The per-page first-load report from `pnpm size:pages` on INV10's four reference pages (docs, form, menu, table, each defined by its component set), base against head, for a page that renders each changed component without its optional feature; the entry-boundary check (INV9) against the "Must not reach" table, with its own tests: a fixture entry that reaches a listed module, a row for an entry the check does not build, and a removed row reported against the base | An unused optional feature adds more than 0.3 KB gzip of first-load JavaScript, or a pull request that grows a shared module reports no per-page delta; an entry reaches a module its "Must not reach" row lists and the check passes; a removed row is not reported |
