@@ -728,8 +728,8 @@ function DropdownMenuBottomSheet({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-    // Keyed on the open sub-menu, not on its items: a new `items` array from a
-    // re-render while the sheet is open leaves focus where the person put it.
+    // Re-run only on open or a sub-menu change. A new `items` array from a
+    // parent render must not move focus.
   }, [currentSubmenu, isOpen]);
 
   useEffect(() => {
