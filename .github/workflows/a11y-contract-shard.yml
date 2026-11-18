@@ -1,0 +1,101 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Runs one leg of the release-check accessibility contracts at a commit on
+# main, on a runner of the release-check's size. A failure that reproduces
+# only on CI runners can then be bisected one commit at a time, without a
+# whole release-check. The leg runs the commit's own scripts, so it tests what
+# that commit's release-check ran. It keeps the leg's Playwright results.
+
+name: A11y contract shard
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected-head:
+        description: Full SHA of a commit on main
+        required: true
+        type: string
+      a11y-shard:
+        description: The leg to run, 1 to 6, as the release-check splits them
+        required: true
+        type: string
+      repeat:
+        description: Times to run each test in the leg (1 to 10)
+        required: false
+        default: '1'
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: a11y-contract-shard-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ inputs.repeat }}
+  cancel-in-progress: false
+
+jobs:
+  shard:
+    name: Accessibility spec-test contracts (${{ inputs.a11y-shard }}/6) at ${{ inputs.expected-head }}
+    # A free standard runner: the same four vCPUs and 16 GB as the release
+    # check's paid 4-core-ubuntu pool.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check the inputs
+        env:
+          SHA: ${{ inputs.expected-head }}
+          SHARD: ${{ inputs.a11y-shard }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::expected-head must be a full 40-character SHA, not '$SHA'."; exit 1; }
+          [[ "$SHARD" =~ ^[1-6]$ ]] || { echo "::error::a11y-shard must be 1 to 6, not '$SHARD'."; exit 1; }
+          [[ "$REPEAT" =~ ^([1-9]|10)$ ]] || { echo "::error::repeat must be 1 to 10, not '$REPEAT'."; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          ref: ${{ inputs.expected-head }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a commit on main
+        env:
+          SHA: ${{ inputs.expected-head }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SHA"
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main."; exit 1; }
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      - name: Build packages and Storybook
+        run: node .github/scripts/build-packages-and-storybook.mjs
+
+      - name: Install Playwright
+        run: npx playwright install chromium
+
+      # The same command and settings as the release-check's leg in ci.yml.
+      - name: Run accessibility spec-test contracts
+        id: contracts
+        env:
+          ASTRYX_HEAD_SHA: ${{ inputs.expected-head }}
+          A11Y_CONTRACT_WORKERS: 4
+          ASTRYX_TABLE_TIMING_GATE: '0'
+          SHARD: ${{ inputs.a11y-shard }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/a11y-contract-shard.mjs --shard "$SHARD/6" > contract-tests.txt
+          pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --repeat-each "$REPEAT"
+
+      - name: Keep the leg's Playwright results
+        if: always() && steps.contracts.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
