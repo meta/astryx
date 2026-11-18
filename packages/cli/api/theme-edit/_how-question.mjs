@@ -4451,7 +4451,11 @@ export function draftAnswer(ctx, env, question) {
         !name
           .toLowerCase()
           .split(/\s+/)
-          .some(w => typeKeywords.has(w))
+          .some(w => typeKeywords.has(w)) &&
+        // (A casing said in words, "All Caps", "Sentence Case", is the
+        // text's case, never a family.)
+        !aspectsOf(name.toLowerCase()).includes('case') &&
+        !/\s(?:case|caps)$/i.test(name)
       );
     };
     // (The words the editor reads: its dials, their rungs and feel words
@@ -8073,7 +8077,39 @@ export function draftAnswer(ctx, env, question) {
     const ownedHere =
       clauses.slice(0, i).some(o => o.parts.length > 0) ||
       Boolean(next?.parts.length);
-    if (!ownLook && (grayLook ? ownedHere : paintsAPart || namesAPart))
+    // (A list piece that is only a color, with no part in the piece after
+    // it, is the theme's: "big buttons, a sky blue, high contrast". "red,
+    // blue buttons" names its part right after, so it is the buttons'.)
+    const j = joinOf.get(c);
+    const ownPiece =
+      j?.sep === 'comma' &&
+      j.list == null &&
+      i > 0 &&
+      !next?.parts.length &&
+      !c.aspects.length &&
+      // ("page background is too blue, make it gray": a pronoun takes the
+      // part before it.)
+      !c.text.split(/\s+/).some(w => PRONOUN_WORD.test(w)) &&
+      // ("green, blue, red, yellow on badges": a run of colors is one list,
+      // never a lone color piece.)
+      ![clauses[i - 1], next].some(
+        o =>
+          o &&
+          o.colors.length &&
+          !o.aspects.length &&
+          !o.parts.length &&
+          // ("mint green for positive numbers", read as the success color:
+          // a color for a thing or a role is a piece of its own, never a
+          // run.)
+          !/\b(?:for|on|in|as|with|success|warning|danger|error|info|accent|neutral|brand|primary|status|colou?rs?)\b/.test(
+            o.text,
+          ),
+      );
+    if (
+      !ownLook &&
+      !ownPiece &&
+      (grayLook ? ownedHere : paintsAPart || namesAPart)
+    )
       continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
@@ -29502,6 +29538,13 @@ function fontIn(cl, question) {
     for (const m of question.matchAll(re)) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');
       if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
+      // ("titles in All Caps", "body text in Sentence Case": a casing said
+      // in words is the text's case, never a family.)
+      if (
+        aspectsOf(name.toLowerCase()).includes('case') ||
+        /\s(?:case|caps)$/i.test(name)
+      )
+        continue;
       // "Plus Jakarta Sans": a clause break word may start the name.
       const low = name.toLowerCase();
       if (

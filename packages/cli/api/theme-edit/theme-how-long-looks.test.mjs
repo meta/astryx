@@ -81,9 +81,10 @@ describe('long looks', () => {
       'q0',
       'Give our fintech budgeting app a confident, modern look: deep navy, mint green for positive numbers, coral for overspending, tabular numbers, roomy cards, works in light and dark.',
     );
-    // (A color beside pieces that name parts, said as no look of its own,
-    // is named as not used.)
+    // (A list piece that is only a color, "deep navy", is the theme's
+    // accent, as it is said alone.)
     expect(top(rs)).toEqual([
+      `set q0 accent '#1e3a8a'`,
       `set q0 success '#34d399'`,
       'set q0 font-variant-numeric tabular-nums --on app-shell',
       'set q0 spacing more --on card',
