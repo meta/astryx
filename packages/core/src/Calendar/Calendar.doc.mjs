@@ -80,6 +80,18 @@ export const docs = {
         description: 'One day in the grid; the control a date is picked with.',
       },
       {
+        name: 'Range band',
+        required: false,
+        description:
+          'The band behind the days of a selected range, rounded at its first and last day.',
+      },
+      {
+        name: 'Range preview band',
+        required: false,
+        description:
+          'The band behind the days a hover would select, before the range is picked.',
+      },
+      {
         name: 'Selected day',
         required: false,
         description:
@@ -248,6 +260,8 @@ function PersianMonth() {
         className: 'astryx-calendar-day',
         states: ['selected', 'today', 'disabled', 'in-range', 'marker'],
       },
+      {className: 'astryx-calendar-range', states: ['start', 'end']},
+      {className: 'astryx-calendar-range-preview', states: ['start', 'end']},
     ],
   },
 };
@@ -407,6 +421,8 @@ export const docsZh = {
         className: 'astryx-calendar-day',
         states: ['selected', 'today', 'disabled', 'in-range', 'marker'],
       },
+      {className: 'astryx-calendar-range', states: ['start', 'end']},
+      {className: 'astryx-calendar-range-preview', states: ['start', 'end']},
     ],
   },
 };

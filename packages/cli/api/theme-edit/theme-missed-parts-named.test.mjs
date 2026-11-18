@@ -71,6 +71,10 @@ describe('what the changes did not reach', () => {
           'm',
         ),
       );
+      // (It says what the line means and that nothing is broken.)
+      expect(r.stdout).toMatch(
+        /^missed: .*: each still shows the base theme's own look there\. Keep each one, or bring it in line with your changes: show lists the first misses with their lines/m,
+      );
     },
     T,
   );

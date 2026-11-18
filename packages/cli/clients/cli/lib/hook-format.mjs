@@ -26,7 +26,7 @@ import {
  * @param {any} docs
  * @returns {string}
  */
-function buildSignature(docs) {
+export function buildSignature(docs) {
   const name = docs.name;
 
   // Build params string — only top-level params (skip options.foo nested params)
@@ -95,6 +95,17 @@ function formatReturnsTable(returns) {
 }
 
 /**
+ * The `## Returns` section: what the hook returns, one row per field. A hook
+ * read prints it, and so does a component read that resolves to a hook.
+ * @param {any} docs
+ * @returns {string[]}
+ */
+export function formatHookReturns(docs) {
+  if (!docs.returns?.length) return [];
+  return ['## Returns\n', formatReturnsTable(docs.returns) + '\n'];
+}
+
+/**
  * Format full hook docs (default mode).
  * Matches component formatFull structure:
  *   # Name, description, anatomy→params, best practices, props→params+returns, theming→related
@@ -121,11 +132,7 @@ export function formatHookFull(docs) {
     sections.push(formatParamsTable(docs.params) + '\n');
   }
 
-  // Returns (hook-specific, no component equivalent)
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   return sections.join('\n');
 }
@@ -168,11 +175,7 @@ export function formatHookCompact(docs, importPath) {
     sections.push(formatParamsTable(docs.params) + '\n');
   }
 
-  // Returns
-  if (docs.returns?.length) {
-    sections.push('## Returns\n');
-    sections.push(formatReturnsTable(docs.returns) + '\n');
-  }
+  sections.push(...formatHookReturns(docs));
 
   // Related components (compact footer)
   /** @type {string[]} */

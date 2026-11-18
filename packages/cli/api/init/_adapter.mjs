@@ -69,9 +69,9 @@ export function applyComputerAgentText({remove}) {
 }
 
 /**
- * The install step to print for `packages` in the project at `cwd`: its
- * package manager's command, or `npm install` with a note when its lockfiles
- * disagree.
+ * The install step to print for `packages` in the project at `cwd`: the
+ * install guidance its integrations give, else its package manager's command,
+ * or `npm install` with a note when its lockfiles disagree.
  * @param {string[]} packages
  * @param {string} cwd
  * @returns {{line: string, note: string | null}}

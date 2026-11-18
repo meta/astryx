@@ -70,7 +70,7 @@ deciding_specs:
       "INV10",
       "INV15",
       "INV16",
-      "INV20"
+      "INV21"
     ]
   }
 }
@@ -133,7 +133,7 @@ Platform-specific details stay inside that compiler.
   compiled CSS. The CLI saves and packages it. Neither creates different theme
   behavior.
 - **INV4 — Web uses one cascade contract.** Runtime and built CSS use the same
-  scopes, `astryx-theme` layer and its sub-layers (INV20), component
+  scopes, `astryx-theme` layer and its sub-layers (INV21), component
   overrides, and consumer precedence.
 - **INV5 — Guaranteed properties remain observable.** The compiler preserves a
   guaranteed target property directly when that produces the promised effect. If
@@ -169,7 +169,7 @@ Platform-specific details stay inside that compiler.
   adaptation blocks remain separate in authored order, and media-surface overrides
   emit last. Duplicate conditions and later root-restoring writes are preserved
   exactly; runtime and static output use the same blocks. With the two
-  sub-layers of INV20 this order holds inside each sub-layer, and a part's
+  sub-layers of INV21 this order holds inside each sub-layer, and a part's
   entries beat the entries of the component it sits on at every stage: a
   part's root entry beats that component's adaptation and `onDark`/`onLight`
   entries on the same element.
@@ -293,7 +293,17 @@ Platform-specific details stay inside that compiler.
   theme root, such as a span that measures a label, uses the font that the
   token names at the page root. A page where no stylesheet defines the token
   keeps the browser's default font. An app's own `html` or `body` font wins.
-- **INV20 — A part on another component's element wins over that component's
+- **INV20 — Text inside a Theme that only inherits its size takes the body
+  size token.** Each `Theme` wrapper carries `font-size:
+var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
+  inside it that sets no size of its own (plain text in a card, a quote) draws
+  at the theme's body size and follows a theme that changes it. Core's reset
+  sets no font size on `html` or `body`, so installing Astryx leaves a host's
+  own text outside a Theme at its own size. Text inside a Theme keeps another
+  size through a font-size on the app's own container inside the Theme, or
+  through the theme's `--text-body-size`, which also sizes Core's own body
+  text.
+- **INV21 — A part on another component's element wins over that component's
   entries.** Some targets sit on the element of a component they render, beside
   that component's own target (a toggle button's `toggle-button` on Button's
   element, beside `button`). Each such part names that target as `sitsOn` on
@@ -425,8 +435,9 @@ tiers.
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                                                                                        | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts`, CLI adaptation build fixtures, and `sharedElementParts.test.ts` (order inside the parts sub-layer; a part's root entry over its component's media-surface entry)                                                                                                                                                                                                                                                           | Rule blocks merge/reorder/drop, surfaces lose precedence, runtime/static CSS diverges, or a component's later-stage entry beats a part's entry on the same element                                                                                                                                |
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
-| INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` rule, none on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                                   | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
-| INV20            | `sharedElementParts.test.ts` (doc `sitsOn` entries match `SHARED_ELEMENT_PARTS`; a part's entry lands in `parts`, its component's in `components`; a theme with no part entry keeps one layer) and `build.shared-element-parts.test.mjs` (CLI single and family builds write the same sub-layers; an older core keeps one layer)                                                                                                                       | A part's entry loses to its component's entry on the same element, the sub-layers reorder root, adaptation and media-surface rules, or a theme with no part entry changes CSS                                                                                                                     |
+| INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
+| INV20            | `Theme.test.tsx` (the wrapper's body size) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                                      | Text inside a Theme with no size of its own                                                                                                                                                                                                                                                       |
+| INV21            | `sharedElementParts.test.ts` (doc `sitsOn` entries match `SHARED_ELEMENT_PARTS`; a part's entry lands in `parts`, its component's in `components`; a theme with no part entry keeps one layer) and `build.shared-element-parts.test.mjs` (CLI single and family builds write the same sub-layers; an older core keeps one layer)                                                                                                                       | A part's entry loses to its component's entry on the same element, the sub-layers reorder root, adaptation and media-surface rules, or a theme with no part entry changes CSS                                                                                                                     |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

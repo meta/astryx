@@ -55,7 +55,7 @@ const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
- * @param {string} [cwd] the project folder; its package manager names the theme install command
+ * @param {string} [cwd] the project folder; its integrations' install guidance, else its package manager, names the theme install step
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {

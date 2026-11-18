@@ -33,9 +33,48 @@ import {
   QUERIES,
   hasModuleHooks,
   readKept,
+  templatesEntry,
+  templatesEntries,
+  allInodes,
+  expectWarmHit,
+  maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
+
+/** @param {string} text */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * What each kept entry in a temp folder's cache folder holds, by kind, once
+ * each: template discovery, a doc parse, a kept summary by its kind, or
+ * anything else by its key.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function keptKinds(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return [];
+  const kinds = new Set();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('gather-')) continue;
+    const file = path.join(dir, name);
+    const key = JSON.parse(readKept(file).key);
+    const summary = key.indexOf('kept-tree');
+    kinds.add(
+      templatesEntry(file)
+        ? 'template discovery'
+        : key.includes('doc-parse')
+          ? 'doc parse'
+          : summary >= 0
+            ? `summary ${key[summary + 1]}`
+            : `other ${JSON.stringify(key.slice(5))}`,
+    );
+  }
+  return [...kinds].sort();
+}
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
@@ -57,6 +96,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "the lookup commands' not-found hint's name summaries",
     );
     expect(plain).toContain("the CLI's own docs tree");
+    expect(plain).toContain(
+      "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
+    );
     expect(plain).toContain(
       "what theme build checks a theme against in Core's component docs",
     );
@@ -80,9 +122,30 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       "the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported)",
     );
-    // The bound on the folder, and on jiti's folder beside it.
+    // The bound on the folder, and on the transpile cache beside it.
     expect(plain).toContain('at most 64 MB');
-    expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
+    expect(plain).toContain(
+      `the transpile cache in ${path.join(tmp, 'astryx', 'transpiled')} keeps its copies in 256 subfolders, each holding at most 1/256 of that, and drops the copies made longest ago first.`,
+    );
+    // Text prints only the brief: the folder, its entries and size, the
+    // command that prints the whole message, and the command that clears the
+    // kept folders. The transpile folder is named once it exists.
+    const catalogs = path.join(tmp, CACHE_NAME);
+    const transpiled = path.join(tmp, 'astryx', 'transpiled');
+    const brief = new RegExp(
+      `^\\d+ (entry|entries) \\(\\d+\\.\\d MB\\) in ${escapeRegExp(catalogs)}\\. \`[^\`]* doctor --json\` lists every kept item and the size limits\\. To clear the caches, run: rm -rf ${escapeRegExp(catalogs)}( ${escapeRegExp(transpiled)})?\\.$`,
+    );
+    expect(row().brief).toMatch(brief);
+    fs.mkdirSync(transpiled, {recursive: true});
+    expect(row().brief).toContain(`rm -rf ${catalogs} ${transpiled}.`);
+    const shown = run(['doctor'], {tmp, json: false}).stdout;
+    expect(shown).toContain(
+      'Each check: status, id, label, message (or brief), fix',
+    );
+    expect(shown.replace(/\s+/g, ' ')).toContain(
+      `To clear the caches, run: rm -rf ${catalogs} ${transpiled}.`,
+    );
+    expect(shown).not.toContain('keep what they gather');
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -269,7 +332,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
+  it('records nothing for theme, discover or docs in a project with no integration, and keeps template discovery for component and template', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -304,17 +367,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 `,
       );
       const env = {NODE_OPTIONS: `--require ${strict}`};
-      for (const ask of [
-        ['template', '--list'],
-        ['component', 'Button'],
-        ['theme', 'list'],
-        ['discover'],
-        ['docs'],
-      ]) {
-        // Stdout and status: a once-a-day notice may go to stderr.
-        const answer = (
-          /** @type {{status: number | null, stdout: string}} */ r,
-        ) => [r.status, r.stdout];
+      // Stdout and status: a once-a-day notice may go to stderr.
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      for (const ask of [['theme', 'list'], ['discover'], ['docs']]) {
         const fresh = answer(
           run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
         );
@@ -327,6 +384,43 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       }
       expect(entries(tmp).size).toBe(0);
       expect(issuesEntries(tmp).size).toBe(0);
+      expect(templatesEntries(tmp).size).toBe(0);
+      // Template discovery reads each of the CLI's template docs, so the
+      // lookups keep it in the existing folder, and never make the folder.
+      const asks = [
+        ['template', '--list'],
+        ['component', 'Button'],
+        ['component', 'Buttn'],
+      ];
+      const fresh = asks.map(ask => {
+        const first = freshTmp();
+        const answered = answer(run(ask, {tmp: first, cwd: bare, json: false}));
+        if (ask[1] !== 'Buttn') {
+          expect(fs.existsSync(path.join(first, CACHE_NAME))).toBe(false);
+        }
+        expect(answer(run(ask, {tmp, cwd: bare, json: false}))).toEqual(
+          answered,
+        );
+        return answered;
+      });
+      if (hasModuleHooks) {
+        const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
+        expect(warm.map(answer)).toEqual(fresh);
+        expect(templatesEntries(tmp).size).toBe(1);
+        // Besides template discovery: the stored docs' parses the recorded
+        // runs keep, and the summaries any lookup keeps once the folder
+        // exists.
+        expect(keptKinds(tmp)).toEqual([
+          'doc parse',
+          'summary core-component-views',
+          'summary core-hook-keywords',
+          'summary hint-names',
+          'summary stored-component-list-check',
+          'template discovery',
+        ]);
+      } else {
+        expect(allInodes(tmp).size).toBe(0);
+      }
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -544,10 +638,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             stderr: r.stderr,
             // The cache row counts what the folder holds, which a write
             // earlier in the run adds to: the rest must match exactly.
-            stdout: r.stdout
-              .split(tmp)
-              .join('<tmp>')
-              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+            stdout: maskCacheCount(r.stdout.split(tmp).join('<tmp>')),
           };
         } finally {
           fs.chmodSync(path.dirname(catalogs), 0o700);

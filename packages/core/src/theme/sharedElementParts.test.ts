@@ -137,4 +137,23 @@ describe('shared-element parts', () => {
       /\.astryx-toggle-button\s*\{\s*border-color: red/,
     );
   });
+  it("lets a pager cell's entry beat a keyed button entry on its element", () => {
+    const theme = defineTheme({
+      name: 'shared-element-pager',
+      tokens: {},
+      components: {
+        button: {'variant:ghost': {backgroundColor: 'gray'}},
+        'pagination-item': {selected: {backgroundColor: 'blue'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const at = component.indexOf('@layer parts {');
+    expect(at).toBeGreaterThan(-1);
+    expect(component.slice(at)).toMatch(
+      /\.astryx-pagination-item\[data-selected="selected"\]\s*\{\s*background-color: blue/,
+    );
+    expect(component.slice(0, at)).toMatch(
+      /\.astryx-button\[data-variant="ghost"\]\s*\{\s*background-color: gray/,
+    );
+  });
 });
