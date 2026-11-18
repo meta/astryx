@@ -347,8 +347,8 @@ and a drawn fill.
   `material` member on React Native (`spec:AST-082/FR10`).
 - Relies on `spec:AST-112` FR3 (amended): Astryx's own native pieces, these
   four contracts included, link by default.
-- Relies on `spec:AST-140` FR5: contracts start at revision 1 and add behaviour
-  as named features the binary reports.
+- Relies on `spec:AST-140` FR5: each contract's baseline is its first
+  release's shape, and later behaviour is a named feature the binary reports.
 
 ## Verification
 
