@@ -98,6 +98,7 @@ import {
   checkAppThemes,
   checkThemes,
   moduleSpecifiers,
+  projectStylesheetLoad,
   stringValues,
   themeImportWiring,
   withProviderWiring,
@@ -143,12 +144,11 @@ import {
   builtTargetOf,
   listProjectSourceFiles,
   readTextFile,
-  doctorStylesheetImports,
   doctorStylesheetAtRules,
   builtProjectRoot,
   readSkillPlaces,
 } from './_adapter.mjs';
-import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
+import {checkBuilt} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {
@@ -567,47 +567,6 @@ function sourceBuildOf(root) {
 }
 
 /**
- * The first project file that loads Core's component styles: a stylesheet
- * that `@import`s them, a module that imports them, or a page that links
- * them. Each is read as a syntax tree or its tags, so comments never count.
- * @param {string} root
- * @returns {{file: string | null, unparsed: number}}
- */
-function coreStylesheetLoad(root) {
-  let unparsed = 0;
-  for (const file of listProjectSourceFiles(root, '', {
-    stylesheets: true,
-    pages: true,
-  })) {
-    let source;
-    try {
-      source = readTextFile(file);
-    } catch {
-      continue;
-    }
-    if (!source.includes('astryx.css')) continue;
-    if (file.endsWith('.css')) {
-      if (doctorStylesheetImports(source).has(CORE_STYLESHEET)) {
-        return {file, unparsed};
-      }
-      continue;
-    }
-    if (/\.html?$/u.test(file)) {
-      if (linksCoreStylesheet(source)) return {file, unparsed};
-      continue;
-    }
-    try {
-      if (moduleSpecifiers(source).has(CORE_STYLESHEET)) {
-        return {file, unparsed};
-      }
-    } catch {
-      unparsed += 1;
-    }
-  }
-  return {file: null, unparsed};
-}
-
-/**
  * The app loads Core's component styles. Without them, Astryx components
  * render unstyled, and nothing else fails: the build passes and the page
  * loads. An app that loads none but compiles Core's styles from source is
@@ -620,7 +579,7 @@ export function checkCoreStylesheets(ctx) {
   if (!ctx.coreDir) return null;
   const root = projectRootOf(ctx);
   const label = "Core's component styles loaded";
-  const {file, unparsed} = coreStylesheetLoad(root);
+  const {file, unparsed} = projectStylesheetLoad(root, CORE_STYLESHEET);
   if (file) {
     return {
       id: 'core-stylesheets',

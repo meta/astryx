@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file Fault-injection coverage for all eleven app-theme doctor checks. */
+/** @file Fault-injection coverage for all twelve app-theme doctor checks. */
 
 import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
@@ -32,9 +32,28 @@ function write(file, content) {
 }
 
 /**
+ * A root module whose root Theme wraps `inner`: an app root doctor can read
+ * (a plain element paints no page).
+ * @param {string} dir @param {string} [inner]
+ */
+function writeRoot(dir, inner = '<main />') {
+  write(
+    path.join(dir, 'src/root.tsx'),
+    `import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]}>${inner}</Theme>;\n`,
+  );
+  // (The page shell: its mount node is what the census reads.)
+  write(
+    path.join(dir, 'index.html'),
+    '<!doctype html><html><head></head><body><div id="root"></div></body></html>\n',
+  );
+}
+
+/**
  * @param {Array<{slug: string, css?: string, fontFamily?: string, fontCss?: string}>} themeSpecs
- * @param {{peerRange?: string, importModule?: boolean, root?: string}} [options]
- *   `root`: the folder the fixture is made in (default: this package)
+ * @param {{peerRange?: string, importModule?: boolean, root?: string, reset?: boolean}} [options]
+ *   `root`: the folder the fixture is made in (default: this package);
+ *   `reset`: whether the app loads Core's reset (default true; false is an
+ *   app embedded in a page it does not own)
  */
 async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   const dir = fs.mkdtempSync(
@@ -43,6 +62,13 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, 'src'), {recursive: true});
   write(path.join(dir, 'tsconfig.json'), '{}\n');
+  // (An app that owns its page loads Core's reset; `reset: false` is the
+  // embedded, guest setup.)
+  if (options.reset !== false)
+    write(
+      path.join(dir, 'src/core-reset.css'),
+      "@import '@astryxdesign/core/reset.css';\n",
+    );
   write(
     path.join(dir, 'package.json'),
     JSON.stringify({
@@ -1238,9 +1264,9 @@ describe('app-theme doctor checks', () => {
       'ocean: write borderTopColor after border in components.tab.selected, or give its value in border.',
     );
     // Its outputs are current: the freshness check still passes.
-    expect(check(await checkAppThemes(dir), 'theme-local-builds')).toMatchObject(
-      {status: 'pass'},
-    );
+    expect(
+      check(await checkAppThemes(dir), 'theme-local-builds'),
+    ).toMatchObject({status: 'pass'});
   });
 
   it('never passes theme-setting-effects for a local theme whose build check did not run', async () => {
@@ -1260,15 +1286,13 @@ describe('app-theme doctor checks', () => {
       sourceFile,
       "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, components: {card: {base: {'--_card-radius': '4px'}}}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
     );
-    expect(check(await checkAppThemes(dir), 'theme-setting-effects')).toEqual(
-      {
-        id: 'theme-setting-effects',
-        label: 'Theme settings that show',
-        status: 'info',
-        message:
-          'Not checked, because its build check did not run: ocean (it sets a private variable).',
-      },
-    );
+    expect(check(await checkAppThemes(dir), 'theme-setting-effects')).toEqual({
+      id: 'theme-setting-effects',
+      label: 'Theme settings that show',
+      status: 'info',
+      message:
+        'Not checked, because its build check did not run: ocean (it sets a private variable).',
+    });
   });
 
   it('names what the build said for a local theme whose source loads but is refused', async () => {
@@ -2180,6 +2204,987 @@ describe('app-theme doctor checks', () => {
     const result = check(await checkAppThemes(dir), 'theme-global-rules');
     expect(result).toMatchObject({status: 'fail'});
     expect(result.message).toContain('body');
+  });
+
+  it('warns when a one-mode theme page is painted by neither AppShell nor a body background', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '[data-astryx-theme="ocean"] { --color-background-body: #101314; --color-text-primary: #e8f1f6; }\n',
+      },
+    ]);
+    writeRoot(dir);
+    const result = check(await checkAppThemes(dir), 'theme-page-color');
+    expect(result).toMatchObject({status: 'warn'});
+    expect(result.message).toContain('drawn for dark mode only');
+    expect(result.fix).toMatch(
+      /^Wrap the page in AppShell; if you can't, pass the theme's mode to the root Theme \(mode="dark"\), or add `body \{ background: var\(--color-background-body\) \}` to global CSS/,
+    );
+  });
+
+  it('passes the one-mode page check when the app renders AppShell or paints the body', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const shell = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(shell.dir, 'src/App.tsx'),
+      "import {AppShell} from '@astryxdesign/core';\nexport const App = () => <AppShell />;\n",
+    );
+    expect(
+      check(await checkAppThemes(shell.dir), 'theme-page-color'),
+    ).toMatchObject({status: 'pass'});
+
+    const subpath = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(subpath.dir, 'src/App.tsx'),
+      "import {AppShell} from '@astryxdesign/core/AppShell';\nexport const App = () => <AppShell />;\n",
+    );
+    expect(
+      check(await checkAppThemes(subpath.dir), 'theme-page-color'),
+    ).toMatchObject({status: 'pass'});
+
+    // (The theme's recorded mode, passed to the root Theme.)
+    const moded = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(moded.packageDir, 'dist/ocean.js'),
+      'export const oceanTheme = {name: \'ocean\', tokens: {}};\nexport const colorModes = ["dark"];\n',
+    );
+    await themeAdd('ocean', {
+      cwd: moded.dir,
+      import: true,
+      package: '@acme/themes',
+    });
+    write(
+      path.join(moded.dir, 'src/App.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, themeModes, defaultThemeSlug} from './astryx-themes';\nexport const App = () => <Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug]} />;\n",
+    );
+    expect(
+      check(await checkAppThemes(moded.dir), 'theme-page-color'),
+    ).toMatchObject({status: 'pass'});
+
+    const body = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(body.dir, 'src/global.css'),
+      'body { background: var(--color-background-body); }\n',
+    );
+    expect(
+      check(await checkAppThemes(body.dir), 'theme-page-color'),
+    ).toMatchObject({status: 'pass'});
+  });
+
+  it('passes the one-mode page check when the root Theme takes a literal mode', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n',
+      },
+    ]);
+    write(
+      path.join(dir, 'src/main.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]} mode=\"dark\" />;\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('reads an oklch page color, and counts no nested Theme, other mode prop, custom property or commented rule', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: oklch(0.2 0.02 250); }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(dir, 'src/main.tsx'),
+      'import {Theme} from \'@astryxdesign/core/theme\';\nimport {themes, defaultThemeSlug} from \'./astryx-themes\';\nconst MediaTheme = ({mode}) => <section data-mode={mode} />;\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]}><MediaTheme mode="dark" /><Theme theme={themes[defaultThemeSlug]} mode="light" /></Theme>;\n',
+    );
+    write(
+      path.join(dir, 'src/global.css'),
+      ':root { --page-background: var(--color-background-body); }\n/* body { background: var(--color-background-body); } */\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('reads the wiring theme add prints, and a light-dark pair of functional colors', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: light-dark(oklch(0.2 0.02 250), oklch(0.25 0.02 250)); }\n';
+    const wired = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(wired.packageDir, 'dist/ocean.js'),
+      'export const oceanTheme = {name: \'ocean\', tokens: {}};\nexport const colorModes = ["dark"];\n',
+    );
+    await themeAdd('ocean', {
+      cwd: wired.dir,
+      import: true,
+      package: '@acme/themes',
+    });
+    writeRoot(wired.dir);
+    const bare = check(await checkAppThemes(wired.dir), 'theme-page-color');
+    expect(bare).toMatchObject({status: 'warn'});
+    write(
+      path.join(wired.dir, 'src/main.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, themeModes, defaultThemeSlug} from './astryx-themes';\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'} />;\n",
+    );
+    fs.rmSync(path.join(wired.dir, 'src/root.tsx'));
+    expect(
+      check(await checkAppThemes(wired.dir), 'theme-page-color'),
+    ).toMatchObject({status: 'pass'});
+  });
+
+  it('counts a fixed mode only on the Theme that takes the default theme', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(dir, 'src/Section.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes} from './astryx-themes';\nexport const Section = () => <Theme theme={themes.ocean} mode=\"dark\" />;\n",
+    );
+    writeRoot(dir);
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('warns when the root Theme is given the other mode, and suggests themeModes for a recorded mode', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(dir, 'src/main.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]} mode=\"light\" />;\n",
+    );
+    const opposite = check(await checkAppThemes(dir), 'theme-page-color');
+    expect(opposite).toMatchObject({status: 'warn'});
+    expect(opposite.message).toMatch(/root Theme is given mode="light"/);
+
+    const recorded = await fixture([{slug: 'ocean', css}]);
+    write(
+      path.join(recorded.packageDir, 'dist/ocean.js'),
+      'export const oceanTheme = {name: \'ocean\', tokens: {}};\nexport const colorModes = ["dark"];\n',
+    );
+    await themeAdd('ocean', {
+      cwd: recorded.dir,
+      import: true,
+      package: '@acme/themes',
+    });
+    writeRoot(recorded.dir);
+    expect(
+      check(await checkAppThemes(recorded.dir), 'theme-page-color').fix,
+    ).toMatch(/mode=\{themeModes\[defaultThemeSlug\]\}/);
+  });
+
+  it('stays silent when the root Theme mode is a value it cannot evaluate', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    for (const mode of [
+      'mode={mode}',
+      "mode={dark ? 'dark' : 'light'}",
+      'mode={useMode()}',
+      '{...props}',
+    ]) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      write(
+        path.join(dir, 'src/root.tsx'),
+        `import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\nexport const Root = ({mode, dark, props, useMode}) => <Theme theme={themes[defaultThemeSlug]} ${mode}><main /></Theme>;\n`,
+      );
+      expect(
+        (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+        mode,
+      ).toBe(false);
+    }
+  });
+
+  it('counts no AppShell a story or a test renders', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'src/Shell.stories.tsx'),
+      "import {AppShell} from '@astryxdesign/core/AppShell';\nexport const Story = () => <AppShell />;\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('reads a project inside a folder named stories as the project, by its own paths', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const root = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-stories-'),
+    );
+    dirs.push(root);
+    const nested = path.join(root, 'stories');
+    fs.mkdirSync(nested, {recursive: true});
+    const {dir} = await fixture([{slug: 'ocean', css}], {root: nested});
+    write(
+      path.join(dir, 'src/App.tsx'),
+      "import {AppShell} from '@astryxdesign/core/AppShell';\nexport const App = () => <AppShell />;\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('reads a project partial a Sass file loads, and a page link to a walked file', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(path.join(dir, 'src/_vars.scss'), '$gap: 4px;\n');
+    write(
+      path.join(dir, 'src/app.scss'),
+      "@use 'sass:math';\n@use 'vars';\n.card { gap: math.div(vars.$gap, 2); }\n",
+    );
+    write(path.join(dir, 'public/site.css'), '.card { color: red; }\n');
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head><link rel="stylesheet" href="/site.css"></head></html>\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('reads a Less import option and a forward list as the module they name', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(path.join(dir, 'src/vars.less'), '@gap: 4px;\n');
+    write(path.join(dir, 'src/app.less'), "@import (reference) 'vars.less';\n");
+    write(path.join(dir, 'src/_tokens.scss'), '$a: 1;\n$b: 2;\n');
+    write(path.join(dir, 'src/index.scss'), "@forward 'tokens' hide a, $b;\n");
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('stays silent on a package whose entry is a stylesheet', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'node_modules/@picocss/pico/package.json'),
+      '{"name": "@picocss/pico", "main": "css/pico.css"}\n',
+    );
+    write(
+      path.join(dir, 'node_modules/@picocss/pico/css/pico.css'),
+      'body { background: navy; }\n',
+    );
+    write(
+      path.join(dir, 'src/kit.ts'),
+      "import '@picocss/pico';\nexport {};\n",
+    );
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('stays silent on a CSS-only package whose stylesheet only the import condition names', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'node_modules/css-only-kit/package.json'),
+      '{"name": "css-only-kit", "exports": {".": {"import": "./kit.css"}}}\n',
+    );
+    write(
+      path.join(dir, 'node_modules/css-only-kit/kit.css'),
+      'body { background: navy; }\n',
+    );
+    write(path.join(dir, 'src/kit.ts'), "import 'css-only-kit';\nexport {};\n");
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('counts an attribute selector that reaches <html> with the page color as painting it', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'src/global.css'),
+      '[data-astryx-theme] { background: var(--color-background-body); }\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('counts no page-color rule for another element, or an id inside an attribute value, as painting', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    for (const rule of [
+      'button:not([disabled])',
+      'a:not([href])',
+      'input:is([type="text"])',
+      '.sidebar [aria-current]',
+      'a[href="#top"]',
+    ]) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      writeRoot(dir);
+      write(
+        path.join(dir, 'src/global.css'),
+        `${rule} { background: var(--color-background-body); }\n`,
+      );
+      expect(
+        check(await checkAppThemes(dir), 'theme-page-color').status,
+        rule,
+      ).toBe('warn');
+    }
+    // (A vendor-prefixed at-rule CSS defines writes nothing doctor misses.)
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'src/global.css'),
+      '@-moz-keyframes spin { from { opacity: 0; } to { opacity: 1; } }\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color').status).toBe(
+      'warn',
+    );
+  });
+
+  it('judges a rule by its subject compound, nesting resolved', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const PAGE = 'background: var(--color-background-body);';
+    /** @type {Array<[string, 'pass' | 'warn' | 'silent']>} */
+    const table = [
+      // (Another element, under a page, root or mount ancestor.)
+      [`body .card { ${PAGE} }`, 'warn'],
+      [`:root .card { ${PAGE} }`, 'warn'],
+      [`#app .card { ${PAGE} }`, 'warn'],
+      [`[data-astryx-theme] .card { ${PAGE} }`, 'warn'],
+      [`body { .card { ${PAGE} } }`, 'warn'],
+      [`body { & .card { ${PAGE} } }`, 'warn'],
+      [`input:is([type="text"]) { ${PAGE} }`, 'warn'],
+      [`.list > [data-x] { ${PAGE} }`, 'warn'],
+      // (The page itself.)
+      [`html body { ${PAGE} }`, 'pass'],
+      [`:root { ${PAGE} }`, 'pass'],
+      [`html, body { ${PAGE} }`, 'pass'],
+      [`:where(body) { ${PAGE} }`, 'pass'],
+      [`[data-astryx-theme="ocean"] { ${PAGE} }`, 'pass'],
+      [`html { & { ${PAGE} } }`, 'pass'],
+      // (The page, narrowed or conditioned, or what may be it.)
+      [`body.dark { ${PAGE} }`, 'silent'],
+      [`body:not(.embed) { ${PAGE} }`, 'silent'],
+      [`body::before { ${PAGE} }`, 'silent'],
+      [`:is(body, .x) { ${PAGE} }`, 'pass'],
+      [`body, .card { ${PAGE} }`, 'pass'],
+      [`@scope (body) { :scope { ${PAGE} } }`, 'pass'],
+      // (The page under a narrowing ancestor, scope root, another theme or
+      // an at-rule wrapper: may paint.)
+      [`html.dark body { ${PAGE} }`, 'silent'],
+      [`[data-theme="dark"] body { ${PAGE} }`, 'silent'],
+      [`@scope (body.dark) { :scope { ${PAGE} } }`, 'silent'],
+      [`@scope (#root) { :scope { ${PAGE} } }`, 'silent'],
+      [`[data-astryx-theme="another"] { ${PAGE} }`, 'silent'],
+      [`@starting-style { body { ${PAGE} } }`, 'silent'],
+      [`body:hover { ${PAGE} }`, 'silent'],
+      // (A full-viewport layer: a mount node or the page's direct child.)
+      [`body > #root { ${PAGE} }`, 'silent'],
+      [`html #root { ${PAGE} }`, 'silent'],
+      // (An id, an attribute or a tag the census shows on none of the
+      // page's elements proves the rule is no page.)
+      [`html #app { ${PAGE} }`, 'warn'],
+      [`aside { ${PAGE} }`, 'warn'],
+      [`.card::before { ${PAGE} }`, 'warn'],
+      [`@scope (.card) { div { ${PAGE} } }`, 'warn'],
+      [`body > * { ${PAGE} }`, 'silent'],
+      ['body > div { background: navy; }', 'silent'],
+      // (A state alone paints no page; the page token by its exact name.)
+      [`::selection { ${PAGE} }`, 'warn'],
+      [`::-webkit-scrollbar { ${PAGE} }`, 'warn'],
+      [`::backdrop { ${PAGE} }`, 'warn'],
+      [`:focus-visible { ${PAGE} }`, 'silent'],
+      ['body { background: var(--color-background-body-alt); }', 'silent'],
+      // (A list is judged part by part: the page beside a may-paint part.)
+      ['body, #root { background: navy; }', 'silent'],
+      [':is(body, #root) { background: navy; }', 'silent'],
+      ['html, body > div { background: navy; }', 'silent'],
+      // (A universal, an attribute or a pseudo-only compound with only the
+      // page before it may be <body> itself.)
+      [`html * { ${PAGE} }`, 'silent'],
+      [`:root * { ${PAGE} }`, 'silent'],
+      [`body * { ${PAGE} }`, 'silent'],
+      [`html [data-root] { ${PAGE} }`, 'warn'],
+      // (Nothing in the subject proves it is not the page or its child.)
+      [`[data-theme="dark"] > * { ${PAGE} }`, 'silent'],
+      [`* > div { ${PAGE} }`, 'silent'],
+      [`:not(.embed) > * { ${PAGE} }`, 'silent'],
+      [`html > * > div { ${PAGE} }`, 'silent'],
+      [`@scope (body) { > div { ${PAGE} } }`, 'silent'],
+      [`@scope (body) { div { ${PAGE} } }`, 'silent'],
+      [`body div { ${PAGE} }`, 'silent'],
+      [`.card div { ${PAGE} }`, 'silent'],
+      [`head ~ * { ${PAGE} }`, 'silent'],
+      [`main { min-height: 100vh; ${PAGE} }`, 'silent'],
+      [`.list > * { ${PAGE} }`, 'silent'],
+      // (CSS Modules' :global() is its selector; a pseudo-only compound
+      // that is no state may paint.)
+      // (In a plain stylesheet :global() is a pseudo-class the browser
+      // drops: may paint, never a pass; a .module.css reads it.)
+      [`:global(body) { ${PAGE} }`, 'silent'],
+      // (The page's direct child under a narrowed or wrapped page.)
+      [`:where(body) > * { ${PAGE} }`, 'silent'],
+      [`:is(body) > * { ${PAGE} }`, 'silent'],
+      [`:where(body) > div { ${PAGE} }`, 'silent'],
+      [`html.dark body > * { ${PAGE} }`, 'silent'],
+      [`[data-theme="dark"] body > * { ${PAGE} }`, 'silent'],
+      [`body.dark > * { ${PAGE} }`, 'silent'],
+      [`body:not(.embed) > * { ${PAGE} }`, 'silent'],
+      [`body.dark > div { ${PAGE} }`, 'silent'],
+      [`body:not(.embed) > div { ${PAGE} }`, 'silent'],
+      [`:dir(ltr) { ${PAGE} }`, 'silent'],
+      [`:lang(en) { ${PAGE} }`, 'silent'],
+      [`::before { ${PAGE} }`, 'silent'],
+      [`:hover { ${PAGE} }`, 'silent'],
+      [`#root { ${PAGE} }`, 'silent'],
+      [`[data-mode] { ${PAGE} }`, 'warn'],
+      [`body { @media print { ${PAGE} } }`, 'silent'],
+      [`@-moz-document url-prefix() { body { ${PAGE} } }`, 'silent'],
+      ['html body { background: navy; }', 'warn'],
+    ];
+    for (const [rule, want] of table) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      writeRoot(dir);
+      write(path.join(dir, 'src/global.css'), `${rule}\n`);
+      const got = (await checkAppThemes(dir)).find(
+        c => c.id === 'theme-page-color',
+      );
+      expect(got ? got.status : 'silent', rule).toBe(want);
+    }
+  }, 120_000);
+
+  it('reads the census from the page shell and the root, and proves nothing where it cannot read', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const PAGE = 'background: var(--color-background-body);';
+    /** @type {Array<[string, string | null, string, 'warn' | 'silent']>} */
+    const table = [
+      // (A mount node the shell shows: its attribute and class are on it.)
+      [
+        '<div id="app" data-root class="shell"></div>',
+        '<main />',
+        `[data-root] { ${PAGE} }`,
+        'silent',
+      ],
+      ['<div id="app"></div>', '<main />', `.shell { ${PAGE} }`, 'warn'],
+      [
+        '<div id="app" class="shell"></div>',
+        '<main />',
+        `.shell { ${PAGE} }`,
+        'silent',
+      ],
+      // (The root element's own class and its direct child's tag.)
+      [
+        '<div id="root"></div>',
+        '<main data-page><aside /></main>',
+        `[data-page] { ${PAGE} }`,
+        'silent',
+      ],
+      [
+        '<div id="root"></div>',
+        '<main data-page><aside /></main>',
+        `aside { ${PAGE} }`,
+        'silent',
+      ],
+      [
+        '<div id="root"></div>',
+        '<main data-page><aside /></main>',
+        `section { ${PAGE} }`,
+        'warn',
+      ],
+      // (No page shell: the mount node is unknown, nothing proves.)
+      [null, '<main />', `.card { ${PAGE} }`, 'silent'],
+      // (A component child: the census cannot name what it renders.)
+      [
+        '<div id="root"></div>',
+        '<main><Nav /></main>',
+        `.card { ${PAGE} }`,
+        'silent',
+      ],
+    ];
+    for (const [mount, root, rule, want] of table) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      writeRoot(dir, root);
+      if (mount == null) fs.rmSync(path.join(dir, 'index.html'));
+      else
+        write(
+          path.join(dir, 'index.html'),
+          `<!doctype html><html><head></head><body>${mount}</body></html>\n`,
+        );
+      if (root.includes('<Nav'))
+        write(
+          path.join(dir, 'src/root.tsx'),
+          fs
+            .readFileSync(path.join(dir, 'src/root.tsx'), 'utf8')
+            .replace(
+              'export const Root',
+              'const Nav = () => <nav />;\nexport const Root',
+            ),
+        );
+      write(path.join(dir, 'src/global.css'), `${rule}\n`);
+      const got = (await checkAppThemes(dir)).find(
+        c => c.id === 'theme-page-color',
+      );
+      expect(got ? got.status : 'silent', `${mount} | ${root} | ${rule}`).toBe(
+        want,
+      );
+    }
+  }, 120_000);
+
+  it('reads :global() in a CSS Modules file, and the theme attribute by the name the theme writes', async () => {
+    const css =
+      '[data-astryx-theme="deep-ocean"] { --color-background-body: #101314; }\n';
+    const PAGE = 'background: var(--color-background-body);';
+    /** @type {Array<[string, string, 'pass' | 'warn' | 'silent']>} */
+    const table = [
+      ['src/app.module.css', `:global(body) { ${PAGE} }`, 'pass'],
+      ['src/app.module.css', `:global(html) { ${PAGE} }`, 'pass'],
+      [
+        'src/global.css',
+        `[data-astryx-theme="deep-ocean"] { ${PAGE} }`,
+        'pass',
+      ],
+      // (The slug is not the name the theme writes: another theme's.)
+      ['src/global.css', `[data-astryx-theme="ocean"] { ${PAGE} }`, 'silent'],
+    ];
+    for (const [file, rule, want] of table) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      writeRoot(dir);
+      write(path.join(dir, file), `${rule}\n`);
+      const got = (await checkAppThemes(dir)).find(
+        c => c.id === 'theme-page-color',
+      );
+      expect(got ? got.status : 'silent', `${file}: ${rule}`).toBe(want);
+    }
+  }, 120_000);
+
+  it('reads the at-rules inside @font-feature-values and @page as CSS', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'src/global.css'),
+      '@font-feature-values Font One { @styleset { nice-style: 12; } }\n@page { @top-center { content: "x"; } }\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color').status).toBe(
+      'warn',
+    );
+  });
+
+  it('gives an app whose only reset import is in a story or a test no page check', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}], {reset: false});
+    writeRoot(dir);
+    write(
+      path.join(dir, 'stories/preview.css'),
+      "@import '@astryxdesign/core/reset.css';\n",
+    );
+    write(
+      path.join(dir, 'src/App.test.tsx'),
+      "import '@astryxdesign/core/reset.css';\n",
+    );
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('counts no story or test, and no CSS import of a registered theme, as painting', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir, moduleFile} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    write(
+      path.join(dir, 'src/Button.test.tsx'),
+      "document.body.style.background = 'navy';\n",
+    );
+    write(
+      path.join(dir, 'src/Intro.stories.tsx'),
+      'export const S = () => <style>{`body { background: navy; }`}</style>;\n',
+    );
+    write(path.join(dir, 'stories/Intro.mdx'), '# Intro\n');
+    const sheet = /import\s+['"]([^'"]+\.css)['"]/.exec(
+      fs.readFileSync(moduleFile, 'utf8'),
+    )?.[1];
+    expect(sheet).toBeTruthy();
+    write(path.join(dir, 'src/global.css'), `@import '${sheet}';\n`);
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('stays silent on a linked stylesheet the walk does not follow', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    const shared = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-shared-'),
+    );
+    dirs.push(shared);
+    write(
+      path.join(shared, 'global.css'),
+      'body { background: var(--color-background-body); }\n',
+    );
+    fs.symlinkSync(
+      path.join(shared, 'global.css'),
+      path.join(dir, 'src/global.css'),
+    );
+    write(
+      path.join(dir, 'src/styles.ts'),
+      "import './global.css';\nexport {};\n",
+    );
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('stays silent when the project is larger than the walk reads', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir);
+    const many = path.join(dir, 'src/generated');
+    fs.mkdirSync(many, {recursive: true});
+    for (let i = 0; i < 5001; i++)
+      fs.writeFileSync(path.join(many, `m${i}.ts`), 'export {};\n');
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  }, 120_000);
+
+  it('reads a component by its own returns, never a helper declared inside it', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    writeRoot(dir, '<App />');
+    write(
+      path.join(dir, 'src/root.tsx'),
+      fs
+        .readFileSync(path.join(dir, 'src/root.tsx'), 'utf8')
+        .replace(
+          'export const Root',
+          "function App() {\n  const Shell = () => <main style={{background: 'var(--color-background-body)'}} />;\n  return <main />;\n}\nexport const Root",
+        ),
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('gives an app whose only reset link is commented out no page check', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}], {reset: false});
+    writeRoot(dir);
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head><!-- <link rel="stylesheet" href="/node_modules/@astryxdesign/core/dist/reset.css" /> --></head></html>\n',
+    );
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('gives an embedded app, which loads no Core reset, no page check', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}], {reset: false});
+    expect(
+      (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('warns when a local theme sets its own page color and nothing paints the page', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: light-dark(#f1f1f1, #1b1b1b); }\n';
+    const {dir} = await fixture([{slug: 'ocean', css}]);
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const sourceFile = path.join(dir, 'src/themes/ocean/oceanTheme.ts');
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    const built = path.join(dir, 'src/themes/ocean/ocean.css');
+    fs.appendFileSync(
+      built,
+      '[data-astryx-theme="ocean"] { --color-background-body: light-dark(#fdf6e3, #1c1a16); }\n',
+    );
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // (A built module that extends its base package, as the editor's
+    // builds do.)
+    const builtModule = path.join(dir, 'src/themes/ocean/ocean.js');
+    fs.writeFileSync(
+      builtModule,
+      `import {oceanTheme as base} from '@acme/themes/themes/ocean';\n${fs.readFileSync(builtModule, 'utf8')}`,
+    );
+    writeRoot(dir);
+    const own = check(await checkAppThemes(dir), 'theme-page-color');
+    expect(own).toMatchObject({status: 'warn'});
+    expect(own.message).toMatch(/sets its own page color/);
+    expect(own.fix).toMatch(
+      /^Wrap the page in AppShell; if you can't, add `body/,
+    );
+    // (The root Theme's own element, painted with the page color by its
+    // style, in a component of another module, paints the page.)
+    write(
+      path.join(dir, 'src/main.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\nimport App from './App';\nexport const Root = () => <Theme theme={themes[defaultThemeSlug]} mode=\"light\"><App /></Theme>;\n",
+    );
+    write(
+      path.join(dir, 'src/App.tsx'),
+      "import {VStack} from '@astryxdesign/core/Layout';\nexport default function App() {\n  return (\n    <VStack style={{background: 'var(--color-background-body)'}}>\n      <VStack />\n    </VStack>\n  );\n}\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'pass',
+    });
+    fs.rmSync(path.join(dir, 'src/main.tsx'));
+    fs.rmSync(path.join(dir, 'src/root.tsx'));
+    write(
+      path.join(dir, 'src/App.tsx'),
+      "import {AppShell} from '@astryxdesign/core/AppShell';\nexport const App = () => <AppShell />;\n",
+    );
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('counts only a body background that uses the page color', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n',
+      },
+    ]);
+    writeRoot(dir);
+    write(path.join(dir, 'src/global.css'), 'body { background: white; }\n');
+    expect(check(await checkAppThemes(dir), 'theme-page-color')).toMatchObject({
+      status: 'warn',
+    });
+  });
+
+  it('stays silent when it cannot read what paints the page', async () => {
+    const css =
+      '[data-astryx-theme="ocean"] { --color-background-body: #101314; }\n';
+    for (const inner of [
+      '<main xstyle={styles.page} />',
+      '<main className="page" />',
+      '<main {...props} />',
+      '<Router />',
+      '{children}',
+    ]) {
+      const {dir} = await fixture([{slug: 'ocean', css}]);
+      writeRoot(dir, inner);
+      expect(
+        (await checkAppThemes(dir)).some(c => c.id === 'theme-page-color'),
+        inner,
+      ).toBe(false);
+    }
+    // (Nor with no root Theme to read, or a body rule it cannot evaluate.)
+    const noRoot = await fixture([{slug: 'ocean', css}]);
+    expect(
+      (await checkAppThemes(noRoot.dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+    // (Nor when the page may be styled where doctor does not read: a
+    // preprocessor stylesheet, a page's own <style> or body style, a
+    // CSS-in-JS global, an @apply rule.)
+    for (const [file, text] of [
+      ['src/global.scss', 'body { background: $page; }\n'],
+      [
+        'index.html',
+        '<!doctype html><html><head><style>body { background: navy; }</style></head></html>\n',
+      ],
+      [
+        'index.html',
+        '<!doctype html><html><body style="background: navy"></body></html>\n',
+      ],
+      [
+        'src/GlobalStyle.tsx',
+        "import {createGlobalStyle} from 'styled-components';\nexport const G = createGlobalStyle`body { background: navy; }`;\n",
+      ],
+      ['src/global.css', 'body { @apply bg-slate-50; }\n'],
+      ['src/global.css', 'body:not(.embed) { background: navy; }\n'],
+      ['src/global.css', "@import 'some-kit/dist/base.css';\n"],
+      ['src/kit.ts', "import 'some-kit/dist/base.css';\nexport {};\n"],
+      [
+        'app/layout.tsx',
+        'export default function RootLayout({children}) {\n  return <html><body className="page">{children}</body></html>;\n}\n',
+      ],
+      [
+        'app/root.tsx',
+        "import kit from 'some-kit/dist/base.css?url';\nexport const links = () => [{rel: 'stylesheet', href: kit}];\n",
+      ],
+      [
+        'app/head.tsx',
+        'export const Head = () => <link rel="stylesheet" href="https://cdn.example.com/kit.css" />;\n',
+      ],
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel="stylesheet" href="https://cdn.example.com/kit.css"></head></html>\n',
+      ],
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel=stylesheet href=https://cdn.example.com/kit.css></head></html>\n',
+      ],
+      [
+        'app/head.tsx',
+        'const KIT = process.env.KIT;\nexport const Head = () => <link rel="stylesheet" href={KIT} />;\n',
+      ],
+      [
+        'app/head.tsx',
+        'const CDN = process.env.CDN;\nexport const Head = () => <link rel="stylesheet" href={`${CDN}/kit.css`} />;\n',
+      ],
+      [
+        'app/root.tsx',
+        "export const links = () => [{rel: 'stylesheet', href: 'https://cdn.example.com/kit.css'}];\n",
+      ],
+      // (A stylesheet out of the project folder, which the sweep never reads.)
+      ['src/shared.ts', "import '../../shared/global.css';\nexport {};\n"],
+      ['src/global.css', "@import '../../shared/global.css';\n"],
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel="stylesheet" href="../shared/global.css"></head></html>\n',
+      ],
+      // (Or one inside it the walk never lists: under node_modules or a
+      // build output.)
+      ['src/global.css', "@import '../node_modules/some-kit/dist/base.css';\n"],
+      ['src/shared.ts', "import '../styles/build/global.css';\nexport {};\n"],
+      // (A root-absolute, bare or protocol-relative path the walk never
+      // lists.)
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel="stylesheet" href="/dist/site.css"></head></html>\n',
+      ],
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel="stylesheet" href="dist/site.css"></head></html>\n',
+      ],
+      ['src/global.css', "@import '/node_modules/some-kit/dist/base.css';\n"],
+      ['src/global.css', "@import '//cdn.example.com/kit.css';\n"],
+      // (A preprocessor stylesheet that loads a package.)
+      ['src/app.scss', "@use 'some-kit/base';\n.card { color: red; }\n"],
+      ['src/app.scss', "@import 'bootstrap/scss/bootstrap';\n"],
+      ['src/app.scss', "@import 'vars', 'bootstrap/scss/bootstrap';\n"],
+      ['src/app.sass', '@import bootstrap/scss/bootstrap\n'],
+      ['src/app.styl', '@import nib\n'],
+      ['src/app.scss', '@import url(https://cdn.example.com/kit.css);\n'],
+      [
+        'src/app.scss',
+        "@use 'sass:meta';\n.app { @include meta.load-css('some-kit/base'); }\n",
+      ],
+      ['src/kit.ts', "import 'some-kit/dist/base.pcss';\nexport {};\n"],
+      ['src/kit.ts', "import 'some-kit/dist/base.postcss';\nexport {};\n"],
+      ['src/app.sss', 'body\n  background: var(--color-background-body)\n'],
+      ['src/kit.ts', "import 'some-kit/base.stylus';\nexport {};\n"],
+      ['src/kit.ts', "import 'some-kit/base.sss';\nexport {};\n"],
+      // (A sheet added at run time, a preloaded style, a bundler or
+      // workspace config's stylesheet, a component language doctor does
+      // not parse, a CSS generator's base layer.)
+      [
+        'src/sheet.ts',
+        "const s = new CSSStyleSheet();\ns.replaceSync('body { background: navy; }');\ndocument.adoptedStyleSheets = [s];\n",
+      ],
+      [
+        'src/inject.ts',
+        "const l = document.createElement('link');\nl.rel = 'stylesheet';\nl.href = 'https://cdn.example.com/kit.css';\ndocument.head.append(l);\n",
+      ],
+      [
+        'index.html',
+        '<!doctype html><html><head><link rel="preload" as="style" href="https://cdn.example.com/kit.css" onload="this.rel=\'stylesheet\'"></head></html>\n',
+      ],
+      [
+        'vite.config.ts',
+        "export default {build: {rollupOptions: {input: ['index.html', 'node_modules/kit/base.css']}}};\n",
+      ],
+      [
+        'angular.json',
+        '{"projects": {"app": {"architect": {"build": {"options": {"styles": ["node_modules/bootstrap/dist/css/bootstrap.css"]}}}}}}\n',
+      ],
+      [
+        'src/App.vue',
+        '<template><div /></template>\n<style>body { background: navy; }</style>\n',
+      ],
+      ['src/global.css', '@tailwind base;\n'],
+      [
+        'tailwind.config.js',
+        "module.exports = {plugins: [({addBase}) => addBase({body: {background: 'navy'}})]};\n",
+      ],
+      // (A module doctor cannot parse, a template naming a sheet, a page
+      // template, an inline script styling the document, a selector that
+      // can match <html>, MUI's global styles.)
+      [
+        'src/legacy.ts',
+        "const el = <HTMLElement>document.getElementById('app');\nexport {el};\n",
+      ],
+      [
+        'src/kit.ts',
+        "const kit = 'some-kit';\nexport const load = () => import(`${kit}/base.css`);\n",
+      ],
+      [
+        'index.ejs',
+        '<!doctype html><html><head><link rel="stylesheet" href="https://cdn.example.com/kit.css"></head></html>\n',
+      ],
+      [
+        'index.html',
+        "<!doctype html><html><body><script>document.documentElement.classList.add('dark');</script></body></html>\n",
+      ],
+      [
+        'index.html',
+        "<!doctype html><html><body><script>document.querySelector('body').style.background = 'navy';</script></body></html>\n",
+      ],
+      ['src/global.css', '* { background: navy; }\n'],
+      [
+        'src/global.css',
+        '@media (prefers-color-scheme: dark) { body { background: var(--color-background-body); } }\n',
+      ],
+      [
+        'src/global.css',
+        '@media print { body { background: var(--color-background-body); } }\n',
+      ],
+      [
+        'src/global.css',
+        '@scope (body) { :scope { background: var(--brand); } }\n',
+      ],
+      [
+        'src/App.tsx',
+        "import GlobalStyles from '@mui/material/GlobalStyles';\nexport const G = () => <GlobalStyles styles={{body: {background: 'navy'}}} />;\n",
+      ],
+    ]) {
+      const f = await fixture([{slug: 'ocean', css}]);
+      writeRoot(f.dir);
+      write(path.join(f.dir, file), text);
+      expect(
+        (await checkAppThemes(f.dir)).some(c => c.id === 'theme-page-color'),
+        file,
+      ).toBe(false);
+    }
+    const unread = await fixture([{slug: 'ocean', css}]);
+    writeRoot(unread.dir);
+    write(
+      path.join(unread.dir, 'src/global.css'),
+      'body { background: var(--app-page); }\n',
+    );
+    expect(
+      (await checkAppThemes(unread.dir)).some(c => c.id === 'theme-page-color'),
+    ).toBe(false);
+  });
+
+  it('adds no page check for a theme with a light and a dark page', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '[data-astryx-theme="ocean"] { --color-background-body: light-dark(#f1f4f7, #111112); }\n',
+      },
+    ]);
+    const checks = await checkAppThemes(dir);
+    expect(checks.some(item => item.id === 'theme-page-color')).toBe(false);
   });
 
   it('reports one information check when the CLI manages no themes', async () => {

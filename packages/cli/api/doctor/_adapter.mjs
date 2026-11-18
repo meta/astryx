@@ -73,6 +73,7 @@ import {
   skillPlaceEscape,
   resolvesInside,
 } from '../../foundation/agent-docs/skill-place-files.mjs';
+import {isOtherLanguageStylesheet} from '../../foundation/fs/stylesheet-file.mjs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
@@ -89,6 +90,8 @@ export {
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 import {
   elementPropOrigins,
+  outermostElements,
+  resolveLocalModule,
   rendersElement,
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
@@ -274,15 +277,36 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
- * @param {{stylesheets?: boolean, pages?: boolean}} [options] - also list
- *   `.css` files, and `.html` pages
+ * @param {{stylesheets?: boolean, pages?: boolean, styleSources?: boolean}} [options] - also list
+ *   `.css` files, `.html` pages, and stylesheets a preprocessor compiles
+ *   (every stylesheet language `foundation/fs/stylesheet-file.mjs` names
+ *   besides CSS)
  */
 export function listProjectSourceFiles(root, generatedModule, options = {}) {
+  return walkProjectSourceFiles(root, generatedModule, options).files;
+}
+
+/** How many files the bounded project walk lists at most. */
+const PROJECT_FILE_LIMIT = 5000;
+
+/**
+ * The bounded app-source walk (see `listProjectSourceFiles`), with whether
+ * it read the whole project: `complete` is false when it stopped at its
+ * file limit with folders left unread.
+ * @param {string} root
+ * @param {string} generatedModule
+ * @param {Parameters<typeof listProjectSourceFiles>[2] & {unparsed?: RegExp}} [options]
+ *   `unparsed`: files of a language the caller does not read, listed apart
+ * @returns {{files: string[], complete: boolean, unparsed: string[]}}
+ */
+export function walkProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
   const files = [];
+  /** The files `options.unparsed` matches, listed apart. @type {string[]} */
+  const unparsed = [];
   /** @type {string[]} */
   const queue = [root];
-  while (queue.length > 0 && files.length < 5000) {
+  while (queue.length > 0 && files.length < PROJECT_FILE_LIMIT) {
     const dir = /** @type {string} */ (queue.shift());
     let entries;
     try {
@@ -304,13 +328,21 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
           (options.stylesheets === true &&
             path.extname(entry.name) === '.css') ||
           (options.pages === true &&
-            /^\.html?$/u.test(path.extname(entry.name))))
+            /^\.html?$/u.test(path.extname(entry.name))) ||
+          (options.styleSources === true &&
+            isOtherLanguageStylesheet(entry.name)))
       ) {
         files.push(file);
+      } else if (entry.isFile() && options.unparsed?.test(entry.name)) {
+        unparsed.push(file);
       }
     }
   }
-  return files;
+  return {
+    files,
+    unparsed,
+    complete: queue.length === 0 && files.length < PROJECT_FILE_LIMIT,
+  };
 }
 
 /**
@@ -494,6 +526,75 @@ export function realDoctorFile(file) {
  */
 export function doctorElementPropOrigins(file, element) {
   return elementPropOrigins(file, element);
+}
+
+/** @type {Promise<{parseColor: (value: unknown) => [number, number, number] | null, hex: (rgb: [number, number, number]) => string, luminance: (hex: string) => number}> | undefined} */
+let colorReaders;
+
+/**
+ * The shared color parser and luminance, loaded on first use: the editor's
+ * color module reads the bundled themes when it loads, which a plain import
+ * of the CLI's API must not pay for.
+ */
+export function doctorColorReaders() {
+  colorReaders ??= Promise.all([
+    import('../theme-edit/_color.mjs'),
+    import('../theme/palette/generate/color.mjs'),
+  ]).then(([color, generate]) => ({
+    parseColor: /** @type {any} */ (color.parseColor),
+    hex: /** @type {any} */ (color.hex),
+    luminance: generate.luminance,
+  }));
+  return colorReaders;
+}
+
+/**
+ * The stylesheets an installed package ships, two folders deep, its own
+ * dependencies left out.
+ * @param {string} packageDir
+ * @returns {string[]}
+ */
+export function doctorPackageStylesheets(packageDir) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} folder @param {number} depth */
+  const read = (folder, depth) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(folder, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === 'node_modules') continue;
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < 2) read(file, depth + 1);
+      } else if (entry.name.endsWith('.css')) out.push(file);
+    }
+  };
+  read(packageDir, 0);
+  return out.sort();
+}
+
+/**
+ * A relative import's file, as a bundler resolves it (see
+ * `resolveLocalModule`), or null.
+ * @param {string} specifier
+ * @param {string} fromFile
+ */
+export function doctorResolveLocalModule(specifier, fromFile) {
+  return resolveLocalModule(specifier, fromFile, {bundler: true});
+}
+
+/**
+ * Each outermost element a module renders, imported by name from a module,
+ * as its JSX element node (see `outermostElements`).
+ * @param {string} file
+ * @param {Parameters<typeof outermostElements>[1]} element
+ */
+export function doctorOutermostElements(file, element) {
+  return outermostElements(file, element);
 }
 
 /**
@@ -1315,4 +1416,100 @@ export async function readSkillPlaces(cwd) {
     plainNamed,
     computerSkill: fs.existsSync(computerSkillFile()),
   };
+}
+
+/**
+ * The file a bare package specifier resolves to from the project, as a
+ * bundler finds it (its `main`/`exports` entry), or `''` when it does not
+ * resolve.
+ * @param {string} projectDir
+ * @param {string} spec
+ * @returns {string}
+ */
+export function doctorResolvePackageEntry(projectDir, spec) {
+  try {
+    return createRequire(path.join(projectDir, 'noop.js')).resolve(spec);
+  } catch {
+    // (A package whose entry only `import` or `style` names: read from
+    // its package.json, as a bundler does.)
+    const name = /^(@[^/]+\/[^/]+|[^/]+)(.*)$/.exec(spec);
+    if (!name) return '';
+    for (let dir = path.resolve(projectDir); ; dir = path.dirname(dir)) {
+      const pkgDir = path.join(dir, 'node_modules', name[1]);
+      try {
+        const pkg = JSON.parse(
+          fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'),
+        );
+        const sub = name[2] ? `.${name[2]}` : '.';
+        /** @param {unknown} e @returns {string} */
+        const pick = e =>
+          typeof e === 'string'
+            ? e
+            : e && typeof e === 'object'
+              ? (['style', 'import', 'default', 'require']
+                  .map(k => pick(/** @type {any} */ (e)[k]))
+                  .find(Boolean) ?? '')
+              : '';
+        const exp = pkg.exports;
+        const target =
+          typeof exp === 'string' && sub === '.'
+            ? exp
+            : exp && typeof exp === 'object'
+              ? pick(sub in exp ? exp[sub] : sub === '.' ? exp : undefined)
+              : sub === '.'
+                ? (pkg.style ?? pkg.main ?? '')
+                : '';
+        return target ? path.join(pkgDir, target) : '';
+      } catch {
+        // (Not in this node_modules: the next one up.)
+      }
+      if (path.dirname(dir) === dir) return '';
+    }
+  }
+}
+
+/**
+ * The strings of each JSON config at the project root (`angular.json`,
+ * `project.json`): a workspace config may list the stylesheets the build
+ * loads. The package manifest, its lockfile and TypeScript's configs list
+ * none.
+ * @param {string} projectDir
+ * @returns {Array<{file: string, strings: string[]}>}
+ */
+export function doctorRootConfigStrings(projectDir) {
+  /** @type {Array<{file: string, strings: string[]}>} */
+  const out = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(projectDir, {withFileTypes: true});
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.json$/i.test(entry.name)) continue;
+    if (
+      /^(?:package(?:-lock)?|tsconfig(?:\..*)?|jsconfig)\.json$/i.test(
+        entry.name,
+      )
+    )
+      continue;
+    const file = path.join(projectDir, entry.name);
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      if (text.length > 2_000_000) continue;
+      /** @type {string[]} */
+      const strings = [];
+      /** @param {unknown} v */
+      const visit = v => {
+        if (typeof v === 'string') strings.push(v);
+        else if (Array.isArray(v)) v.forEach(visit);
+        else if (v && typeof v === 'object') Object.values(v).forEach(visit);
+      };
+      visit(JSON.parse(text));
+      out.push({file, strings});
+    } catch {
+      // (Not JSON doctor can read: nothing listed.)
+    }
+  }
+  return out;
 }

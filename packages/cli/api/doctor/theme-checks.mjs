@@ -7,9 +7,21 @@
  * informational. A check passes only after its specific evidence is read.
  */
 
+import {
+  STYLESHEET_FILE,
+  isOtherLanguageStylesheet,
+} from '../../foundation/fs/stylesheet-file.mjs';
 import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
-import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {
+  postcss,
+  selectorParser,
+} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {
+  UNREAD_HREF,
+  linksPackageStylesheet,
+  stylesheetLinkHrefs,
+} from './built-checks.mjs';
 import {
   addMatchingCore,
   collectUnloadedFonts,
@@ -20,6 +32,10 @@ import {
   corePeerRange,
   findDoctorCoreDir,
   doctorElementPropOrigins,
+  doctorColorReaders,
+  doctorOutermostElements,
+  doctorPackageStylesheets,
+  doctorResolveLocalModule,
   doctorRendersElement,
   doctorStylesheetImports,
   findDoctorInstalledPackage,
@@ -27,6 +43,9 @@ import {
   realDoctorFile,
   isLocalThemeOwner,
   listDoctorThemePackages,
+  doctorRootConfigStrings,
+  doctorResolvePackageEntry,
+  walkProjectSourceFiles,
   listProjectSourceFiles,
   planThemeAppWrite,
   readPackageJson,
@@ -57,7 +76,6 @@ import {
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
-import {stylesheetLinkHrefs} from './built-checks.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
@@ -1374,7 +1392,7 @@ function privateInputFile(theme, owner, projectDir) {
 }
 
 /**
- * Run all eleven app-theme checks.
+ * Run all twelve app-theme checks.
  * @param {string} cwd
  * @returns {Promise<DoctorCheck[]>}
  */
@@ -2398,9 +2416,1603 @@ export async function checkAppThemes(cwd) {
           },
   );
 
+  const pageCheck = oneModePageCheck(
+    state.projectDir,
+    resolved.find(theme => theme.slug === state.defaultSlug) ?? null,
+    await doctorColorReaders(),
+    // (The registered themes' own stylesheets set tokens in their scope and
+    // paint no host page.)
+    new Set(
+      resolved.flatMap(theme => [
+        theme.stylesheet,
+        ...(theme.fontStylesheet ? [theme.fontStylesheet] : []),
+      ]),
+    ),
+  );
+  if (pageCheck) checks.push(pageCheck);
+
   const migration = unmigratedCopyCheck(state.projectDir);
   if (migration) checks.push(migration);
   return checks;
+}
+
+/**
+ * A fixed CSS color's lightness side, in any syntax the shared color parser
+ * reads (hex, rgb(), hsl(), oklch(), …): true for a light color, false for a
+ * dark one, null for a value with no fixed color.
+ * @param {string} value
+ * @param {Awaited<ReturnType<typeof doctorColorReaders>>} readers
+ * @returns {boolean | null}
+ */
+function lightSide(value, readers) {
+  const rgb = readers.parseColor(value);
+  return rgb ? readers.luminance(readers.hex(rgb)) > 0.18 : null;
+}
+
+/**
+ * Whether a project file, by its path inside the project, is a story or a
+ * test: a `*.stories.*`, `*.story.*`, `*.test.*` or `*.spec.*` module, or one
+ * in a `__tests__`, `__stories__` or `stories` folder.
+ * @param {string} rel
+ */
+function storyOrTest(rel) {
+  return (
+    /\.(?:stories|story|test|spec)\.\w+$/u.test(rel) ||
+    /(?:^|[\\/])(?:__tests__|__stories__|stories)[\\/]/u.test(rel)
+  );
+}
+
+/**
+ * Whether a relative specifier a project file names is a stylesheet the
+ * page sweep does not read: "read" means in the walked file set, so one
+ * outside the project, under a folder the walk skips (`node_modules`, a
+ * build output) or behind a link is not.
+ * @param {string} spec
+ * @param {{file: string, projectDir: string, walked: Set<string>}} where
+ */
+function leavesProject(spec, where) {
+  if (!spec.startsWith('.')) return false;
+  return !where.walked.has(path.resolve(path.dirname(where.file), spec));
+}
+
+/**
+ * A stylesheet a page links: one doctor does not read (a CDN or package
+ * sheet) may paint the page; Astryx's own, the registered themes', a font
+ * service's and the project's own files (read by the sweep) do not.
+ * @param {string} href
+ * @param {Set<string>} themeStylesheets
+ * @param {{file: string, projectDir: string, walked: Set<string>}} [where] the file that links
+ *   it, inside its project: a relative path out of the project is not read
+ * @returns {PageVerdict}
+ */
+function linkedSheetVerdict(href, themeStylesheets, where) {
+  if (href === UNREAD_HREF) return 'unknown';
+  const value = href.replace(/[?#].*$/u, '');
+  if (where && leavesProject(value, where)) return 'unknown';
+  if (/^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\//i.test(value))
+    return 'not';
+  if (/@astryxdesign\//.test(value)) return 'not';
+  if (
+    [...themeStylesheets].some(sheet =>
+      value.endsWith(sheet.replace(/^\.\//, '')),
+    )
+  )
+    return 'not';
+  if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(value)) return 'unknown';
+  if (/(?:^|\/)node_modules\//.test(value)) return 'unknown';
+  if (!where) return 'not';
+  // (Read only when it is a file the sweep walked: a page's path is
+  // relative to the page, or, from `/`, to the project or its public
+  // folder.)
+  return walkedSheet(value, where) ? 'not' : 'unknown';
+}
+
+/**
+ * A stylesheet path a project file or config names, relative to the file or
+ * to the project root: read when the sweep walked it, else may paint (a
+ * package's, a URL, a file the walk skips).
+ * @param {string} value
+ * @param {{file: string, projectDir: string, walked: Set<string>}} where
+ * @returns {PageVerdict}
+ */
+function stylesheetPathVerdict(value, where) {
+  if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(value)) {
+    return /^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\//i.test(
+      value,
+    )
+      ? 'not'
+      : 'unknown';
+  }
+  const rooted = value.replace(/^\/+/, '');
+  return walkedSheet(value, where) ||
+    where.walked.has(path.resolve(where.projectDir, rooted))
+    ? 'not'
+    : 'unknown';
+}
+
+/**
+ * Whether a stylesheet path a project file names is one of the files the
+ * page sweep walked.
+ * @param {string} value
+ * @param {{file: string, projectDir: string, walked: Set<string>}} where
+ */
+function walkedSheet(value, where) {
+  const candidates = value.startsWith('/')
+    ? [
+        path.join(where.projectDir, value),
+        path.join(where.projectDir, 'public', value),
+      ]
+    : [path.resolve(path.dirname(where.file), value)];
+  return candidates.some(c => where.walked.has(c));
+}
+
+/**
+ * What a module does with the page apart from its root Theme: a package
+ * stylesheet it imports (other than Astryx's own) may paint it; a `<body>`
+ * or `<html>` element it renders paints it by its own attributes.
+ * @param {string} source
+ * @param {Set<string>} themeStylesheets the registered themes' stylesheets
+ * @param {{file: string, projectDir: string, walked: Set<string>}} where the module, in its project
+ * @returns {PageVerdict}
+ */
+function modulePageVerdict(source, themeStylesheets, where) {
+  /** @type {PageVerdict[]} */
+  const verdicts = [];
+  let specs;
+  try {
+    specs = moduleSpecifiers(source);
+  } catch {
+    // (A module doctor cannot parse may load anything.)
+    return 'unknown';
+  }
+  for (const raw of specs) {
+    const spec = String(raw).replace(/[?#].*$/u, '');
+    // (A package whose entry is a stylesheet, `@picocss/pico`: resolved
+    // from the project, as the bundler does.)
+    if (
+      !/^[./]/.test(spec) &&
+      !/^@astryxdesign\//.test(spec) &&
+      !/\.[a-z]+$/i.test(spec) &&
+      STYLESHEET_FILE.test(doctorResolvePackageEntry(where.projectDir, spec))
+    ) {
+      verdicts.push('unknown');
+      continue;
+    }
+    if (
+      STYLESHEET_FILE.test(spec) &&
+      (spec.startsWith('.')
+        ? leavesProject(spec, where)
+        : spec.startsWith('/')
+          ? !walkedSheet(spec, where)
+          : !/^@astryxdesign\//.test(spec) && !themeStylesheets.has(spec))
+    )
+      verdicts.push('unknown');
+  }
+  for (const href of stylesheetLinkHrefs(source))
+    verdicts.push(linkedSheetVerdict(href, themeStylesheets, where));
+  if (PRELOADED_STYLE.test(source)) verdicts.push('unknown');
+  // (A stylesheet path a module names as a string, a bundler's entry or a
+  // config's list (`vite.config`, `webpack.config`): read when it is a file
+  // the sweep walked, from the module or the project root; else it may
+  // paint.)
+  if (
+    (
+      source.match(/['"`][^'"`\n]*\.[a-z]+(?:[?#][^'"`\n]*)?['"`]/gi) ?? []
+    ).some(quoted =>
+      STYLESHEET_FILE.test(quoted.slice(1, -1).replace(/[?#].*$/u, '')),
+    )
+  )
+    try {
+      walkAst(parseModule(source), node => {
+        // (A template with a value in it that names a stylesheet, a
+        // `import(\`${kit}/base.css\`)`, is a sheet doctor cannot name.)
+        if (node.type === 'TemplateLiteral' && node.expressions.length) {
+          const joined = node.quasis
+            .map((/** @type {any} */ q) => q.value?.cooked ?? '')
+            .join('x')
+            .replace(/[?#].*$/u, '');
+          if (STYLESHEET_FILE.test(joined)) verdicts.push('unknown');
+          return;
+        }
+        const text =
+          node.type === 'StringLiteral'
+            ? node.value
+            : node.type === 'TemplateLiteral'
+              ? (node.quasis[0]?.value?.cooked ?? '')
+              : null;
+        if (text == null) return;
+        const value = text.replace(/[?#].*$/u, '');
+        if (!STYLESHEET_FILE.test(value) || /\s/.test(value)) return;
+        if (/^@astryxdesign\//.test(value) || themeStylesheets.has(value))
+          return;
+        verdicts.push(stylesheetPathVerdict(value, where));
+      });
+    } catch {
+      verdicts.push('unknown');
+    }
+  // (A route's `links()` descriptors, as Remix and React Router write them:
+  // a stylesheet entry's `href`, a string read like a <link>, anything else
+  // unread.)
+  if (/\brel\s*:\s*['"`]stylesheet['"`]/.test(source)) {
+    try {
+      walkAst(parseModule(source), node => {
+        if (node.type !== 'ObjectExpression') return;
+        /** @param {string} key */
+        const prop = key =>
+          node.properties.find(
+            (/** @type {any} */ p) =>
+              p.type === 'ObjectProperty' &&
+              (p.key?.name ?? p.key?.value) === key,
+          )?.value;
+        const rel = prop('rel');
+        if (rel?.type !== 'StringLiteral' || rel.value !== 'stylesheet') return;
+        const href = prop('href');
+        verdicts.push(
+          href?.type === 'StringLiteral'
+            ? linkedSheetVerdict(href.value, themeStylesheets, where)
+            : href?.type === 'TemplateLiteral' && !href.expressions.length
+              ? linkedSheetVerdict(
+                  href.quasis[0]?.value?.cooked ?? '',
+                  themeStylesheets,
+                  where,
+                )
+              : 'unknown',
+        );
+      });
+    } catch {
+      verdicts.push('unknown');
+    }
+  }
+  if (/<(?:body|html)\b/.test(source)) {
+    try {
+      walkAst(parseModule(source), node => {
+        if (
+          node.type === 'JSXOpeningElement' &&
+          node.name?.type === 'JSXIdentifier' &&
+          (node.name.name === 'body' || node.name.name === 'html')
+        )
+          verdicts.push(ownBackground(node));
+      });
+    } catch {
+      verdicts.push('unknown');
+    }
+  }
+  return combineVerdicts(verdicts);
+}
+
+/** The attribute Core's root `Theme` writes on `<html>`. */
+const THEME_ROOT_ATTRIBUTE = 'data-astryx-theme';
+
+/** Sub-blocks of at-rules CSS defines: `@font-feature-values` and page margins. */
+const CSS_NESTED_AT_RULES = new Set([
+  'swash',
+  'annotation',
+  'ornaments',
+  'stylistic',
+  'styleset',
+  'character-variant',
+  'historical-forms',
+  'top-left-corner',
+  'top-left',
+  'top-center',
+  'top-right',
+  'top-right-corner',
+  'bottom-left-corner',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+  'bottom-right-corner',
+  'left-top',
+  'left-middle',
+  'left-bottom',
+  'right-top',
+  'right-middle',
+  'right-bottom',
+]);
+
+/**
+ * The full selectors of a postcss rule, its nesting resolved: a nested
+ * rule's `&` is its parent's selector, and one without `&` is a descendant
+ * of it.
+ * @param {any} rule
+ * @returns {string[]}
+ */
+function fullSelectors(rule) {
+  /** @type {string[]} */
+  let out = rule.selectors.map((/** @type {string} */ x) => x.trim());
+  for (let p = rule.parent; p; p = p.parent) {
+    if (p.type !== 'rule') continue;
+    const parents = p.selectors.map((/** @type {string} */ x) => x.trim());
+    out = parents.flatMap((/** @type {string} */ parent) =>
+      out.map(child =>
+        child.includes('&')
+          ? child.replace(/&/g, parent)
+          : `${parent} ${child}`,
+      ),
+    );
+  }
+  return out;
+}
+
+/**
+ * What the project shows is on the elements that can be the page or cover
+ * it: `<html>`, `<body>`, the mount node between them and the app, the
+ * element the root `Theme` wraps and its direct children. A part of a
+ * selector proves a rule cannot paint the page only when this census shows
+ * it is on none of them. A facet doctor cannot read (a component child, a
+ * class from an expression, a mount node no page shows) is open: nothing in
+ * it proves.
+ * @typedef {{tags: Set<string>, classes: Set<string>, ids: Set<string>,
+ *   attrs: Set<string>, open: {tags: boolean, classes: boolean, ids: boolean,
+ *   attrs: boolean}, mountKnown: boolean}} PageCensus
+ */
+
+/** @returns {PageCensus} */
+function newPageCensus() {
+  return {
+    tags: new Set(['html', 'body']),
+    classes: new Set(),
+    ids: new Set(),
+    // (What Core's root `Theme` and the page write on `<html>`.)
+    attrs: new Set(['class', 'style', 'id', 'dir', 'lang', 'data-theme']),
+    open: {tags: false, classes: false, ids: false, attrs: false},
+    mountKnown: false,
+  };
+}
+
+/** @param {PageCensus} census */
+function openCensus(census) {
+  census.open = {tags: true, classes: true, ids: true, attrs: true};
+}
+
+/**
+ * Records a JSX opening element in the census: its tag, id, classes and
+ * attribute names; what doctor cannot read opens that facet.
+ * @param {any} opening
+ * @param {PageCensus} census
+ */
+function censusJsxElement(opening, census) {
+  const name = opening?.name;
+  if (name?.type !== 'JSXIdentifier' || !/^[a-z]/.test(name.name)) {
+    openCensus(census);
+    return;
+  }
+  census.tags.add(name.name.toLowerCase());
+  for (const a of opening.attributes ?? []) {
+    if (a.type === 'JSXSpreadAttribute') {
+      openCensus(census);
+      continue;
+    }
+    const key = String(a.name?.name ?? '');
+    const literal =
+      a.value?.type === 'StringLiteral'
+        ? a.value.value
+        : a.value?.type === 'JSXExpressionContainer' &&
+            a.value.expression?.type === 'StringLiteral'
+          ? a.value.expression.value
+          : null;
+    if (key === 'className' || key === 'class') {
+      if (literal == null) census.open.classes = true;
+      else {
+        for (const c of literal.split(/\s+/)) if (c) census.classes.add(c);
+      }
+    } else if (key === 'id') {
+      if (literal == null) census.open.ids = true;
+      else census.ids.add(literal);
+    } else census.attrs.add(key === 'htmlFor' ? 'for' : key.toLowerCase());
+  }
+}
+
+/**
+ * Records an element and its direct JSX children in the census: a host
+ * child by its own attributes, anything else (a component, an expression)
+ * opens it.
+ * @param {any} element a JSXElement
+ * @param {PageCensus} census
+ */
+function censusJsxWithChildren(element, census) {
+  censusJsxElement(element.openingElement, census);
+  for (const c of element.children ?? []) {
+    if (c.type === 'JSXText') continue;
+    if (
+      c.type === 'JSXExpressionContainer' &&
+      c.expression?.type === 'JSXEmptyExpression'
+    )
+      continue;
+    if (c.type === 'JSXElement') censusJsxElement(c.openingElement, census);
+    else openCensus(census);
+  }
+}
+
+/**
+ * Records every element of a page file in the census (a page is the
+ * shell: its `<html>`, `<body>` and mount node).
+ * @param {string} html
+ * @param {PageCensus} census
+ */
+function censusHtmlPage(html, census) {
+  const text = html.replace(/<!--[\s\S]*?-->/g, ' ');
+  if (/<body\b/i.test(text)) census.mountKnown = true;
+  for (const tag of text.matchAll(/<([a-zA-Z][\w-]*)\b([^>]*)>/g)) {
+    census.tags.add(tag[1].toLowerCase());
+    for (const at of tag[2].matchAll(
+      /([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g,
+    )) {
+      const key = at[1].toLowerCase();
+      const value = at[2] ?? at[3] ?? at[4] ?? '';
+      if (key === 'class') {
+        for (const c of value.split(/\s+/)) if (c) census.classes.add(c);
+      } else if (key === 'id') census.ids.add(value);
+      else census.attrs.add(key);
+    }
+  }
+}
+
+/**
+ * Records a module's JSX `<html>` and `<body>` (a Next.js layout) and the
+ * body's direct children in the census.
+ * @param {string} source
+ * @param {PageCensus} census
+ */
+function censusJsxPage(source, census) {
+  if (!/<(?:body|html)\b/.test(source)) return;
+  let ast;
+  try {
+    ast = parseModule(source);
+  } catch {
+    return;
+  }
+  walkAst(ast, node => {
+    if (node.type !== 'JSXElement') return;
+    const name = node.openingElement?.name;
+    if (name?.type !== 'JSXIdentifier') return;
+    if (name.name === 'html') censusJsxElement(node.openingElement, census);
+    if (name.name === 'body') {
+      census.mountKnown = true;
+      censusJsxWithChildren(node, census);
+    }
+  });
+}
+
+/** A pseudo-element that can be a full-viewport layer of the page. */
+const PAGE_LAYER_PSEUDO_ELEMENT = /^::?(?:before|after)$/i;
+
+/**
+ * What each part of a selector is to the page: one entry per part of a
+ * selector list (an `:is()`/`:where()` subject counts as a list), each read
+ * as its own rule. A part paints the page only when every compound and any
+ * `@scope` root are `html`, `body`, `:root` or this theme's own root
+ * attribute, unnarrowed. A part cannot paint the page only when its subject
+ * (the compound after the last combinator) carries something the census
+ * shows is on none of the page's elements: a tag, a class, an id or an
+ * attribute, or a pseudo-element that is no page layer (`::selection`).
+ * Every other part may paint. In a CSS Modules file `:global(…)` is the
+ * selector it holds.
+ * @param {string} selector
+ * @param {{themes: Set<string> | null, scope: 'page' | 'maybe' | 'none' | null,
+ *   module?: boolean, census: PageCensus}} ctx the names this theme writes,
+ *   what the nearest `@scope` root is, whether the stylesheet is a CSS
+ *   Modules file, and the census
+ * @returns {Array<'page' | 'maybe' | 'none'>}
+ */
+function selectorReach(selector, ctx) {
+  // (In a plain stylesheet `:global(…)` is an unknown pseudo-class the
+  // browser drops; a rule inside a `@scope` that starts with a combinator
+  // is relative to the scope root.)
+  let text = ctx.module
+    ? selector.replace(/:global\(([^()]*)\)/g, '$1').replace(/:global\s+/g, '')
+    : selector;
+  if (ctx.scope != null && /^\s*[>+~]/.test(text)) text = `:scope ${text}`;
+  let ast;
+  try {
+    ast = selectorParser()().astSync(text);
+  } catch {
+    return ['maybe'];
+  }
+  const {census} = ctx;
+  /** @param {any} n */
+  const pageAtom = n =>
+    (n.type === 'tag' && /^(?:html|body)$/i.test(n.value)) ||
+    (n.type === 'pseudo' && /^:root$/i.test(n.value)) ||
+    (n.type === 'pseudo' &&
+      /^:scope$/i.test(n.value) &&
+      ctx.scope === 'page') ||
+    (n.type === 'attribute' &&
+      n.attribute === THEME_ROOT_ATTRIBUTE &&
+      (n.value == null || (ctx.themes?.has(n.value) ?? false)));
+  /** @param {any} n */
+  const listPseudo = n =>
+    n.type === 'pseudo' &&
+    /^:(?:is|where|matches|-webkit-any|-moz-any)$/i.test(n.value);
+  /**
+   * Whether a node of a subject compound proves it is none of the page's
+   * elements.
+   * @param {any} n
+   */
+  const proves = n => {
+    if (n.type === 'pseudo' && n.value.startsWith('::'))
+      return !PAGE_LAYER_PSEUDO_ELEMENT.test(n.value);
+    if (n.type === 'tag')
+      return !census.open.tags && !census.tags.has(n.value.toLowerCase());
+    if (n.type === 'class')
+      return !census.open.classes && !census.classes.has(n.value);
+    if (n.type === 'id') return !census.open.ids && !census.ids.has(n.value);
+    if (n.type === 'attribute') {
+      const key = String(n.attribute).toLowerCase();
+      if (key.startsWith('data-astryx-')) return false;
+      return !census.open.attrs && !census.attrs.has(key);
+    }
+    return false;
+  };
+  /** @type {Array<'page' | 'maybe' | 'none'>} */
+  const parts = [];
+  for (const sel of ast.nodes) {
+    const nodes = /** @type {any[]} */ (sel.nodes).filter(
+      n => n.type !== 'comment',
+    );
+    const lastComb = nodes.map(n => n.type).lastIndexOf('combinator');
+    const subjectNodes = nodes.slice(lastComb + 1);
+    // (An `:is()`/`:where()` subject is a list: each of its parts, after
+    // what comes before it, is judged as its own rule.)
+    if (subjectNodes.length === 1 && listPseudo(subjectNodes[0])) {
+      const prefix = nodes
+        .slice(0, lastComb + 1)
+        .map(n => String(n))
+        .join('');
+      for (const inner of subjectNodes[0].nodes)
+        parts.push(...selectorReach(`${prefix}${String(inner).trim()}`, ctx));
+      continue;
+    }
+    // (Inside a `@scope` whose root is proven no page, nothing is.)
+    if (ctx.scope === 'none') {
+      parts.push('none');
+      continue;
+    }
+    const before = nodes
+      .slice(0, lastComb + 1)
+      .filter(n => n.type !== 'combinator');
+    if (subjectNodes.length && subjectNodes.every(pageAtom))
+      parts.push(
+        before.every(pageAtom) && (ctx.scope == null || ctx.scope === 'page')
+          ? 'page'
+          : 'maybe',
+      );
+    else if (subjectNodes.some(pageAtom)) parts.push('maybe');
+    else parts.push(subjectNodes.some(proves) ? 'none' : 'maybe');
+  }
+  return parts;
+}
+
+/**
+ * What each part of the rule a declaration (or an at-rule) sits in is to
+ * the page, its nesting resolved and its nearest `@scope` root judged by
+ * the same rule.
+ * @param {any} node
+ * @param {Set<string> | null} themes the names this theme writes
+ * @param {PageCensus} census
+ * @param {boolean} [module] whether the stylesheet is a CSS Modules file
+ * @returns {Array<'page' | 'maybe' | 'none'>}
+ */
+function declReach(node, themes, census, module = false) {
+  let rule = node.parent;
+  while (rule && rule.type !== 'rule') rule = rule.parent;
+  if (!rule) return [];
+  /** @type {'page' | 'maybe' | 'none' | null} */
+  let scope = null;
+  for (let p = rule.parent; p && scope == null; p = p.parent)
+    if (p.type === 'atrule' && p.name?.toLowerCase() === 'scope') {
+      const root = /^\s*\(([^)]*)\)/.exec(String(p.params ?? ''))?.[1];
+      const reaches = root
+        ? selectorReach(root, {themes, scope: null, module, census})
+        : [];
+      scope =
+        reaches.length && reaches.every(r => r === 'page')
+          ? 'page'
+          : reaches.length && reaches.every(r => r === 'none')
+            ? 'none'
+            : 'maybe';
+    }
+  return fullSelectors(rule).flatMap(selector =>
+    selectorReach(selector, {themes, scope, module, census}),
+  );
+}
+
+/**
+ * Whether a declaration holds only under a condition: inside any at-rule
+ * but `@layer` and `@scope` (read on its own): `@media`, `@supports`,
+ * `@container`, `@document`, `@starting-style`, vendor forms included,
+ * nested in a rule or around it.
+ * @param {any} node
+ */
+function conditionalDecl(node) {
+  for (let p = node.parent; p; p = p.parent)
+    if (
+      p.type === 'atrule' &&
+      !/^(?:layer|scope)$/i.test(String(p.name ?? '').replace(/^-[a-z]+-/i, ''))
+    )
+      return true;
+  return false;
+}
+
+/** The at-rules CSS itself defines (and `@apply`, read on its own). */
+const CSS_AT_RULES = new Set([
+  'apply',
+  'charset',
+  'container',
+  'counter-style',
+  'custom-media',
+  'document',
+  'font-face',
+  'font-feature-values',
+  'font-palette-values',
+  'import',
+  'keyframes',
+  'layer',
+  'media',
+  'namespace',
+  'page',
+  'position-try',
+  'property',
+  'scope',
+  'starting-style',
+  'supports',
+  'view-transition',
+]);
+
+/** A `<link rel="preload" as="style">`, which a page turns into a stylesheet when it loads. */
+const PRELOADED_STYLE =
+  /<link\b(?=[^>]*\brel\s*=\s*\{?\s*["'`]?\s*preload\b)(?=[^>]*\bas\s*=\s*\{?\s*["'`]?\s*style\b)[^>]*>/i;
+
+/**
+ * The component and page-template languages whose files the sweep does not
+ * parse: each may hold a `<style>`, a `<link>` or a load.
+ */
+const UNPARSED_COMPONENT_FILE =
+  /\.(?:vue|svelte|astro|mdx|marko|riot|ejs|hbs|handlebars|mustache|njk|nunjucks|pug|jade|liquid|twig|erb|haml|slim)$/i;
+
+/**
+ * Script that styles the page or adds a sheet at run time: the document's
+ * own elements styled or classed, an element it creates, a constructed
+ * sheet, a rule it inserts. One pattern for a module and a page's inline
+ * script.
+ */
+const RUNTIME_PAGE_STYLING =
+  /\b(?:adoptedStyleSheets|CSSStyleSheet|insertRule|replaceSync)\b|\bdocument\.(?:body|documentElement)\b|\b(?:querySelector(?:All)?|closest)\(\s*['"`]\s*(?:html|body|:root)\b|\bgetElementsByTagName\(\s*['"`](?:html|body)['"`]|\bcreateElement\(\s*['"`](?:style|link)['"`]/;
+
+/**
+ * Whether a file may style the page in a way doctor does not read: a
+ * preprocessor stylesheet, a page's `<style>` or a `<body>`/`<html>` style
+ * or class, or a module with a CSS-in-JS global, a `<style>` it renders or
+ * a script that styles the document. Comments are not read apart.
+ * @param {string} source
+ * @param {string} ext
+ * @param {{file: string, projectDir: string, walked: Set<string>}} [where]
+ *   the file, in its project: a preprocessor stylesheet that loads one the
+ *   sweep did not walk (a package's, a URL) may paint the page
+ */
+function pageStyleUnread(source, ext, where) {
+  const pageAndBackground =
+    /(?:\bhtml\b|\bbody\b|:root)[\s\S]{0,400}?background|background[\s\S]{0,200}?(?:\bhtml\b|\bbody\b|:root)/i;
+  if (isOtherLanguageStylesheet(`x${ext}`)) {
+    if (pageAndBackground.test(source) || /@apply\b/.test(source)) return true;
+    const text = source.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, ' ');
+    // (Every item a load names: a comma list, quoted or not, a `url()`,
+    // after a Less option (`(reference)`); `@use` and `@forward` name one
+    // module, before their `as`/`with`/`show`/`hide`; a
+    // `meta.load-css(…)` loads one more. Sass's own `sass:` modules load
+    // nothing.)
+    /** @param {string} item */
+    const specOf = item => {
+      const url = /^url\(\s*(['"]?)([^'")]*)\1\s*\)$/u.exec(item);
+      const quoted = /^(['"])([^'"]*)\1$/u.exec(item);
+      return url ? url[2] : quoted ? quoted[2] : item;
+    };
+    /** @type {string[]} */
+    const specs = [];
+    for (const m of text.matchAll(
+      /@(use|forward|import|require)\s+([^;{}\n]+)/g,
+    )) {
+      const statement = m[2].replace(/^\([^)]*\)\s*/u, '').trim();
+      const items =
+        m[1] === 'use' || m[1] === 'forward'
+          ? [statement.replace(/\s+(?:as|with|show|hide)\b[\s\S]*$/u, '')]
+          : statement.split(/,(?![^(]*\))/);
+      for (const raw of items) {
+        const spec = specOf(
+          raw
+            .trim()
+            .replace(/\s+(?:screen|print|all|only|not|and)\b[\s\S]*$/u, '')
+            .trim(),
+        );
+        if (spec && !/^sass:/u.test(spec)) specs.push(spec);
+      }
+    }
+    for (const m of text.matchAll(/\bload-css\(\s*((['"])[^'"]*\2|[^,)\s]+)/g))
+      specs.push(specOf(m[1]));
+    for (const spec of specs) {
+      if (/^@astryxdesign\//.test(spec)) continue;
+      if (
+        /^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\//i.test(spec)
+      )
+        continue;
+      if (!where || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(spec)) return true;
+      // (A partial as Sass and Less find it: the path as said, with the
+      // file's own kinds of extension, and Sass's leading underscore.)
+      const base = path.resolve(path.dirname(where.file), spec);
+      const dir = path.dirname(base);
+      const name = path.basename(base);
+      // (Any stylesheet language's extension, from the shared list.)
+      const stems = [
+        base,
+        path.join(dir, `_${name}`),
+        path.join(base, '_index'),
+        path.join(base, 'index'),
+      ];
+      const found =
+        where.walked.has(base) ||
+        [...where.walked].some(
+          f =>
+            STYLESHEET_FILE.test(f) &&
+            stems.some(
+              stem =>
+                f.startsWith(`${stem}.`) &&
+                !f.slice(stem.length + 1).includes(path.sep),
+            ),
+        );
+      if (!found) return true;
+    }
+    return false;
+  }
+  if (/^\.html?$/u.test(ext))
+    return (
+      /<style\b/i.test(source) ||
+      /<(?:body|html)\b[^>]*\b(?:style|class)\s*=/i.test(source) ||
+      PRELOADED_STYLE.test(source) ||
+      [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].some(m =>
+        RUNTIME_PAGE_STYLING.test(m[1]),
+      )
+    );
+  // (A module: a CSS-in-JS global, a <style> it renders, a script that
+  // styles the document or adds a sheet at run time (an element it
+  // creates, a constructed sheet, a rule it inserts), or a CSS generator's
+  // base layer (Tailwind's `addBase`, UnoCSS's `preflights`).)
+  return (
+    /\b(?:createGlobalStyle|injectGlobal|globalStyle|globalCss|defineGlobalStyles|addBase|preflights)\b|:global\b|<Global\w*|<style\b/.test(
+      source,
+    ) || RUNTIME_PAGE_STYLING.test(source)
+  );
+}
+
+/**
+ * What a stylesheet's `html`, `body` and `:root` backgrounds do with the
+ * page, read with postcss: `paints` when one uses `--color-background-body`,
+ * `unknown` when one takes a value doctor cannot evaluate (another
+ * variable), else `not`.
+ * @param {string} css
+ * @param {{file: string, projectDir: string, walked: Set<string>, themeStylesheets?: Set<string>, themeNames?: Set<string>, census?: PageCensus}} [where]
+ *   the stylesheet, in its project: an `@import` out of the project is not
+ *   read; one of the registered themes' stylesheets paints no host page
+ * @returns {PageVerdict}
+ */
+function pageRuleVerdict(css, where) {
+  let root;
+  try {
+    root = postcss().parse(css);
+  } catch {
+    return 'unknown';
+  }
+  /** @type {PageVerdict[]} */
+  const verdicts = [];
+  // (An at-rule CSS does not define, a generator's `@tailwind base` or
+  // `@unocss`, writes rules doctor does not see.)
+  root.walkAtRules(atRule => {
+    // (A vendor-prefixed form, `@-moz-keyframes`, is that at-rule.)
+    const name = atRule.name.toLowerCase().replace(/^-[a-z]+-/, '');
+    if (!CSS_AT_RULES.has(name) && !CSS_NESTED_AT_RULES.has(name))
+      verdicts.push('unknown');
+  });
+  const cssModule = /\.module\.[a-z]+$/i.test(where?.file ?? '');
+  const census = where?.census ?? newPageCensus();
+  if (!where?.census) openCensus(census);
+  // (Each background declaration, read against the full selector of the
+  // rule it sits in, nesting resolved, and the conditions around it.)
+  root.walkDecls(/^background(?:-color|-image)?$/i, decl => {
+    // (The page token by its exact name: `--color-background-body-alt` is
+    // another token.)
+    const paints = /var\(\s*--color-background-body\s*[,)]/.test(decl.value);
+    // (Each part of the rule's selector is its own rule.)
+    for (const reach of declReach(
+      decl,
+      where?.themeNames ?? null,
+      census,
+      cssModule,
+    )) {
+      if (reach === 'none') continue;
+      if (reach === 'maybe' || conditionalDecl(decl)) {
+        verdicts.push('unknown');
+        continue;
+      }
+      verdicts.push(
+        paints ? 'paints' : /var\(/.test(decl.value) ? 'unknown' : 'not',
+      );
+    }
+  });
+  // (An `@apply` in a rule that reaches the page writes what doctor does
+  // not read.)
+  root.walkAtRules('apply', atRule => {
+    if (
+      declReach(atRule, where?.themeNames ?? null, census, cssModule).some(
+        r => r !== 'none',
+      )
+    )
+      verdicts.push('unknown');
+  });
+  // (A stylesheet it imports from a package, other than Astryx's own, which
+  // never paint the host page, or a font service's, is not read, and may
+  // paint the page.)
+  root.walkAtRules('import', atRule => {
+    const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
+    if (!spec) {
+      verdicts.push('unknown');
+      return;
+    }
+    if (/^@astryxdesign\//.test(spec)) return;
+    if (where?.themeStylesheets?.has(spec)) return;
+    if (/^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\//i.test(spec))
+      return;
+    // (A path the sweep walked is read where it is; anything else, a
+    // package, a URL, a file the walk skipped, may paint.)
+    if (
+      where &&
+      /^[./]/.test(spec) &&
+      !spec.startsWith('//') &&
+      walkedSheet(spec.replace(/[?#].*$/u, ''), where)
+    )
+      return;
+    if (!where && /^\.{1,2}\//.test(spec)) return;
+    verdicts.push('unknown');
+  });
+  return combineVerdicts(verdicts);
+}
+
+/**
+ * Whether a module's outermost Core `Theme` that takes the default theme
+ * (`themes[defaultThemeSlug]`) is given a fixed mode:
+ * a literal `light` or `dark`, or, for a theme whose one mode the module
+ * records, its `themeModes[…]` entry, alone or with a fallback (`??
+ * 'system'`, as `theme add` wires it). Theme marks the page with that mode,
+ * and Core's reset gives it that color scheme. A Theme inside another Theme,
+ * or another component's `mode`, does not count.
+ * @param {string} file
+ * @param {boolean} recorded whether the module records the theme's mode
+ * @returns {'light' | 'dark' | 'recorded' | 'unknown' | null} the mode it
+ *   is given; `unknown` for a value doctor cannot evaluate (a variable, a
+ *   ternary, a hook's value, spread props)
+ */
+function rootThemeMode(file, recorded) {
+  /** @param {any} e @returns {'light' | 'dark' | null} */
+  const literal = e => {
+    const text =
+      e?.type === 'StringLiteral'
+        ? e.value
+        : e?.type === 'TemplateLiteral' && !e.expressions.length
+          ? (e.quasis[0]?.value?.cooked ?? '')
+          : '';
+    return text === 'light' || text === 'dark' ? text : null;
+  };
+  /** @param {any} e */
+  const themeModesEntry = e =>
+    e?.type === 'MemberExpression' &&
+    e.computed &&
+    e.object?.type === 'Identifier' &&
+    e.object.name === 'themeModes';
+  /** @param {any} tag @param {string} name */
+  const attribute = (tag, name) =>
+    (tag.attributes ?? []).find(
+      (/** @type {any} */ a) =>
+        a.type === 'JSXAttribute' && a.name?.name === name,
+    );
+  // (The app's own root: the Theme given `themes[defaultThemeSlug]`, never
+  // a section's Theme for one named theme.)
+  /** @param {any} tag */
+  const takesDefault = tag => {
+    const e = attribute(tag, 'theme')?.value?.expression;
+    return (
+      e?.type === 'MemberExpression' &&
+      e.computed &&
+      e.object?.type === 'Identifier' &&
+      e.object.name === 'themes' &&
+      e.property?.type === 'Identifier' &&
+      e.property.name === 'defaultThemeSlug'
+    );
+  };
+  for (const element of doctorOutermostElements(file, {
+    sources: CORE_THEME_SOURCES,
+    name: 'Theme',
+  })) {
+    const tag = element.openingElement;
+    if (!takesDefault(tag)) continue;
+    const v = attribute(tag, 'mode')?.value;
+    const fixed =
+      v?.type === 'StringLiteral'
+        ? literal(v)
+        : v?.type === 'JSXExpressionContainer'
+          ? literal(v.expression)
+          : null;
+    if (fixed) return fixed;
+    const e = v?.type === 'JSXExpressionContainer' ? v.expression : null;
+    const fromRecord =
+      themeModesEntry(e) ||
+      (e?.type === 'LogicalExpression' &&
+        e.operator === '??' &&
+        themeModesEntry(e.left));
+    if (recorded && fromRecord) return 'recorded';
+    // (A value doctor cannot evaluate may be the theme's mode.)
+    if (
+      (tag.attributes ?? []).some(
+        (/** @type {any} */ a) => a.type === 'JSXSpreadAttribute',
+      ) ||
+      (e &&
+        !fromRecord &&
+        e.type !== 'StringLiteral' &&
+        !(e.type === 'TemplateLiteral' && !e.expressions.length))
+    )
+      return 'unknown';
+  }
+  return null;
+}
+
+/**
+ * What an app's root element does with the page: `paints` when its own
+ * background provably takes `--color-background-body`, `not` when its
+ * background provably is something else or nothing, `unknown` when doctor
+ * cannot read it (a class, StyleX, spread props, a computed style, or a
+ * component it cannot follow).
+ * @typedef {'paints' | 'not' | 'unknown'} PageVerdict
+ */
+
+/** @param {PageVerdict[]} verdicts @returns {PageVerdict} */
+function combineVerdicts(verdicts) {
+  if (verdicts.includes('paints')) return 'paints';
+  if (verdicts.includes('unknown')) return 'unknown';
+  return 'not';
+}
+
+/**
+ * A JSX element's own attributes, for the page: its inline `style`
+ * background read; a class, StyleX (`xstyle`), a spread, or a style doctor
+ * cannot evaluate is `unknown`.
+ * @param {any} opening a JSXOpeningElement
+ * @returns {PageVerdict}
+ */
+function ownBackground(opening) {
+  /** @type {PageVerdict} */
+  let verdict = 'not';
+  for (const a of opening?.attributes ?? []) {
+    if (a.type === 'JSXSpreadAttribute') return 'unknown';
+    const name = a.name?.name;
+    if (name === 'className' || name === 'xstyle' || name === 'class')
+      return 'unknown';
+    if (name !== 'style') continue;
+    const style =
+      a.value?.type === 'JSXExpressionContainer' ? a.value.expression : null;
+    if (style?.type !== 'ObjectExpression') return 'unknown';
+    for (const p of style.properties) {
+      if (p.type !== 'ObjectProperty' || p.computed) return 'unknown';
+      const key = p.key?.name ?? p.key?.value;
+      if (!/^background(?:Color|Image)?$/.test(String(key))) continue;
+      const v = p.value;
+      const text =
+        v?.type === 'StringLiteral'
+          ? v.value
+          : v?.type === 'TemplateLiteral' && !v.expressions.length
+            ? (v.quasis[0]?.value?.cooked ?? '')
+            : null;
+      if (text == null) return 'unknown';
+      if (/var\(\s*--color-background-body\s*[,)]/.test(text))
+        verdict = 'paints';
+      else if (/var\(/.test(text)) return 'unknown';
+    }
+  }
+  return verdict;
+}
+
+/**
+ * The JSX each function a module declares returns, by the name it is
+ * declared or exported under (`default` for a default export); `unknown`
+ * when a function can return something other than JSX.
+ * @param {any} ast
+ * @returns {Map<string, any[] | 'unknown'>}
+ */
+function returnedJsx(ast) {
+  /** @type {Map<string, any[] | 'unknown'>} */
+  const out = new Map();
+  /** @param {any} fn @returns {any[] | 'unknown'} */
+  const roots = fn => {
+    const isJsx = (/** @type {any} */ n) =>
+      n?.type === 'JSXElement' || n?.type === 'JSXFragment';
+    if (isJsx(fn.body)) return [fn.body];
+    if (fn.body?.type !== 'BlockStatement') return 'unknown';
+    /** @type {any[]} */
+    const found = [];
+    let other = false;
+    // (Only the function's own returns: a helper declared inside it
+    // returns for itself, not for the component.)
+    /** @param {unknown} value */
+    const visit = value => {
+      if (value == null || typeof value !== 'object') return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      const node = /** @type {any} */ (value);
+      if (/Function/.test(node.type ?? '')) return;
+      if (node.type === 'ReturnStatement') {
+        const arg =
+          node.argument?.type === 'ParenthesizedExpression'
+            ? node.argument.expression
+            : node.argument;
+        if (isJsx(arg)) found.push(arg);
+        else other = true;
+        return;
+      }
+      for (const [key, child] of Object.entries(node)) {
+        if (['loc', 'start', 'end', 'extra'].includes(key)) continue;
+        visit(child);
+      }
+    };
+    visit(fn.body.body);
+    return other || !found.length ? 'unknown' : found;
+  };
+  /** @type {Map<string, string>} */
+  const aliases = new Map();
+  for (const node of ast.program.body) {
+    const decl =
+      node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    if (decl?.type === 'FunctionDeclaration' && decl.id)
+      out.set(decl.id.name, roots(decl));
+    if (decl?.type === 'VariableDeclaration')
+      for (const d of decl.declarations)
+        if (
+          d.id?.type === 'Identifier' &&
+          /^(?:ArrowFunctionExpression|FunctionExpression)$/.test(
+            d.init?.type ?? '',
+          )
+        )
+          out.set(d.id.name, roots(d.init));
+    if (node.type === 'ExportNamedDeclaration')
+      for (const sp of node.specifiers ?? [])
+        if (sp.local?.name)
+          aliases.set(sp.exported?.name ?? sp.exported?.value, sp.local.name);
+    if (node.type === 'ExportDefaultDeclaration') {
+      const d = node.declaration;
+      if (/Function/.test(d?.type ?? '')) out.set('default', roots(d));
+      else if (d?.type === 'Identifier') aliases.set('default', d.name);
+    }
+  }
+  for (const [exported, local] of aliases) {
+    const found = out.get(local);
+    if (found) out.set(exported, found);
+  }
+  return out;
+}
+
+/**
+ * What a root element does with the page (see PageVerdict): a host element
+ * or a Core component by its own attributes (Core paints the page only
+ * through AppShell); an app component by the JSX it returns, followed into
+ * relative imports; a fragment by its elements; anything else `unknown`.
+ * @param {any} node a JSXElement, JSXFragment or other JSX child
+ * @param {{file: string, ast: any}} where the module the node is in
+ * @param {number} depth
+ * @param {PageCensus} [census] records the root element and its children
+ * @returns {PageVerdict}
+ */
+function rootVerdict(node, where, depth, census) {
+  if (depth > 6) return 'unknown';
+  if (node?.type === 'JSXText') return 'not';
+  if (node?.type === 'JSXFragment')
+    return combineVerdicts(
+      (node.children ?? []).map((/** @type {any} */ c) =>
+        rootVerdict(c, where, depth, census),
+      ),
+    );
+  if (node?.type !== 'JSXElement') return 'unknown';
+  const name = node.openingElement?.name;
+  if (name?.type !== 'JSXIdentifier') return 'unknown';
+  if (/^[a-z]/.test(name.name)) {
+    if (census) censusJsxWithChildren(node, census);
+    return ownBackground(node.openingElement);
+  }
+  /** @type {{source: string, imported: string} | null} */
+  let from = null;
+  for (const n of where.ast.program.body)
+    if (n.type === 'ImportDeclaration' && n.importKind !== 'type')
+      for (const sp of n.specifiers ?? [])
+        if (sp.local?.name === name.name)
+          from = {
+            source: n.source.value,
+            imported:
+              sp.type === 'ImportDefaultSpecifier'
+                ? 'default'
+                : (sp.imported?.name ?? sp.imported?.value),
+          };
+  if (from && /^@astryxdesign\/core(?:\/|$)/.test(from.source)) {
+    if (from.imported === 'AppShell') return 'paints';
+    // (A Core component renders elements of its own: the census cannot
+    // name them.)
+    if (census) openCensus(census);
+    return ownBackground(node.openingElement);
+  }
+  if (from && !from.source.startsWith('.')) return 'unknown';
+  // (An app component: what it returns decides, unless the element gives
+  // it a class, StyleX or spread it may paint with.)
+  const own = ownBackground(node.openingElement);
+  if (own !== 'not') return own;
+  let target = where;
+  let wanted = name.name;
+  if (from) {
+    const resolved = doctorResolveLocalModule(from.source, where.file);
+    if (!resolved) return 'unknown';
+    try {
+      target = {file: resolved, ast: parseModule(readTextFile(resolved))};
+    } catch {
+      return 'unknown';
+    }
+    wanted = from.imported;
+  }
+  const returned = returnedJsx(target.ast).get(wanted);
+  if (!returned || returned === 'unknown') return 'unknown';
+  return combineVerdicts(
+    returned.map((/** @type {any} */ r) =>
+      rootVerdict(r, target, depth + 1, census),
+    ),
+  );
+}
+
+/**
+ * What the app's root element does with the page, from the outermost Core
+ * Theme that takes `themes[defaultThemeSlug]` in a module: null when the
+ * module renders none, else the verdict of what it wraps (the Theme's own
+ * class, style or spread first).
+ * @param {string} file
+ * @param {PageCensus} [census] records the root element and its children
+ * @returns {PageVerdict | null}
+ */
+function rootThemeVerdict(file, census) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseModule(readTextFile(file));
+  } catch {
+    return null;
+  }
+  /** @type {PageVerdict[]} */
+  const verdicts = [];
+  for (const element of doctorOutermostElements(file, {
+    sources: CORE_THEME_SOURCES,
+    name: 'Theme',
+  })) {
+    const theme = (element.openingElement.attributes ?? []).find(
+      (/** @type {any} */ a) =>
+        a.type === 'JSXAttribute' && a.name?.name === 'theme',
+    )?.value?.expression;
+    if (!(
+      theme?.type === 'MemberExpression' &&
+      theme.computed &&
+      theme.object?.name === 'themes' &&
+      theme.property?.name === 'defaultThemeSlug'
+    ))
+      continue;
+    const own = ownBackground({
+      attributes: (element.openingElement.attributes ?? []).filter(
+        (/** @type {any} */ a) =>
+          a.type === 'JSXSpreadAttribute' ||
+          !['theme', 'mode', 'children'].includes(a.name?.name),
+      ),
+    });
+    const children = (element.children ?? []).filter(
+      (/** @type {any} */ c) => c.type !== 'JSXText' || c.value.trim(),
+    );
+    verdicts.push(
+      own !== 'not'
+        ? own
+        : combineVerdicts(
+            children.map((/** @type {any} */ c) =>
+              rootVerdict(c, {file, ast}, 0, census),
+            ),
+          ),
+    );
+  }
+  return verdicts.length ? combineVerdicts(verdicts) : null;
+}
+
+/**
+ * The two halves of a `light-dark(a, b)` value, split at its top-level
+ * comma so functional colors (`oklch(…)`) stay whole; null for another value.
+ * @param {string} value
+ * @returns {[string, string] | null}
+ */
+function lightDarkHalves(value) {
+  const m = /^\s*light-dark\(([\s\S]*)\)\s*$/.exec(value);
+  if (!m) return null;
+  let depth = 0;
+  for (let i = 0; i < m[1].length; i++) {
+    const ch = m[1][i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0)
+      return [m[1].slice(0, i).trim(), m[1].slice(i + 1).trim()];
+  }
+  return null;
+}
+
+/**
+ * The one mode a built theme's page color is drawn for, or null when its
+ * page takes a light and a dark color (or the value cannot be read).
+ * @param {string} css
+ * @param {Awaited<ReturnType<typeof doctorColorReaders>>} readers
+ * @returns {'light' | 'dark' | null}
+ */
+function oneModeOfPage(css, readers) {
+  const value = /--color-background-body\s*:\s*([^;}]+)/.exec(css)?.[1];
+  if (!value) return null;
+  const sides = (lightDarkHalves(value) ?? [value]).map(side =>
+    lightSide(side, readers),
+  );
+  if (sides.some(side => side == null)) return null;
+  if (sides.some(side => side !== sides[0])) return null;
+  return sides[0] ? 'light' : 'dark';
+}
+
+/**
+ * The page color a theme's built stylesheet gives `--color-background-body`,
+ * as written, or null.
+ * @param {string} css
+ */
+function pageColorValue(css) {
+  const v = /--color-background-body\s*:\s*([^;}]+)/.exec(css)?.[1];
+  return v ? v.trim().toLowerCase().replace(/\s+/g, ' ') : null;
+}
+
+/**
+ * The page colors the packages a local theme's built module imports its
+ * base from give, read from each package's own stylesheets; empty for a
+ * package theme (it is a base itself) or a base doctor cannot find.
+ * @param {string} projectDir
+ * @param {ResolvedAppTheme} theme
+ * @returns {Set<string>}
+ */
+function basePageColors(projectDir, theme) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  if (theme.source !== 'local' || !theme.moduleFile) return out;
+  let ast;
+  try {
+    ast = parseModule(readTextFile(theme.moduleFile));
+  } catch {
+    return out;
+  }
+  /** @type {Set<string>} */
+  const packages = new Set();
+  walkAst(ast, node => {
+    const spec = node.type === 'ImportDeclaration' ? node.source?.value : null;
+    if (typeof spec !== 'string' || spec.startsWith('.')) return;
+    packages.add(
+      spec
+        .split('/')
+        .slice(0, spec.startsWith('@') ? 2 : 1)
+        .join('/'),
+    );
+  });
+  for (const name of packages) {
+    if (name === '@astryxdesign/core') continue;
+    const dir = findDoctorInstalledPackage(projectDir, name);
+    if (!dir) continue;
+    for (const file of doctorPackageStylesheets(dir)) {
+      try {
+        const value = pageColorValue(readTextFile(file));
+        if (value) out.add(value);
+      } catch {
+        // An unreadable stylesheet gives no base color.
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The first project file that loads a package stylesheet (`specifier`): a
+ * stylesheet that `@import`s it, a module that imports it, or a page that
+ * links it. Each is read as a syntax tree or its tags, so comments never
+ * count. `unparsed` counts the modules naming it that do not parse.
+ * @param {string} root
+ * @param {string} specifier
+ * @param {{skip?: (rel: string) => boolean}} [options] `skip`: project
+ *   files (by their path inside the project) that do not count
+ * @returns {{file: string | null, unparsed: number}}
+ */
+export function projectStylesheetLoad(root, specifier, options = {}) {
+  const name = specifier.split('/').at(-1) ?? specifier;
+  let unparsed = 0;
+  for (const file of listProjectSourceFiles(root, '', {
+    stylesheets: true,
+    pages: true,
+  })) {
+    if (options.skip?.(path.relative(root, file))) continue;
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!source.includes(name)) continue;
+    if (file.endsWith('.css')) {
+      if (doctorStylesheetImports(source).has(specifier))
+        return {file, unparsed};
+      continue;
+    }
+    if (/\.html?$/u.test(file)) {
+      if (linksPackageStylesheet(source, specifier)) return {file, unparsed};
+      continue;
+    }
+    try {
+      if (moduleSpecifiers(source).has(specifier)) return {file, unparsed};
+    } catch {
+      unparsed += 1;
+    }
+  }
+  return {file: null, unparsed};
+}
+
+/**
+ * Whether the project loads Core's reset stylesheet: an app that does not
+ * is embedded in a page it does not own (the guest setup), and paints no
+ * page.
+ * @param {string} projectDir
+ */
+function loadsCoreReset(projectDir) {
+  return (
+    // (A story or a test loads the reset for itself, not for the app.)
+    projectStylesheetLoad(projectDir, '@astryxdesign/core/reset.css', {
+      skip: storyOrTest,
+    }).file != null
+  );
+}
+
+/**
+ * The default theme's page color shows only where something paints the
+ * page: AppShell, or a global body rule that takes the page color. Astryx
+ * never paints the host page, so doctor warns when nothing does and the
+ * theme needs it: a theme drawn for one mode (in the other OS mode its text
+ * lands on the browser's own page color; a root Theme given its mode also
+ * keeps it readable), or a local theme that sets its own page color,
+ * different from its base's (the color chosen never shows). An app that
+ * loads no Core reset is embedded in a page it does not own, and gets no
+ * finding.
+ * @param {string} projectDir
+ * @param {ResolvedAppTheme | null} theme
+ * @param {Awaited<ReturnType<typeof doctorColorReaders>>} readers
+ * @param {Set<string>} [themeStylesheets] the stylesheets the registered
+ *   themes load, as the theme module imports them
+ * @returns {DoctorCheck | null}
+ */
+function oneModePageCheck(
+  projectDir,
+  theme,
+  readers,
+  themeStylesheets = new Set(),
+) {
+  if (!theme?.stylesheetFile) return null;
+  let mode;
+  let value;
+  /** The names the theme's own stylesheet scopes itself by, as `Theme` writes them. @type {Set<string>} */
+  const themeNames = new Set();
+  try {
+    const css = readTextFile(theme.stylesheetFile);
+    mode = oneModeOfPage(css, readers);
+    value = pageColorValue(css);
+    for (const m of css.matchAll(
+      /\[\s*data-astryx-theme\s*=\s*(["']?)([^"'\]]+)\1\s*\]/g,
+    ))
+      themeNames.add(m[2]);
+    // (The slug, only when the stylesheet names no theme of its own.)
+    if (!themeNames.size) themeNames.add(theme.slug);
+  } catch {
+    return null;
+  }
+  const bases = mode ? new Set() : basePageColors(projectDir, theme);
+  const own = !mode && value != null && bases.size > 0 && !bases.has(value);
+  if (!mode && !own) return null;
+  if (!loadsCoreReset(projectDir)) return null;
+  // (Doctor warns only on proof that nothing paints the page: a root it
+  // found, every part of it read as not the page color. Anything it cannot
+  // read may paint, and the check stays silent.)
+  let painted = false;
+  let mayPaint = false;
+  let foundRoot = false;
+  /** @type {'light' | 'dark' | null} */
+  let opposite = null;
+  const walk = walkProjectSourceFiles(projectDir, '', {
+    stylesheets: true,
+    pages: true,
+    styleSources: true,
+    unparsed: UNPARSED_COMPONENT_FILE,
+  });
+  // (A project larger than the walk reads: what it left may paint.)
+  if (!walk.complete) mayPaint = true;
+  const walked = new Set(walk.files.map(f => path.resolve(f)));
+  // (What the page's elements carry, read before any stylesheet is judged.)
+  const census = newPageCensus();
+  /** @type {Array<{file: string, source: string}>} */
+  const stylesheets = [];
+  // (A component language the sweep does not parse, a `.vue` or `.svelte`
+  // file, may hold a `<style>` or a load.)
+  if (walk.unparsed.some(file => !storyOrTest(path.relative(projectDir, file))))
+    mayPaint = true;
+  // (A project config that lists stylesheets, as `angular.json` does: each
+  // read like a path a module names.)
+  for (const {file, strings} of doctorRootConfigStrings(projectDir))
+    for (const text of strings) {
+      const value = text.replace(/[?#].*$/u, '');
+      if (!STYLESHEET_FILE.test(value) || /^@astryxdesign\//.test(value))
+        continue;
+      if (
+        stylesheetPathVerdict(value, {file, projectDir, walked}) === 'unknown'
+      )
+        mayPaint = true;
+    }
+  for (const file of walk.files) {
+    // (A story or a test styles or renders for itself, not for the app;
+    // read by its path inside the project.)
+    if (storyOrTest(path.relative(projectDir, file))) continue;
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (generatedThemeFile(source)) continue;
+    const ext = path.extname(file);
+    // (Sources doctor does not read for the page: a preprocessor's
+    // stylesheet, a page's own <style> or body style, a stylesheet or a
+    // module that styles the page some other way. One that names the page
+    // and a background may paint it.)
+    if (
+      ext !== '.css' &&
+      pageStyleUnread(source, ext, {file, projectDir, walked})
+    ) {
+      mayPaint = true;
+      continue;
+    }
+    // (A preprocessor stylesheet read above is no module.)
+    if (isOtherLanguageStylesheet(`x${ext}`)) continue;
+    if (/^\.html?$/u.test(ext)) {
+      censusHtmlPage(source, census);
+      if (
+        stylesheetLinkHrefs(source).some(
+          href =>
+            linkedSheetVerdict(href, themeStylesheets, {
+              file,
+              projectDir,
+              walked,
+            }) === 'unknown',
+        )
+      )
+        mayPaint = true;
+      continue;
+    }
+    if (ext === '.css') {
+      stylesheets.push({file, source});
+      continue;
+    }
+    // (AppShell from the package or its own entry, as the templates
+    // import it.)
+    if (
+      source.includes('AppShell') &&
+      doctorRendersElement(file, {
+        sources: new Set(['@astryxdesign/core', '@astryxdesign/core/AppShell']),
+        name: 'AppShell',
+      })
+    ) {
+      painted = true;
+      break;
+    }
+    // (A module that imports a package's stylesheet, other than Astryx's
+    // own, may paint the page with it; a <body> or <html> it renders, a
+    // Next.js layout's, by its own attributes.)
+    const moduleVerdict = modulePageVerdict(source, themeStylesheets, {
+      file,
+      projectDir,
+      walked,
+    });
+    if (moduleVerdict === 'paints') {
+      painted = true;
+      break;
+    }
+    if (moduleVerdict === 'unknown') mayPaint = true;
+    censusJsxPage(source, census);
+    if (!/\bTheme\b/.test(source)) continue;
+    const root = rootThemeVerdict(file, census);
+    if (root === 'paints') {
+      painted = true;
+      break;
+    }
+    if (root) foundRoot = true;
+    if (root === 'unknown') mayPaint = true;
+    // (A root Theme given a fixed mode, the theme's recorded one
+    // (`themeModes[…]`) or a literal `light` or `dark`: Theme marks the page
+    // with that mode, and Core's reset gives it that color scheme, so a
+    // one-mode theme's text stays readable in every OS mode. It paints no
+    // page color, so it never shows a theme's own one.)
+    if (!mode) continue;
+    const given = rootThemeMode(file, Boolean(theme.mode));
+    if (given === 'recorded' || given === mode) {
+      painted = true;
+      break;
+    }
+    if (given === 'unknown') {
+      mayPaint = true;
+      continue;
+    }
+    // (The other mode, said as a literal, gives the page that mode's color
+    // scheme: the theme's text then sits on the wrong side.)
+    if (given) opposite = given;
+  }
+  // (No page shell read: the mount node is unknown, so nothing proves a
+  // rule is not it.)
+  if (!census.mountKnown) openCensus(census);
+  for (const {file, source} of painted ? [] : stylesheets) {
+    const css = pageRuleVerdict(source, {
+      file,
+      projectDir,
+      walked,
+      themeStylesheets,
+      themeNames,
+      census,
+    });
+    if (css === 'paints') {
+      painted = true;
+      break;
+    }
+    if (css === 'unknown') mayPaint = true;
+  }
+  if (!painted && (mayPaint || !foundRoot)) return null;
+  const label = 'Theme page color shown';
+  const bodyRule =
+    'add `body { background: var(--color-background-body) }` to global CSS (the purity check of `doctor --built` flags a stylesheet imported from component source, so prefer AppShell)';
+  if (!mode)
+    return painted
+      ? {
+          id: 'theme-page-color',
+          label,
+          status: 'pass',
+          message: `${theme.slug} sets its own page color, and the app paints its page (AppShell, a body background of the page color, or the root element's own background).`,
+        }
+      : {
+          id: 'theme-page-color',
+          label,
+          status: 'warn',
+          message: `${theme.slug} sets its own page color (${value}), and nothing paints the app's page: no AppShell renders, no stylesheet gives the body the page color, and the root Theme's own element takes no page color. The page shows the browser's own color, not the theme's.`,
+          fix: `Wrap the page in AppShell; if you can't, ${bodyRule}.`,
+        };
+  const other = mode === 'dark' ? 'light' : 'dark';
+  return painted
+    ? {
+        id: 'theme-page-color',
+        label,
+        status: 'pass',
+        message: `${theme.slug} is drawn for ${mode} mode, and the app paints its page (AppShell, a body background of the page color, or the theme's own mode on its root Theme).`,
+      }
+    : {
+        id: 'theme-page-color',
+        label,
+        status: 'warn',
+        message: opposite
+          ? `${theme.slug} is drawn for ${mode} mode only, but the root Theme is given mode="${opposite}", so the page takes ${opposite} mode's color scheme and the theme's text sits on the wrong side of it. Nothing else paints the page (no AppShell, no body background of the page color).`
+          : `${theme.slug} is drawn for ${mode} mode only, and nothing paints the app's page: no AppShell renders, no stylesheet gives the body the page color, and the root Theme is not given the theme's mode. In ${other} OS mode its text sits on the browser's own page color.`,
+        fix: `Wrap the page in AppShell; if you can't, pass the theme's mode to the root Theme (${theme.mode ? 'mode={themeModes[defaultThemeSlug]}' : `mode="${mode}"`}), or ${bodyRule}.`,
+      };
 }
 
 /** @param {string} file */
