@@ -69,7 +69,7 @@ components.
 | `AstryxDropZone`         | native component (Fabric Native Component)      | `DropZone`, `ReorderableList`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A column shows where the card lands, scrolls at its edges, and takes the drop.                                                                                                |
 | `AstryxDragSnap`         | native component (Fabric Native Component)      | `BottomSheet` (and the components that render one, such as `ActionSheet`, `Selector`, `DropdownMenu`, `CommandPalette`, `DateInput`), `InlineSheet`, `Toast`.                                                                                                                                                                                                                                                                                                                                                                                                                             | A sheet follows the finger, rubber-bands at its ends, and snaps to a stop; a notification flicks away.                                                                        |
 | `AstryxSwipeRow`         | native component (Fabric Native Component)      | `Item` rows with swipe actions; `List`, `CheckboxList`, `RadioList`, `TreeList`, and `Selector` render their rows with `Item`.                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A row slides open to show its actions, or a full swipe fires the outer action.                                                                                                |
-| `AstryxPanZoomView`      | native component (Fabric Native Component)      | No Astryx component; app API on the `./controls` entry. The create command's `maps` template uses it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | A map-like canvas or a large diagram pans with a glide and zooms about the fingers.                                                                                           |
+| `AstryxPanZoomView`      | native component (Fabric Native Component)      | No Astryx component; the create command's `maps` template uses it (OQ3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A map-like canvas or a large diagram pans with a glide and zooms about the fingers.                                                                                           |
 | `AstryxZoomPager`        | native component (Fabric Native Component)      | `Lightbox` (its public face; internal native contract). The create command's `gallery` template.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A full-screen photo viewer pages, zooms, and closes on a drag down.                                                                                                           |
 
 ## Non-goals
@@ -87,6 +87,9 @@ components.
 - The native stack's back gesture itself, the menu hosts, and the presentation
   hosts, which `spec:AST-125` and `spec:AST-128` own.
   This record owns only how a drag yields to them.
+- The per-recognizer handles through which other gesture libraries declare
+  their relationship to Astryx's recognizers, which the amended `spec:AST-112`
+  FR18 owns.
 - React Native's Animated and its native driver, beyond the event route FR2
   depends on.
 - Equivalent internal implementations remain valid when they satisfy this contract.
@@ -112,7 +115,8 @@ components.
   `onDropZoneMove`, at most once a frame and only while a drag moves over the
   zone, because JavaScript turns the point into a place to insert; and
   `onCameraChange` during motion, only while `cameraChangeInterval` is above 0
-  and no more often than that interval.
+  and no more often than that interval. Both carry positions JavaScript reads;
+  neither holds the motion, which runs on whether JavaScript answers or not.
 - **FR2 — Frame events feed only Animated's native driver.** `onDragFrame`,
   `onSwipeFrame`, `onCameraFrame`, and `onPagerFrame` exist so that the
   `Animated.Value`s a caller gives a view follow its gesture through React
@@ -342,7 +346,8 @@ components.
   system menu by the class name of UIKit's private context-menu container,
   because UIKit offers no public query for a presented bar-button menu. It only
   reads the name and calls nothing private; when the name is absent, the guard
-  does nothing and never blocks a touch.
+  does nothing and never blocks a touch. The binary reports a self-check for
+  this exception through the platform info module (`spec:AST-140/FR9`).
 
 ### Platform support
 
@@ -376,7 +381,8 @@ components.
   named features that JavaScript checks before it uses them.
 - Relies on `spec:AST-112` FR1 and FR5 (amended): the touch shield is not in
   the platform core (it is Preview and inspector tooling, `spec:AST-141`), and
-  `./controls` holds the gesture views, the pan-zoom view included.
+  the gesture views stay internal behind the library's components on
+  `./controls`.
 
 ## Verification
 
@@ -393,7 +399,7 @@ components.
 | FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of forwarded accessibility props | actions passed to each view; the pager and the pan-zoom surface as adjustable elements; drag item and drop zone; the large content viewer inside a drag-and-snap view | An accessibility prop not forwarded, or an adjustable that does something other than its gesture                                                                       |
 | FR13     | Unit tests and Simulator and emulator checks with Reduce Motion and right-to-left                                      | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                                                          | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                                                           |
 | FR14     | The platform's spec rules check over the contract list                                                                 | each contract in the group                                                                                                                                            | A contract above revision 1, or a named feature the record does not list                                                                                               |
-| FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                            | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                                                                      |
+| FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                            | each view; the gesture root with no menu container found; the platform info self-check                                                                                | A private API call, or a gesture root that blocks a touch when the name is absent                                                                                      |
 
 ## Decision log
 
@@ -466,4 +472,5 @@ cannot. JavaScript keeps the meaning of a location and of a drop.
   edge); or Android keeps ignoring it and only `ownsEdge` excludes.
 - **OQ3 — Which Astryx component is the public face of `AstryxPanZoomView`?**
   (`human-design`) No library component uses it. Options: a library component
-  for maps or large diagrams renders it; or it stays app API on `./controls`.
+  for maps or large diagrams renders it; or `spec:AST-112` FR5 exports it from
+  `./controls` as app API.
