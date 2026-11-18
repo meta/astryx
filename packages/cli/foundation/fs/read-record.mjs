@@ -6,7 +6,8 @@
  *
  * @input An operation run inside `recordReads(seen, fn)`.
  * @output `seen` gets every file whose content the operation read through fs
- *   or imported as a doc module (`recordContentRead`), and every folder it
+ *   (synchronously or with promises.readFile) or imported as a doc module
+ *   (`recordContentRead`), and every folder it
  *   listed or probed, each with its state when first read; an exact run
  *   records each probed path by what the call returned instead.
  *   `unchangedSince(seen)` says whether all are still in that state.
@@ -20,6 +21,7 @@
  */
 
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {createHash} from 'node:crypto';
 import {createRequire, syncBuiltinESMExports} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -125,10 +127,11 @@ const RECORDED = [
   'realpathSync',
   'accessSync',
   'openSync',
+  'readFile',
 ];
 
 /** The reads that see a file's content, so the file itself is checked. */
-const CONTENT_READS = new Set(['readFileSync', 'openSync']);
+const CONTENT_READS = new Set(['readFileSync', 'openSync', 'readFile']);
 
 /**
  * What an existence check of a present path records: only that it is there,
@@ -185,6 +188,58 @@ const statSyncRaw = fs.statSync;
 /** fs.realpathSync as loaded, before installRecorder wraps it. */
 const realpathSyncRaw = fs.realpathSync;
 
+/** fs.readdirSync as loaded, before installRecorder wraps it. */
+const readdirSyncRaw = fs.readdirSync;
+
+/** fs.readlinkSync as loaded, before installRecorder wraps it. */
+const readlinkSyncRaw = fs.readlinkSync;
+
+/** How a folder's listing stamp ({@link listingStamp}) begins. */
+export const LISTED = 'list:';
+
+/**
+ * A folder's entries as a stamp: their names and types, and where each link
+ * points. A save that renames a new copy over an entry keeps it; an entry
+ * added, removed or renamed, a changed type, or a link re-pointed changes it.
+ * The folder's own times are left out, as a save by rename changes them on
+ * every save.
+ * @param {import('node:fs').Dirent[]} dirents the folder's entries
+ * @param {string} dir the folder
+ * @returns {string}
+ */
+export function listingOf(dirents, dir) {
+  const entries = dirents
+    .map(entry => {
+      if (entry.isSymbolicLink()) {
+        let target = '';
+        try {
+          target = String(readlinkSyncRaw(path.join(dir, entry.name)));
+        } catch {
+          // A link that cannot be read is listed by its name alone.
+        }
+        return `l${entry.name}\0${target}`;
+      }
+      const type = entry.isDirectory() ? 'd' : entry.isFile() ? 'f' : 'o';
+      return `${type}${entry.name}`;
+    })
+    .sort();
+  return `${LISTED}${createHash('sha256').update(entries.join('\0')).digest('hex')}`;
+}
+
+/**
+ * The listing stamp of the folder at `dir` now ({@link listingOf}), absent
+ * when nothing is there, or one fixed stamp while it cannot be read.
+ * @param {string} dir
+ * @returns {string}
+ */
+export function listingStamp(dir) {
+  try {
+    return listingOf(readdirSyncRaw(dir, {withFileTypes: true}), dir);
+  } catch {
+    return fileStamp(dir) === '-' ? '-' : `${LISTED}unreadable`;
+  }
+}
+
 /**
  * Wrap fs's read calls once so that, inside `reads.run`, each path they are
  * given is added to that run's set. Outside a run they behave exactly as
@@ -194,7 +249,9 @@ function installRecorder() {
   if (recording) return;
   recording = true;
   for (const name of RECORDED) {
-    const original = fs[name];
+    // Older Node releases read native ES modules through the promise API.
+    const api = name === 'readFile' ? fs.promises : fs;
+    const original = api[name];
     if (typeof original !== 'function') continue;
     const kind = readKind(name);
     /**
@@ -230,9 +287,9 @@ function installRecorder() {
       return answer;
     };
     Object.assign(wrapped, original);
-    fs[name] = wrapped;
+    api[name] = wrapped;
   }
-  // ESM imports of node:fs see the wrapped functions too.
+  // ESM imports of node:fs and node:fs/promises see the wrapped functions too.
   syncBuiltinESMExports();
 }
 
@@ -298,7 +355,7 @@ function presenceState(file) {
  * @param {string} file
  * @returns {string}
  */
-function resolvedNow(file) {
+export function resolvedNow(file) {
   try {
     return `${RESOLVED}${realpathSyncRaw(file)}`;
   } catch {

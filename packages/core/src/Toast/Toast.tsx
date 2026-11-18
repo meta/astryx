@@ -38,7 +38,8 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
-import {pickMediaMode} from '../hooks/useAutoMediaMode';
+import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
+import {pickInvertedSide} from '../hooks/mediaSide';
 import {parseColor} from '../utils/color';
 import type {
   ToastType,
@@ -132,6 +133,11 @@ const styles = stylex.create({
   exiting: {
     opacity: 0,
     transform: `translateY(var(--_toast-swipe-exit-y, var(--_toast-swipe-y, var(--_toast-slide-y, ${TOAST_EDGE_DRIFT})))) scale(var(--_toast-swipe-scale, 1))`,
+  },
+  // The close button draws in the card's text color, the color the card's
+  // body text inherits.
+  close: {
+    color: 'inherit',
   },
   endContent: {
     flexShrink: 0,
@@ -434,7 +440,7 @@ export function ToastSurface({
   );
   const fromTokens =
     surface !== null && surface.a >= 1
-      ? pickMediaMode(
+      ? pickInvertedSide(
           surface,
           null,
           parseColor(tokens['--color-on-dark'] ?? ''),
@@ -447,6 +453,12 @@ export function ToastSurface({
       : isError || mode === 'light'
         ? 'dark'
         : 'light';
+  // Once painted, the card's text takes the side that reads best on it.
+  const measuredMediaMode = useSurfaceMediaMode(
+    rootRef,
+    true,
+    pickInvertedSide,
+  );
 
   return (
     <div
@@ -469,7 +481,7 @@ export function ToastSurface({
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode="auto" fallback={fallbackMediaMode}>
+      <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
         {renderContent ? (
           renderContent({
             body,
@@ -491,6 +503,8 @@ export function ToastSurface({
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon="close" size="sm" color="inherit" />}
+                className={themeProps('toast-close').className}
+                xstyle={styles.close}
                 label={t('@astryx.toast.dismiss')}
                 onClick={handleDismiss}
                 isIconOnly

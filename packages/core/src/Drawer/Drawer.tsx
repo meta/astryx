@@ -131,6 +131,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxShadow: shadowVars['--shadow-high'],
     // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
     // Chromium then holds a finger's drag on the page beside an open

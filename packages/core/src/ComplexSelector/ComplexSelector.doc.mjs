@@ -172,7 +172,7 @@ export const docs = {
         {
           name: 'startIcon',
           type: 'ReactNode | IconType',
-          description: 'Icon displayed at the start of the trigger.',
+          description: 'Icon displayed at the start of the trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
         },
         {
           name: 'width',
@@ -397,7 +397,7 @@ export const docsDense = {
     triggerLabel: 'Closed trigger label/content.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon.',
+    startIcon: 'Leading trigger icon; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     placement: 'Popup placement.',
     alignment: 'Popup alignment.',
     renderTrigger:

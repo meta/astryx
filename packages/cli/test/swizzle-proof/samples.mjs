@@ -280,6 +280,21 @@ export const samples = {
       },
       'aria-label': 'Dot',
     }),
+  lab__ChatVirtualizer: ({C, React}) =>
+    // A fixed-height frame, so the browser step windows real rows.
+    React.createElement(
+      'div',
+      {style: {height: 320, display: 'flex', flexDirection: 'column'}},
+      React.createElement(C, {
+        data: [
+          {id: 'a', text: 'First message'},
+          {id: 'b', text: 'Second message'},
+          {id: 'c', text: 'Third message'},
+        ],
+        getRowKey: item => item.id,
+        renderItem: ({item}) => React.createElement('p', null, item.text),
+      }),
+    ),
   lab__ChatReactionBar: ({C, React}) =>
     React.createElement(C, {
       reactions: [
@@ -555,4 +570,51 @@ export const notRendered = {
   core__NavItem: 'a style module',
   core__InteractiveRoleContext: 'a context',
   core__SizeContext: 'a context',
+};
+
+/**
+ * Targets whose doc names a required prop that neither a sample nor the doc's
+ * playground defaults give, and that render without it: the proof renders
+ * them with the defaults alone. A target with a required prop that is in none
+ * of `samples`, `needsNoSample` and `notRendered` fails by name
+ * (samples.test.mjs, and the proof before it renders).
+ */
+export const needsNoSample = {
+  core__CheckboxList: 'renders without label',
+  core__DateInput: 'renders without label',
+  core__DateRangeInput: 'renders without label, value, onChange',
+  core__DateTimeInput: 'renders without label, onChange',
+  core__Drawer: 'renders without onOpenChange',
+  core__FieldStatus: 'renders without type, message',
+  core__FileInput: 'renders without label, value, onChange',
+  core__IconButton: 'renders without label, icon',
+  core__InfoTip: 'renders without content',
+  core__InputGroup: 'renders without label',
+  core__Lightbox: 'renders without onOpenChange',
+  core__MultiSelector: 'renders without onChange',
+  core__NavIcon: 'renders without icon',
+  core__NumberInput: 'renders without onChange',
+  core__Pagination: 'renders without onChange',
+  core__PowerSearch: 'renders without onChange',
+  core__RadioList: 'renders without label, value, onChange',
+  core__SegmentedControl: 'renders without onChange',
+  core__StatusDot: 'renders without variant',
+  core__TabList: 'renders without onChange',
+  core__TimeInput: 'renders without label',
+  core__Token: 'renders without label',
+  core__Tokenizer: 'renders without searchSource, onChange',
+  core__Typeahead: 'renders without label, searchSource, value, onChange',
+  lab__ChatEmojiPicker: 'renders without onSelect',
+  lab__CircleCheckIndicator: 'renders without state',
+  lab__CircularProgress: 'renders without label',
+  lab__DialogHeroHeader: 'renders without title, media',
+  lab__EmojiPicker: 'renders without onSelect',
+  lab__LineClamp: 'renders without maxLines',
+  lab__SelectableCardGroup: 'renders without label, value, onChange',
+  lab__Stat: 'renders without label, value',
+  lab__TabBar: 'renders without value, onChange',
+  lab__TabBarMoreList: 'renders without onChange',
+  richtext__RichTextEditor: 'renders without label',
+  richtext__RichTextView: 'renders without value',
+  vega__VegaChart: 'renders without spec',
 };

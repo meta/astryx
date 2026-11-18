@@ -63,7 +63,7 @@ export async function doc(packages, pkgName, compName, {lang, zh}) {
       ERROR_CODES.ERR_UNKNOWN_PACKAGE,
     );
 
-  const result = findComponent([pkg], compName);
+  const result = await findComponent([pkg], compName);
   if (!result) {
     const lower = compName.toLowerCase();
     const hits = pkg.components.filter(c => c.toLowerCase().includes(lower));

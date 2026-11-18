@@ -14,6 +14,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 
 /**
@@ -133,6 +134,67 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   }
 
   return resolved;
+}
+
+/**
+ * The system temp folders a scratch copy may go to: the folder `os.tmpdir()`
+ * names, and `/tmp` on a POSIX system, each as written. A folder that is a
+ * disk's root or holds the home folder is left out, so a misset `TMPDIR`
+ * cannot open the whole disk or the home folder to scratch copies. Both are
+ * compared as written and by their real locations, because a write follows
+ * links: a temp folder that links to `/`, or a home folder reached through a
+ * link, cannot get around the check. A folder whose real location cannot be
+ * read is left out.
+ *
+ * @returns {string[]}
+ */
+export function tempFolders() {
+  /** @param {string} at @returns {string[] | null} as written, then its real location */
+  const spellings = at => {
+    const written = path.resolve(at);
+    try {
+      return [written, canonicalPath(written)];
+    } catch {
+      return null;
+    }
+  };
+  const homes = spellings(os.homedir()) ?? [path.resolve(os.homedir())];
+  /** @type {Map<string, string>} each real location, with its first folder as written */
+  const kept = new Map();
+  for (const folder of [
+    os.tmpdir(),
+    ...(process.platform === 'win32' ? [] : ['/tmp']),
+  ]) {
+    const forms = spellings(folder);
+    if (
+      !forms ||
+      forms.some(
+        form =>
+          form === path.parse(form).root ||
+          homes.some(home => relativeInside(form, home) !== null),
+      )
+    )
+      continue;
+    if (!kept.has(forms[1])) kept.set(forms[1], forms[0]);
+  }
+  return [...kept.values()];
+}
+
+/**
+ * The temp folder of {@link tempFolders} that holds the absolute path
+ * `target`, or null. The path is read as written and through the temp
+ * folder's own links, as `assertWithin` reads a project folder (macOS keeps
+ * `/tmp` at `/private/tmp`).
+ *
+ * @param {string} target absolute
+ * @returns {string | null}
+ */
+export function tempFolderOf(target) {
+  return (
+    tempFolders().find(
+      folder => relativeInsideRoot(path.resolve(target), folder) !== null,
+    ) ?? null
+  );
 }
 
 /**

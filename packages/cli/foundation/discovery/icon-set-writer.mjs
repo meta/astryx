@@ -56,9 +56,12 @@ import {
   moduleExportOrigin,
   staticExportBindings,
 } from './module-exports.mjs';
+import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
+
+export {iconIdOf};
 
 /**
  * An authoring error with an ERR_* code and suggestions.
@@ -74,35 +77,6 @@ export class IconSetAuthoringError extends Error {
     this.code = code;
     this.suggestions = suggestions;
   }
-}
-
-/**
- * `XMarkIcon` → `x-mark`; `Trash2` → `trash-2`; `ArrowUpDown` →
- * `arrow-up-down`; `Squares2X2Icon` and `Grid2x2` → `squares-2x2`,
- * `grid-2x2`: an icon id from an export name. A dimension (a digit, `x` or
- * `X`, a digit) stays one word.
- * @param {string} name
- */
-export function iconIdOf(name) {
-  return (
-    name
-      .replace(/Icon$/u, '')
-      // `2X2` and `2x2` are one word: lower the x first.
-      .replace(/([0-9])[xX](?=[0-9])/gu, '$1x')
-      // A one-letter word before a digit ends there: `CalendarX2` is
-      // `calendar-x-2`, as its library names it.
-      .replace(/([a-z][A-Z])(?=[0-9])/gu, '$1-')
-      // A lower-case letter before a capital or a digit ends a word, except
-      // the x inside a dimension.
-      .replace(/([a-z])(?=[A-Z0-9])/gu, (match, letter, offset, whole) =>
-        letter === 'x' && /[0-9]/u.test(whole[offset - 1] ?? '')
-          ? letter
-          : `${letter}-`,
-      )
-      .replace(/([0-9])([A-Z])/gu, '$1-$2')
-      .replace(/([A-Z])([A-Z][a-z])/gu, '$1-$2')
-      .toLowerCase()
-  );
 }
 
 /**

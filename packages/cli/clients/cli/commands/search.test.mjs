@@ -17,6 +17,10 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {requireNatively} from '../../../test-utils/native-require.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
+import {
+  getCliInvocation,
+  prefixCliCommands,
+} from '../../../foundation/env/package-manager.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../../../api/search/search.mjs')} */
@@ -384,11 +388,23 @@ describe(
           for (const [key, value] of Object.entries(result)) {
             if (value == null || value === '') continue;
             const label = `${result.domain} ${result.name}: ${key}`;
-            expect(printsField(verbose, key, value), label).toBe(true);
+            // Readiness shows as the kind's tag, only on an unready template.
+            if (key === 'isReady') {
+              const kind = value ? result.kind : `${result.kind} (not ready)`;
+              expect(printsField(plain, 'kind', kind), label).toBe(true);
+              continue;
+            }
+            // Text shows a description's commands with the project's
+            // command, as docs text does; JSON keeps them bare.
+            const run = getCliInvocation(REPO_ROOT);
+            /** @param {unknown} v */
+            const asText = v =>
+              key === 'description' ? prefixCliCommands(String(v), run) : v;
+            expect(printsField(verbose, key, asText(value)), label).toBe(true);
             if (key !== 'score' && key !== 'reason') {
               // The plain view keeps the first sentence of a description.
               const shown =
-                key === 'description' ? firstSentence(value) : value;
+                key === 'description' ? asText(firstSentence(value)) : value;
               expect(printsField(plain, key, shown), label).toBe(true);
             }
           }
