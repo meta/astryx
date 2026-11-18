@@ -74,7 +74,10 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  folderIsEmpty,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
 import {forkFileNames, renamedEntry} from './_fork.mjs';
 import {
@@ -2085,7 +2088,8 @@ export async function addSharedThemeToApp(source, options) {
         : await sharedEditorProblem(staged.editor.dir, name);
     if (staged.editor && editorRefusal) editorNote = editorRefusal;
     else if (staged.editor) {
-      if (!fs.existsSync(editorDir)) editorPlan = 'new';
+      // (A folder of only system files, `.DS_Store`, holds no editor state.)
+      if (folderIsEmpty(editorDir)) editorPlan = 'new';
       else if (
         previousEditor &&
         changedSharedFiles(editorDir, {files: previousEditor}).length === 0 &&
@@ -2117,7 +2121,7 @@ export async function addSharedThemeToApp(source, options) {
         }
         editorWriting = true;
         copyTree(staged.editor.dir, editorDir);
-        editorFiles = filesUnder(editorDir);
+        editorFiles = filesUnder(staged.editor.dir);
       }
       const {outputDir, files} = ejectThemeFiles(theme, {
         cwd,
@@ -2127,16 +2131,23 @@ export async function addSharedThemeToApp(source, options) {
       // With the editor's state beside it, the copy stays the editor's:
       // the shared descriptor keeps the mark the editor writes, so the
       // editor's later builds update this copy.
+      // (The descriptor written is eject's, maintained: false, under the
+      // editor's own first line.)
       if (editorFiles.length) {
         const doc = files.find(file => file.endsWith('Theme.doc.mjs'));
         const shared = doc ? path.join(staged.root, name, doc) : null;
-        if (
-          doc &&
-          shared &&
-          fs.existsSync(shared) &&
-          fs.readFileSync(shared, 'utf-8').includes(APP_COPY_MARK)
-        )
-          fs.copyFileSync(shared, path.join(target, doc));
+        const markLine =
+          shared && fs.existsSync(shared)
+            ? fs
+                .readFileSync(shared, 'utf-8')
+                .split('\n')
+                .find(line => line.includes(APP_COPY_MARK))
+            : undefined;
+        if (doc && markLine && /^\s*(?:\/\/|\/\*)/.test(markLine))
+          fs.writeFileSync(
+            path.join(target, doc),
+            `${markLine}\n\n${localThemeDescriptor(theme)}`,
+          );
       }
       const install = installSharedThemeNeeds(
         forkNeeds(outputDir, files, cwd),
@@ -2409,11 +2420,14 @@ function undoSharedTheme(projectDir, slug, remaining) {
   const dir = path.join(projectDir, LOCAL_THEME_ROOT, slug);
   const receipt = readSharedReceipt(dir);
   if (!receipt) return null;
-  const kept = changedSharedFiles(dir, receipt);
+  const changed = changedSharedFiles(dir, receipt);
+  // (Kept and removed files are named by their path in the project.)
+  const kept = changed.map(file => relFrom(projectDir, path.join(dir, file)));
   /** @type {string[]} */
   const removed = [];
   for (const file of Object.keys(receipt.files)) {
-    if (kept.includes(file) || !fs.existsSync(path.join(dir, file))) continue;
+    if (changed.includes(file) || !fs.existsSync(path.join(dir, file)))
+      continue;
     fs.rmSync(path.join(dir, file), {force: true});
     removed.push(relFrom(projectDir, path.join(dir, file)));
   }

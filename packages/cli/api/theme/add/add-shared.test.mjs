@@ -359,7 +359,7 @@ describe('theme add with a shared theme', () => {
     await themeAdd(path.join(shared, 'ocean'), {cwd: app});
     fs.writeFileSync(path.join(app, 'src/themes/ocean/ocean.css'), 'mine\n');
     const again = await themeRemove('ocean', {cwd: app});
-    expect(again.data.undo?.kept).toEqual(['ocean.css']);
+    expect(again.data.undo?.kept).toEqual(['src/themes/ocean/ocean.css']);
     expect(
       fs.readFileSync(path.join(app, 'src/themes/ocean/ocean.css'), 'utf8'),
     ).toBe('mine\n');
@@ -729,6 +729,33 @@ describe('theme add with a shared theme', () => {
       expect(tree(app)).toEqual(before);
     },
   );
+
+  it('copies editor state into a folder of only system files, and keeps the copy maintained: false', async () => {
+    fs.mkdirSync(path.join(app, 'themes/ocean'), {recursive: true});
+    fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), '');
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    // (A shared descriptor under the editor's mark that says maintained.)
+    fs.writeFileSync(
+      path.join(shared, 'b', 'app-copy', 'oceanTheme.doc.mjs'),
+      "// Written by `astryx experimental theme editor show ocean` after every build.\n\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'ocean', displayName: 'ocean', description: 'The ocean theme.', maintained: true};\n",
+    );
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: ['ocean.settings.json'],
+    });
+    expect(result.data.copy?.editor).not.toHaveProperty('notCopied');
+    const doc = fs.readFileSync(
+      path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
+      'utf8',
+    );
+    expect(doc).toMatch(/^\/\/ Written by `astryx experimental theme editor/);
+    expect(doc).toMatch(/maintained: false/);
+  });
 
   it('names two folders of editor state, and copies neither', async () => {
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');

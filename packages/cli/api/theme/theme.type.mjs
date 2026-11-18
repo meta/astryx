@@ -169,8 +169,10 @@
  * lockfile when it installed), `config` the module, the default and the
  * dependencies it added, and `editor` the theme editor's saved state the
  * bundle carries: where it sat (`from`), the editor's folder for the theme
- * (`outputDir`), the files copied there, and `notCopied`, why none were,
- * when that folder already holds editor state theme add did not write.
+ * (`outputDir`), the files copied there, and `notCopied`, why none were
+ * (settings the editor refuses, a palette recipe this CLI does not know, more
+ * than one folder of editor state, or a folder there that holds editor state
+ * theme add did not write).
  * `undo` is present when `theme remove` removed a theme `theme add` copied
  * from a shared theme: `removed` the files of the copy it deleted, `kept`
  * those changed since the add (left as they are), `uninstalled` the packages
