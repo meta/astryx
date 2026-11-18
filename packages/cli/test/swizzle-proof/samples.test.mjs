@@ -96,5 +96,8 @@ describe('swizzle proof samples', () => {
 
   it('keep a mark only for a target that has no sample', () => {
     expect(Object.keys(needsNoSample).filter(key => samples[key])).toEqual([]);
+    // Every target with a required prop renders with it: none is left to
+    // render with its defaults alone.
+    expect(needsNoSample).toEqual({});
   });
 });
