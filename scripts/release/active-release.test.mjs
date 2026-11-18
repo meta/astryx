@@ -30,6 +30,7 @@ import {
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
+  validateCodemodPromotionApplicabilityMove,
   validateReleaseDiff,
   validateReleaseTestRepair,
   validateHistoricalReleaseMergeBack,
@@ -37,6 +38,7 @@ import {
   validateReleaseState,
   writeAuthority,
 } from './active-release.mjs';
+import {classifyReleaseDiff} from './release-paths.mjs';
 
 const CUT = '1'.repeat(40);
 const HEAD = '2'.repeat(40);
@@ -456,6 +458,60 @@ describe('active release branch authority', () => {
     ).toEqual([]);
   });
 
+  it('allows only the exact AST-057 pointers moved by codemod promotion', () => {
+    const spec = 'docs/specs/AST-057-row-actions/spec.md';
+    const sources = [
+      'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+      'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+    ];
+    const destinations = sources.map(file =>
+      file.replace('/transforms/next/', '/transforms/v0.7.17/'),
+    );
+    const promotionEntries = sources.map(
+      (file, index) => `R100\t${file}\t${destinations[index]}`,
+    );
+    const entries = [`M\t${spec}`, ...promotionEntries];
+    const before = `{"paths":${JSON.stringify(sources)}}\n`;
+    const after = sources.reduce(
+      (text, file, index) => text.replace(file, destinations[index]),
+      before,
+    );
+
+    expect(classifyReleaseDiff(entries)).toBe('version-bump');
+    expect(
+      validateCodemodPromotionApplicabilityMove({
+        before,
+        after,
+        entries,
+        status: 'M',
+        version: '0.7.17',
+      }),
+    ).toEqual([]);
+    expect(
+      validateReleaseDiff(entries, {
+        validatedCodemodPromotionPaths: new Set([spec]),
+      }),
+    ).toEqual([]);
+    expect(validateReleaseDiff(entries)).toContain(
+      `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
+    );
+
+    expect(
+      validateCodemodPromotionApplicabilityMove({
+        before,
+        after: after.replace('{"paths"', '{"other"'),
+        entries,
+        status: 'M',
+        version: '0.7.17',
+      }),
+    ).toContain(
+      `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+    expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
+      'invalid',
+    );
+  });
+
   it('admits one post-bump test repair whose patch already merged on main', () => {
     const patchId = 'a'.repeat(40);
     const changeDigest = 'c'.repeat(64);
@@ -588,8 +644,7 @@ describe('active release branch authority', () => {
 +  1,
  );
  after();`,
-        expected:
-          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+        expected: 'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
       },
       {
         diff: `diff --git a/test.mjs b/test.mjs
@@ -652,7 +707,8 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
       );
     }
-    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const portStatements =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1,7 +1,7 @@
@@ -673,7 +729,8 @@ describe('active release branch authority', () => {
  cleanup();`);
     expect(portStatements).not.toContain('<unbounded changed statement>');
 
-    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const multiStatementChange =
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1 +1 @@
@@ -681,7 +738,10 @@ describe('active release branch authority', () => {
 +safe(); expect(value).toBe(false);`);
     expect(multiStatementChange).toContain('expect(value).toBe(false);');
     expect(
-      repair({changedLines: undefined, changedStatements: multiStatementChange}),
+      repair({
+        changedLines: undefined,
+        changedStatements: multiStatementChange,
+      }),
     ).toContain(
       'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
     );
@@ -741,8 +801,7 @@ describe('active release branch authority', () => {
     roots.push(root);
     const testFile =
       'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
-    const before =
-      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const before = 'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
     const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
     const {cut} = createRepository(root, [
       {
@@ -822,8 +881,7 @@ describe('active release branch authority', () => {
         name: 'whitespaceRepair',
         parent: 'releaseBase',
         files: {
-          [testFile]:
-            'const ready = true;\nawait mouse Drag(page);\n\n',
+          [testFile]: 'const ready = true;\nawait mouse Drag(page);\n\n',
         },
       },
       {
