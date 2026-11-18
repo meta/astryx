@@ -512,6 +512,36 @@ describe("a part's own piece taken away", () => {
     },
     T,
   );
+
+  it(
+    'folds every option of every look, each step once, naming each part once',
+    async () => {
+      /** Every line of the first answer's options. @param {any} data */
+      const all = data =>
+        JSON.stringify(
+          (data.results ?? []).find((/** @type {any} */ r) =>
+            r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+          )?.commands ?? [],
+        );
+      // (A size is the largest look's; the others keep the steps between
+      // them, so the type scale keeps its shape.)
+      const sizedData = await answer('display headings 60px');
+      const sized = all(sizedData);
+      expect(sized).toMatch(/--text-display-1-size 60px/);
+      for (const n of [2, 3]) {
+        const px = Number(new RegExp(`--text-display-${n}-size (\\d+)px`).exec(sized)?.[1]);
+        expect(px).toBeGreaterThan(0);
+        expect(px).toBeLessThan(60);
+      }
+      expect(JSON.stringify(sizedData.results)).toMatch(/scaled to keep the steps/);
+      const georgia = first(await answer('display headings in Georgia'));
+      expect(georgia.length).toBe(new Set(georgia).size);
+      expect(JSON.stringify((await answer('display headings color')).results)).not.toMatch(
+        /heading and heading/,
+      );
+    },
+    T,
+  );
 });
 
 describe('a display heading', () => {

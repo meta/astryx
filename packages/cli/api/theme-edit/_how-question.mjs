@@ -44,7 +44,12 @@ import {
   wordTable,
   pageColorNote,
 } from './_tables.mjs';
-import {baseInstalled, installLine, packageInstalled} from './_project.mjs';
+import {
+  baseInstalled,
+  installLine,
+  literals,
+  packageInstalled,
+} from './_project.mjs';
 import {
   PALETTE_DIALS,
   STATUS_TOKEN,
@@ -8247,7 +8252,7 @@ export function draftAnswer(ctx, env, question) {
     if (!p || !m) continue;
     const values = numberedLookValues(
       m[2],
-      partComponentDocs(ctx, p.on).map(d => String(d.doc.props?.[m[1]]?.type ?? '')).join(' | '),
+      partComponentDocs(ctx, p.on).flatMap(d => literals(d.doc.props?.[m[1]]?.type)),
       /** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
     );
     if (values.length < 2) continue;
@@ -29000,7 +29005,10 @@ export function draftAnswer(ctx, env, question) {
   }
 
   // ("heavy display headings", "make them blue" after it: one answer.)
-  oneAnswerPerFamily(drafts, d => draftClause.get(d), clauses, pluralSaid);
+  oneAnswerPerFamily(drafts, d => draftClause.get(d), clauses, pluralSaid, w => {
+    const token = `--text-${w.split(':')[1]}-size`;
+    return lengthPx(String(resolvedValue(token) || current(token) || ''));
+  });
   /** @type {Draft[]} */
   const result = [];
   // Several changes in one question: one answer that runs them all first,
@@ -31901,7 +31909,7 @@ export function draftAnswer(ctx, env, question) {
     : undefined;
   if (named0)
     result.push({
-      text: `"${named0.text}" names ${named0.parts.map(p => p.on).join(' and ')} and what to look at, but no change (a value, or a way such as darker or more); how ${named0.parts[0].on} shows what it has now`,
+      text: `"${named0.text}" names ${[...new Set(named0.parts.map(p => p.on))].join(' and ')} and what to look at, but no change (a value, or a way such as darker or more); how ${named0.parts[0].on} shows what it has now`,
       options: [],
       lookup: `${HOW} ${named0.parts[0].on}`,
     });
