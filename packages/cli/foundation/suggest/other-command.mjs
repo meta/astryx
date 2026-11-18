@@ -521,21 +521,18 @@ const HOOK_KEYWORDS_CODE = [
  * @param {string} coreDir
  * @returns {Promise<Array<{name: string, keywords: string[]}>>}
  */
-function coreHookKeywords(coreDir) {
+export async function coreHookKeywords(coreDir) {
+  const {HOOK_SKIP_DIRS, discoverHookKeywords} =
+    await import('../discovery/hook-discovery.mjs');
   return keptTreeSummaryAsync(
     {
       kind: 'core-hook-keywords',
       roots: [path.join(coreDir, 'src')],
       code: HOOK_KEYWORDS_CODE,
-      skip: name =>
-        name === 'utils' || name === '__tests__' || name === 'node_modules',
+      skip: name => HOOK_SKIP_DIRS.has(name),
       recorded: true,
     },
-    async () => {
-      const {discoverHookKeywords} =
-        await import('../discovery/hook-discovery.mjs');
-      return discoverHookKeywords(coreDir);
-    },
+    async () => discoverHookKeywords(coreDir),
   );
 }
 
