@@ -83,6 +83,12 @@ import {
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
+  // A layer that hides with its anchor while the anchor is out of view. It
+  // stays open; visibility, not display, so its box and its anchor hold.
+  anchorOutOfView: {
+    visibility: 'hidden',
+    pointerEvents: 'none',
+  },
   // The software keyboard's block-size cap, on the layer's own element. Every
   // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
   // layer nested in a capped one does not inherit the outer cap. The surfaces
@@ -534,6 +540,18 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * runtime's read.
    */
   writesEntranceSide?: boolean;
+  /**
+   * While the anchor is out of view — clipped by the viewport or a scrolling
+   * ancestor, or removed from the page — the layer is hidden and takes no
+   * pointer input. It stays open and shows again in place when the anchor
+   * returns.
+   */
+  hidesWithAnchor?: boolean;
+  /**
+   * Called as a layer that hides with its anchor starts to hide, before the
+   * hidden style commits, so the owner can move focus out first.
+   */
+  onAnchorHidden?: () => void;
 }
 
 function toCssLength(value: number | string): string {
@@ -1311,6 +1329,13 @@ function useLayerImplementation(
     mode === 'context' && options.waitsForAnchor === true,
   );
   const onCloseStartRef = useCommittedRef(onCloseStart);
+  const hidesWithAnchor =
+    mode === 'context' ? (options.hidesWithAnchor ?? false) : false;
+  // Read by the trigger ref, which stays stable across renders.
+  const hidesWithAnchorRef = useCommittedRef(hidesWithAnchor);
+  const onAnchorHiddenRef = useCommittedRef(
+    mode === 'context' ? options.onAnchorHidden : undefined,
+  );
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1319,14 +1344,26 @@ function useLayerImplementation(
   // fallback is withdrawn while it is not, so an aligned layer holds its
   // position and size instead of chasing an anchor nobody can see.
   const [isAnchorInView, setIsAnchorInView] = useState(true);
+  // The open layer's anchor visibility observer. The trigger ref moves it to
+  // a replaced anchor of a layer that hides with its anchor.
+  const anchorObserverRef = useRef<IntersectionObserver | null>(null);
+  // The element that observer watches, so a replaced anchor is unobserved
+  // even when it detached in an earlier commit.
+  const observedAnchorRef = useRef<Element | null>(null);
   // Mirror so the pre-paint read commits nothing when the answer is unchanged.
   const isAnchorInViewRef = useRef(true);
-  const updateAnchorInView = useCallback((inView: boolean) => {
-    if (isAnchorInViewRef.current !== inView) {
-      isAnchorInViewRef.current = inView;
-      setIsAnchorInView(inView);
-    }
-  }, []);
+  const updateAnchorInView = useCallback(
+    (inView: boolean) => {
+      if (isAnchorInViewRef.current !== inView) {
+        isAnchorInViewRef.current = inView;
+        if (!inView && hidesWithAnchorRef.current && isOpenRef.current) {
+          onAnchorHiddenRef.current?.();
+        }
+        setIsAnchorInView(inView);
+      }
+    },
+    [hidesWithAnchorRef, onAnchorHiddenRef],
+  );
   // The inset the app declared on LayerProvider (FR6). Read through context
   // and written inline on the layer, so a corrective portal cannot escape it
   // and no measurement is needed to apply it.
@@ -2082,6 +2119,17 @@ function useLayerImplementation(
       // A trigger in another document (a frame, a pop-out window) has its
       // presses counted there too, before its first press.
       listenForGestures(el.ownerDocument);
+      // Only a layer that hides with its anchor follows a new anchor's
+      // visibility; every other layer keeps no DOM-derived state.
+      const anchorObserver = anchorObserverRef.current;
+      const observed = observedAnchorRef.current;
+      if (hidesWithAnchorRef.current && anchorObserver && el !== observed) {
+        if (observed) {
+          anchorObserver.unobserve(observed);
+        }
+        anchorObserver.observe(el);
+        observedAnchorRef.current = el;
+      }
 
       // A trigger replaced while the layer is open (React detaches the old
       // node with `null`, then attaches the new one): the old trigger's
@@ -2120,7 +2168,7 @@ function useLayerImplementation(
         });
       }
     },
-    [anchorId, cancelPendingAnchorWait, keepsAnchorClear],
+    [anchorId, cancelPendingAnchorWait, hidesWithAnchorRef, keepsAnchorClear],
   );
 
   // Arm only when the dismissing gesture's click is still ahead of us. Some
@@ -2442,7 +2490,15 @@ function useLayerImplementation(
       }
     });
     observer.observe(anchor);
-    return () => observer.disconnect();
+    anchorObserverRef.current = observer;
+    observedAnchorRef.current = anchor;
+    return () => {
+      observer.disconnect();
+      if (anchorObserverRef.current === observer) {
+        anchorObserverRef.current = null;
+        observedAnchorRef.current = null;
+      }
+    };
   }, [isOpen, mode, updateAnchorInView]);
 
   // A layer that keeps its anchor clear re-reads its geometry while it
@@ -2559,6 +2615,7 @@ function useLayerImplementation(
         viewportStyles,
         offsetStyle,
         xstyle,
+        hidesWithAnchor && !isAnchorInView && styles.anchorOutOfView,
       );
       const combinedClassName = extraClassName
         ? `${extraClassName} ${stylexResult.className ?? ''}`
@@ -2611,6 +2668,7 @@ function useLayerImplementation(
     [
       anchorId,
       declaredInset,
+      hidesWithAnchor,
       id,
       isAnchorInView,
       keepsAnchorClear,
