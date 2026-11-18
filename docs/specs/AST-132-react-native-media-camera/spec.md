@@ -215,12 +215,13 @@ isPossible})`.
     display zoom: 1 is the main lens, 0.5 the ultra-wide where the device has
     one, clamped to the device's range), `flash` (`auto`, `on`, or `off`, for
     the next photo), `isTorchOn`, `isActive` (false pauses the camera),
-    `codeTypes`, `scanRegion`, `simulation`, and `label`. It draws `children`
-    over the preview.
+    `simulation`, and `label`; on iOS also `codeTypes` and `scanRegion`, iOS
+    platform props (FR10). It draws `children` over the preview.
   - Events: `onReady(capabilities)` with `minZoom`, `maxZoom`, `hasFlash`,
     `hasTorch`, and `hasUltraWide`; `onStatusChange({status})` with
     `starting`, `ready`, `simulated`, `permission-required`, `denied`, or
-    `error`; `onError(failure)`; and `onCodesScanned({codes})` (FR10).
+    `error`; `onError(failure)`; and, on iOS, `onCodesScanned({codes})`
+    (FR10).
   - `ref` is a handle with `takePhoto(options?)` and `focus({x, y})`, which
     focuses and exposes at a point in the view's coordinates and returns to
     continuous focus when the subject changes. `takePhoto` resolves
@@ -237,7 +238,11 @@ isPossible})`.
     to the foreground.
   - Camera configuration, capture, and JPEG encoding run off the UI thread;
     the preview draws on the platform's own layer.
-- **FR10 — Live codes from the camera.**
+- **FR10 — Live codes from the camera on iOS.**
+  - `codeTypes`, `scanRegion`, and `onCodesScanned` are `CameraView`'s iOS
+    platform props (`spec:AST-082/FR3`, `spec:AST-082/FR5`). Android's
+    `CameraView` type has none of them, so Android code that uses them fails
+    at type check (DEC-6).
   - `codeTypes` turns detection on for any of `qr`, `ean13`, `ean8`, `upce`,
     `code128`, `code39`, `code93`, `itf14`, `codabar`, `pdf417`, `aztec`, and
     `datamatrix`; an empty or absent list turns it off. Detection runs on the same
@@ -250,10 +255,7 @@ isPossible})`.
     four for a 2D code, and a box around a 1D code.
   - `createCodeDetector({repeatAfterMs})` turns the stream into one moment per
     code.
-  - iOS detects codes with the system's own metadata output. On Android,
-    `codeTypes` answers `unsupported`: a `CameraView` with `codeTypes` reports
-    `onError` with `unsupported` once per mount, and the preview and capture
-    work as usual (DEC-6).
+  - iOS detects codes with the system's own metadata output.
 - **FR11 — The simulated camera.** On a device without a camera
   (`hasHardware` false: the iOS Simulator, an emulator without one), where the
   view is absent (Jest, an app without `camera`), or with
@@ -327,7 +329,7 @@ isPossible})`.
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxAudio`      | `AVPlayer` per player with the time-domain pitch algorithm; `AVAudioSession` playback category; `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`; background playback with the app's `audio` background mode; levels through an asset reader to float PCM. | Media3 `ExoPlayer` per player on the main thread with its audio focus; a `MediaSessionService` (foreground service of type `mediaPlayback`) and its media notification; levels through `MediaExtractor` and `MediaCodec`. |
 | `AstryxVideoView`  | `AVPlayerLayer` over the module's player; `AVPictureInPictureController`; `AVPlayerViewController` for `controls: 'system'`.                                                                                                                                   | Media3 `PlayerView` over the module's player, with its controller for `controls: 'system'`; picture in picture in the platform's own activity, started by the app and closed by the person.                               |
-| `AstryxCameraView` | `AVCaptureSession` with a preview layer, a photo output, and a metadata output for codes on the same session; the region of interest from `scanRegion`; orientation from the rotation coordinator.                                                             | CameraX: a `PreviewView` and an `ImageCapture`; `codeTypes` answers `unsupported` (FR10).                                                                                                                                 |
+| `AstryxCameraView` | `AVCaptureSession` with a preview layer, a photo output, and a metadata output for codes on the same session; the region of interest from `scanRegion`; orientation from the rotation coordinator.                                                             | CameraX: a `PreviewView` and an `ImageCapture`; code scanning is iOS-only (FR10).                                                                                                                                         |
 
 - FR9 and FR14 gap: `CameraView` lacks the `label` prop, and its preview
   lacks an accessible name and status announcements.
@@ -354,22 +356,22 @@ isPossible})`.
 
 ## Verification
 
-| Contract | Verification                                                                                                                         | Representative states                                                                                    | Mutation or failure expectation                                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader                                            | `media` and `camera` opted out; opted in                                                                 | An opted-out app links a media framework, declares the camera permission or the media service, or the library imports a capability outside its loader           |
-| FR2      | The platform's spec rules check; `contracts.json` against the codegen specs                                                          | each module method; each view prop, command, and event                                                   | A listed member is missing, a shipped member changes, or a method rejects                                                                                       |
-| FR3      | The media contract suite over the `./testing` double (`mockMediaCapability`) and on devices                                          | open, play, pause, seek, rate, volume, mute, loop, release; a released player                            | A state is missing a field, a muted player loses its volume, a looping player reports `ended`, or a released player still delivers                              |
-| FR5      | Device checks of interruptions, routes, the lock screen, and the Now Playing card; JVM tests of the background and Now Playing rules | a call; headphones out; background with and without the declaration; two Now-Playing players, one closed | The player keeps playing through an interruption, resumes after a route loss, starts a service without the declaration, or loses the card wrongly               |
-| FR6      | Unit tests through `scriptAudioLevels`; Simulator and emulator reads                                                                 | a file; bytes in slices; `onProgress`; a cancel; a remote URL; a long file                               | A level falls outside 0 to 1, a chunk arrives out of order, bytes reach a file, a remote URL is read, or a read is refused for its size                         |
-| FR7      | Library and platform tests through the doubles; Simulator and emulator checks with two views of one player                           | inline then full screen; `contain` and `cover`; `system` controls; `volume` set and unset                | The second view restarts the player, an unset prop changes the player, or the size event is missing                                                             |
-| FR8      | Device and emulator checks of picture in picture; Simulator check of `isSupported`                                                   | start and stop; automatic start on iOS; leaving the app while it shows                                   | Android shows the whole app, the player pauses on leaving, or a one-platform feature answers true on the other                                                  |
-| FR9      | Unit tests of `CameraView` through `mockCameraCapability`; device and emulator checks                                                | each permission state; facing, zoom, flash, torch; `takePhoto` with and without a ready camera           | The view prompts, mounts the camera without `granted`, or `takePhoto` rejects                                                                                   |
-| FR10     | Unit tests of the code mapping and the detector; iOS device checks; an emulator check of the Android answer                          | a code inside and outside the region; a code that leaves; `codeTypes` on Android                         | A code outside the region is reported, events come faster than every 100 ms, no empty list follows the last code, or Android answers anything but `unsupported` |
-| FR11     | Unit tests of the simulated camera; Simulator renders                                                                                | no camera; `simulation.isEnabled`; Reduce Motion; simulated codes                                        | A device without a camera prompts, the scene moves under Reduce Motion, or a simulated photo carries a `uri`                                                    |
-| FR12     | Library tests of `useAudioPlayer`, `useVideoPlayer`, and `VideoView`                                                                 | a source change; unmount; full screen; picture in picture; a changed option                              | A player leaks after unmount, a callback is not stable, or full screen opens a second player                                                                    |
-| FR13     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                                | each capability not opted in; the view absent; an unknown native reason                                  | A call throws, a reason falls outside the set, `no-native-view` is reported more than once, or a hook does not report `unavailable`                             |
-| FR14     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                                 | `AstryxVideoView` bare and with system controls; the camera's status changes                             | The bare picture is read, the system controls are covered, or a camera status change is not announced                                                           |
-| FR15     | The platform's spec rules check of the named features                                                                                | a binary without a picture-in-picture feature row                                                        | The JavaScript uses a feature the binary does not report                                                                                                        |
+| Contract | Verification                                                                                                                         | Representative states                                                                                    | Mutation or failure expectation                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader                                            | `media` and `camera` opted out; opted in                                                                 | An opted-out app links a media framework, declares the camera permission or the media service, or the library imports a capability outside its loader                 |
+| FR2      | The platform's spec rules check; `contracts.json` against the codegen specs                                                          | each module method; each view prop, command, and event                                                   | A listed member is missing, a shipped member changes, or a method rejects                                                                                             |
+| FR3      | The media contract suite over the `./testing` double (`mockMediaCapability`) and on devices                                          | open, play, pause, seek, rate, volume, mute, loop, release; a released player                            | A state is missing a field, a muted player loses its volume, a looping player reports `ended`, or a released player still delivers                                    |
+| FR5      | Device checks of interruptions, routes, the lock screen, and the Now Playing card; JVM tests of the background and Now Playing rules | a call; headphones out; background with and without the declaration; two Now-Playing players, one closed | The player keeps playing through an interruption, resumes after a route loss, starts a service without the declaration, or loses the card wrongly                     |
+| FR6      | Unit tests through `scriptAudioLevels`; Simulator and emulator reads                                                                 | a file; bytes in slices; `onProgress`; a cancel; a remote URL; a long file                               | A level falls outside 0 to 1, a chunk arrives out of order, bytes reach a file, a remote URL is read, or a read is refused for its size                               |
+| FR7      | Library and platform tests through the doubles; Simulator and emulator checks with two views of one player                           | inline then full screen; `contain` and `cover`; `system` controls; `volume` set and unset                | The second view restarts the player, an unset prop changes the player, or the size event is missing                                                                   |
+| FR8      | Device and emulator checks of picture in picture; Simulator check of `isSupported`                                                   | start and stop; automatic start on iOS; leaving the app while it shows                                   | Android shows the whole app, the player pauses on leaving, or a one-platform feature answers true on the other                                                        |
+| FR9      | Unit tests of `CameraView` through `mockCameraCapability`; device and emulator checks                                                | each permission state; facing, zoom, flash, torch; `takePhoto` with and without a ready camera           | The view prompts, mounts the camera without `granted`, or `takePhoto` rejects                                                                                         |
+| FR10     | Unit tests of the code mapping and the detector; iOS device checks; a type check of Android code                                     | a code inside and outside the region; a code that leaves; `codeTypes` in Android code                    | A code outside the region is reported, events come faster than every 100 ms, no empty list follows the last code, or Android code that passes `codeTypes` type-checks |
+| FR11     | Unit tests of the simulated camera; Simulator renders                                                                                | no camera; `simulation.isEnabled`; Reduce Motion; simulated codes                                        | A device without a camera prompts, the scene moves under Reduce Motion, or a simulated photo carries a `uri`                                                          |
+| FR12     | Library tests of `useAudioPlayer`, `useVideoPlayer`, and `VideoView`                                                                 | a source change; unmount; full screen; picture in picture; a changed option                              | A player leaks after unmount, a callback is not stable, or full screen opens a second player                                                                          |
+| FR13     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                                | each capability not opted in; the view absent; an unknown native reason                                  | A call throws, a reason falls outside the set, `no-native-view` is reported more than once, or a hook does not report `unavailable`                                   |
+| FR14     | VoiceOver and TalkBack checks on the Simulator, emulator, and device                                                                 | `AstryxVideoView` bare and with system controls; the camera's status changes                             | The bare picture is read, the system controls are covered, or a camera status change is not announced                                                                 |
+| FR15     | The platform's spec rules check of the named features                                                                                | a binary without a picture-in-picture feature row                                                        | The JavaScript uses a feature the binary does not report                                                                                                              |
 
 ## Decision log
 
@@ -422,7 +424,9 @@ stays in the core package's `camera` capability, because the `camera` create tem
 
 iOS scans codes with the system's own metadata output. Android has no system
 code decoder, and Astryx takes no third-party native dependency
-(`spec:AST-112/FR2`), so on Android `codeTypes` answers `unsupported`.
+(`spec:AST-112/FR2`), so code scanning is part of `CameraView`'s iOS platform
+contract, and Android code that asks for it fails at type check
+(`spec:AST-082/FR3`).
 
 ## Open questions
 
