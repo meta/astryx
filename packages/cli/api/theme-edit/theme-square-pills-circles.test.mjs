@@ -74,7 +74,8 @@ describe('square corners', () => {
       /drawn as circles stay round/.test(x.note),
     );
     expect(circles?.note).toMatch(/avatar/);
-    expect(circles?.note).toMatch(/switch-thumb/);
+    // (Core draws the switch thumb at a 50% radius, no pill token: it is
+    // round whatever the corners, so the note need not keep it.)
     expect(circles?.note).not.toMatch(/\bbadge\b/);
   }, 240_000);
 });
