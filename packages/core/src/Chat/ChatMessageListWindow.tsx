@@ -39,8 +39,9 @@ import type {
 } from './chatMessageListVirtualization';
 import {
   isFollowingNewest,
-  streamScrollPositions,
-  streamScrollShifts,
+  shiftStreamScroll,
+  subscribeStreamScroll,
+  unlockStreamScroll,
 } from './chatStreamScrollChannel';
 
 /** The size of a message that has not rendered yet, in CSS px. */
@@ -86,36 +87,6 @@ const densityRowGap: Record<ChatDensity, stylex.StyleXStyles> = {
   balanced: rowGapStyles[4],
   spacious: rowGapStyles[6],
 };
-
-/**
- * Moves the position through the stream scroll on `scroller`, so it never
- * reads a correction as the reader's scroll.
- */
-function shiftScroller(scroller: HTMLElement, delta: number) {
-  const shift = streamScrollShifts.get(scroller);
-  if (shift == null) {
-    scroller.scrollTop += delta;
-  } else {
-    shift.shiftBy(delta);
-  }
-}
-
-/** Takes the position the stream scroll on `scroller` reads for each scroll event. */
-function subscribePosition(
-  scroller: HTMLElement,
-  listener: (top: number, isAtEnd: boolean) => void,
-): () => void {
-  let listeners = streamScrollPositions.get(scroller);
-  if (listeners == null) {
-    listeners = new Set();
-    streamScrollPositions.set(scroller, listeners);
-  }
-  const subscribed = listeners;
-  subscribed.add(listener);
-  return () => {
-    subscribed.delete(listener);
-  };
-}
 
 interface WindowRowProps {
   itemKey: ListWindowKey;
@@ -207,14 +178,14 @@ function WindowedItems({
       shiftBy: (delta: number) => {
         const scroller = scrollerRef.current;
         if (scroller != null) {
-          shiftScroller(scroller, delta);
+          shiftStreamScroll(scroller, delta);
         }
       },
       jumpTo: (top: number) => {
         const scroller = scrollerRef.current;
         if (scroller != null) {
-          streamScrollShifts.get(scroller)?.unlock();
-          shiftScroller(scroller, top - scroller.scrollTop);
+          unlockStreamScroll(scroller);
+          shiftStreamScroll(scroller, top - scroller.scrollTop);
         }
       },
     }),
@@ -241,7 +212,7 @@ function WindowedItems({
     content: contentRef,
     focusTarget: logRef,
     writer,
-    subscribePosition,
+    subscribePosition: subscribeStreamScroll,
     isEndAnchored,
     isLastRetained: true,
   });

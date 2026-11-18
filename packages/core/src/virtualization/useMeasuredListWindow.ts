@@ -241,10 +241,12 @@ function createMeasuredListEngine() {
     return sizes.get(keys[index]) ?? latest?.estimateSize(index) ?? 0;
   }
 
-  function isEnd(): boolean {
-    return (
-      reveal === undefined && (isOpening || latest?.isEndAnchored() === true)
-    );
+  /**
+   * Whether the end is the anchor. A render passes its own reader; event
+   * callbacks read the committed options.
+   */
+  function isEnd(isEndAnchored = latest?.isEndAnchored): boolean {
+    return reveal === undefined && (isOpening || isEndAnchored?.() === true);
   }
 
   function topInView(index: number): number {
@@ -260,14 +262,14 @@ function createMeasuredListEngine() {
     anchor = {key: keys[index], top: topInView(index)};
   }
 
-  function captureHold(): Hold | undefined {
+  function captureHold(isEndAnchored?: () => boolean): Hold | undefined {
     if (keys.length === 0) {
       return undefined;
     }
     if (reveal !== undefined) {
       return {key: reveal.key, top: 0, viewport: viewportSize, isEnd: false};
     }
-    if (isEnd()) {
+    if (isEnd(isEndAnchored)) {
       const last = keys.length - 1;
       return {
         key: keys[last],
@@ -616,6 +618,7 @@ function createMeasuredListEngine() {
     estimateSize: (index: number) => number,
     focusIndex: number | undefined,
     isLastRetained: boolean,
+    isEndAnchored: () => boolean,
   ): Plan {
     const nextOffsets = buildItemOffsets(
       nextKeys.length,
@@ -631,7 +634,7 @@ function createMeasuredListEngine() {
       position = scrollTop - listTop + debt;
       const hold =
         hasKeyChange || (reveal !== undefined && !isRevealWritten)
-          ? captureHold()
+          ? captureHold(isEndAnchored)
           : undefined;
       if (hold !== undefined) {
         const index = resolve(hold, nextIndices);
@@ -862,6 +865,7 @@ export function useMeasuredListWindow(
     estimateSize,
     focusIndex,
     options.isLastRetained === true,
+    options.isEndAnchored,
   );
 
   // Syncs the scroll position, the row measurements and the position,

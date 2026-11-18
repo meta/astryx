@@ -42,11 +42,7 @@ import {
   scrollportTop,
   scrollsPage,
 } from '../utils/pageScroller';
-import {
-  markFollowing,
-  streamScrollPositions,
-  streamScrollShifts,
-} from './chatStreamScrollChannel';
+import {channelOf, markFollowing} from './chatStreamScrollChannel';
 
 // =============================================================================
 // Types
@@ -362,14 +358,11 @@ export function useChatStreamScroll({
 
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
-    streamScrollShifts.set(el, {
-      shiftBy: delta => {
-        if (animatingRef.current && springPositionRef.current !== undefined) {
-          springPositionRef.current += delta;
-        }
-        el.scrollTop += delta;
-        lastScrollTopRef.current = el.scrollTop;
-      },
+    const channel = channelOf(el);
+    Object.assign(channel, {
+      last: lastScrollTopRef,
+      spring: springPositionRef,
+      animating: animatingRef,
       unlock,
     });
     const doc = el.ownerDocument;
@@ -398,9 +391,9 @@ export function useChatStreamScroll({
         setLocked(false);
         animatingRef.current = false;
       }
-      streamScrollPositions
-        .get(el)
-        ?.forEach(listener => listener(scrollTop, landedAtBottom));
+      channel.positions?.forEach(listener =>
+        listener(scrollTop, landedAtBottom),
+      );
     };
 
     const onScrollEnd = () => {
@@ -445,7 +438,8 @@ export function useChatStreamScroll({
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
       markFollowing(el, false);
-      streamScrollShifts.delete(el);
+      channel.last = undefined;
+      channel.unlock = undefined;
     };
   }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked, unlock]);
 

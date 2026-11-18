@@ -4,11 +4,11 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {
-  streamScrollPositions,
-  streamScrollShifts,
+  channelOf,
+  shiftStreamScroll,
+  subscribeStreamScroll,
+  unlockStreamScroll,
 } from './chatStreamScrollChannel';
-
-const getStreamScrollShift = (el: Element) => streamScrollShifts.get(el);
 import {
   useChatStreamScroll,
   type UseChatStreamScrollOptions,
@@ -539,7 +539,7 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     expect(el.scrollTop).toBe(600);
     // A row above the end measured 100 px smaller.
     setGeometry(el, {scrollHeight: 900, clientHeight: 400});
-    act(() => getStreamScrollShift(el)!.shiftBy(-100));
+    act(() => shiftStreamScroll(el, -100));
     expect(el.scrollTop).toBe(500);
     act(() => {
       el.dispatchEvent(new Event('scroll'));
@@ -555,7 +555,7 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     act(() => api.current!.scrollToBottom());
     flushRaf();
     const afterFrame = el.scrollTop;
-    act(() => getStreamScrollShift(el)!.shiftBy(50));
+    act(() => shiftStreamScroll(el, 50));
     expect(el.scrollTop).toBe(afterFrame + 50);
     flushRaf();
     // The spring's next frame starts from the shifted position.
@@ -568,12 +568,12 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     flushRaf();
     const tops: number[] = [];
     const listener = (top: number) => tops.push(top);
-    streamScrollPositions.set(el, new Set([listener]));
+    const stop = subscribeStreamScroll(el, listener);
     el.scrollTop = 250;
     act(() => {
       el.dispatchEvent(new Event('scroll'));
     });
-    streamScrollPositions.delete(el);
+    stop();
     el.scrollTop = 100;
     act(() => {
       el.dispatchEvent(new Event('scroll'));
@@ -585,9 +585,9 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     const {api, el, unmount} = renderHook();
     setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
     flushRaf();
-    act(() => getStreamScrollShift(el)!.unlock());
+    act(() => unlockStreamScroll(el));
     expect(api.current!.isLocked).toBe(false);
     unmount();
-    expect(getStreamScrollShift(el)).toBeUndefined();
+    expect(channelOf(el).unlock).toBeUndefined();
   });
 });
