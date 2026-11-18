@@ -22,7 +22,6 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
-import {screenScale} from '../utils/screenScale';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -134,6 +133,38 @@ function isFlexRow(parent: Element | null): boolean {
 function exactWidth(element: HTMLElement, scale: number): number {
   const width = element.getBoundingClientRect().width;
   return width > 0 ? width / scale : element.offsetWidth;
+}
+
+/**
+ * How far the transforms around `element` scale its width on screen: its
+ * client width over its exact layout width from the computed style. The
+ * exact ratio counts, since a whole-pixel offsetWidth can be most of a pixel
+ * short. A box with no computed pixel width reads as unscaled.
+ *
+ * SYNC: `screenScale` in utils/hitArea.ts reads the same ratio with a
+ * one-pixel shortcut; keep the two reads alike.
+ */
+function inlineScale(element: HTMLElement): number {
+  const onScreen = element.getBoundingClientRect().width;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (!(onScreen > 0) || style == null || !style.width.endsWith('px')) {
+    return 1;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const layout =
+    px(style.width) +
+    (style.boxSizing === 'border-box'
+      ? 0
+      : px(style.paddingLeft) +
+        px(style.paddingRight) +
+        px(style.borderLeftWidth) +
+        px(style.borderRightWidth));
+  if (!(layout > 0)) {
+    return 1;
+  }
+  const scale = onScreen / layout;
+  // Within rounding of 1 the box is at its layout size.
+  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
 }
 
 /** The bounds of a single-row set, from sub-pixel widths. */
@@ -596,11 +627,8 @@ export function useOverflowInternal(
           px(style.borderRightWidth);
       }
       // The visible list shares the measure copy's scale and, unlike the
-      // zero-height copy, has a box to read it from. The exact ratio counts: a
-      // whole-pixel width can be most of a pixel short of the list's.
-      const scale = tracksInlineBounds
-        ? screenScale(container, container.getBoundingClientRect(), 0).x
-        : 1;
+      // zero-height copy, has a box to read it from.
+      const scale = tracksInlineBounds ? inlineScale(container) : 1;
       const exact = (element: HTMLElement) => exactWidth(element, scale);
       if (tracksInlineBounds && !observeParent) {
         // The list publishes its unfolded width as its own width. It fits
