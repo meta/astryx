@@ -16,6 +16,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {
   isAstryxInitialized,
@@ -214,13 +215,31 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
 
   // Agents often keep only the start of a long answer (`2>&1 | head`), so a
   // line printed after the output would be cut, and the day used up unseen.
-  it("prints before the command's own output, so a cut answer keeps it", async () => {
+  it("prints before the command's own output, so a cut answer keeps it", () => {
     asProject();
-    const r = await runCli(['component', '--list'], tmp);
-    const combined = `${r.stderr}\n${r.stdout}`;
-    expect(r.stderr).toMatch(NUDGE);
-    expect(r.stderr.trimStart().startsWith('Astryx is not set up')).toBe(true);
-    expect(combined.trimStart().startsWith('Astryx is not set up')).toBe(true);
+    // One file takes both streams, as `2>&1` does, so the order is the order
+    // the lines were written in.
+    const out = path.join(stateHome, 'both-streams.txt');
+    const fd = fs.openSync(out, 'w');
+    try {
+      const r = spawnSync(
+        process.execPath,
+        [
+          path.join(REPO, 'packages/cli/clients/cli/bin/astryx.mjs'),
+          'component',
+          '--list',
+        ],
+        {cwd: tmp, env: {...process.env, CI: ''}, stdio: ['ignore', fd, fd]},
+      );
+      expect(r.status).toBe(0);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const both = fs.readFileSync(out, 'utf8');
+    const reminder = both.indexOf('Astryx is not set up in this project yet.');
+    const firstComponent = both.search(/^name:/m);
+    expect(reminder).toBeGreaterThanOrEqual(0);
+    expect(firstComponent).toBeGreaterThan(reminder);
   });
 
   it('prints for a command that fails too, and that uses the day', async () => {
