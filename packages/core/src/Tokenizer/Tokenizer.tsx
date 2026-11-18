@@ -1548,9 +1548,9 @@ export function Tokenizer<T extends SearchableItem>({
         // Redirect to the input so the user doesn't have to tab through
         // every token remove button. A press on a token's own control, and
         // the menu returning focus to the token that opened it, keep focus
-        // where they put it, as does a press on the status info-tip. A
-        // disabled grouped track that takes focus keeps it: it is the keyboard
-        // path to its hidden tokens.
+        // where they put it. The status info-tip keeps focus from a press or
+        // Shift+Tab, as it does on TextInput. A disabled grouped track that
+        // takes focus keeps it: it is the keyboard path to its hidden tokens.
         // In a grouped row, a move to the input also scrolls the strip to its
         // end before the press releases, so a press on a token's remove
         // button keeps its focus too. A finger's tap on a remove button with
@@ -1559,12 +1559,12 @@ export function Tokenizer<T extends SearchableItem>({
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
+          !isStatusButtonPress(e.target, statusTooltipDescribedBy) &&
           !(
             readModality() === 'pointer' &&
             (findTokenControl(e.target) != null ||
               (e.target instanceof Node &&
-                trackRef.current?.contains(e.target) === true) ||
-              isStatusButtonPress(e.target, statusTooltipDescribedBy))
+                trackRef.current?.contains(e.target) === true))
           ) &&
           !isMenuFocusReturnRef.current &&
           !(removeControlOf(e.target) != null && wasKeyboardDown())

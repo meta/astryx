@@ -712,9 +712,7 @@ export function Typeahead<T extends SearchableItem>({
     inputLabelId,
     [
       description ? descriptionId : null,
-      // The status message element is rendered by Field, which is skipped
-      // inside an InputGroup and renders no message box for the tooltip
-      // variant; that variant's info-tip describes the input instead.
+      // Field draws no message box inside an InputGroup or for `tooltip`.
       !inputGroup && statusVariant !== 'tooltip' && status?.message
         ? statusMessageId
         : null,
