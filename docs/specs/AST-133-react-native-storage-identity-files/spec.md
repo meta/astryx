@@ -115,7 +115,7 @@ Astryx Stage simulation (`spec:AST-112/FR2`, `spec:AST-082/FR13`).
   | Contract               | Kind                                | Methods                                                                                                                                                               | Platforms    |
   | ---------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
   | `AstryxSecureStorage`  | native module (Turbo Native Module) | `getConstants` (`isUserPresenceAvailable`, `accessibleClasses`, `biometry`), `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`                                | iOS, Android |
-  | `AstryxClientIdentity` | native module (Turbo Native Module) | `getConstants` (`isSimulator`), `createKey`, `createCsr`, `sign`, `storeCertificate`, `getInfo`, `list`, `bindToHosts`, `remove`, `useSystemIdentity` (Android)       | iOS, Android |
+  | `AstryxClientIdentity` | native module (Turbo Native Module) | `getConstants` (`isSimulator`), `createKey`, `createCsr`, `sign`, `storeCertificate`, `getInfo`, `list`, `bindToHosts`, `remove`, `adoptSystemIdentity` (Android)     | iOS, Android |
   | `AstryxFiles`          | native module (Turbo Native Module) | `getConstants`, `write`, `read`, `remove`, `list`, `trim`, `clear`, `download`, `cancelDownload`, `onDownloadProgress` (event), `saveAs`, `share`, `readBundledAsset` | iOS, Android |
 
 - **FR2 — Every call is a result; constants are synchronous.**
@@ -123,11 +123,11 @@ Astryx Stage simulation (`spec:AST-112/FR2`, `spec:AST-082/FR13`).
     (`spec:AST-112/FR6`), `readBundledAsset` included. Each module adds only
     these reasons to the common ones:
 
-    | Module                 | Module reasons                                                                                                                                                                                                              |
-    | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-    | `AstryxSecureStorage`  | `invalid-key`, `invalid-value`, `invalid-json`, `locked`, `unavailable`, `auth-failed`, `unsupported-option`, `no-namespace`; `cancelled` when the person dismisses Face ID, Touch ID or the passcode                       |
-    | `AstryxClientIdentity` | `invalid-label`, `exists`, `no-secure-hardware`, `no-key`, `invalid-subject`, `invalid-certificate`, `key-mismatch`, `invalid-host`, `not-presentable`, `no-activity`, `no-system-identities`, `unavailable`; `cancelled`   |
-    | `AstryxFiles`          | `invalid-name`, `invalid-data`, `invalid-url`, `invalid-uri`, `invalid-option`, `missing-file`, `no-space`, `no-window`, `busy`, `http`, `redirect`, `timeout`, `network`, `io`, `no-namespace`, `unavailable`; `cancelled` |
+    | Module                 | Module reasons                                                                                                                                                                                                                            |
+    | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `AstryxSecureStorage`  | `invalid-key`, `invalid-value`, `invalid-json`, `locked`, `unavailable`, `auth-failed`, `unsupported-option`, `no-namespace`; `cancelled` when the person dismisses Face ID, Touch ID or the passcode                                     |
+    | `AstryxClientIdentity` | `invalid-label`, `exists`, `no-secure-hardware`, `no-key`, `invalid-subject`, `invalid-certificate`, `key-mismatch`, `invalid-host`, `not-presentable`, `no-activity`, `no-system-identities`, `no-namespace`, `unavailable`; `cancelled` |
+    | `AstryxFiles`          | `invalid-name`, `invalid-data`, `invalid-url`, `invalid-uri`, `invalid-option`, `missing-file`, `no-space`, `no-window`, `busy`, `http`, `redirect`, `timeout`, `network`, `io`, `no-namespace`, `unavailable`; `cancelled`               |
 
   - Synchronous members (`isAvailable()`, `supports(feature)`,
     `AstryxSecureStorage.capabilities()`, `AstryxClientIdentity.isSimulator()`,
@@ -241,7 +241,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 - **FR8 — On Android, an app can use a system certificate (feature
   `system-identity`).**
-  - `useSystemIdentity(label, {hosts, alias?})` adopts a certificate from
+  - `adoptSystemIdentity(label, {hosts, alias?})` adopts a certificate from
     Android's system store (one an administrator or the person installed)
     under `label`, bound to exact `hosts`. The system's picker and consent
     dialog name the hosts; an `alias` this runtime adopted before and that is
