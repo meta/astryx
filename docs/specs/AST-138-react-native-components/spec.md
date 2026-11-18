@@ -40,23 +40,23 @@ names and the shapes that several components share.
 It applies `spec:AST-082`: a component has one core contract and a contract
 per platform (`spec:AST-082/FR3`), the core contract is portable
 (`spec:AST-082/FR4`), and native platforms are native-first
-(`spec:AST-082/FR11`). It applies `spec:AST-093`'s order (the platform's own
-control, then the platform's guidelines, then the theme) to the library's
-components, and `spec:AST-017`'s lifecycle states to every public name.
+(`spec:AST-082/FR11`). Its components follow the order `spec:AST-093/DEC-1`
+states: the platform's own control, then the platform's guidelines, then the
+theme.
 
 ## Why this exists
 
-The React Native ecosystem has mature component kits and navigation
-libraries, and a web design system can be wrapped for React Native one
-component at a time. Neither gives an Astryx app what it needs:
+An Astryx app on a phone needs one vocabulary with the web, navigation chrome
+that is the system's, a short list of phone-only components, and one shape for
+each concept several components share. This record gives each:
 
-| Need                                                   | What a straight port or a third-party kit gives                                                    | What this record fixes                                                                                                                       |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| One vocabulary across web and native                   | Another kit's names and props, or every web component ported whether or not it fits a touch app    | The web names and core contracts for every family that fits, grouped by how far its interaction model carries to a phone (FR1 to FR5)        |
-| Navigation chrome that is the system's                 | Web app-shell components (top nav, side nav) drawn on a phone, or a navigation library's own model | No web app shell; a header, tabs and screens declared once and rendered by the system or drawn from the same declaration (FR11 to FR24)      |
-| Components a phone app needs and a web page does not   | Gaps filled by each app, differently                                                               | A named list of native-essential components, each with an iOS and an Android answer (FR6)                                                    |
-| A component set that stays small                       | Demo parts and one-off helpers exported as components                                              | Demo parts in the template kit, duplicates folded into one component, and a migration line for each name that is not in the set (FR7 to FR9) |
-| Shared shapes (stops, scroll ownership, toasts, menus) | One shape per component, invented locally                                                          | One shape each, taken from the web where the web has one and from the platform's public API where it does not (FR25 to FR34)                 |
+| Need                                                   | What this record fixes                                                                                                                       |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| One vocabulary across web and native                   | The web names and core contracts for every family that fits, grouped by how far its interaction model carries to a phone (FR1 to FR5)        |
+| Navigation chrome that is the system's                 | No web app shell; a header, tabs and screens declared once and rendered by the system or drawn from the same declaration (FR11 to FR24)      |
+| Components a phone app needs and a web page does not   | A named list of native-essential components, each with an iOS and an Android answer (FR6)                                                    |
+| A component set that stays small                       | Demo parts in the template kit, duplicates folded into one component, and a migration line for each name that is not in the set (FR7 to FR9) |
+| Shared shapes (stops, scroll ownership, toasts, menus) | One shape each, taken from the web where the web has one and from the platform's public API where it does not (FR25 to FR34)                 |
 
 ## Who uses it
 
@@ -259,9 +259,8 @@ Components not listed here are JavaScript over React Native's own views and
   | `StackHeader*` parts                                            | The `Header` parts (FR12).                                                                                                                      |
   | Demo parts (FR7)                                                | The same component from the app's own template-kit source, with the same props.                                                                 |
 
-  A name in this table that a package release once exported stays exported,
-  marked `@deprecated` with this line as its message, for one minor version
-  (`spec:AST-112/FR5`, `spec:AST-017/FR26`).
+  None of these names is exported. Each line is the documented mapping from
+  that name to the set.
 
 ### Screen and insets
 
@@ -523,8 +522,7 @@ Components not listed here are JavaScript over React Native's own views and
   - Library components use `is*` and `has*` booleans and `on*` events.
   - A component with no web counterpart offers `onClick` only, never both
     `onClick` and `onPress` for one event.
-  - A public API offers one form of each prop: no deprecated alias beside its
-    replacement inside a contract that has never had a stable release.
+  - A public API offers one form of each prop, with no alias beside it.
   - A component's React Native contract is written against the web contract
     of the core release the package builds on, and is checked against it.
 - **FR38 — The areas are ranked.** The set's component areas have this
@@ -732,9 +730,9 @@ dash means JavaScript only.
   the Android answer either way.
 - `spec:AST-124`: `Lightbox` is the zoom pager's public face, as here (FR31).
 - `spec:AST-128`: the system menu's row subset is the one FR13 types.
-- Each web-parity family's React Native contract is a platform record
-  beside its component record (`spec:AST-082/FR3`, `spec:AST-093/FR1`); the
-  web contracts do not change.
+- The web counterparts' component records do not change; each web-parity
+  family's React Native contract is its platform contract under
+  `spec:AST-082/FR3`.
 
 ## Verification
 
@@ -798,8 +796,7 @@ misclassifies layout and form families that every app needs.
 **Decider:** imdreamrunner, 2026-11-17
 
 The system bar is configured from data before a push starts, so a serialisable
-record is what every renderer reads, as UIKit's navigation item is the record
-its bar renders. Parts are the documented API because composition lets an app
+record is what every renderer reads. Parts are the documented API because composition lets an app
 put its own components in the bar and keeps one vocabulary with the web's
 slot names. Static and dynamic placement, the first-frame guarantee, the lazy
 fallback and the conflict rule keep parts from regressing the record's timing.
@@ -824,9 +821,8 @@ and parts model, and the split view folds into the tab model's width classes.
 **Reference:** `spec:AST-138/DEC-4`
 **Decider:** imdreamrunner, 2026-11-17
 
-UIKit and Material name a sheet's resting state by identity, and the web names
-stops by value. Naming a stop by its own value uses the web's vocabulary and
-cannot be off by one in either direction.
+A stop named by its own value uses the web's stop vocabulary and cannot be off
+by one in either direction.
 
 Rejected: stop indices, because the component and the route would count in
 opposite directions.
