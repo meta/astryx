@@ -111,7 +111,7 @@ describe('desktopMatches', () => {
     ).toBe(false);
   });
 
-  it('never matches a media type followed by a condition joined by `or`', () => {
+  it('never matches a media type followed by a condition with `or` at its top level', () => {
     expect(
       desktopMatches('screen and (max-width: 640px) or (min-width: 1024px)'),
     ).toBe(false);
@@ -129,6 +129,30 @@ describe('desktopMatches', () => {
       desktopMatches('screen and ((max-width: 640px) or (min-width: 1024px))'),
     ).toBe(true);
     expect(desktopMatches('screen and not (max-width: 640px)')).toBe(true);
+    expect(
+      desktopMatches('not print and (max-width: 640px) or (min-width: 1024px)'),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'not speech and (max-width: 640px) or (min-width: 1024px)',
+      ),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'screen and not (min-width: 640px) or (min-width: 1024px)',
+      ),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'not screen and not (min-width: 640px) or (min-width: 1024px)',
+      ),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'screen and (min-width: 640px) and (min-width: 800px) or (pointer: coarse)',
+      ),
+    ).toBe(false);
+    expect(desktopMatches('not print and (max-width: 640px)')).toBe(true);
   });
 
   it('reads text it cannot parse as before', () => {
