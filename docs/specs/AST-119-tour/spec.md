@@ -8,7 +8,7 @@ archive_reason: null
 superseded_by: null
 approved_by: nynexman4464
 approved_at: 2026-11-18
-phase: proposed
+phase: accepted
 owners: [nynexman4464]
 affects_architecture: []
 affects_families: [family:overlay-dismissal]
@@ -59,7 +59,7 @@ happens between pages.
 
 - **FR1 — Steps are a list of data.** Tour takes `steps`, an array of step
   objects. Each step has a unique `id`, a `title`, and optionally a `body`, an
-  `anchor`, a `placement` and an `alignment`, which place the callout against
+  `anchorRef`, a `placement` and an `alignment`, which place the callout against
   its anchor as Popover's do. Step order is array order. Duplicate ids warn in
   development, and the later step is ignored.
 - **FR2 — A step left out does not exist.** The step count ("2 of 3"), Back and
@@ -84,20 +84,20 @@ happens between pages.
 
 ### Anchors
 
-- **FR6 — An anchor is an element, a lookup, or nothing.** A step's `anchor`
-  accepts a ref or a function that returns an element or `null`, resolved as
-  a `usePopover` anchor (`spec:AST-116` FR2, FR3). A step without `anchor`
-  shows centered in the viewport, with no highlight.
+- **FR6 — An anchor is an element or nothing.** A step's `anchorRef` is a ref
+  to an element, read as `usePopover`'s `anchorRef` is (`spec:AST-116` FR2,
+  FR3). A step without `anchorRef` shows centered in the viewport, with no
+  highlight.
 - **FR7 — An anchor off screen scrolls into view.** When a step shows and its
   anchor is outside the viewport or a scrolling ancestor's visible area, the
   anchor scrolls into view, instantly under reduced motion.
   `hasScrollIntoView` (default `true`) set to `false` leaves scrolling to the
   app for every step.
 - **FR8 — The app decides about a missing anchor.** When a step shows and its
-  anchor resolves to nothing, Tour follows `missingAnchorBehavior`: `'center'`
-  (the default: show the step centered, with no highlight, as a step with no
-  `anchor` shows (FR6); the callout moves
-  to the anchor when a later read resolves it, `spec:AST-116` FR3),
+  `anchorRef` holds no element in the document, Tour follows
+  `missingAnchorBehavior`: `'center'` (the default: show the step centered,
+  with no highlight, as a step with no `anchorRef` shows (FR6); the callout
+  moves to the anchor when a later read finds it, `spec:AST-116` FR3),
   `'skipStep'` (move on in the direction of travel, to the next step after
   Next and the previous step after Back; a skipped last step ends the tour as
   `'complete'`, and a skipped first step on Back keeps the step that was
@@ -107,17 +107,19 @@ happens between pages.
   reported once through `onMissingAnchor(id)` and warns in development. Tour
   sets no timer and does not wait.
 - **FR9 — A step can prepare its anchor.** A step's optional `showAction`
-  runs before Tour resolves the anchor, and Tour waits for the promise it
+  runs before Tour reads the anchor, and Tour waits for the promise it
   returns, for example while the app opens a panel. Until it settles, no
   callout shows and focus does not move. A rejected promise is treated as a
   missing anchor (FR8).
-- **FR10 — An anchor that leaves hides the callout.** This covers an anchor
-  that resolved and then left; a step that starts without its anchor follows
-  FR8. While the active step's anchor is out of view or out of the document,
-  the callout of a step without a backdrop is hidden and the tour keeps
-  running (`spec:AST-116` FR6, FR7). It shows again when the anchor returns.
-  A step with a backdrop is not hidden: it shows centered, with no highlight,
-  until the anchor returns, and stays modal (FR14).
+- **FR10 — The tour keeps running when an anchor leaves.** This covers an
+  anchor that was there and then left; a step that starts without its anchor
+  follows FR8. While the anchor is out of the document, the callout of a step
+  without a backdrop shows no surface, and focus inside it moves out
+  (`spec:AST-116` FR6, AR1). A step with a backdrop is not hidden then: it
+  shows centered, with no highlight, and stays modal (FR14). Either callout
+  goes back to the anchor when a later read finds it (`spec:AST-116` FR3).
+  While the anchor is out of view, every callout follows the layer runtime's
+  rule for an anchored layer (`spec:AST-059` FR5).
 
 ### Callout
 
@@ -166,7 +168,9 @@ happens between pages.
 - Supported feature/engine floor: the layer runtime's CSS anchor positioning
   floor, as for Popover.
 - Unsupported behavior: in the runtime's reduced browser fallback, placement
-  follows the fallback; FR7–FR10 and FR14–FR17 are unchanged.
+  follows the fallback, and FR10's out-of-view rule follows
+  `spec:AST-059`'s fallback. FR7–FR9, the rest of FR10 and FR14–FR17 are
+  unchanged.
 - Browser evidence: real Chromium, Firefox and WebKit for FR7, FR10 and
   FR14–FR16; jsdom for step order, ARIA and event ordering.
 
@@ -178,13 +182,17 @@ happens between pages.
   anchor rows; its Ownership boundary takes placement, step focus and controls
   from FR6–FR17; AR1 points to FR14. Its Compatibility "Controlled/uncontrolled
   behavior" line names `activeId`, `onActiveIdChange` and `onEnd` (FR4, FR5) in
-  place of `isActive` and `onDismiss`. FR1 is unchanged. DEC-1's "a step is a
-  non-modal layer" covers a step without a backdrop; a step with a backdrop is
-  modal (FR14).
-- `family:overlay-dismissal` gains two Tour rows: without a backdrop, Escape
-  ends the tour only while focus is in the callout, or on or inside its
-  anchor; with a backdrop, the step takes Escape as a modal layer does (FR14).
-  Its Lab TourStep row and member entry go with the lab Tour.
+  place of `isActive` and `onDismiss`. FR1 is unchanged. DEC-1 gains an
+  amendment line: its "a step is a non-modal layer" covers a step without a
+  backdrop, and a step with a backdrop is modal (FR14, DEC-6).
+- `family:overlay-dismissal`: FR2 names a Tour step's presence, and its
+  matrix gains two Tour step rows: without a backdrop, Escape ends the tour
+  only while focus is in the callout, or on or inside its anchor; with a
+  backdrop, the step takes Escape as a modal layer does (FR14). An
+  `FR2 gap:` line cites the FR14 gap. Its Lab TourStep row and member entry
+  stay until the lab Tour goes.
+- `spec:AST-116` DEC-5 gains an amendment line: the tour step it calls
+  non-modal is a step without a backdrop (DEC-6).
 - Consumer docs: `Tour.doc.mjs` documents the step array, conditional steps,
   the active step, missing anchors and the intro-Dialog recipe.
 - Lab `Tour` keeps `<TourStep>` children. Core `Tour` takes a
@@ -195,19 +203,18 @@ FR3 gap: lab steps follow an index; removing an earlier step moves the active
 step, and removing the active last step shows nothing and reports no end.
 FR4 gap: the app cannot name the active lab step; it can only start the tour
 or move it by one.
-FR6 gap: a lab step takes only a ref; it has no lookup function and no
-centered step without an anchor.
+FR6 gap: a lab step names its ref `targetRef`, and has no centered step
+without an anchor.
 FR7 gap: the lab does not scroll an anchor into view.
 FR8 gap: when a lab anchor is not in the document as its step starts, the
 callout shows unanchored, the ring never appears, and nothing reports it.
 FR9 gap: a lab step has no preparation before it shows.
 FR10 gap: a lab callout and ring stay on a removed anchor's last box, or jump
-to the viewport corner after a scroll or resize, and stay shown over an anchor
-scrolled out of a scrolling panel.
+to the viewport corner after a scroll or resize.
 FR11 gap: lab control labels are English only, and no prop rewords them.
 FR12 gap: the lab has no Skip control.
-FR14 gap: lab Escape ends the tour wherever focus is, and a lab step with a
-backdrop does not keep Tab in its callout.
+FR14 gap: a lab step without a backdrop ends the tour on Escape wherever focus
+is, and a lab step with a backdrop does not keep Tab in its callout.
 FR15 gap: a lab step without a backdrop also moves focus into the callout,
 wherever focus was.
 FR16 gap: a lab tour returns focus to the target only when it is in the tab
@@ -222,9 +229,9 @@ description, and no `aria-modal` under a backdrop.
 | --------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1–FR3   | core `Tour.test.tsx` steps suite             | Three steps; the middle one left out; the active step removed; the last step removed                                                                                                                                                            | A count or Back/Next that includes a left-out step, or a removed active step left showing, fails                                                                                                                                                                                                                                                                                                                                  |
 | FR4, FR5  | core `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from an anchor's click                                                                                                                                                            | A step change not reported, a missing or wrong end reason, or an internal step override fails                                                                                                                                                                                                                                                                                                                                     |
-| FR6, FR7  | core `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                                                                                                                                                     | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails                                                                                                                                                                                                                                                                                                                                          |
-| FR8, FR9  | core `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default, after Next, after Back and on a step the app sets; the anchor resolving after a centered step; a pending and a rejected preparation                                     | A timer, a callout shown before preparation settles, a skip against the direction of travel, a centered step that stays centered once its anchor resolves, or a missing anchor with no `onMissingAnchor` report fails                                                                                                                                                                                                             |
-| FR10      | Real-browser spec                            | With and without a backdrop: the anchor scrolled out and removed while its step shows, then back in view                                                                                                                                        | Without a backdrop: a callout over unrelated content, an end, or a callout still hidden after the anchor returns. With a backdrop: no callout, or a callout that is not modal, while the anchor is away                                                                                                                                                                                                                           |
+| FR6, FR7  | core `Tour.test.tsx` and a real-browser spec | A ref and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                                                                                                                                                           | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails                                                                                                                                                                                                                                                                                                                                          |
+| FR8, FR9  | core `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default, after Next, after Back and on a step the app sets; a later read finding the anchor after a centered step; a pending and a rejected preparation                          | A timer, a callout shown before preparation settles, a skip against the direction of travel, a centered step that stays centered once a later read finds its anchor, or a missing anchor with no `onMissingAnchor` report fails                                                                                                                                                                                                   |
+| FR10      | Real-browser spec                            | With and without a backdrop: the anchor removed while its step shows, then mounted again; the anchor scrolled out of view, then back                                                                                                            | Anchor removed, without a backdrop: a visible callout, focus left in the hidden callout, or an end. With a backdrop: no callout, or a callout that is not modal. Either: a callout still away from the anchor after a later read finds it. Anchor scrolled out: a callout that breaks the layer runtime's rule                                                                                                                    |
 | FR11–FR13 | core `Tour.test.tsx` callout suite           | First, middle and last steps; Skip and count on and off; a locale; `nextLabel`, `doneLabel` and `skipLabel`; a step with and without a backdrop                                                                                                 | A built-in title or body text, Back on the first step, an untranslated label, a label prop that loses to the catalog, a missing ring, or a ring or dimming exposed to assistive technology fails                                                                                                                                                                                                                                  |
 | FR14–FR17 | core `Tour.test.tsx` and a real-browser spec | With and without a backdrop: Tab from the callout and the anchor; Escape in and out; each focus origin at a step change; a step change that leaves focus where it is; the tour ending with focus in the callout, on the page body and elsewhere | Without a backdrop: focus held in the callout, focus taken from the person, or `aria-modal`. With a backdrop: Tab leaving the callout, focus left outside it, or no `aria-modal`. Either: a missing, repeated or assertive announcement at a step change that leaves focus where it is, an announcement beside a focus move, focus on the body or moved from elsewhere at the end, or a callout with no name or description fails |
 
@@ -288,9 +295,9 @@ Tour takes `steps`, `activeId`, `onActiveIdChange`, `onEnd`,
 `missingAnchorBehavior`, `onMissingAnchor`, `hasScrollIntoView`,
 `hasStepCount`, `hasSkipButton`,
 `hasBackdrop` (as the lab Tour names it), `nextLabel`, `doneLabel` and
-`skipLabel`; a step has `id`, `anchor`, `title`, `body`, `placement`,
+`skipLabel`; a step has `id`, `anchorRef`, `title`, `body`, `placement`,
 `alignment` and `showAction`. A callback mirrors the prop it reports, a choice of response is a
-`<thing>Behavior`, a boolean is `has…`, and `anchor` matches `usePopover`. Next
+`<thing>Behavior`, a boolean is `has…`, and `anchorRef` matches `usePopover`. Next
 always shows, so no input hides it. A control's words are a flat optional
 `<control>Label` prop that defaults to the catalog message, as Popover's
 `closeButtonLabel` and AlertDialog's `cancelLabel` are. Back, the close
@@ -319,3 +326,9 @@ controls that a pointer cannot.
 
 - **OQ3 — Uncontrolled use.** (`human-api`) Whether Tour also takes
   `defaultActiveId` and manages the active step itself.
+- **OQ4 — How does a step name a target the app holds no ref to?**
+  (`human-api`) A target that another component renders reaches Tour through
+  that component's forwarded ref. No current caller has a target without one.
+  Options: the app passes a ref object whose `current` reads the element; or
+  a lookup input on the step, which `spec:AST-116` DEC-1 rejects for
+  `usePopover`. Until ruled, a step takes `anchorRef` only.
