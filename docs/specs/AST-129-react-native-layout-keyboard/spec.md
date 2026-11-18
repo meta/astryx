@@ -58,7 +58,7 @@ pieces for specific gaps, stated per piece.
 | `AstryxSafeAreaProvider` (`SafeAreaProvider`, hooks) | native component (Fabric Native Component) | `AstryxAppRoot` mounts it around the tree. Through the library's shared insets (`useInsets`), fed by it: `AppShell`, `Header`, `TopNav`, `FloatingHeader`, `TabBar`, `Layout`, `InlineSheet`, `ChatLayout`, `ChatMessageList`, `KeyboardAccessoryView`, `VideoView`, and the layer host that places toasts; through a snapshot of the window's insets: `BottomSheet`, `Dialog`, `Drawer`, `Lightbox`, `CommandPalette`; the Astryx router's stack and tab navigators and their header search field. The `./safe-area-context` entry. | Bars, sheets, toasts and screen content clear the notch, Dynamic Island, status bar, home indicator and display cutout, and follow rotation.        |
 | `AstryxSafeAreaView` (`SafeAreaView`)                | native component (Fabric Native Component) | No Astryx component; app API (`SafeAreaView`) and the `./safe-area-context` entry.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | An app's own view padded by the safe area on the edges it names, from its first frame.                                                              |
 | `AstryxSafeArea`                                     | native module (Turbo Native Module)        | The library's shared insets read its window metrics when no provider is above (a navigation root without an app root), so the same components as the provider's row; `initialWindowMetrics`; the platform status's `safeArea` row; the library's launch timing, which measures the module's first read.                                                                                                                                                                                                                              | No jump from zero insets to real ones on the first frame.                                                                                           |
-| `AstryxKeyboardDock` (`KeyboardDockView`)            | native component (Fabric Native Component) | `KeyboardAccessoryView`; `ChatLayout` (the composer, through `KeyboardAccessoryView`, and the transcript's bottom inset); `BottomSheet` (a footer that rides the keyboard, and the Android sheet lift); `CommandPalette` (the Android lift). On Android its reports also feed the library's shared keyboard frame, which every keyboard-aware surface reads.                                                                                                                                                                         | A composer or footer that stands on the keyboard through a show, a hide and a drag down, with the newest message kept above it.                     |
+| `AstryxKeyboardDock` (`KeyboardDockView`)            | native component (Fabric Native Component) | `KeyboardAccessoryView`, `ChatLayout`, `BottomSheet`, `CommandPalette`; on Android, the library's shared keyboard frame, which keyboard-aware surfaces read.                                                                                                                                                                                                                                                                                                                                                                         | A composer or footer that stands on the keyboard through a show, a hide and a drag down, with the newest message kept above it.                     |
 | `AstryxWindowStatusBar`                              | native component (Fabric Native Component) | The Astryx router's stack navigator: drawn full-screen and transparent modal routes on Android.                                                                                                                                                                                                                                                                                                                                                                                                                                      | A modal over a dark photo shows light status bar glyphs, and the screen under it keeps its own look after the modal closes.                         |
 | `AstryxSelectableText` (`NativeSelectableTextView`)  | native component (Fabric Native Component) | `Markdown` with `isSelectable`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Long-press a word in a notes app's rendered note, drag across a heading and two paragraphs, and copy them as one text, with the system's edit menu. |
 | `Intl`                                               | engine requirement (JavaScript runtime)    | Every component that formats through the library's internationalization helpers (`./i18n`, `InternationalizationProvider`): `Calendar`, `DateInput`, `DateRangeInput`, `TimeInput`, `Timestamp`, `Timer`, `NumberInput`, `Slider`, `Stepper`, `ProgressBar`, `Pagination`, `TextArea` (the count's plural words), `Avatar` (initials), `DonutChart`, and every other component that writes a number.                                                                                                                                 | Dates, times, numbers and counts in the person's locale and digits, and right-to-left layout for right-to-left languages.                           |
@@ -87,9 +87,9 @@ pieces for specific gaps, stated per piece.
 ## Requirements
 
 - **FR1 — One native provider is the source of truth for a subtree's insets.**
-  `SafeAreaProvider` renders `AstryxSafeAreaProvider`, a plain flex container
-  that measures the part of its own frame the system's bars, cutouts, rounded
-  corners and home indicator leave free.
+  `SafeAreaProvider` renders `AstryxSafeAreaProvider`, an ordinary flex
+  container that reports how far the system's bars, cutouts, rounded corners
+  and home indicator reach into its own frame.
   - It sends `onInsetsChange {insets, frame}` once it has a size and then
     whenever the insets or the frame change by more than one pixel: `insets`
     relative to the provider's own frame, `frame` in its window, in points (dp
@@ -98,9 +98,9 @@ pieces for specific gaps, stated per piece.
     or `SafeAreaInsetsContext` and `SafeAreaFrameContext`. The hooks throw
     outside every provider, as react-native-safe-area-context's do.
     `onMetricsChange(metrics)` reports each measurement to the app.
-  - `AstryxAppRoot` mounts a provider around the tree unless the app passes
-    `safeArea={false}`, and feeds the library's insets from it when the app
-    passes no `insets` of its own (`spec:AST-112/FR9`).
+  - `AstryxAppRoot` mounts a provider around the tree by default, and the
+    library's insets come from it unless the app supplies its own
+    (`spec:AST-112/FR9`).
 - **FR2 — The initial layout uses real numbers.** A provider starts from
   `initialMetrics` when given, else the enclosing provider's values, else the
   window's metrics from `AstryxSafeArea` at mount time, so a provider mounted
@@ -116,8 +116,9 @@ pieces for specific gaps, stated per piece.
     `additive` (the inset plus the style's own value for that edge), `maximum`
     (the larger of the two) or `off` (the style's value alone). An unknown or
     unnamed edge is `off`; no `edges` means every edge `additive`. The style's
-    own value is the one the layout engine resolves for the physical edge,
-    logical start and end included, in points; a percentage or `auto` counts as 0.
+    own value for an edge is what layout resolves for that physical edge,
+    including logical start and end; only point values count, so a percentage
+    or `auto` adds nothing.
   - Right to left: the view takes React Native's direction and its left-right
     swap, so a physical inset stays on its physical side.
   - `initialInsets` is the context's value when the view renders, so the
@@ -142,65 +143,66 @@ pieces for specific gaps, stated per piece.
   its API and needs none.
 - FR5 gap: the package declares react-native-safe-area-context as an optional
   peer dependency.
-- **FR6 — `KeyboardDockView` is a container whose children ride the keyboard.**
-  The caller lays the dock out and pads its bottom by the keyboard's overlap;
-  the dock never changes its own size.
-  - `followsKeyboard` (default `true`): `false` parks the children at their
-    laid-out place. The library passes the router's focus, so only the focused
-    screen's dock moves.
-  - `onKeyboardDockChange({height, overlap, settled})` comes at the start of a
-    keyboard change (`settled: false`, the end frame's numbers) and at its end
-    (`settled: true`), and on a later layout only when the rounded numbers
-    differ; never per frame. `height` is the docked keyboard's height (0 when
-    hidden, floating or split); `overlap` is how much of the dock's own frame
-    the keyboard's end frame covers.
-  - `transcriptNativeID` names a view among the dock's three nearest ancestors
-    whose first scroll view is the transcript the dock owns (FR7, FR8). Such a
-    list sets no `contentInset`, `scrollIndicatorInsets` or
-    `automaticallyAdjustKeyboardInsets` itself. A name the dock cannot find is
-    ignored and looked up again at the next layout.
+- **FR6 — `KeyboardDockView` holds content that stays on the keyboard.** The
+  caller sizes the dock and gives it bottom padding equal to the part of the
+  dock the keyboard covers; the dock itself never resizes.
+  - `followsKeyboard` (default `true`): with `false` the children keep their
+    laid-out position whatever the keyboard does. A screen hidden behind
+    another one passes `false`, so only the visible screen's dock moves.
+  - `onKeyboardDockChange({height, overlap, settled})` fires when a keyboard
+    change begins (`settled: false`, with the numbers of where the keyboard is
+    going) and when it ends (`settled: true`), and after a later layout only
+    if the rounded numbers changed. It never fires per frame. `height` is the
+    docked keyboard's height, 0 when it is hidden, floating or split;
+    `overlap` is the part of the dock's frame the keyboard covers at the end
+    of the change.
+  - `transcriptNativeID` links one scroll view to the dock (FR8): the first
+    scroll view inside the view with that `nativeID`, which must sit within
+    the dock's three closest ancestors. An ID the dock cannot find has no
+    effect, and the dock looks for it again at the next layout.
   - `bottomInset` and `restingInset` (Android): the bottom padding the caller
-    lays the dock out with, and the padding its children rest at with the
-    keyboard hidden, in dp.
-  - `isKeyboardDockAvailable()` answers true where the binary registers the
-    dock with the transcript inset of FR7, which is iOS. The library passes one more prop of its own,
-    `animatesSideInsets` (FR7); an app that passes it gets the public behaviour.
-- **FR7 — On iOS the dock follows the keyboard on the render server.** The
-  dock anchors its children's carrier to UIKit's keyboard layout guide.
-  - A show, a hide or a height change animates the children to the keyboard's
-    place with the keyboard's own duration and curve, in the keyboard's own
-    transaction; the caller's padding lands in one commit that the dock
-    compensates in the same transaction.
-  - During an interactive dismissal (a scroll view's
-    `keyboardDismissMode="interactive"`) the children follow the keyboard's top
-    frame by frame; a drag released midway animates back along the keyboard's
-    curve.
-  - With `transcriptNativeID`, the transcript's bottom content inset follows how
-    far the children have risen above their rest, frame by frame, and a list
-    at its end stays at its end: the newest row stays above the composer.
-  - With `animatesSideInsets`, a commit that changes the dock's own left or
-    right padding animates its children's new frames on the render server
-    instead of landing in one frame; the layout is the new one at once.
-  - No JavaScript runs per frame in any of these.
-- **FR8 — On Android the dock follows the IME's animated inset on the UI
-  thread.** The dock follows the IME's inset animation on every frame of a show
-  and a hide and moves itself by a translation against `bottomInset` and
-  `restingInset`, so the children stand on the IME's drawn top on every frame;
-  once the IME settles and the padding matches, the translation is 0. Its
-  events come at the animation's start and end and also reach the library's
-  shared keyboard frame. With `transcriptNativeID`, the transcript stays in flow
-  and a finger dragging it down by the touch slop hides the IME once per
-  gesture, keeping the focused field's focus; a tap, an upward drag or a
-  shorter drag leaves it up.
+    gives the dock, and the padding the children keep when the keyboard is
+    hidden, in dp.
+  - `isKeyboardDockAvailable()` is true where the binary registers the dock
+    with the linked scroll view of FR8, which is iOS. `animatesSideInsets` is
+    a prop only the library sets; an app that sets it gets the default
+    behaviour.
+- **FR7 — The dock rides the keyboard with no JavaScript per frame.** The
+  dock moves its children natively on every frame of a keyboard change, and
+  JavaScript hears only the change's start and end.
+  - iOS: the children are tied to UIKit's keyboard layout guide. A show, a
+    hide or a height change moves them with the keyboard's own duration and
+    curve, and the caller's padding update causes no jump. During an
+    interactive dismissal (`keyboardDismissMode="interactive"` on a scroll
+    view) they follow the keyboard's top on every frame, and if the finger
+    lets go halfway they return with the keyboard.
+  - Android: the dock follows the IME's inset animation and offsets itself on
+    the UI thread from `bottomInset` and `restingInset`, so the children sit
+    on the IME's visible top on every frame of a show and a hide. When the IME
+    comes to rest and the padding matches, the offset is 0. On Android the
+    dock's start and end reports also update the library's shared keyboard
+    frame.
+  - iOS, `animatesSideInsets`: when one commit changes the dock's own left or
+    right padding, the children's new frames animate on the render server;
+    the layout itself takes the new values at once.
+- **FR8 — The linked scroll view rides the keyboard with the dock.** On both
+  platforms, the linked scroll view's bottom content inset follows how far the
+  children are above their resting place on every frame, and a list scrolled
+  to its end stays at its end, so its last row stays visible above the docked
+  content. The linked list sets no `contentInset`, `scrollIndicatorInsets` or
+  `automaticallyAdjustKeyboardInsets` of its own.
+- FR8 gap: on Android the dock writes no inset to the linked scroll view; the
+  list keeps its place in the layout and moves only at a change's start and
+  end.
 - **FR9 — A drawn modal window owns its status bar on Android.**
-  `AstryxWindowStatusBar` is a zero-size view whose props are the status bar
-  ask of the Dialog window it renders in: `barStyle` (`light`, `dark`, `auto`)
-  and `barVisibility` (`hidden`, `shown`, `auto`), strings on the wire, where
-  an unknown value reads as `auto`.
-  - The router's drawn full-screen and transparent modal routes render it from
-    the route's `statusBarStyle` and `statusBarHidden`; a native stack inside
-    the same window asks over it with its top screen's values. With nothing
-    asking, the window shows the activity's look.
+  `AstryxWindowStatusBar` is a zero-size view that sets the status bar of the
+  Dialog window it is rendered in: `barStyle` (`light`, `dark`, `auto`) and
+  `barVisibility` (`hidden`, `shown`, `auto`). Values travel as strings, and a
+  value the binary does not recognize is treated as `auto`.
+  - The router's drawn full-screen and transparent modal routes render it
+    with the route's status bar style and visibility. A native stack inside
+    the same window takes precedence with its top screen's values. When
+    nothing asks, the window shows the activity's look.
   - Only that window's bar is written: never the activity's window, never the
     navigation bar. In the activity's own window the view does nothing, and it
     renders nothing when the route asks nothing.
@@ -210,9 +212,9 @@ pieces for specific gaps, stated per piece.
   The view takes `blocks` (each a list of runs with resolved styles, a `role`
   such as `heading`, and an optional `href` per run) and draws them in one
   native text view.
-  - The text is the blocks' texts joined by `"\n"`; every offset counts UTF-16
-    code units, as JavaScript strings do. A list marker is part of the text and
-    of a copy.
+  - The view's text is every block's text with a line break between blocks.
+    Offsets are UTF-16 code unit indices into that text, the unit JavaScript
+    strings use. List markers belong to the text, so a copy includes them.
   - `onSelectionChange(selection)` reports the offsets, the blocks the
     selection touches with block-relative ranges, and the text a copy gives,
     only when the selection changes.
@@ -222,15 +224,15 @@ pieces for specific gaps, stated per piece.
   - `onLinkPress({href, blockIndex})` comes for a tap on a link with no
     selection, or for the screen reader's link action. The platform opens
     nothing.
-  - Props: `isSelectable` (default `true`; `false` draws and reads the text
-    and still reports links), `selectionColor`, `colorScheme` (iOS; the edit
+  - Props: `isSelectable` (default `true`; `false` keeps the text visible
+    and readable by screen readers but not selectable, and links still report), `selectionColor`, `colorScheme` (iOS; the edit
     menu and handles), `allowFontScaling` (default `true`),
     `maxFontSizeMultiplier` (0 for no limit), `estimatedHeight`, `fallback`,
     `onError`.
 - **FR11 — Selectable text sizes itself and uses the system's menus.** The
-  native view lays its text out at the width it is given and reports the height
-  it needs; the wrapper applies it one layout pass after the text changes, and
-  a `height` in `style` wins. The edit menu is the system's (Copy, Look Up,
+  native view measures the height its text needs at its current width and
+  reports it; the wrapper sets that height one layout pass after the text
+  changes, and a `height` in `style` takes precedence. The edit menu is the system's (Copy, Look Up,
   Translate, Share on iOS; Copy, Share, Select all on Android). Fonts resolve
   through React Native's font manager, so a block gets the same faces a `Text`
   does.
@@ -252,8 +254,8 @@ pieces for specific gaps, stated per piece.
   `isKeyboardDockAvailable()`, `isNativeSelectableTextViewAvailable()`), and
   the window status bar's probe is internal (`spec:AST-112/FR7`).
   - Without the native provider, `SafeAreaProvider` is a plain view whose
-    subtree gets the starting numbers, or zeros; it never holds its children
-    back. Without the native view, `SafeAreaView` applies the same edge rule
+    subtree gets the starting numbers, or zeros; it always renders its
+    children. Without the native view, `SafeAreaView` applies the same edge rule
     as FR3 from context in JavaScript. The platform status's `safeArea` row
     says which applies.
   - Without the dock, `KeyboardDockView` is a plain view: the keyboard's start
@@ -349,14 +351,14 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 
 ### Platform support
 
-| Contract                 | iOS                                                                                                                                                     | Android                                                                                                                                                                     | Astryx Stage                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                    | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                                                           | Implemented on both looks                                                                  |
-| `AstryxSafeAreaView`     | Shared shadow node applies the edge rule during layout                                                                                                  | The same shared shadow node                                                                                                                                                 | Implemented on both looks                                                                  |
-| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                             | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                                                 | Implemented on both looks                                                                  |
-| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, transcript inset, side-inset animation | `WindowInsetsAnimationCompat` and a UI-thread translation on show and hide; transcript drag hides the IME. Interactive dismissal and `animatesSideInsets` are iOS behaviour | Implemented on both looks                                                                  |
-| `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                      | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                          | Implemented on the Android look                                                            |
-| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                      | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                | Implemented on both looks: word selection by long press or double tap, Copy and Select All |
+| Contract                 | iOS                                                                                                                                                                                                                                                                       | Android                                                                                                                                                                                                 | Astryx Stage                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                                                                                                                                      | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                                                                                       | Implemented on both looks                                                                  |
+| `AstryxSafeAreaView`     | Shared shadow node applies the edge rule during layout                                                                                                                                                                                                                    | The same shared shadow node                                                                                                                                                                             | Implemented on both looks                                                                  |
+| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                                                                                                                                               | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                                                                             | Implemented on both looks                                                                  |
+| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, the linked scroll view's inset, side-inset animation. A gap the caller's padding leaves between the children and the keyboard is kept through the motion | `WindowInsetsAnimationCompat` and a UI-thread offset on show and hide; the children sit on the IME's top, so a gap above the keyboard is not kept. No interactive dismissal and no `animatesSideInsets` | Implemented on both looks                                                                  |
+| `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                                                      | Implemented on the Android look                                                            |
+| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                                            | Implemented on both looks: word selection by long press or double tap, Copy and Select All |
 
 - FR7 gap: Astryx Stage draws a dock side-inset change with
   `animatesSideInsets` in one frame instead of animating it.
@@ -393,25 +395,25 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 
 ## Verification
 
-| Contract | Verification                                                                                                                            | Representative states                                                                                    | Mutation or failure expectation                                                                                                       |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests through the `./testing` view doubles; Simulator and emulator checks; Astryx Stage contract suite                             | portrait, landscape, a notch and a cutout; a nested provider; a change under one pixel                   | Insets include the keyboard, an event per sub-pixel change, or a hook that answers outside every provider                             |
-| FR2      | Unit tests with absent, older and current module doubles                                                                                | explicit, inherited and window metrics; `initialMetrics={null}`; a provider mounted after rotation       | The initial frame lays out with zeros where metrics exist, or stale metrics after a rotation                                          |
-| FR3      | Unit tests of the edge rule; Simulator and emulator layout checks; Astryx Stage contract suite                                          | each edge mode; padding and margin; logical start and end; right to left with and without the swap       | Padding a frame late, a wrong combined value, or an inset on the wrong side in right to left                                          |
-| FR4      | Unit tests with absent, malformed and current module doubles                                                                            | no window; a malformed constant                                                                          | A throw, or a value other than `null` without the module                                                                              |
-| FR5      | Unit tests of the entry's names against react-native-safe-area-context 5.x; a previewed project that imports it; package manifest check | each exported name; `cornerAdaptation`; the package's dependencies and peer dependencies                 | A missing name, or a previewed project that renders blank, or react-native-safe-area-context in the dependencies or peer dependencies |
-| FR6      | Unit tests through the `./testing` view doubles                                                                                         | `followsKeyboard` false; an unknown transcript name; the internal prop passed by an app                  | An event per frame, a parked dock that moves, or an app that gets the internal behaviour                                              |
-| FR7      | Simulator and device checks with UI-thread frame checks (no JavaScript per frame); Astryx Stage contract suite                          | show, hide, height change, interactive drag and release, a transcript at its end, a side-inset commit    | The composer leaves the keyboard's top on any frame, JavaScript runs per frame, or the newest row slips under the composer            |
-| FR8      | Emulator checks with UI-thread frame checks; Android unit tests of the translation and the drag rule; Astryx Stage contract suite       | show and hide frame by frame; a drag down past and short of the slop; a tap                              | A blank band between composer and IME, a non-zero translation once settled, or the IME hidden by a tap or twice in one gesture        |
-| FR9      | Emulator checks; Android unit tests; Astryx Stage contract suite; router tests with the view registered and absent                      | light and dark style; hidden and shown; nested stack; closing the modal; a view in the activity's window | The activity's window or the navigation bar is written, or the look stays after the modal closes                                      |
-| FR10     | Unit tests through the `./testing` doubles; Simulator, emulator and Astryx Stage selection checks                                       | a selection across blocks; `setSelection` and `selectBlocks`; a link tap with and without a selection    | A selection that stops at a block edge, wrong UTF-16 offsets, or a link opened natively                                               |
-| FR11     | Simulator and emulator layout checks; Android instrumentation of font scaling                                                           | a width change; a text change; a `height` in style                                                       | A clipped or stale height, or a face that differs from `Text`'s                                                                       |
-| FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                                       | per-block elements; a heading; a link action; the largest text size; Reduce Motion                       | One element for every block, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion           |
-| FR13     | Unit tests with each view and the module absent                                                                                         | every fallback                                                                                           | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                                     |
-| FR14     | The platform's spec rules check; Astryx Stage contract suites and the Stage version floor                                               | a contract at revision 1; a missing named feature; a Stage below the floor                               | A revision above 1, a feature used without `hasContractFeature`, or an older Stage that runs the project                              |
-| FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds; Astryx Stage's engine check at start                   | each member on iOS and Android; a Stage engine without a required member                                 | The table differs from the probe, or Stage runs without a required member and reports nothing                                         |
-| FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                                       | each fallback; an English and a non-English locale; native digits                                        | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import           |
-| FR17     | Review of the native source against the public iOS SDK and the Android SDK and AndroidX                                                 | each native piece on iOS and Android                                                                     | A private selector, a private class, or reflection into a framework                                                                   |
+| Contract | Verification                                                                                                                                               | Representative states                                                                                           | Mutation or failure expectation                                                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests through the `./testing` view doubles; Simulator and emulator checks; Astryx Stage contract suite                                                | portrait, landscape, a notch and a cutout; a nested provider; a change under one pixel                          | Insets include the keyboard, an event per sub-pixel change, or a hook that answers outside every provider                                               |
+| FR2      | Unit tests with absent, older and current module doubles                                                                                                   | explicit, inherited and window metrics; `initialMetrics={null}`; a provider mounted after rotation              | The initial frame lays out with zeros where metrics exist, or stale metrics after a rotation                                                            |
+| FR3      | Unit tests of the edge rule; Simulator and emulator layout checks; Astryx Stage contract suite                                                             | each edge mode; padding and margin; logical start and end; right to left with and without the swap              | Padding a frame late, a wrong combined value, or an inset on the wrong side in right to left                                                            |
+| FR4      | Unit tests with absent, malformed and current module doubles                                                                                               | no window; a malformed constant                                                                                 | A throw, or a value other than `null` without the module                                                                                                |
+| FR5      | Unit tests of the entry's names against react-native-safe-area-context 5.x; a previewed project that imports it; package manifest check                    | each exported name; `cornerAdaptation`; the package's dependencies and peer dependencies                        | A missing name, or a previewed project that renders blank, or react-native-safe-area-context in the dependencies or peer dependencies                   |
+| FR6      | Unit tests through the `./testing` view doubles                                                                                                            | `followsKeyboard` false; an unknown `nativeID`; the library-only prop set by an app                             | An event per frame, a held dock that moves, or an app that gets the library-only behaviour                                                              |
+| FR7      | Simulator, emulator and device checks with UI-thread frame checks (no JavaScript per frame); Android unit tests of the offset; Astryx Stage contract suite | show, hide and height change on both platforms; interactive drag and release on iOS; a side-inset commit on iOS | The docked content leaves the keyboard's top on any frame, a band opens between it and the IME, an offset remains at rest, or JavaScript runs per frame |
+| FR8      | Simulator and emulator checks with UI-thread frame checks; Astryx Stage contract suite                                                                     | a list at its end; a list scrolled up; a list under a finger; a show, a hide and an interactive drag            | The last row slips under the docked content, the list jumps, or the list's own inset props fight the dock's                                             |
+| FR9      | Emulator checks; Android unit tests; Astryx Stage contract suite; router tests with the view registered and absent                                         | light and dark style; hidden and shown; nested stack; closing the modal; a view in the activity's window        | The activity's window or the navigation bar is written, or the look stays after the modal closes                                                        |
+| FR10     | Unit tests through the `./testing` doubles; Simulator, emulator and Astryx Stage selection checks                                                          | a selection across blocks; `setSelection` and `selectBlocks`; a link tap with and without a selection           | A selection that stops at a block edge, wrong UTF-16 offsets, or a link opened natively                                                                 |
+| FR11     | Simulator and emulator layout checks; Android instrumentation of font scaling                                                                              | a width change; a text change; a `height` in style                                                              | A clipped or stale height, or a face that differs from `Text`'s                                                                                         |
+| FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                                                          | per-block elements; a heading; a link action; the largest text size; Reduce Motion                              | One element for every block, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion                             |
+| FR13     | Unit tests with each view and the module absent                                                                                                            | every fallback                                                                                                  | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                                                       |
+| FR14     | The platform's spec rules check; Astryx Stage contract suites and the Stage version floor                                                                  | a contract at revision 1; a missing named feature; a Stage below the floor                                      | A revision above 1, a feature used without `hasContractFeature`, or an older Stage that runs the project                                                |
+| FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds; Astryx Stage's engine check at start                                      | each member on iOS and Android; a Stage engine without a required member                                        | The table differs from the probe, or Stage runs without a required member and reports nothing                                                           |
+| FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                                                          | each fallback; an English and a non-English locale; native digits                                               | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import                             |
+| FR17     | Review of the native source against the public iOS SDK and the Android SDK and AndroidX                                                                    | each native piece on iOS and Android                                                                            | A private selector, a private class, or reflection into a framework                                                                                     |
 
 ## Decision log
 
@@ -450,8 +452,8 @@ insets change.
 The keyboard's motion belongs to the system's animation, so the dock follows it
 on the UI thread and the render server, and JavaScript sets padding only at a
 change's start and end. The composer stays on the keyboard on every frame even
-when the JavaScript thread is busy. Android follows the IME's animated inset;
-a drag down on the transcript hides the IME instead of following the finger.
+when the JavaScript thread is busy. iOS follows UIKit's keyboard layout guide
+and Android follows the IME's inset animation.
 
 Rejected: keyboard frames sent to JavaScript per frame, because each frame would
 wait on the JavaScript thread.
@@ -503,14 +505,19 @@ gaps.
   provider, as react-native-safe-area-context does; or keep it only in the
   `./safe-area-context` entry, so the core's own app API is the provider and
   its hooks.
-- **OQ2 — Is the dock's transcript coupling public?** (`human-api`)
-  `transcriptNativeID` reaches a scroll view among the dock's three nearest
-  ancestors. Options: keep it as public API for apps that build their own chat
-  screen; or keep it library-internal, with `ChatLayout` as the public way to
-  get a transcript that rides the keyboard.
+- **OQ2 — Is the dock's scroll-view link public?** (`human-api`)
+  `transcriptNativeID` finds its scroll view among the dock's three closest
+  ancestors. Options: a public prop any app can use for its own list; or a
+  prop only the library sets.
 - **OQ3 — Does an app's own `Modal` get a public way to set its window's status
   bar on Android?** (`human-api`) The window status bar is internal and only
   the router's drawn modal routes use it; React Native's `StatusBar` inside a
   `Modal` writes the activity's window. Options: export a public component for
   an app's own `Modal`; or keep it internal and route full-screen modals
   through the router.
+- **OQ4 — Is hiding the keyboard by dragging the linked list down a dock
+  behaviour?** (`human-api`) Android binaries hide the IME when a finger drags
+  the linked scroll view down past the touch slop, once per gesture, and keep
+  the field's focus; iOS has the scroll view's own interactive dismissal.
+  Options: a named dock behaviour on Android with its own opt-in; or no dock
+  behaviour, leaving dismissal to the scroll view.
