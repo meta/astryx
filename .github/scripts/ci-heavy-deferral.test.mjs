@@ -243,6 +243,33 @@ describe('a deferred push', () => {
     }
   });
 
+  it('defers a fork push admitted with ci:run; its review-pass run at that head runs every suite after the label is removed, and a later push runs nothing (FR20, FR29)', () => {
+    const fromFork = ({labels, attempt}) => {
+      const event = pushEvent({login: 'someone', labels, attempt});
+      event.event.pull_request.head.repo.full_name = 'someone/astryx';
+      return event;
+    };
+    const admitted = fromFork({labels: ['ci:run'], attempt: '1'});
+    expect(heavyCi(admitted).outputs.deferred).toBe('true');
+    expect(starts('typecheck', admitted)).toBe(true);
+    for (const id of HEAVY) expect(starts(id, admitted), id).toBe(false);
+    // A later attempt keeps the event it re-runs, `ci:run` included, though
+    // the contributor job has since removed the label from the pull request.
+    const reviewPass = fromFork({labels: ['ci:run'], attempt: '2'});
+    expect(heavyCi(reviewPass).result).toBe('skipped');
+    for (const id of HEAVY) expect(starts(id, reviewPass), id).toBe(true);
+    // A later push carries no label: nothing runs until it is vetted again.
+    const later = fromFork({labels: [], attempt: '1'});
+    expect(starts('typecheck', later)).toBe(false);
+    for (const id of HEAVY) expect(starts(id, later), id).toBe(false);
+  });
+
+  it('runs every suite at the pre-merge re-run, a later attempt', () => {
+    const preMerge = pushEvent({attempt: '2'});
+    expect(heavyCi(preMerge).result).toBe('skipped');
+    for (const id of HEAVY) expect(starts(id, preMerge), id).toBe(true);
+  });
+
   it('still runs the fast checks: typecheck and lint', () => {
     expect(starts('typecheck', github)).toBe(true);
     expect(JSON.stringify(ci.jobs.typecheck)).not.toContain('heavy-ci');

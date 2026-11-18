@@ -8,7 +8,9 @@
 # looks when a review is submitted or an /approve-spec comment lands (the
 # gate settles a moment later, so it waits for it), when a CI run ends (a
 # deferred run that finished after its review passed), and every quarter hour
-# for a start it missed. It reads main's helper, never pull-request code.
+# for a start it missed. Its helper comes from main, never from the pull
+# request; on a review event GitHub takes this script from the pull request's
+# own copy of this file.
 name: CI review pass
 
 on:
@@ -73,27 +75,35 @@ jobs:
               }
             };
             const event = context.eventName;
+            // A fork's run lists no pull request: pullsForRun finds it by its
+            // head repository and branch.
             const number =
               context.payload.pull_request?.number ??
               (context.payload.issue?.pull_request ? context.payload.issue.number : undefined) ??
-              context.payload.workflow_run?.pull_requests?.[0]?.number;
+              (context.payload.workflow_run
+                ? (await turn.pullsForRun({github, ...context.repo, run: context.payload.workflow_run}))[0]
+                : undefined);
             if (event === 'schedule' || event === 'workflow_dispatch' || number == null) {
               // Every recent first attempt that failed: a deferred run fails
-              // its required checks.
+              // its required checks. Each page holds at most 100 runs.
               const since = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
-              const {data} = await github.rest.actions.listWorkflowRuns({
-                ...context.repo,
-                workflow_id: turn.CI_WORKFLOW,
-                event: 'pull_request',
-                status: 'failure',
-                created: `>=${since}`,
-                per_page: 100,
-              });
-              const numbers = new Set(
-                data.workflow_runs
-                  .filter(run => run.run_attempt === 1)
-                  .flatMap(run => (run.pull_requests ?? []).map(p => p.number)),
-              );
+              const failed = [];
+              for (let page = 1; page <= 10; page += 1) {
+                const {data} = await github.rest.actions.listWorkflowRuns({
+                  ...context.repo,
+                  workflow_id: turn.CI_WORKFLOW,
+                  event: 'pull_request',
+                  status: 'failure',
+                  created: `>=${since}`,
+                  per_page: 100,
+                  page,
+                });
+                failed.push(...data.workflow_runs);
+                if (data.workflow_runs.length < 100) break;
+              }
+              const numbers = new Set();
+              for (const run of failed.filter(run => run.run_attempt === 1))
+                for (const n of await turn.pullsForRun({github, ...context.repo, run})) numbers.add(n);
               for (const n of numbers) {
                 const {data: pull} = await github.rest.pulls.get({...context.repo, pull_number: n});
                 if (pull.state === 'open' && intoMain(pull)) await start(pull);

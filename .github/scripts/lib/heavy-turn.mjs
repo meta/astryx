@@ -52,6 +52,30 @@ export async function reviewStatus({github, owner, repo, sha}) {
 }
 
 /**
+ * The pull requests a CI run belongs to. GitHub lists them on a run from this
+ * repository but none on a fork's run, so a fork's open pull requests are
+ * found by the run's head repository and branch, at the run's head.
+ * @param {{github: any, owner: string, repo: string, run: any}} input
+ * @returns {Promise<number[]>}
+ */
+export async function pullsForRun({github, owner, repo, run}) {
+  const listed = (run.pull_requests ?? []).map(pull => pull.number);
+  if (listed.length > 0) return listed;
+  const headOwner = run.head_repository?.owner?.login;
+  if (!headOwner || !run.head_branch) return [];
+  const {data} = await github.rest.pulls.list({
+    owner,
+    repo,
+    state: 'open',
+    head: `${headOwner}:${run.head_branch}`,
+    per_page: 100,
+  });
+  return data
+    .filter(pull => pull.head?.sha === run.head_sha)
+    .map(pull => pull.number);
+}
+
+/**
  * Starts the heavy suites for a pull request whose review passes at its head:
  * re-runs its newest CI run there in full when that run's first attempt
  * deferred them. Returns what it did, in words.

@@ -750,6 +750,10 @@ the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
 The nightly perf lane is the one scheduled measurement outside them (FR18).
 
+FR20 gap: the CI workflows defer the heavy suites only for the shared agent
+login's pushes, and run them when a pull request is marked ready, opened or
+reopened rather than when the review and spec gates pass at a head.
+
 ## Verification
 
 | Contract | Verification                                                                                                                                                                                  | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |

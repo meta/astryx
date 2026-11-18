@@ -59,6 +59,8 @@ owns response fields and compatibility.
   strongly: the word is that doc's evidence. Its name, title, description and
   declared keywords stay its own. `searchCore`, which build reads, keeps the
   gathered reading.
+  Icons are not among the results: an icon ask's trailing `icons` section
+  (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a

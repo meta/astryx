@@ -56,6 +56,15 @@ function stubGithub({pulls = [], runs = [], jobs = {}, statuses = {}}) {
         get: async ({pull_number}) => ({
           data: pulls.find(pull => pull.number === pull_number),
         }),
+        // `head` is OWNER:branch, as GitHub takes it.
+        list: async ({head, state}) => {
+          expect(state).toBe('open');
+          return {
+            data: pulls.filter(
+              pull => `${pull.head.owner ?? 'o'}:${pull.head.ref}` === head,
+            ),
+          };
+        },
       },
       repos: {
         listCommitStatusesForRef: async ({ref}) => ({
@@ -300,23 +309,79 @@ describe('the workflow', () => {
     );
   });
 
+  /** A fork's pull request and its CI run, which lists no pull request. */
+  const forkPull = (number, sha) =>
+    pull(number, sha, {head: {sha, ref: 'fix', owner: 'someone'}});
+  const forkRun = (id, sha, extra = {}) =>
+    ciRun(id, sha, {
+      pull_requests: [],
+      head_branch: 'fix',
+      head_repository: {owner: {login: 'someone'}},
+      ...extra,
+    });
+
   it("sweeps recent failed first attempts on the schedule, a fork's included", async () => {
     vi.useFakeTimers();
     const {calls} = await pass(
       'schedule',
       {},
       {
-        pulls: [pull(1, 'h1'), pull(2, 'h2'), pull(3, 'h3')],
+        pulls: [pull(1, 'h1'), pull(2, 'h2'), pull(3, 'h3'), forkPull(4, 'h4')],
         runs: [
           ciRun(11, 'h1', {pull_requests: [{number: 1}]}),
           ciRun(12, 'h2', {pull_requests: [{number: 2}]}),
           ciRun(13, 'h3', {pull_requests: [{number: 3}], run_attempt: 2}),
+          forkRun(14, 'h4'),
         ],
-        jobs: {11: deferredJobs, 12: deferredJobs, 13: deferredJobs},
-        statuses: {h1: passed, h2: pending, h3: passed},
+        jobs: {
+          11: deferredJobs,
+          12: deferredJobs,
+          13: deferredJobs,
+          14: deferredJobs,
+        },
+        statuses: {h1: passed, h2: pending, h3: passed, h4: passed},
       },
     );
     vi.useRealTimers();
-    expect(calls.reRunWorkflow).toEqual([11]);
+    expect(calls.reRunWorkflow).toEqual([11, 14]);
+  });
+
+  it('starts a fork head admitted after its gates passed, once its deferred run ends', async () => {
+    // The gates passed before `ci:run`; admitting the head starts a first
+    // attempt that defers, and its end starts the review-pass run.
+    vi.useFakeTimers();
+    const run = forkRun(15, 'h5');
+    const {calls} = await pass(
+      'workflow_run',
+      {workflow_run: run},
+      {
+        pulls: [forkPull(5, 'h5')],
+        runs: [run],
+        jobs: {15: deferredJobs},
+        statuses: {h5: passed},
+      },
+    );
+    vi.useRealTimers();
+    expect(calls.reRunWorkflow).toEqual([15]);
+  });
+
+  it('gives a later head whose gates pass its own review-pass run', async () => {
+    vi.useFakeTimers();
+    const {calls} = await pass(
+      'pull_request_review',
+      {pull_request: {number: 6}},
+      {
+        pulls: [pull(6, 'h6b')],
+        // The earlier head already ran again in full.
+        runs: [
+          ciRun(16, 'h6a', {run_attempt: 2, conclusion: 'success'}),
+          ciRun(17, 'h6b', {created_at: '2026-11-17T13:00:00Z'}),
+        ],
+        jobs: {16: ranJobs, 17: deferredJobs},
+        statuses: {h6b: passed},
+      },
+    );
+    vi.useRealTimers();
+    expect(calls.reRunWorkflow).toEqual([17]);
   });
 });
