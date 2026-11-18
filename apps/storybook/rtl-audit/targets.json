@@ -170,8 +170,8 @@
     "storyId": "lab-chatadditions--reactions",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-chat-reaction-bar button:has-text(\"🎉\")",
-      "next": ".astryx-chat-reaction-bar button:has-text(\"👀\")"
+      "prev": ".astryx-chat-reaction-bar button:has-text(\"\ud83c\udf89\")",
+      "next": ".astryx-chat-reaction-bar button:has-text(\"\ud83d\udc40\")"
     }
   },
   {
@@ -196,11 +196,6 @@
       "prev": ".astryx-chat-unread-divider > span:first-child",
       "next": ".astryx-chat-unread-divider span:text-is(\"New\")"
     }
-  },
-  {
-    "component": "CheckboxIndicator",
-    "storyId": "core-indicator--all-states",
-    "dims": []
   },
   {
     "component": "CheckboxInput",
@@ -232,11 +227,6 @@
       "prev": ".astryx-checkbox-input",
       "next": "[data-testid=\"checkbox-end-content\"]"
     }
-  },
-  {
-    "component": "CheckIndicator",
-    "storyId": "core-indicator--all-states",
-    "dims": []
   },
   {
     "component": "CodeBlock",
@@ -651,11 +641,6 @@
       "prev": "button[aria-label=\"Previous month\"]",
       "next": "button[aria-label=\"Next month\"]"
     }
-  },
-  {
-    "component": "RadioIndicator",
-    "storyId": "core-indicator--all-states",
-    "dims": []
   },
   {"component": "RadioList", "storyId": "core-radiolist--default", "dims": []},
   {
