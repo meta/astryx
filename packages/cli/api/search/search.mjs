@@ -27,9 +27,8 @@ import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   gatherCandidatesReused,
   loadSearchData,
-  searchIconSource,
+  searchIconSection,
 } from './_adapter.mjs';
-import {iconSection} from './_icons.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {searchView} from './_named-keywords.mjs';
 import {checkSearchArgs} from './_result.mjs';
@@ -82,15 +81,11 @@ async function searchRead(query, options) {
   const {response, catalog} = await rankedSearch(query, options);
   // A search for one `type` keeps to that domain, and icons are not one.
   if (options.type == null) {
-    const source = await searchIconSource(options.cwd ?? process.cwd());
-    const icons =
-      source &&
-      (await iconSection(
-        query,
-        source,
-        declaredNames(catalog.all),
-        options.limit ?? 20,
-      ));
+    const icons = await searchIconSection(query, {
+      cwd: options.cwd ?? process.cwd(),
+      declaredNames: declaredNames(catalog.all),
+      limit: options.limit ?? 20,
+    });
     if (icons) response.data.icons = icons;
   }
   return response;

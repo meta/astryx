@@ -7,8 +7,8 @@
  *
  * @input a query, the installed icon sets, and the search's limit
  * @output the `data.icons` section, or null
- * @position api/search — read by search.mjs only; searchCore, build and the
- *   search index never read it
+ * @position api/search — read by the adapter only (_adapter.mjs
+ *   searchIconSection); searchCore, build and the search index never read it
  */
 
 import {
@@ -38,7 +38,7 @@ export async function iconSection(query, source, declaredNames, limit) {
   }
   const sets = await source.sets();
   if (sets.length === 0) return null;
-  const matches = answeringMatches(rankIcons(sets, query));
+  const matches = answeringMatches(rankIcons(sets, query, {words: true}));
   if (matches.length === 0) return null;
   return {
     matchCount: matches.length,

@@ -154,8 +154,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   Discover refuses
   `--type icon-set` and ignores `icon-set` catalog items and their fields
   exactly as it does any unknown kind or field. Where icon features are on,
-  `icon-set` is a discover kind (FR17). `astryx search` never reads icon
-  sets, whether icon features are on or off, and returns no experimental doc.
+  `icon-set` is a discover kind (FR17). `astryx search` reads icon sets only
+  for an icon ask where icon features are on (FR11), and returns no
+  experimental doc.
   Where icon features are off, no stable doc names an experimental route, an
   icon set, or an icon definition, and a stable docs
   node's previous and next links skip experimental neighbors; the one stable
@@ -262,13 +263,13 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   its own and names both looks as `look`. With no set installed, the answer
   says so (`reason`), names the Astryx definitions that match
   (`definitions`), built-in ones first, and says how to get a set (`next`).
-  `astryx search` with no `--type` answers an icon ask the same way: when a
-  set is installed and one word of the query as typed is `icon`, `icons`, a
+  `astryx search` with no `--type` answers an icon ask the same way: where
+  icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component
   or hook name (`Icon`, `IconButton`), the matches that answer
   follow `results` as a trailing `icons` section, `{matchCount, results}`, of
   at most 3 (fewer when `--limit` is smaller), each with its `set`, `id`,
-  `import` line and command. Every other search does no icon work.
+  `import` line and command (FR11).
 - **FR7 — One icon and the installed sets.** `<set>/<id>` answers
   `icon.detail` with every variant's import line; `--list` answers `icon.list`
   with each set's coverage of built-in, Astryx, and its own definitions, the
@@ -393,7 +394,10 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   would draw the same icon.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
-  Icons join it only at promotion.
+  Its `results` and `matchCount` never hold an icon. It reads icon sets only
+  where icon features are on and the query asks for an icon (FR6), and then
+  appends at most three icons in its own `icons` block. Promotion decides
+  every other stable listing of icons.
 - **FR12 — The theme map.** A set exports the map `themeMap` names: one entry
   per built-in definition in `map`, each its icon's artwork, so a theme sets
   `icons: themeIcons`. Each entry is sized to the theme's icon box by CSS
@@ -818,8 +822,10 @@ Rejected: one doc file per icon, which thousands of hand-kept files cannot keep 
 **Decider:** `josephfarina`, `2026-10-20`
 
 An icon answer needs its import line, variants, and definitions, so
-`astryx experimental icon` answers with the full record. `astryx search` is a
-stable surface the experiment never feeds; icons join it at promotion.
+`astryx experimental icon` answers with the full record. `astryx search` keeps
+its results stable: for an icon ask where icon features are on, the
+experiment adds only a trailing block of at most three icons, and promotion
+decides every other stable listing.
 
 ### DEC-3 — An icon no set has becomes a placeholder
 

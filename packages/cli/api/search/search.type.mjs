@@ -40,6 +40,7 @@
 /**
  * One installed icon that answers a search that asks for an icon, as the icon
  * finder (`astryx experimental icon <words>`) ranks it.
+ * @experimental May change or be removed in a patch release.
  * @typedef {object} IconSearchEntry
  * @property {'icon'} domain
  * @property {string} name - `<set>/<id>`.
@@ -54,6 +55,7 @@
 
 /**
  * The icons that answer a search that asks for an icon.
+ * @experimental May change or be removed in a patch release.
  * @typedef {object} SearchIconSection
  * @property {number} matchCount - How many installed icons answer, before the cap.
  * @property {IconSearchEntry[]} results - The best of them, at most 3 (fewer when `limit` is smaller).
@@ -67,7 +69,8 @@
  * @property {string} data.query
  * @property {number} data.matchCount - How many candidates matched the query in total, before `limit` was applied. `results` is the bounded slice of that set, so `matchCount > results.length` means the answer was capped.
  * @property {SearchResultEntry[]} data.results
- * @property {SearchIconSection} [data.icons] - Present only when an icon set
+ * @property {SearchIconSection} [data.icons] - Experimental: may change or be
+ *   removed in a patch release. Present only when an icon set
  *   is installed, the search has no `type`, the query asks for an icon (one
  *   word as typed is `icon` or `icons`, an installed set's name, or an icon
  *   export name such as `SearchIcon`, and is not a component or hook name),

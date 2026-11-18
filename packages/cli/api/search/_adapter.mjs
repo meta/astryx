@@ -20,6 +20,7 @@ import {coreDirOrThrow} from '../error.mjs';
 import {Project} from '../../foundation/config/project.mjs';
 import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {iconSetDirectoryNames} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {iconSection} from './_icons.mjs';
 import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
@@ -39,16 +40,18 @@ import {
 export {componentKeywords} from './_gather-components.mjs';
 
 /**
- * Where search answers icon asks from, when the icon features are on: the
- * names of the installed sets, read from their directories alone, and a read
- * of the sets themselves, in tie order. Null when the features are off or
- * the project fails to load: search then answers as it does without icons.
- * Nothing is kept with the gathered catalog, so a pack installed or removed
- * shows on the next search.
- * @param {string} cwd
- * @returns {Promise<{setNames: string[], sets: () => Promise<import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet[]>} | null>}
+ * The icon section of a search (_icons.mjs): the installed icons that answer
+ * a query that asks for an icon, or null. Only where icon features are on:
+ * the ask test reads the installed sets' names from their directories alone,
+ * and the sets themselves are read only for a query that asks. A project
+ * that fails to load has no section. Nothing is kept with the gathered
+ * catalog, so a pack installed or removed shows on the next search.
+ * @param {string} query
+ * @param {{cwd: string, declaredNames: string[], limit: number}} options
+ *   `declaredNames`: the names of the components and hooks search reads
+ * @returns {Promise<import('./search.type.mjs').SearchIconSection | null>}
  */
-export async function searchIconSource(cwd) {
+export async function searchIconSection(query, {cwd, declaredNames, limit}) {
   let project;
   try {
     project = await Project.load(cwd);
@@ -57,18 +60,25 @@ export async function searchIconSource(cwd) {
   }
   if (!iconFeatureGate(project).on) return null;
   const loaded = /** @type {Project} */ (project);
-  return {
-    setNames: loaded.loadedIntegrations.flatMap(integration =>
-      integration?.iconSets ? iconSetDirectoryNames(integration.iconSets) : [],
-    ),
-    sets: async () => {
-      try {
-        return (await loaded.iconSets()).sets;
-      } catch {
-        return [];
-      }
+  return iconSection(
+    query,
+    {
+      setNames: loaded.loadedIntegrations.flatMap(integration =>
+        integration?.iconSets
+          ? iconSetDirectoryNames(integration.iconSets)
+          : [],
+      ),
+      sets: async () => {
+        try {
+          return (await loaded.iconSets()).sets;
+        } catch {
+          return [];
+        }
+      },
     },
-  };
+    declaredNames,
+    limit,
+  );
 }
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
