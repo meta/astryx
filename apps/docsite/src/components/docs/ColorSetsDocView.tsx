@@ -3,32 +3,39 @@
 'use client';
 
 /**
- * @file Color-set documentation with paired Neutral swatches.
- * @input Authored section tables and canonical theme token resolution.
- * @output Visible colors, token labels, and light/dark reference values.
+ * @file Compact visual reference for data-color sets.
+ * @input Authored set tables and canonical Neutral theme values.
+ * @output One readable palette with token names and paired mode previews.
  * @position The Color sets subpage under Data visualization.
  */
 
+import {useEffect, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
+import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {Table, proportional} from '@astryxdesign/core/Table';
-import {Text} from '@astryxdesign/core/Text';
+import {Selector} from '@astryxdesign/core/Selector';
+import {Tab, TabList} from '@astryxdesign/core/TabList';
+import {Heading, Text} from '@astryxdesign/core/Text';
+import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
-import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {
+  colorVars,
+  radiusVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
-import type {ContentBlock, DocSection} from '../../generated/docsRegistry';
-import {AnchorHeading} from './AnchorHeading';
+import type {DocSection} from '../../generated/docsRegistry';
 import {ContentBlockRenderer} from './ContentBlockRenderer';
-import {buildOutline, normalizeHeadingLevel} from './docOutline';
-import {ReferenceDocView, type SectionOverrides} from './ReferenceDocView';
-import {renderInlineMarkdown} from './inlineMarkdown';
+import {DocPageLayout} from './DocPageLayout';
 
 const modeTokens = {
   light: resolveThemeTokens(neutralTheme, {mode: 'light'}),
   dark: resolveThemeTokens(neutralTheme, {mode: 'dark'}),
 };
 const styles = stylex.create({
+  tabs: {maxWidth: '100%', minWidth: 0},
+  token: {fontSize: '0.75rem', overflowWrap: 'anywhere'},
   surface: (color: string) => ({
     width: 28,
     height: 28,
@@ -38,17 +45,37 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     borderWidth: 1,
     borderStyle: 'solid',
-    borderColor: colorVars['--color-border-gray'],
+    borderColor: colorVars['--color-border'],
   }),
-  value: {whiteSpace: 'nowrap'},
-  token: {overflowWrap: 'anywhere'},
   fill: (color: string, strength: number) => ({
     width: '100%',
     height: '100%',
     backgroundColor: color,
     opacity: strength,
   }),
+  preview: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-2'],
+  },
+  controls: {maxWidth: '22rem'},
 });
+
+const PURPOSE: Record<string, string> = {
+  Categorical:
+    'Different categories, different colors. Keep each category’s color consistent across charts.',
+  Sequential:
+    'One measure, ordered from less to more. Choose a ramp and label the value ranges.',
+  Reference: 'A quieter color for a comparison or a labeled target line.',
+  Semantic:
+    'A named status: positive, warning, negative, or neutral. Always label what the color means.',
+  Diverging:
+    'Two directions from a midpoint, such as above and below a target.',
+  Spectrum:
+    'A mixed-hue example with 10 positions but only 8 distinct colors. A single ramp is usually easier to read.',
+  Heatmap:
+    'Fill strength shows patterns in a table or grid. Keep the exact values visible.',
+};
 
 export function colorLabel(value: string, strength: number): string {
   if (strength === 1) {
@@ -61,6 +88,20 @@ export function colorLabel(value: string, strength: number): string {
       .toUpperCase()}`;
   }
   return `color-mix(in srgb, ${value} ${strength * 100}%, transparent)`;
+}
+
+export function colorGroups(section: DocSection) {
+  const groups: Array<{title: string; rows: string[][]}> = [];
+  let title = section.title;
+  for (const block of section.content) {
+    if (block.type === 'heading') {
+      title = block.text ?? section.title;
+    }
+    if (block.type === 'table') {
+      groups.push({title, rows: block.rows ?? []});
+    }
+  }
+  return groups;
 }
 
 function ModePreview({
@@ -79,129 +120,229 @@ function ModePreview({
   }
   const label = colorLabel(color, strength);
   return (
-    <HStack gap={2} vAlign="center">
+    <div {...stylex.props(styles.preview)}>
       <div
         role="img"
         aria-label={`${token}, ${mode}, ${strength * 100}%, ${label}`}
         {...stylex.props(styles.surface(surface))}>
         <div {...stylex.props(styles.fill(color, strength))} />
       </div>
-      <Text type="code" color="secondary" xstyle={styles.value}>
-        {label}
-      </Text>
-    </HStack>
+    </div>
   );
 }
 
-function ColorSetTable({block}: {block: ContentBlock}) {
-  const headers = block.headers ?? [];
-  const tokenIndex = headers.indexOf('Token'),
-    strengthIndex = headers.indexOf('Strength');
-  if (tokenIndex < 0 || strengthIndex < 0) {
-    throw new Error('Color-set tables require Token and Strength columns');
-  }
-  const data = (block.rows ?? []).map(row => {
-    const strength = Number.parseFloat(row[strengthIndex]) / 100;
+function Palette({rows}: {rows: string[][]}) {
+  const data = rows.map((row, index) => {
+    const strength = Number.parseFloat(row[2]) / 100;
     if (!Number.isFinite(strength) || strength < 0 || strength > 1) {
       throw new Error('Invalid color-set strength');
     }
-    return {meaning: row[0], token: row[tokenIndex], strength};
+    return {
+      index,
+      token: row[1],
+      strength,
+      meaning: row[0].replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'),
+    };
   });
   return (
-    <Table
-      data={data}
-      columns={[
-        {
-          key: 'token',
-          header: 'Token / use',
-          width: proportional(2),
-          renderCell: row => (
-            <VStack gap={1}>
-              <Text type="code" xstyle={styles.token}>
-                {row.token}
-              </Text>
-              <Text type="supporting" color="secondary">
-                {renderInlineMarkdown(row.meaning)}
-                {row.strength === 1 ? '' : ` · ${row.strength * 100}%`}
-              </Text>
-            </VStack>
-          ),
-        },
-        {
-          key: 'value',
-          header: 'Light / Dark',
-          width: proportional(1),
-          renderCell: row => (
-            <VStack gap={2}>
-              <ModePreview
-                token={row.token}
-                mode="light"
-                strength={row.strength}
-              />
-              <ModePreview
-                token={row.token}
-                mode="dark"
-                strength={row.strength}
-              />
-            </VStack>
-          ),
-        },
-      ]}
-      density="spacious"
-      dividers="rows"
-    />
+    <Card>
+      <Table
+        data={data}
+        columns={[
+          {
+            key: 'token',
+            header: 'Token',
+            width: pixel(260),
+            renderCell: row => (
+              <VStack gap={1}>
+                <Text>{row.token}</Text>
+                {row.strength !== 1 && (
+                  <Text type="supporting" color="secondary">
+                    {row.strength * 100}% fill
+                  </Text>
+                )}
+              </VStack>
+            ),
+          },
+          {
+            key: 'value',
+            header: 'Value',
+            width: proportional(1),
+            renderCell: row => {
+              const light = colorLabel(
+                modeTokens.light[row.token],
+                row.strength,
+              );
+              const dark = colorLabel(modeTokens.dark[row.token], row.strength);
+              return (
+                <HStack gap={2} vAlign="center">
+                  <ModePreview
+                    token={row.token}
+                    mode="light"
+                    strength={row.strength}
+                  />
+                  <ModePreview
+                    token={row.token}
+                    mode="dark"
+                    strength={row.strength}
+                  />
+                  <Text type="code" color="secondary">
+                    {light === dark ? light : `${light} / ${dark}`}
+                  </Text>
+                </HStack>
+              );
+            },
+          },
+        ]}
+        density="spacious"
+        dividers="rows"
+      />
+    </Card>
+  );
+}
+
+function SetPanel({section}: {section: DocSection}) {
+  const groups = colorGroups(section);
+  const [groupIndex, setGroupIndex] = useState('0');
+  const group = groups[Number(groupIndex)] ?? groups[0];
+  const rows = group?.rows ?? [];
+  const changes = rows.some(
+    row => modeTokens.light[row[1]] !== modeTokens.dark[row[1]],
+  );
+  const alpha = rows.some(row => row[2] !== '100%');
+  return (
+    <VStack gap={4}>
+      <Heading level={2}>{section.title}</Heading>
+      <Text>{PURPOSE[section.title]}</Text>
+      {groups.length > 1 && (
+        <div {...stylex.props(styles.controls)}>
+          <Selector
+            label={section.title === 'Sequential' ? 'Ramp' : 'Palette'}
+            value={groupIndex}
+            options={groups.map((item, i) => ({
+              value: String(i),
+              label: item.title,
+            }))}
+            onChange={setGroupIndex}
+            width="100%"
+          />
+        </div>
+      )}
+      <Text type="supporting" color="secondary">
+        {changes
+          ? 'Gray and neutral change in dark mode.'
+          : 'Same token colors in both modes.'}
+        {alpha
+          ? ' Transparent fills blend with the light or dark surface.'
+          : ''}
+        {section.title === 'Sequential' ? ' Shown dark → light (5 → 1).' : ''}
+      </Text>
+      {section.title === 'Semantic' && (
+        <Text type="supporting" color="secondary">
+          Warning yellow is an example, not an approved default.
+        </Text>
+      )}
+      <Palette rows={rows} />
+      <Collapsible trigger="Implementation details" defaultIsOpen={false}>
+        <VStack gap={4}>
+          {section.content
+            .filter(block => block.type === 'prose' || block.type === 'code')
+            .map((block, i) => (
+              <ContentBlockRenderer key={i} block={block} />
+            ))}
+        </VStack>
+      </Collapsible>
+    </VStack>
   );
 }
 
 export function ColorSetsDocView({
   title,
-  description,
   sections,
 }: {
   title: string;
   description: string;
   sections: DocSection[];
 }) {
-  const {blockIds} = buildOutline(sections);
-  const overrides: SectionOverrides = {};
-  sections.forEach((section, sectionIndex) => {
-    if (section.previewType !== 'swatch') {
-      return;
-    }
-    overrides[section.title] = (current, id) => (
-      <VStack gap={4}>
-        <AnchorHeading id={id} level={2} type="display-3">
-          {current.title}
-        </AnchorHeading>
-        {current.content.map((block, blockIndex) => {
-          if (block.type === 'table') {
-            return (
-              <Card key={blockIndex}>
-                <ColorSetTable block={block} />
-              </Card>
-            );
-          }
-          if (block.type === 'heading') {
-            return (
-              <AnchorHeading
-                key={blockIndex}
-                id={blockIds.get(`${sectionIndex}:${blockIndex}`) ?? ''}
-                level={normalizeHeadingLevel(block.level)}>
-                {block.text}
-              </AnchorHeading>
-            );
-          }
-          return <ContentBlockRenderer key={blockIndex} block={block} />;
-        })}
-      </VStack>
-    );
-  });
+  const sets = sections.filter(section => section.previewType === 'swatch');
+  const [selected, setSelected] = useState('categorical');
+  const keys = sets.map(section => section.title.toLowerCase());
+  const keyString = keys.join('|');
+  useEffect(() => {
+    const restore = () => {
+      const hash = window.location.hash.slice(1);
+      const found = keyString
+        .split('|')
+        .find(key => hash === key || hash.startsWith(`${key}-`));
+      setSelected(found ?? 'categorical');
+    };
+    restore();
+    window.addEventListener('hashchange', restore);
+    window.addEventListener('popstate', restore);
+    return () => {
+      window.removeEventListener('hashchange', restore);
+      window.removeEventListener('popstate', restore);
+    };
+  }, [keyString]);
+  const select = (value: string) => {
+    setSelected(value);
+    window.history.replaceState(window.history.state, '', `#${value}`);
+  };
   return (
-    <ReferenceDocView
+    <DocPageLayout
       title={title}
-      description={description}
-      sections={sections}
-      sectionOverrides={overrides}
-    />
+      description="Existing Astryx colors, shown in Neutral.">
+      <VStack gap={6}>
+        <TabList
+          value="colors"
+          onChange={() => {}}
+          aria-label="Data visualization guides"
+          hasDivider>
+          <Tab
+            value="colors"
+            label="Color sets"
+            href="/docs/visualization-color-sets"
+          />
+          <Tab
+            value="styling"
+            label="Chart styling"
+            href="/docs/visualization#match-each-chart-part-to-an-existing-role"
+          />
+        </TabList>
+        <TabList
+          value={selected}
+          onChange={select}
+          role="tablist"
+          aria-label="Color sets"
+          size="sm"
+          hasDivider
+          xstyle={styles.tabs}>
+          {sets.map((section, i) => (
+            <Tab
+              key={keys[i]}
+              value={keys[i]}
+              label={section.title}
+              panelId={`set-${keys[i]}`}
+            />
+          ))}
+        </TabList>
+        {sets.map((section, i) => (
+          <div
+            key={keys[i]}
+            id={`set-${keys[i]}`}
+            role="tabpanel"
+            aria-label={section.title}
+            hidden={selected !== keys[i]}>
+            {selected === keys[i] && (
+              <SetPanel key={keys[i]} section={section} />
+            )}
+          </div>
+        ))}
+        <Text type="supporting" color="secondary">
+          Composed palettes are examples, not new token families or approved
+          defaults.
+        </Text>
+      </VStack>
+    </DocPageLayout>
   );
 }
