@@ -139,6 +139,25 @@ describe('the single contract-leg dispatch', () => {
     );
   });
 
+  it('stamps the checked-out revision after the build and before the contracts', () => {
+    const stamp = step('Stamp Storybook source revision');
+    const releaseStamp = ci.jobs['build-storybook'].steps.find(
+      item => item.name === 'Stamp Storybook source revision',
+    );
+    expect(stamp?.run).toBe(
+      'git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt',
+    );
+    expect(stamp.run).toBe(releaseStamp.run);
+    expect(stamp.if).toBeUndefined();
+    const names = job.steps.map(item => item.name);
+    expect(names.indexOf('Stamp Storybook source revision')).toBeGreaterThan(
+      names.indexOf('Build packages and Storybook'),
+    );
+    expect(names.indexOf('Stamp Storybook source revision')).toBeLessThan(
+      names.indexOf('Run accessibility spec-test contracts'),
+    );
+  });
+
   it('gives the leg time for its repeats, with no arithmetic, which expressions lack', () => {
     const limit = job['timeout-minutes'];
     expect(limit).not.toMatch(/[+*/]|\s-\s/);

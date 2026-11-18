@@ -111,6 +111,9 @@ jobs:
       - name: Build packages and Storybook
         run: node .github/scripts/build-packages-and-storybook.mjs
 
+      - name: Stamp Storybook source revision
+        run: git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt
+
       - name: Install Playwright
         run: npx playwright install chromium
 
