@@ -31,6 +31,6 @@ Where a base theme draws its own text with one of these colors and the grown val
 
 A set `--color-on-accent` (or another role's text or icon color) reaches only what reads it, and a role color set for one mode leaves the base theme's own parts as they are in the other mode.
 
-- `astryx experimental theme editor`: a whole-theme `--color-accent` set as a token now acts as the theme's accent when no accent color is set. Links, selected rows, list items, citations and the accent tint grow from it, as they do from `set <theme> accent`. A dark value set with `--mode dark` carries the dark shades, and the token keeps the exact value it was given in each mode. Set for one mode only, it moves that mode only: the other mode keeps the colors the base theme gives it now, saved as fixed values, so that mode no longer follows a later change to the base theme.
+- `astryx experimental theme editor`: a whole-theme `--color-accent` set as a token now acts as the theme's accent when no accent color is set. Links, selected rows, list items, citations and the accent tint grow from it, as they do from `set <theme> accent`. A dark value set with `--mode dark` carries the dark shades, and the token keeps the exact value it was given in each mode. Set for one mode only, it moves that mode only: the other mode keeps the colors the theme's own palette gives it, and where the theme has none, it reads the base theme's values, so it follows a later change to the base theme.
 
 @josephfarina

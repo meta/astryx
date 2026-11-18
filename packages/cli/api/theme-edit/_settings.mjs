@@ -8227,6 +8227,7 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
   }
   const like = data.like;
   const REF = '@@palette:';
+  const BASE_REF = '@@base:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
   const refOf = (family, m, r) =>
     r.family === 'black' || r.family === 'white'
@@ -8240,11 +8241,15 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
       const now = theme.tokens[k];
       const [l, d] = Array.isArray(now) ? now : [now, now];
       if (l !== v.light.color || d !== v.dark.color) continue;
-      // A half kept at the base theme's (family 'literal') is its color.
+      // A half kept at the base theme's (family 'literal') is its color;
+      // one that is the base theme's own value is read from the base, so
+      // that mode follows the base theme as it changes.
       const half = (/** @type {'light' | 'dark'} */ m) =>
-        /** @type {any} */ (v[m]).family === 'literal'
-          ? v[m].color
-          : refOf(v.family, m, v[m]);
+        /** @type {any} */ (v[m]).base && like
+          ? `${BASE_REF}${k}@${m}`
+          : /** @type {any} */ (v[m]).family === 'literal'
+            ? v[m].color
+            : refOf(v.family, m, v[m]);
       out.tokens[k] = [half('light'), half('dark')];
     }
   }
@@ -8270,7 +8275,13 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
     }
   }
   let usesPalette = false;
+  /** The modes the module reads the base theme's own values in. @type {Set<'light' | 'dark'>} */
+  const baseModes = new Set();
   const body = JSON.stringify(out, null, 2)
+    .replace(/"@@base:(--[a-z0-9-]+)@(light|dark)"/g, (_, token, m) => {
+      baseModes.add(m);
+      return `baseIn(${JSON.stringify(token)}, '${m}')`;
+    })
     .replace(
       /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)(?:\+([0-9a-f]{2}))?)"/g,
       (_, end, family, m, stop, alpha) => {
@@ -8312,13 +8323,16 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
           ]
         : []),
       `// Change it with \`${P} set ${slug} ...\`; your own changes go in ${slug}.theme.ts.`,
-      "import {defineTheme} from '@astryxdesign/core/theme';",
+      baseModes.size
+        ? "import {defineTheme, tokenDefaults} from '@astryxdesign/core/theme';"
+        : "import {defineTheme} from '@astryxdesign/core/theme';",
       ...(like
         ? [
             `import {${like}Theme as base} from '@astryxdesign/theme-${like}/built';`,
           ]
         : []),
       ...(usesPalette ? [paletteImport(slug)] : []),
+      ...(baseModes.size ? ['', ...BASE_IN_SOURCE] : []),
       '',
       `export const ${camel(slug)}Settings = defineTheme({`,
       ...(like ? ['  extends: base,'] : []),
@@ -8328,6 +8342,35 @@ function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
     ].join('\n'),
   );
 }
+
+/**
+ * The generated module's reader of the base theme's own value of a token in
+ * one mode, as the base is now (the base's value, else Core's default; its
+ * `light-dark()` half, else the value), so a mode the theme leaves to its
+ * base keeps following the base theme. It reads `base` only as a value
+ * (the build follows a theme through a binding it never hands to code).
+ */
+const BASE_IN_SOURCE = [
+  "// A mode the theme leaves to its base theme reads the base's value as it is now.",
+  "const baseIn = (token: string, mode: 'light' | 'dark'): string => {",
+  '  const value = String(',
+  '    (base.tokens as Record<string, unknown> | undefined)?.[token] ??',
+  '      tokenDefaults[token] ??',
+  "      '',",
+  '  ).trim();',
+  '  const pair = /^light-dark\\(([\\s\\S]*)\\)$/.exec(value);',
+  '  if (!pair) return value;',
+  '  let depth = 0;',
+  '  for (let i = 0; i < pair[1].length; i++) {',
+  '    const ch = pair[1][i];',
+  "    if (ch === '(') depth++;",
+  "    else if (ch === ')') depth--;",
+  "    else if (ch === ',' && depth === 0)",
+  "      return (mode === 'light' ? pair[1].slice(0, i) : pair[1].slice(i + 1)).trim();",
+  '  }',
+  '  return value;',
+  '};',
+];
 
 /**
  * A hash of a theme's source file as the next build reads it: the file, or
