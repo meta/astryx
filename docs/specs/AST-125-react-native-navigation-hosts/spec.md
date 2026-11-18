@@ -73,8 +73,9 @@ outside Astryx stay React and React Native (`spec:AST-112/FR2`).
 | AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its `bottomAccessory` option                                                                                                                                                                                                                    | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
 | AstryxRouter       | protocol (JavaScript)                      | The router provides it: `NavigationRoot` (its handle) and `createNavigationRef()` carry the four methods, and `useNavigationInspector` reads it. No other Astryx component reads it; apps (`useRouterState`), Astryx Stage's address bar and the Astryx app's preview chrome do | An address bar or route list that shows and opens the app's routes                                 |
 
-The drawn tab bar (`TabBar.ForNavigation`) and the drawn modal route
-(`BottomSheet`) render no navigation host.
+The drawn tab bar (`TabBar.ForNavigation`), the drawn accessory
+(`BottomAccessory`) and the drawn modal route (`BottomSheet`) render no
+navigation host.
 
 ## Non-goals
 
@@ -86,6 +87,9 @@ The drawn tab bar (`TabBar.ForNavigation`) and the drawn modal route
 - Safe-area measurement outside navigation: the core's safe-area provider owns
   window insets; the hosts report screen insets only.
 - How an app chooses system or drawn chrome (OQ1).
+- The API of the router's stack and tab options, the `Header` component and
+  the library's tab accessory: they map onto the native props here, and this
+  record does not settle them.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -117,19 +121,19 @@ The drawn tab bar (`TabBar.ForNavigation`) and the drawn modal route
   root's routes for host-facing UI.
   - `getRouterState()` returns the host root's snapshot, or `undefined` when no
     root is mounted. `subscribeRouterState(listener)` calls the listener with
-    each new snapshot, published on commits only, and returns an unsubscribe
+    each new snapshot, after each committed navigation change, and returns an unsubscribe
     function. `useRouterState()` is the hook form: inside a root, that root's;
     outside, the host root's.
   - A snapshot holds `revision`, `seq` (one more per published change of its
     root), `routes` (depth first: `key`, `name`, JSON-safe `params`, `path`,
     `presentation`, `focused`, `navigator`, `depth`, `parentKey`),
     `focusedKey`, `focusedPath`, `canGoBack` and `hasLinking`. It is
-    immutable, and no store, tree or navigation object leaks through it.
+    immutable plain data.
   - `navigateToPath(pathOrURL)` opens a path or in-app URL through the root's
     linking and returns true only when the app went somewhere. A URL that is not
     in-app, matches nothing, or fails the config returns false and is never
-    handed to the system. `canOpenPath(path)` answers whether a path parses and
-    prints back to the same path; it never dispatches.
+    handed to the system. `canOpenPath(path)` answers whether a path turns into a
+    route and back into the same path; it never navigates.
   - The same four functions exist per root on the root's handle and on
     `createNavigationRef()`. Astryx Stage and the Astryx app's preview chrome
     read the host root through a global bridge that the host installs; an app's
@@ -153,17 +157,17 @@ The drawn tab bar (`TabBar.ForNavigation`) and the drawn modal route
     button, its menu, a swipe, system back), and the router removes exactly
     those in one action.
   - A route the router removes stays mounted with `active: false` until the
-    host emits `onScreenDismissed`, so its content stays drawn while the
-    system animates the pop.
+    host emits `onScreenDismissed`, so the person sees its content for the
+    whole pop animation.
   - `onPopStart` fires on the leaving top screen when the system starts a pop,
     before its transition begins, with `source`: `gesture` (the start of a
     back swipe or predictive back gesture), `key` (Android system back without
     a gesture, a hardware key, TalkBack, or the iOS VoiceOver escape) or
     `button` (the back button or its menu). A pop or `onGestureCancel` follows
     it. It never fires for a pop the router asked for, a prevented back, or a
-    tab re-select. The router delivers it as the leaving screen's `popStart`
-    event with `data: {source, routeKey}`; a handler starts work as the pop
-    begins, and the pop is not held for it.
+    tab re-select. The router passes it to the leaving screen as a navigation
+    event: a handler can start work as the pop begins, and the pop does not
+    wait for it.
   - `colorScheme` (`unspecified | light | dark`) sets the container's interface
     style, which the system bars' material, buttons and search field follow;
     the router sends the theme's chrome appearance, and `unspecified` follows
@@ -184,82 +188,90 @@ The drawn tab bar (`TabBar.ForNavigation`) and the drawn modal route
     menus, search fields and the router consume it.
   - A prevent-remove guard turns `canPop` off before any gesture, so the
     system never starts a swipe the router would refuse.
-- **FR5 — The stack screen carries each screen's chrome.** Its props have the
-  meaning of the router's stack option of the same name; booleans are
-  positive.
+- **FR5 — The stack screen carries each screen's chrome.** These are native
+  props. The router's stack options and the `Header` component map onto them;
+  their API is outside this record. Where a concept is the same, a prop keeps
+  the name and meaning react-native-screens and React Navigation give it:
+  compatibility with the ecosystem's option vocabulary is a goal, so an app
+  that moves from those libraries reads the same words. Booleans are positive.
   - Header: `title`, `headerShown`, `headerTransparent`, `headerShadowVisible`,
-    `headerLargeTitleEnabled`, `headerLargeTitleInRow` (the large title in the
-    bar row, never collapsing), `headerSubtitle`, `headerLargeSubtitle`,
-    `headerTitleStyle`, `headerLargeTitleStyle` (scaled with Dynamic Type),
-    `headerTintColor`, `headerStyle` (an opaque bar colour; on Android also the
-    colour and hairline once content scrolls under it).
-  - Back: `headerBackVisible`, `headerBackTitle` (`''` is the chevron only),
-    `headerBackButtonDisplayMode`, `headerBackButtonMenuEnabled`.
-  - Items: `headerLeftItems`, `headerRightItems` and `toolbarItems` are data in
-    visual order with a stable `id` (`kind`: button, menu, spacer, flexible
-    spacer, status; icon as a system symbol, an Astryx glyph with its vector
-    drawing, or an image URI; badge, selected, disabled, hidden, prominent,
-    shared background, accessibility label and hint). A menu or the title menu
-    (`headerTitleMenu`) is the system menu's spec as JSON. `onBarItemPress
-{routeKey, id}` and `onMenuSelect {routeKey, barItemId, menuItemId}` report
-    presses.
-  - Header slots: a screen's React `headerTitle`, `headerLeft` or `headerRight`
-    is an `AstryxHeaderSlot` child (`slot: title | left | right`) that the bar
-    hosts at its content's own size; `measure` and press regions inside it are
-    the bar's. Every other child is the screen's content.
-  - Toolbar and tabs: `toolbarShown`, `toolbarHidesOnScroll`,
-    `hidesTabBarWhenPushed` (read at the push; the tab bar slides away with it).
+    `headerLargeTitleEnabled`, `headerLargeTitleInRow` (the large title stays
+    in the bar row and does not collapse), `headerSubtitle`,
+    `headerLargeSubtitle`, `headerTitleStyle`, `headerLargeTitleStyle` (both
+    follow Dynamic Type), `headerTintColor`, and `headerStyle` (a solid bar
+    colour; on Android also the colour and bottom line the bar takes when
+    content scrolls under it).
+  - Back: `headerBackVisible`, `headerBackTitle` (an empty string shows the
+    chevron alone), `headerBackButtonDisplayMode`,
+    `headerBackButtonMenuEnabled`.
+  - Items: `headerLeftItems`, `headerRightItems` and `toolbarItems` are lists
+    of plain data, leading to trailing, each with a stable `id`. An item is a
+    button, a menu, a spacer, a flexible spacer or a status text; its icon is a
+    system symbol, an Astryx glyph with its vector drawing, or an image URI; it
+    can carry a badge, a selected, disabled, hidden or prominent state, a
+    shared background, and an accessibility label and hint. Item menus and the
+    title menu (`headerTitleMenu`) use the system menu's JSON spec. The
+    `onBarItemPress` and `onMenuSelect` events report which item or menu row
+    the person chose.
+  - Header slots: an `AstryxHeaderSlot` child (`slot`: `title`, `left` or
+    `right`) holds React content that the system bar places, sized by that
+    content. Layout measurement and touches inside it use the slot's place in
+    the bar. Children that are not slots form the screen's content.
+  - Toolbar and tabs: `toolbarShown`, `toolbarHidesOnScroll`, and
+    `hidesTabBarWhenPushed` (read when the screen is pushed: the tab bar leaves
+    with the push and returns with the pop).
   - Transition and system: `animation`, `animationTypeForReplace`,
     `backPreview`, `statusBarStyle`, `statusBarHidden`, `statusBarAnimation`,
     `autoHideHomeIndicator`.
-  - Scroll: `scrollViewNativeID` names the screen's scroll target (else the
-    first vertical scroll view); the large title collapses with it, and
-    `scrollEdgeEffects` (top and bottom: automatic, soft, hard, hidden) apply
-    to it on iOS 26.
+  - Scroll: `scrollViewNativeID` names the scroll view the bar follows (without
+    it, the first vertical scroll view). The large title collapses with that
+    scroll view, and `scrollEdgeEffects` (top and bottom: automatic, soft,
+    hard, hidden) apply to it on iOS 26.
   - Vertical bars (iOS 27.1): `verticalBarBehavior`, `verticalBarCompression`,
-    and each item's `axis` and `visibilityPriority` mirror the system's
-    options; a title-only item or a header slot never joins a vertical bar.
-- **FR6 — Header search has one option set and two renderings.**
-  `headerSearchBarOptions` (placement, placeholder, capitalization, hide on
-  scroll, dimming, controlled `text` with `textRevision`, Cancel's title,
-  autofocus, scopes) drives the system search field on iOS under system chrome,
-  with `onSearchChange`, `onSearchFocus`, `onSearchBlur`, `onSearchCancel`,
-  `onSearchButtonPress` and `onScopeChange`. Elsewhere (Android, drawn chrome)
-  the router draws the library's `SearchField` in a row under the bar: the
-  screen's `searchActive` hides the bar while it is edited, `searchRowInset`
-  adds the row to the screen's top safe area, and `onBarEdge {routeKey,
-barBottom}` reports the bar's live bottom edge on the native driver.
-- **FR7 — A stack screen may take its own appearance.** The stack option
-  `appearance: 'light' | 'dark'` gives one screen its own light or dark
-  whatever the app's mode; unset, the screen follows the app.
-  - The router draws the screen's content, header slots and the modal routes it
-    presents in that mode, and reads the theme-derived options the screen
-    inherits (tint, title colours, page fill, Android bar colours, status bar)
-    again in it. Options the screen sets itself win as given.
-  - The screen's native prop `appearance` (`unspecified | light | dark`) puts
-    its chrome in that mode while it is the top screen: the navigation bar, the
-    status bar glyphs (and Android's navigation bar glyphs), the background
-    behind it, surfaces it presents natively, and the tab bar of the tabs it
-    sits in (no tabs host prop). The chrome changes inside the push and pop
-    transitions' own frames; an interactive back keeps the top screen's mode
-    until it commits, and a cancelled one changes nothing. This chrome is the
-    named feature `AstryxStackScreen.appearance` (FR14); on a binary without
-    it the content and the inherited options still take the screen's mode, the
-    chrome follows the host's `colorScheme`, and the router warns once.
+    and each item's `axis` and `visibilityPriority` pass the system's own
+    options through. The system keeps items without an icon, and header slots,
+    out of a vertical bar.
+- **FR6 — Header search is a system field or a row the router draws.** The
+  native prop `headerSearchBarOptions` (placement, placeholder,
+  capitalization, hiding on scroll, dimming, controlled `text` with
+  `textRevision`, the Cancel title, autofocus, scopes) configures the system
+  search field on iOS, which reports through `onSearchChange`,
+  `onSearchFocus`, `onSearchBlur`, `onSearchCancel`, `onSearchButtonPress` and
+  `onScopeChange`. Where the system field is not used (Android, drawn chrome),
+  the router draws its own search row, and three members of the screen support
+  it: `searchActive` hides the bar while the row is edited, `searchRowInset`
+  adds the row's height to the screen's top safe area, and `onBarEdge` reports
+  the bar's bottom edge to a native-driver binding.
+- **FR7 — A stack screen may take its own appearance.** The native prop
+  `appearance` (`unspecified`, `light` or `dark`; `unspecified` follows the
+  host) sets one screen's chrome to light or dark whatever the app's mode.
+  - While the screen is on top, its mode applies to the navigation bar, the
+    status bar glyphs (and the Android navigation bar glyphs), the background
+    behind the screen, the surfaces the screen presents natively, and the tab
+    bar of the tabs that hold the stack. The tabs host has no prop for it.
+  - The change happens within the frames of the push or pop transition. During
+    an interactive back the top screen's mode stays until the back completes;
+    a cancelled back changes nothing.
+  - The router exposes this as a per-screen option and draws the screen's own
+    content in the same mode; that option's API is outside this record.
+  - The chrome behaviour is the named feature `AstryxStackScreen.appearance`
+    (FR14). On a binary without it, the chrome follows the host's
+    `colorScheme`, and the router warns once.
 - **FR8 — The tabs host.** A native tab container whose children are
   `AstryxTabScreen`s and at most one `AstryxTabAccessory`.
-  - `selectedRouteKey` applies when it changes, never on an unrelated update;
-    `selectionNonce` re-asserts it when the router did not follow a native
-    selection.
-  - `onTabSelect {routeKey, reselected}` reports a native selection. A tab with
-    `tabBarSelectionEnabled: false` is never selected natively, but its tap is
-    reported. `onTabLongPress {routeKey}` reports a long press.
+  - `selectedRouteKey` names the selected tab. The host selects it only when
+    the value changes, so a tap the router is still answering is not undone.
+    A new `selectionNonce` makes the host apply `selectedRouteKey` again.
+  - `onTabSelect` reports a tap on a tab, with `reselected` true when the tab
+    was already selected. A tab with `tabBarSelectionEnabled: false` stays
+    unselected when tapped, and the tap still arrives as `onTabSelect`.
+    `onTabLongPress` reports a long press.
   - Re-select is native: unless the tab's `tabBarRepeatedPressBehavior` is
     `none`, a tab with a deeper stack pops it to its root when that stack's
     `popToRootEnabled` allows (reported by the stack host as `onNativePop`),
     else the stack host emits `onBackPrevented` with `source: 'reselect'`; a
-    tab at its root scrolls its scroll target to the top. The router never pops
-    for a system tab bar.
+    tab at its root scrolls its scroll view to the top. Under the system tab
+    bar this pop is the host's, not the router's.
   - `tabBarMinimizeBehavior` (automatic, never, on scroll down, on scroll up;
     from the selected tab's scroll target), `tabBarControllerMode` (automatic,
     tab bar, sidebar), `tabBarHidden`, `tabBarActiveTintColor`,
@@ -275,12 +287,16 @@ barBottom}` reports the bar's live bottom edge on the native driver.
   - FR8 gap: on iOS 26, a tab whose content container changes after the tab bar
     is installed has no accessibility identifier from `tabBarButtonTestID`.
 - **FR9 — The tab accessory.** The accessory's content sits above the tab bar.
-  On iOS 26 it is the system's bottom accessory, inline beside the bar when the
-  bar minimizes; below iOS 26 and on Android it is docked above the bar and the
-  tabs' safe area includes it. `onTabAccessoryPlacementChange {placement:
-'expanded' | 'inline'}` fires once at first layout and on each change.
-  `isChromeHidden` hides the system's own platter and press effect on iOS 26
-  while the same content view stays mounted and touchable.
+  - On iOS 26 it is the system's bottom accessory, which moves beside the bar
+    when the bar minimizes. Below iOS 26 and on Android it is a docked view
+    above the bar, and the tabs' safe area includes its height.
+  - The contract has one placement vocabulary: `expanded` (above the bar) and
+    `inline` (beside a minimized bar). `onTabAccessoryPlacementChange` reports
+    the placement once at the first layout and again on each change; Android
+    and iOS below 26 report `expanded` only.
+  - `isChromeHidden` removes the system's own background and press highlight
+    around the content on iOS 26; the content view stays mounted and keeps its
+    touches.
 - **FR10 — The hosts report insets to JavaScript.**
   - A screen's content runs edge to edge by default. Each stack screen, and
     each tab screen without a stack, reports `onScreenInsetsChange {routeKey,
@@ -294,8 +310,8 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - `safeAreaEdges` pads non-scrolling content natively and the reported insets
     on those edges are 0, so nothing pads twice.
   - The router exposes them as `useScreenInsets()`, `useContentWidth()` and
-    `useVerticalBarEdge()`. The hosts report what the system measured; they
-    never derive a bar from orientation, size class or device.
+    `useVerticalBarEdge()`. Every value comes from the system's own
+    measurement of the screen, not from the device or its orientation.
 - **FR11 — Threading and motion.** Transitions, back gestures, large-title
   collapse, scroll-edge effects, tab bar minimize and the accessory's placement
   run on the UI thread under the system, with no JavaScript per frame.
@@ -510,3 +526,8 @@ off the predictive back scrub.
   bottom toolbar. Options: map `headerSearchBarOptions` onto Material's search
   bar and `toolbarItems` onto a Material bottom app bar; or keep the drawn row
   and document the toolbar options as iOS-only.
+- **OQ5 — Does the library keep a second placement vocabulary?**
+  (`human-api`) The tab accessory contract reports `expanded` or `inline`; the
+  library's docked bar (`useDockedBar`, `DockedBarBand`) names its placements
+  `floating`, `regular` and `inline`. Options: use the contract's names in the
+  library; or keep the library's names and document the mapping.
