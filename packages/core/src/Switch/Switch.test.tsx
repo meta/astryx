@@ -1418,7 +1418,7 @@ describe('Switch', () => {
         'var(--_switch-thumb-height,20px)',
       ]);
       // The travel reads the track's size: 14px at the shipped 40 × 24 track
-      // (proved in a browser by SwitchThumbTravel.interaction.browser.spec).
+      // (proved in a browser by SwitchThumbRest.interaction.browser.spec).
       expect(on.travel).toBe('translateX(calc(100cqi - 50cqb - 50%))');
     });
 
