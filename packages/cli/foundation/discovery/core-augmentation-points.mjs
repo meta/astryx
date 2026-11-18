@@ -155,6 +155,14 @@ export function propAugmentationPoint(coreRoot, pascalName, prop) {
 }
 
 const CORE_PACKAGE = '@astryxdesign/core';
+
+/**
+ * Whether a module path names Core: the package or one of its subpaths.
+ * @param {string} specifier
+ */
+export function isCoreModule(specifier) {
+  return specifier === CORE_PACKAGE || specifier.startsWith(`${CORE_PACKAGE}/`);
+}
 /** A project's own TypeScript file, declarations included. */
 const SOURCE_FILE = /\.[cm]?tsx?$/;
 /** A declaration file, the only TypeScript an installed package publishes. */
@@ -172,19 +180,22 @@ const ENTRY_LIMIT = 20_000;
  * Core or is an Astryx integration. `complete` is false when a file cannot be
  * read or parsed, or the read passes {@link ENTRY_LIMIT} entries: the keys
  * may then miss some, and a caller must not take them as the whole set.
+ * `files` are the files that augment Core, for a caller that reads them with
+ * TypeScript.
  * @param {string} projectDir the folder of the project's package.json
- * @returns {{keys: Map<string, Set<string>>, complete: boolean}}
+ * @returns {{keys: Map<string, Set<string>>, complete: boolean, files: string[]}}
  */
 export function projectAugmentations(projectDir) {
   /** @type {Map<string, Set<string>>} */
   const keys = new Map();
-  const state = {entries: 0, complete: true};
+  /** @type {{entries: number, complete: boolean, files: string[]}} */
+  const state = {entries: 0, complete: true, files: []};
   readTree(projectDir, SOURCE_FILE, keys, state);
   for (const dir of astryxDependencyDirs(projectDir)) {
     if (!state.complete) break;
     readTree(dir, DECLARATION_FILE, keys, state);
   }
-  return {keys, complete: state.complete};
+  return {keys, complete: state.complete, files: state.files};
 }
 
 /**
@@ -263,7 +274,7 @@ function installedPackageDir(fromDir, name) {
  * @param {string} root
  * @param {RegExp} pattern
  * @param {Map<string, Set<string>>} keys
- * @param {{entries: number, complete: boolean}} state
+ * @param {{entries: number, complete: boolean, files: string[]}} state
  */
 function readTree(root, pattern, keys, state) {
   const folders = [root];
@@ -288,7 +299,9 @@ function readTree(root, pattern, keys, state) {
         pattern.test(entry.name) &&
         (entry.isFile() || entry.isSymbolicLink())
       ) {
-        if (!readAugmentations(file, keys)) state.complete = false;
+        const read = readAugmentations(file, keys);
+        if (read === null) state.complete = false;
+        else if (read) state.files.push(file);
       }
     }
   }
@@ -299,17 +312,18 @@ function readTree(root, pattern, keys, state) {
  * no Core module in a `declare module` adds nothing and is not parsed.
  * @param {string} file
  * @param {Map<string, Set<string>>} keys
- * @returns {boolean} false when the file cannot be read or parsed
+ * @returns {boolean | null} whether the file augments Core; null when it
+ *   cannot be read or parsed
  */
 function readAugmentations(file, keys) {
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch {
-    return false;
+    return null;
   }
   if (!text.includes(CORE_PACKAGE) || !/\bdeclare\s+module\b/.test(text))
-    return true;
+    return false;
   /** @type {any} */
   let ast;
   try {
@@ -321,8 +335,9 @@ function readAugmentations(file, keys) {
       ],
     });
   } catch {
-    return false;
+    return null;
   }
+  let augments = false;
   for (const statement of ast.program.body) {
     if (
       statement.type !== 'TSModuleDeclaration' ||
@@ -330,8 +345,8 @@ function readAugmentations(file, keys) {
     )
       continue;
     const target = statement.id.value;
-    if (target !== CORE_PACKAGE && !target.startsWith(`${CORE_PACKAGE}/`))
-      continue;
+    if (!isCoreModule(target)) continue;
+    augments = true;
     for (const member of statement.body?.body ?? []) {
       const declaration =
         member.type === 'ExportNamedDeclaration' ? member.declaration : member;
@@ -348,5 +363,5 @@ function readAugmentations(file, keys) {
       keys.set(declaration.id.name, added);
     }
   }
-  return true;
+  return augments;
 }

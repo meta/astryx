@@ -44,6 +44,16 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
+import {scanCoreProps} from '../../foundation/discovery/core-props.mjs';
+import {readCorePropTypes} from '../../foundation/discovery/core-prop-types.mjs';
+import {projectAugmentations} from '../../foundation/discovery/core-augmentation-points.mjs';
+import {
+  resolveProjectTypeScript,
+  TYPESCRIPT_FIX,
+  unusableTypeScriptReason,
+} from '../../foundation/discovery/project-typescript.mjs';
+import {closeNameScore, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
+import {component as componentAnswer} from '../component/component.mjs';
 import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
@@ -311,6 +321,108 @@ export function findIconPlaceholders(projectDir) {
     });
   }
   return found.sort((a, b) => compareText(a.file, b.file));
+}
+
+/**
+ * Test, story and fixture files, and the folders that usually hold them:
+ * code that shows or checks a component, not a page a person uses.
+ */
+const NOT_PAGE_CODE =
+  /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__|tests?|stories|fixtures|e2e)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+
+/**
+ * @typedef {object} UnknownCoreProp
+ * @property {string} file relative to the project, with `/`
+ * @property {number} line
+ * @property {number} column
+ * @property {string} component
+ * @property {string} prop
+ * @property {string | null} suggestion the documented prop the name is
+ *   closest to, when one is close
+ */
+
+/**
+ * The props the project's own source gives Core components that the
+ * component does not take. A prop is a candidate when Core's docs for the
+ * component (the props `astryx component <Name> --package @astryxdesign/core`
+ * lists) leave it out, and it is reported only when the project's TypeScript,
+ * reading Core's own published types as the project's pages see them, says
+ * the component's props do not take it either. The name of an HTML, SVG, DOM
+ * or ARIA attribute React's types know is never reported: a component may
+ * pass it on to the element it renders. A component with no docs, one
+ * TypeScript cannot read, and a generic one are not judged. Test, story and
+ * fixture files are not read. `skipped` says why nothing was judged: no
+ * TypeScript, or types or augmentations it could not read.
+ * @param {string} projectDir
+ * @returns {Promise<{found: UnknownCoreProp[], uses: number, skipped: string | null}>}
+ */
+export async function findUnknownCoreProps(projectDir) {
+  const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
+  /** @type {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string}>} */
+  const uses = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    if (NOT_PAGE_CODE.test(relative(file))) continue;
+    let text;
+    try {
+      text = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!text.includes('@astryxdesign/core')) continue;
+    for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file)});
+  }
+  // One batch read of the props Core's docs list, as `astryx component
+  // <Name> --props` prints them; a component they do not describe is not
+  // judged.
+  /** @type {Map<string, string[]>} */
+  const documented = new Map();
+  const names = [...new Set(uses.map(use => use.component))];
+  if (names.length > 0) {
+    const answer = /** @type {any} */ (await componentAnswer(names, {cwd: projectDir, package: '@astryxdesign/core', props: true}));
+    for (const read of answer?.data?.results ?? []) {
+      const props = read?.status === 'found' ? read.result?.data : null;
+      if (Array.isArray(props)) documented.set(read.selector, props.map((/** @type {any} */ prop) => prop?.name).filter(Boolean));
+    }
+  }
+  const candidates = uses.filter(use => {
+    const props = documented.get(use.component);
+    return props != null && !props.includes(use.prop);
+  });
+  if (candidates.length === 0) return {found: [], uses: uses.length, skipped: null};
+  const compiler = resolveProjectTypeScript([projectDir]);
+  if (compiler === null) {
+    return {found: [], uses: uses.length, skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`};
+  }
+  if (compiler.ts === null) {
+    return {found: [], uses: uses.length, skipped: unusableTypeScriptReason(compiler.version, 'the props were not checked')};
+  }
+  const augmentations = projectAugmentations(projectDir);
+  if (!augmentations.complete) {
+    return {found: [], uses: uses.length, skipped: "the files that may add to Core's types could not all be read, so the props were not checked."};
+  }
+  /** @type {Map<string, Set<string>>} */
+  const asked = new Map();
+  for (const use of candidates) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
+  const types = readCorePropTypes({ts: compiler.ts, projectDir, augmentations: augmentations.files, props: asked});
+  if (types.unread) return {found: [], uses: uses.length, skipped: `${types.unread}, so the props were not checked.`};
+  const found = candidates
+    .filter(use => !types.attributes.has(use.prop) && types.takes.get(use.component)?.get(use.prop) === false)
+    .map(use => ({...use, suggestion: closestProp(use.prop, documented.get(use.component) ?? [])}));
+  found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
+  return {found, uses: uses.length, skipped: null};
+}
+
+/**
+ * The documented prop a name most likely means, as a failed lookup suggests
+ * a name: a near spelling, or a name that holds every word of it
+ * (`isLabelHidden` for `labelHidden`). Null when none is close.
+ * @param {string} name
+ * @param {string[]} props
+ * @returns {string | null}
+ */
+function closestProp(name, props) {
+  const [best] = orderByAffinity(name, props, prop => [prop], {closest: true, typos: true});
+  return best != null && closeNameScore(name, best) > 0 ? best : null;
 }
 
 /**
