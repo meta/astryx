@@ -104,6 +104,10 @@ describe('the token path', () => {
       await themeEditHow('--color-background-body', {cwd, theme: 'q0'})
     );
     expect(data.note).toMatch(NOTE);
+    // (An area embedded in a page another app owns adds no body rule.)
+    expect(data.note).toContain(
+      'An Astryx area embedded in a page another app owns adds no body rule: that page is not its own.',
+    );
     expect(Object.keys(data).indexOf('note')).toBeLessThan(
       Object.keys(data).indexOf('source'),
     );
