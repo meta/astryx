@@ -20,6 +20,7 @@ import {
   cssNumber,
   cssProperties,
   longhandsOf,
+  sidesOf,
 } from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
@@ -34,6 +35,7 @@ import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
+  BAR_REACH_THINGS,
   barRows,
   blockSides,
   coreVarValues,
@@ -8095,9 +8097,7 @@ function barReach(ctx, theme, data) {
         x.source === 'property' &&
         !x.when &&
         !x.state &&
-        /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/.test(
-          x.thing,
-        ) &&
+        BAR_REACH_THINGS.test(x.thing) &&
         partsOf(ctx, x).includes(holder),
     );
     if (exact) continue;
@@ -8129,8 +8129,7 @@ function barReach(ctx, theme, data) {
       const sides = blockSides(
         prop =>
           pads.length
-            ? (b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ??
-              null)
+            ? (b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ?? null)
             : drawnValue(map[holder], prop),
         'padding',
       ).filter(v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()));
@@ -8274,9 +8273,6 @@ function layerParts(layer) {
   return {image: all[at], position, size, repeat, other};
 }
 
-/** A side word in a longhand's name, in the order a box value lists sides. */
-const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
-
 /**
  * The fills made from the surface: they follow a surface the theme sets,
  * at the base theme's lightness step from it.
@@ -8368,33 +8364,6 @@ function laterLonghandsAsSides(b, baseBlock) {
   if (!changed) return;
   for (const k of Object.keys(b)) delete b[k];
   Object.assign(b, out);
-}
-
-/**
- * A two-sided (start/end) or four-sided (top/right/bottom/left) longhand's
- * value, as each side's property and value by the shorthand rules; null for
- * any other property.
- * @param {string} prop kebab-case
- * @param {string} v
- * @returns {Record<string, string> | null}
- */
-function sidesOf(prop, v) {
-  const direct = [...longhandsOf(prop)].filter(p => longhandsOf(p).size === 0);
-  const w = splitTop(v.trim(), ' ').map(x => x.trim());
-  if (!w.length || /!important/i.test(v)) return null;
-  const start = direct.find(p => /-start(-|$)/.test(p));
-  const end = direct.find(p => /-end(-|$)/.test(p));
-  if (direct.length === 2 && start && end && w.length <= 2)
-    return {[start]: w[0], [end]: w[1] ?? w[0]};
-  const named = BOX_SIDES.map(side =>
-    direct.find(p => new RegExp(`-${side}(-|$)`).test(p)),
-  );
-  if (direct.length !== 4 || named.some(x => !x) || w.length > 4) return null;
-  const [t, r = t, bo = t, l = r] = w;
-  const vals = [t, r, bo, l];
-  return Object.fromEntries(
-    named.map((p, i) => [/** @type {string} */ (p), vals[i]]),
-  );
 }
 
 /** Core's default type scale ratio. */
@@ -11932,11 +11901,16 @@ function barFitProblems(ctx, data, res) {
   /** @param {string | null} v */
   const len = v => (v == null ? 0 : (pxOf(v) ?? 0));
   /** @param {(prop: string) => string | null} get */
-  const padSum = get => blockSides(get, 'padding').reduce((a, v) => a + len(v), 0);
+  const padSum = get =>
+    blockSides(get, 'padding').reduce((a, v) => a + len(v), 0);
   /** @param {string} part */
   const ownsPadding = part =>
     BLOCK_PADDING_KEYS.some(
-      k => own(part, k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)) != null,
+      k =>
+        own(
+          part,
+          k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`),
+        ) != null,
     );
   /** @type {ThemeProblem[]} */
   const out = [];
@@ -12003,9 +11977,19 @@ function barFitProblems(ctx, data, res) {
         );
       const shown = paints ? tall : bare;
       if (tall == null || shown == null || shown <= room + 0.5) continue;
+      // (The padding that fits is read from its line alone: a least
+      // height of its own, a control's, takes no room the padding needs.)
+      const line = partHeightPx(
+        map,
+        child,
+        p =>
+          /^padding|^(min-)?height$|block-size$/.test(p) ? '0' : own(child, p),
+        at,
+        pxAt,
+      );
       const fix =
         bare != null && bare <= room
-          ? `${P} set ${data.name} padding-block ${Math.floor((room - bare) / 2)}px --on ${child}`
+          ? `${P} set ${data.name} padding-block ${Math.floor((room - (line ?? bare)) / 2)}px --on ${child}`
           : `${P} set ${data.name} height ${Math.ceil(tall + holderPad + rowPad)}px --on ${holder}`;
       out.push({
         key: `bar|${holder}|${row}|${child}`,

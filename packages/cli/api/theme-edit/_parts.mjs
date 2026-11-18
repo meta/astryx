@@ -25,7 +25,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
 import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
-import {splitTop} from './_css.mjs';
+import {sidesOf} from './_css.mjs';
 
 /** Text properties CSS inherits, which a part passes to the text inside it. */
 export const INHERITED_TEXT =
@@ -104,6 +104,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [repeats] - parts it holds more than one of side by side, as the nearest part around them (a shortcut's keys, a button group's buttons)
+ * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
@@ -1374,9 +1375,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, listed?: Set<string>, innerSets?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>, seen?: Map<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1693,6 +1694,12 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const at of anc.all ?? (anc.target ? [anc.target] : []))
           if (at !== t) {
             map[at].contains.add(t);
+            // (A part drawn a second time inside the same element is listed
+            // there: a menu's items, never a header's one nav.)
+            const seen = (anc.seen ??= new Map());
+            seen.set(`${at}\0${t}`, (seen.get(`${at}\0${t}`) ?? 0) + 1);
+            if (seen.get(`${at}\0${t}`) === 2)
+              (map[at].listed ??= new Set()).add(t);
             // (The variant each holds there: a toast's close button is a
             // ghost button.)
             if (dataAttrs.variant)
@@ -1817,6 +1824,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       ),
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
+      ...(v.listed?.size ? {listed: [...v.listed]} : {}),
       ...(v.holdsVariants
         ? {
             holdsVariants: Object.fromEntries(
@@ -2012,6 +2020,13 @@ const BLOCK_BOX =
   /^(height|min-height|max-height|(min-|max-)?block-size|padding(-(top|bottom|block(-start|-end)?))?|margin-(top|bottom|block(-start|-end)?))$/;
 
 /**
+ * The properties that make a part a bar when set on it: its height, and
+ * its vertical padding (see barRows).
+ */
+export const BAR_REACH_THINGS =
+  /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/;
+
+/**
  * The value a part draws a property with as the census saw it: the one it
  * always has, else the one every condition it was drawn in agrees on; null
  * when it sets none (or conditions differ).
@@ -2031,9 +2046,11 @@ export function drawnValue(rec, prop) {
  * The bar rows a part holds, from the part map's `contains` relation: the
  * parts drawn inside it that lay their own children out in one row,
  * centered across its whole width (display flex, align-items center, width
- * 100%: the top nav in the app's header), reached through frames that draw
- * no box of their own (a layout region). A height or a vertical padding
- * set on the holder makes the bar these rows fill.
+ * 100%: the top nav in the app's header), drawn there once (a part that
+ * is listed inside it is a list's item, never its bar's row: a menu's items,
+ * a side nav's items), reached through frames that draw no box of their
+ * own (a layout region). A part holding such a row is laid out as a bar:
+ * a height or a vertical padding set on it makes the bar that row fills.
  * @param {Record<string, PartRecord>} map
  * @param {string} holder
  * @returns {string[]}
@@ -2042,8 +2059,10 @@ export function barRows(map, holder) {
   const inside = map[holder]?.contains ?? [];
   /** @param {string} p */
   const frame = p => !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  const listed = new Set(map[holder]?.listed ?? []);
   return inside.filter(r => {
     const rec = map[r];
+    if (listed.has(r)) return false;
     if (
       !/^(inline-)?flex$/.test(drawnValue(rec, 'display') ?? '') ||
       /^column/.test(drawnValue(rec, 'flex-direction') ?? '') ||
@@ -2068,23 +2087,23 @@ export function barRows(map, holder) {
 export function blockSides(get, family) {
   const [head, tail] =
     family === 'padding' ? ['padding', ''] : ['border', '-width'];
+  /** @param {string} side */
+  const name = side => `${head}-${side}${tail}`;
   const whole = get(family);
-  const parts = whole ? splitTop(whole.trim(), ' ') : [];
-  const fromWhole = /** @type {[string | null, string | null]} */ (
-    parts.length ? [parts[0], parts[parts.length > 2 ? 2 : 0]] : [null, null]
-  );
-  const block = get(`${head}-block${tail}`);
-  const bp = block ? splitTop(block.trim(), ' ') : [];
+  const all = whole ? sidesOf(family, whole) : null;
+  const block = get(name('block'));
+  const ends = block ? sidesOf(name('block'), block) : null;
   return [
-    get(`${head}-top${tail}`) ??
-      get(`${head}-block-start${tail}`) ??
-      bp[0] ??
-      fromWhole[0],
-    get(`${head}-bottom${tail}`) ??
-      get(`${head}-block-end${tail}`) ??
-      bp[1] ??
-      bp[0] ??
-      fromWhole[1],
+    get(name('top')) ??
+      get(name('block-start')) ??
+      ends?.[name('block-start')] ??
+      all?.[name('top')] ??
+      null,
+    get(name('bottom')) ??
+      get(name('block-end')) ??
+      ends?.[name('block-end')] ??
+      all?.[name('bottom')] ??
+      null,
   ];
 }
 

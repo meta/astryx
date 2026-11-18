@@ -40,6 +40,8 @@ import {
   unitsJoined,
 } from './_css.mjs';
 import {
+  BAR_REACH_THINGS,
+  barRows,
   calcVars,
   coreFallback,
   multipliedTokens,
@@ -5356,7 +5358,12 @@ function checkOne(
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (means === 'own') {
+    // (A height or vertical padding on a bar keeps --only: it keeps the
+    // setting off the row the bar holds, see barReach.)
+    const barOnly =
+      BAR_REACH_THINGS.test(thing) &&
+      barRows(/** @type {any} */ (ctx.C?.MAP ?? {}), s.on).length === 1;
+    if (means === 'own' && !barOnly) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
