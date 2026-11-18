@@ -49,12 +49,16 @@ import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
 import {useFocusTrap} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {subscribeInput} from '../utils/inputStream';
 
 // Store original matches to restore later
-// A tap leaves the document's last pointer as touch; the next case's mouse
-// events must not read as a tap's compatibility events.
+// A tap leaves the shared input stream's last pointer as touch; the next
+// case's mouse events must not read as a tap's compatibility events.
 afterEach(() => {
   __resetInteractionModalityForTest();
+  const release = subscribeInput(window, 'pointerover', () => {});
+  fireEvent.pointerOver(document.body, {pointerType: 'mouse'});
+  release();
 });
 
 const originalMatches = HTMLElement.prototype.matches;
@@ -1836,46 +1840,65 @@ describe('HoverCard', () => {
     });
 
     it('opens nothing on a mouse arrival when the device has no pointer that can hover', async () => {
+      const noHover = (query: string) => ({
+        matches: query === '(any-hover: none)',
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      });
+      // A window whose input stream has heard no pointer yet: a phone's tap
+      // that mounted the trigger under the finger before anything listened.
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      const frameWindow = frame.contentWindow!;
+      Object.defineProperty(frameWindow, 'matchMedia', {
+        configurable: true,
+        value: noHover,
+      });
+      const onOpenChange = vi.fn();
+      const view = render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          touchTrigger="none"
+          delay={0}>
+          Ruby Cheung
+        </HoverCard>,
+        {container: frameWindow.document.body},
+      );
+      fireEvent.mouseEnter(view.getByText('Ruby Cheung'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+      view.unmount();
+      frame.remove();
+
+      // Once a mouse announces itself, it hovers, whatever the media query
+      // says (Chromium reports no hover pointer under touch emulation).
       const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
       Object.defineProperty(window, 'matchMedia', {
         configurable: true,
-        value: (query: string) => ({
-          matches: query === '(any-hover: none)',
-          media: query,
-          onchange: null,
-          addEventListener: () => {},
-          removeEventListener: () => {},
-          addListener: () => {},
-          removeListener: () => {},
-          dispatchEvent: () => false,
-        }),
+        value: noHover,
       });
       try {
-        const onOpenChange = vi.fn();
+        const onMouseOpen = vi.fn();
         render(
           <HoverCard
             content={<span>Card content</span>}
-            onOpenChange={onOpenChange}
+            onOpenChange={onMouseOpen}
             touchTrigger="none"
             delay={0}>
             Ruby Cheung
           </HoverCard>,
         );
-        // No pointer event reached the page: a phone's tap that mounted the
-        // trigger under the finger before any Core component tracked input.
         const trigger = screen.getByText('Ruby Cheung');
-        fireEvent.mouseEnter(trigger);
-        await new Promise(resolve => setTimeout(resolve, 50));
-        expect(onOpenChange).not.toHaveBeenCalled();
-
-        // A mouse that announces itself still hovers, whatever the media
-        // query says (Chromium reports no hover pointer under touch
-        // emulation).
-        fireEvent.mouseLeave(trigger);
         fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
         fireEvent.mouseEnter(trigger);
         await waitFor(() => {
-          expect(onOpenChange).toHaveBeenCalledWith(true);
+          expect(onMouseOpen).toHaveBeenCalledWith(true);
         });
       } finally {
         if (original == null) {

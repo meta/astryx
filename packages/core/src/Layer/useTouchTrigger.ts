@@ -63,10 +63,10 @@ import {isDisabledControl} from '../utils/pressDisabled';
 import {isElement, isHTMLElement} from '../utils/nodeType';
 import {findTextEntryControl} from '../keyboard/keyboardHeight';
 import {
-  getLastPointerType,
   isTextEntrySincePointer,
   useInteractionModalityTrackingFor,
 } from '../utils/interactionModality';
+import {getLastPointerType, subscribeInput} from '../utils/inputStream';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -359,6 +359,25 @@ export function useTouchTrigger(
  * Whether the trigger's device has no pointer that can hover, as on a phone:
  * every mouse event there is a tap's compatibility event.
  */
+function windowOf(trigger: Element | null): Window | null {
+  return (
+    trigger?.ownerDocument.defaultView ??
+    (typeof window === 'undefined' ? null : window)
+  );
+}
+
+/**
+ * The last pointer type the shared input stream heard in the trigger's
+ * window: a mouse or pen sends `pointerover` before its `mouseover`, and a
+ * tap's compatibility mouse events have no pointer of their own.
+ */
+function lastPointerTypeAt(trigger: Element | null): string | null {
+  const view = windowOf(trigger);
+  return view == null ? null : getLastPointerType(view);
+}
+
+function ignorePointer(): void {}
+
 function hasNoHoverPointer(trigger: Element | null): boolean {
   const view = trigger?.ownerDocument.defaultView;
   return view?.matchMedia?.('(any-hover: none)').matches === true;
@@ -486,6 +505,44 @@ export function useTouchTriggerInternal(
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
+
+  // Syncs the shared input stream: while a hover trigger is mounted, the
+  // stream hears `pointerover` and `pointerdown` in its window, so it knows
+  // the last pointer's type. A trigger that moves to another window
+  // subscribes there.
+  const pointerStreamRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  useEffect(() => {
+    const view = windowOf(triggerRef.current);
+    const held = pointerStreamRef.current;
+    if (held?.view === view) {
+      return;
+    }
+    held?.release();
+    pointerStreamRef.current = null;
+    if (view == null) {
+      return;
+    }
+    const releaseOver = subscribeInput(view, 'pointerover', ignorePointer);
+    const releaseDown = subscribeInput(view, 'pointerdown', ignorePointer);
+    pointerStreamRef.current = {
+      view,
+      release: () => {
+        releaseOver();
+        releaseDown();
+      },
+    };
+  });
+  // Releases the stream subscription on unmount.
+  useEffect(
+    () => () => {
+      pointerStreamRef.current?.release();
+      pointerStreamRef.current = null;
+    },
+    [],
+  );
   // A finger's compatibility arrival on a trigger that saw no pointer of its
   // own: a tap moved the trigger under the finger.
   const isFingerArrivalRef = useRef(false);
@@ -495,7 +552,7 @@ export function useTouchTriggerInternal(
   const isTouchInteraction = useCallback(() => {
     const trigger = triggerRef.current;
     const isFingerArrival =
-      isFingerArrivalRef.current && getLastPointerType(trigger) === 'touch';
+      isFingerArrivalRef.current && lastPointerTypeAt(trigger) === 'touch';
     return (
       (isTouchPointerRef.current || isFingerArrival) &&
       isTextEntrySincePointer(trigger)
@@ -507,7 +564,7 @@ export function useTouchTriggerInternal(
       return true;
     }
     const trigger = triggerRef.current;
-    const lastPointerType = getLastPointerType(trigger);
+    const lastPointerType = lastPointerTypeAt(trigger);
     // A pointer the page has heard decides. Before any, a device with no
     // pointer that can hover sends only a tap's compatibility events.
     return lastPointerType == null

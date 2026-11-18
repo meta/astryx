@@ -4,12 +4,11 @@
 
 /**
  * @file interactionModality.ts
- * @input Global pointerdown/pointerover/keydown events
+ * @input Global pointerdown/keydown events
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
  *   and getInteractionModality, which reads how the user last interacted in a
- *   document, isTextEntrySincePointer, which reads whether every key since
- *   the last pointer press typed into a text-entry field, and
- *   getLastPointerType, which reads the last pointer's type
+ *   document, and isTextEntrySincePointer, which reads whether every key
+ *   since the last pointer press typed into a text-entry field
  * @position Internal document-wide singleton; used where `:focus-visible`
  *   alone is too broad
  */
@@ -45,17 +44,10 @@ type InteractionModalityStore = {
    * field. Undefined in a store that an older bundle made.
    */
   isTextEntrySincePointer?: boolean;
-  /**
-   * The `pointerType` of the last pointer that pressed or arrived over an
-   * element. Undefined in a store that an older bundle made.
-   */
-  lastPointerType?: string;
   isListening: boolean;
   /** Mounted consumers holding a second document's listeners. */
   consumers?: number;
-  onPointerDown: (event?: PointerEvent) => void;
-  /** Undefined in a store that an older bundle made. */
-  onPointerOver?: (event: PointerEvent) => void;
+  onPointerDown: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
   /**
    * Where focus went when it left this document's own elements: into a child
@@ -133,19 +125,12 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     modality: 'keyboard',
     isTextEntrySincePointer: false,
     isListening: false,
-    onPointerDown: event => {
-      store.lastPointerType = event?.pointerType ?? store.lastPointerType;
+    onPointerDown: () => {
       store.modality = 'pointer';
       store.isTextEntrySincePointer = true;
       store.focusAway = null;
       setFocusRings(targetDocument, false);
       hearWindow(targetDocument, store);
-    },
-    // A mouse or pen announces itself with `pointerover` before its
-    // `mouseover`. A tap's compatibility mouse events follow a touch pointer
-    // and have no mouse pointer of their own.
-    onPointerOver: event => {
-      store.lastPointerType = event.pointerType;
     },
     onKeyDown: event => {
       // A key with Meta, Alt or Control held is a shortcut, so it leaves the
@@ -258,12 +243,6 @@ function setListening(
       capture: true,
       passive: true,
     });
-    if (store.onPointerOver != null) {
-      targetDocument.addEventListener('pointerover', store.onPointerOver, {
-        capture: true,
-        passive: true,
-      });
-    }
     // A store an older bundle made has no focus listener.
     if (store.onFocusIn != null) {
       targetDocument.addEventListener('focusin', store.onFocusIn, {
@@ -284,11 +263,6 @@ function setListening(
     targetDocument.removeEventListener('keydown', store.onKeyDown, {
       capture: true,
     });
-    if (store.onPointerOver != null) {
-      targetDocument.removeEventListener('pointerover', store.onPointerOver, {
-        capture: true,
-      });
-    }
     if (store.onFocusIn != null) {
       targetDocument.removeEventListener('focusin', store.onFocusIn, {
         capture: true,
@@ -509,39 +483,12 @@ export function isTextEntrySincePointer(
   return store.isTextEntrySincePointer ?? store.modality === 'pointer';
 }
 
-/**
- * The `pointerType` of the last pointer that pressed or arrived over an
- * element in `target`'s document, or the page's: `'touch'`, `'mouse'`,
- * `'pen'`, or undefined when the store has heard none (or an older bundle
- * made it). A mouse event that follows a finger is a tap's compatibility
- * event, not hover: iOS sends `mouseover`, `mouseenter` and `mousemove`
- * after a tap, also to an element that moved under the finger, and no
- * `pointerenter` there.
- */
-export function getLastPointerType(
-  target?: Document | Node | null,
-): string | undefined {
-  const targetDocument =
-    target == null
-      ? typeof document === 'undefined'
-        ? null
-        : document
-      : target.nodeType === 9
-        ? (target as Document)
-        : target.ownerDocument;
-  if (targetDocument == null) {
-    return undefined;
-  }
-  return getStore(targetDocument).lastPointerType;
-}
-
 /** Test-only: restore the initial state between cases. */
 export function __resetInteractionModalityForTest(): void {
   if (typeof document !== 'undefined') {
     const store = getStore(document);
     store.modality = 'keyboard';
     store.isTextEntrySincePointer = false;
-    store.lastPointerType = undefined;
   }
 }
 

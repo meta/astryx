@@ -218,7 +218,7 @@ describe('interactionModality', () => {
 
     releaseSecond();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['focusin', 'keydown', 'pointerdown', 'pointerover'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -315,7 +315,7 @@ describe('interactionModality', () => {
     // The last component in that document unmounts: tracking there stops.
     second.unmount();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['focusin', 'keydown', 'pointerdown', 'pointerover'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -355,7 +355,6 @@ describe('interactionModality', () => {
       'focusin',
       'keydown',
       'pointerdown',
-      'pointerover',
     ]);
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
@@ -470,7 +469,6 @@ describe('interactionModality', () => {
         'focusin',
         'keydown',
         'pointerdown',
-        'pointerover',
       ]);
       await frame.unmount();
     });

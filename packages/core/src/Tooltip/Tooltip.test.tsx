@@ -34,16 +34,20 @@ import {Item} from '../Item/Item';
 import {Token} from '../Token/Token';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {subscribeInput} from '../utils/inputStream';
 import userEvent from '@testing-library/user-event';
 import {IconButton} from '../IconButton/IconButton';
 import {Toolbar} from '../Toolbar/Toolbar';
 import {TestIcon} from '../__tests__/TestIcon';
 
 // Store original matches to restore later
-// A tap leaves the document's last pointer as touch; the next case's mouse
-// events must not read as a tap's compatibility events.
+// A tap leaves the shared input stream's last pointer as touch; the next
+// case's mouse events must not read as a tap's compatibility events.
 afterEach(() => {
   __resetInteractionModalityForTest();
+  const release = subscribeInput(window, 'pointerover', () => {});
+  fireEvent.pointerOver(document.body, {pointerType: 'mouse'});
+  release();
 });
 
 const originalMatches = HTMLElement.prototype.matches;

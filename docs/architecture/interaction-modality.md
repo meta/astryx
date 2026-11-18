@@ -45,13 +45,10 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17, spec:AST-020/DEC-6]
         "useInteractionModalityTracking",
         "useInteractionModalityTrackingFor",
         "trackInteractionModalityIn",
-        "getInteractionModality",
-        "getLastPointerType"
+        "getInteractionModality"
       ],
-      "patterns": [
-        "addEventListener\\(\\s*['\"](?:pointerdown|pointerover|keydown)['\"]"
-      ],
-      "claims": ["INV1", "INV2", "INV3", "INV11"]
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV1", "INV2", "INV3"]
     },
     "focus-return": {
       "names": [
