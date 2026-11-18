@@ -116,8 +116,48 @@ describe('offers follow the answer', () => {
     }
     const r = await results('lo', 'high contrast');
     expect(r[0].text).toMatch(
-      /lo is light only, but Core's dark media surfaces \(lightbox, overlay-scrim\) still read --color-text-secondary's dark half/,
+      /lo is light only: dark mode keeps its own value for --color-text-secondary \(now [^)]+\), --color-border \(now [^)]+\), which Core's dark media surfaces \(lightbox, overlay-scrim\) draw/,
     );
     expect(r[0].commands.some(c => /--mode dark/.test(c))).toBe(false);
+  }, 300_000);
+
+  it('names only the tokens dark media surfaces read through their own dark half, and the line that keeps it', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    // The dark media rule draws the main text color and the accent in
+    // --color-on-dark, so their dark halves are never what the lightbox
+    // shows: no note names them.
+    for (const q of ['accent #2563eb', 'main text #333333']) {
+      const text = (await results('lo', q)).map(x => x.text).join('\n');
+      expect(text, q).not.toMatch(/dark media surfaces/);
+      expect(text, q).not.toMatch(
+        /--color-accent \(now|--color-text-primary \(now/,
+      );
+    }
+    // A dial's line makes the dark shades too: the note names the line
+    // that keeps them, the one that sets the token alone.
+    const neutral = (await results('lo', 'neutral #64748b'))[0].text;
+    expect(neutral).toMatch(
+      /with the line that sets the token alone, dark mode keeps its own value for --color-neutral \(now [^)]+\)/,
+    );
+    // A line of token and part settings keeps the token's dark half itself.
+    const page = (await results('lo', 'page #fafafa'))[0].text;
+    expect(page).toMatch(
+      /lo is light only: dark mode keeps its own value for --color-background-body \(now [^)]+\)/,
+    );
+    // What it says is what the line does: dark mode keeps the token's own
+    // dark value.
+    const before = (
+      await themeEditHow('secondary text #555555', {cwd, theme: 'lo'})
+    ).data.results[0].text.match(/--color-text-secondary \(now ([^)]+)\)/)?.[1];
+    await themeEditSet('lo', '--color-text-secondary', '#555555', {cwd});
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const css = fs.readFileSync(path.join(cwd, 'themes/lo/lo.css'), 'utf8');
+    expect(css).toContain(
+      `--color-text-secondary: light-dark(#555555, ${before});`,
+    );
   }, 300_000);
 });
