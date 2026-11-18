@@ -199,7 +199,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   with a handle. Every motion runs on transform and opacity. FR12's layout
   calls come with the handle, so a List given no handle loads only its own
   row-update glue, not the shared layout-motion module
-  (`architecture:component-import-boundaries` INV7).
+  (`architecture:component-import-boundaries` INV7). The handle carries them
+  under `LIST_LAYOUT`, a registered key in the internal leaf module
+  `motion/listLayoutKey.ts`: `motion/animatedLayout.ts` writes it on the
+  handle and `List/listLayoutUpdates.ts` reads it. No other module imports
+  it, and no package entry exports it.
 
 ## Accessibility contract
 
