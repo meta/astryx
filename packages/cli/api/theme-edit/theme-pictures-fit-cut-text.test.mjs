@@ -3,7 +3,8 @@
 /**
  * @file A sheet item whose text a part cuts with an ellipsis when narrow (a
  * stepper's step names, a section heading) grows by what the text lacks,
- * up to the sheet's width, before its picture; both browsers run it.
+ * up to the room an item has in a cell as wide as the sheet's content box,
+ * before its picture, so no cell runs past the sheet; both browsers run it.
  */
 
 import * as fs from 'node:fs';
@@ -22,7 +23,12 @@ function item(width, texts) {
     getBoundingClientRect: () => ({
       width: Math.max(width, parseFloat(self.style.minWidth ?? '0') || 0),
     }),
-    closest: () => ({clientWidth: 1200}),
+    // A sheet 1200px wide with 14px of padding a side, and a cell with
+    // 10px of padding and a 1px border a side: 1150px of room for an item.
+    closest: (/** @type {string} */ selector) =>
+      selector === '.cs-sheet'
+        ? {clientWidth: 1200, sides: {padding: 14}}
+        : {sides: {padding: 10, border: 1}},
     querySelectorAll: () =>
       texts.map(t => ({
         scrollWidth: t.scroll,
@@ -44,6 +50,12 @@ function run(items) {
   const document = {querySelectorAll: () => items};
   const getComputedStyle = (/** @type {any} */ el) => ({
     textOverflow: el.ellipsis ? 'ellipsis' : 'clip',
+    paddingLeft: `${el.sides?.padding ?? 0}px`,
+    paddingRight: `${el.sides?.padding ?? 0}px`,
+    borderLeftWidth: `${el.sides?.border ?? 0}px`,
+    borderRightWidth: `${el.sides?.border ?? 0}px`,
+    marginLeft: '0px',
+    marginRight: '0px',
   });
   new Function('document', 'getComputedStyle', FIT_CELLS)(
     document,
@@ -52,14 +64,16 @@ function run(items) {
 }
 
 describe('text a part cuts when narrow', () => {
-  it('gets the room it needs, up to the sheet width', () => {
+  it('gets the room it needs, up to the room inside the sheet', () => {
     const stepper = item(240, [{scroll: 92, client: 52, ellipsis: true}]);
     const wide = item(240, [{scroll: 2000, client: 100, ellipsis: true}]);
     const clipped = item(240, [{scroll: 400, client: 100, ellipsis: false}]);
     const whole = item(240, [{scroll: 80, client: 80, ellipsis: true}]);
     run([stepper, wide, clipped, whole]);
     expect(stepper.style.minWidth).toBe('280px');
-    expect(wide.style.minWidth).toBe('1200px');
+    // Never past the sheet's content box: the cell's padding and border fit
+    // inside it.
+    expect(wide.style.minWidth).toBe('1150px');
     // Text clipped with no ellipsis, or drawn whole, is left as it is.
     expect(clipped.style.minWidth).toBeUndefined();
     expect(whole.style.minWidth).toBeUndefined();
