@@ -111,38 +111,34 @@ function savedSearchEntries(tmp) {
 describe.skipIf(process.platform !== 'linux')(
   'kept installed doc names',
   () => {
-    it.skipIf(!hasModuleHooks)(
-      'are kept, and an edit to an installed package doc shows on the very next run',
-      () => {
-        const tmp = keptTmp('installed-doc-names');
-        const {dir, docs} = projectWithDocs();
-        try {
-          expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
-          expect(docNameEntries(tmp)).toHaveLength(1);
-          expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
-          // A new doc, then a renamed one: each shows on the next run, as a
-          // fresh run gives it.
-          writeDoc(docs, 'widgets-theming');
-          expect(listedDocs(tmp, dir)).toEqual([
-            'widgets-setup',
-            'widgets-theming',
-          ]);
-          expect(listedDocs(freshTmp(), dir)).toEqual([
-            'widgets-setup',
-            'widgets-theming',
-          ]);
-          fs.rmSync(path.join(docs, 'widgets-theming.doc.mjs'));
-          writeDoc(docs, 'widgets-layout');
-          expect(listedDocs(tmp, dir)).toEqual([
-            'widgets-layout',
-            'widgets-setup',
-          ]);
-        } finally {
-          fs.rmSync(dir, {recursive: true, force: true});
-        }
-      },
-      240_000,
-    );
+    it('are kept, and an edit to an installed package doc shows on the very next run', () => {
+      const tmp = keptTmp('installed-doc-names');
+      const {dir, docs} = projectWithDocs();
+      try {
+        expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
+        expect(docNameEntries(tmp)).toHaveLength(hasModuleHooks ? 1 : 0);
+        expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
+        // A new doc, then a renamed one: each shows on the next run, as a
+        // fresh run gives it.
+        writeDoc(docs, 'widgets-theming');
+        expect(listedDocs(tmp, dir)).toEqual([
+          'widgets-setup',
+          'widgets-theming',
+        ]);
+        expect(listedDocs(freshTmp(), dir)).toEqual([
+          'widgets-setup',
+          'widgets-theming',
+        ]);
+        fs.rmSync(path.join(docs, 'widgets-theming.doc.mjs'));
+        writeDoc(docs, 'widgets-layout');
+        expect(listedDocs(tmp, dir)).toEqual([
+          'widgets-layout',
+          'widgets-setup',
+        ]);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    }, 240_000);
 
     it('answer as a fresh run does when the cache folder cannot be written', () => {
       const tmp = keptTmp('installed-doc-names-locked');
@@ -219,24 +215,22 @@ describe.skipIf(process.platform !== 'linux')(
       }
     }, 240_000);
 
-    it.skipIf(!hasModuleHooks)(
-      "keeps search's discover line per folder, as discover counts what each folder declares",
-      () => {
-        const other = makeProject();
-        const src = path.join(other.dir, 'src');
-        fs.mkdirSync(src, {recursive: true});
-        // The root declares @acme/kit without installing it; src declares
-        // nothing.
-        fs.writeFileSync(
-          path.join(other.dir, 'package.json'),
-          JSON.stringify({
-            name: 'consumer',
-            dependencies: {'@acme/kit': '^1.0.0'},
-          }),
-        );
-        fs.writeFileSync(
-          path.join(other.dir, 'astryx.config.mjs'),
-          `export default {
+    it("keeps search's discover line per folder, as discover counts what each folder declares", () => {
+      const other = makeProject();
+      const src = path.join(other.dir, 'src');
+      fs.mkdirSync(src, {recursive: true});
+      // The root declares @acme/kit without installing it; src declares
+      // nothing.
+      fs.writeFileSync(
+        path.join(other.dir, 'package.json'),
+        JSON.stringify({
+          name: 'consumer',
+          dependencies: {'@acme/kit': '^1.0.0'},
+        }),
+      );
+      fs.writeFileSync(
+        path.join(other.dir, 'astryx.config.mjs'),
+        `export default {
   integrations: ['@acme/widgets'],
   async discover() {
     return {
@@ -255,41 +249,42 @@ describe.skipIf(process.platform !== 'linux')(
   },
 };
 `,
-        );
-        /** @param {string} tmp @param {string} cwd */
-        const hint = (tmp, cwd) =>
-          run(['search', 'bar', 'chart'], {
-            tmp,
-            cwd,
-            json: false,
-          }).stdout.includes('More in packages you could add');
-        /** @param {string} tmp @param {string} cwd */
-        const answers = (tmp, cwd) =>
-          JSON.parse(run(['discover', 'bar', 'chart'], {tmp, cwd}).stdout)
-            .type === 'discover.search';
-        try {
-          for (const order of [
-            [other.dir, src],
-            [src, other.dir],
-          ]) {
-            const tmp = keptTmp(`declared-${path.basename(order[0])}`);
-            expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
-            for (const cwd of [...order, ...order]) {
-              expect(hint(tmp, cwd)).toBe(answers(tmp, cwd));
-            }
-            // The two folders answer differently, and each keeps a record of
-            // its own: a record one folder kept never answers for the other.
-            expect(answers(tmp, other.dir)).toBe(false);
-            expect(answers(tmp, src)).toBe(true);
-            expect(savedSearchEntries(tmp).sort()).toEqual(
-              [fs.realpathSync(other.dir), fs.realpathSync(src)].sort(),
-            );
+      );
+      /** @param {string} tmp @param {string} cwd */
+      const hint = (tmp, cwd) =>
+        run(['search', 'bar', 'chart'], {
+          tmp,
+          cwd,
+          json: false,
+        }).stdout.includes('More in packages you could add');
+      /** @param {string} tmp @param {string} cwd */
+      const answers = (tmp, cwd) =>
+        JSON.parse(run(['discover', 'bar', 'chart'], {tmp, cwd}).stdout)
+          .type === 'discover.search';
+      try {
+        for (const order of [
+          [other.dir, src],
+          [src, other.dir],
+        ]) {
+          const tmp = keptTmp(`declared-${path.basename(order[0])}`);
+          expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
+          for (const cwd of [...order, ...order]) {
+            expect(hint(tmp, cwd)).toBe(answers(tmp, cwd));
           }
-        } finally {
-          fs.rmSync(other.dir, {recursive: true, force: true});
+          // The two folders answer differently, and each keeps a record of
+          // its own: a record one folder kept never answers for the other.
+          expect(answers(tmp, other.dir)).toBe(false);
+          expect(answers(tmp, src)).toBe(true);
+          // Without module hooks no run keeps a record.
+          expect(savedSearchEntries(tmp).sort()).toEqual(
+            hasModuleHooks
+              ? [fs.realpathSync(other.dir), fs.realpathSync(src)].sort()
+              : [],
+          );
         }
-      },
-      240_000,
-    );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    }, 240_000);
   },
 );
