@@ -113,11 +113,23 @@ describe('a paint drawn inside a part', () => {
     }
     // A part holding several parts that draw it writes nothing and names
     // them.
-    const several = await answer('make the stepper gray', 'i');
-    expect(several.writes).toEqual([]);
-    expect(several.text).toMatch(
-      /stepper draws no fill of its own; the parts inside it that draw it: step-bar, step-connector/,
-    );
+    // A piece whose resting look is keyed by its own visual props (a
+    // slider's track by orientation) draws at rest: a slider holds two
+    // such pieces, so nothing is written and the answer names them.
+    for (const [q, named] of [
+      [
+        'make the stepper gray',
+        /stepper draws no fill of its own; the parts inside it that draw it: .*step-bar/,
+      ],
+      [
+        'make the slider gray',
+        /slider draws no fill of its own; the parts inside it that draw it: .*slider-track/,
+      ],
+    ]) {
+      const several = await answer(q, 'i');
+      expect(several.writes, q).toEqual([]);
+      expect(several.text, q).toMatch(named);
+    }
     // A shared component inside a part (an empty state's or a button
     // group's Button) is never handed the change: main's answer stands.
     for (const q of [

@@ -15544,20 +15544,36 @@ export function draftAnswer(ctx, env, question) {
     // A piece whose own resting paint draws it, never one that paints it
     // only to mark a state (a nav item's selected fill, an option's
     // highlight) or through a hover or press layer inside it.
-    /** @param {any} r */
-    const drawsAtRest = r =>
-      props.some(
-        x =>
-          Object.values(r?.own?.[x]?.tokens ?? {}).some(conds =>
-            /** @type {string[]} */ (conds).includes('always'),
-          ) || !/^(transparent|none|)$/.test(String(r?.at?.[x]?.always ?? '')),
+    /**
+     * Whether a census condition is a resting look: always, or only the
+     * piece's visual props (its size, its orientation), never a runtime
+     * state, a pseudo-class or a layer.
+     * @param {string} cond
+     * @param {string} k
+     */
+    const resting = (cond, k) => {
+      if (cond === 'always') return true;
+      if (/[\s:[]/.test(cond)) return false;
+      const visual = ctx.project.target.get(k)?.props ?? [];
+      return cond
+        .split(',')
+        .every(pair => visual.includes(pair.split('=')[0] ?? ''));
+    };
+    /** @param {string} k */
+    const drawsAtRest = k =>
+      props.some(x =>
+        Object.entries(C.MAP[k]?.at?.[x] ?? {}).some(
+          ([cond, value]) =>
+            resting(cond, k) &&
+            !/^(transparent|none|)$/.test(String(value).trim()),
+        ),
       );
     // Only the part's own pieces: a shared component inside it (an empty
     // state's Button) is never handed a change meant for the part.
     const owner = ctx.project.target.get(one(on))?.component;
     return (rec.contains ?? []).filter(
       k =>
-        drawsAtRest(C.MAP[k]) &&
+        drawsAtRest(k) &&
         owner !== undefined &&
         ctx.project.target.get(k)?.component === owner,
     );

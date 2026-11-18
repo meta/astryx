@@ -2,7 +2,7 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Themes can reach parts that painted with no target of their own. The default look does not change.
+[feat] Themes can reach parts that painted with no target of their own. The default look does not change.
 
 - Each key badge in Kbd carries `kbd-key`.
 - The Typeahead result popup carries `typeahead-popup`.
