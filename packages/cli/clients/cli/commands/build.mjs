@@ -339,7 +339,7 @@ export function registerBuild(program) {
         out.push(
           section(
             'COMPONENTS',
-            `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+            `For what the template and blocks do not cover${more(domain)}. Read the ones you need in one call: ${formatCliCommand('component <name> [name...]')}`,
           ),
           ...componentLines,
         );
