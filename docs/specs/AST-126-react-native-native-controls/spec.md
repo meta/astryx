@@ -63,7 +63,7 @@ and React Native as required dependencies (`spec:AST-082/FR13`). Per piece:
   Native's `TextInput` (OQ1).
 - `AstryxSegmentedControl`: titles that follow Dynamic Type, and the drawn
   control before a title is cut (FR6).
-- `AstryxDatePicker` (view and module): calendar dates as ISO wall-clock
+- `AstryxDatePickerView` and `AstryxDatePicker`: calendar dates as ISO wall-clock
   strings (DEC-4), Material 3's date range dialog, and results instead of
   rejections (`spec:AST-140/FR3`).
 - `AstryxPasteControl`: no capability gap; PasteButton draws the system control
@@ -71,15 +71,15 @@ and React Native as required dependencies (`spec:AST-082/FR13`). Per piece:
 
 ## Who uses it
 
-| Native piece                | Kind                                       | Astryx components that use it                                                                                                                                                                    | What a person sees                                                                                                   |
-| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `AstryxNativeButton`        | native component (Fabric Native Component) | `Button` under native presentation (outside a connected group such as `ButtonGroup` or `InputGroup`, not a toggle, not a glass surface, no icon on Android); apps through the `./controls` entry | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
-| `AstryxNativeSlider`        | native component (Fabric Native Component) | `Slider` under native presentation; `MediaScrubber`, which asks for it through `Slider`; apps through `./controls`                                                                               | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
-| `AstryxNativeTextField`     | native component (Fabric Native Component) | `TextInput` under native presentation, outside an `InputGroup`, no start icon on Android; apps through `./controls`                                                                              | The system text box inside Astryx's label, description and status                                                    |
-| `AstryxSegmentedControl`    | native component (Fabric Native Component) | `SegmentedControl` under native presentation; apps through `./controls`                                                                                                                          | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
-| `AstryxDatePicker` (view)   | native component (Fabric Native Component) | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on iOS when their surface resolves to native; apps through `./controls`                                                              | UIDatePicker's compact pill in the field, or the inline calendar or wheels in the library's sheet                    |
-| `AstryxDatePicker` (module) | native module (Turbo Native Module)        | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on Android when their surface resolves to native; apps through `./controls`                                                          | The Astryx field, which opens Material 3's date, date range or time dialog                                           |
-| `AstryxPasteControl`        | native component (Fabric Native Component) | `PasteButton` on iOS 16 and later, in an app's own runtime; apps through `./controls`                                                                                                            | The system paste control, which pastes with no permission prompt; elsewhere the library Button with the word "Paste" |
+| Native piece             | Kind                                       | Astryx components that use it                                                                                                                                                                    | What a person sees                                                                                                   |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `AstryxNativeButton`     | native component (Fabric Native Component) | `Button` under native presentation (outside a connected group such as `ButtonGroup` or `InputGroup`, not a toggle, not a glass surface, no icon on Android); apps through the `./controls` entry | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
+| `AstryxNativeSlider`     | native component (Fabric Native Component) | `Slider` under native presentation; `MediaScrubber`, which asks for it through `Slider`; apps through `./controls`                                                                               | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
+| `AstryxNativeTextField`  | native component (Fabric Native Component) | `TextInput` under native presentation, outside an `InputGroup`, no start icon on Android; apps through `./controls`                                                                              | The system text box inside Astryx's label, description and status                                                    |
+| `AstryxSegmentedControl` | native component (Fabric Native Component) | `SegmentedControl` under native presentation; apps through `./controls`                                                                                                                          | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
+| `AstryxDatePickerView`   | native component (Fabric Native Component) | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on iOS when their surface resolves to native; apps through `./controls`                                                              | UIDatePicker's compact pill in the field, or the inline calendar or wheels in the library's sheet                    |
+| `AstryxDatePicker`       | native module (Turbo Native Module)        | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on Android when their surface resolves to native; apps through `./controls`                                                          | The Astryx field, which opens Material 3's date, date range or time dialog                                           |
+| `AstryxPasteControl`     | native component (Fabric Native Component) | `PasteButton` on iOS 16 and later, in an app's own runtime; apps through `./controls`                                                                                                            | The system paste control, which pastes with no permission prompt; elsewhere the library Button with the word "Paste" |
 
 `SearchField`, `TextArea`, `NumberInput` and the other text-entry components
 edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
@@ -117,7 +117,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     `NativeSegmentedControl`, `NativePasteControl`, each with its
     `is<View>Available()` probe;
   - `datePickerView()` and `isDatePickerViewAvailable()` (the iOS picker view),
-    and `AstryxDatePicker` with `isAvailable()`, `version()`, `openDate`,
+    and `AstryxDatePicker` with `isAvailable()`, `openDate`,
     `openDateRange` and `openTime` (the Android dialogs);
   - `AndroidDatePicker` and `AndroidDateRangePicker`, which open the dialogs
     from a field the caller draws (`renderField({open, isOpen})`).
@@ -379,7 +379,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 | `AstryxNativeSlider`     | native component (Fabric Native Component) | `value`, `minimumValue`, `maximumValue`, `step`, `changeInterval`, `enabled`, `layoutDirection`, `appearance`, `minimumTrackTint`, `maximumTrackTint`, `thumbTint`, `axLabel`, `axHint`, `axValueText`, `axStep`                                                                                                                                                                                                          | `restoreValue`         | `onValueChange`, `onValueCommit`, `onSlidingChange`, `onIntrinsicSize` | iOS          |
 | `AstryxNativeTextField`  | native component (Fabric Native Component) | `text`, `mostRecentEventCount`, `placeholder`, `size`, `secure`, `keyboard`, `contentType`, `returnKey`, `capitalize`, `autoCorrect`, `spellCheck`, `clearButton`, `startSystemImage` (iOS), `loading`, `editable`, `enabled`, `status`, `autoFocus`, `appearance`, `statusTint`, `fieldStyle` (iOS), `fill` (iOS), `cornerRadius` (iOS), `insetX` (iOS), `axLabel`, `axHint`, `axAccessible`, `axSelected`, `axLanguage` | `focus`, `blur`        | `onTextChange`, `onFocusChange`, `onReturn`, `onIntrinsicSize`         | iOS, Android |
 | `AstryxSegmentedControl` | native component (Fabric Native Component) | `segments`, `selectedIndex`, `layout`, `size`, `enabled`, `appearance`, `selectedTint`, `selectedForeground`, `axGroupLabel`                                                                                                                                                                                                                                                                                              | `restoreSelectedIndex` | `onNativeChange`, `onIntrinsicSize`                                    | iOS          |
-| `AstryxDatePicker`       | native component (Fabric Native Component) | `mode`, `pickerStyle`, `value`, `minimumValue`, `maximumValue`, `localeIdentifier`, `firstWeekday`, `minuteInterval`, `hourCycle`, `pillTitle`, `pillIsPlaceholder`, `pickerEnabled`, `appearance`, `pickerAccessibilityLabel`, `pickerAccessibilityHint`                                                                                                                                                                 | none                   | `onValueChange`, `onPillPress`, `onEditingChange`, `onPickerSize`      | iOS          |
+| `AstryxDatePickerView`   | native component (Fabric Native Component) | `mode`, `pickerStyle`, `value`, `minimumValue`, `maximumValue`, `localeIdentifier`, `firstWeekday`, `minuteInterval`, `hourCycle`, `pillTitle`, `pillIsPlaceholder`, `pickerEnabled`, `appearance`, `pickerAccessibilityLabel`, `pickerAccessibilityHint`                                                                                                                                                                 | none                   | `onValueChange`, `onPillPress`, `onEditingChange`, `onPickerSize`      | iOS          |
 | `AstryxPasteControl`     | native component (Fabric Native Component) | `acceptedTypes`, `enabled`, `foregroundTint`, `backgroundTint`, `cornerRadius`, `displayMode`, `appearance`, `axHint`                                                                                                                                                                                                                                                                                                     | none                   | `onPaste`, `onIntrinsicSize`                                           | iOS          |
 
 | Contract           | Kind                                | Methods                                                                | Platforms |
@@ -396,15 +396,15 @@ FR7's results.
 
 ### Platform support
 
-| Contract                    | iOS                                                                            | Android                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `AstryxNativeButton`        | UIButton with UIButton.Configuration; glass configurations on iOS 26 and later | Material 3 MaterialButton                                                     |
-| `AstryxNativeSlider`        | UISlider                                                                       | No host; Slider draws its Astryx control (OQ2)                                |
-| `AstryxNativeTextField`     | UITextField, rounded or filled                                                 | Material 3 TextInputLayout with TextInputEditText                             |
-| `AstryxSegmentedControl`    | UISegmentedControl                                                             | No host; SegmentedControl draws its Astryx control (OQ2)                      |
-| `AstryxDatePicker` (view)   | UIDatePicker (compact, inline, wheels) and the pill                            | No host                                                                       |
-| `AstryxDatePicker` (module) | No module: the view and the library's sheet                                    | MaterialDatePicker (date, date range), MaterialTimePicker as dialog fragments |
-| `AstryxPasteControl`        | UIPasteControl, iOS 16 and later                                               | No host: the library Button reads the clipboard                               |
+| Contract                 | iOS                                                                            | Android                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `AstryxNativeButton`     | UIButton with UIButton.Configuration; glass configurations on iOS 26 and later | Material 3 MaterialButton                                                     |
+| `AstryxNativeSlider`     | UISlider                                                                       | No host; Slider draws its Astryx control (OQ2)                                |
+| `AstryxNativeTextField`  | UITextField, rounded or filled                                                 | Material 3 TextInputLayout with TextInputEditText                             |
+| `AstryxSegmentedControl` | UISegmentedControl                                                             | No host; SegmentedControl draws its Astryx control (OQ2)                      |
+| `AstryxDatePickerView`   | UIDatePicker (compact, inline, wheels) and the pill                            | No host                                                                       |
+| `AstryxDatePicker`       | No module: the view and the library's sheet                                    | MaterialDatePicker (date, date range), MaterialTimePicker as dialog fragments |
+| `AstryxPasteControl`     | UIPasteControl, iOS 16 and later                                               | No host: the library Button reads the clipboard                               |
 
 - Supported feature/engine floor: iOS at React Native's own minimum, with
   UIPasteControl from iOS 16 and Liquid Glass from iOS 26; Android API level 24
@@ -429,8 +429,14 @@ FR7's results.
   controls and the gesture views of the library's components.
 - Relies on `spec:AST-140/FR5`: every contract is at revision 1, and later
   behaviour is a named feature.
-- This record makes no departure from `spec:AST-043` or `spec:AST-082`; OQ2,
-  OQ3, OQ7 and OQ8 ask whether React Native departs from them.
+- Departs from `spec:AST-082/FR11` on Android: Slider and SegmentedControl,
+  and a Button or TextInput with an icon, draw the Astryx control where
+  Material 3 has its own. OQ2 asks whether this stands.
+- Follows `spec:AST-043` FR1 to FR3 and FR11's native-first default; OQ3, OQ7
+  and OQ8 ask whether React Native departs from them or from
+  `spec:AST-082/DEC-2`.
+- iOS's button and text field draw UIButton and UITextField; whether they wrap
+  the shared Swift controls of `spec:AST-112/FR10` is OQ9.
 - No other record changes.
 
 ## Verification
@@ -540,10 +546,6 @@ read call, and no code reads the pasteboard before the tap.
   and SegmentedControl take none and follow the provider and the theme.
   Options: give every control that prop; or one rendering axis shared by every
   component.
-- **OQ5 — Does the date picker keep one name for two kinds of contract?**
-  (`human-api`) `AstryxDatePicker` is a native component on iOS and a native
-  module on Android. Options: one contract per name, each of one kind; or one
-  name for both, told apart by kind.
 - **OQ6 — Does Switch get a native contract?** (`human-design`) Options: an
   Astryx switch contract over UISwitch and Material 3's switch, with this
   group's appearance mapping and named features; or React
@@ -560,3 +562,8 @@ read call, and no code reads the pasteboard before the tap.
   instance. Options: keep them on the views as the platform's app API, with the
   library components feeding them from the theme; or move them into the theme
   for the views too.
+- **OQ9 — Do the iOS button and text field wrap the shared Swift controls?**
+  (`checkable`) `spec:AST-112/FR10` asks the platform to wrap a shared native
+  control where `@astryxdesign/native` provides one. Options: wrap the shared
+  Swift `Button` and `TextInput`, with this record's contract on top; or keep
+  UIButton and UITextField until the shared controls cover FR3 and FR5.
