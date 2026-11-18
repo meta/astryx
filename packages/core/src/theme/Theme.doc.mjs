@@ -75,7 +75,7 @@ export const docs = {
       name: 'mode',
       type: "'light' | 'dark' | 'system'",
       default: "'system'",
-      description: 'Color mode. System takes the page\u2019s light or dark scheme: the reader\u2019s preference, unless the page or its host sets the root\u2019s scheme.',
+      description: 'Color mode. System takes the page\u2019s light or dark scheme: reset.css makes it the reader\u2019s preference, and the page or its host can set the root\u2019s scheme itself.',
     },
     {
       name: 'children',
@@ -117,6 +117,6 @@ export const docsDense = {
   propDescriptions: {
     theme:
       'theme object to apply. Prefer built theme objects for static production themes; use runtime `defineTheme()` for dynamic themes.',
-    mode: 'color mode. System takes the page\u2019s scheme (the reader\u2019s preference unless the page or host sets the root\u2019s). defaults to "system"',
+    mode: 'color mode. System takes the page\u2019s scheme (reset.css makes it the reader\u2019s preference; the page or host can set the root\u2019s). defaults to "system"',
   },
 };

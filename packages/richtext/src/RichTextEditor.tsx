@@ -82,6 +82,7 @@ import {CodeBackspacePlugin} from './internal/CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './internal/CodePastePlugin';
 import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
 import {CodeTabPlugin} from './internal/CodeTabPlugin';
 import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
@@ -197,6 +198,10 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   editorRoot: {
+    // The document's own direction, read where the surface sits. A block
+    // whose text decides nothing reads this rather than inheriting, so a
+    // list or table that reads the other way cannot change it.
+    '--_richtext-document-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     position: 'relative',
     width: '100%',
     // ContentEditable and Lexical's sibling placeholder inherit one shared
@@ -738,6 +743,7 @@ export const RichTextEditor = function RichTextEditor({
               <TablePastePlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              <BlockDirectionPlugin />
               {/* Backspace at the very start of a code block makes it a
                   paragraph, instead of merging it into the block above. */}
               <CodeBackspacePlugin />

@@ -15,6 +15,7 @@ applies_to:
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
+    packages/core/src/privateAttributes/scheme.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
@@ -244,9 +245,24 @@ Platform-specific details stay inside that compiler.
 - **INV18 — A color-mode block applies only in its mode.** The web compiler
   writes a component style key's `@light` or `@dark` block (properties,
   pseudo-class overrides, and pseudo-elements) as rules that match only where
-  the element's color mode is that mode, as Theme resolves it. Outside media
-  surfaces the theme root's `data-theme` decides, and a root mode other than
-  `light` or `dark` follows the system preference. Inside the theme's media
+  the element's color mode is that mode. Outside media surfaces the theme
+  root's `data-theme` decides. Under a root mode other than `light` or `dark`
+  and no Theme that forces one, a block follows the scheme the page root draws
+  in: the root's `color-scheme`, else its `<meta name="color-scheme">`. A
+  `color-scheme` set on `body` or on an element around the Theme does not
+  count. When the page draws in one scheme, the root Theme names it on `<html>` in a
+  private attribute (`architecture:public-component-api` INV23). Its owner is
+  `privateAttributes/scheme.ts`, which the root Theme writes it through and the
+  theme engine reads its selectors from; no existing owner module serves,
+  since each names one attribute. A block
+  applies where that scheme is its mode, whatever the reader prefers. While
+  no scheme is named, a block applies where the reader's preference
+  (`prefers-color-scheme`) is its mode: on a page that follows the reader,
+  and at the first paint of a server-rendered page, before the root Theme
+  mounts. So on a page that names no scheme, which draws light, once the
+  root Theme has mounted the `@light` block applies for every reader and the
+  `@dark` block for none. Under a Theme that forces a mode, a system root
+  follows the reader's preference. Inside the theme's media
   surfaces the nearest surface decides: a block applies where the closest
   media surface around the element is of its mode, so a light surface inside
   a dark one takes only the light block. This holds for up to five surfaces
@@ -269,6 +285,16 @@ Platform-specific details stay inside that compiler.
   theme root, such as a span that measures a label, uses the font that the
   token names at the page root. A page where no stylesheet defines the token
   keeps the browser's default font. An app's own `html` or `body` font wins.
+- **INV20 — Text inside a Theme that only inherits its size takes the body
+  size token.** Each `Theme` wrapper carries `font-size:
+var(--text-body-size)` for its own theme (`component:Theme` FR1), so text
+  inside it that sets no size of its own (plain text in a card, a quote) draws
+  at the theme's body size and follows a theme that changes it. Core's reset
+  sets no font size on `html` or `body`, so installing Astryx leaves a host's
+  own text outside a Theme at its own size. Text inside a Theme keeps another
+  size through a font-size on the app's own container inside the Theme, or
+  through the theme's `--text-body-size`, which also sizes Core's own body
+  text.
 
 This record does not own:
 
@@ -380,7 +406,8 @@ tiers.
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                                                                                        | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                                                                                           | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
-| INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` rule, none on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                                   | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
+| INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` font rule, no font on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                           | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
+| INV20            | `Theme.test.tsx` (the wrapper's body size) and `reset.test.ts` (no font size on `html` or `body`)                                                                                                                                                                                                                                                                                                                                                      | Text inside a Theme with no size of its own                                                                                                                                                                                                                                                       |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

@@ -42,7 +42,8 @@ owns response fields and compatibility.
 
 - Which ordering method or weights win. They are measured, and they change
   under FR6.
-- How search matches or scores an entry.
+- How search matches or scores an entry, beyond the reading of other
+  entries' names that FR1 states.
 - Build's start template, alternatives, and page call (`spec:AST-048`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -52,7 +53,18 @@ owns response fields and compatibility.
 - **FR1 — search answers with the lexical matches.** Every result is an entry
   the lexical ranker matched, with that ranker's score and reason, and
   `matchCount` equals its match count. Search never returns more results than
-  the lexical ranker does for the same query and limit.
+  the lexical ranker does for the same query and limit. In search's reading of
+  the catalog, another entry's name is that entry's evidence: a component a
+  block uses never answers a query word for the block alone, and a title inside
+  the query reaches its tier only when no query word it leaves unanswered names
+  a component or hook and no doc. In that reading, a doc that opens a level (a
+  docs-tree namespace) does not answer a query word through its text (its prose,
+  or a code term or table cell its keywords gather) when a doc beneath its route
+  answers that word at least as strongly: the word is that doc's evidence. Its
+  name, title, description and declared keywords stay its own. `searchCore`,
+  which build reads, keeps the gathered reading.
+  Icons are not among the results: an icon ask's trailing `icons` section
+  (`spec:AST-084` FR6) changes neither `results` nor `matchCount`.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a

@@ -110,7 +110,7 @@ export default function SettingsTemplate() {
         )
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           <VStack gap={4}>
             {/* Mobile: the sidebar nav collapses to a horizontal, centered
                 tab bar above the content. */}
@@ -123,9 +123,11 @@ export default function SettingsTemplate() {
                 </TabList>
               </VStack>
             )}
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Basic information</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Basic information
+                </Heading>
                 <Text type="supporting" color="secondary">
                   View and update your personal details and account information.
                 </Text>
@@ -169,9 +171,11 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Change password</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Change password
+                </Heading>
                 <Text type="supporting" color="secondary">
                   Update your password to keep your account secure.
                 </Text>
@@ -213,9 +217,11 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
-                <Heading level={3}>Advanced settings</Heading>
+                <Heading level={3} accessibilityLevel={2}>
+                  Advanced settings
+                </Heading>
                 <Text type="supporting" color="secondary">
                   Configure detailed account preferences and security options.
                 </Text>

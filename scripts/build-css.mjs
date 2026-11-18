@@ -166,13 +166,9 @@ export const ASTRYX_LAYER_ORDER = LAYER_ORDER;
 /**
  * Wrap a package's compiled StyleX rules as its prebuilt stylesheet: a banner,
  * the layer-order registration, then every rule inside `@layer astryx-base`.
- * Core's carries its root block before them (spec:AST-080 FR3).
- * @param {string} banner
- * @param {string} css
- * @param {{core?: boolean}} [options]
  */
-export function composePackageStylesheet(banner, css, options) {
-  return `/* ${banner} */\n/* Auto-generated. Do not edit manually. */\n\n${layerBlock(css, options)}`;
+export function composePackageStylesheet(banner, css) {
+  return `/* ${banner} */\n/* Auto-generated. Do not edit manually. */\n\n${layerBlock(css)}`;
 }
 
 /**
@@ -272,9 +268,7 @@ async function main() {
   const outPath = path.resolve(target.dist, target.outFile);
   await fs.writeFile(
     outPath,
-    composePackageStylesheet(target.banner, combinedCSS, {
-      core: target.name === 'core',
-    }),
+    composePackageStylesheet(target.banner, combinedCSS),
     'utf8',
   );
   console.log(

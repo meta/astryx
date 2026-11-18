@@ -5,8 +5,8 @@
  *   project with no icon set installed and no `experimental.iconSet`, every
  *   stable command answers exactly as it does without icon sets. An
  *   installed icon-set package turns icon features on
- *   (foundation/integrations/icon-features.mjs); search still answers as it
- *   does without icon sets.
+ *   (foundation/integrations/icon-features.mjs); search's results still
+ *   answer as they do without icon sets, and only an icon ask appends icons.
  *
  *   The goldens under `__golden__/no-icon-set/` were written by the CLI
  *   without the icon-set feature, so a result, field, section, count, or
@@ -161,7 +161,7 @@ const ICON_SET_READERS = {
   'api/upgrade/run/run.mjs':
     'passes the gate to the nudge, which strips the root with it off',
   'api/discover/_adapter.mjs':
-    'reads sets only with the gate on, and strips the root before collecting identities',
+    'reads installed sets only with the gate on, and strips the root before collecting identities',
   // Readers behind a gated reader.
   'api/docs/_entry-names.mjs':
     "whether a loaded integration names a root, so the docs tree may hold more than the CLI's own; it reads the sets only through project.iconSets()",
@@ -169,6 +169,8 @@ const ICON_SET_READERS = {
     "a loaded integration's root, as part of the key its kept docs routes (api/docs/_entry-names.mjs) are kept under; it reads no set",
   'api/doctor/doctor.mjs': 'project.iconSets()',
   'api/template/_adapter.mjs': 'project.iconSets()',
+  'api/search/_adapter.mjs':
+    "search's icon section: with the gate on, the set directory names for the ask test, then project.iconSets() only for an icon ask",
   'foundation/doc-compiler/inputs.mjs': 'project.iconSets()',
   'foundation/discovery/icon-set-discovery.mjs':
     'discovery itself: called by the gated readers',
@@ -194,6 +196,12 @@ const ICON_SET_READERS = {
     'integration verify, for the package being authored',
   'clients/cli/commands/doctor.mjs':
     "prints validate's iconSets, which validate fills only with the gate on",
+  'api/discover/discover.mjs':
+    "passes the gate to the catalog view, and keeps search's discover line off icon sets without it; it reads a source's catalog, never an installed root",
+  'api/discover/_catalog-view.mjs':
+    "marks a catalog entry's iconSets experimental; it reads a source's catalog, never an installed root",
+  'clients/cli/commands/discover.mjs':
+    "prints the Available entries' iconSets, which come from a source's catalog, never an installed root",
 };
 /** A read of an icon-set root, or a run of icon-set discovery or checks. */
 const ICON_SET_READ =
@@ -1057,7 +1065,7 @@ export default {
 // packages/cli/test/experimental-isolation.test.mjs --update` in a branch
 // runs them too.
 describe.skipIf(REGENERATING)(
-  'with an icon set installed and configured, search is unchanged',
+  "with an icon set installed and configured, search's results are unchanged",
   () => {
     const queries = [
       'delete',
@@ -1130,8 +1138,9 @@ describe.skipIf(REGENERATING)(
       expect(list.data.projectSet).toBe('@acme/glyphs/glyphs');
     });
 
-    // Icon words: icon lookup by meaning is only `astryx experimental icon`;
-    // `astryx search` joins it only at promotion (spec:AST-084 FR11).
+    // Icon words: the results stay as without icon sets. Only an icon ask
+    // that an installed icon answers appends `icons` (spec:AST-084 FR11), and
+    // no icon in this set answers these queries.
     it.each(queries)(
       'search %s equals the output without icon sets, text and JSON',
       async query => {
@@ -1292,8 +1301,8 @@ describe('with no icon-set package and no experimental.iconSet, discover reads n
 // An installed icon-set package turns the icon feature gate on
 // (spec:AST-084 FR0) with no `experimental.iconSet`: discover, doctor,
 // `doctor integration validate`, and `docs icons` read the set. Copied
-// templates follow a set only with `experimental.iconSet`, and search never
-// reads one. Main's CLI has no icon sets, so regenerating from main skips
+// templates follow a set only with `experimental.iconSet`, and search reads
+// one only for an icon ask, whose icons follow its unchanged results. Main's CLI has no icon sets, so regenerating from main skips
 // these.
 describe.skipIf(REGENERATING)(
   'with an icon-set package installed and no experimental.iconSet, icon features are on',
@@ -1488,8 +1497,8 @@ describe.skipIf(REGENERATING)(
       );
     });
 
-    // Search joins icon sets only through its own section; until then it
-    // answers as the CLI without icon sets does.
+    // Search's results answer as the CLI without icon sets does; no icon in
+    // this set answers these queries, so no `icons` block follows them.
     it.each(['close', 'icon set', 'experimental'])(
       'search %s equals the output without icon sets, text and JSON',
       async query => {

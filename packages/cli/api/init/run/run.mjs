@@ -24,6 +24,7 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {
+  STARTER_THEME,
   inspectAgentDocs,
   projectInstallStep,
   resolveAgentPaths,
@@ -46,8 +47,6 @@ import {logger} from '../../logger.mjs';
 const VALID_FEATURES = ['agents', 'theme', 'template'];
 const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 
-const THEME_PACKAGE = '@astryxdesign/theme-neutral';
-
 /**
  * Build the "Next steps" lines printed at the end of `astryx init`.
  *
@@ -56,11 +55,11 @@ const THEME_PACKAGE = '@astryxdesign/theme-neutral';
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
- * @param {string} [cwd] the project folder; its package manager names the theme install command
+ * @param {string} [cwd] the project folder; its integrations' install guidance, else its package manager, names the theme install step
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {
-  const install = projectInstallStep([THEME_PACKAGE], cwd);
+  const install = projectInstallStep([STARTER_THEME.package], cwd);
   return [
     '',
     '  Next steps:',
@@ -72,7 +71,7 @@ export function getNextSteps(invocation, cwd = process.cwd()) {
     '    4. Add and wire a theme:',
     `       ${install.line}`,
     ...(install.note ? [`       (${install.note})`] : []),
-    `       ${invocation} theme add neutral`,
+    `       ${invocation} theme add ${STARTER_THEME.slug}`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',

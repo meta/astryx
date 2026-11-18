@@ -793,25 +793,26 @@ const BULK_EDIT_ACTIONS: ReadonlyArray<{
   key: string;
   label: string;
   icon: React.ReactNode;
-  onClick: (selected: ServiceJob[]) => void;
+  /** The demo toast for the selected job IDs. */
+  demoBody: (jobIds: string) => string;
 }> = [
   {
     key: 'assign',
     label: 'Assign',
     icon: <Icon icon={UserPlus} size="sm" />,
-    onClick: s => alert(`Assign technician: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: a technician would be assigned to ${ids} here`,
   },
   {
     key: 'reschedule',
     label: 'Reschedule',
     icon: <Icon icon={Calendar} size="sm" />,
-    onClick: s => alert(`Reschedule: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be rescheduled here`,
   },
   {
     key: 'cancel',
     label: 'Cancel',
     icon: <Icon icon={CircleX} size="sm" />,
-    onClick: s => alert(`Cancel: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be canceled here`,
   },
 ];
 
@@ -3594,7 +3595,15 @@ export default function TableFilterTemplate() {
                 variant="ghost"
                 size="sm"
                 icon={action.icon}
-                onClick={() => action.onClick(selectedJobs)}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: action.demoBody(
+                      selectedJobs.map(job => job.id).join(', '),
+                    ),
+                    uniqueID: `bulk-${action.key}`,
+                  })
+                }
               />
             ))}
           </HStack>
@@ -4371,7 +4380,13 @@ export default function TableFilterTemplate() {
                     <Button
                       label="New job"
                       variant="primary"
-                      onClick={() => alert('New job')}
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: a new job form would open here',
+                          uniqueID: 'new-job',
+                        })
+                      }
                     />
                   </HStack>
 
