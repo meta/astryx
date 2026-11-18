@@ -33,6 +33,5 @@ A set `--color-on-accent` (or another role's text or icon color) reaches only wh
 
 - `astryx experimental theme editor`: a whole-theme `--color-accent` set as a token now acts as the theme's accent when no accent color is set. Links, selected rows, list items, citations and the accent tint grow from it, as they do from `set <theme> accent`. A dark value set with `--mode dark` carries the dark shades, and the token keeps the exact value it was given in each mode. Set for one mode only, it moves that mode only: the other keeps the base theme's colors.
 
-- `astryx theme use` and a later `astryx theme add` say when no source file of the app imports the generated theme module, so the default theme they record is not what the app shows yet, and print the one-time wiring (`change.notImported` in `--json`). `astryx doctor` and these commands read that from one shared check.
 
 @josephfarina

@@ -8,13 +8,13 @@
  * @output SOURCE_EXTENSIONS, listProjectSourceFiles, specifierTargets,
  *   projectImportsModule
  * @position read by doctor (whether the app imports the generated theme
- *   module) and by `theme add` and `theme use` (whether the app shows the
- *   default they record)
+ *   module and its stylesheets); no command receipt reads app source
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {moduleImports} from '../render/embedded-imports.mjs';
+import {candidatesOf, matchPath, pathsFor} from '../render/ts-paths.mjs';
 
 export const SOURCE_EXTENSIONS = new Set([
   '.js',
@@ -68,8 +68,10 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
         entry.isFile() &&
         file !== generatedModule &&
         (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
-          (options.stylesheets === true && path.extname(entry.name) === '.css') ||
-          (options.pages === true && /^\.html?$/u.test(path.extname(entry.name))))
+          (options.stylesheets === true &&
+            path.extname(entry.name) === '.css') ||
+          (options.pages === true &&
+            /^\.html?$/u.test(path.extname(entry.name))))
       ) {
         files.push(file);
       }
@@ -79,24 +81,34 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
 }
 
 /**
- * Whether a relative specifier in `fromFile` names `target`, with or without
- * its extension, or as a folder's index file.
+ * Whether a specifier in `fromFile` names `target`, with or without its
+ * extension, or as a folder's index file: a relative specifier from the
+ * file's folder, and a bare one through the `compilerOptions.paths` of the
+ * tsconfig (or jsconfig) TypeScript reads for the file (`@/astryx-themes`
+ * with `"@/*": ["./src/*"]`).
  * @param {string} specifier
  * @param {string} fromFile
  * @param {string} target
  */
 export function specifierTargets(specifier, fromFile, target) {
-  if (!specifier.startsWith('.')) return false;
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [
-    base,
-    ...[...SOURCE_EXTENSIONS].map(extension => `${base}${extension}`),
-    ...[...SOURCE_EXTENSIONS].map(extension =>
-      path.join(base, `index${extension}`),
-    ),
-  ];
-  return candidates.some(
-    candidate => path.resolve(candidate) === path.resolve(target),
+  /** @type {string[]} */
+  let bases;
+  if (specifier.startsWith('.')) {
+    bases = [path.resolve(path.dirname(fromFile), specifier)];
+  } else {
+    const match = matchPath(pathsFor(path.resolve(fromFile)), specifier);
+    if (!match) return false;
+    bases = candidatesOf(match);
+  }
+  const wanted = path.resolve(target);
+  return bases.some(base =>
+    [
+      base,
+      ...[...SOURCE_EXTENSIONS].map(extension => `${base}${extension}`),
+      ...[...SOURCE_EXTENSIONS].map(extension =>
+        path.join(base, `index${extension}`),
+      ),
+    ].some(candidate => path.resolve(candidate) === wanted),
   );
 }
 

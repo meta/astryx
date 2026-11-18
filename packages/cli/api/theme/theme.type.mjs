@@ -127,9 +127,6 @@
  * `change.wireModes` is present when the module lists a theme's one color
  * mode (`themeModes`) for the first time after the app was wired: the app's
  * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
- * `change.notImported` is present on an add after the first, or a use, when
- * no source file of the app imports the module at `modulePath`: the default
- * it records is not what the app shows until the app root is wired.
  * `change.moduleRemoved` is present when `theme remove` removed the only
  * added theme and deleted the module at `modulePath`: `themes` is empty,
  * `default` is `''`, and the app root must drop the module's wiring.
@@ -170,7 +167,7 @@
  * the add installed that no theme still in the record is owned by or
  * imports, and `uninstallError`
  * why that uninstall failed.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true, notImported?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installCommand: string | null, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installCommand: string | null, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**
