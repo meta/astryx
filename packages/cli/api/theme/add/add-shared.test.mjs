@@ -20,6 +20,7 @@ import {themeAdd} from './add.mjs';
 import {themeRemove} from '../remove/remove.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+import {recordDeclaredSettings} from '../../../foundation/env/cli-command.mjs';
 
 const runs = vi.hoisted(
   () => /** @type {Array<{cmd: string, args: string[], cwd: string}>} */ ([]),
@@ -589,6 +590,28 @@ describe('theme add with a shared theme', () => {
     runs.length = 0;
     await themeAdd(path.join(shared, 'ocean'), {cwd: app});
     expect(runs.at(-1)?.args.at(-1)).toBe('--mode=skip-build');
+  });
+
+  it("follows an integration's install guidance in place of the package manager", async () => {
+    recordDeclaredSettings(app, [
+      {
+        name: '@acme/ui',
+        installGuidance:
+          'Add {packages} to package.json, then run the relock script',
+      },
+    ]);
+    writeTheme(path.join(shared, 'ocean'), 'ocean', {
+      imports: ['@astryxdesign/theme-neutral/built', 'left-pad'],
+    });
+    const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(runs).toEqual([]);
+    expect(result.data.copy).toMatchObject({
+      installed: [],
+      installGuidance:
+        'Add left-pad to package.json, then run the relock script',
+      installRetryCommand: `Add @astryxdesign/theme-neutral@${CLI_VERSION} to package.json, then run the relock script`,
+    });
+    recordDeclaredSettings(app, []);
   });
 
   it('installs nothing for a base the app has installed without declaring it', async () => {
