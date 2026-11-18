@@ -3850,10 +3850,12 @@ function clausesOf(q, partWords, words = null) {
         (m, prev, sp) => (colorsIn(String(prev)).length ? `${prev}${sp};` : m),
       )
       .split(
-        // A font stack ("Georgia, serif") is one value, not two asks.
+        // A font stack ("Georgia, serif") is one value, not two asks; nor
+        // are the layers of a background picture ("linear-gradient(…),
+        // linear-gradient(…)").
         // Two sides of a corner ask joined by "and" ("rounded on top and
         // bottom") are one ask, as a corner except is.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b)|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)(?!\s*(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient)\()|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b)|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
@@ -4794,6 +4796,37 @@ function valueWords(rest) {
   }
   if (word) out.push(word);
   return out;
+}
+
+/** A CSS picture function: a gradient or an image file. */
+const PICTURE_FUNCTION =
+  /^(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/;
+
+/**
+ * A background picture value said whole in the text: its picture layers
+ * (gradients or url()), comma-separated, each with the position, size and
+ * repeat words CSS reads after it; null when the text says none.
+ * @param {string} text
+ * @returns {string | null}
+ */
+function pictureValue(text) {
+  const words = valueWords(text);
+  const start = words.findIndex(w => PICTURE_FUNCTION.test(w));
+  if (start < 0) return null;
+  const layerWord =
+    /^(?:,|\/|[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?(?:\/[-+]?\d*\.?\d+(?:px|%|r?em|vh|vw|ch)?)?|repeat(?:-x|-y)?|no-repeat|space|round|center|top|bottom|left|right|fixed|scroll|local|cover|contain|auto),?$/;
+  const kept = [];
+  for (const w of words.slice(start)) {
+    if (!(PICTURE_FUNCTION.test(w) || layerWord.test(w))) break;
+    kept.push(w);
+  }
+  const value = kept.join(' ').replace(/[\s,]+$/, '');
+  // (A call left open by the text is no value.)
+  const open = [...value].reduce(
+    (n, ch) => n + (ch === '(' ? 1 : ch === ')' ? -1 : 0),
+    0,
+  );
+  return open === 0 ? value : null;
 }
 
 /**
@@ -21275,6 +21308,17 @@ export function draftAnswer(ctx, env, question) {
     )
       return answerFor(c, null, a);
     if (on === 'page') {
+      // "page background radial-gradient(#0002 1px, transparent 1px) 0 0 /
+      // 16px 16px": a picture value said whole is written as said, on the
+      // part that paints the page.
+      const picture = pictureValue(c.text);
+      if (picture)
+        return {
+          text: `the page background: ${picture} on app-shell (the page behind your parts)`,
+          options: [
+            [set('background', picture, {on: 'app-shell', ...modeOf(c)})],
+          ],
+        };
       const color = colorFor(c, 'fill');
       // "the page background lighter": the whole-theme answer, per mode.
       if (!color && a === 'background' && c.dir) return answerFor(c, null, a);
@@ -31899,6 +31943,31 @@ export function draftAnswer(ctx, env, question) {
         text: `${pageColorNote(env.data?.mode)} (The parts that paint it: ${[...new Set([...(TARGET.has('app-shell') ? ['app-shell'] : []), ...pageReaders])].slice(0, 6).join(', ')}.)`,
         options: [],
         lookup: TARGET.has('app-shell') ? `${HOW} app-shell` : undefined,
+      });
+    // (A picture, a pattern or gradient, on the part that paints the page
+    // shows only inside AppShell: the body rule carries the page color, not
+    // the picture. Said once, with the way to have it.)
+    const paintsPicture = (/** @type {Draft} */ d) =>
+      d.options.some(o =>
+        o.some(
+          st =>
+            st.on === 'app-shell' &&
+            st.verb === 'set' &&
+            /^background(?:-image)?$/.test(String(st.thing)) &&
+            /\b(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/.test(
+              String(st.value),
+            ),
+        ),
+      );
+    if (
+      TARGET.has('app-shell') &&
+      result.some(paintsPicture) &&
+      !result.some(d => /picture shows inside AppShell/.test(d.text))
+    )
+      result.push({
+        text: 'Your page picture shows inside AppShell, which draws it once behind the whole page. Wrap the page in AppShell: a page without it shows no picture, and the body rule (`body { background: var(--color-background-body) }`) gives it the page color only.',
+        options: [],
+        lookup: `${HOW} app-shell`,
       });
   }
   // "bold white text in the header", "white text on the primary button":
