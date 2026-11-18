@@ -118,7 +118,7 @@ describe('componentDetailProps types', () => {
       ]),
     ).toEqual([
       ['item', ['SearchItem']],
-      ['source', ['SearchItem', 'SearchSource']],
+      ['source', ['SearchSource', 'SearchItem']],
     ]);
   });
 

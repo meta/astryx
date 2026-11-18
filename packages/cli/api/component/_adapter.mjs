@@ -693,11 +693,14 @@ export function withPropTypes(props, ownerPackage, docPath) {
   const found = exportedTypeDeclarations(root, props.flatMap(namesOf));
   return props.map(prop => {
     const names = new Set(namesOf(prop));
-    const types = found
-      .filter(type => type.via.some(via => names.has(via)))
-      .map(({name, declaration}) =>
-        declaration === undefined ? {name} : {name, declaration},
-      );
+    const reached = found.filter(type => type.via.some(via => names.has(via)));
+    // The prop's own types come first, then the types they name.
+    const types = [
+      ...reached.filter(type => names.has(type.name)),
+      ...reached.filter(type => !names.has(type.name)),
+    ].map(({name, declaration}) =>
+      declaration === undefined ? {name} : {name, declaration},
+    );
     return types.length > 0 ? {...prop, types} : prop;
   });
 }
