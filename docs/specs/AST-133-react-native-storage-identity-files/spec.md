@@ -376,22 +376,21 @@ true`, never `ok` alone.
     listed.
 
 - **FR17 — Astryx Stage simulates each module.**
-  - `AstryxSecureStorage`: one file per namespace in Astryx Stage's data
-    folder, readable only by the person who runs it. It is not encrypted and
-    has no lock state, so `locked` never happens. Under an iOS look a
-    protected read draws a confirmation with the `prompt`; under an Android
-    look `user-presence` is absent. The command that starts Astryx Stage can
-    hand a secret to the launched project through its standard input, never
-    through the environment.
-  - `AstryxClientIdentity`: identities per namespace in its data folder, with
-    software keys (`isHardwareBacked: false`, never `no-secure-hardware`, and
-    `isSimulator()` false); signing requests, signatures, chains, the host
-    rules of FR6, and presentation on the runtime's requests and downloads
-    under the redirect rule of FR7. `system-identity` is absent.
-  - `AstryxFiles`: a cache per namespace in its data folder, downloads through
-    its own HTTP client under the rules of FR10, the system's save panel and a
-    share sheet look-alike, and `readBundledAsset` confined to the project's
-    own asset folders and cache.
+  - `AstryxSecureStorage`: secrets per namespace that last across runs and
+    that only the person running Astryx Stage can read. They are not
+    protected by a device lock, so `locked` never happens. Under an iOS look a
+    protected read asks for confirmation with the `prompt`; under an Android
+    look `user-presence` is absent. A secret can be handed to the launched
+    project when Astryx Stage starts, never through the environment.
+  - `AstryxClientIdentity`: identities per namespace that last across runs,
+    with keys that are not hardware-backed (`isHardwareBacked: false`, never
+    `no-secure-hardware`, and `isSimulator()` false); signing requests,
+    signatures, chains, the host rules of FR6, and presentation on the
+    runtime's requests and downloads under the redirect rule of FR7.
+    `system-identity` is absent.
+  - `AstryxFiles`: a cache per namespace, downloads under the rules of FR10,
+    a save dialog and a share sheet, and `readBundledAsset` confined to the
+    project's own assets and cache.
   - FR17 gap: Astryx Stage reports a download's progress only once, at the
     end, and presents a bound identity on a download only with `credentials:
 'include'`.
@@ -406,11 +405,11 @@ true`, never `ok` alone.
 
 ### Platform support
 
-| Contract               | iOS                                                                                                                                   | Android                                                                                                                                           | Astryx Stage                                                  |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `AstryxSecureStorage`  | Keychain generic-password items, one service per namespace; accessibility classes; a user-presence access control for `user-presence` | AES-256-GCM values under an Android Keystore key, in the app's no-backup folder; `whenUnlocked` through an unlocked-device key (API 28 and later) | One file per namespace (FR17)                                 |
-| `AstryxClientIdentity` | Secure Enclave keys; React Native's request handler and `URLSession` challenges for presentation                                      | StrongBox or TEE Keystore keys; a client key manager on React Native's HTTP client; `KeyChain` for `system-identity`                              | Software keys; its own HTTP client presents them (FR17)       |
-| `AstryxFiles`          | The caches folder; `URLSession` downloads; `UIDocumentPickerViewController` in export mode; `UIActivityViewController`                | The cache folder; React Native's HTTP client for downloads; the create-document picker; the share chooser through the package's `FileProvider`    | Its data folder; its own HTTP client; the system's save panel |
+| Contract               | iOS                                                                                                                                   | Android                                                                                                                                           | Astryx Stage                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `AstryxSecureStorage`  | Keychain generic-password items, one service per namespace; accessibility classes; a user-presence access control for `user-presence` | AES-256-GCM values under an Android Keystore key, in the app's no-backup folder; `whenUnlocked` through an unlocked-device key (API 28 and later) | Secrets per namespace, kept across runs (FR17)           |
+| `AstryxClientIdentity` | Secure Enclave keys; React Native's request handler and `URLSession` challenges for presentation                                      | StrongBox or TEE Keystore keys; a client key manager on React Native's HTTP client; `KeyChain` for `system-identity`                              | Keys that are not hardware-backed, presented as FR7 says |
+| `AstryxFiles`          | The caches folder; `URLSession` downloads; `UIDocumentPickerViewController` in export mode; `UIActivityViewController`                | The cache folder; React Native's HTTP client for downloads; the create-document picker; the share chooser through the package's `FileProvider`    | A cache per namespace; downloads; save and share (FR17)  |
 
 - FR17 gap: Astryx Stage reports no `contractFeatures` list.
 - Supported feature/engine floor: the platform floor of `spec:AST-112`
