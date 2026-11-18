@@ -55,7 +55,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Your theme's page color, `--color-background-body`, shows inside `AppShell`; `Theme` sets the tokens but paints no page of its own. Wrap the page in `AppShell`; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer `AppShell`). A theme with one mode draws its text for its own page, so the page needs that color in every OS mode.",
+          text: "Your theme's page color, `--color-background-body`, shows inside `AppShell`; `Theme` sets the tokens but paints no page of its own. Wrap the page in `AppShell`; if you can't, add `body { background: var(--color-background-body) }` to global CSS (doctor's purity check flags any stylesheet, so prefer `AppShell`). An Astryx area embedded in a page another app owns adds no body rule: that page is not its own. A theme with one mode draws its text for its own page, so the page needs that color in every OS mode.",
         },
         {
           type: 'prose',
