@@ -4322,10 +4322,39 @@ export function draftAnswer(ctx, env, question) {
     // ("amber for warnings", "red only for alerts": the role color.)
     .replace(
       /\b((?:[a-z]+\s+)?[a-z]+|#[0-9a-f]{3,8})\s+(?:only\s+|just\s+)?(?:for|reserved for|on)\s+(?:the\s+|all\s+)?(warnings?|success(?:es)?|info(?:rmation)?|notices?)\b/gi,
-      (m, color, role) =>
-        colorsIn(String(color).toLowerCase()).length
-          ? `${/^warn/i.test(role) ? 'warning' : /^succ/i.test(role) ? 'success' : 'info'} color ${color}`
-          : m,
+      (m, color, role, at, whole) => {
+        // (Only a color said alone for the role, "amber for warnings":
+        // "red text on the info banner" is the banner's text, in its info
+        // look, never the info color.)
+        const words = String(color).toLowerCase().split(/\s+/);
+        const colorAlone = words.every(
+          w =>
+            colorsIn(w).length ||
+            /^(?:light|dark|pale|deep|soft|bright|warm|cool|muted|vivid|rich|pastel)$/.test(
+              w,
+            ),
+        );
+        const next = String(whole)
+          .slice(Number(at) + m.length)
+          .toLowerCase();
+        const partFollows = partLexicon(ctx).parts.some(([re]) =>
+          re.test(
+            ` ${next
+              .split(/[,;.:]/)[0]
+              .trim()
+              .split(/\s+/)
+              .slice(0, 3)
+              .join(' ')} `,
+          ),
+        );
+        if (
+          !colorAlone ||
+          partFollows ||
+          !colorsIn(String(color).toLowerCase()).length
+        )
+          return m;
+        return `${/^warn/i.test(role) ? 'warning' : /^succ/i.test(role) ? 'success' : 'info'} color ${color}`;
+      },
     )
     // ("make it brighter and more cheerful": a livelier, more colorful
     // theme.)
