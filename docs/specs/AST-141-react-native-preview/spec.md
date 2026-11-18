@@ -113,9 +113,11 @@ None.
     own player, under FR5's `AstryxAudio` row, and gives them back at its
     teardown.
   - A call that the host's policy refuses for a project answers
-    `not-allowed`, a reason the host adds to every capability's set
-    (`spec:AST-140/FR3`); it is never a silent no-op. The other reasons that
-    FR5's table names are the host's too, on the modules it names them for.
+    `not-allowed`, Preview's own reason: Preview adds it to the reason set of
+    every capability a project reaches, so a refused call resolves
+    `{ok: false, reason: 'not-allowed'}`, and Preview's types (FR9) declare
+    it. It is never a silent no-op. The other reasons that FR5's table names
+    are the host's too, on the modules it names them for.
   - Removing a project from the app's list removes everything it stored, in
     every store of the package, its web view data included where the web
     capability is linked. Only the host removes a project's data; a project
