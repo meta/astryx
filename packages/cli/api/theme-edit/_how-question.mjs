@@ -2566,10 +2566,11 @@ const REMOVAL_VERBS =
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /**
  * A clause that forbids a change ("don't make buttons rounder", "never hide
- * the tab underline", "inputs shouldn't be round"): nothing changes.
+ * the tab underline", "inputs shouldn't be round", "ghost buttons not look
+ * like primary buttons"): nothing changes.
  */
 const PROHIBITION = new RegExp(
-  `^\\s*(?:(?:but|and)\\s+)?(?:please\\s+)?(?:don'?t|do not|never)\\s+(?:make|hide|${REMOVAL_VERBS})\\b|\\b(?:should|must|shall)(?:n'?t| not)\\s+(?:be|get|look|become)\\b`,
+  `^\\s*(?:(?:but|and)\\s+)?(?:please\\s+)?(?:don'?t|do not|never)\\s+(?:make|hide|${REMOVAL_VERBS})\\b|\\b(?:(?:should|must|shall|do|does)(?:n'?t| not)|not|never)\\s+(?:be|get|look|become)\\b`,
 );
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
@@ -15313,7 +15314,7 @@ export function draftAnswer(ctx, env, question) {
         prohibited.push(p.on);
       }
       push({
-        text: `"${c.text.trim()}" asks for no change, so nothing is set there; ${c.parts.map(p => p.on).join(', ') || 'it'} stays as it is`,
+        text: `"${c.text.trim()}" asks for no change, so nothing is set there; ${[...new Set(c.parts.map(p => p.on))].join(', ') || 'it'} stays as it is`,
         options: [],
       });
       continue;
@@ -26745,14 +26746,17 @@ export function draftAnswer(ctx, env, question) {
             : 'a theme that is always dark: mode dark-only',
         options: [[set('mode', 'dark-only')]],
       };
-    // ("use the default theme": a theme named is the app's choice, a switch.)
-    if (GOING_BACK.test(t) && /\btheme\b/.test(t) && !c.colors.length)
+    // (A going-back word said alone: "use the default theme" names a
+    // theme; "make it look like before" asks undo. Beside other asks, or
+    // "by default", it is theirs.)
+    const back = clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
+    if (back && GOING_BACK.test(/\b(\w+) theme\b/.exec(t)?.[1] ?? ''))
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
         options: [],
         lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
       };
-    if ((/\b(undo|go back)\b/.test(t) || GOING_BACK.test(t)) && !c.colors.length)
+    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && GOING_BACK.test(t)))
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,

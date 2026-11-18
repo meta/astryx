@@ -144,6 +144,23 @@ describe('one variant made to look like another', () => {
   );
 });
 
+describe('a likeness said with "not"', () => {
+  it(
+    'writes nothing, never the look it names',
+    async () => {
+      for (const q of [
+        'ghost buttons not look like primary buttons',
+        'ghost buttons should never look like primary buttons',
+      ]) {
+        const data = await answer(q);
+        expect(first(data), q).toEqual([]);
+        expect(JSON.stringify(data.results), q).toMatch(/asks for no change/);
+      }
+    },
+    T,
+  );
+});
+
 describe("a piece the ask says not to take away", () => {
   it(
     'is kept: "don\'t hide", "never hide" and "do not remove" write nothing',
