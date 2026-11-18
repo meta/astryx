@@ -597,6 +597,69 @@ describe('theme add with a shared theme', () => {
     expect(runs.at(-1)?.args.at(-1)).toBe('--mode=skip-build');
   });
 
+  it("keeps the theme editor's saved state with the copy, and theme remove takes it back", async () => {
+    const archive = path.join(shared, 'bundle.tgz');
+    fs.writeFileSync(
+      archive,
+      tgz({
+        ...themeEntries('bundle/app-copy/', 'sunset'),
+        'bundle/editor-theme/sunset.settings.json': '{"base":"neutral"}\n',
+        'bundle/editor-theme/sunset.theme.ts': 'export {};\n',
+        'bundle/editor-theme/tokens/sunset.palette.ts': 'export {};\n',
+      }),
+    );
+    const before = tree(app);
+    const result = await themeAdd(archive, {cwd: app});
+    expect(result.data.copy?.editor).toEqual({
+      from: 'bundle/editor-theme',
+      outputDir: 'themes/sunset',
+      files: expect.arrayContaining([
+        'sunset.settings.json',
+        'sunset.theme.ts',
+        'tokens/sunset.palette.ts',
+      ]),
+    });
+    expect(
+      fs.readFileSync(
+        path.join(app, 'themes/sunset/sunset.settings.json'),
+        'utf8',
+      ),
+    ).toBe('{"base":"neutral"}\n');
+    expect(result.data.copy?.written).toEqual(
+      expect.arrayContaining(['themes/sunset/sunset.settings.json']),
+    );
+    await themeRemove('sunset', {cwd: app});
+    expect(tree(app)).toEqual(before);
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+  });
+
+  it('leaves editor state it did not write in place, and says so', async () => {
+    const mine = path.join(app, 'themes/ocean/ocean.settings.json');
+    fs.mkdirSync(path.dirname(mine), {recursive: true});
+    fs.writeFileSync(mine, '{"mine":true}\n');
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      '{"theirs":true}\n',
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(/already holds editor state/),
+    });
+    expect(fs.readFileSync(mine, 'utf8')).toBe('{"mine":true}\n');
+    await themeRemove('ocean', {cwd: app});
+    expect(fs.readFileSync(mine, 'utf8')).toBe('{"mine":true}\n');
+  });
+
+  it('adds no editor state when the shared theme carries none', async () => {
+    writeTheme(path.join(shared, 'ocean'), 'ocean');
+    const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(result.data.copy).not.toHaveProperty('editor');
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+  });
+
   it("follows an integration's install guidance in place of the package manager", async () => {
     recordDeclaredSettings(app, [
       {
