@@ -727,8 +727,9 @@ record depends on an ask whose owner has not agreed to it.
 
 - Two new packages under `packages/`: `@astryxdesign/react-native` and
   `@astryxdesign/react-native-expo`, canary-only (FR1, FR14).
-- `@astryxdesign/cli` runs the package's commands (FR13) through the mechanism
-  OQ5 settles, and `architecture:cli-surface` gains that mechanism. The CLI
+- `@astryxdesign/cli` runs the commands that `@astryxdesign/react-native` adds
+  under `astryx rn` and that any installed package or integration adds under
+  `astryx experimental rn` (FR13) through the mechanism OQ5 settles, and `architecture:cli-surface` gains that mechanism. The CLI
   holds no React Native command code.
 - `spec:AST-114` reads the package as a base. Its FR4 list gains the
   `setup.checks` step, and its FR5 table gains `doctor`'s `--platform` and
@@ -749,9 +750,11 @@ record depends on an ask whose owner has not agreed to it.
   `ERR_BASE_NOT_FOUND` and `ERR_BASE_AMBIGUOUS` and before any `requires`.
   The CLI reserves the name `rn`, so it needs no list of React Native command
   names.
-- `spec:AST-042` FR1 and FR2 extend to the functions that a base package's
-  entry exports for its commands, and FR4's admission covers FR13's one new
-  top-level command, `rn`, and its subcommands.
+- `spec:AST-042` FR1 and FR2 extend to the functions that any package or
+  integration exports for the commands it adds under `astryx rn` or
+  `astryx experimental rn` (FR13), with their docs and tests, and FR4's
+  admission covers FR13's one new top-level command, `rn`, its subcommands,
+  and the `experimental rn` level.
 - `architecture:cli-surface`: INV3 registers FR13's new codes,
   `ERR_BASE_COMMAND` included; INV2 and INV9 admit a command that keeps
   running, writes its one result, and closes standard output; INV2's error
