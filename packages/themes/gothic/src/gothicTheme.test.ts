@@ -3,7 +3,7 @@
 import {describe, expect, it} from 'vitest';
 import {resolveThemeTokens} from '@astryxdesign/core/theme';
 import {palette as gothicModePalettes} from './gothicPalettes.generated';
-import {gothicTheme} from './gothicTheme';
+import {colorModes, gothicTheme} from './gothicTheme';
 
 const categoricalFamilies = [
   'blue',
@@ -94,5 +94,16 @@ describe('gothic palette mapping', () => {
         `${family} categorical text`,
       ).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe('gothic color modes', () => {
+  it('names its one mode, dark, which every colour token draws', () => {
+    expect(colorModes).toEqual(['dark']);
+    const light = resolveThemeTokens(gothicTheme, {mode: 'light'});
+    const dark = resolveThemeTokens(gothicTheme, {mode: 'dark'});
+    for (const token of Object.keys(gothicTheme.tokens ?? {}))
+      if (token.startsWith('--color-'))
+        expect(light[token], token).toBe(dark[token]);
   });
 });
