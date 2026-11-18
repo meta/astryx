@@ -95,9 +95,10 @@ const wrapperStyles = stylex.create({
     display: 'contents',
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
-    // Text that only inherits its size takes this theme's body size, a
-    // nested theme's own included.
+    // Text that only inherits its size and line height takes this theme's
+    // body size and body leading, a nested theme's own included.
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   light: {
     colorScheme: 'light',
