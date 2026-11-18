@@ -25,15 +25,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                             |
-| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                                    |
-| End-user impact         | People opening a long windowed list wait less, and every windowed list behaves the same way, inside a container scroll area or on a scrolling page (INV4).                           |
-| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                                       |
-| Compatibility/readiness | Additive and internal. The module is `packages/core/src/virtualization/`. Table's public virtualization hooks keep their shape except for DEC-6's one rename (INV3).                 |
-| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it, other than DEC-6's one rename. |
-| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4, DEC-6.                                                                                                                                                   |
+| Area                    | Contract                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                                                          |
+| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                                                                 |
+| End-user impact         | People opening a long windowed list wait less, and every windowed list behaves the same way, inside a container scroll area or on a scrolling page; Table windows only inside its own bounded scroll area (INV4). |
+| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                                                                    |
+| Compatibility/readiness | Additive and internal. The module is `packages/core/src/virtualization/`. Table's public virtualization hooks keep their shape except for DEC-6's one rename (INV3).                                              |
+| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it, other than DEC-6's one rename.                              |
+| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4, DEC-6.                                                                                                                                                                                |
 
 This table is a review projection; the body below is authoritative.
 
@@ -51,8 +51,8 @@ windowing module computes which rows render and where the scroll range ends.
 Each consumer keeps its own records for when it windows, what it renders, and
 how it exposes the full list to assistive technology.
 
-The module windows a list on either scroll axis. On the block axis, all rows
-share one pitch. On the inline axis, each item has its own width. The
+The module windows a list on either scroll axis. On the inline axis, each item
+has its own width. The
 consumer names the viewport space that its pinned items cover at each edge,
 and the module plans only for the space between them. The module reads the
 inline scroll position as a distance from the inline start, so a
@@ -117,6 +117,8 @@ row-position accuracy (DEC-3).
   virtualization (`module:Table/useTableColumnsVirtualization`) use it.
   Selector renders every option when it opens, and Core's Chat renders every
   message.
+- **FR3 gap:** the shared module positions block-axis rows at one shared
+  pitch.
 - **INV4 gap:** Table windows only inside its own bounded viewport; when the
   page or an outer container is its scroller, it renders every row.
 - **INV5 gap:** Table's adapter (its virtualization plugin and column
