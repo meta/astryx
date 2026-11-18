@@ -52,8 +52,8 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from '../../foundation/discovery/project-typescript.mjs';
-import {closeNameScore, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
-import {component as componentAnswer} from '../component/component.mjs';
+import {nameWords, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
+import {COMPONENT_BATCH_SELECTOR_LIMIT, component as componentAnswer} from '../component/component.mjs';
 import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
@@ -377,8 +377,9 @@ export async function findUnknownCoreProps(projectDir) {
   /** @type {Map<string, string[]>} */
   const documented = new Map();
   const names = [...new Set(uses.map(use => use.component))];
-  if (names.length > 0) {
-    const answer = /** @type {any} */ (await componentAnswer(names, {cwd: projectDir, package: '@astryxdesign/core', props: true}));
+  for (let start = 0; start < names.length; start += COMPONENT_BATCH_SELECTOR_LIMIT) {
+    const batch = names.slice(start, start + COMPONENT_BATCH_SELECTOR_LIMIT);
+    const answer = /** @type {any} */ (await componentAnswer(batch, {cwd: projectDir, package: '@astryxdesign/core', props: true}));
     for (const read of answer?.data?.results ?? []) {
       const props = read?.status === 'found' ? read.result?.data : null;
       if (Array.isArray(props)) documented.set(read.selector, props.map((/** @type {any} */ prop) => prop?.name).filter(Boolean));
@@ -413,16 +414,26 @@ export async function findUnknownCoreProps(projectDir) {
 }
 
 /**
- * The documented prop a name most likely means, as a failed lookup suggests
- * a name: a near spelling, or a name that holds every word of it
- * (`isLabelHidden` for `labelHidden`). Null when none is close.
+ * The documented prop a name means, when one has the same words: in another
+ * order or case, with a plural `s`, or with the `is` or `has` that Core puts
+ * in front of a yes-or-no prop (`isLabelHidden` for `labelHidden`,
+ * `startIcon` for `iconStart`). Words are read as a failed lookup reads them.
+ * A name with another word, or a near spelling, can mean something else
+ * (`padding` for `paddingX`, `maxWidth` for `minWidth`), so it is not
+ * offered. Null when no prop has the same words.
  * @param {string} name
  * @param {string[]} props
  * @returns {string | null}
  */
 function closestProp(name, props) {
-  const [best] = orderByAffinity(name, props, prop => [prop], {closest: true, typos: true});
-  return best != null && closeNameScore(name, best) > 0 ? best : null;
+  const key = (/** @type {string} */ text) =>
+    nameWords(text)
+      .filter(word => word !== 'is' && word !== 'has')
+      .map(word => (word.length > 3 ? word.replace(/s$/, '') : word))
+      .sort()
+      .join(' ');
+  const wanted = key(name);
+  return orderByAffinity(name, props, prop => [prop]).find(prop => prop !== name && key(prop) === wanted) ?? null;
 }
 
 /**

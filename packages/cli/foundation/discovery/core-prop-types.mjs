@@ -63,8 +63,9 @@ function subpathsByComponent(projectDir) {
 
 /**
  * A module that exists only for this read: it names each component's props
- * type, imported from the module that declares it, and the attributes React's
- * element types take.
+ * type, imported from the module that declares it, and every prop name of
+ * every HTML and SVG element React's types know (`React.JSX`, or the global
+ * `JSX` of older React types).
  * @param {string[]} components
  * @param {Map<string, string>} modules each component's module
  */
@@ -72,11 +73,12 @@ function queryText(components, modules) {
   const imports = components.map((name, i) => `import type {${name} as Component${i}Value} from '${modules.get(name) ?? CORE_PACKAGE}';`);
   return [
     ...imports,
-    "import type {AllHTMLAttributes, ComponentProps, SVGAttributes} from 'react';",
-    'export type Attributes = AllHTMLAttributes<HTMLElement> & SVGAttributes<SVGElement>;',
+    "import type * as React from 'react';",
+    'export type Attributes = {[K in keyof React.JSX.IntrinsicElements]: keyof React.JSX.IntrinsicElements[K]}[keyof React.JSX.IntrinsicElements];',
+    'export type GlobalAttributes = {[K in keyof JSX.IntrinsicElements]: keyof JSX.IntrinsicElements[K]}[keyof JSX.IntrinsicElements];',
     ...components.flatMap((_, i) => [
       `export type Component${i} = typeof Component${i}Value;`,
-      `export type Props${i} = ComponentProps<typeof Component${i}Value>;`,
+      `export type Props${i} = React.ComponentProps<typeof Component${i}Value>;`,
     ]),
     '',
   ].join('\n');
@@ -105,8 +107,8 @@ function isGeneric(ts, checker, type) {
  * @typedef {object} CorePropTypes
  * @property {Map<string, Map<string, boolean>>} takes for each component
  *   whose props type TypeScript reads, whether it takes each prop asked about
- * @property {Set<string>} attributes the attribute names React's HTML and SVG
- *   element types take, DOM events and ARIA included
+ * @property {Set<string>} attributes the prop names React's types give HTML
+ *   and SVG elements, DOM events and ARIA attributes included
  * @property {string | null} unread why the types could not be read, or null
  */
 
@@ -138,12 +140,15 @@ export function readCorePropTypes({ts, projectDir, augmentations, props}) {
     types: [],
   };
   const host = ts.createCompilerHost(options, true);
-  const getSourceFile = host.getSourceFile;
-  host.getSourceFile = (/** @type {string} */ name, /** @type {any} */ language, ...rest) =>
+  const {getSourceFile, fileExists, readFile} = host;
+  /**
+   * @param {string} name
+   * @param {any} language
+   * @param {...any} rest
+   */
+  host.getSourceFile = (name, language, ...rest) =>
     path.resolve(name) === file ? ts.createSourceFile(file, text, language, true) : getSourceFile.call(host, name, language, ...rest);
-  const fileExists = host.fileExists;
   host.fileExists = (/** @type {string} */ name) => path.resolve(name) === file || fileExists.call(host, name);
-  const readFile = host.readFile;
   host.readFile = (/** @type {string} */ name) => (path.resolve(name) === file ? text : readFile.call(host, name));
   const program = ts.createProgram({rootNames: [file, ...augmentations], options, host});
   const checker = program.getTypeChecker();
@@ -156,11 +161,13 @@ export function readCorePropTypes({ts, projectDir, augmentations, props}) {
   }
   /** @type {Map<string, Map<string, boolean>>} */
   const takes = new Map();
-  const attributesType = aliases.get('Attributes');
-  if (!attributesType || unreadable(ts, attributesType)) {
-    return {takes, attributes: new Set(), unread: "TypeScript could not read React's types from this project"};
+  const attributesType = [aliases.get('Attributes'), aliases.get('GlobalAttributes')].find(type => type && !unreadable(ts, type));
+  /** @type {any[]} */
+  const names = attributesType?.isUnion() ? attributesType.types : attributesType ? [attributesType] : [];
+  const attributes = new Set(names.filter(type => type.isStringLiteral()).map(type => type.value));
+  if (attributes.size === 0) {
+    return {takes, attributes, unread: "TypeScript could not read React's types from this project"};
   }
-  const attributes = new Set(checker.getPropertiesOfType(attributesType).map((/** @type {any} */ symbol) => symbol.getName()));
   let readAny = false;
   components.forEach((name, i) => {
     const own = aliases.get(`Component${i}`);
