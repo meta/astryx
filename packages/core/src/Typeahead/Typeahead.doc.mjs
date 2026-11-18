@@ -45,6 +45,12 @@ const anatomy = [
       'Shared clear action that removes the selected item when hasClear is enabled.',
   },
   {
+    name: 'Popup surface',
+    required: false,
+    description:
+      'The layer the Dropdown opens in, above the page and anchored below the input.',
+  },
+  {
     name: 'Dropdown',
     required: false,
     description:
@@ -323,6 +329,7 @@ export const docs = {
     targets: [
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
+      {className: 'astryx-typeahead-popup'},
       {className: 'astryx-typeahead-empty-state'},
       {
         className: 'astryx-typeahead-option',
