@@ -18,6 +18,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {programRootsFor} from '../render/ts-paths.mjs';
 import {coreThemeValues} from './core-theme-facts.mjs';
+import {readDeclaredDependencies} from '../integrations/declared-dependencies.mjs';
+import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
+import {findManifestPaths} from '../integrations/manifest-paths.mjs';
 import {babelParse} from '../runtime/lazy-dependencies.mjs';
 
 /** @type {Map<string, string>} */
@@ -816,11 +819,13 @@ const CANDIDATE_LIMIT = 2_000;
  * (`declare module '@astryxdesign/core/Button' { interface ButtonVariantMap
  * { 'primary-muted': true } }`), keyed by interface name. It reads the places
  * TypeScript reads for the project's pages: every TypeScript file under the
- * project folder (a theme build's `<theme>.variants.d.ts` included), and the
- * declaration files of each package the project depends on that depends on
- * Core or is an Astryx integration. `complete` is false when the page's
- * tsconfig (`files`, `include` or `typeRoots`) reaches a place the walk does
- * not read, the walk meets a linked folder or a folder it cannot list, a
+ * project folder outside `node_modules` and hidden folders (a theme build's
+ * `<theme>.variants.d.ts` included), each place inside the project the
+ * page's tsconfig (`files`, `include`, `typeRoots`) adds, even a hidden one
+ * (`.next/types`), and the declaration files of each package the project
+ * declares that depends on Core or has an integration manifest. `complete`
+ * is false when the page's tsconfig reaches outside the project folder, the
+ * walk meets a linked folder or a folder it cannot list, a
  * file whose text names Core in a `declare module` cannot be read or parsed,
  * or more than {@link CANDIDATE_LIMIT} files name it: the keys may then miss
  * some, and a caller must not take them as the whole set. Only those files
@@ -834,7 +839,21 @@ export function projectAugmentations(projectDir, file) {
   const keys = new Map();
   const state = {candidates: 0, complete: true};
   const roots = programRootsFor(file) ?? [];
-  if (!roots.every(root => walkReads(projectDir, root))) state.complete = false;
+  if (roots.some(root => placeInWalk(projectDir, root) === 'outside'))
+    state.complete = false;
+  // A root the walk skips (Next.js includes `.next/types/**/*.ts`) is read on its own.
+  for (const root of roots) {
+    if (!state.complete) break;
+    if (placeInWalk(projectDir, root) !== 'skipped') continue;
+    const found = statOrNull(root);
+    if (found?.isDirectory()) readTree(root, SOURCE_FILE, keys, state);
+    else if (
+      found?.isFile() &&
+      SOURCE_FILE.test(root) &&
+      readAugmentations(root, keys) === 'failed'
+    )
+      state.complete = false;
+  }
   if (state.complete) readTree(projectDir, SOURCE_FILE, keys, state);
   for (const dir of astryxDependencyDirs(projectDir)) {
     if (!state.complete) break;
@@ -844,35 +863,19 @@ export function projectAugmentations(projectDir, file) {
 }
 
 /**
- * The folders of the packages `projectDir`'s package.json depends on that
- * depend on Core (or peer on it) or carry an `astryx.integration.mjs`: the
- * theme and integration packages whose declarations can augment Core.
+ * The folders of the packages `projectDir`'s package.json declares
+ * (readDeclaredDependencies) that depend on Core (or peer on it) or carry an
+ * integration manifest: the theme and integration packages whose
+ * declarations can augment Core.
  * @param {string} projectDir
  * @returns {string[]}
  */
 function astryxDependencyDirs(projectDir) {
-  /** @type {any} */
-  let manifest;
-  try {
-    manifest = JSON.parse(
-      fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8'),
-    );
-  } catch {
-    return [];
-  }
-  const names = new Set(
-    [
-      'dependencies',
-      'devDependencies',
-      'peerDependencies',
-      'optionalDependencies',
-    ].flatMap(field => Object.keys(manifest?.[field] ?? {})),
-  );
-  names.delete(CORE_PACKAGE);
   /** @type {string[]} */
   const dirs = [];
-  for (const name of names) {
-    const dir = installedPackageDir(projectDir, name);
+  for (const {name} of readDeclaredDependencies(projectDir)) {
+    if (name === CORE_PACKAGE) continue;
+    const dir = resolveInstalledPackageDir(name, projectDir)?.packageDir;
     if (!dir) continue;
     /** @type {any} */
     let pkg;
@@ -885,31 +888,9 @@ function astryxDependencyDirs(projectDir) {
       pkg?.dependencies?.[CORE_PACKAGE] ??
       pkg?.peerDependencies?.[CORE_PACKAGE],
     );
-    if (onCore || fs.existsSync(path.join(dir, 'astryx.integration.mjs')))
-      dirs.push(dir);
+    if (onCore || findManifestPaths(dir).length > 0) dirs.push(dir);
   }
   return dirs;
-}
-
-/**
- * The real folder of package `name` as Node resolves it from `fromDir`: the
- * first `node_modules/<name>` holding a package.json on the way up.
- * @param {string} fromDir
- * @param {string} name
- * @returns {string | null}
- */
-function installedPackageDir(fromDir, name) {
-  for (let dir = path.resolve(fromDir); ; dir = path.dirname(dir)) {
-    const candidate = path.join(dir, 'node_modules', ...name.split('/'));
-    if (fs.existsSync(path.join(candidate, 'package.json'))) {
-      try {
-        return fs.realpathSync(candidate);
-      } catch {
-        return null;
-      }
-    }
-    if (path.dirname(dir) === dir) return null;
-  }
 }
 
 /**
@@ -971,19 +952,22 @@ function statOrNull(file) {
 }
 
 /**
- * Whether the project walk reads `target`: it lies inside `projectDir`, and
- * not inside a `node_modules` or hidden folder there.
+ * Where `target` lies for the project walk: 'outside' `projectDir`,
+ * 'skipped' inside a `node_modules` or hidden folder the walk does not enter,
+ * or 'walked'.
  * @param {string} projectDir
  * @param {string} target absolute
- * @returns {boolean}
+ * @returns {'outside' | 'skipped' | 'walked'}
  */
-function walkReads(projectDir, target) {
+function placeInWalk(projectDir, target) {
   const relative = path.relative(projectDir, target);
-  if (relative === '') return true;
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return false;
-  return !relative
+  if (relative === '') return 'walked';
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return 'outside';
+  return relative
     .split(path.sep)
-    .some(part => part === 'node_modules' || part.startsWith('.'));
+    .some(part => part === 'node_modules' || part.startsWith('.'))
+    ? 'skipped'
+    : 'walked';
 }
 
 /**
