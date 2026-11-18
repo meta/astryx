@@ -77,10 +77,10 @@ runs:
               const nodes = await openPullRequests();
               const older = list => list.filter(p => p.number < pr.number).length;
               if (older(nodes.filter(p => mine(p.headRefName))) >= OLDEST) {
-                return `Queued behind your ${OLDEST} oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.`;
+                return `Queued behind your ${OLDEST} oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.`;
               }
               if (shared && older(nodes) >= 5) {
-                return "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
+                return "Queued behind the shared login's 5 oldest PRs: runs at a review-pass run once it is among them, or at the pre-merge re-run.";
               }
             },
             // A heavy run is a run on one of those pull requests whose heavy job
@@ -115,7 +115,7 @@ runs:
                 }
               }
               if (laneHeavy >= DAILY || (shared && loginHeavy >= 40)) {
-                return 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
+                return 'Daily heavy-run cap reached: runs at a review-pass run after the cap resets, or at the pre-merge re-run.';
               }
             },
           ];
