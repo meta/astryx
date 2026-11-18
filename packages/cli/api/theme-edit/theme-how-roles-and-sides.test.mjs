@@ -126,6 +126,9 @@ describe('plain looks', () => {
       'warning text bigger',
       'danger text smaller',
       'success text bold',
+      // (A status's messages or notes are its text.)
+      'success messages in smaller text',
+      'warning notes bigger',
     ]) {
       const rs = await how('q0', ask);
       // (Nothing is written for the whole theme's text.)
