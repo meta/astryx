@@ -3174,7 +3174,7 @@ async function leaveOutStored(ctx, slug, data, cwd, skip) {
     .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
     .join('; ');
   return [
-    `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
+    `${slug}.settings.json holds what this editor does not take as typed in (an entry a newer editor saved, or one that does nothing where it is saved): ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
   ];
 }
 

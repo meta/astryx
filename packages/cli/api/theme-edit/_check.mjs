@@ -820,7 +820,7 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
- * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string, noEffect?: boolean}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads; `noEffect`: refused as it never shows where it is saved)
+ * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string, noEffect?: boolean}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads; `noEffect`: refused only by what set checks in a value typed in, as a newer editor's entry or one that does nothing where it is saved is: kept and built as saved)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
   // The setting the command replaces (its thing in the same scope); a
@@ -968,8 +968,12 @@ export function storedProblems(ctx, slug, data, skip = '') {
           e instanceof Error
             ? e.message.replace(/ Nothing was changed\.$/, '')
             : String(e),
-        // Refused for having no effect where it is saved: it never shows.
-        ...(e.code === E.ERR_THEME_NO_EFFECT ? {noEffect: true} : {}),
+        // Refused only by what set checks in a value typed in (no effect
+        // where it is saved, a scope or rule a newer editor relaxed): kept
+        // and built as saved, with a note, never a refusal of the whole
+        // theme. A value the property does not take is damage that stops
+        // it, as before.
+        ...(e.code === E.ERR_THEME_BAD_VALUE ? {} : {noEffect: true}),
       });
     }
   }
@@ -3030,8 +3034,10 @@ export function drawsLine(C, parts, prop, state, when) {
         ? [`${prop}-width`, 'border-width']
         : [`${prop}-width`];
   const [wp, wv] = String(when ?? '').split(':');
-  const zero = (/** @type {unknown} */ v) => /^\s*0(?:px|rem|em)?\s*$/.test(String(v));
-  const none = (/** @type {unknown} */ v) => /^\s*(?:none|hidden)\b/i.test(String(v));
+  const zero = (/** @type {unknown} */ v) =>
+    /^\s*0(?:px|rem|em)?\s*$/.test(String(v));
+  const none = (/** @type {unknown} */ v) =>
+    /^\s*(?:none|hidden)\b/i.test(String(v));
   return parts.some(t => {
     const at = C.MAP[t]?.at ?? {};
     return keys.some(k => {
@@ -5371,13 +5377,19 @@ function checkOne(
       const variant = Object.entries(record?.attrs ?? {}).find(
         ([, vals]) => Array.isArray(vals) && vals.includes(rest),
       )?.[0];
-      if (holder && (STATE_WORDS.includes(rest) || TARGET.get(holder)?.states?.includes(rest)))
+      if (
+        holder &&
+        (STATE_WORDS.includes(rest) ||
+          TARGET.get(holder)?.states?.includes(rest))
+      )
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
           `"${s.on}" is not a part name; it is ${holder} when ${rest}, set on ${holder} --state ${rest}.`,
           {
             didYouMean: [holder],
-            run: [setLine(slug, thing, v, {...s, on: holder, state: rest}, unset)],
+            run: [
+              setLine(slug, thing, v, {...s, on: holder, state: rest}, unset),
+            ],
           },
         );
       if (holder && variant)
@@ -5386,7 +5398,15 @@ function checkOne(
           `"${s.on}" is not a part name; it is ${holder} with ${variant} ${rest}, set on ${holder} --when ${variant}:${rest}.`,
           {
             didYouMean: [holder],
-            run: [setLine(slug, thing, v, {...s, on: holder, when: `${variant}:${rest}`}, unset)],
+            run: [
+              setLine(
+                slug,
+                thing,
+                v,
+                {...s, on: holder, when: `${variant}:${rest}`},
+                unset,
+              ),
+            ],
           },
         );
       const held = record?.contains ?? [];

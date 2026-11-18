@@ -3,8 +3,8 @@
 /**
  * @file The palette recipe an editor theme's colors are made with: a new
  * palette names the newest one; a palette saved before it (its config names
- * none) keeps the first one through a color change, which says how to move
- * it, so a CLI upgrade never moves a theme's colors.
+ * none, the first) is made again with the newest on its next change, and
+ * the result says so (its colors change once).
  */
 
 import fs from 'node:fs';
@@ -56,16 +56,16 @@ describe('the palette recipe of an editor theme', () => {
     expect(config('fresh').recipe).toBe('astryx-oklch-v3');
   });
 
-  it('a palette saved before it keeps the first through a color change, and says how to move it', async () => {
+  it('a palette saved before it is made again with the newest on its next change, and says so', async () => {
     const {data} = /** @type {any} */ (
       await themeEditSet('old', 'accent', '#0f766e', {cwd})
     );
     const now = config('old');
-    expect(now.recipe).toBeUndefined();
+    expect(now.recipe).toBe('astryx-oklch-v3');
     expect(now.families[0].seed).toBe('#0f766e');
-    expect(generatePaletteSet(now).recipe).toBe('astryx-oklch-v1');
-    expect(data.notes.join('\n')).toMatch(
-      /makes its colors with the astryx-oklch-v1 recipe it was made with.*"recipe": "astryx-oklch-v3" there/,
-    );
+    expect(generatePaletteSet(now).recipe).toBe('astryx-oklch-v3');
+    expect(
+      [...(data.notes ?? []), ...(data.colorNotes ?? [])].join('\n'),
+    ).toMatch(/made with the astryx-oklch-v1 palette recipe/);
   });
 });

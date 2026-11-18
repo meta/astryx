@@ -2,9 +2,10 @@
 
 /**
  * @file A theme whose palette.config.json names a palette recipe this CLI
- * does not know (one a newer CLI brings) is refused plainly: the message
- * names the recipe and this CLI's version and says to update the CLI, and
- * the file's bytes stay exactly as they were, for any recipe name.
+ * does not know (one a newer CLI brings) opens with its saved colors, and
+ * says so; a color change is refused plainly: the message names the recipe
+ * and this CLI's version and gives the install of the newest CLI, and the
+ * file's bytes stay exactly as they were, for any recipe name.
  */
 
 import * as fs from 'node:fs';
@@ -66,18 +67,24 @@ const refusal = async run => {
 
 describe('a palette recipe this CLI does not know', () => {
   it(
-    'show, set and undo name the recipe and the CLI version, and leave the file as it is',
+    'show opens and names the recipe; a color change is refused, naming the recipe, the CLI version and the install, and leaves the file as it is',
     async () => {
       const before = fs.readFileSync(config);
+      const shown = /** @type {any} */ (await themeEditShow('n', {cwd}));
+      expect(
+        [...(shown.data.notes ?? []), ...(shown.data.colorNotes ?? [])].join(
+          '\n',
+        ),
+      ).toContain('palette recipe made-up-recipe-zz9');
+      expect(fs.readFileSync(config).equals(before)).toBe(true);
       for (const run of [
-        () => themeEditShow('n', {cwd}),
-        () => themeEditSet('n', 'corners', 'round', {cwd}),
+        () => themeEditSet('n', 'accent', '#e11d48', {cwd}),
         () => themeEditUndo('n', {cwd, thing: 'accent'}),
       ]) {
         const e = await refusal(run);
         expect(e.message).toContain('palette recipe made-up-recipe-zz9');
         expect(e.message).toContain(`this CLI (${cliVersion()})`);
-        expect(e.message).toMatch(/update the CLI/);
+        expect(e.message).toMatch(/install the newest CLI/);
         expect(e.message).not.toMatch(/by hand/);
         // The way to a newer CLI is the project's own install of it, never
         // `astryx upgrade`, which migrates code and installs nothing.

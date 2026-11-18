@@ -128,6 +128,10 @@ import {
   paletteFiles,
   paletteImport,
   paletteMapping,
+  paletteKeptAsSaved,
+  paletteEdited,
+  olderRecipe,
+  recipeOf,
   syncPalette,
   syncPaletteRefs,
   refuseIfLockLost,
@@ -1707,7 +1711,11 @@ export function settingsProblem(
       return `${s.thing} has mode ${s.mode}, but a dial is the same in light and dark, so set takes no --mode for it`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
-    if (s.only === true && !onlyFits(s))
+    // An `only` on a part no group spreads to, as a newer editor saves a
+    // part property, is that part's exact setting: kept and built as
+    // written, and named by the saved-setting check, never damage that
+    // stops the theme. On anything else it means nothing.
+    if (s.only === true && !onlyFits(s) && !onPartProperty(s))
       return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group styled alike (${AUTO_SPREAD.join(', ')})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
@@ -2386,8 +2394,23 @@ export function entryDamage(s) {
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
   // A dial is the same in light and dark: a mode on it means nothing.
   if (s.mode != null && s.source === 'dial') return 'mode';
-  if (s.only != null && (s.only !== true || !onlyFits(s))) return 'only';
+  // (`only: true` on a part property no group spreads to is that part's
+  // exact setting, as a newer editor saves it: no damage.)
+  if (
+    s.only != null &&
+    (s.only !== true || (!onlyFits(s) && !onPartProperty(s)))
+  )
+    return 'only';
   return null;
+}
+
+/**
+ * Whether a setting is a CSS property on a part, where a newer editor
+ * saves `only` on any part (see the settings reader).
+ * @param {any} s
+ */
+function onPartProperty(s) {
+  return s.source === 'property' && typeof s.on === 'string' && s.on !== '';
 }
 
 /**
@@ -2399,7 +2422,11 @@ export function entryDamage(s) {
  */
 export function onlyFits(s, map = null) {
   const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  if (fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+  if (
+    fam &&
+    !FAMILIES[s.on] &&
+    AUTO_SPREAD.includes(/** @type {string} */ (fam))
+  )
     return true;
   // A height or vertical padding on a bar: --only keeps it off the row the
   // bar holds (barReach). Read without the part map (a saved entry), any
@@ -5006,6 +5033,35 @@ function keepShades(pal, kept) {
       };
     }
     tokens[k] = next;
+  }
+  // A token the theme shows from its palette that this mapping does not
+  // give (one a newer editor mapped) keeps its shades too, where the
+  // palette has them: nothing the theme shows moves until a color does.
+  for (const [k, old] of Object.entries(kept)) {
+    if (k === 'lifted parts' || Object.hasOwn(tokens, k)) continue;
+    /** @param {'light' | 'dark'} m */
+    const at = m => {
+      const r = /** @type {any} */ (old)[m];
+      const color = /** @type {any} */ (pal.candidate.palette)[r.family]?.[m]?.[
+        r.stop
+      ];
+      return typeof color === 'string'
+        ? {
+            stop: r.stop,
+            color: r.alpha ? `${color}${r.alpha}` : color,
+            ...(r.alpha ? {alpha: r.alpha} : {}),
+            family: r.family,
+          }
+        : null;
+    };
+    const light = at('light');
+    const dark = at('dark');
+    if (light && dark)
+      tokens[k] = /** @type {any} */ ({
+        family: /** @type {any} */ (old).light.family,
+        light,
+        dark,
+      });
   }
   // A theme built without lifted text keeps the base theme's own.
   return {...pal, tokens, lift: kept['lifted parts'] ? pal.lift : null};
@@ -9601,7 +9657,22 @@ async function buildThemeSteps(ctx, slug, data) {
     paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
     ctx.keepStops,
   );
+  // A theme whose palette is kept as saved (made by a newer CLI) keeps the
+  // settings module that newer CLI wrote while it is current for these
+  // settings and unedited: writing it again here would map the saved
+  // colors this CLI's way and change how the theme looks. The theme is
+  // built from it as written, as `theme build` builds it.
+  const keepModule = (() => {
+    if (!fs.existsSync(f.settingsTs)) return false;
+    if (!paletteKeptAsSaved(cwd, slug, data, base)) return false;
+    const ts = fs.readFileSync(f.settingsTs, 'utf8');
+    return (
+      /\/\/ Built from settings ([0-9a-f]{16}) /.exec(ts)?.[1] ===
+        settingsStamp(data).split(' ')[0] && moduleUnedited(ts) !== false
+    );
+  })();
   await step(() => {
+    if (keepModule) return;
     writeWhole(
       f.settingsTs,
       settingsSource(
@@ -9727,7 +9798,8 @@ async function buildThemeSteps(ctx, slug, data) {
   );
   /** @type {string[]} */
   const lifted = [];
-  if (found.length) {
+  // (A kept module stays as written: see keepModule.)
+  if (found.length && !keepModule) {
     for (const x of found) {
       const t = theme.components[x.target];
       // The base value goes before the variant's own declarations, so a
@@ -15086,6 +15158,28 @@ export function staleBuild(cwd, slug, data) {
   refuseUnreadable(cwd, [...files, ...builtFiles(cwd, slug, data, true)]);
   const missing = files.find(p => !fs.existsSync(p));
   if (missing) return `${path.relative(f.dir, missing)} was missing`;
+  // A palette made with an older recipe this CLI knows is made again with
+  // the newest when the theme is opened (see planPalette).
+  {
+    /** @type {any} */
+    let config;
+    try {
+      config = JSON.parse(
+        fs.readFileSync(path.join(cwd, paletteFiles(slug).config), 'utf8'),
+      );
+    } catch {
+      config = null;
+    }
+    // (A palette file edited by hand waits for a color change, which asks
+    // whether to keep the edit.)
+    if (
+      config &&
+      typeof config === 'object' &&
+      olderRecipe(config) &&
+      !paletteEdited(cwd, slug)
+    )
+      return `its colors were made with the ${recipeOf(config)} palette recipe, which this CLI makes again with its newest`;
+  }
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
   const stamp =
     /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);

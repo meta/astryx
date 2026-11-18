@@ -1304,7 +1304,138 @@ function darkExact(t, id, seed) {
  * @property {any} config
  * @property {string[]} notes
  * @property {Record<string, {stop: number, dark: boolean, why: string, ratio: number}>} fills
+ * @property {boolean} [stored] the saved palette, kept as it is (a recipe this CLI does not know)
  */
+
+/** The newest palette recipe this CLI makes. */
+export const NEWEST_RECIPE = PALETTE_RECIPE_NEWEST;
+
+/**
+ * The recipe a config's colors are made with (none named is the first).
+ * @param {any} config
+ * @returns {string}
+ */
+export function recipeOf(config) {
+  return String(config?.recipe ?? PALETTE_RECIPE);
+}
+
+/**
+ * Whether a config names a recipe this CLI knows that is older than its
+ * newest (none named is the first recipe).
+ * @param {any} config
+ */
+export function olderRecipe(config) {
+  return (
+    knownRecipe(config) && (config?.recipe ?? PALETTE_RECIPE) !== NEWEST_RECIPE
+  );
+}
+
+/**
+ * Whether this CLI's generator knows the recipe a config names (none named
+ * is the first recipe).
+ * @param {any} config
+ */
+function knownRecipe(config) {
+  return config?.recipe == null || PALETTE_RECIPES.includes(config.recipe);
+}
+
+/**
+ * The refusal of a color change to a palette made with a recipe this CLI
+ * does not know: the recipe, this CLI's version, and the update.
+ * @param {string} cwd
+ * @param {string} file
+ * @param {unknown} recipe
+ */
+function unknownRecipe(cwd, file, recipe) {
+  return new AstryxError(
+    `${file}: this theme's colors were made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know, so it cannot make them again; install the newest CLI to change them. Other changes still work, and the saved colors stay as they are. Nothing was changed.`,
+    [newerCliCommand(cwd)],
+    ERROR_CODES.ERR_PALETTE_GENERATION,
+  );
+}
+
+/**
+ * What a theme's palette is made from in its settings (the color dials,
+ * in each mode, and vibrancy), as one key to compare.
+ * @param {Setting[]} settings
+ */
+function paletteSettingsKey(settings) {
+  return JSON.stringify(
+    (settings ?? [])
+      .filter(
+        x =>
+          x?.source === 'dial' &&
+          (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy'),
+      )
+      .map(x => [x.thing, x.value, x.on ?? '', x.mode ?? '']),
+  );
+}
+
+/**
+ * The palette as its files hold it, read as the generator's candidate
+ * (its stops, families and ends), for a palette this CLI cannot make
+ * again; null when the palette file is missing or does not read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} config
+ */
+function storedCandidate(cwd, slug, config) {
+  const f = paletteFiles(slug);
+  let data;
+  try {
+    data = paletteData(fs.readFileSync(path.join(cwd, f.palette), 'utf8'));
+  } catch {
+    return null;
+  }
+  if (!data) return null;
+  const first = /** @type {any} */ (Object.values(data.palette)[0]);
+  const stops = (
+    Array.isArray(config?.stops)
+      ? config.stops
+      : Object.keys(first?.light ?? first?.dark ?? {})
+  )
+    .map(Number)
+    .sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
+  return {
+    schemaVersion: 1,
+    status: 'candidate',
+    recipe: config?.recipe,
+    black: data.black ?? PALETTE_BLACK,
+    white: data.white ?? PALETTE_WHITE,
+    stops,
+    palette: data.palette,
+  };
+}
+
+/**
+ * Whether a theme's palette is kept exactly as saved, as one made with a
+ * recipe this CLI does not know is ({@link planPalette}): its build keeps
+ * what that palette made.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} [base]
+ */
+export function paletteKeptAsSaved(cwd, slug, data, base) {
+  try {
+    return Boolean(planPalette(cwd, slug, data, base)?.stored);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The candidate a plan's palette is: the saved one for a palette this CLI
+ * cannot make again, else the generator's.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {PalettePlan} plan
+ */
+function candidateOf(cwd, slug, plan) {
+  return plan.stored
+    ? /** @type {Candidate} */ (storedCandidate(cwd, slug, plan.config))
+    : generate(plan.config, paletteFiles(slug).config, cwd);
+}
 
 /**
  * The palette config a theme's settings ask for. The existing config is
@@ -1323,20 +1454,77 @@ function darkExact(t, id, seed) {
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
-  // (Before anything reads it, so the refusal names this project's way to
-  // a newer CLI.)
-  refuseUnknownRecipe(existing, file, cwd);
   const fams = dialFamilies(data);
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
   const notes = [];
   const own =
     existing && typeof existing === 'object' && !Array.isArray(existing);
-  // A new palette is made with the newest recipe; a palette the theme
-  // already has keeps the one it was made with (none named is the first),
-  // so its colors never move with a CLI upgrade. Moving it is a choice
-  // made in its config.
-  const config = own ? {...existing} : {recipe: PALETTE_RECIPE_NEWEST};
+  // A palette made with a recipe this CLI does not know (a newer CLI's):
+  // its saved colors stay exactly as stored, so opening the theme never
+  // recolors it; only a change to its colors needs a CLI that knows it.
+  if (own && !knownRecipe(existing)) {
+    const {settings: saved} = savedSettings(cwd, slug);
+    const stored = storedCandidate(cwd, slug, existing);
+    if (
+      stored &&
+      paletteSettingsKey(data.settings) === paletteSettingsKey(saved)
+    )
+      return {
+        config: existing,
+        // Each accent or status color at the stop its saved palette holds
+        // it, light (its exact anchor, else the nearest shade), and dark
+        // when an exact dark anchor holds it there too.
+        fills: Object.fromEntries(
+          fams
+            .filter(f => f.id !== 'neutral')
+            .map(f => {
+              const anchors = /** @type {any[]} */ (
+                existing.families?.find(
+                  (/** @type {any} */ x) => x?.id === f.id,
+                )?.anchors ?? []
+              );
+              const exact = (/** @type {Mode} */ m) =>
+                anchors.find(
+                  a =>
+                    a?.mode === m &&
+                    a.policy === 'exact' &&
+                    sameColor(a.color, f.seed),
+                );
+              const ramp = /** @type {any} */ (stored.palette)[f.id]?.light;
+              const stop =
+                exact('light')?.stop ??
+                (ramp ? nearestShade(ramp, f.seed) : null) ??
+                50;
+              return [
+                f.id,
+                {
+                  stop: Number(stop),
+                  dark: Boolean(exact('dark')),
+                  why: '',
+                  ratio: 0,
+                },
+              ];
+            }),
+        ),
+        notes: [
+          `${file} names the palette recipe ${String(existing.recipe)}, which this CLI (${cliVersion()}) doesn't know: the theme keeps its saved colors exactly as they are. Changing a color needs a CLI that knows that recipe (${newerCliCommand(cwd).name})`,
+        ],
+        stored: true,
+      };
+    throw unknownRecipe(cwd, file, existing.recipe);
+  }
+  // A new palette is made with the newest recipe. A palette made with an
+  // older recipe this CLI knows (none named is the first) is brought up to
+  // the newest when the theme is opened or changed: its colors change
+  // once, and the note says so.
+  const config = own ? {...existing} : {recipe: NEWEST_RECIPE};
+  if (own && olderRecipe(existing)) {
+    notes.push(
+      `${file}: its colors were made with the ${recipeOf(existing)} palette recipe, so they are made again with ${NEWEST_RECIPE}, this CLI's newest (its colors change once)`,
+    );
+    config.recipe = NEWEST_RECIPE;
+  }
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
   // Every theme's palette has both modes: a one-mode theme keeps both
   // halves of its colors (its mode is the one the app's <Theme> is given),
@@ -1564,24 +1752,6 @@ function planPalette(cwd, slug, data, base) {
       if (!families.some(f => f?.id === id))
         families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
   }
-  // A color change on a palette made with the first recipe says what the
-  // newer one does, and how to choose it.
-  /** @param {any} c */
-  const colorsOf = c =>
-    JSON.stringify([
-      c?.vibrancy ?? null,
-      (Array.isArray(c?.families) ? c.families : []).map(
-        (/** @type {any} */ f) => [f?.id, String(f?.seed ?? '').toLowerCase()],
-      ),
-    ]);
-  if (
-    own &&
-    (config.recipe ?? PALETTE_RECIPE) === PALETTE_RECIPE &&
-    colorsOf(existing) !== colorsOf(config)
-  )
-    notes.push(
-      `${file} makes its colors with the ${PALETTE_RECIPE} recipe it was made with, whose pale shades stay at the edge of what a screen shows whatever the vibrancy; "recipe": "${PALETTE_RECIPE_NEWEST}" there makes them follow the vibrancy and each color's own strength (its colors change once)`,
-    );
   const dead = deadKeys(config);
   if (dead.length)
     notes.push(
@@ -1765,6 +1935,12 @@ function syncPaletteFiles(cwd, slug, data, base) {
     if (fs.existsSync(tokensDir) && !fs.readdirSync(tokensDir).length)
       fs.rmdirSync(tokensDir);
     return notes;
+  }
+  // A palette this CLI cannot make again keeps its files as they are.
+  // (Its note rides on the mapping, paletteMapping, once.)
+  if (plan.stored) {
+    data.palette = sha256(fs.readFileSync(abs(f.config)));
+    return [];
   }
   const text = `${JSON.stringify(plan.config, null, 2)}\n`;
   /** @type {any} */
@@ -2536,9 +2712,9 @@ export function familyRamp(cwd, slug, data, base, family) {
     const plan = /** @type {PalettePlan} */ (
       planPalette(cwd, slug, data, base)
     );
-    const ramp = /** @type {any} */ (
-      generate(plan.config, paletteFiles(slug).config, cwd).palette
-    )[family];
+    const ramp = /** @type {any} */ (candidateOf(cwd, slug, plan).palette)[
+      family
+    ];
     if (ramp?.light && ramp?.dark) return ramp;
   }
   if (family !== 'neutral') return null;
@@ -2650,7 +2826,7 @@ function paletteMappingOf(cwd, slug, data, base, tokenDefaults) {
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
-  const candidate = generate(config, paletteFiles(slug).config, cwd);
+  const candidate = candidateOf(cwd, slug, plan);
   const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
   const {
     stops,
