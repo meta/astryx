@@ -58,17 +58,8 @@ records.
 | `AstryxVideoView`  | native component (Fabric Native Component) | `VideoView` (inline and in full screen, for a `useVideoPlayer` controller); apps through the `./media` entry's `NativeVideoView`                     | A video inside the screen, the same video in full screen, and a floating picture-in-picture window                                  |
 | `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (DEC-5)                           | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
 
-Scope notes: these pieces are specified elsewhere, in their own records,
-which also place them.
-
-- `AstryxBarcode` (`camera`) reads machine-readable codes from a still image
-  the app already has. It is camera-class for permission and policy.
-- `AstryxAudioRecorder` records sound for the `microphone` capability.
-- `AstryxPhotoLibrary` and `AstryxPhotoThumbnailView` read the device's photo
-  library.
-- `AstryxPdfView` and `AstryxPdfModule` show and render PDF documents.
-- `AstryxImageMarkup` marks up an image, and `AstryxScreenCapture` reports or
-  prevents screen capture.
+Scope notes: the photo library pieces are specified in `spec:AST-135`.
+Capabilities that no Astryx component uses are outside the core package.
 
 ## Non-goals
 
@@ -82,9 +73,9 @@ which also place them.
   captions and subtitle tracks, advertising, playlists, and offline downloads.
 - Video recording, live photos, depth, RAW, HDR control, frame processors, and
   per-frame image access from the camera.
-- Still-image code decoding, recording sound, the photo library, PDF
-  documents, image markup, and screen capture: each is specified in its own
-  record (scope notes above).
+- Still-image code decoding, recording sound, PDF documents, image markup, and
+  screen capture: no Astryx component uses them, so they are outside the core
+  package. The photo library is `spec:AST-135`'s.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -106,12 +97,12 @@ which also place them.
     `isNativeVideoViewAvailable()`.
   - `camera` links capture on iOS (AVFoundation) and CameraX with a
     pure-Java code decoder on Android, and declares the camera permission and
-    the optional camera hardware feature. It holds the camera view, still-image
-    code decoding (`AstryxBarcode`, `spec:AST-136`), and camera capture:
+    the optional camera hardware feature. It holds the camera view and camera
+    capture:
     `CameraView`'s `takePhoto` (FR9) is the capture, and the core file
     picker has no camera source (`spec:AST-130/FR13`). The `./camera` entry
-    exports `CameraView`, `isCameraViewAvailable()`, `CODE_TYPES`,
-    `createCodeDetector`, and `AstryxBarcode`.
+    exports `CameraView`, `isCameraViewAvailable()`, `CODE_TYPES`, and
+    `createCodeDetector`.
   - The library reaches each capability only through
     `AstryxPlatform.capability('media' | 'camera')` (`spec:AST-112/FR2`).
 - **FR2 — The native contract.**
