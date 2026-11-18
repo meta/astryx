@@ -8,9 +8,8 @@
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses, a search with icon features
  * off loads none of the icon section's code, and a search loads no gzip
- * code, which only unpacking a shared theme uses. A module hook in the
- * child records every module that the run loads (resolving a package loads
- * none).
+ * code, which it never uses. A module hook in the child records every
+ * module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -204,19 +203,6 @@ describe('a run of the bin that prints the version, and its base', () => {
   );
 });
 
-describe('a search in a folder with no project', () => {
-  it('loads no gzip code (astryx search tooltip)', () => {
-    const {status, cliModules, builtins} = modulesLoadedBy([
-      'search',
-      'tooltip',
-    ]);
-    expect(status).toBe(0);
-    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
-    // Only unpacking a shared theme's archive reads gzip.
-    expect(builtins.has('node:zlib')).toBe(false);
-  });
-});
-
 describe('a component lookup in a folder with no project', () => {
   it('loads no code-rewrite package (astryx component Buttn)', () => {
     const {status, packages, cliModules} = modulesLoadedBy([
@@ -233,6 +219,17 @@ describe('a component lookup in a folder with no project', () => {
 });
 
 describe('a search in a folder with no project', () => {
+  it('loads no gzip code (astryx search tooltip)', () => {
+    const {status, cliModules, builtins} = modulesLoadedBy([
+      'search',
+      'tooltip',
+    ]);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // Search reads no archive; the theme code it loads unpacks none.
+    expect(builtins.has('node:zlib')).toBe(false);
+  });
+
   it("loads none of the icon section's code while icon features are off (astryx search tooltip)", () => {
     const {status, cliModules} = modulesLoadedBy(['search', 'tooltip']);
     expect(status).toBe(0);

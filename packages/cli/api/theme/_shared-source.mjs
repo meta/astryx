@@ -229,8 +229,8 @@ export function extractTgz(packed, dest, arg) {
   /** @type {Buffer} */
   let tar;
   try {
-    // zlib loads here, when an archive is unpacked: the commands that load
-    // the theme adapter and never add a theme do not load it.
+    // zlib loads here, when an archive is unpacked, so the commands that
+    // load the theme adapter only to read themes do not load it.
     const {gunzipSync} = process.getBuiltinModule('node:zlib');
     tar = gunzipSync(packed, {maxOutputLength: MAX_ARCHIVE_BYTES});
   } catch {
