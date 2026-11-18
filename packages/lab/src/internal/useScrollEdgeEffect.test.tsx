@@ -71,9 +71,12 @@ const host = {
   watched: [] as unknown[],
   /** The hook's latest end call, as the real one keeps it. */
   onEnd: null as (() => void) | null,
+  /** Whether the scroll at a past time was a finger's, when a test sets it. */
+  fingerAt: null as ((at: number) => boolean) | null,
 };
 /** useFingerScroll's reader is stable across renders, as the real one. */
-const readFingerScroll = () => host.isFinger;
+const readFingerScroll = (at?: number) =>
+  at != null && host.fingerAt != null ? host.fingerAt(at) : host.isFinger;
 /** The finger-scroll hook saying that the finger's scroll has ended. */
 function endFingerScroll() {
   host.isFinger = false;
@@ -126,11 +129,16 @@ class RecordingObserver {
     return [];
   }
   /**
-   * Reports the sentinel intersecting its root (true) or gone (false), with
-   * the root rectangle's top when given (the engine's, margin applied) and
-   * its height.
+   * Reports the sentinel intersecting its root (true) or gone (false). It
+   * passes the root rectangle's top when given (the engine's, margin
+   * applied), its height, and the crossing's time when given.
    */
-  report(isIntersecting: boolean, rootTop?: number, rootHeight = 400) {
+  report(
+    isIntersecting: boolean,
+    rootTop?: number,
+    rootHeight = 400,
+    time?: number,
+  ) {
     act(() => {
       this.callback(
         [
@@ -140,6 +148,7 @@ class RecordingObserver {
               rootTop == null
                 ? null
                 : ({top: rootTop, height: rootHeight} as DOMRectReadOnly),
+            ...(time == null ? {} : {time}),
           } as IntersectionObserverEntry,
         ],
         this as unknown as IntersectionObserver,
@@ -189,6 +198,7 @@ beforeEach(() => {
   host.watched = [];
   RecordingObserver.instances = [];
   host.onEnd = null;
+  host.fingerAt = null;
   resize.callbacks = [];
   resize.stops = 0;
   animator.set.mockClear();
@@ -475,6 +485,32 @@ describe('useScrollEdgeEffect', () => {
       {promote: false},
     );
     expect(animator.animate).toHaveBeenCalledTimes(1);
+  });
+
+  it('fades for a report that runs after the finger’s scroll ended, read at the time the observer recorded it', () => {
+    render(<Bar enabled />);
+    observer().report(true);
+    // The finger's scroll ran from 100 to 200 ms; a busy page reports later.
+    host.isFinger = false;
+    host.fingerAt = at => at >= 100 && at <= 200;
+    observer().report(false, undefined, 400, 150);
+    expect(animator.animate).toHaveBeenLastCalledWith(
+      {opacity: 1},
+      {spring: bars.scrollEdgeEffect.appear},
+    );
+  });
+
+  it('switches at once for a program scroll right after a finger’s: the observer records it later', () => {
+    render(<Bar enabled />);
+    observer().report(true);
+    host.isFinger = false;
+    host.fingerAt = at => at >= 100 && at <= 200;
+    observer().report(false, undefined, 400, 216);
+    expect(animator.set).toHaveBeenLastCalledWith(
+      {opacity: 1},
+      {promote: false},
+    );
+    expect(animator.animate).not.toHaveBeenCalled();
   });
 
   it('watches the page’s finger scrolls, or the scroll container’s', () => {

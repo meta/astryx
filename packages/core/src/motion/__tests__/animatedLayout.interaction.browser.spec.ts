@@ -20,6 +20,7 @@
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {requireFrames} from '@astryxdesign/interaction-harness';
 import {build} from 'esbuild';
 import {cubicBezier} from '../bezier';
 import {LATE_START_MS} from '../frameBlock';
@@ -1373,12 +1374,16 @@ test.describe('spec:AST-105 Coverage', () => {
       const [animation] = (
         doc.getElementById('after') as HTMLElement
       ).getAnimations();
-      await frame(view);
-      await frame(view);
+      // These reads happen as the change commits, before any frame. They take
+      // the glide's start, the last frame time on its timeline, and the
+      // frame's clock. The engines keep these times to the microsecond.
+      const us = (ms: number) => Math.round(ms * 1000) / 1000;
       return {
         gap: performance.now() - view.performance.now(),
         playState: animation.playState,
-        currentTime: Number(animation.currentTime),
+        startTime: us(Number(animation.startTime)),
+        frameTime: us(Number(doc.timeline.currentTime)),
+        now: us(view.performance.now()),
       };
     }, BASE_STYLE);
     test.info().annotations.push({
@@ -1387,11 +1392,12 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     // The frame's clock started well after the page's...
     expect(run.gap).toBeGreaterThan(100);
-    // ...and the row after the change glides from the first frames, rather
-    // than holding its old place until the page's clock comes round.
+    // ...and the row after the change glides from the frame's next frame. Its
+    // start is on the frame's own clock, from that clock's last frame to now.
+    // On the page's clock it would sit `gap` later and hold its old place.
     expect(run.playState).toBe('running');
-    expect(run.currentTime).toBeGreaterThanOrEqual(0);
-    expect(run.currentTime).toBeLessThan(200);
+    expect(run.startTime).toBeGreaterThanOrEqual(run.frameTime);
+    expect(run.startTime).toBeLessThanOrEqual(run.now);
   });
 
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({
@@ -2647,7 +2653,7 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       const content = document.querySelector('#content') as HTMLElement;
       const a = document.querySelector('#a') as HTMLElement;
       const layout = AL.createAnimatedLayout(() => area);
-      const frames: EdgeFrame[] = [];
+      const frames: (EdgeFrame & {t: number})[] = [];
       const bottoms: number[] = [];
       const read = (phase: string) => {
         const box = content.getBoundingClientRect();
@@ -2655,6 +2661,7 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
         const beside = window.glideBoxOf(a);
         frames.push({
           phase,
+          t: performance.timeOrigin + performance.now(),
           edge: box.top + inset.top,
           beside: beside.bottom,
           shown: box.height - inset.top - inset.bottom,
@@ -2662,7 +2669,7 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
             Math.abs(window.computedInsetOf(content).top - inset.top) +
             Math.abs(a.getBoundingClientRect().top - beside.top),
         });
-        if (phase === 'closing') {
+        if (phase.startsWith('closing')) {
           bottoms.push(box.bottom);
         }
       };
@@ -2678,9 +2685,27 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       content.style.display = 'block';
       opening.animate();
       AL.playLayoutChange(layout, content, {edge: 'block-start'});
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Held at fixed times on its own clock, once it rides, so the reads
+      // judge the curve however late the frames come. Then the reveal plays
+      // again from its start on real frames.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
+        read('opening held');
+      }
+      window.holdAt(0);
+      window.resumeAll();
+      // A frame after the reveal has ended shows it fully open, so it does
+      // not count as a frame of the motion.
+      const revealing = () =>
+        content
+          .getAnimations({subtree: true})
+          .some(animation => animation.playState === 'running');
       for (let i = 0; i < 60; i++) {
         await frame();
-        read('opening');
+        read(revealing() ? 'opening' : 'opening ended');
       }
       const openBottom = content.getBoundingClientRect().bottom;
       // The gap the layout leaves between them at rest (the rows' margins).
@@ -2689,11 +2714,29 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       // Hidden again: the content before it glides back down over it, its
       // top edge on that content, while it stays where it shows.
       const closing = AL.reportLayoutChange(layout, () => content);
+      const before = new Set(document.getAnimations());
       closing.measureBefore();
       closing.animate();
       const isHeld = AL.holdLayoutExit(layout, content, () => {}, {
         edge: 'block-start',
       });
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // The conceal's own animations, held and played as the reveal's were.
+      const concealing = document.getAnimations().filter(a => !before.has(a));
+      const seek = (ms: number) => {
+        for (const animation of concealing) {
+          animation.pause();
+          animation.currentTime = ms;
+        }
+      };
+      for (const ms of [20, 40, 60, 80, 100]) {
+        seek(ms);
+        read('closing held');
+      }
+      seek(0);
+      window.resumeAll();
       for (let i = 0; i < 60; i++) {
         await frame();
         read('closing');
@@ -2702,8 +2745,6 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
     });
     expect(result.isHeld).toBe(true);
     const shown = result.frames.filter(f => f.shown > 0.5);
-    expect(shown.filter(f => f.phase === 'opening').length).toBeGreaterThan(4);
-    expect(shown.filter(f => f.phase === 'closing').length).toBeGreaterThan(4);
     for (const f of shown) {
       expect(
         Math.abs(f.edge - f.beside - result.restGap),
@@ -2715,6 +2756,19 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       expect(Math.abs(bottom - result.openBottom)).toBeLessThan(1);
     }
     reportSkew(shown, browserName);
+    // The held reads judge the curves. These prove the page drew both. Each
+    // phase is judged on its own reads, so a gap in the other phase cannot
+    // name it starved.
+    for (const phase of ['opening', 'closing']) {
+      requireFrames(
+        result.frames.filter(f => f.phase.startsWith(phase)),
+        {
+          min: 5,
+          during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
+          where: f => f.phase === phase && f.shown > 0.5,
+        },
+      );
+    }
   });
 
   test('a block-end reveal keeps its edge on the content after it on every frame, and a conceal that reverses it starts from what it shows', async ({

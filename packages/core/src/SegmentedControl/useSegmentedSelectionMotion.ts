@@ -42,6 +42,7 @@ import {observeResize} from '../utils/sharedResizeObserver';
 import {titleOfSegment} from '../privateAttributes/segmentTitle.stylex';
 import {mapProgress, mapRange} from '../motion/progress';
 import {easedProgress, readThemeTiming} from '../motion/themeTiming';
+import {shadowVars} from '../theme/tokens.stylex';
 import {useSegmentedTouchTracking} from './useSegmentedTouchTracking';
 
 /** The segments, in DOM order. */
@@ -99,6 +100,13 @@ export const LAYER_GEOMETRY: ReadonlyArray<string> = [
   'height',
   'visibility',
 ];
+
+/**
+ * The lifted lens's edge: the theme's low elevation, as on Switch's lifted
+ * thumb. The lens copies the selected surface, which can match the page.
+ * Without an edge, a lifted lens hides the track around it.
+ */
+const LIFTED_SHADOW = shadowVars['--shadow-low'];
 
 /** The custom property on the radiogroup that sets `property` of `layer`. */
 export function layerVariable(layer: Layer, property: string): string {
@@ -398,11 +406,13 @@ function defaultNow(): number {
  * once.
  *
  * Under a finger:
- * - A theme role owns a pressed thumb's lift, so a press on the selected
- *   segment lifts nothing here.
- * - A drag from the selected segment carries the lens at its resting size.
- *   Its center chases the finger, at most `dragOvershoot` past the end
- *   segments.
+ * - A press on the selected segment lifts the lens, as UIKit's does. It
+ *   grows by `liftGrowth` on the `lift` spring and shrinks back on the same
+ *   spring after the release. A pen's press lifts it too. While lifted it
+ *   carries the theme's low elevation shadow, so the track stays visible
+ *   around it.
+ * - A drag from the selected segment carries the lifted lens. Its center
+ *   chases the finger, at most `dragOvershoot` past the end segments.
  * - The selected title's color follows the lens's center. It moves to a
  *   neighbor only once the center is a quarter of that segment past the
  *   boundary. Every title keeps its weight until the lift.
@@ -422,9 +432,9 @@ function defaultNow(): number {
  * from the selected segment carries the lens on the pointer itself.
  *
  * Under Reduced Motion, a held lens still follows the pointer: that is direct
- * movement, not a transition. Nothing else chases, travels or scales. The lens
- * fades in at the new segment while ::after, painted with the old surface,
- * fades out in place. With a fine pointer under Reduce Motion, a change shows
+ * movement, not a transition. Nothing else chases, travels, lifts or scales.
+ * The lens fades in at the new segment while ::after, painted with the old
+ * surface, fades out in place. With a fine pointer under Reduce Motion, a change shows
  * through the theme's transition.
  */
 export class SegmentedSelectionMotion {
@@ -448,6 +458,13 @@ export class SegmentedSelectionMotion {
   private readonly running = new Set<MotionHandle>();
   /** A finger holds the lens: a drag from the selected segment carries it. */
   private isHeld = false;
+  /** The held lens grew by `liftGrowth`; its settle shrinks it back. */
+  private isLifted = false;
+  /**
+   * The lifted lens wears the theme's elevation. The hand-back clears this
+   * shadow with the lens, so a commit's repaint keeps it until then.
+   */
+  private hasLiftedEdge = false;
   /**
    * The touch presentation applies (a coarse primary pointer), so every
    * change slides on UIKit's springs. When it is off, a change slides on the
@@ -571,7 +588,7 @@ export class SegmentedSelectionMotion {
       if (carried != null && carried.segment === destination) {
         if (carried.hidden !== destination) {
           showSurface(carried.hidden);
-          paintLayer(track, 'lens', destination);
+          this.paintLens(track, destination);
           hideSurface(destination);
           carried.hidden = destination;
         }
@@ -654,15 +671,77 @@ export class SegmentedSelectionMotion {
   }
 
   /**
+   * The press tracker highlighted the press, as UIControl does: at once, or
+   * after a scroller's content delay. A press on the selected segment lifts
+   * the lens then. A touch the page scrolls first lifts nothing.
+   */
+  highlighted(): void {
+    if (this.touch?.carriesLens === true) {
+      this.lift();
+    }
+  }
+
+  /**
+   * The lens binds on the selected segment and grows by `liftGrowth` on the
+   * `lift` spring. A slide still on its way goes on to that segment on the
+   * slide spring, at its own speed. Any pointer lifts it under the touch
+   * presentation, as Switch's thumb does. A fine primary pointer and Reduce
+   * Motion keep it at its resting size.
+   */
+  private lift(): void {
+    if (
+      this.isLifted ||
+      !this.isPresenting ||
+      this.animator.reducedMotion() !== 'off'
+    ) {
+      return;
+    }
+    this.hold();
+    const carried = this.carried;
+    if (!this.isHeld || carried == null) {
+      return;
+    }
+    const [width, height] = segmentedControl.liftGrowth;
+    const lifted = {
+      scaleX: (carried.box.width + width) / carried.box.width,
+      scaleY: (carried.box.height + height) / carried.box.height,
+    };
+    this.isLifted = true;
+    this.hasLiftedEdge = true;
+    const position = {x: 0} as const;
+    this.springLens(position, this.springFrom(position, 'selection'));
+    this.springLens(lifted, this.springFrom(lifted, 'lift'));
+    this.showLiftedEdge();
+  }
+
+  /** The lifted lens's edge: the theme's low elevation. */
+  private showLiftedEdge(): void {
+    this.track?.style.setProperty(
+      layerVariable('lens', 'box-shadow'),
+      LIFTED_SHADOW,
+    );
+  }
+
+  /** Paints the lens with `segment`'s surface; a lifted lens keeps its edge. */
+  private paintLens(track: HTMLElement, segment: HTMLElement): void {
+    paintLayer(track, 'lens', segment);
+    if (this.hasLiftedEdge) {
+      this.showLiftedEdge();
+    }
+  }
+
+  /**
    * The finger moved to `clientX`. A drag from the selected segment carries
-   * the lens at its resting size. A touch elsewhere leaves the lens alone,
-   * and that segment shows the shared pressed overlay.
+   * the lens. A touch elsewhere leaves the lens alone, and that segment shows
+   * the shared pressed overlay.
    */
   drag(clientX: number): void {
     const touch = this.touch;
     if (touch == null || !touch.carriesLens) {
       return;
     }
+    // A drag that starts before the highlight lifts the lens as well.
+    this.lift();
     this.hold();
     if (!this.isHeld) {
       return;
@@ -672,9 +751,9 @@ export class SegmentedSelectionMotion {
   }
 
   /**
-   * The first move of a drag from the selected segment binds the lens there,
-   * at its resting size. Under Reduced Motion too: the lens follows the hand,
-   * and only the release cross-fades.
+   * A finger's press on the selected segment, or the first move of a drag
+   * from it, binds the lens there. Under Reduced Motion too: the lens follows
+   * the hand, and only the release cross-fades.
    */
   private hold(): void {
     const touch = this.touch;
@@ -928,6 +1007,8 @@ export class SegmentedSelectionMotion {
   settle(): void {
     this.endLeaving();
     this.isHeld = false;
+    this.isLifted = false;
+    this.hasLiftedEdge = false;
     this.pending = null;
     const carried = this.carried;
     if (carried != null) {
@@ -1171,7 +1252,7 @@ export class SegmentedSelectionMotion {
       if (this.abandoned.has(paint)) {
         showSurface(paint);
       }
-      paintLayer(track, 'lens', paint);
+      this.paintLens(track, paint);
       hideSurface(paint);
       this.abandoned.delete(paint);
     }
@@ -1193,12 +1274,14 @@ export class SegmentedSelectionMotion {
   /** A spring transition that keeps the captured velocities of `values`. */
   private springFrom(
     values: MotionValues,
-    kind: 'selection' | 'tracking',
+    kind: 'selection' | 'tracking' | 'lift',
   ): SpringTransition {
     const spring =
       kind === 'selection'
         ? segmentedControl.selectionSpring
-        : springs.fingerTracking;
+        : kind === 'lift'
+          ? segmentedControl.lift
+          : springs.fingerTracking;
     const velocity: Record<string, number> = {};
     for (const key of Object.keys(values) as (keyof typeof this.velocity)[]) {
       const v = this.velocity[key];
@@ -1215,11 +1298,24 @@ export class SegmentedSelectionMotion {
 
   /**
    * The lens settles at its resting place on `segment`. Under a finger it
-   * springs on the slide spring. Under a fine pointer it takes the theme's
-   * duration and easing, as the segments' own transition does.
+   * springs on the slide spring, and a lifted lens shrinks back on the lift's.
+   * Under a fine pointer it takes the theme's duration and easing, as the
+   * segments' own transition does.
    */
   private settleLens(segment: HTMLElement, options: AnimateOptions): void {
     const rest = {x: 0, scaleX: 1, scaleY: 1} as const;
+    if (this.isPresenting && this.isLifted) {
+      this.isLifted = false;
+      const position = {x: 0} as const;
+      const size = {scaleX: 1, scaleY: 1} as const;
+      this.springLens(
+        position,
+        this.springFrom(position, 'selection'),
+        options,
+      );
+      this.springLens(size, this.springFrom(size, 'lift'), options);
+      return;
+    }
     if (this.isPresenting) {
       this.springLens(rest, this.springFrom(rest, 'selection'), options);
       return;

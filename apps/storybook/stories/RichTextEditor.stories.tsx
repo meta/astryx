@@ -2,6 +2,7 @@
 
 import {useId, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {
   RichTextEditor,
   RichTextView,
@@ -21,13 +22,19 @@ import {
   MarkdownParitySandbox,
   WideNumberMarkerParity,
   MixedNumberMarkerParity,
-  CodeDirectionParity,
   TaskParentNumberMarkerParity,
   type MarkdownParitySandboxProps,
 } from './RichTextEditor.markdownParity';
 import {MarkdownPluginsImportExport as MarkdownPluginsImportExportStory} from './RichTextEditor.markdownPluginsImportExport';
 import {MarkdownPluginsSandbox} from './RichTextEditor.markdownPlugins';
 import {RichTextEditorPlayground} from './RichTextEditor.playground';
+
+const styles = stylex.create({
+  // Room above the toolbar for the link popover, which opens above it.
+  roomAbove: {
+    paddingBlockStart: 120,
+  },
+});
 
 const meta: Meta<typeof RichTextEditor> = {
   title: 'RichText/RichTextEditor',
@@ -163,6 +170,29 @@ export const WithLinks: Story = {
     // baked into the node). No extra plugin needed.
     toolbar: <RichTextEditorToolbar />,
   },
+  // The link popover opens above the toolbar when there is room.
+  decorators: [
+    Story => (
+      <div {...stylex.props(styles.roomAbove)}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * The toolbar at the top of the page, with no room above it: the link
+ * popover flips below the toolbar.
+ */
+export const WithLinksNoRoomAbove: Story = {
+  args: {
+    label: 'Notes',
+    isLabelHidden: true,
+    placeholder:
+      'Select text and press the Link button (or Cmd/Ctrl+K) to add a link…',
+    toolbar: <RichTextEditorToolbar />,
+  },
+  parameters: {layout: 'fullscreen'},
 };
 
 export const WithAutoLink: Story = {
@@ -245,6 +275,30 @@ export const ReadOnly: Story = {
   },
 };
 
+/** A disabled editor and toolbar with formatted content. */
+export const Disabled: Story = {
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    toolbar: <RichTextEditorToolbar />,
+    defaultValue: markdownToEditorStateJSON(
+      'A **disabled** editor keeps its *formatted* text.\n',
+    ),
+  },
+};
+
+/** A disabled editor whose content holds a link. */
+export const DisabledWithLink: Story = {
+  name: 'Disabled with a link',
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    defaultValue: markdownToEditorStateJSON(
+      'Read [the guide](https://example.com/guide) before you edit.\n',
+    ),
+  },
+};
+
 const SEED = JSON.stringify({
   root: {
     children: [
@@ -279,6 +333,20 @@ export const WithInitialValue: Story = {
   args: {
     label: 'Notes',
     defaultValue: SEED,
+  },
+};
+
+/**
+ * A seeded document with an English paragraph and a paragraph of digits only.
+ * Each block takes the direction of its own text from the first frame; the
+ * digits have none, so they follow the page.
+ */
+export const MixedDirectionSeed: Story = {
+  args: {
+    label: 'Notes',
+    defaultValue: markdownToEditorStateJSON(
+      'An English paragraph.\n\n123 — 456',
+    ),
   },
 };
 
@@ -632,12 +700,6 @@ export const MarkdownParityTaskParentNumberMarkers: Story = {
   name: 'Markdown parity: pure task-parent number markers at 16px',
   tags: ['!autodocs'],
   render: () => <TaskParentNumberMarkerParity />,
-};
-
-export const MarkdownParityCodeDirection: Story = {
-  name: 'Markdown parity: code in a Hebrew paragraph',
-  tags: ['!autodocs'],
-  render: () => <CodeDirectionParity />,
 };
 
 export const MarkdownParityToggle: MarkdownParityStory = {

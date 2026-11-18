@@ -31,10 +31,19 @@ beforeAll(async () => {
   const manifest = JSON.parse(
     (await runCli(['--json', 'manifest'], dir)).stdout,
   ).data;
-  const theme = manifest.commands.find(command => command.name === 'theme');
-  const build = theme.subcommands.find(
-    command => command.name === 'theme build',
-  );
+  // Search the whole tree: in the experimental copy suite the experimental
+  // command reads as `theme build` and comes first, so each run finds its own.
+  /** @param {any[]} commands @returns {any} */
+  const find = commands =>
+    commands.reduce(
+      (hit, command) =>
+        hit ??
+        (command.name === 'theme build'
+          ? command
+          : find(command.subcommands ?? [])),
+      null,
+    );
+  const build = find(manifest.commands);
   descriptions = new Map(
     build.options.map(option => [
       /** @type {string} */ (option.flag.match(/--[a-z-]+/)?.[0]),

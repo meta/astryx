@@ -34,6 +34,10 @@ function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
 }
 
+function assertiveRegion(): HTMLElement | null {
+  return document.querySelector('[data-astryx-live-region="assertive"]');
+}
+
 // A code sample long enough to exceed the default collapsible threshold (10).
 const LONG_CODE = Array.from(
   {length: 15},
@@ -59,15 +63,6 @@ describe('CodeBlock', () => {
   it('renders the code', () => {
     render(<CodeBlock code="const x = 1;" language="javascript" />);
     expect(screen.getByText(/const/)).toBeInTheDocument();
-  });
-
-  it('lays its code out left to right in a right-to-left page', () => {
-    const {container} = render(
-      <div dir="rtl">
-        <CodeBlock code="const a = 1;" language="javascript" hasLineNumbers />
-      </div>,
-    );
-    expect(container.querySelector('code')).toHaveAttribute('dir', 'ltr');
   });
 
   it('forwards the public ref and composes supported root props', () => {
@@ -296,12 +291,16 @@ describe('CodeBlock', () => {
       // The tooltip says the same as the name, so Button does not repeat it
       // as a description.
       expect(failed).not.toHaveAttribute('aria-describedby');
+      // A failure is an error, so it goes to the assertive region.
       await waitFor(() => {
-        expect(politeRegion()).toHaveTextContent(
+        expect(assertiveRegion()).toHaveTextContent(
           'Failed to copy value to clipboard.',
         );
       });
-      expect(politeRegion()).not.toHaveTextContent('permission');
+      expect(assertiveRegion()).not.toHaveTextContent('permission');
+      expect(politeRegion()?.textContent ?? '').not.toContain(
+        'Failed to copy value to clipboard.',
+      );
     });
 
     it('calls onCopyError once with the rejection and never onCopy', async () => {

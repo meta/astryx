@@ -447,6 +447,44 @@ test('a light-dismissing popover stays open when a hold takes a tap outside it; 
     .toEqual(['pop:open', 'pop:closed']);
 });
 
+test('a finger that goes down outside a light-dismissing popover before its hold and lifts during it dismisses the popover, as with no hold, every time', async ({
+  page,
+}) => {
+  const driver = await load(page);
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error('no viewport');
+  }
+  const outside = {x: 20, y: viewport.height - 20};
+  // The lift that lands on the shield is intermittent in WebKit, so the case
+  // runs ten times.
+  for (let run = 0; run < 10; run += 1) {
+    await open(page, 'pop');
+    await driver.play(
+      [
+        {t: 0, fingers: [{id: 7, ...outside}]},
+        {t: 600, fingers: [{id: 7, ...outside}]},
+        {t: 616, fingers: []},
+      ],
+      {
+        onEvent: async step => {
+          if (step.type === 'touchStart') {
+            await hold(page, 'pop', 'viewport');
+          }
+        },
+      },
+    );
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document.getElementById('pop')?.matches(':popover-open'),
+        ),
+      )
+      .toBe(false);
+    await release(page);
+  }
+});
+
 test('a hit test that skips shields sees past a hold: under a held modal dialog’s shield, its own action', async ({
   page,
 }) => {

@@ -38,9 +38,10 @@ if ! awk '/^commit /{c=1;next} c&&NF{f=1} END{exit !f}' <<< "$newer"; then
   exit 0
 fi
 awk -v base="$base_ref" '
-  /^commit / { sha = $2; $1 = ""; $2 = ""; subject = substr($0, 3); next }
+  # A workflow command reads "%" as an escape, so the subject is escaped once
+  # for the commit, not again for each file it changed.
+  /^commit / { sha = $2; $1 = ""; $2 = ""; subject = substr($0, 3); gsub(/%/, "%25", subject); next }
   NF && shown < 5 {
-    gsub(/%/, "%25", subject)
     printf "::warning title=Update your branch before debugging::%s changed on %s in %s (%s), which this head does not have. Update the branch onto %s and re-run: a test whose file changed on %s gets an update, not a retry.\n", $0, base, sha, subject, base, base
     shown++
   }

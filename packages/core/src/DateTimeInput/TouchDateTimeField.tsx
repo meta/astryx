@@ -48,6 +48,7 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useToday} from '../hooks/useToday';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
@@ -84,6 +85,8 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
@@ -118,6 +121,7 @@ import {
   DEFAULT_MONTH_REACH,
   clampIndex,
   createMonthModel,
+  dateInMonth,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 import {
@@ -126,6 +130,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import {InternationalizationContext} from '../i18n/InternationalizationContext';
 import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+
+// The month math needs a date before today is known (server render,
+// hydration). The sheet's content, which shows the month, waits for today.
+const UNKNOWN_TODAY_STAND_IN = plainDateFromISO('1970-01-01');
 
 registerEnglishFallback(english);
 
@@ -255,7 +263,8 @@ const styles = stylex.create({
     inlineSize: '100%',
     minInlineSize: 0,
     paddingInline: spacingVars['--spacing-4'],
-    paddingBlockStart: spacingVars['--spacing-6'],
+    // The sheet keeps the band under its grab bar.
+    paddingBlockStart: 0,
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
   touchSurface: {
@@ -563,7 +572,9 @@ export function TouchDateTimeField({
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
 
-  const today = useMemo(() => plainDateToday(), []);
+  // Unknown on the server and while hydrating. The sheet's content waits for
+  // it, so hydration matches the server markup.
+  const today = useToday();
   const selectedDate = useMemo(
     () => parseValidISODate(valueParts.date),
     [valueParts.date],
@@ -606,9 +617,20 @@ export function TouchDateTimeField({
 
   // Indexes belong to the calendar, so DateTimeInput remounts this surface
   // when the calendar changes.
-  const [anchorMonthIndex] = useState(() =>
-    monthModel.indexOf(selectedDate ?? plainDateToday()),
+  // Without a value, the sheet opens on today's month. A hydrated sheet stores
+  // that month in the first render that knows today. Then a later render after
+  // a month-end midnight does not move an open sheet.
+  const [anchoredMonthIndex, setAnchoredMonthIndex] = useState<number | null>(
+    () => {
+      const opening = selectedDate ?? today;
+      return opening == null ? null : monthModel.indexOf(opening);
+    },
   );
+  if (anchoredMonthIndex == null && today != null) {
+    setAnchoredMonthIndex(monthModel.indexOf(today));
+  }
+  const anchorMonthIndex =
+    anchoredMonthIndex ?? monthModel.indexOf(today ?? UNKNOWN_TODAY_STAND_IN);
   const minMonthIndex =
     calendarMin != null
       ? monthModel.indexOf(plainDateFromISO(calendarMin))
@@ -617,22 +639,27 @@ export function TouchDateTimeField({
     calendarMax != null
       ? monthModel.indexOf(plainDateFromISO(calendarMax))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
-  const [monthIndex, setMonthIndex] = useState(() =>
-    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
+  // Set once the person moves the month; until then the opening month.
+  const [chosenMonthIndex, setMonthIndex] = useState<number | null>(() =>
+    anchoredMonthIndex == null
+      ? null
+      : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
   // min/max can narrow underneath the mounted sheet. Keep the visible month in
   // range during render, so no commit shows an out-of-range month; the month
   // scroller is keyed on the range and remounts at the clamped month.
-  const clampedMonthIndex = clampIndex(
-    monthIndex,
-    minMonthIndex,
-    maxMonthIndex,
-  );
+  const clampedChosenMonthIndex =
+    chosenMonthIndex == null
+      ? null
+      : clampIndex(chosenMonthIndex, minMonthIndex, maxMonthIndex);
   // Object.is, matching the dependency comparison of the effect this replaces
   // (a NaN index would otherwise never compare equal and re-render forever).
-  if (!Object.is(clampedMonthIndex, monthIndex)) {
-    setMonthIndex(clampedMonthIndex);
+  if (!Object.is(clampedChosenMonthIndex, chosenMonthIndex)) {
+    setMonthIndex(clampedChosenMonthIndex);
   }
+  const monthIndex =
+    clampedChosenMonthIndex ??
+    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex);
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
@@ -765,13 +792,13 @@ export function TouchDateTimeField({
   const handleResetInSheet = useCallback(() => {
     fireChange(undefined);
     setDraftTime(undefined);
-    const currentMonth = monthModel.indexOf(today);
+    const currentMonth = monthModel.indexOf(plainDateToday());
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [fireChange, monthModel, today, minMonthIndex, maxMonthIndex]);
+  }, [fireChange, monthModel, minMonthIndex, maxMonthIndex]);
 
   const handleDateSelect = useCallback(
     (nextDate: ISODateString) => {
@@ -783,6 +810,37 @@ export function TouchDateTimeField({
       }
     },
     [clampTimeForDate, fireChange, optimisticValue, timeForWheels],
+  );
+
+  // UIDatePicker moves a chosen date with these wheels
+  // (`datePicker.calendar.monthYearWheels.changesDate`).
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        parseValidISODate(calendarMin),
+        parseValidISODate(calendarMax),
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        handleDateSelect(plainDateToISO(moved));
+      }
+    },
+    [
+      isTouch,
+      selectedDate,
+      monthModel,
+      calendarMin,
+      calendarMax,
+      isDateDisabled,
+      handleDateSelect,
+    ],
   );
 
   const commitWheelTime = useCallback(
@@ -1104,10 +1162,7 @@ export function TouchDateTimeField({
                 keptDay={keptDay}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
-                onChange={next => {
-                  setMonthIndex(next);
-                  scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-                }}
+                onChange={handleWheelChange}
                 monthLabel={t('@astryx.dateInput.monthWheel')}
                 yearLabel={t('@astryx.dateInput.yearWheel')}
                 isActive={activePanel === 'date' && isWheelOpen}
@@ -1266,6 +1321,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1357,6 +1413,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1422,11 +1479,11 @@ export function TouchDateTimeField({
           onOpenChange={handleSheetOpenChange}
           label={t('@astryx.dateTimeInput.dialogLabel')}
           height="hug"
-          // touchSheetBody owns the inset, including the band under the grab
-          // handle.
+          // touchSheetBody owns the inset; the sheet keeps the band under its
+          // grab bar.
           padding={0}>
           <div ref={sheetBodyRef} {...stylex.props(styles.touchSheetBody)}>
-            {surface}
+            {today != null && surface}
           </div>
         </BottomSheet>
         {showsDisabledMessage &&

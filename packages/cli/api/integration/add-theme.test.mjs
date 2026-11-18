@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import {CLI_ROOT, findInstalledPackage} from '../../foundation/fs/paths.mjs';
 import {integrationAddTheme} from './add-theme.mjs';
 import {validateLocalIntegration} from './validate-integration.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -26,7 +27,7 @@ function setup({
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-theme-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-theme-'));
 });
 
 afterEach(() => {

@@ -9,6 +9,7 @@ import {
   selectIntegrationCodemods,
 } from './integration-discovery.mjs';
 import {runIntegrationCodemods} from './integration-runner.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -51,7 +52,7 @@ function scaffold(codemodFiles) {
 // modules in the temp package can import it without node_modules wiring.
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-codemod-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-codemod-test-'));
   process.chdir(tmpDir);
 });
 

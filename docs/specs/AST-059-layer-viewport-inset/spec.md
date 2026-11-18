@@ -258,7 +258,8 @@ the app reaches every layer instead of the components that happen to read it.
   `overflow-y: auto` with no overscroll containment, and the runtime reads
   nothing to decide it: a wheel over a layer that fits still scrolls the page,
   and a tall layer's scroll chains to the page at its end, as native scrolling
-  does (FR3). The runtime authors both orders; a component passes no fallbacks
+  does (FR3). `component:Tooltip` records what that means for content inside
+  the layer: it is always a scroll container. The runtime authors both orders; a component passes no fallbacks
   of its own to an anchor-mode layer.
 - **FR5 — An off-screen anchor holds.** A layer whose anchor has left the
   viewport does not slide. It keeps the position the flips give it and its
@@ -330,7 +331,10 @@ the app reaches every layer instead of the components that happen to read it.
   its block size so that edge sits 10 px above the keyboard, the clearance
   UIKit keeps under a popover. Its content overflows inside the layer box,
   where the composing component scrolls it, and the field being typed into
-  stays in view. A layer the keyboard does not reach, and a layer whose
+  stays in view. When a person presses, touches or turns a wheel inside the
+  layer after the cap lands, the content stays where they put it. A later
+  keyboard change brings the field into view again.
+  A layer the keyboard does not reach, and a layer whose
   block-end edge the fallback order holds (placed above its trigger), stay as
   they are. The keyboard's height is the keyboard module's one height
   (`architecture:react-component-runtime` INV11); no layer measures the
@@ -399,10 +403,10 @@ When this ships:
 - Add an invariant for FR8: no geometry input is measured after paint and
   then applied; the first painted frame is the settled frame; no scroll frame
   reads or forces layout for a layer (DEC-7, DEC-8).
-- Positioning and INV12 describe the anchor-move intersection observers, a
-  re-read in every frame of a scroll, a re-pick after a scroll other than the
-  one DEC-8 keeps, and the read that decides whether a layer scrolls as
-  current behavior; they follow FR4, FR8, DEC-7, and DEC-8 when those ship.
+- Positioning and INV12 follow FR4, FR8, DEC-7 and DEC-8: one combined list
+  from the first frame, CSS overflow for whether a layer scrolls, no observer
+  of an anchor that moves without resizing, and one check in the first
+  painted frame after a scroll stops.
 - INV11 and INV12 add the software keyboard's cap (FR9) and FR10's timing:
   the cap is read from the layer's own box without its entrance transform when
   the keyboard moves, and it changes once per keyboard movement, the one
@@ -673,6 +677,48 @@ passes.
 
 Rejected: CSS alone (the tooltip stays off-screen at the edge), and a re-pick
 in every scroll frame (the layer bounces mid-scroll).
+
+### DEC-9 — Script never moves a layer to follow its anchor
+
+**Reference:** `spec:AST-059/DEC-9`
+**Decider:** `cixzhang`, `2026-11-10`
+
+An anchored layer follows its anchor only through CSS anchor positioning
+(`position-anchor`, `position-area`, `anchor()` and `@position-try`). No script
+moves a layer to keep it on its anchor: no scroll, resize, observer or
+animation-frame handler writes a layer's `top`, `left`, `inset`, `translate`
+or `transform` from a measured anchor or layer rectangle. The out-of-view hold and the re-pick that DEC-7 keeps choose among the
+layer's CSS options or hold it in place, and write no coordinates. Four uses stay
+outside this rule because none of them follows an anchor: fixed mode's coordinates, which a caller sets once from
+an event such as a context-menu press; a one-time entrance or exit transform
+that plays and ends; the software keyboard's lift (FR9, DEC-6), which writes an
+inset to keep a layer clear of the keyboard, not to follow its anchor; and the
+reduced fallback for browsers without anchor
+positioning, which has no anchored geometry (`spec:AST-003` FR22).
+
+The owner, on popover scroll jank: "We should avoid repositioning layers to
+meet the anchor manually in js and ban such strategies in speed since we keep
+seeing this happen".
+
+Rejected: script positioning as a fallback for CSS anchor positioning in
+supported browsers (it lags the scroll by a frame and forces layout).
+
+### DEC-10 — A layer never inherits its trigger's press transform
+
+**Reference:** `spec:AST-059/DEC-10`
+**Decider:** `cixzhang`, `2026-11-10`
+
+A trigger's press feedback scales only the trigger's own visual. A layer the
+trigger opens renders outside that scaled subtree, so a press never scales,
+moves or distorts the layer or its entrance, and the layer anchors to the
+trigger's untransformed box.
+
+The owner: "since we scale the button on press the popover also gets scaled
+from it which makes the animation look weird. We probably need the popover
+menu to be outside of the scale css".
+
+Rejected: counter-scaling the layer to cancel the press (it lags the press and
+still distorts the entrance).
 
 ## Open questions
 

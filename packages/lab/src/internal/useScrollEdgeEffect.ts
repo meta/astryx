@@ -272,7 +272,9 @@ export function useScrollEdgeEffect({
       if (next === isShown) {
         return;
       }
-      if (isShown != null && isFingerScroll()) {
+      // A busy page can run the report after the finger's scroll ended: read
+      // the scroll at the time the observer recorded the crossing.
+      if (isShown != null && isFingerScroll(entry.time)) {
         // Under Reduce Motion the animator plays its own opacity
         // cross-fade on a coarse pointer.
         animator.animate(

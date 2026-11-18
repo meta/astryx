@@ -6,10 +6,13 @@
  * block search did not return gets the picker's own entry with a real score
  * and reason; a block the request writes out by its exact name keeps its slot,
  * as does a block an integration ships; a block the weights were never fitted
- * with is still ranked from its own docs; and ties keep build's order.
+ * with is still ranked from its own docs, also by its words the weights do
+ * not know; and ties keep build's order. One test reads the shipped weights
+ * through the picker's loader: they count a doc-fitted block as known.
  */
 
 import {describe, expect, it} from 'vitest';
+import {loadBlockPicker} from '../_adapter.mjs';
 import {pickBlocks, stemOf, termsOf, wordsOf} from './blocks.mjs';
 
 /** Two dims, each byte a weight offset by 128: "chart" words on the first, "table" words on the second. */
@@ -185,6 +188,28 @@ describe('pickBlocks', () => {
     expect(entries.get('SwitchToggle')?.reason).toMatch(/toggle|switch/);
   });
 
+  it('ties a block to a request by a docs word the weights do not know', () => {
+    expect(WEIGHTS.vocab).not.toContain('sparkline');
+    const catalog = [
+      ...CATALOG,
+      {
+        name: 'CardSparkline',
+        package: '@astryxdesign/core',
+        displayName: 'Card — Sparkline',
+        description: 'A card with a sparkline.',
+        command: 'astryx template CardSparkline --type block',
+      },
+    ];
+    const own = ['ListPlain', 'TableBasic'];
+    const {names, entries} = pickBlocks(
+      'sparkline',
+      {...signals(own), catalog},
+      WEIGHTS,
+    );
+    expect(names[0]).toBe('CardSparkline');
+    expect(entries.get('CardSparkline')?.reason).toMatch(/sparkline/);
+  });
+
   it('keeps build’s order when nothing in the request is known', () => {
     const own = ['ListPlain', 'TableBasic', 'CardStat'];
     const {names} = pickBlocks('zzz qqq', signals(own), WEIGHTS);
@@ -204,6 +229,16 @@ describe('pickBlocks', () => {
     pickBlocks('sales chart', s2, WEIGHTS);
     expect(JSON.stringify(s)).toBe(before);
     expect(JSON.stringify(s2)).toBe(before2);
+  });
+});
+
+describe('the shipped picker weights', () => {
+  it('count a block the doc matrix was fitted with as known', () => {
+    // A block outside `known` is ranked as one the matrices never saw. A
+    // block whose docs the doc matrix was fitted with is not such a block.
+    const shipped = loadBlockPicker();
+    expect(shipped).not.toBeNull();
+    expect(shipped?.known).toContain('InfoTipShowcase');
   });
 });
 

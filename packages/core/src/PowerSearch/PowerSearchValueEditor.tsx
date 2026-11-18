@@ -53,6 +53,7 @@ import {
 import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
 import {HStack} from '../HStack/HStack';
 import {DateRangeInput, type DateRange} from '../DateRangeInput';
+import {Calendar} from '../Calendar/Calendar';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {TimeInput} from '../TimeInput';
 import {Selector} from '../Selector';
@@ -495,6 +496,7 @@ function TimeEditor({
     <TimeInput
       label={t('@astryx.powersearch.valueEditor.time')}
       isLabelHidden
+      entryErrorBehavior="complete"
       isDisabled={isDisabled}
       value={currentValue}
       onChange={value => {
@@ -565,6 +567,7 @@ function DateTimeEditor({
       <DateInput
         label={label}
         isLabelHidden
+        entryErrorBehavior="complete"
         isDisabled={isDisabled}
         value={date}
         onChange={value => {
@@ -576,6 +579,7 @@ function DateTimeEditor({
       <TimeInput
         label={t('@astryx.powersearch.valueEditor.time')}
         isLabelHidden
+        entryErrorBehavior="complete"
         isDisabled={isDisabled}
         value={time}
         onChange={value => {
@@ -628,6 +632,7 @@ function DateAbsoluteEditor({
     <DateInput
       label={label}
       isLabelHidden
+      entryErrorBehavior="complete"
       isDisabled={isDisabled}
       value={
         unixSeconds == null
@@ -806,6 +811,16 @@ function DateRangeEditor({
     }
   }, []);
 
+  // A sheet opens no popover over itself.
+  if (presentation === 'bottom-sheet') {
+    return (
+      // A disabled editor takes no input: the calendar has no disabled state.
+      <div inert={isDisabled === true}>
+        <Calendar mode="range" value={currentValue} onChange={handleChange} />
+      </div>
+    );
+  }
+
   return (
     <div onKeyDown={handleKeyDown}>
       <DateRangeInput
@@ -815,9 +830,6 @@ function DateRangeEditor({
         value={currentValue}
         onChange={handleChange}
         hasClear={false}
-        // A phone-wide sheet fits one month; the popover keeps the default.
-        numberOfMonths={presentation === 'bottom-sheet' ? 1 : undefined}
-        width={presentation === 'bottom-sheet' ? '100%' : undefined}
       />
     </div>
   );

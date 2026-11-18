@@ -14,7 +14,6 @@
  */
 
 import {
-  createContext,
   use,
   useRef,
   useMemo,
@@ -69,6 +68,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/filtering/useTableFiltering.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
 
@@ -338,7 +338,11 @@ interface FilterStore {
   getConfig: () => UseTableFilteringConfig;
 }
 
-const FilterStoreContext = createContext<FilterStore | null>(null);
+const FilterStoreContext = createSharedContext<FilterStore | null>(
+  'FilterStoreContext',
+  1,
+  null,
+);
 FilterStoreContext.displayName = 'FilterStoreContext';
 
 function useFilterStore(): FilterStore {
@@ -353,7 +357,11 @@ function useFilterStore(): FilterStore {
 
 /** Variant is stable per plugin instance — kept in a separate context so
  *  slot components can read it without going through the mutable store. */
-const FilterVariantContext = createContext<TableFilterVariant>('popover');
+const FilterVariantContext = createSharedContext<TableFilterVariant>(
+  'FilterVariantContext',
+  1,
+  'popover',
+);
 FilterVariantContext.displayName = 'FilterVariantContext';
 
 // =============================================================================
@@ -736,6 +744,7 @@ function DateFilterControl({
     <DateInput
       label={t('@astryx.tableFiltering.filterByColumn', {header})}
       isLabelHidden
+      entryErrorBehavior="complete"
       value={(value as ISODateString | undefined) ?? undefined}
       onChange={newValue => {
         store.getConfig().onFilterChange(columnKey, newValue ?? null);
@@ -765,6 +774,7 @@ function TimeFilterControl({
     <TimeInput
       label={t('@astryx.tableFiltering.filterByColumn', {header})}
       isLabelHidden
+      entryErrorBehavior="complete"
       value={(value as ISOTimeString | undefined) ?? undefined}
       onChange={newValue => {
         store.getConfig().onFilterChange(columnKey, newValue ?? null);

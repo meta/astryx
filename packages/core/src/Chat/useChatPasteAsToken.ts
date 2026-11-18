@@ -13,6 +13,7 @@
  * pastes pass through normally.
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/Chat/useChatPasteAsToken.doc.mjs
  * - /packages/core/src/Chat/index.ts (exports)
  */
 

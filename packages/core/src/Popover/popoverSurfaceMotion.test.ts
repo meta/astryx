@@ -14,8 +14,10 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {LAYER_SIDE_CASES} from '../Layer/__tests__/layerEntranceSide.fixture';
 import {isInHeldLayer, isInputShield} from '../Layer/inputHold';
 import {cubicBezier} from '../motion/bezier';
+import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
 import {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
 import {popover, timing} from '../motion/uikit';
 import {findPopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
@@ -125,6 +127,25 @@ describe('popoverCollapsedState', () => {
     });
     expect([left.originX, left.originY, left.axis]).toEqual([180, 70, 'x']);
   });
+
+  it.each(LAYER_SIDE_CASES)(
+    'grows a popover $name from the point the pointer entrance scales about',
+    ({layer, trigger, origin, touchAxis}) => {
+      const state = popoverCollapsedState({surface: layer, source: trigger});
+      expect([state.originX, state.originY]).toEqual([origin.x, origin.y]);
+      if (touchAxis == null) {
+        // No side: it only scales, so its length starts full.
+        expect(state.length).toBe(1);
+        return;
+      }
+      expect(state.axis).toBe(touchAxis);
+      const fullLength = touchAxis === 'x' ? layer.width : layer.height;
+      expect(state.length).toBeCloseTo(
+        Math.min(1, popover.collapsedLengthPx / fullLength),
+        12,
+      );
+    },
+  );
 
   it('keeps the point on the popover when its source is wider than it, and never grows a short popover', () => {
     const state = popoverCollapsedState({
@@ -257,7 +278,10 @@ describe('createPopoverSurfaceMotion', () => {
     vi.unstubAllGlobals();
   });
 
-  const create = (reducedMotion = false, {scheduled = true} = {}) => {
+  const create = (
+    reducedMotion = false,
+    {scheduled = true, entrance = false} = {},
+  ) => {
     const host = document.createElement('section');
     document.body.appendChild(host);
     const element = document.createElement('div');
@@ -278,6 +302,10 @@ describe('createPopoverSurfaceMotion', () => {
     // The touch presentation runs under a coarse pointer, where Reduce
     // Motion cross-fades.
     stubMedia(reducedMotion, true);
+    // The surface, where the pointer presentation's CSS entrance runs.
+    const surface = entrance
+      ? element.querySelector<HTMLElement>('[role="dialog"]')
+      : null;
     const motion = createPopoverSurfaceMotion(
       element,
       scheduled
@@ -289,8 +317,9 @@ describe('createPopoverSurfaceMotion', () => {
               return lastFrame;
             },
             cancelFrame: handle => frames.delete(handle),
+            entrance: surface,
           }
-        : {now: () => clock},
+        : {now: () => clock, entrance: surface},
     );
     return {element, motion};
   };
@@ -362,8 +391,11 @@ describe('createPopoverSurfaceMotion', () => {
     expect(endMs).toBeLessThanOrEqual(ENTRANCE.ms + 1);
     expect(endMs).toBeGreaterThan(ENTRANCE.ms * 0.8);
     expect(peak).toBeLessThanOrEqual(1);
+    // It starts at the floor, not at 0: Chromium draws the start frame.
     const [opacityAnimation] = live('opacity');
-    expect(Number(opacityAnimation.keyframes[0].opacity)).toBe(0);
+    expect(Number(opacityAnimation.keyframes[0].opacity)).toBe(
+      ENTRANCE_OPACITY_FLOOR,
+    );
     expect(Number(opacityAnimation.keyframes.at(-1)!.opacity)).toBe(1);
   });
 
@@ -715,6 +747,25 @@ describe('createPopoverSurfaceMotion', () => {
     motion.exit();
     expect(recorded).toHaveLength(0);
     expect(copyOf(element)).toBeNull();
+  });
+
+  it('turns the CSS entrance off on the surface too, and gives it back where it gives the layer\u2019s back', async () => {
+    const {element, motion} = create(false, {entrance: true});
+    const surface = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    motion.enter(() => GEOMETRY);
+    await Promise.resolve();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    frame();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    motion.reset();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('');
+    // A close after the opening task ends, before the frame.
+    motion.enter(() => GEOMETRY);
+    await Promise.resolve();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    motion.exit();
+    frame();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('');
   });
 
   it('reset leaves the element as the component styles it', () => {

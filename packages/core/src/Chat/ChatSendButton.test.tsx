@@ -32,7 +32,10 @@ describe('ChatSendButton', () => {
 
     it('is disabled with no composer context and no isDisabled prop', () => {
       render(<ChatSendButton />);
-      expect(screen.getByRole('button', {name: 'Send'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
     });
 
     it('is enabled when isDisabled is explicitly false', () => {
@@ -294,7 +297,10 @@ describe('ChatSendButton', () => {
         <ChatComposer onSubmit={onSubmit} value="" input={<div />} />,
       );
       // Empty composer — nothing to send.
-      expect(screen.getByRole('button', {name: 'Send'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
 
       rerender(
         <ChatComposer onSubmit={onSubmit} value="hello" input={<div />} />,

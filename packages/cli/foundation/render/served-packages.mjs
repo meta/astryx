@@ -3,8 +3,9 @@
 /**
  * @file Which packages a render may take from the package set the CLI runs
  * from when the page is outside a project (architecture:cli-surface INV30):
- * the Astryx packages, the React and StyleX they run with, and the
- * integrations the host approves. Inside a project the set is never used.
+ * the Astryx packages, the React and StyleX they run with, the integrations
+ * the host approves, and the other packages the host's set declares. Inside a
+ * project the set is never used.
  *
  * @input A specifier, the file that imports it, and the served Core's folder.
  * @output The file it resolves to, or null.
@@ -37,7 +38,8 @@ export function packageOf(spec) {
 /**
  * Whether a render may take `name` from the package set.
  * @param {string} name
- * @param {readonly string[]} integrations the integrations the host approves
+ * @param {readonly string[]} integrations the integrations the host approves,
+ *   and the other packages its set declares
  * @returns {boolean}
  */
 export function isServedPackage(name, integrations) {

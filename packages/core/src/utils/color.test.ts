@@ -109,6 +109,20 @@ describe('parseColor', () => {
     expect(parseColor('oklch(0.5 0.1 200)')).toBeNull();
     expect(parseColor('rebeccapurple')).toBeNull();
   });
+
+  it('returns null for names the prototype chain answers', () => {
+    expect(parseColor('constructor')).toBeNull();
+    expect(parseColor('__proto__')).toBeNull();
+    expect(parseColor('CONSTRUCTOR')).toBeNull();
+  });
+
+  it('keeps the composed callers null-safe for those names', () => {
+    // The charts/lab helpers compose `parseColor(color) ?? parseHex(color)`
+    // and hand the result to formatColor; a truthy non-RGBA answer reaches
+    // it as undefined channels.
+    const rgba = parseColor('constructor') ?? parseHex('constructor');
+    expect(rgba).toBeNull();
+  });
 });
 
 describe('formatHex', () => {
@@ -229,5 +243,10 @@ describe('alpha application (conformance for charts/lab `colors.alpha`)', () => 
 
   it('unparseable input is preserved unchanged', () => {
     expect(applyAlpha('var(--color-accent)', 0.2)).toBe('var(--color-accent)');
+  });
+
+  it('preserves names the prototype chain answers', () => {
+    expect(applyAlpha('constructor', 0.2)).toBe('constructor');
+    expect(applyAlpha('__proto__', 1)).toBe('__proto__');
   });
 });

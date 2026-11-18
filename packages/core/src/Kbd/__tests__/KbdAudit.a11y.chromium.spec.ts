@@ -52,9 +52,10 @@ type AuditReceipt = {
 
 // What each story shows, in document order: the visible text of every
 // badge, then the spoken name of every shortcut. The CI browser is not an
-// Apple platform, so `mod` shows "Ctrl" and is spoken "Control".
+// Apple platform, so `mod` and `ctrl` show "Ctrl", `alt` and `shift` show
+// "Alt" and "Shift", and `mod` is spoken "Control".
 const GLYPHS: Record<Story, string[]> = {
-  'modifier-combinations': ['Ctrl', 'K', '⇧', '↵', '⌃', 'C', '⌥', '⇥'],
+  'modifier-combinations': ['Ctrl', 'K', 'Shift', '↵', 'Ctrl', 'C', 'Alt', '⇥'],
   'special-keys': [
     'Esc',
     'Esc',
@@ -68,8 +69,15 @@ const GLYPHS: Record<Story, string[]> = {
     '←',
     '→',
   ],
-  'larger-text': [0, 1, 2].flatMap(() => ['Ctrl', 'K', '⇧', '↵', 'Esc', '↑']),
-  'inline-with-text': ['Ctrl', 'K', 'Ctrl', '⇧', 'P', 'Esc', '↑', '↓', '↵'],
+  'larger-text': [0, 1, 2].flatMap(() => [
+    'Ctrl',
+    'K',
+    'Shift',
+    '↵',
+    'Esc',
+    '↑',
+  ]),
+  'inline-with-text': ['Ctrl', 'K', 'Ctrl', 'Shift', 'P', 'Esc', '↑', '↓', '↵'],
   'menu-shortcuts': [
     'Ctrl',
     'X',
@@ -80,7 +88,7 @@ const GLYPHS: Record<Story, string[]> = {
     'Ctrl',
     'Z',
     'Ctrl',
-    '⇧',
+    'Shift',
     'Z',
   ],
 };

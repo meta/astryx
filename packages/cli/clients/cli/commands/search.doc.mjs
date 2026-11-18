@@ -36,7 +36,8 @@ export const doc = {
     },
     {
       flag: '--verbose',
-      description: "Also print each result's score and match reason",
+      description:
+        "Also print each result's score and match reason, and its whole description",
     },
   ],
   examples: [

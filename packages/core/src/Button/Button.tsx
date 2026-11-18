@@ -31,6 +31,8 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
   sizeVars,
@@ -53,7 +55,9 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
+  PressGroupBandContext,
   PressGroupContext,
   pressGroupItemProps,
 } from '../hooks/pressGroupContext';
@@ -93,6 +97,14 @@ registerEnglishFallback(english);
  * believed. Typed `string`, so StyleX reads it as a computed key.
  */
 const PRESSED_ON: string = '[data-astryx-press="on"]';
+
+/**
+ * The button's own popup is open. A press does not scale it then, so the
+ * popup anchors to the button at rest. A disclosure button, with no popup,
+ * keeps its press.
+ */
+const POPUP_OPEN: string =
+  '[aria-expanded="true"][aria-haspopup]:not([aria-haspopup="false"])';
 
 /** `aria-haspopup` values of a trigger that keeps its own press and opening. */
 const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
@@ -140,8 +152,11 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the popup opens.
+      [POPUP_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transitionDuration: {
       default: durationVars['--duration-fast'],
       '@media (prefers-reduced-motion: reduce)': '0s',
@@ -154,7 +169,7 @@ const styles = stylex.create({
       // A mouse press. Under a coarse pointer `:active` is not a press (it
       // paints on the touch and outlives a scroll), so the touch press model
       // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
-      ':active:where(:not(:disabled,[aria-disabled="true"]))': {
+      [`:active:where(:not(:disabled,[aria-disabled="true"],${POPUP_OPEN}))`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
         // Under reduced motion a press never scales the button. The overlay
@@ -164,7 +179,7 @@ const styles = stylex.create({
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
           'scale(1)',
       },
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
@@ -182,7 +197,7 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
@@ -269,16 +284,21 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
+// At the default text size one label line is shorter than the element size,
+// so a caller's height still replaces this one. A larger text size makes the
+// line taller, and the button grows with its label.
 const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
+  sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
+  md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
+  lg: {height: `max(${sizeVars['--size-element-lg']}, 1lh)`},
+});
+
+// An icon-only button holds its glyph, which does not grow with the text, so
+// it keeps a fixed square size.
+const iconOnlySizeStyles = stylex.create({
+  sm: {height: sizeVars['--size-element-sm']},
+  md: {height: sizeVars['--size-element-md']},
+  lg: {height: sizeVars['--size-element-lg']},
 });
 
 /**
@@ -315,11 +335,10 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
-    // Forced colors replace the fill with ButtonFace; a border keeps the
-    // destructive fill's shape visible (architecture:theme-tokens INV11). A
-    // border, not an outline, leaves the shared focus ring intact.
-    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
-    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    // Forced colors replace the fill with ButtonFace; the solid-variant edge
+    // (`forcedColorsEdge`) keeps the destructive fill's shape visible
+    // (architecture:theme-tokens INV11), in this color. A border, not an
+    // outline, leaves the shared focus ring intact.
     borderColor: {
       default: null,
       '@media (forced-colors: active)': 'CanvasText',
@@ -628,6 +647,115 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * A solid variant's edge in forced colors. These variants separate themselves
+ * from the page with a fill alone and have no border; forced colors discards
+ * the fill, which would leave plain text with no perceivable boundary
+ * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. `ghost` is
+ * flat by design and keeps none.
+ *
+ * Outside forced colors a standalone button keeps the base's borderless
+ * values, and a grouped button's longhands are `null`, so the group's own
+ * values stay. A grouped button gets only the longhands its group does not own: the group's
+ * dividers stay where they are under both StyleX style resolutions, and the
+ * group's first and last buttons close its outer edge.
+ */
+const FORCED_COLORS = '@media (forced-colors: active)';
+
+const forcedColorsEdge = stylex.create({
+  standalone: {
+    // Repeats the base's 0 and none: these keys replace the base's own.
+    borderWidth: {default: 0, [FORCED_COLORS]: '1px'},
+    borderStyle: {default: 'none', [FORCED_COLORS]: 'solid'},
+    borderColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+  },
+  groupHorizontal: {
+    borderBlockStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderBlockEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderInlineEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+  },
+  groupVertical: {
+    borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderInlineEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderBlockStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderBlockEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+  },
+});
+
+// The color of a grouped button's forced-colors edge: `destructive` takes
+// `CanvasText`, the others `ButtonText`. These are the same longhands the
+// edge sets, so the color holds whichever order a build puts shorthands and
+// longhands in.
+const forcedColorsEdgeColor = stylex.create({
+  horizontal: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  horizontalOnError: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    },
+  },
+  vertical: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  verticalOnError: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    },
+  },
+});
+
+/**
  * Whether `node` adds nothing to a content name: nothing renders, or an Icon
  * with no label. Any other node can add text.
  */
@@ -640,6 +768,20 @@ function addsNoName(node: ReactNode): boolean {
   }
   const {label} = node.props;
   return typeof label !== 'string' || label.trim() === '';
+}
+
+/**
+ * Whether a caller's Tooltip already describes the Button. Its tooltip
+ * replaces the cut-label one, so one tooltip shows at one spot.
+ */
+function hasCallerTooltip(button: HTMLElement): boolean {
+  const ids = button.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
+  return ids.some(
+    id =>
+      id !== '' &&
+      button.ownerDocument.getElementById(id)?.getAttribute('role') ===
+        'tooltip',
+  );
 }
 
 /**
@@ -698,6 +840,10 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  const isSolidVariant =
+    variant === 'primary' ||
+    variant === 'secondary' ||
+    variant === 'destructive';
   // A tracking group's tracker paints this button's pointer press. A menu
   // trigger is not tracked: it keeps its own press and opening.
   const groupPointers = use(PressGroupContext);
@@ -752,9 +898,17 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
-  // The group draws one band for all its members.
-  // A disabled or busy-only button takes no tap.
-  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  // Server markup has no click guard until it hydrates, and a native submit
+  // or reset button acts on its form without one.
+  const isHydrating = useIsHydrating();
+  const renderedType =
+    buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
+      ? 'button'
+      : type;
+  // The group draws one band for all its members: a ButtonGroup, or a
+  // tracking group that says so. A disabled or busy-only button takes no tap.
+  const groupDrawsBand = use(PressGroupBandContext);
+  const hasHitArea = buttonGroup == null && !groupDrawsBand && !buttonDisabled;
   const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
@@ -769,12 +923,6 @@ export function Button({
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
 
-  // Use aria-disabled (button stays focusable) when busy-only, or when a
-  // tooltip is present so keyboard users can still reach it. A genuinely
-  // isDisabled/group-disabled button (not busy) keeps native disabled.
-  const useAriaDisabled =
-    buttonDisabled && (isBusyOnlyDisabled || tooltip != null);
-
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
   // so no extra DOM node is inserted — the button stays a direct child of its
@@ -785,20 +933,26 @@ export function Button({
     isEnabled: tooltip != null,
   });
 
+  // A label cut short by its row shows in full in a tooltip when keyboard
+  // focus reaches the Button; a caller's own tooltip replaces it.
+  const buttonRef = useRef<HTMLElement | null>(null);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const canShowCutLabel = !isIconOnly && tooltip == null;
+  const cutLabel = useCutTextOnKeyboardFocus({
+    anchorRef: buttonRef,
+    measureRef: labelRef,
+    isEnabled: canShowCutLabel,
+    isSuppressed: hasCallerTooltip,
+  });
+
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
     // a re-click while pending starts a fresh action that interrupts the prior.
     if (buttonDisabled || (actionInFlightRef.current && !isInterruptible)) {
       e.preventDefault();
-      // A native `disabled` element never dispatches a click at all, so it
-      // never reaches a wrapping element's own handler either. An
-      // aria-disabled button (busy-only, or with a tooltip) is still a real,
-      // interactive element the DOM keeps dispatching clicks on —
-      // preventDefault alone only cancels the button's OWN default action
-      // (form submit, link navigation), not propagation. Without this, an
-      // unavailable Button inside a clickable row/card/backdrop still
-      // triggers that ancestor's action, which the previously native-disabled
-      // control never did.
+      // An aria-disabled button still receives clicks. preventDefault cancels
+      // only its own default action, such as a form submit. Stop propagation
+      // so a clickable ancestor does not act.
       e.stopPropagation();
       return;
     }
@@ -815,9 +969,9 @@ export function Button({
     }
   };
 
-  // When aria-disabled, suppress activation keys (Enter/Space) but allow
-  // other keys (Escape, arrows) to reach consumer handlers.
-  const handleKeyDown = useAriaDisabled
+  // A disabled button cancels Enter and Space, its activation keys. Other
+  // keys, such as Escape and the arrows, still reach the caller's handler.
+  const handleKeyDown = buttonDisabled
     ? (e: React.KeyboardEvent<HTMLButtonElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -835,7 +989,7 @@ export function Button({
   // Shared StyleX props for both button and link rendering
   const sharedStylexProps = focusOutlineProps.focusVisible(
     styles.base,
-    sizeStyles[size],
+    isIconOnly ? iconOnlySizeStyles[size] : sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
     // The press the controller writes, on a layer under the label whose
@@ -846,7 +1000,7 @@ export function Button({
     isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
-    useAriaDisabled && styles.ariaDisabled,
+    buttonDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
     !buttonGroup &&
       (isGroupTracked ? styles.pressableTracked : styles.pressable),
@@ -863,6 +1017,21 @@ export function Button({
     // by the ButtonGroup so the shared surface lifts as one unit.
     !buttonGroup && elevationStyles[elevation],
     width != null && dynamicStyles.width(width),
+    isSolidVariant &&
+      (buttonGroup == null
+        ? forcedColorsEdge.standalone
+        : buttonGroup.orientation === 'horizontal'
+          ? forcedColorsEdge.groupHorizontal
+          : forcedColorsEdge.groupVertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
+        ? variant === 'destructive'
+          ? forcedColorsEdgeColor.horizontalOnError
+          : forcedColorsEdgeColor.horizontal
+        : variant === 'destructive'
+          ? forcedColorsEdgeColor.verticalOnError
+          : forcedColorsEdgeColor.vertical),
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
@@ -919,7 +1088,9 @@ export function Button({
           </span>
         )}
         {isIconOnly ? null : (
-          <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
+          <span ref={labelRef} {...stylex.props(styles.labelText)}>
+            {children ?? label}
+          </span>
         )}
         {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
@@ -980,6 +1151,7 @@ export function Button({
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
     hitAreaRef,
+    buttonRef,
   );
 
   let element: ReactNode;
@@ -1004,7 +1176,13 @@ export function Button({
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1014,8 +1192,7 @@ export function Button({
     element = (
       <button
         ref={mergedButtonRef}
-        type={type}
-        disabled={useAriaDisabled ? undefined : buttonDisabled}
+        type={renderedType}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
@@ -1023,13 +1200,20 @@ export function Button({
         {...pressFeedback}
         {...groupItemProps}
         {...props}
+        {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1037,16 +1221,21 @@ export function Button({
     );
   }
 
-  if (tooltip) {
-    return (
-      <>
-        {element}
-        {tooltipHook.renderTooltip(tooltip)}
-      </>
-    );
-  }
-
-  return element;
+  // One shape whether or not a tooltip shows, so a label that becomes cut
+  // short keeps the same button element (and its focus).
+  return (
+    <>
+      {element}
+      {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
+      {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
+        <cutLabel.Tooltip
+          anchorRef={buttonRef}
+          content={cutLabel.cutText}
+          onHide={cutLabel.hide}
+        />
+      ) : null}
+    </>
+  );
 }
 
 Button.displayName = 'Button';

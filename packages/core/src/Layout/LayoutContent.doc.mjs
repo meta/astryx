@@ -38,6 +38,11 @@ export const docs = {
       type: 'AriaRole',
       description: 'ARIA landmark role.',
     },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the content region element.',
+    },
   ],
 };
 
@@ -75,6 +80,11 @@ export const docsZh = {
       type: 'AriaRole',
       description: 'ARIA 地标角色。',
     },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发到内容区域元素的 ref。',
+    },
   ],
 };
 
@@ -91,5 +101,6 @@ export const docsDense = {
     label:
       'Accessible label for landmark element; also names the region while it scrolls (default "Content").',
     role: 'ARIA landmark role.',
+    ref: 'Ref forwarded to the content region element.',
   },
 };

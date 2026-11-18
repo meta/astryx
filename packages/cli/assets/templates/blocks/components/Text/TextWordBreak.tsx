@@ -17,7 +17,12 @@ export default function TextWordBreak() {
         <Text type="label" display="block">
           Break-word (default for multi-line)
         </Text>
-        <div style={{width: 200, border: '1px solid #ccc', padding: 8}}>
+        <div
+          style={{
+            width: 200,
+            border: '1px solid var(--color-border)',
+            padding: 8,
+          }}>
           <Text type="body" maxLines={2} wordBreak="break-word">
             This is a verylongunbreakableword for a break-word example
           </Text>
@@ -27,7 +32,12 @@ export default function TextWordBreak() {
         <Text type="label" display="block">
           Break-all (default for single-line)
         </Text>
-        <div style={{width: 200, border: '1px solid #ccc', padding: 8}}>
+        <div
+          style={{
+            width: 200,
+            border: '1px solid var(--color-border)',
+            padding: 8,
+          }}>
           <Text type="body" maxLines={2} wordBreak="break-all">
             Breaks anywhere: abcdefghijklmnopqrstuvwxyz0123456789
           </Text>

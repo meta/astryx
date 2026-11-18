@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState, type CSSProperties} from 'react';
+import {useRef, useState, type CSSProperties} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Button} from '@astryxdesign/core/Button';
@@ -11,6 +11,10 @@ import {
   StackItem,
 } from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {
   PlusIcon,
   FunnelIcon,
@@ -1045,6 +1049,122 @@ export const TabsPattern: Story = {
           </div>
         ))}
       </div>
+    );
+  },
+};
+
+/**
+ * A tab's help text: a Tooltip anchored on the Tab through its ref, so it
+ * describes the tab itself. Each Tooltip renders after the TabList, because the
+ * strip holds only tabs. The tab stays one button; the info glyph is decorative.
+ */
+export const DescribedTabs: Story = {
+  name: 'Tab With Help Text',
+  render: () => {
+    const [value, setValue] = useState('general');
+    const generalRef = useRef<HTMLButtonElement>(null);
+    const membersRef = useRef<HTMLButtonElement>(null);
+    const panels = {
+      general: 'Workspace name, language, and time zone.',
+      members: 'People with access to this workspace.',
+      advanced: 'Export, archive, and delete.',
+    };
+    return (
+      <div style={{display: 'grid', gap: '12px', maxWidth: '420px'}}>
+        <TabList
+          value={value}
+          onChange={setValue}
+          role="tablist"
+          aria-label="Settings">
+          <Tab
+            ref={generalRef}
+            value="general"
+            label="General"
+            panelId="panel-help-general"
+            endContent={<Icon icon="info" size="sm" />}
+          />
+          <Tab
+            ref={membersRef}
+            value="members"
+            label="Members"
+            panelId="panel-help-members"
+            endContent={<Icon icon="info" size="sm" />}
+          />
+          <Tab
+            value="advanced"
+            label="Advanced"
+            panelId="panel-help-advanced"
+          />
+        </TabList>
+        <Tooltip
+          content="Name, language, and time zone for this workspace."
+          anchorRef={generalRef}
+        />
+        <Tooltip
+          content="Who can open this workspace, and what they can change."
+          anchorRef={membersRef}
+        />
+        {Object.entries(panels).map(([key, text]) => (
+          <div
+            key={key}
+            id={`panel-help-${key}`}
+            role="tabpanel"
+            tabIndex={0}
+            hidden={key !== value}>
+            {text}
+          </div>
+        ))}
+      </div>
+    );
+  },
+};
+
+/**
+ * An editor-style strip that runs the selected indicator edge to edge. A
+ * nested Theme restyles the `tab-indicator` target, so only this strip
+ * changes; it takes the outer color mode. `insetInline` is not a guaranteed
+ * property of that target, so the override is best effort across releases.
+ */
+const fullWidthIndicatorTheme = defineTheme({
+  name: 'full-width-tab-indicator',
+  extends: neutralTheme,
+  components: {
+    'tab-indicator': {
+      base: {insetInline: '0'},
+    },
+  },
+});
+
+export const FullWidthIndicator: Story = {
+  name: 'Full-Width Indicator (Nested Theme)',
+  render: () => {
+    const [value, setValue] = useState('app');
+    const {mode} = useTheme();
+    return (
+      <VStack gap={4}>
+        <Theme theme={fullWidthIndicatorTheme} mode={mode}>
+          <TabList
+            value={value}
+            onChange={setValue}
+            aria-label="Open files"
+            size="sm"
+            hasDivider>
+            <Tab value="app" label="App.tsx" />
+            <Tab value="styles" label="styles.css" />
+            <Tab value="readme" label="README.md" />
+          </TabList>
+        </Theme>
+        <TabList
+          value={value}
+          onChange={setValue}
+          aria-label="Default indicator, for comparison"
+          size="sm"
+          hasDivider>
+          <Tab value="app" label="App.tsx" />
+          <Tab value="styles" label="styles.css" />
+          <Tab value="readme" label="README.md" />
+        </TabList>
+      </VStack>
     );
   },
 };

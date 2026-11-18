@@ -12,6 +12,7 @@
 import {describe, expect, it} from 'vitest';
 import {
   formatLocaleTime,
+  isLocaleTimeComplete,
   parseLocaleTime,
   resolveHourFormat,
   type HourFormat,
@@ -207,5 +208,51 @@ describe('parseLocaleTime', () => {
     expect(parseLocaleTime('', 'en-US')).toBeNull();
     expect(parseLocaleTime('25:99', 'de-DE')).toBeNull();
     expect(parseLocaleTime('午後14:30', 'ja-JP')).toBeNull();
+  });
+});
+
+describe('isLocaleTimeComplete', () => {
+  it.each([
+    ['1', '12h', false],
+    ['1:3', '12h', false],
+    ['1:30', '12h', false],
+    ['1:30 PM', '12h', true],
+    ['1:30 p.m.', '12h', true],
+    ['0:30', '12h', true],
+    ['13:30', '12h', true],
+    ['12:30', '12h', false],
+    ['1330', '12h', true],
+    ['130', '12h', false],
+    ['1:3', '24h', false],
+    ['1:30', '24h', true],
+    ['13:30', '24h', true],
+    ['25:99', '24h', true],
+    ['-', '24h', false],
+    ['', '24h', false],
+  ] as [string, HourFormat, boolean][])(
+    'counts %j in a %s field as complete: %s',
+    (text, hourFormat, expected) => {
+      expect(isLocaleTimeComplete(text, 'en-US', hourFormat)).toBe(expected);
+    },
+  );
+
+  it('waits for both second digits when the field shows seconds', () => {
+    expect(isLocaleTimeComplete('13:30', 'en-US', '24h', true)).toBe(false);
+    expect(isLocaleTimeComplete('13:30:0', 'en-US', '24h', true)).toBe(false);
+    expect(isLocaleTimeComplete('13:30:05', 'en-US', '24h', true)).toBe(true);
+  });
+
+  it("reads the locale's digits, separator, and day-period words", () => {
+    expect(isLocaleTimeComplete('14.30', 'fi-FI', '24h')).toBe(true);
+    expect(isLocaleTimeComplete('١:٣٠', 'ar-EG', '12h')).toBe(false);
+    expect(
+      isLocaleTimeComplete(
+        formatLocaleTime(iso('13:30'), 'ar-EG', '12h'),
+        'ar-EG',
+        '12h',
+      ),
+    ).toBe(true);
+    expect(isLocaleTimeComplete('오후 1:30', 'ko-KR', '12h')).toBe(true);
+    expect(isLocaleTimeComplete('1:30', 'ko-KR', '12h')).toBe(false);
   });
 });

@@ -28,10 +28,12 @@ import {
   calendarMonthOfYear,
   calendarMonthsBetween,
   calendarMonthsInCalendarYear,
+  calendarShiftMonths,
   calendarShiftYears,
   calendarYearMonthOf,
   isGregorianAligned,
 } from '../utils/calendarSystem';
+import {plainDateIsAfter, plainDateIsBefore} from '../utils/plainDate';
 
 /** How many months are reachable in either direction when unbounded. */
 export const DEFAULT_MONTH_REACH = 600;
@@ -217,4 +219,38 @@ export function createMonthModel(calendar: CalendarSystem): MonthModel {
   return isGregorianAligned(calendar)
     ? gregorianMonthModel(calendar)
     : temporalMonthModel(calendar);
+}
+
+/**
+ * `date` moved to the calendar month at `monthIndex`, keeping its day of the
+ * month, as UIDatePicker's month and year wheels move the date
+ * (`datePicker.calendar.monthYearWheels.changesDate`). A day the month lacks
+ * becomes the month's last day (`wheels.dayClampsToMonth`). The result stays
+ * inside the bounds.
+ *
+ * @example
+ * ```
+ * dateInMonth(createMonthModel('gregory'), {year: 2026, month: 1, day: 31}, toMonthIndex(2026, 2));
+ * // {year: 2026, month: 2, day: 28}
+ * ```
+ */
+export function dateInMonth(
+  model: MonthModel,
+  date: PlainDate,
+  monthIndex: number,
+  min?: PlainDate | null,
+  max?: PlainDate | null,
+): PlainDate {
+  const moved = calendarShiftMonths(
+    model.calendar,
+    date,
+    monthIndex - model.indexOf(date),
+  );
+  if (min != null && plainDateIsBefore(moved, min)) {
+    return min;
+  }
+  if (max != null && plainDateIsAfter(moved, max)) {
+    return max;
+  }
+  return moved;
 }

@@ -16,6 +16,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {requireNatively} from '../../../test-utils/native-require.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
+import {
+  getCliInvocation,
+  prefixCliCommands,
+} from '../../../foundation/env/package-manager.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../../../api/search/search.mjs')} */
@@ -383,15 +388,58 @@ describe(
           for (const [key, value] of Object.entries(result)) {
             if (value == null || value === '') continue;
             const label = `${result.domain} ${result.name}: ${key}`;
-            expect(printsField(verbose, key, value), label).toBe(true);
+            // Readiness shows as the kind's tag, only on an unready template.
+            if (key === 'isReady') {
+              const kind = value ? result.kind : `${result.kind} (not ready)`;
+              expect(printsField(plain, 'kind', kind), label).toBe(true);
+              continue;
+            }
+            // Text shows a description's commands with the project's
+            // command, as docs text does; JSON keeps them bare.
+            const run = getCliInvocation(REPO_ROOT);
+            /** @param {unknown} v */
+            const asText = v =>
+              key === 'description' ? prefixCliCommands(String(v), run) : v;
+            expect(printsField(verbose, key, asText(value)), label).toBe(true);
             if (key !== 'score' && key !== 'reason') {
-              expect(printsField(plain, key, value), label).toBe(true);
+              // The plain view keeps the first sentence of a description.
+              const shown =
+                key === 'description' ? asText(firstSentence(value)) : value;
+              expect(printsField(plain, key, shown), label).toBe(true);
             }
           }
         }
       }
       expect(domains).toEqual(new Set(SEARCH_DOMAINS));
     }, 90_000);
+
+    it('keeps the first sentence of a description; --verbose and --json keep it whole', async () => {
+      const args = ['search', 'toast'];
+      const env = JSON.parse(
+        (await runCli(['--json', ...args], REPO_ROOT)).stdout,
+      );
+      const plain = (await runCli(args, REPO_ROOT)).stdout;
+      const verbose = (await runCli([...args, '--verbose'], REPO_ROOT)).stdout;
+      const flat = (/** @type {string} */ s) => s.replace(/\s+/g, ' ').trim();
+      const long = env.data.results.find(
+        (/** @type {{description?: string}} */ r) =>
+          r.description && firstSentence(r.description) !== flat(r.description),
+      );
+      expect(
+        long,
+        'a result with a description of more than one sentence',
+      ).toBeDefined();
+      const first = firstSentence(long.description);
+      const second = firstSentence(flat(long.description).slice(first.length));
+      expect(plain).toMatch(
+        new RegExp(
+          `^description:\\s+${first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+          'm',
+        ),
+      );
+      expect(plain).not.toContain(second.slice(0, 30));
+      expect(verbose).toContain(second.slice(0, 30));
+    });
 
     it('--verbose exits 0 and prints import/match detail', async () => {
       // Regression: the boolean verbose flag was named --detail, which collided

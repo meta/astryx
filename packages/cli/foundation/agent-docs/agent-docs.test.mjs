@@ -25,6 +25,7 @@ import {
   AgentDocsHomeError,
   resolveAgentDocsRoot,
 } from './agent-docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -158,8 +159,14 @@ describe('generateCompressedIndex', () => {
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
-    expect(result).toMatch(/astryx docs theme/);
-    expect(result).toMatch(/never :root/);
+    // Themes go through the theme editor (preferred over hand-written files),
+    // never :root overrides; extending a theme and eject-to-fork stay named.
+    expect(result).toMatch(/astryx experimental theme editor new <name>/);
+    expect(result).toMatch(/prefer the experimental theme editor/);
+    expect(result).toMatch(/never :root overrides/);
+    expect(result).toContain('astryx docs theme');
+    expect(result).toContain('theme eject <slug>');
+    expect(result).toMatch(/extend an imported theme/);
   });
 
   it('sends frame choice to the layout doc rather than naming a shell', () => {
@@ -338,6 +345,22 @@ describe('generateCompressedIndex', () => {
     );
   });
 
+  it('ends with the remove line, after any integration lines', () => {
+    const REMOVE_LINE =
+      'To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.';
+    const endsWith = (/** @type {string} */ block) =>
+      block.endsWith(`\n${REMOVE_LINE}\n<!-- ASTRYX:END -->`);
+    expect(endsWith(generateCompressedIndex('1.0.0', {topics: []}))).toBe(true);
+    expect(
+      endsWith(
+        generateCompressedIndex('1.0.0', {
+          topics: [],
+          agentDocs: [{package: '@acme/first', append: ['first one']}],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it('caps the configured project at 32 integration lines', () => {
     const agentDocs = Array.from({length: 5}, (_, packageIndex) => ({
       package: `@acme/package-${packageIndex}`,
@@ -355,7 +378,7 @@ describe('generateCompressedIndex', () => {
 describe('renderAgentDocsBlock', () => {
   it('produces repeatable target bytes from configured manifests', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-render-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-render-'),
     );
     try {
       fs.writeFileSync(
@@ -433,7 +456,7 @@ describe('renderAgentDocsBlock', () => {
   });
   it('renders doc tokens in an integration line for the project', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-tokens-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-tokens-'),
     );
     try {
       fs.writeFileSync(
@@ -479,7 +502,7 @@ describe('renderAgentDocsBlock', () => {
 
   it('rejects a package label that could alter managed block structure', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-label-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-label-'),
     );
     try {
       fs.writeFileSync(
@@ -1281,6 +1304,23 @@ describe('installAgentDocs', () => {
 
     expect(written).toEqual(['custom/AGENT.md']);
     expect(fs.existsSync(path.join(tmpDir, 'custom', 'AGENT.md'))).toBe(true);
+  });
+
+  it('names the by-hand way out in a block that --remove-agents leaves', async () => {
+    setupCorePackage(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'c', version: '1.0.0'}),
+    );
+    installAgentDocs(tmpDir, {paths: ['custom/AGENT.md']});
+    const file = path.join(tmpDir, 'custom', 'AGENT.md');
+    const {remove} = await import('../../api/init/remove/remove.mjs');
+    await remove({cwd: tmpDir});
+    const left = fs.readFileSync(file, 'utf-8');
+    expect(left).toContain('<!-- ASTRYX:START -->');
+    expect(left).toContain(
+      'from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.\n<!-- ASTRYX:END -->',
+    );
   });
 
   it('onlyReplace: skips files without XDS markers', () => {

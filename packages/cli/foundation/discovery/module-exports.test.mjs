@@ -11,9 +11,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   elementPropOrigins,
+  rendersElement,
+  followedExportNames,
   moduleExportOrigin,
   moduleExportOrigins,
   moduleExportSource,
+  moduleExportVerdict,
+  moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
 
@@ -210,6 +214,35 @@ describe('a library of thousands of icons', () => {
   }, 60_000);
 });
 
+describe('rendersElement', () => {
+  const PROVIDER = {sources: new Set(['@acme/ui/theme']), name: 'Provider'};
+
+  it('is true for an element imported by name, renamed or not', () => {
+    const app = write(
+      'Layout.tsx',
+      "import {Provider as P} from '@acme/ui/theme';\nexport const L = ({c}: any) => <P>{c}</P>;\n",
+    );
+    expect(rendersElement(app, PROVIDER)).toBe(true);
+  });
+
+  it('is false for an import never rendered, a type-only one, or another module', () => {
+    const imported = write(
+      'Imported.tsx',
+      "import {Provider} from '@acme/ui/theme';\nexport const p = Provider;\n",
+    );
+    const typeOnly = write(
+      'TypeOnly.tsx',
+      "import type {Provider} from '@acme/ui/theme';\nexport const L = () => <Provider />;\n",
+    );
+    const other = write(
+      'Other.tsx',
+      "import {Provider} from './Provider';\nexport const L = () => <Provider />;\n",
+    );
+    for (const file of [imported, typeOnly, other])
+      expect(rendersElement(file, PROVIDER)).toBe(false);
+  });
+});
+
 describe('elementPropOrigins', () => {
   const THEME = {
     sources: new Set(['@acme/core']),
@@ -276,6 +309,86 @@ describe('elementPropOrigins', () => {
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
   });
+
+  it('follows an import to an export declared inside a namespace, as the whole-tree reader finds it', () => {
+    const themes = write(
+      'themes.ts',
+      'namespace Palette {\n  export const ocean = {};\n}\n',
+    );
+    const app = write(
+      'Namespaced.tsx',
+      "import {Theme} from '@acme/core';\nimport {ocean} from './themes';\nexport const A = () => <Theme theme={ocean} />;\n",
+    );
+    // The icon-set reader, which reads only the top level, runs first on
+    // the same parsed module and leaves the whole-tree answer unchanged.
+    expect(moduleExportOrigin(themes, 'ocean')).toBeNull();
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: themes, name: 'ocean'},
+    ]);
+  });
+});
+
+describe('an export declared inside a namespace', () => {
+  const NAMESPACE =
+    'export namespace Button {\n  export function Inner() { return null; }\n}\n';
+
+  it('counts for the stable reader, as it always has', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportSource(file, 'Inner')).toBe(file);
+    expect(moduleExportsName(file, 'Inner')).toBe(true);
+  });
+
+  it('is no export of the module for the icon-set reader, which reads only its top level', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportOrigin(file, 'Inner')).toBeNull();
+    expect(followedExportNames(file)).not.toContain('Inner');
+  });
+
+  it('counts for the one-pass reader, in value and type reads, after the icon-set reader reads the module', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(
+      moduleExportOrigin(file, 'Inner', undefined, {types: true}),
+    ).toBeNull();
+    for (const types of [false, true]) {
+      expect(moduleExportOrigins(file, {types}).get('Inner')).toEqual({
+        file,
+        name: 'Inner',
+      });
+    }
+  });
+});
+
+describe('the one-pass reader beside the icon-set reader', () => {
+  it('reads namespace and type exports as the whole-tree reader does, while the icon-set reader skips nested declarations', () => {
+    const file = write(
+      'mixed.ts',
+      [
+        'export namespace Shapes {',
+        '  export const circle = 1;',
+        '  export interface Corner {}',
+        '}',
+        'export interface Size {}',
+        'export const top = 2;',
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigin(file, 'circle')).toBeNull();
+    expect(
+      moduleExportOrigin(file, 'Corner', undefined, {types: true}),
+    ).toBeNull();
+    expect(moduleExportOrigin(file, 'Size', undefined, {types: true})).toEqual({
+      file,
+      name: 'Size',
+    });
+    const names = types =>
+      [...moduleExportOrigins(file, {types}).keys()].sort();
+    expect(names(false)).toEqual(['circle', 'top']);
+    expect(names(true)).toEqual(['Corner', 'Shapes', 'Size', 'circle', 'top']);
+    expect(moduleExportOrigins(file, {types: true}).get('Corner')).toEqual({
+      file,
+      name: 'Corner',
+    });
+  });
 });
 
 describe('moduleExportOrigins', () => {
@@ -317,6 +430,19 @@ describe('moduleExportOrigins', () => {
         );
       }
     }
+  });
+
+  it('follows an alias of an imported binding to where that binding is declared', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('inner.ts', 'export const Inner = {};\n');
+    write(
+      'alias.ts',
+      "import {Inner as Provider} from './inner';\nexport const Public = Provider;\n",
+    );
+    const alias = path.join(dir, 'alias.ts');
+    const inner = {file: path.join(dir, 'inner.ts'), name: 'Inner'};
+    expect(moduleExportOrigin(alias, 'Public')).toEqual(inner);
+    expect(moduleExportOrigins(alias).get('Public')).toEqual(inner);
   });
 
   it('agrees through an export * cycle', () => {
@@ -406,6 +532,76 @@ describe('moduleExportOrigins', () => {
     expect(moduleExportOrigins(index).get('renamed')).toEqual({
       file: path.join(dir, 'values.ts'),
       name: 'a',
+    });
+  });
+});
+
+describe('a re-export of the package itself', () => {
+  /**
+   * A package that imports itself by name, as Node allows a package that
+   * declares `exports`.
+   * @param {Record<string, unknown>} [fields] package.json fields
+   */
+  function writeSelfReferencing(fields = {}) {
+    fs.mkdirSync(path.join(dir, 'icons'));
+    fs.mkdirSync(path.join(dir, 'set'));
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@acme/icons',
+        exports: {'.': './index.js', './*Icon': './icons/*Icon.js'},
+        ...fields,
+      }),
+    );
+    write('icons/StarIcon.js', 'export default function StarIcon() {}\n');
+    write(
+      'index.js',
+      "export {default as StarIcon} from './icons/StarIcon.js';\nexport * from './set/set.js';\n",
+    );
+    return write(
+      'set/set.js',
+      [
+        "export {StarIcon as Star} from '@acme/icons';",
+        "export {default as Deep} from '@acme/icons/StarIcon';",
+        "export {Missing} from '@acme/icons';",
+        "export {default as Hidden} from '@acme/icons/private';",
+        "export {Other} from '@acme/other';",
+        '',
+      ].join('\n'),
+    );
+  }
+
+  it('reads the package entry and its subpaths through its own exports', () => {
+    const set = writeSelfReferencing();
+    expect(moduleExportVerdict(set, 'Star')).toEqual({verdict: 'exports'});
+    expect(moduleExportVerdict(set, 'Deep')).toEqual({verdict: 'exports'});
+    expect(moduleExportVerdict(set, 'Missing')).toEqual({verdict: 'lacks'});
+    expect(moduleExportOrigin(set, 'Deep')).toEqual({
+      file: path.join(dir, 'icons', 'StarIcon.js'),
+      name: 'default',
+    });
+  });
+
+  it('names a subpath its exports do not map and another package', () => {
+    const set = writeSelfReferencing();
+    expect(moduleExportVerdict(set, 'Hidden')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Hidden from "@acme/icons/private", which resolves to no file this check can read.',
+    });
+    expect(moduleExportVerdict(set, 'Other')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Other from "@acme/other", another package this check does not read.',
+    });
+  });
+
+  it('reads its own name as another package without an exports map, as Node does', () => {
+    const set = writeSelfReferencing({exports: undefined, main: 'index.js'});
+    expect(moduleExportVerdict(set, 'Star')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Star from "@acme/icons", another package this check does not read.',
     });
   });
 });

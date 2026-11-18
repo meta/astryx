@@ -5,7 +5,8 @@
  * @input keyboardHeight.ts, the keyboard layout guide, a stand-in visual
  *   viewport
  * @output Tests for the on-screen keyboard module: the height, where it
- *   measures, its one set of listeners and the focus refusal
+ *   measures, a hide reported in steps, its one set of listeners and the
+ *   focus refusal
  * @position Keyboard module tests
  */
 
@@ -22,6 +23,7 @@ import {
   __resetLayoutViewportForTest,
   layoutViewportHeight,
 } from '../utils/layoutViewport';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {
   claimTapFocus,
   findTextEntryControl,
@@ -336,6 +338,220 @@ describe('where the keyboard is measured (FR6, FR7)', () => {
     expect(isKeyboardMeasurable(inner)).toBe(false);
     expect(measureKeyboardHeight(inner)).toBe(0);
     frame.remove();
+  });
+});
+
+describe('a hide Chrome reports in steps under Remove animations (FR8)', () => {
+  // Each test's subscriptions end after it, also when an expectation fails.
+  const stops: (() => void)[] = [];
+  afterEach(() => {
+    for (const stop of stops.splice(0)) {
+      stop();
+    }
+    vi.useRealTimers();
+  });
+  // Android's Remove animations setting reads as prefers-reduced-motion.
+  const reduceMotion = (reduce: boolean) =>
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({
+          matches: reduce && query === '(prefers-reduced-motion: reduce)',
+          media: query,
+        }) as unknown as MediaQueryList,
+    );
+  const withVirtualKeyboard = () =>
+    Object.defineProperty(window.navigator, 'virtualKeyboard', {
+      configurable: true,
+      value: {overlaysContent: false},
+    });
+  const heightsOf = (listener: ReturnType<typeof vi.fn>) =>
+    listener.mock.calls.map(([event]) => (event as KeyboardHeightEvent).height);
+  const keyboard = (height: number) =>
+    report({height: window.innerHeight - height});
+
+  it('reports the hide once, with the report of none, and keeps the shown height until then', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+      expect(getKeyboardHeight(window)).toBe(300);
+    }
+    keyboard(0);
+    expect(heightsOf(listener)).toEqual([300, 0]);
+    expect(getKeyboardHeight(window)).toBe(0);
+  });
+
+  it('gives the keyboard layout guide one hide for the steps, and no change', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const kinds: string[] = [];
+    stops.push(
+      getKeyboardLayoutGuide(window).subscribe(transition => {
+        kinds.push(transition.kind);
+      }),
+    );
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+    }
+    keyboard(0);
+    expect(kinds).toEqual(['show', 'hide']);
+  });
+
+  it('reports a lower keyboard that stays up after a quiet spell', () => {
+    vi.useFakeTimers();
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(250);
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(heightsOf(listener)).toEqual([300]);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(heightsOf(listener)).toEqual([300, 250]);
+  });
+
+  it('keeps a step waiting through a pan, which reports the same height', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(250);
+    for (const offsetTop of [20, 40, 60]) {
+      act(() => {
+        vi.advanceTimersByTime(90);
+      });
+      Object.assign(viewport, {offsetTop});
+      act(() => {
+        viewport.dispatchEvent(new Event('scroll'));
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    expect(heightsOf(listener)).toEqual([300, 250]);
+  });
+
+  it('waits 1 s at most in all, however long the steps go on', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [280, 260, 240, 220]) {
+      keyboard(step);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+    }
+    expect(heightsOf(listener)).toEqual([300, 220]);
+  });
+
+  it('reports a keyboard that comes back up at once', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(200);
+    keyboard(300);
+    expect(heightsOf(listener)).toEqual([300, 300]);
+  });
+
+  it('reports every report of a show at once', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(44);
+    keyboard(300);
+    expect(heightsOf(listener)).toEqual([44, 300]);
+  });
+
+  it.each([
+    ['without Remove animations', true, false],
+    ['without the VirtualKeyboard API', false, true],
+  ])('reports every step %s', (_, hasApi, reduce) => {
+    if (hasApi) {
+      withVirtualKeyboard();
+    }
+    reduceMotion(reduce);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+    }
+    keyboard(0);
+    expect(heightsOf(listener)).toEqual([300, 200, 120, 60, 0]);
+  });
+
+  it('stops waiting when the last reader leaves', () => {
+    vi.useFakeTimers();
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    const stop = subscribeKeyboardHeight(window, listener);
+    keyboard(300);
+    keyboard(200);
+    stop();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(heightsOf(listener)).toEqual([300]);
+  });
+});
+
+describe('the store beside another copy of Core (spec:AST-110 FR3)', () => {
+  it('keeps its own store beside a copy whose store has the earlier shape, and each reads its own height', () => {
+    // An earlier copy of Core keeps the window's store under the first
+    // version, without the hide's touch count. It listens, and read 300 px.
+    const earlier = sharedWeakMap<Window, object>(
+      'keyboard/keyboard-height/stores',
+      1,
+    );
+    const previous = earlier.get(window);
+    const theirs = {
+      height: 300,
+      listeners: new Set(),
+      focusListeners: new Set(),
+      detach: () => {},
+      detachFocus: null,
+    };
+    earlier.set(window, theirs);
+    const stop = subscribeKeyboardHeight(window, () => {});
+    try {
+      expect(getKeyboardHeight(window)).toBe(0);
+      report({height: window.innerHeight - 200});
+      expect(getKeyboardHeight(window)).toBe(200);
+      expect(theirs.height).toBe(300);
+      expect(Object.keys(theirs)).toEqual([
+        'height',
+        'listeners',
+        'focusListeners',
+        'detach',
+        'detachFocus',
+      ]);
+    } finally {
+      stop();
+      if (previous == null) {
+        earlier.delete(window);
+      } else {
+        earlier.set(window, previous);
+      }
+    }
   });
 });
 
@@ -711,13 +927,17 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   });
 
+  // A touch's start, and its end or cancel, which tell whether a finger is
+  // down.
+  const TOUCH_TYPES = ['touchstart', 'touchend', 'touchcancel'];
+
   it('listens for touches only while it watches', () => {
     const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     const watch = watchRevealPan(window, {owns: () => true});
-    expect(add.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(add.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
     watch.stop();
-    expect(remove.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
   });
 
   it('shares one touch subscription among its watches (architecture INV13, spec:AST-094 FR24)', () => {
@@ -732,7 +952,7 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
       owns: () => true,
       onTouch: () => touched.push('second'),
     });
-    expect(add.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(add.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
     document.dispatchEvent(new Event('touchstart'));
     expect(touched).toEqual(['first', 'second']);
     first.stop();
@@ -740,7 +960,7 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     document.dispatchEvent(new Event('touchstart'));
     expect(touched).toEqual(['first', 'second', 'second']);
     second.stop();
-    expect(remove.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(TOUCH_TYPES);
   });
 });
 

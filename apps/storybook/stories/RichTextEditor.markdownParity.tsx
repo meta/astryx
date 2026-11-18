@@ -11,8 +11,7 @@
  *   per-block geometry and the scroll anchor across a mode switch.
  *   `WideNumberMarkerParity`, `MixedNumberMarkerParity` and
  *   `TaskParentNumberMarkerParity` compare short and wide outside counters on
- *   Markdown, RichTextView, and RichTextEditor; `CodeDirectionParity` shows
- *   inline and fenced code in a Hebrew paragraph on the same three surfaces.
+ *   Markdown, RichTextView, and RichTextEditor.
  * @position Storybook-only diagnostic for RichTextEditor.stories.tsx. It shows
  *   current behavior and fixes nothing: every difference it reports is a
  *   finding, and none of its numbers is a target.
@@ -40,6 +39,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {defineTheme, Theme, useTheme} from '@astryxdesign/core/theme';
 import {
+  borderVars,
   colorVars,
   spacingVars,
   typeScaleVars,
@@ -385,11 +385,29 @@ function MarkdownRead({content}: {content: ParityContent}) {
   );
 }
 
-function RichTextEdit({content}: {content: ParityContent}) {
+/**
+ * The in-place editing frame the RichTextEditor docs describe: the field's
+ * inset and border sit outside the reading width, so the document wraps at the
+ * same width in read and edit mode (spec:AST-061 FR9).
+ */
+const inPlaceStyles = stylex.create({
+  editorFrame: {
+    marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`,
+  },
+});
+
+function RichTextEdit({
+  content,
+  isInPlace = false,
+}: {
+  content: ParityContent;
+  isInPlace?: boolean;
+}) {
   return (
     <RichTextEditor
       label="Document"
       isLabelHidden
+      xstyle={isInPlace ? inPlaceStyles.editorFrame : undefined}
       defaultValue={content.editorState}
       toolbar={<RichTextEditorToolbar />}
       plugins={
@@ -404,7 +422,8 @@ interface SurfaceDefinition {
   readonly label: string;
   /** The element whose children are the document's top-level blocks. */
   readonly contentRoot: (body: HTMLElement) => Element | null;
-  readonly render: (content: ParityContent) => ReactNode;
+  /** `isInPlace` is set when the surface replaces the other one in place. */
+  readonly render: (content: ParityContent, isInPlace?: boolean) => ReactNode;
 }
 
 /**
@@ -421,7 +440,9 @@ const SURFACES = {
   richtext: {
     label: 'RichText, edit mode',
     contentRoot: body => body.querySelector('[contenteditable]'),
-    render: content => <RichTextEdit content={content} />,
+    render: (content: ParityContent, isInPlace?: boolean) => (
+      <RichTextEdit content={content} isInPlace={isInPlace} />
+    ),
   },
 } satisfies Record<string, SurfaceDefinition>;
 
@@ -755,7 +776,7 @@ function ToggleView({
         label={SURFACES[surface].label}
         bodyRef={bodyRef}
         isHosted={hostWidth === '680px'}>
-        {SURFACES[surface].render(content)}
+        {SURFACES[surface].render(content, true)}
       </SurfaceSection>
       <Measurements
         left={{label: 'Read (last measured)', geometry: read}}
@@ -864,12 +885,6 @@ const WIDE_MARKER_SOURCE = [
 ].join('\n');
 
 const wideMarkerStyles = stylex.create({
-  editorFrame: {
-    // The field's 8px inset and 1px border offset its document. Give the frame
-    // that space outside the common measure, rather than testing unequal widths.
-    width: `calc(100% + 2 * (${spacingVars['--spacing-2']} + 1px))`,
-    marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + 1px))`,
-  },
   columns: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
@@ -904,22 +919,6 @@ const TASK_PARENT_MARKER_SOURCE = [
   '    388. Task roman counter',
   '    389. Task roman sibling',
 ].join('\n');
-
-const CODE_DIRECTION_SOURCE = [
-  'פסקה בעברית עם הקוד `const a = 1;` בתוך השורה.',
-  '',
-  '```ts',
-  'const a = 1;',
-  'if (a > 0) {',
-  '  console.log(a);',
-  '}',
-  '```',
-].join('\n');
-
-/** Reusable comparison for inline and fenced code in a Hebrew paragraph. */
-export function CodeDirectionParity() {
-  return <NumberMarkerParity source={CODE_DIRECTION_SOURCE} />;
-}
 
 /** Reusable comparison for a numbered list below two pure task ancestors. */
 export function TaskParentNumberMarkerParity() {
@@ -959,7 +958,7 @@ function NumberMarkerParity({source}: {source: string}) {
             label="Wide counters"
             isLabelHidden
             defaultValue={state}
-            xstyle={wideMarkerStyles.editorFrame}
+            xstyle={inPlaceStyles.editorFrame}
           />
         </div>
       </div>

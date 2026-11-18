@@ -42,6 +42,44 @@ export {
   starterIcons,
 } from './icons';
 
+// Weight-responsive icons: one SVG per icon that follows the surrounding font-weight
+export {
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+} from './WeightedSVGIcon';
+export {
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+} from './buildWeightedIcon';
+export {registerWeightProbe} from './weightProbe';
+export {
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
+} from './weightedIcons';
+
 // XIF spec types
 export type {
   XIFIcon,
