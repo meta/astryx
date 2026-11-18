@@ -145,12 +145,12 @@ const styles = stylex.create({
     },
     {
       id: 'own-css',
-      title: 'Using motion tokens in your own CSS',
+      title: 'Motion tokens in your CSS',
       category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: "The motion tokens are CSS custom properties, so plain CSS reads them with `var()`; for the Web Animations API, read a token's value with `getComputedStyle(element).getPropertyValue('--duration-medium')` first. Time an animation with a `--duration-*` token and ease it with an `--ease-*` token, so it follows the theme's motion. Under Reduce Motion, keep the change but drop the travel: nothing moves, scales or clips. With a mouse or trackpad the change happens at once; under a finger it cross-fades, opacity only, in 200 ms or less.",
+          text: "The motion tokens are CSS custom properties, so plain CSS reads them with `var()`; for the Web Animations API, read a token's value with `getComputedStyle` first. Time an animation with a `--duration-*` token and ease it with an `--ease-*` token, so it follows the theme's motion. Under Reduce Motion, keep the change but drop the travel: nothing moves, scales or clips. With a mouse or trackpad the change happens at once; under a finger it cross-fades, opacity only, in 200 ms or less.",
         },
         {
           type: 'code',
