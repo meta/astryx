@@ -92,8 +92,10 @@ project away from the app's own identity and data.
   Preview link, or by typing an address. The project comes from:
   - a developer's computer: the project's dev server on the local network,
     which `astryx experimental rn preview` prints as a link and a QR code; or
-  - a hosted bundle: a bundle that `astryx experimental rn preview bundle` writes, served
-    over HTTPS from any host (FR12).
+  - a hosted bundle: a bundle that `astryx experimental rn preview bundle`
+    writes, served over HTTPS from any host, or read-only on the local
+    network by `astryx experimental rn preview serve`, which the host opens
+    as it opens a dev server (FR12).
 - **FR2 — No project code runs without the person's confirmation.** A
   scanned code and a Preview link opened from outside the app show a
   confirmation first, with the name the link carries and the address it comes
@@ -121,7 +123,7 @@ project away from the app's own identity and data.
     project. Stored data, cache files, web view sessions and page storage,
     and players belong to the namespace that made them; a project never reads
     or acts on the app's or another project's. A runtime with no namespace
-    answers `no-namespace` (`spec:AST-130/FR14`).
+    answers `no-namespace` (`spec:AST-130/FR13`).
   - It never reaches the app's own identity, stored data, files, players,
     or the person's photo library, and it cannot change the app's
     appearance or bars. It holds the lock-screen controls only through its
@@ -145,12 +147,12 @@ project away from the app's own identity and data.
   | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
   | `AstryxAppearance` (`spec:AST-130/FR4`)                                                     | `getOverride()` answers `'system'`, `getRunOverride()` answers `null`, and `setOverride` answers `not-allowed`.                                                                                                                                                                                                                                                                                        |
   | `AstryxPlatformInfo`, launch info (`spec:AST-130/FR8`)                                      | No `launch` and an empty `installedAt`; the memory and bundle-size reads answer `not-allowed`.                                                                                                                                                                                                                                                                                                         |
-  | `AstryxStorage` (`spec:AST-130/FR14`)                                                       | Its own namespace (FR4).                                                                                                                                                                                                                                                                                                                                                                               |
+  | `AstryxStorage` (`spec:AST-130/FR13`)                                                       | Its own namespace (FR4).                                                                                                                                                                                                                                                                                                                                                                               |
   | `AstryxClipboard` (`spec:AST-130/FR7`)                                                      | Each read asks as the device does; a refused read or write answers `not-allowed`.                                                                                                                                                                                                                                                                                                                      |
-  | `AstryxBack`, `AstryxLaunch` (`spec:AST-130/FR11`, `spec:AST-130/FR12`)                     | Change nothing.                                                                                                                                                                                                                                                                                                                                                                                        |
+  | `AstryxBack`, `AstryxLaunch` (`spec:AST-130/FR10`, `spec:AST-130/FR11`)                     | Change nothing.                                                                                                                                                                                                                                                                                                                                                                                        |
   | `AstryxAudio`, `AstryxVideoView` (`spec:AST-132/FR3`, `spec:AST-132/FR7`)                   | Players open beside the app's. A `playerId` another runtime holds answers `busy`; a runtime's `close` or teardown frees only its own players; a video view draws only its own runtime's player. The player that started last, in any runtime, owns the Now Playing card and remote commands, and one runtime's teardown never removes another's. A file outside its own folders answers `not-allowed`. |
   | `AstryxPhotoLibrary`, `AstryxPhotoThumbnailView` (`spec:AST-135/FR3` to `spec:AST-135/FR6`) | Not allowed. Every library call answers `not-allowed`, and the thumbnail view reports `not-allowed` and draws nothing: the person's photo library is the app's alone.                                                                                                                                                                                                                                  |
-  | The system photo picker, `AstryxFilePicker` (`spec:AST-130/FR13`)                           | Allowed. The iOS system picker and the Android Photo Picker expose no library, and only the items the person picks reach the project, copied into its own cache as picker results.                                                                                                                                                                                                                     |
+  | The system photo picker, `AstryxFilePicker` (`spec:AST-130/FR12`)                           | Allowed. The iOS system picker and the Android Photo Picker expose no library, and only the items the person picks reach the project, copied into its own cache as picker results.                                                                                                                                                                                                                     |
   | `AstryxCameraView` (`spec:AST-132/FR9`)                                                     | The camera's consent in the app; without it, the permission reports `denied`.                                                                                                                                                                                                                                                                                                                          |
   | `AstryxPasteControl` (`spec:AST-126/FR8`)                                                   | Never served; `PasteButton` draws its fallback, which reads the clipboard under the clipboard's consent.                                                                                                                                                                                                                                                                                               |
   | `AstryxIconView`, `AstryxIcons` (`spec:AST-127/FR1`, `spec:AST-127/FR2`)                    | A bundled mask, a `data:` URI, or a file it may read; a remote mask goes through `Image`, under its own image loading and network rules, and never as a mask the app's runtime downloaded. `prefetch` answers `not-allowed`.                                                                                                                                                                           |
@@ -195,12 +197,13 @@ project away from the app's own identity and data.
   `@astryxdesign/react-native` carries nothing of Preview and imports nothing
   from a host. A project carries no Preview code of its own: the host sets up
   what the project needs before the project's code runs (FR6).
-  - Every way in (FR1) carries a Preview manifest: the name the link carries
-    (FR2), the platform, and what the project requires from the host (FR7).
-    `astryx experimental rn preview` writes it from the project, and the host
-    reads it before anything of the project runs.
+  - Every dev server and bundle the host opens (FR1) serves a Preview
+    manifest: the project's name, the platform, and what the project requires
+    from the host (FR7). `astryx experimental rn preview` writes it from the
+    project, and the host reads it from the dev server or the bundle before
+    anything of the project runs.
   - The manifest's shape and its types are Preview's own and experimental
-    (DEC-6). They ship with the Preview commands, never in
+    (DEC-6). They ship with Preview's command-line tooling (FR12), never in
     `@astryxdesign/react-native`, and a project's code neither imports nor
     reads them.
 
@@ -232,8 +235,10 @@ project away from the app's own identity and data.
 ### The commands
 
 - **FR12 — `astryx experimental rn preview` makes what a Preview host opens.**
-  `@astryxdesign/react-native` contributes the group to the Astryx CLI with
-  its other commands as an experimental group (DEC-6). It sits under the
+  Preview's own command-line tooling contributes the group to the Astryx CLI
+  as an experimental group (DEC-6), with the manifest's types (FR9). It
+  releases apart from `@astryxdesign/react-native`, which contributes none of
+  it. The group sits under the
   `astryx experimental` command group, the CLI's experimental namespace
   (`spec:AST-017/FR27`, `spec:AST-084` FR0); no stable command gains a
   Preview subcommand or option, its help text and its documentation say that
@@ -248,7 +253,7 @@ project away from the app's own identity and data.
   | `astryx experimental rn preview`        | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, `--display-name <words>` is the name the link carries, and `--qr-png <file>` writes the link's QR code. |
   | `astryx experimental rn preview check`  | Compares the project's requirements with what a Preview host provides (FR7), and lists each requirement the host lacks.                                                                                                                                                                                                                                                                           |
   | `astryx experimental rn preview bundle` | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link (FR8).                                                                                                                                                                           |
-  | `astryx experimental rn preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                       |
+  | `astryx experimental rn preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on the local network on `--port <n>`, for a Preview host to open as it opens a dev server (FR1), and writes it first when it is older than the project's sources.                                                                                                                                                       |
   | `astryx experimental rn preview share`  | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                      |
   - `preview` answers for one platform: the one `--platform` names, `ios`
     otherwise. `preview bundle`, `preview serve`, and `preview share` act on
@@ -319,7 +324,7 @@ project away from the app's own identity and data.
 | FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project                               | a project; an app with two routers                                                                               | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                                                                      |
 | FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx experimental rn preview check`                                           | a missing native piece; an older host                                                                            | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                                                                           |
 | FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                                          | a valid link; each failed check; data written while open                                                         | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                                                                         |
-| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code; the manifest of each way in                                     | the Astryx app's build; a plain project; a dev server link; a hosted bundle                                      | The app's native Preview pieces or Preview's manifest types in `@astryxdesign/react-native`, a project that needs Preview code to run, or a way in whose manifest the host does not read before the project runs                              |
+| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code; the manifest of each dev server and bundle                      | the Astryx app's build; a plain project; a dev server link; a hosted bundle                                      | The app's native Preview pieces or Preview's manifest types or commands in `@astryxdesign/react-native`, a project that needs Preview code to run, or a way in whose manifest the host does not read before the project runs                  |
 | FR10     | Inspector picking over a project that counts its touches, presses, scrolls, drags, and menu opens, on iOS and Android                               | picking on; an element picked; picking turned off; leaving the project; a screen reader activation while picking | A touch, press, scroll, drag, screen reader activation, or menu that reaches the project while the shield shows, a project that gets no touches after the shield goes, or an inspector that names the wrong component                         |
 | FR11     | A project that shows a sheet, a menu, and a modal window, with the exit control and the inspector over it, on iOS and Android; a screen reader walk | each kind of presentation; a touch outside the controls with picking off; screen reader on                       | A project surface drawn above the exit control, a touch outside the controls with picking off that does not reach the project, an exit control the screen reader cannot reach, or a project element the layer hides from assistive technology |
 | FR12     | CLI contract tests of `astryx experimental rn preview`: envelopes, exit codes, each code in FR12's table; a share without terms                     | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                                    | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                                                                     |
@@ -424,11 +429,12 @@ Astryx React Native depends on it.
     covers only simple, static pieces.
 - **OQ2 — What more may a Preview project reach?** (`human-design`) FR4 and
   FR5 fix the namespaces and the per-module policy. Open: whether storage is
-  per project or per project and per source address; cookies and web view
-  data (per project, or none); network (any host, the local network only for
-  dev servers, or a declared list); sign-in; permissions beyond the camera (the system prompt once for the app with a
+  per project or per project and per source address; network (any host, the
+  local network only for dev servers, or a declared list); sign-in; and
+  permissions beyond the camera (the system prompt once for the app with a
   per-project consent in the app, or no permission-gated capability for
-  projects); and web content. A wider reach makes more apps previewable; each
+  projects). The web view and its sessions follow FR5's default rule, in the
+  project's own namespace (FR4). A wider reach makes more apps previewable; each
   widening is a capability that code from a link can use on the person's
   phone.
 - **OQ3 — How does a person know who served a project?** (`human-design`)
