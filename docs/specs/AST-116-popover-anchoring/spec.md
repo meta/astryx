@@ -292,7 +292,7 @@ Dialog and DropdownMenu.
   verification row and Open questions narrow containment to the modal
   default. DEC-8's modal, always light-dismissing sheet is superseded for
   `isModal: false` (FR16), with an amendment line. AR4 and the close state row
-  follow FR20's order, and DEC-9's amendment also hands its return target to FR17–FR20. The Dismissal concept row and the `usePopover` light and Escape dismissal row say the native auto path holds until FR9 and FR15 ship. The Trigger binding and side-effect lines and FR9 name
+  follow FR20's order, and DEC-9's amendment also hands its return target to FR17–FR20. The Dismissal concept row and the `usePopover` light and Escape dismissal row name the scripted outside-press watch an `onOutsidePress` caller gets, and say Escape applies wherever focus is until FR15 ships. The Trigger binding and side-effect lines and FR9 name
   the anchor, the trigger unless `usePopover` names another element. The
   "no viewport-rectangle anchor" line stays and names `usePopover`'s element
   anchor. Released default preserved notes the FR22 changes.
@@ -337,8 +337,6 @@ Dialog and DropdownMenu.
   - The rich text editor's link form, a dialog popover in a published package.
   - The `LayerSamePress` story and Popover's own tests.
 
-FR9 gap: outside presses close the popover through native light dismiss, which
-no caller can cancel.
 FR12 gap: focus containment is active whenever the popover is open, whatever
 `isModal` says.
 FR15 gap: Escape on a non-modal popover closes it through native auto light
