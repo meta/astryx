@@ -45,19 +45,19 @@ and stays consistent with `spec:AST-131/FR7` (bundled folders) and
 
 ## Why this exists
 
-Each piece has an open-source alternative that works well. Every one of them
-ships native code, so an app that is JavaScript only, or a project opened in
-the Astryx app's Preview, cannot add it. The platform package already links
+An app could reach each piece through an open-source library instead. Every
+such library ships native code, so a JavaScript-only app, or a project opened
+in the Astryx app's Preview, cannot add it. The platform package already links
 the system web engine for the web view (`spec:AST-131`), so these modules add
 no new framework to an app that opts `web` in.
 
-| Piece                 | What the ecosystem already does well                                                                                                                                                                                                | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                          |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAuthSession`   | react-native-app-auth wraps the AppAuth SDKs: OAuth and OpenID Connect with discovery, token exchange, and refresh. expo-web-browser opens the system's authentication session, and expo-auth-session builds OAuth on it with PKCE. | All three ship native code (expo-auth-session also needs the Expo modules runtime, `spec:AST-112/FR11`). The platform adds what they do not: a redirect URI per runtime and a state bound natively, so a Preview project never receives the app's or another project's callback, and results with closed reasons. Token exchange stays the app's, over `fetch` (Non-goals). |
-| `AstryxWebSessions`   | react-native-webview isolates or shares cookies per app (`incognito`, `sharedCookiesEnabled`); a cookie library such as @react-native-cookies/cookies writes the native cookie store.                                               | Both ship native code, and neither gives one view its own store with cookies that never cross the bridge as props. The session handle carries cookies, an ephemeral store, page storage off, and a pin that holds across redirects into the view (`spec:AST-131/FR8`).                                                                                                      |
-| `AstryxWebData`       | react-native-webview clears one view's cache through its ref, and cookie libraries clear the whole native cookie store.                                                                                                             | Both ship native code. Clearing the whole cookie store also signs the app's own `fetch` session out. The platform clears the runtime's page store in one call, spares the network cookie jar, and can clear the store when the last view closes, at the next start too (DEC-1).                                                                                             |
-| `AstryxWebBundles`    | react-native-webview loads local files with `allowFileAccess`; react-native-fs or expo-file-system copies a folder out of the app bundle, and a static server library serves it over a loopback port.                               | Every combination ships native code. File access lets the page read other files, and a loopback server is reachable by any local process. The platform serves the folder from a private origin with no network and answers the page's data requests through a byte route the app handles in JavaScript (DEC-2), with warm pages that open at once (`spec:AST-131/FR7`).     |
-| `AstryxPageSnapshots` | react-native-view-shot captures a mounted view, and a react-native-webview mounted offscreen can draw a document.                                                                                                                   | Both ship native code, and an offscreen web view runs the document's script with network access. The platform draws the document inert: script off, nothing loaded but the images it carries, a store that keeps nothing. No Astryx component uses it, so its place in the package is a scope question (OQ2).                                                               |
+| Piece                 | Why the platform owns it                                                                                                                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAuthSession`   | react-native-app-auth, and expo-auth-session with expo-web-browser, are complete OAuth clients but ship native code. The module adds a redirect URI per runtime and a state bound natively, so a Preview project never receives another runtime's callback (DEC-3). |
+| `AstryxWebSessions`   | react-native-webview's per-app cookie modes with a cookie library ship native code and cannot give one view a store of its own with cookies that never cross as props. The handle carries them into the view (`spec:AST-131/FR8`).                                  |
+| `AstryxWebData`       | Clearing web data through a cookie library ships native code and signs the app's own `fetch` session out. The module clears the page store alone, and can clear it when the last view closes (DEC-1).                                                               |
+| `AstryxWebBundles`    | Serving a bundled folder through react-native-webview's file access and a file library ships native code and gives the page file access. The module serves a private origin with no network and a byte route the app answers in JavaScript (DEC-2).                 |
+| `AstryxPageSnapshots` | Capturing an offscreen react-native-webview with react-native-view-shot ships native code and runs the document's script. The module draws the document inert (DEC-4). No Astryx component uses it, so its place in the package is a scope question (OQ2).          |
 
 ## Who uses it
 
@@ -111,13 +111,15 @@ no new framework to an app that opts `web` in.
   | `AstryxPageSnapshots` | native module (Turbo Native Module) | `getConstants` (`version`, `isSupported`), `capture`, `cancel`                                                             | iOS, Android |
   | `AstryxAuthSession`   | native module (Turbo Native Module) | `getConstants` (`version`), `isSupported`, `start`, `cancel`, `getRedirectUri`, `createPkce`                               | iOS, Android |
   - Every method takes one request object and resolves one result object
-    with `status`, `reason`, and `message` (`spec:AST-112/FR8`). `cancel` on
-    `AstryxAuthSession` returns nothing; the open sign-in settles `cancelled`.
+    with `status`, `reason`, and `message` (`spec:AST-112/FR8`), `cancel`
+    included.
   - `prewarm` and `releaseWarm` exist on iOS only (FR13).
 
 - **FR2 — The JavaScript objects.** Each object has `isAvailable()` and
-  `version()` (`spec:AST-112/FR7`), and its calls resolve `AstryxResult`
-  (`spec:AST-112/FR6`):
+  `version()`, and `AstryxWebData`, `AstryxWebBundles`, and
+  `AstryxAuthSession`, which have named features (FR13), have
+  `supports(feature)` (`spec:AST-112/FR7`). Their calls resolve
+  `AstryxResult` (`spec:AST-112/FR6`):
   - `AstryxWebSessions`: `create({cookies?, isEphemeral?, allowsPageStorage?,
 pin?})` answers `{sessionId}`; `remove(sessionId)`.
   - `AstryxWebData`: `clear()` answers `{isHttpCacheCleared,
@@ -131,7 +133,8 @@ isImageCacheCleared}`; `setPolicy({clearsWhenLastViewCloses})`.
   - `AstryxPageSnapshots`: `capture({html}, {width, height, timeoutMs?,
 background?, maxPixels?, signal?})` answers `{file, name, width, height,
 isBlank}`.
-  - `AstryxAuthSession`: `signIn(request)` answers `{url}`; `cancel()`;
+  - `AstryxAuthSession`: `signIn(request)` answers `{url}`; `cancel()`
+    answers `ok` whether or not a sign-in was open;
     `getRedirectUri({callbackScheme?, path?})` answers `{uri}`; `createPkce()`
     answers `{pkce: {verifier, challenge, method, state}}`.
   - The library's `useAuthSession()` hook returns `isAvailable` and the same
@@ -144,9 +147,8 @@ isBlank}`.
   runtime, and one of its own for each Preview project. Sessions, bundles and
   their byte-route requests, the page store and its policy, snapshot files,
   and redirect URIs belong to the runtime that made them. A project never
-  reaches the app's or another project's. Calls that only the app's runtime
-  may make answer `not-allowed` in a project: `prewarm`, `capture`, and
-  `register`.
+  reaches the app's or another project's. `register` and `capture` answer
+  `not-allowed` in a project, and a project's `prewarm` keeps nothing.
 
 - **FR4 — `AstryxWebSessions` holds an embedded page's session natively.**
   - `create` takes `cookies` (`{name, value, domain, path?}`), `isEphemeral`
@@ -223,16 +225,17 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     an error status. A request with no answer after 30 seconds is served
     `504`. A request whose page went away is dropped, and an answer to it, a
     second answer, or an unknown id answers `no-request`.
-  - With `AstryxWebBundles.warmPages` (FR13), `prewarm` keeps `count` (default
-    1. loaded pages of a registered bundle at `path` (default `/index.html`)
-       for a view with `warm` to adopt (`spec:AST-131/FR7`). The pages wait out
-       of sight, hidden from accessibility, with a bundle view's hardening and a
-       store that keeps nothing. The pool warms a new page after each adoption,
-       drops every page on a memory warning or when the app goes to the
-       background, and warms again when it returns. The platform sets no limit
-       on `count`. A bad name, path, or count, an unregistered bundle, or a
-       binary without the feature keeps nothing, and each view then loads its
-       own page.
+  - With `AstryxWebBundles.warmPages` (FR13), `prewarm` keeps `count` loaded
+    pages of a registered bundle (a whole number, at least one; default one)
+    at `path` (default `/index.html`) for a view with `warm` to adopt
+    (`spec:AST-131/FR7`). The pages wait out of sight, hidden from
+    accessibility, with a bundle view's hardening and a store that keeps
+    nothing. The pool warms a new page after each adoption, drops every page
+    on a memory warning or when the app goes to the background, and warms
+    again when it returns. The platform sets no limit on `count`. A bad name,
+    path, or count, an unregistered bundle, a Preview project's call, or a
+    binary without the feature keeps nothing, and each view then loads its
+    own page.
   - A runtime's bundles, pools, and open requests go when the runtime goes.
 
 - **FR7 — `AstryxPageSnapshots` draws an HTML document inert.**
@@ -242,6 +245,8 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     `width` and `height` in pixels, and `isBlank` (every pixel is the
     background). The picture is taken when the load finishes or at
     `timeoutMs` (default 2000), whichever comes first, as the page stands.
+    When the engine does not draw the picture within a further `timeoutMs`
+    (a hung renderer), `capture` answers `timeout`.
     `background` (default `#ffffff`) is the canvas under the page.
     `maxPixels` (default the layout size times the screen's scale) is the
     picture's longest side.
@@ -320,9 +325,10 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
   | `AstryxWebBundles`    | `invalid-config` (a name, path, body, or status the platform cannot serve), `not-found` (no such folder or cache file), `no-request`                                                  |
   | `AstryxPageSnapshots` | `timeout`, `unsupported-content` (the engine refused the document, or its content process ended), `unavailable`, `invalid-option` (a size, time, colour, or pixel count out of range) |
   | `AstryxAuthSession`   | `no-window`, `busy`, `invalid-url`, `scheme-not-registered`, `no-browser`, `missing-state`, `wrong-project`, `state-mismatch`, `origin-not-trusted`, `redirect-not-owned`             |
-  - `not-allowed` covers a call only the app's runtime may make (FR3) and a
-    project sign-in the person declined; `origin-not-trusted` is a project
-    origin the Astryx app does not admit (Non-goals).
+  - `not-allowed` is a call only the app's runtime may make (FR3).
+    `cancelled` is a sign-in the person closed or a project sign-in whose
+    consent the person declined (`spec:AST-112/FR6`). `origin-not-trusted` is
+    a project origin the Astryx app does not admit (Non-goals).
 
 - **FR11 — Threads and lifecycle.** No call blocks the UI thread. Snapshot
   and cache work runs off the main thread. The web engine's own calls run on
@@ -379,16 +385,18 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
     networking client through a field React Native does not publish.
 
 - **FR15 — Astryx Stage implements each module.**
-  - `AstryxWebSessions`, `AstryxWebData`, and `AstryxWebBundles`: the same
-    registry, store, policy, and byte route as a device, served by the
-    system web view on macOS (`spec:AST-131` Platform support).
-  - `AstryxAuthSession`: the sign-in opens in the system browser. A flow whose
-    `redirect_uri` uses the callback scheme comes back through a loopback
-    redirect on `127.0.0.1` that takes one request with the right path and
-    state. On macOS a custom-scheme callback uses `ASWebAuthenticationSession`;
-    on Linux a short-lived scheme handler for a scheme the app declares, for
-    a flow with a state. A headless run opens nothing, and a script step
-    supplies the callback. The same routing checks as a device apply (FR8).
+  - `AstryxWebSessions`, `AstryxWebData`, and `AstryxWebBundles` behave as on a
+    device wherever Astryx Stage shows a web view (macOS,
+    `spec:AST-131` Platform support): the same sessions, page store, policy,
+    bundled folders, and byte route.
+  - `AstryxAuthSession`: the sign-in opens in the desktop's browser. A flow
+    whose `redirect_uri` uses the callback scheme comes back through a
+    loopback redirect on `127.0.0.1` that accepts one request with the right
+    path and state. On macOS a custom-scheme callback comes back through the
+    system's sign-in sheet. On Linux it comes back only while a sign-in with a
+    state is open, and only on a scheme the app declares. A headless run opens
+    nothing, and a script step supplies the callback. The same routing checks
+    as a device apply (FR8).
   - FR15 gap: Astryx Stage has no `AstryxPageSnapshots`; `isAvailable()`
     answers false there.
   - FR15 gap: Astryx Stage keeps no warm pages and does not list
@@ -401,13 +409,13 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 ### Platform support
 
-| Contract              | iOS                                                                                                         | Android                                                                                                                        | Astryx Stage                                                                                |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `AstryxWebSessions`   | In-memory registry; `WKWebsiteDataStore.nonPersistentDataStore()` for an ephemeral store                    | In-memory registry; a WebView profile of the view's own, deleted with it                                                       | The same registry; macOS system web view                                                    |
-| `AstryxWebData`       | A data store by identifier for the page store (iOS 17 and later); before 17, pages run with no page storage | A WebView profile for the page store where the device has multiple profiles; otherwise pages run with no page storage          | Clears the plugin's store; counts its views for the policy                                  |
-| `AstryxWebBundles`    | `WKURLSchemeHandler` for the private origin and byte route; warm pool                                       | Request interception on a reserved `.invalid` https host; the byte route answers on the engine's request thread; no warm pages | Registry and byte route; macOS system web view; no warm pages                               |
-| `AstryxPageSnapshots` | Offscreen `WKWebView`, content script off, `WKURLSchemeHandler`, content rule list, non-persistent store    | Offscreen `WebView`, script off, request interception, network loads blocked, a throwaway profile; needs multiple profiles     | Absent (FR15)                                                                               |
-| `AstryxAuthSession`   | `ASWebAuthenticationSession`; `SFSafariViewController` with `safariView`                                    | Auth Tab (AndroidX Browser) where the browser has one, else a Custom Tab; a redirect activity for the callback schemes         | System browser with a loopback redirect; macOS authentication session; Linux scheme handler |
+| Contract              | iOS                                                                                                      | Android                                                                                                           | Astryx Stage                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxWebSessions`   | Sessions in memory only; an ephemeral store is discarded with its view                                   | Sessions in memory only; an ephemeral store is deleted with its view, with no Cache API or service workers        | As on a device, where Stage shows a web view                                                                                  |
+| `AstryxWebData`       | A page store apart from the network cookie jar on iOS 17 and later; before 17, pages run with no storage | A page store apart from the network cookie jar where the WebView has multiple profiles; otherwise no page storage | As on a device: clears the page store; the policy counts its views                                                            |
+| `AstryxWebBundles`    | `astryx-bundle://<name>/` origin with no network; warm pages                                             | An https origin on a reserved `.invalid` host that no DNS lookup answers, with no network; no warm pages          | Bundled folders and byte route as on a device, where Stage shows a web view; no warm pages                                    |
+| `AstryxPageSnapshots` | The inert contract on every supported version                                                            | The inert contract where the WebView has multiple profiles and request interception; elsewhere `unavailable`      | Absent (FR15)                                                                                                                 |
+| `AstryxAuthSession`   | The system's web authentication sheet; the in-app Safari view with `safariView`; ephemeral when asked    | The browser's Auth Tab where it has one, else a Custom Tab; ephemeral only in an Auth Tab                         | Sign-in in the desktop browser; callbacks through a loopback redirect, the macOS sign-in sheet, or a declared scheme on Linux |
 
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, Android API level 24, the New Architecture only), with the
@@ -421,10 +429,14 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 ## Current-state impact
 
-- None beyond `spec:AST-112`. This record details its FR3 (the `web`
-  capability stays opt-in), FR6 (the modules' closed reasons), FR7 (their
-  probes and features), FR8 (the group's revision-1 baseline), and FR12
-  (the modules in Astryx Stage).
+- `spec:AST-112/FR1` names the `web` capability as the web view and the
+  sign-in session. This record amends that list: `web` holds the web view,
+  its sessions and page store, bundled web content, page snapshots, and the
+  sign-in session.
+- Otherwise none beyond `spec:AST-112`. This record details its FR3 (the
+  `web` capability stays opt-in), FR6 (the modules' closed reasons), FR7
+  (their probes and features), FR8 (the group's revision-1 baseline), and
+  FR12 (the modules in Astryx Stage).
 - It states the full contract of `AstryxWebSessions`, `AstryxWebData`,
   `AstryxWebBundles`, `AstryxPageSnapshots`, and `AstryxAuthSession`, which
   `spec:AST-131` places in the `web` capability and leaves to this record. It
@@ -432,24 +444,24 @@ contentRange?, errorCode?})`. `body` is one of `{text}` (UTF-8),
 
 ## Verification
 
-| Contract | Verification                                                                                                    | Representative states                                                                                           | Mutation or failure expectation                                                                                          |
-| -------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | The platform's spec rules check; the contracts list against the codegen specs; built app without and with `web` | each module; `web` opted out and in                                                                             | A module is missing, read with `getEnforcing` or outside its wrapper, or linked without the opt-in                       |
-| FR2      | Unit tests of each object and of `useAuthSession` through the `./testing` doubles                               | each method; a hook re-render; a request without `rootTag`                                                      | A call rejects, a callback identity changes on re-render, or the root tag is not filled in                               |
-| FR3      | Simulator and emulator checks with the app's runtime and two Preview projects                                   | a session, a bundle, a page store, a snapshot, and a redirect URI made in each runtime                          | One runtime reaches another's, or a project's `prewarm`, `capture`, or `register` succeeds                               |
-| FR4      | Unit tests of the refusals; Simulator and emulator checks of a session in a view                                | cookies with and without `isEphemeral`; a bad cookie; an http pin; `remove` then a new mount                    | A cookie value appears in props or logs, a refused session gets an id, or a removed id loads a page                      |
-| FR5      | Simulator and emulator checks of the store, the network jar, and the caches; a process end with a view open     | `clear()` with a signed-in `fetch`; the policy on and off; a device without separate page profiles              | The network jar loses a cookie, a page keeps storage after a clear, or the start clear does not run                      |
-| FR6      | Unit tests of the name and path rules; Simulator, emulator, and Astryx Stage scripts of the byte route          | each body kind; a ranged `file`; a stream; no answer for 30 seconds; a second answer; `prewarm` and an adoption | A refused path reaches the app, a header is missing, a late request is not `504`, or a second answer is accepted         |
-| FR7      | Simulator and emulator checks with hostile documents; unit tests of the option rules                            | a script, a remote image, a refresh, a frame, a storage write; a cancel; a file-cache clear mid-job             | Any script runs, any request leaves the device, a cancelled job leaves a file, or the same inputs give two names         |
-| FR8      | Simulator, emulator, and device sign-ins against a test provider; unit tests of the routing checks              | success; close; a wrong state; a project with another namespace; two sign-ins at once; a loopback http URL      | A callback with the wrong state is handed over, a project receives another runtime's callback, or a second sign-in opens |
-| FR9      | Log and trace capture during the FR4 to FR8 checks; source check of the generators                              | a sign-in, a session, a byte-route request                                                                      | A cookie value, callback URL, code, or verifier appears in a log, trace, or message                                      |
-| FR10     | Unit tests through the doubles in their absent, older, and current shapes                                       | each reason; an unknown native reason                                                                           | A call throws, or a reason falls outside the set                                                                         |
-| FR11     | Main-thread hang checks during snapshots, clears, and byte-route answers; reload checks                         | a long snapshot queue; a reload with an open request and an open sign-in                                        | The UI thread stalls, or a request or sign-in outlives its runtime                                                       |
-| FR12     | Platform tests with the module absent, not linked, and switched off                                             | each object; `useAuthSession`; `subscribe`                                                                      | A call rejects, `isAvailable()` answers true, or the wrong common reason is returned                                     |
-| FR13     | Unit tests of `hasContractFeature` per platform; Stage version floor check                                      | each feature present and absent; an older Astryx Stage                                                          | A call uses a feature the binary does not list, or an older Astryx Stage runs the project                                |
-| FR14     | Source check of the native code's symbols on both platforms                                                     | the default app with `web` opted in                                                                             | A symbol outside the named public frameworks is used                                                                     |
-| FR15     | Astryx Stage contract suites, headless and in a window                                                          | a session view, a clear, a byte-route page, a scripted sign-in callback, a loopback sign-in                     | Astryx Stage behaves differently from a device without a gap line                                                        |
-| FR16     | VoiceOver and TalkBack checks of the sign-in sheet; accessibility tree check with a warm pool                   | an open sign-in; a pool of two warm pages                                                                       | A warm page appears in the accessibility tree, or the sheet is not read                                                  |
+| Contract | Verification                                                                                                    | Representative states                                                                                                                                                      | Mutation or failure expectation                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| FR1      | The platform's spec rules check; the contracts list against the codegen specs; built app without and with `web` | each module; `web` opted out and in                                                                                                                                        | A module is missing, read with `getEnforcing` or outside its wrapper, or linked without the opt-in                       |
+| FR2      | Unit tests of each object and of `useAuthSession` through the `./testing` doubles                               | each method; a hook re-render; a request without `rootTag`                                                                                                                 | A call rejects, a callback identity changes on re-render, or the root tag is not filled in                               |
+| FR3      | Simulator and emulator checks with the app's runtime and two Preview projects                                   | a session, a page store, and a redirect URI in each runtime; a bundle, a snapshot, and a warm pool in the app's runtime; `register`, `capture`, and `prewarm` in a project | One runtime reaches another's, a project's `register` or `capture` succeeds, or a project's `prewarm` keeps a page       |
+| FR4      | Unit tests of the refusals; Simulator and emulator checks of a session in a view                                | cookies with and without `isEphemeral`; a bad cookie; an http pin; `remove` then a new mount                                                                               | A cookie value appears in props or logs, a refused session gets an id, or a removed id loads a page                      |
+| FR5      | Simulator and emulator checks of the store, the network jar, and the caches; a process end with a view open     | `clear()` with a signed-in `fetch`; the policy on and off; a device without separate page profiles                                                                         | The network jar loses a cookie, a page keeps storage after a clear, or the start clear does not run                      |
+| FR6      | Unit tests of the name and path rules; Simulator, emulator, and Astryx Stage scripts of the byte route          | each body kind; a ranged `file`; a stream; no answer for 30 seconds; a second answer; `prewarm` and an adoption                                                            | A refused path reaches the app, a header is missing, a late request is not `504`, or a second answer is accepted         |
+| FR7      | Simulator and emulator checks with hostile documents; unit tests of the option rules                            | a script, a remote image, a refresh, a frame, a storage write; a cancel; a file-cache clear mid-job                                                                        | Any script runs, any request leaves the device, a cancelled job leaves a file, or the same inputs give two names         |
+| FR8      | Simulator, emulator, and device sign-ins against a test provider; unit tests of the routing checks              | success; close; a wrong state; a project with another namespace; two sign-ins at once; a loopback http URL                                                                 | A callback with the wrong state is handed over, a project receives another runtime's callback, or a second sign-in opens |
+| FR9      | Log and trace capture during the FR4 to FR8 checks; source check of the generators                              | a sign-in, a session, a byte-route request                                                                                                                                 | A cookie value, callback URL, code, or verifier appears in a log, trace, or message                                      |
+| FR10     | Unit tests through the doubles in their absent, older, and current shapes                                       | each reason; an unknown native reason                                                                                                                                      | A call throws, or a reason falls outside the set                                                                         |
+| FR11     | Main-thread hang checks during snapshots, clears, and byte-route answers; reload checks                         | a long snapshot queue; a reload with an open request and an open sign-in                                                                                                   | The UI thread stalls, or a request or sign-in outlives its runtime                                                       |
+| FR12     | Platform tests with the module absent, not linked, and switched off                                             | each object; `useAuthSession`; `subscribe`                                                                                                                                 | A call rejects, `isAvailable()` answers true, or the wrong common reason is returned                                     |
+| FR13     | Unit tests of `hasContractFeature` per platform; Stage version floor check                                      | each feature present and absent; an older Astryx Stage                                                                                                                     | A call uses a feature the binary does not list, or an older Astryx Stage runs the project                                |
+| FR14     | Source check of the native code's symbols on both platforms                                                     | the default app with `web` opted in                                                                                                                                        | A symbol outside the named public frameworks is used                                                                     |
+| FR15     | Astryx Stage contract suites, headless and in a window                                                          | a session view, a clear, a byte-route page, a scripted sign-in callback, a loopback sign-in                                                                                | Astryx Stage behaves differently from a device without a gap line                                                        |
+| FR16     | VoiceOver and TalkBack checks of the sign-in sheet; accessibility tree check with a warm pool                   | an open sign-in; a pool of two warm pages                                                                                                                                  | A warm page appears in the accessibility tree, or the sheet is not read                                                  |
 
 ## Decision log
 
