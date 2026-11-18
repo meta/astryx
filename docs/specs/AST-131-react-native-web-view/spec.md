@@ -39,8 +39,7 @@ evolution (`spec:AST-140/FR5`). It specifies the native web view
 the session registry (`AstryxWebSessions`) the view depends on, which the
 library's `WebView` and `WebContent` use; the three are core, within the
 opt-in `web` capability. `WebView` is the web view's public face; the native
-view is internal implementation behind it (`spec:AST-112/FR5`,
-`spec:AST-112/FR21`).
+view is internal implementation behind it (`spec:AST-112/FR5`).
 
 ## Why this exists
 
@@ -296,7 +295,7 @@ grantsOrigin?}` (an HTML string).
     default) and reports `onError` with `no-native-view` once.
   - Where there is no web view (not opted in, Jest, the web, or the platform
     switched off through the capabilities provider), the library's components
-    draw their own fallback; their records own its content. The handle's
+    draw their own fallback. The handle's
     `postMessage` does nothing there.
 - **FR16 — Accessibility.** The engine exposes the page's own structure
   (headings, links, form fields, text) to VoiceOver and TalkBack, and the
@@ -323,10 +322,10 @@ grantsOrigin?}` (an HTML string).
 
 ### Platform support
 
-| Contract            | iOS                                                                                 | Android                                                                                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxWebView`     | WebKit (`WKWebView`). Every named feature; `preventsCapture` is best effort (FR11). | Android System WebView (`android.webkit.WebView`) with AndroidX WebKit. Every named feature but `linkMenu`. A content process end is reported on Android 8.0 and later. |
-| `AstryxWebViewInfo` | `channelIsolation` is true; `pageProfile` is true on iOS 17 and later.              | Both constants follow the installed WebView: `channelIsolation` needs its frame-aware message support, `pageProfile` its support for separate profiles.                 |
+| Contract            | iOS                                                                                                                                                 | Android                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxWebView`     | WebKit (`WKWebView`). Every named feature but `preventsCapture`, which it reports as not supported (FR11); capture prevention there is best effort. | Android System WebView (`android.webkit.WebView`) with AndroidX WebKit. Every named feature but `linkMenu`. A content process end is reported on Android 8.0 and later. |
+| `AstryxWebViewInfo` | `channelIsolation` is true; `pageProfile` is true on iOS 17 and later.                                                                              | Both constants follow the installed WebView: `channelIsolation` needs its frame-aware message support, `pageProfile` its support for separate profiles.                 |
 
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, Android API level 24, the New Architecture only), with the
@@ -342,7 +341,7 @@ grantsOrigin?}` (an HTML string).
 
 - Relies on `spec:AST-112` FR1 (amended): the `web` capability holds the web
   view, its device report, and the session registry.
-- Relies on `spec:AST-112` FR5 and FR21 (amended): native views are internal
+- Relies on `spec:AST-112` FR5 (amended): native views are internal
   implementation behind components, and `WebView` is the web view's public
   face (FR1, FR2).
 - Relies on `spec:AST-112` FR7 (amended): each group of the platform has its
