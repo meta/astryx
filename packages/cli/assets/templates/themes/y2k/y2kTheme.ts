@@ -442,6 +442,9 @@ export const y2kTheme = defineTheme({
     '--radius-container': '0px',
     '--radius-page': '0px',
     '--radius-full': '0px',
+    // Set, so a theme that extends Y2K and sets its own container radius
+    // keeps square chat surfaces.
+    '--radius-chat': '0px',
 
     // =========================================================================
     // Shadows — warm cream neutral
