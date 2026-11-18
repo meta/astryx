@@ -365,6 +365,25 @@ describe('the workflow', () => {
     expect(calls.reRunWorkflow).toEqual([15]);
   });
 
+  it('starts a draft marked ready after its gates passed, once that first run ends', async () => {
+    // A draft runs no CI; marking it ready starts a first attempt that defers,
+    // and that run's end starts the review-pass run.
+    vi.useFakeTimers();
+    const run = ciRun(18, 'h7', {pull_requests: [{number: 7}]});
+    const {calls} = await pass(
+      'workflow_run',
+      {workflow_run: run},
+      {
+        pulls: [pull(7, 'h7')],
+        runs: [run],
+        jobs: {18: deferredJobs},
+        statuses: {h7: passed},
+      },
+    );
+    vi.useRealTimers();
+    expect(calls.reRunWorkflow).toEqual([18]);
+  });
+
   it('gives a later head whose gates pass its own review-pass run', async () => {
     vi.useFakeTimers();
     const {calls} = await pass(

@@ -42,6 +42,8 @@ const ci = read('ci.yml');
 const lint = read('lint.yml');
 const prComment = read('pr-comment.yml');
 
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+
 // The jobs that skip on a deferred push.
 const HEAVY = [
   'test-ui',
@@ -180,7 +182,6 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
   it.each([
     ['re-run in full (review passed, or the pre-merge run)', {attempt: '2'}],
     ['a release merge-back', {head: 'chore/merge-v1.2.3-to-main'}],
-    ['release-critical', {labels: ['release-critical']}],
   ])('runs everything when the run is %s', (_, event) => {
     const github = pushEvent(event);
     expect(evaluate(HEAVY_CANDIDATE, {github})).toBe(false);
@@ -203,11 +204,67 @@ describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => 
     expect(heavyCi(github).result).toBe('skipped');
   });
 
-  it('never defers a release-critical pull request: its first push runs every suite (DEC-30)', () => {
-    const github = pushEvent({login: 'someone', labels: ['release-critical']});
-    expect(heavyCi(github).result).toBe('skipped');
-    for (const id of HEAVY.filter(item => item !== 'test-native-swift'))
-      expect(starts(id, github), id).toBe(true);
+  it('reads a release-critical label only when someone with write access applied it last (DEC-30)', async () => {
+    const job = ci.jobs['heavy-ci'];
+    const read = job.steps.find(item => item.id === 'release');
+    const labelled = pushEvent({
+      login: 'someone',
+      labels: ['release-critical'],
+    });
+    // The job still runs for a labelled pull request; its decision reads the label.
+    expect(evaluate(HEAVY_CANDIDATE, {github: labelled})).toBe(true);
+    expect(evaluate(read.if, {github: labelled})).toBe(true);
+    expect(evaluate(read.if, {github: pushEvent()})).toBe(false);
+    expect(
+      job.steps.find(item => item.uses?.startsWith('actions/checkout')).with[
+        'sparse-checkout'
+      ],
+    ).toContain('.github/scripts/lib');
+    // The step asks run-labels.cjs, as admission and the caps do.
+    process.env.RUN_LABELS_MODULE = '/run-labels.cjs';
+    const counts = async decide => {
+      const outputs = {};
+      await new AsyncFunction(
+        'github',
+        'context',
+        'core',
+        'importModule',
+        read.with.script.replaceAll('await import(', 'await importModule('),
+      )(
+        {},
+        {},
+        {
+          warning: () => {},
+          notice: () => {},
+          setOutput: (key, value) => (outputs[key] = value),
+        },
+        async specifier =>
+          specifier === 'node:url'
+            ? import('node:url')
+            : {
+                decideRunLabel: async ({suite, label}) => {
+                  expect([suite, label]).toEqual([
+                    'release-critical',
+                    'release-critical',
+                  ]);
+                  return decide();
+                },
+              },
+      );
+      return outputs.counts;
+    };
+    expect(await counts(() => true)).toBe('true');
+    // Applied last by someone without write access, or unreadable: it does
+    // not count, so the push defers.
+    expect(await counts(() => false)).toBe('false');
+    expect(
+      await counts(() => {
+        throw new Error('lookup failed');
+      }),
+    ).toBe('false');
+    expect(
+      job.steps.find(item => item.id === 'decide').env.RELEASE_CRITICAL,
+    ).toBe('${{ steps.release.outputs.counts }}');
   });
 
   it('names no author in the deferral, and keeps the shared agent logins in one list with the heavy-suite caps', () => {
@@ -327,13 +384,15 @@ describe('a deferred push', () => {
   // A Lab-only change runs only fast work, so it defers nothing either
   // (spec:AST-030 FR26).
   it.each([
-    ['true', 'false', 'false', ''],
-    ['false', 'true', 'false', ''],
-    ['false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
-    ['', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['true', 'false', '', 'false', ''],
+    ['false', 'true', '', 'false', ''],
+    ['false', 'false', 'true', 'false', ''],
+    ['false', 'false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['false', 'false', '', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['', '', '', 'true', HEAVY_DEFERRED_MESSAGE],
   ])(
-    'defers unless the change is spec-only or Lab-only (spec_only=%s, lab_only=%s → deferred=%s)',
-    (specOnly, labOnly, deferred, summary) => {
+    'defers unless the change is spec-only or Lab-only, or release-critical counts (spec_only=%s, lab_only=%s, release_critical=%s → deferred=%s)',
+    (specOnly, labOnly, releaseCritical, deferred, summary) => {
       const step = ci.jobs['heavy-ci'].steps.find(item => item.id === 'decide');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heavy-ci-'));
       try {
@@ -349,6 +408,7 @@ describe('a deferred push', () => {
               ...process.env,
               SPEC_ONLY: specOnly,
               LAB_ONLY: labOnly,
+              RELEASE_CRITICAL: releaseCritical,
               GITHUB_OUTPUT: output,
               GITHUB_STEP_SUMMARY: stepSummary,
               GITHUB_RUN_ID: '7',

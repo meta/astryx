@@ -57,8 +57,9 @@ export function ungated(condition) {
  * A run that defers the heavy suites (spec:AST-030 FR20, DEC-32): a
  * pull-request run into `main`, from any author, in its first attempt (a push,
  * or the pull request opened, reopened or marked ready). A release merge-back
- * and a release-critical pull request are never deferred. The `heavy-ci` job
- * runs only then, and defers unless the change is spec-only or Lab-only.
+ * is never deferred. The `heavy-ci` job runs only then, and defers unless the
+ * change is spec-only or Lab-only, or a release-critical label that someone
+ * with write access applied last counts (DEC-30).
  * The heavy suites run when review passes (ci-review-pass.yml re-runs the
  * run in full) and in merge-guard's pre-merge re-run.
  */
@@ -71,8 +72,7 @@ export const SHARED_AGENT_LOGINS = ['cixzhang'];
 
 export const HEAVY_CANDIDATE =
   "(github.event_name == 'pull_request' && github.run_attempt == '1' && " +
-  "github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v') && " +
-  "!contains(github.event.pull_request.labels.*.name, 'release-critical'))";
+  "github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))";
 
 /** `heavy-ci` decided to defer this push's heavy suites. */
 export const HEAVY_DEFERRED = "needs.heavy-ci.outputs.deferred == 'true'";
