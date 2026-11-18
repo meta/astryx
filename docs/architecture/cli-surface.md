@@ -801,8 +801,9 @@ non-interactive guarantee.
   and `--reverse`, which gives the page back. Its `missing` lists every file
   the restored page imports that it lacks, and every file the rendered file
   records as not carried; `exact` is true only when `missing` is empty and
-  every restored file matches its recorded checksum. `astryx experimental
-  import` follows the same rule: it reports the same `missing` and `exact`.
+  every restored file matches its recorded checksum.
+  `astryx experimental import` follows the same rule: it reports the same
+  `missing` and `exact`.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
