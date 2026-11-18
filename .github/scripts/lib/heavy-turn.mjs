@@ -14,6 +14,8 @@
  * is such a later attempt too.
  */
 
+import {workflowRunPullCandidates} from './workflow-run-pulls.mjs';
+
 /** The commit status the review gate writes (both halves: DEC-14). */
 export const REVIEW_STATUS = 'review-required';
 
@@ -52,26 +54,18 @@ export async function reviewStatus({github, owner, repo, sha}) {
 }
 
 /**
- * The pull requests a CI run belongs to. GitHub lists them on a run from this
- * repository but none on a fork's run, so a fork's open pull requests are
- * found by the run's head repository and branch, at the run's head.
+ * The pull requests a CI run belongs to, by the shared lookup. A fork's run
+ * names none, so a fork's open pull request is taken by the run's head
+ * repository and branch, and only at the run's head.
  * @param {{github: any, owner: string, repo: string, run: any}} input
  * @returns {Promise<number[]>}
  */
 export async function pullsForRun({github, owner, repo, run}) {
-  const listed = (run.pull_requests ?? []).map(pull => pull.number);
-  if (listed.length > 0) return listed;
-  const headOwner = run.head_repository?.owner?.login;
-  if (!headOwner || !run.head_branch) return [];
-  const {data} = await github.rest.pulls.list({
-    owner,
-    repo,
-    state: 'open',
-    head: `${headOwner}:${run.head_branch}`,
-    per_page: 100,
-  });
-  return data
-    .filter(pull => pull.head?.sha === run.head_sha)
+  const candidates =
+    (await workflowRunPullCandidates({github, owner, repo, run})) ?? [];
+  const named = (run.pull_requests ?? []).length > 0;
+  return candidates
+    .filter(pull => named || pull.head?.sha === run.head_sha)
     .map(pull => pull.number);
 }
 
