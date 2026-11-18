@@ -1679,10 +1679,11 @@ export function Slider({ref, ...props}: SliderProps) {
 
   // Text value display. The box reserves the width of the texts at, and one
   // step in from, each end of the range. The track then keeps its length while
-  // the value changes, and a dragged thumb stays under the pointer. A tabular
-  // digit or a space counts as 1ch, the width of the font's own zero, which no
-  // tabular digit or space exceeds. Any other character counts as 1em. One
-  // more pixel covers the browser's rounding of a text run's width.
+  // the value changes, and a dragged thumb stays under the pointer. A digit or
+  // a space counts as 1ch, the width of the font's own zero. With tabular
+  // figures no digit or space is wider; a font without them can still shift
+  // the track by a pixel or two. Any other character counts as 1em. One more
+  // pixel covers the browser's rounding of a text run's width.
   const textOf = (vs: ReadonlyArray<number>): string =>
     vs.map(displayValue).join(' – ');
   let textDisplay = null;
