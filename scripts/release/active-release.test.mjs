@@ -476,17 +476,18 @@ describe('active release branch authority', () => {
       (text, file, index) => text.replace(file, destinations[index]),
       before,
     );
-
-    expect(classifyReleaseDiff(entries)).toBe('version-bump');
-    expect(
+    const validateMove = overrides =>
       validateCodemodPromotionApplicabilityMove({
         before,
         after,
         entries,
         status: 'M',
         version: '0.7.17',
-      }),
-    ).toEqual([]);
+        ...overrides,
+      });
+
+    expect(classifyReleaseDiff(entries)).toBe('version-bump');
+    expect(validateMove()).toEqual([]);
     expect(
       validateReleaseDiff(entries, {
         validatedCodemodPromotionPaths: new Set([spec]),
@@ -496,15 +497,16 @@ describe('active release branch authority', () => {
       `release bump contains an unvalidated codemod-promotion applicability move: ${spec}`,
     );
 
-    expect(
-      validateCodemodPromotionApplicabilityMove({
-        before,
-        after: after.replace('{"paths"', '{"other"'),
-        entries,
-        status: 'M',
-        version: '0.7.17',
-      }),
-    ).toContain(
+    expect(validateMove({entries: entries.slice(0, -1)})).toContain(
+      `codemod promotion does not rename ${sources[1]} to ${destinations[1]}`,
+    );
+    expect(validateMove({before: `${before}${sources[0]}\n`})).toContain(
+      `${spec} must contain the exact pre-promotion pointer once: ${sources[0]}`,
+    );
+    expect(validateMove({status: 'D'})).toContain(
+      `${spec} may only be modified by a generated codemod promotion`,
+    );
+    expect(validateMove({after: after.replace('{"paths"', '{"other"')})).toContain(
       `${spec} may change only the exact applicability pointers moved by the codemod promotion`,
     );
     expect(classifyReleaseDiff(['M\tdocs/specs/AST-058/spec.md'])).toBe(
@@ -644,7 +646,8 @@ describe('active release branch authority', () => {
 +  1,
  );
  after();`,
-        expected: 'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+        expected:
+          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
       },
       {
         diff: `diff --git a/test.mjs b/test.mjs
@@ -707,8 +710,7 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
       );
     }
-    const portStatements =
-      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1,7 +1,7 @@
@@ -729,8 +731,7 @@ describe('active release branch authority', () => {
  cleanup();`);
     expect(portStatements).not.toContain('<unbounded changed statement>');
 
-    const multiStatementChange =
-      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1 +1 @@
@@ -738,10 +739,7 @@ describe('active release branch authority', () => {
 +safe(); expect(value).toBe(false);`);
     expect(multiStatementChange).toContain('expect(value).toBe(false);');
     expect(
-      repair({
-        changedLines: undefined,
-        changedStatements: multiStatementChange,
-      }),
+      repair({changedLines: undefined, changedStatements: multiStatementChange}),
     ).toContain(
       'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
     );
@@ -801,7 +799,8 @@ describe('active release branch authority', () => {
     roots.push(root);
     const testFile =
       'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
-    const before = 'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const before =
+      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
     const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
     const {cut} = createRepository(root, [
       {
@@ -881,7 +880,8 @@ describe('active release branch authority', () => {
         name: 'whitespaceRepair',
         parent: 'releaseBase',
         files: {
-          [testFile]: 'const ready = true;\nawait mouse Drag(page);\n\n',
+          [testFile]:
+            'const ready = true;\nawait mouse Drag(page);\n\n',
         },
       },
       {

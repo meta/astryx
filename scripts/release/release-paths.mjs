@@ -75,7 +75,10 @@ function classifyReleaseDiff(entries) {
 }
 
 if (process.argv.includes('--classify')) {
-  const entries = fs.readFileSync(0, 'utf8').split('\n').filter(Boolean);
+  const entries = fs
+    .readFileSync(0, 'utf8')
+    .split('\n')
+    .filter(Boolean);
   console.log(classifyReleaseDiff(entries));
 }
 

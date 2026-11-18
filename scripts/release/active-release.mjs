@@ -912,9 +912,7 @@ function validateReleaseTestRepair({
   for (const entry of entries) {
     const status = entry.split('\t', 1)[0];
     if (status !== 'M')
-      errors.push(
-        `release test repair may only modify an existing test: ${entry}`,
-      );
+      errors.push(`release test repair may only modify an existing test: ${entry}`);
     const files = diffEntryFiles(entry);
     if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
@@ -1012,7 +1010,11 @@ function validateReleaseTestRepairAtRef(
   ])
     .split('\n')
     .filter(Boolean);
-  const diff = gitRaw(root, ['diff', '--binary', `${mergeBase}..${head}`]);
+  const diff = gitRaw(root, [
+    'diff',
+    '--binary',
+    `${mergeBase}..${head}`,
+  ]);
   const changedStatements = changedStatementsFromDiff(
     git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
   );
@@ -1117,14 +1119,12 @@ function patchBuildsHead(root, base, head, patch) {
     execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
     execFileSync(
       'git',
-      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'],
-      {
-        cwd: root,
-        env,
-        input: patch.endsWith('\n') ? patch : `${patch}\n`,
-        stdio: ['pipe', 'ignore', 'ignore'],
-      },
-    );
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
+      cwd: root,
+      env,
+      input: patch.endsWith('\n') ? patch : `${patch}\n`,
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
     const tree = execFileSync('git', ['write-tree'], {
       cwd: root,
       env,
@@ -1159,9 +1159,7 @@ function validateReleasePolicyCarryAtRef(
       'release policy carry must contain exactly one non-merge commit',
     );
   if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
-    errors.push(
-      'release policy carry commit must directly follow the release head',
-    );
+    errors.push('release policy carry commit must directly follow the release head');
   if (!isAncestor(root, source, mainRef))
     errors.push('release policy carry source is not merged on current main');
   if (
@@ -1262,15 +1260,12 @@ function validateReleasePolicyCarryAtRef(
   };
 }
 
-const CODEMOD_PROMOTION_SPEC_PATH = 'docs/specs/AST-057-row-actions/spec.md';
+const CODEMOD_PROMOTION_SPEC_PATH =
+  'docs/specs/AST-057-row-actions/spec.md';
 const CODEMOD_PROMOTION_POINTERS = [
   'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
   'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
 ];
-
-function countOccurrences(text, value) {
-  return text.split(value).length - 1;
-}
 
 function validateCodemodPromotionApplicabilityMove({
   before,
@@ -1288,7 +1283,7 @@ function validateCodemodPromotionApplicabilityMove({
   let expected = before;
   for (const from of CODEMOD_PROMOTION_POINTERS) {
     const to = from.replace('/transforms/next/', `/transforms/v${version}/`);
-    if (countOccurrences(before, from) !== 1)
+    if (before.split(from).length !== 2)
       errors.push(
         `${CODEMOD_PROMOTION_SPEC_PATH} must contain the exact pre-promotion pointer once: ${from}`,
       );
@@ -1357,7 +1352,11 @@ function validateCodemodPromotionApplicabilityAtRef(
 
 function validateReleaseDiff(
   entries,
-  {plan, baseChangesets, validatedCodemodPromotionPaths = new Set()} = {},
+  {
+    plan,
+    baseChangesets,
+    validatedCodemodPromotionPaths = new Set(),
+  } = {},
 ) {
   const errors = [];
   const planned = plan
