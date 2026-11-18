@@ -2108,13 +2108,13 @@ describe('astryx experimental export (CLI)', () => {
       'many-files.html',
       `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', files.map(f => ({path: f.path, bytes: Buffer.from(f.text)})))}</body>`,
     );
-    const text = await runCli(['experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-text/page.tsx'], dir);
+    const text = await runCli(['experimental', 'export', '--reverse', 'many-files.html', '--out', 'many-text/page.tsx'], dir);
     expect(text.status).toBe(0);
     const line = text.stdout.split('\n').find(l => /^\s*files\b/.test(l)) ?? '';
     expect(line).toContain('styles/s09.css');
     expect(line).not.toContain('styles/s10.css');
     expect(line).toContain('... and 3 more in many-text/styles/');
-    const json = await runCli(['--json', 'experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-json/page.tsx'], dir);
+    const json = await runCli(['--json', 'experimental', 'export', '--reverse', 'many-files.html', '--out', 'many-json/page.tsx'], dir);
     expect(JSON.parse(json.stdout).data.files).toHaveLength(13);
   }, 60_000);
 });
