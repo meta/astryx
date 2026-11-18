@@ -7245,18 +7245,33 @@ export function draftAnswer(ctx, env, question) {
     /\b(?:theme|look|feel|vibe|style|palette|brand|branding)\b/.test(q) ||
     lookList;
   const namesAPart = clauses.some(c => c.parts.length > 0);
-  for (let i = clauses.length - 1; i >= 0 && !paintsAPart && !namesAPart; i--) {
+  for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
     if (c.parts.length || !c.colors.length || c.colors.length > 2 || c.except)
       continue;
+    // (With a part painted or named in the ask, a color said alone is
+    // never the theme's, "red, blue buttons"; only a gray said for the
+    // whole list, "calm muted blue-gray, …, striped table rows", is the
+    // neutral, where no part is named before it or right with it.)
+    const grayLook = /\b(?:gr[ae]y|bluegray|slate)\b/.test(c.text);
+    const next = clauses[i + 1];
+    const ownedHere =
+      clauses.slice(0, i).some(o => o.parts.length > 0) ||
+      Boolean(next?.parts.length);
+    if (grayLook ? ownedHere : paintsAPart || namesAPart) continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
         c.text,
       )
     )
       continue;
+    // (A gray said in a look listed in three pieces or more counts as a
+    // look even where a part it names comes after the color.)
+    const listLook =
+      lookSaid ||
+      (grayLook && q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3);
     if (
-      !lookSaid &&
+      !listLook &&
       (c.colors.length > 1 ||
         !/^\s*(?:a|an|the)?\s*(?:(?:light|dark|deep|rich|bright|pale|soft)\s+)?[a-z-]+\s*[.!]?\s*$/.test(
           c.text,

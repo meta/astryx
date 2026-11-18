@@ -163,6 +163,22 @@ describe('plain looks', () => {
       ]),
     );
     expect(corners.some(c => /corners|radius/.test(c))).toBe(true);
+    // (A color said alone before a part the list names later is still
+    // the theme's: the blue-gray is the neutral.)
+    expect(
+      top(
+        await how(
+          'q0',
+          'medical records table view: dense compact rows, calm muted blue-gray, small 13px text, clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical, striped table rows',
+        ),
+      ),
+    ).toContain(`set q0 neutral '#617090'`);
+    // (Only a gray: a hue said alone before a part is never the theme's.)
+    expect(
+      writes(await how('q0', 'red, blue buttons')).some(c =>
+        /^set q0 accent /.test(c),
+      ),
+    ).toBe(false);
     // (A status may lead with its label.)
     expect(
       top(
