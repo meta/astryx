@@ -130,9 +130,19 @@ export const theme = defineTheme({name: 'app', extends: base, tokens: {'--radius
       const once = await applyTransform(`${IMPORT}${body}`);
       expect(once.match(TODO)).toHaveLength(1);
       expect(once).toContain('extends a theme this upgrade does not migrate');
+      expect(once).toContain('If the base has an adaptation rule');
       expect(once).not.toContain("'--radius-chat'");
       expect(await applyTransform(once)).toBe(once);
     }
+
+    // A theme that sets the token still loses its base's adaptation rules.
+    const own =
+      await applyTransform(`${IMPORT}import {brandTheme} from '@acme/brand-theme';
+export const theme = defineTheme({name: 'app', extends: brandTheme, tokens: {'--radius-chat': '28px'}});`);
+    expect(own.match(TODO)).toHaveLength(1);
+    expect(own).toContain('If the base has an adaptation rule');
+    expect(own).not.toContain('add "--radius-chat" to its tokens');
+    expect(await applyTransform(own)).toBe(own);
   });
 
   it("leaves a TODO on an extending theme with its own radius scale, which also completes its base's adaptation rules", async () => {
