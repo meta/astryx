@@ -108,7 +108,8 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven: ancestor hover + focus (accessible default)
+  // CSS-driven reveals hide with opacity alone. Hidden content stays in the
+  // tab order, so Tab can reach an action and focus-within can reveal it.
   hoverReveal: {
     opacity: {
       default: 0,
@@ -116,13 +117,6 @@ const styles = stylex.create({
         '@media (hover: hover)': 1,
       },
       [stylex.when.ancestor(':focus-within', overlayScope)]: 1,
-    },
-    visibility: {
-      default: 'hidden',
-      [stylex.when.ancestor(':hover', overlayScope)]: {
-        '@media (hover: hover)': 'visible',
-      },
-      [stylex.when.ancestor(':focus-within', overlayScope)]: 'visible',
     },
     pointerEvents: {
       default: 'none',
@@ -158,10 +152,6 @@ const styles = stylex.create({
     opacity: {
       default: 0,
       [stylex.when.ancestor(':focus-within', overlayScope)]: 1,
-    },
-    visibility: {
-      default: 'hidden',
-      [stylex.when.ancestor(':focus-within', overlayScope)]: 'visible',
     },
     pointerEvents: {
       default: 'none',
@@ -276,7 +266,7 @@ export function OverlayScrim({
   return (
     <div
       {...mergeProps(
-        themeProps('overlay-scrim', {position}),
+        themeProps('overlay-scrim', {position, scrim: scrim || undefined}),
         stylex.props(
           styles.base,
           positionMap[position],

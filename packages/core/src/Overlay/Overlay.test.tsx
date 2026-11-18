@@ -162,6 +162,29 @@ describe('Overlay', () => {
       ).not.toBeInTheDocument();
     });
 
+    it.each(['dark', 'light'] as const)(
+      'reflects scrim="%s" as data-scrim on the scrim target',
+      scrim => {
+        const {container} = render(
+          <Overlay scrim={scrim} content={<span>c</span>}>
+            <div>b</div>
+          </Overlay>,
+        );
+        const target = container.querySelector('.astryx-overlay-scrim');
+        expect(target).toHaveAttribute('data-scrim', scrim);
+      },
+    );
+
+    it('reflects no data-scrim when scrim={false}', () => {
+      const {container} = render(
+        <Overlay scrim={false} content={<span>c</span>}>
+          <div>b</div>
+        </Overlay>,
+      );
+      const target = container.querySelector('.astryx-overlay-scrim');
+      expect(target).not.toHaveAttribute('data-scrim');
+    });
+
     it('scrim={false} renders no MediaTheme wrapper', () => {
       const {container} = render(
         <Overlay scrim={false} content={<span>c</span>}>

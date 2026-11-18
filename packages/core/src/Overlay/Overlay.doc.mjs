@@ -25,9 +25,19 @@ export const docs = {
           'Keep overlay content compact so it remains legible over the scrim and does not obscure important visual information.',
       },
       {
+        guidance: true,
+        description:
+          'Give an overlay action a specific visible label. With showOn hover or focus, Tab reaches the action while the overlay is hidden, and focus reveals the overlay.',
+      },
+      {
         guidance: false,
         description:
           'Do not use Overlay for floating content anchored outside the surface. Use Popover, Tooltip, or Dialog for those patterns.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not put information people need to choose the item, such as its title or price, only in a hover overlay. On a touch device it shows only after a tap.',
       },
     ],
     anatomy: [
@@ -183,7 +193,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-overlay'},
-      {className: 'astryx-overlay-scrim', visualProps: ['position']},
+      {className: 'astryx-overlay-scrim', visualProps: ['position', 'scrim']},
     ],
   },
 };
@@ -197,13 +207,15 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Use for short contextual actions/labels tied to the underlying surface.'},
       {guidance: true, description: 'Keep content compact and legible over the scrim.'},
+      {guidance: true, description: 'Give overlay actions a specific visible label; Tab reaches them while hidden, focus reveals.'},
       {guidance: false, description: 'Do not use for floating anchored surfaces; use Popover, Tooltip, or Dialog.'},
+      {guidance: false, description: 'Do not put info needed to choose the item (title, price) only in a hover overlay; touch shows it after a tap.'},
     ],
   },
   propDescriptions: {
     content: 'overlay content inside scrim; required',
     children: 'base media/card/surface beneath overlay',
-    showOn: 'visibility trigger; hover also focus-visible; default always',
+    showOn: 'visibility trigger; hover also reveals on focus within; default always',
     isOpen: 'controlled visibility override',
     scrim: 'dark/light scrim or false for no scrim; default dark',
     position: 'scrim placement: fill, bottom strip, or top strip',

@@ -352,3 +352,42 @@ export const NoScrim: Story = {
     </div>
   ),
 };
+
+const REVEAL_MODES = [
+  {showOn: 'hover', position: 'fill', label: 'Hover'},
+  {showOn: 'focus', position: 'fill', label: 'Focus'},
+  {showOn: 'hover', position: 'bottom', label: 'Hover strip'},
+  {showOn: 'always', position: 'fill', label: 'Always'},
+] as const;
+
+/**
+ * Each reveal mode over media that has no focusable element of its own, with
+ * an action in the overlay. Tab reaches each action, and focus reveals its
+ * overlay.
+ */
+export const RevealModes: Story = {
+  render: () => (
+    <div style={{width: 520}}>
+      <Grid columns={2} gap={4}>
+        {REVEAL_MODES.map(mode => (
+          <Overlay
+            key={mode.label}
+            showOn={mode.showOn}
+            position={mode.position}
+            align="center"
+            content={
+              <Button label={`${mode.label} action`} variant="secondary" />
+            }>
+            <AspectRatio ratio={16 / 9}>
+              <img
+                src={SAMPLE_IMAGE}
+                alt={`${mode.label} media`}
+                {...stylex.props(styles.image)}
+              />
+            </AspectRatio>
+          </Overlay>
+        ))}
+      </Grid>
+    </div>
+  ),
+};
