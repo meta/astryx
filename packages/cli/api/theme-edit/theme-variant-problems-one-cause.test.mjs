@@ -2,13 +2,13 @@
 
 /**
  * @file The same text in the same color failing on three or more of its
- * ground's variants (a colored card's text in every colored card) is one
- * problem for each text and mode, with each variant's line in one where
- * they have one.
+ * ground's variants (a colored card's own text on the dark fills a theme
+ * gives three colored cards) is one problem for each text and mode, with
+ * each variant's line in one where they have one.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -36,28 +36,34 @@ afterAll(() => {
 describe('one cause across a ground part variants', () => {
   it('is one problem for each text and mode, never one per variant', async () => {
     if (unbuilt) return;
-    // butter's colored cards write their own dark text; an accent that
-    // takes the category colors dark in dark leaves it failing on each.
-    const r = /** @type {any} */ (
-      await themeEditSet('g', 'accent', '#2563eb', {cwd})
-    ).data;
+    // butter's colored cards write their own dark text; dark fills the
+    // theme gives three of them leave that text failing on each.
+    for (const v of ['blue', 'green', 'purple'])
+      await themeEditSet('g', 'background-color', '#1e293b', {
+        cwd,
+        on: 'card',
+        when: `variant:${v}`,
+      });
+    const r = /** @type {any} */ (await themeEditShow('g', {cwd})).data;
     const problems =
       /** @type {Array<{problem: string, fix: string | null}>} */ (
-        r.newProblems
+        r.openProblems
       );
-    expect(
-      problems.filter(p =>
-        /^text \(".*"\) in \S+ on \d+ card variants /.test(p.problem),
-      ).length,
-    ).toBeGreaterThan(0);
+    const grouped = problems.filter(p =>
+      /^text \(".*"\) in \S+ on 3 card variants \(blue, green, purple\) /.test(
+        p.problem,
+      ),
+    );
+    expect(grouped.length).toBeGreaterThan(0);
     expect(
       problems.filter(p => /\(on card, variant \w+\)/.test(p.problem)),
     ).toEqual([]);
     // Each grouped problem's line, where it has one, is every variant's.
-    for (const p of problems.filter(
-      x => /card variants/.test(x.problem) && x.fix,
-    ))
-      for (const one of String(p.fix).split(' && '))
-        expect(one).toMatch(/ --on card --when variant:\w+/);
+    for (const p of grouped.filter(x => x.fix)) {
+      const lines = String(p.fix).split(' && ');
+      expect(lines).toHaveLength(3);
+      for (const one of lines)
+        expect(one).toMatch(/ --on card --when variant:(?:blue|green|purple) /);
+    }
   }, 600_000);
 });
