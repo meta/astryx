@@ -52,6 +52,7 @@ import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {
   Aperture,
@@ -2055,7 +2056,8 @@ export default function CanvasEditor() {
             </LayoutHeader>
           }
           content={
-            <LayoutContent padding={0}>
+            <LayoutContent role="main" padding={0}>
+              <VisuallyHidden as="h1">Canvas editor</VisuallyHidden>
               <Layout
                 height="fill"
                 start={

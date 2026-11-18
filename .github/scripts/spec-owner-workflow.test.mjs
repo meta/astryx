@@ -179,7 +179,7 @@ describe('spec-only workflow contract', () => {
     // and tests off for the spec-only lane.
     const docsiteJob = block('docsite-build', 'docsite-browser');
 
-    const checkout = docsiteJob.indexOf('- uses: actions/checkout@v7');
+    const checkout = docsiteJob.indexOf('uses: actions/checkout@v7');
     const setup = docsiteJob.indexOf('- uses: ./.github/actions/setup');
     const validate = docsiteJob.indexOf('- name: Validate spec records');
     expect(checkout).toBeGreaterThanOrEqual(0);

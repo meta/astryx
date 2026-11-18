@@ -284,7 +284,7 @@ function runAsMeant(cmd, path, stray, message, words, offered) {
  * @type {Record<string, Record<string, string>>}
  */
 const REMOVED_OPTIONS = {
-  'experimental render': {
+  'experimental export': {
     '--static': "--static is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",
     '--interactive':
       "--interactive is no longer an option: every render carries the page's script now. Drop the flag and run the command again.",

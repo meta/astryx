@@ -35,7 +35,6 @@
   "src/SideNav/SideNav.doc.mjs SideNav.children required_mismatch",
   "src/SideNav/SideNavHeading.doc.mjs SideNavHeading.as not_in_doc",
   "src/SideNav/SideNavSection.doc.mjs SideNavSection.children required_mismatch",
-  "src/Table/Table.doc.mjs Table.emptyState not_in_doc",
   "src/Table/Table.doc.mjs Table.scrollWrapper not_in_doc",
   "src/Table/TableCell.doc.mjs TableCell.colSpan not_in_doc",
   "src/Table/TableCell.doc.mjs TableCell.contextMenuActions not_in_doc",

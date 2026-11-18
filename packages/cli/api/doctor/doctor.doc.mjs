@@ -48,7 +48,7 @@ export const doc = {
     {
       type: 'doctor',
       description:
-        'The diagnostic report: `data.checks`, each with a stable id, label, `status` (`pass` | `warn` | `fail` | `info`), a one-line message, and an optional `fix` (always present on `warn` and `fail`; some `info` checks carry one too); plus `data.summary` with counts per status.',
+        'The diagnostic report: `data.checks`, each with a stable id, label, `status` (`pass` | `warn` | `fail` | `info`), a one-line message, an optional `brief` (a short form of a long message, which text output prints in its place; `--json` keeps the whole message), and an optional `fix` (always present on `warn` and `fail`; some `info` checks carry one too); plus `data.summary` with counts per status.',
     },
   ],
   examples: [

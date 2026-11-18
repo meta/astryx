@@ -119,6 +119,20 @@ describe('setConfigValues', () => {
     expect(text).not.toContain('iconVariant');
   });
 
+  it('removes an object a removal empties, and keeps one that still holds a key', () => {
+    writeConfig(
+      "export default {\n  integrations: [],\n  skills: {\n    to: 'skills',\n  },\n  experimental: {\n    iconSet: 'glyphs',\n    iconVariant: 'filled',\n  },\n};\n",
+    );
+    setConfigValues(dir, [
+      ['skills.to', null],
+      ['experimental.iconVariant', null],
+    ]);
+    const text = readConfig();
+    expect(text).not.toContain('skills');
+    expect(text).not.toContain('iconVariant');
+    expect(text).toMatch(/experimental: \{\s*iconSet: 'glyphs',?\s*\}/u);
+  });
+
   it('writes nothing when every field already has its value, or is already gone', () => {
     const before =
       "export default {\n  experimental: {iconSet: 'glyphs'},\n};\n";

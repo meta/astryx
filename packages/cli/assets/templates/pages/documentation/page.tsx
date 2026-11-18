@@ -214,13 +214,15 @@ export default function DocumentationOverviewPage() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={8}>
+        <LayoutContent role="main" padding={8}>
           <VStack gap={10}>
             <Card variant="gray" padding={10}>
               <HStack gap={8} vAlign="center">
                 <StackItem size="fill">
                   <VStack gap={4}>
-                    <Text type="display-1">Web overview</Text>
+                    <Text as="h1" type="display-1">
+                      Web overview
+                    </Text>
                     <Text type="large" weight="normal" color="secondary">
                       An open-source UI library to help developers quickly build
                       beautiful, accessible products.
