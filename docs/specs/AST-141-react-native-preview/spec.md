@@ -36,7 +36,7 @@ Preview conforms to Astryx React Native's contracts (`spec:AST-112`) and never
 defines them. `@astryxdesign/react-native` depends on no Preview host: an app
 builds and runs on its devices with no Preview, and it may use third-party
 libraries and another router beside the package. This record owns the
-`astryx rn preview …` commands, what a person does in the host, the
+`astryx experimental rn preview …` commands, what a person does in the host, the
 namespaces that keep a project apart, the Preview policy per module, and the
 checks and preparation before a project's code runs. A Preview project meets
 the same limits in every host that runs it (FR4).
@@ -56,7 +56,7 @@ project away from the app's own identity and data.
 
 | Who                                    | What they do with Preview                                                                                           |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A developer building an Astryx app     | Scans a QR code from `astryx rn preview` and uses the project on a real phone while it hot-reloads.                 |
+| A developer building an Astryx app     | Scans a QR code from `astryx experimental rn preview` and uses the project on a real phone while it hot-reloads.    |
 | An AI agent working on an Astryx app   | Prints the Preview link or writes a hosted bundle for a person, and checks the project against the host beforehand. |
 | A reviewer, designer, or product owner | Opens a hosted bundle from a link and tries the change on a phone.                                                  |
 | Astryx's own maintainers               | Check that a project meets the same limits in the Astryx app on iOS and on Android.                                 |
@@ -71,7 +71,7 @@ project away from the app's own identity and data.
 - Each native contract's behavior on iOS and Android. Its platform group
   record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states it; this record states
   only what a Preview project reaches of it (FR4).
-- The React Native commands outside the `astryx rn preview` group, and the
+- The React Native commands outside the `astryx experimental rn preview` group, and the
   rules every React Native command follows (`spec:AST-112/FR13`).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -91,8 +91,8 @@ project away from the app's own identity and data.
   app's scanner, from a photo, or with the system camera), by opening a
   Preview link, or by typing an address. The project comes from:
   - a developer's computer: the project's dev server on the local network,
-    which `astryx rn preview` prints as a link and a QR code; or
-  - a hosted bundle: a bundle that `astryx rn preview bundle` writes, served
+    which `astryx experimental rn preview` prints as a link and a QR code; or
+  - a hosted bundle: a bundle that `astryx experimental rn preview bundle` writes, served
     over HTTPS from any host (FR12).
 - **FR2 — No project code runs without the person's confirmation.** A
   scanned code and a Preview link opened from outside the app show a
@@ -178,7 +178,7 @@ project away from the app's own identity and data.
     main module runs, the host compares that with the native components,
     modules, versions, and named features it has; a project that needs one
     the host lacks is refused with a screen that names what is missing.
-    `astryx rn preview check` answers the same question on the developer's
+    `astryx experimental rn preview check` answers the same question on the developer's
     computer (FR12).
   - The host runs source bundles only. A precompiled bytecode bundle is
     refused before it runs.
@@ -224,22 +224,25 @@ project away from the app's own identity and data.
 
 ### The commands
 
-- **FR12 — `astryx rn preview` makes what a Preview host opens.**
+- **FR12 — `astryx experimental rn preview` makes what a Preview host opens.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
-  its other commands as an experimental group (DEC-6): its help text and its
-  documentation say that it is experimental, and it is outside the stable
-  compatibility promise (`spec:AST-017/FR21`). The group follows the rules of
+  its other commands as an experimental group (DEC-6). It sits under the
+  `astryx experimental` command group, the CLI's experimental namespace
+  (`spec:AST-017/FR27`, `spec:AST-084` FR0); no stable command gains a
+  Preview subcommand or option, its help text and its documentation say that
+  it is experimental, and it is outside the stable compatibility promise
+  (`spec:AST-017/FR21`). The group follows the rules of
   the other commands (`spec:AST-112/FR13`): it asks no question, prints one envelope under
   `--json`, prints plain text otherwise, exits 0 or 1 the same in text and
   JSON, and its outcomes differ by `code`.
 
-  | Command                    | Its one job                                                                                                                                                                                                                                                                                                                                                                                       |
-  | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `astryx rn preview`        | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, `--display-name <words>` is the name the link carries, and `--qr-png <file>` writes the link's QR code. |
-  | `astryx rn preview check`  | Compares the project's requirements with what a Preview host provides (FR7), and lists each requirement the host lacks.                                                                                                                                                                                                                                                                           |
-  | `astryx rn preview bundle` | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link (FR8).                                                                                                                                                                           |
-  | `astryx rn preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                       |
-  | `astryx rn preview share`  | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                      |
+  | Command                                 | Its one job                                                                                                                                                                                                                                                                                                                                                                                       |
+  | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `astryx experimental rn preview`        | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, `--display-name <words>` is the name the link carries, and `--qr-png <file>` writes the link's QR code. |
+  | `astryx experimental rn preview check`  | Compares the project's requirements with what a Preview host provides (FR7), and lists each requirement the host lacks.                                                                                                                                                                                                                                                                           |
+  | `astryx experimental rn preview bundle` | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link (FR8).                                                                                                                                                                           |
+  | `astryx experimental rn preview serve`  | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                       |
+  | `astryx experimental rn preview share`  | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                      |
   - `preview` answers for one platform: the one `--platform` names, `ios`
     otherwise. `preview bundle`, `preview serve`, and `preview share` act on
     every platform the app has unless `--platform ios|android` names one.
@@ -289,7 +292,7 @@ project away from the app's own identity and data.
 ## Current-state impact
 
 - `spec:AST-112` names this record for the Astryx app's Preview and the
-  `astryx rn preview …` commands; its library layer keeps the types and
+  `astryx experimental rn preview …` commands; its library layer keeps the types and
   manifest shape a previewed project uses (`spec:AST-112/FR1`), and its
   installers (`spec:AST-112/FR5`) are what the prelude installs (FR6).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
@@ -305,12 +308,12 @@ project away from the app's own identity and data.
 | FR4      | The app and two projects that read and write each store; a refused capability; a removed project, on iOS and Android                                | each store; each refused capability; a project that tries to remove another namespace's data | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, or a project that removes data it does not own                                                                |
 | FR5      | iOS and Android device runs of a project that calls each module in the table                                                                        | each row of FR5's table; a photo picked through the system picker                            | A project that changes the app's appearance, reads its launch facts, takes the app's players, reads the photo library, or gets a picked item outside its own cache                                                           |
 | FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project                               | a project; an app with two routers                                                           | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                                                     |
-| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                                        | a missing native piece; an older host                                                        | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                                                          |
+| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx experimental rn preview check`                                           | a missing native piece; an older host                                                        | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                                                          |
 | FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                                          | a valid link; each failed check; data written while open                                     | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                                                        |
 | FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                                                  | the Astryx app's build; a plain project                                                      | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                                                                 |
 | FR10     | Inspector picking over a project that counts its touches, presses, scrolls, drags, and menu opens, on iOS and Android                               | picking on; an element picked; picking turned off; leaving the project                       | A touch, press, scroll, drag, or menu that reaches the project while the shield shows, a project that gets no touches after the shield goes, or an inspector that names the wrong component                                  |
 | FR11     | A project that shows a sheet, a menu, and a modal window, with the exit control and the inspector over it, on iOS and Android; a screen reader walk | each kind of presentation; a touch outside the controls; screen reader on                    | A project surface drawn above the exit control, a touch outside the controls that does not reach the project, an exit control the screen reader cannot reach, or a project element the layer hides from assistive technology |
-| FR12     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR12's table; a share without terms                                  | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                                                    |
+| FR12     | CLI contract tests of `astryx experimental rn preview`: envelopes, exit codes, each code in FR12's table; a share without terms                     | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                                                    |
 | FR13     | Review of each native change's evidence                                                                                                             | a native behavior change                                                                     | A native claim backed only by a Preview run                                                                                                                                                                                  |
 
 ## Decision log
@@ -388,8 +391,9 @@ project applies them.
 
 Preview is a development feature whose security and distribution questions
 are open (OQ2 to OQ4). It ships as an explicit experimental surface
-(`spec:AST-017/FR21`): its commands say so, any release may change or remove
-it, and nothing in Astryx React Native depends on it.
+(`spec:AST-017/FR21`): its commands sit in the CLI's experimental namespace
+(`spec:AST-017/FR27`), any release may change or remove it, and nothing in
+Astryx React Native depends on it.
 
 ## Open questions
 
