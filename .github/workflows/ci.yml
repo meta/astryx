@@ -797,9 +797,8 @@ jobs:
             }
             core.setOutput('counts', String(counts === true));
 
-      # A head whose review already passes (a re-run, or a head reviewed before
-      # its run) would get its review-pass run at once, so it runs every suite
-      # in this run instead. Review signal writes the gate a moment after the
+      # A head already reviewed when its run starts would get its review-pass
+      # run at once, so it runs every suite in this run instead. Review signal writes the gate a moment after the
       # push: look for up to three minutes.
       - name: Read whether the review gate already passes at this head
         id: gate
@@ -854,7 +853,7 @@ jobs:
             exit 0
           fi
           echo 'deferred=true' >> "$GITHUB_OUTPUT"
-          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own when the review and spec gates pass at this head; re-run all jobs of this run to run everything now."
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own once the review app or an engineering owner approves this exact head and the spec gate passes; re-run all jobs of this run to run everything now."
           echo "Heavy CI deferred: runs when review passes and before merge." >> "$GITHUB_STEP_SUMMARY"
 
   docsite-build:

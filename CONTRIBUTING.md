@@ -969,11 +969,14 @@ Storybook story for anything you added or altered.
   the pull request opened, reopened or marked ready) runs lint and, in the CI
   workflow, only typecheck (path-filtered workflows run as usual); `test`,
   `build` and `docsite-test` fail with "Heavy CI deferred". A spec-only or
-  Lab-only change runs everything, and so does a pull request labelled
-  `release-critical` when someone with write access applied the label last. When the review and spec gates pass at a head, the
-  `CI review pass` workflow runs that head's run again in full; merge-guard's
-  pre-merge re-run also runs everything. **Re-run all jobs** on the latest run runs
-  everything at that head at once.
+  Lab-only change is never deferred, nor a pull request labelled
+  `release-critical` when someone with write access applied the label last.
+  Once the review app (for an author with write access) or an engineering owner
+  approves that exact head and the spec gate passes, the `CI review pass`
+  workflow runs that head's run again in full. The `review-required` check can
+  show success earlier, at an engineering owner's own push; that does not start
+  the full run. merge-guard's pre-merge re-run also runs everything. **Re-run
+  all jobs** on the latest run runs everything at that head at once.
 
 ## Code Style
 

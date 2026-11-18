@@ -8,10 +8,12 @@
  * @position Read by ci-review-pass.yml (spec:AST-030/DEC-32, FR20)
  *
  * A pull-request push runs only the fast checks in its run's first attempt
- * and defers the heavy suites (the `heavy-ci` job). They run at the first head
- * whose review and spec gates pass: then the deferred run is run again in
- * full, and a later attempt runs every suite. merge-guard's pre-merge re-run
- * is such a later attempt too.
+ * and defers the heavy suites (the `heavy-ci` job). They run at a head whose
+ * review passes as DEC-11 reads it (`reviewPasses`): the review app (for a
+ * write-access author) or an engineering owner approved that exact head, and
+ * the review-required status shows success. Then the deferred run is run again
+ * in full, and a later attempt runs every suite. merge-guard's pre-merge
+ * re-run is such a later attempt too.
  */
 
 import {createRequire} from 'node:module';
