@@ -49,10 +49,10 @@ export async function loadTemplateIconSets(cwd) {
  * bare name may read another package's component (a replacement, or a second
  * package with that name), so each name is read as `<package>/<Name>`. A
  * project whose components cannot be read answers no name, so no component
- * is named. `documents` answers whether a package documents a name: yes when
- * the list holds the name under that package, since every package the list
- * names for a name is one of its owners; no for a package that cannot own a
- * component; else as `ownersOf` answers.
+ * is named. `documents` answers whether a package documents a name, as
+ * `ownersOf` does: yes when the list holds the name under Core or a
+ * configured integration, which a lookup of the name finds as an owner; no
+ * for a package that cannot own a component; else by `ownersOf`.
  * @param {string} cwd
  * @returns {Promise<{ownersOf: (name: string) => readonly string[], qualified: boolean, documents: (pkg: string, name: string) => boolean}>}
  */
@@ -127,22 +127,28 @@ export async function loadComponentLookup(cwd) {
      * @param {string} name
      */
     const documents = (pkg, name) => {
-      if (listedBy.get(pkg)?.has(name)) return true;
-      // Only Core, a configured integration or an installed package with
-      // component docs can own a name, so a package that is none of them
-      // (a chart library) documents none, and no lookup is needed.
-      let canOwn = true;
-      try {
-        canOwn =
-          pkg === adapter.CORE_PACKAGE ||
-          integrations.some(integration => integration.name === pkg) ||
-          (externals ??= discoverExternalPackages(cwd)).some(
-            ext => ext.name === pkg,
-          );
-      } catch {
-        // Looked up as before.
+      // Core and the configured integrations are the owners a lookup finds
+      // first, so the list naming one of them for a name answers yes. A
+      // package with component docs of the older kind is an owner only when
+      // neither Core nor an integration documents the name, so it is looked
+      // up.
+      const owner =
+        pkg === adapter.CORE_PACKAGE ||
+        integrations.some(integration => integration.name === pkg);
+      if (owner && listedBy.get(pkg)?.has(name)) return true;
+      if (!owner) {
+        // Only those packages can own a name, so a package that is none of
+        // them (a chart library) documents none, and no lookup is needed.
+        let canOwn = true;
+        try {
+          externals ??= discoverExternalPackages(cwd);
+          canOwn = externals.some(ext => ext.name === pkg);
+        } catch {
+          // Looked up as before.
+        }
+        if (!canOwn) return false;
       }
-      return canOwn && ownersOf(name).includes(pkg);
+      return ownersOf(name).includes(pkg);
     };
     return {ownersOf, qualified: !listed, documents};
   } catch {

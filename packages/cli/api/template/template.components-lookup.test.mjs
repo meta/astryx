@@ -45,6 +45,16 @@ export default function Page() {
 }
 `;
 
+/**
+ * A source that renders a component an installed package with component docs
+ * of the older kind (`astryx.docs`) documents under a name Core documents too.
+ */
+const LEGACY_SOURCE = `import {Card} from '@legacy/kit/Card';
+export default function Page() {
+  return <Card />;
+}
+`;
+
 /** @type {string} */
 let dir;
 /** @type {string} */
@@ -76,6 +86,27 @@ beforeEach(() => {
   fs.writeFileSync(
     path.join(pkgDir, 'astryx.integration.mjs'),
     "export default {components: './src'};\n",
+  );
+  const legacyDir = path.join(dir, 'node_modules', '@legacy', 'kit');
+  fs.mkdirSync(path.join(legacyDir, 'docs'), {recursive: true});
+  fs.writeFileSync(
+    path.join(legacyDir, 'package.json'),
+    JSON.stringify({
+      name: '@legacy/kit',
+      version: '1.0.0',
+      astryx: {docs: 'docs'},
+    }),
+  );
+  fs.writeFileSync(
+    path.join(legacyDir, 'docs', 'Card.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'component',
+      name: 'Card',
+      displayName: 'Legacy Card',
+      import: '@legacy/kit/Card',
+      usage: {description: 'A card of the older kit.'},
+      props: [],
+    })};\n`,
   );
   for (const name of ACME) {
     fs.writeFileSync(
@@ -144,6 +175,15 @@ describe("a template's component line", () => {
       '@acme/widgets/AcmeChip',
       '@astryxdesign/core/Badge',
     ]);
+  }, 60_000);
+
+  it('names no component of a package with docs of the older kind under a name Core documents, as a lookup of every owner does', async () => {
+    const lookup = await loadComponentLookup(dir);
+    const everyOwner = {ownersOf: lookup.ownersOf, qualified: lookup.qualified};
+    expect(answeredComponentsInSource(LEGACY_SOURCE, lookup)).toEqual(
+      answeredComponentsInSource(LEGACY_SOURCE, everyOwner),
+    );
+    expect(answeredComponentsInSource(LEGACY_SOURCE, lookup)).toEqual([]);
   }, 60_000);
 
   it("reads none of an integration's docs for names the component list holds or a chart library imports", async () => {
