@@ -11,7 +11,7 @@
 - `astryx experimental theme editor how`:
 
 - A one-line look no longer drops pieces without a word:
-  - A color "for" something that a status color's own description names, such as "mint green for positive numbers", sets that status color. Anything else, such as "coral for overspending", is listed as not taken.
+  - A color "for" something that a status color's own description names, such as "teal for done tasks", sets that status color. Anything else, such as "coral for overspending", is listed as not taken.
   - "tabular numbers" sets tabular figures throughout the app.
   - "works in light and dark" is read as both modes.
   - A word about a color ("a cheerful sky blue") describes that color.

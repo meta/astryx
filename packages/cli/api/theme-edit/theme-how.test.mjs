@@ -4644,7 +4644,8 @@ describe('how lookups', () => {
   }, 60_000);
 
   it('an empty answer carries the hint and the next commands in JSON too', async () => {
-    const {data} = await themeEditHow('make it look like Apple', {cwd});
+    // ("make it look like Apple" names a brand, and asks for its colors.)
+    const {data} = await themeEditHow('make it flurble', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
     // The help that lists the asks it understands comes first.
