@@ -88,13 +88,29 @@ describe('reachableFiles: the public/ folder the render read', () => {
     for (const publicDir of ['../public', '/public', 'public/../src/public', 'nowhere', 7]) {
       expect(reachableFiles(tree, {publicDir}).missing).toEqual(['src/public/pics/a.png']);
     }
+  });
+});
 
 describe('resolutionCandidates', () => {
   it('tries the path as written, then the TypeScript source a .js-family name stands for', () => {
-    expect(resolutionCandidates('parts/Kpi.js').slice(0, 3)).toEqual(['parts/Kpi.js', 'parts/Kpi.ts', 'parts/Kpi.tsx']);
-    expect(resolutionCandidates('parts/Kpi.jsx').slice(0, 3)).toEqual(['parts/Kpi.jsx', 'parts/Kpi.tsx', 'parts/Kpi.ts']);
-    expect(resolutionCandidates('a.mjs').slice(0, 2)).toEqual(['a.mjs', 'a.mts']);
-    expect(resolutionCandidates('a.cjs').slice(0, 2)).toEqual(['a.cjs', 'a.cts']);
+    expect(resolutionCandidates('parts/Kpi.js').slice(0, 3)).toEqual([
+      'parts/Kpi.js',
+      'parts/Kpi.ts',
+      'parts/Kpi.tsx',
+    ]);
+    expect(resolutionCandidates('parts/Kpi.jsx').slice(0, 3)).toEqual([
+      'parts/Kpi.jsx',
+      'parts/Kpi.tsx',
+      'parts/Kpi.ts',
+    ]);
+    expect(resolutionCandidates('a.mjs').slice(0, 2)).toEqual([
+      'a.mjs',
+      'a.mts',
+    ]);
+    expect(resolutionCandidates('a.cjs').slice(0, 2)).toEqual([
+      'a.cjs',
+      'a.cts',
+    ]);
   });
 
   it('adds no TypeScript step for an extensionless or other import', () => {
