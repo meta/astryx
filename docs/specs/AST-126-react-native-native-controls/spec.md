@@ -90,9 +90,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 - The contract of any one component (Button, Slider, TextInput,
   SegmentedControl, the date family, PasteButton). Each component's own record
   owns it; this record owns its native presentation.
-- `Switch` and `Stepper`. The presentation seam knows them, but Switch's system
-  control is React Native's own `Switch` and Stepper has no native piece; neither
-  has a platform contract here.
+- `Stepper`. The presentation seam knows it, but it has no native piece and no
+  platform contract here.
 - The native-driver gesture views that ship beside the controls (swipe row,
   drag snap, zoom pager, pan and zoom). The gestures record owns them.
 - The date family's own surfaces (popover, bottom sheet, typed field) and their
@@ -126,6 +125,10 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   The library reaches the entry only through
   `AstryxPlatform.capability('controls')` (`spec:AST-112/FR2`).
 
+  FR1 gap: `spec:AST-112` FR1 and FR3 list `controls` as an opt-in capability,
+  so an app that does not list it links none of the controls and every probe
+  answers false.
+
 - **FR2 — The library chooses the system control or its own.** A component
   resolves its presentation in this order: its `presentation` prop, where it has
   one (Button, TextInput, the date family); the nearest
@@ -152,6 +155,9 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     control's fitting width exceeds its room (DEC-2).
   - Switching presentation keeps the value. A text field that is focused when
     its presentation switches loses focus, and `onBlur` runs.
+  - FR2 gap: `Switch` has no native contract. Its system presentation is React
+    Native's own `Switch`, outside this group's appearance mapping (FR11),
+    contract baseline (FR15) and Stage contract suites (OQ6).
 - **FR3 — Native button.** `NativeButton` takes `label`, `variant`
   (`primary`, `secondary`, `ghost`, `destructive`), `size` (`sm`, `md`, `lg`),
   `buttonStyle` (`standard`, `glass`), `symbolName`, `isLoading`, `isDisabled`,
@@ -367,6 +373,10 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   Astryx Stage pairs with the package through the package's Stage version floor:
   the package names the oldest Stage that implements its contract set, and an
   older Stage refuses the project and lists the gaps.
+- **FR16 — Native code uses public platform API only.** The controls' native
+  code calls only the public API of UIKit, Foundation, the Android SDK and
+  Material Components: no private selector, private field or restricted API.
+  The group has no exception.
 
 ### Native contracts
 
@@ -407,7 +417,9 @@ end}`, which the wrapper maps to FR7's results.
 - Unsupported behavior: a view a binary lacks reports `no-native-view` once and
   the library draws its own control (FR14); a dialog call resolves
   `not-linked`, `no-module` or `unavailable` (FR7); a behaviour a binary lacks
-  answers by its named feature (FR15).
+  answers by its named feature (FR15). Android has no slider or segmented
+  control host, so Slider and SegmentedControl draw their Astryx controls there
+  (OQ2).
 - Browser evidence: none. Native claims are proven on the iOS Simulator, the
   Android emulator, devices and Astryx Stage (`spec:AST-112/FR15`).
 
@@ -416,7 +428,7 @@ end}`, which the wrapper maps to FR7's results.
 - Details `spec:AST-112` FR1 (the `controls` content), FR6 and FR7 (results and
   probes of the controls), FR8 (their contracts), FR9 (native controls speak
   Astryx's design language), FR10 and FR12 for the controls listed here.
-- Changes `spec:AST-112` FR1, FR3 and FR5: the controls link with the platform's
+- Changes `spec:AST-112` FR1, FR3 and FR5 (the FR1 gap): the controls link with the platform's
   core by default instead of as an opt-in capability, a minimal opt-out may
   exist, and `./controls` stays their entry (FR1).
 - The date family's presentation on React Native differs from
@@ -445,6 +457,7 @@ end}`, which the wrapper maps to FR7's results.
 | FR13     | UI-thread frame checks during drags, typing and picker scrolls                                                             | a slider drag; a segmented tap; typing; the wheels                                                                                | JavaScript runs per frame                                                                                             |
 | FR14     | Unit tests through the `./testing` doubles in their absent, older and current shapes                                       | each view absent; the module absent; an older binary                                                                              | A throw, a rejection, a repeated `onError`, or a component that draws nothing                                         |
 | FR15     | The platform's spec rules check; Astryx Stage contract suites and its version floor                                        | every contract at revision 1; a missing named feature; an older Stage                                                             | A revision other than 1, a feature used without its check, or an older Stage that runs the project                    |
+| FR16     | Source review and symbol check of the controls' native code against the public SDKs                                        | each control's iOS and Android code                                                                                               | A private selector, a private field read, or a restricted API                                                         |
 
 ## Decision log
 
@@ -532,3 +545,11 @@ the pasteboard before the tap.
   and SegmentedControl take none and follow the provider and the theme.
   Options: give every control that prop; or one rendering axis shared by every
   component.
+- **OQ5 — Does the date picker keep one name for two kinds of contract?**
+  (`human-api`) `AstryxDatePicker` is a native component on iOS and a native
+  module on Android. Options: one contract per name, each of one kind; or one
+  name for both, told apart by kind.
+- **OQ6 — Does Switch get a native contract?** (`human-design`) Options: an
+  Astryx switch contract over UISwitch and Material 3's switch, with this
+  group's appearance mapping, named features and Stage suites; or React
+  Native's own `Switch`, tinted by the library, as its system presentation.
