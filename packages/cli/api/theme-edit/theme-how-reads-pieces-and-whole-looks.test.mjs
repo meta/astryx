@@ -88,6 +88,11 @@ describe('a look named after a product', () => {
         expect(text, q).toMatch(/its font, how round its corners are/);
         expect(text, q).toMatch(/picture/);
       }
+      // (A quality word, "accessible", "consistent", names no product.)
+      for (const q of ['make it accessible', 'make it consistent'])
+        expect(JSON.stringify((await answer(q)).results), q).not.toMatch(
+          /never guesses a brand/,
+        );
     },
     T,
   );
@@ -149,6 +154,9 @@ describe('one variant made to look like another', () => {
         'make it more original',
         'make it clear',
         'use a clear theme',
+        'make everything clear',
+        'make it crystal clear',
+        'make it feel original',
       ]) {
         const text = JSON.stringify((await answer(q)).results);
         expect(text, q).not.toMatch(/steps back one change|has no change to undo/);
@@ -166,10 +174,48 @@ describe('a likeness said with "not"', () => {
       for (const q of [
         'ghost buttons not look like primary buttons',
         'ghost buttons should never look like primary buttons',
+        "don't let ghost buttons look like primary buttons",
+        "I don't want ghost buttons to look like primary buttons",
       ]) {
         const data = await answer(q);
         expect(first(data), q).toEqual([]);
         expect(JSON.stringify(data.results), q).toMatch(/asks for no change/);
+      }
+    },
+    T,
+  );
+});
+
+describe('a likeness said with a state or a mode', () => {
+  it(
+    'writes nothing and names the state or mode, never the resting look',
+    async () => {
+      for (const q of [
+        'make ghost buttons look like primary buttons on hover',
+        'ghost buttons look like the default button when pressed',
+        'ghost buttons look like primary buttons in dark mode',
+      ]) {
+        const data = await answer(q);
+        expect(first(data), q).toEqual([]);
+        expect(JSON.stringify(data.results), q).toMatch(/nothing is written for/);
+      }
+    },
+    T,
+  );
+});
+
+describe('"not" or "never" before a look that is no likeness', () => {
+  it(
+    'is no prohibition: the look is still read',
+    async () => {
+      for (const q of [
+        'cards never get a shadow',
+        'the cards do not get enough shadow',
+        'the buttons do not look round enough',
+      ]) {
+        const data = await answer(q);
+        expect(first(data).length, q).toBeGreaterThan(0);
+        expect(JSON.stringify(data.results), q).not.toMatch(/asks for no change|nothing to change/);
       }
     },
     T,
@@ -184,6 +230,9 @@ describe("a piece the ask says not to take away", () => {
         "don't hide the code block copy button",
         'never hide the tab underline',
         'do not remove the copy button on code blocks',
+        'avoid hiding the code block copy button',
+        "make sure the code block copy button isn't hidden",
+        "I don't want the code block copy button removed",
       ]) {
         const data = await answer(q);
         expect(first(data), q).toEqual([]);
@@ -204,6 +253,7 @@ describe('a hide said negated', () => {
         'stop hiding the code block copy button',
         'un-hide the code block copy button',
         'never remove the copy button on code blocks',
+        'stop removing the code block copy button',
       ]) {
         const data = await answer(q);
         expect(first(data), q).toEqual([]);
@@ -214,6 +264,7 @@ describe('a hide said negated', () => {
         for (const q of [
           'stop hiding the code block copy button',
           'un-hide the code block copy button',
+          'stop removing the code block copy button',
         ])
           expect(first(await answer(q)), q).toEqual([
             `undo t display --on ${piece}`,
