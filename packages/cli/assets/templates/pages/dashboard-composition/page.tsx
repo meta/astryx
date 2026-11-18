@@ -762,7 +762,7 @@ export default function DashboardPortfolioTemplate() {
             </HStack>
 
             {/* Market index cards */}
-            <Grid columns={{minWidth: 320, max: 5, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 8, repeat: 'fit'}} gap={4}>
               {marketIndices.map(m => (
                 <MarketCard key={m.ticker} {...m} />
               ))}
