@@ -161,20 +161,20 @@ gaps stated per piece.
     ignores it when its `isOpen` turned false meanwhile.
   - On Android there is no module; `ActionSheet` draws an `AlertDialog` for
     one choice and a drawn bottom sheet of buttons for two or more.
-- **FR5 — The presentation host presents every Astryx surface kind it
-  builds.** `nativePresentationHost.component` takes `kind`, `isPresented`,
+- **FR5 — The presentation host presents five kinds.** `nativePresentationHost.component` takes `kind`, `isPresented`,
   `isModal`, `canDismiss`, `sheet`, `animation`, `statusBarHidden`,
   `statusBarStyle`, `colorScheme`, `estimatedSize`, the events of FR7, and
   `onError`.
 
-  | `kind`                                  | iOS presentation                                                                   | System dismissal                     |
-  | --------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------ |
-  | `sheet`                                 | UISheetPresentationController with the stops of FR6                                | swipe down past the lowest stop      |
-  | `pageSheet`                             | UIModalPresentationPageSheet as UIKit configures it                                | swipe down                           |
-  | `formSheet`                             | UIModalPresentationFormSheet (a page sheet in a compact width)                     | swipe down                           |
-  | `fullScreen`                            | UIModalPresentationFullScreen, system background                                   | none; the content offers the way out |
-  | `overFullScreen`                        | UIModalPresentationOverFullScreen, clear container, presenter drawn behind         | none                                 |
-  | `popover`, `dialog`, `alert`, `overlay` | reserved: nothing is presented, and `onError` reports `unsupported` once per mount | —                                    |
+  | `kind`           | iOS presentation                                                           | System dismissal                     |
+  | ---------------- | -------------------------------------------------------------------------- | ------------------------------------ |
+  | `sheet`          | UISheetPresentationController with the stops of FR6                        | swipe down past the lowest stop      |
+  | `pageSheet`      | UIModalPresentationPageSheet as UIKit configures it                        | swipe down                           |
+  | `formSheet`      | UIModalPresentationFormSheet (a page sheet in a compact width)             | swipe down                           |
+  | `fullScreen`     | UIModalPresentationFullScreen, system background                           | none; the content offers the way out |
+  | `overFullScreen` | UIModalPresentationOverFullScreen, clear container, presenter drawn behind | none                                 |
+  - Any other `kind` presents nothing and reports `unsupported` through
+    `onError` once per mount.
   - `kind` and `animation` are read when a presentation starts; a change
     applies to the next one. `animation` is `default` (the system's slide),
     `fade` (a cross-dissolve), or `none`; the dismissal mirrors it, and a
@@ -298,6 +298,13 @@ gaps stated per piece.
   package's Stage version floor: the package names the oldest Stage that
   implements its contract set, and an older Stage refuses the project with the
   gaps listed.
+- **FR16 — Native code uses public API only.** The group's native code calls
+  only the public API of iOS, Android, and React Native. One exception: the
+  modal host resets React Native's modal host's own presented state by name
+  and hooks its recycle and invalidate steps, so that no modal window outlives
+  the component that owns it when that component unmounts during a
+  transition. Where React Native renames that state, the hook reports a fault
+  and changes nothing.
 
 ### Native contract
 
@@ -312,19 +319,23 @@ gaps stated per piece.
 | `AstryxActionSheet` | native module (Turbo Native Module) | `getConstants`, `isSupported`, `present`, `show` | iOS       |
 
 On the wire, every built kind is the native `kind` `sheet` with
-`presentationStyle` naming it; the other native `kind` values are the reserved
-kinds. `present` takes one request object with the calling surface and
+`presentationStyle` naming it; any other native `kind` value presents
+nothing. `present` takes one request object with the calling surface and
 resolves `{index, reason, message}`; `show` is its positional form.
 
 ### Platform support
 
 | Contract                 | iOS                                                                                                                                      | Android                                                                                                                | Astryx Stage                                                                                                                       |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSystemMenu`       | UIMenu on a UIButton (`showsMenuAsPrimaryAction`) and UIContextMenuInteraction; `present()` from iOS 17.4; row element sizes from iOS 16 | Not registered: the library draws a Material 3 menu, anchored or in a bottom sheet (DEC-4)                             | A UIMenu look-alike: pull-down, context menu with the lifted area and dimmed backdrop, the preview card; the Android profile draws |
+| `AstryxSystemMenu`       | UIMenu on a UIButton (`showsMenuAsPrimaryAction`) and UIContextMenuInteraction; `present()` from iOS 17.4; row element sizes from iOS 16 | Not registered: the library draws a Material 3 menu, anchored or in a bottom sheet                                     | A UIMenu look-alike: pull-down, context menu with the lifted area and dimmed backdrop, the preview card; the Android profile draws |
 | `AstryxActionSheet`      | UIAlertController in the action sheet style; a popover on iPad                                                                           | No module: an `AlertDialog` or a drawn bottom sheet of buttons                                                         | A UIAlertController look-alike; the Android profile has no module                                                                  |
 | `AstryxPresentationHost` | UISheetPresentationController detents (custom heights from iOS 16), page, form, full-screen and over-full-screen presentations           | Not registered: the library's drawn sheet in a React Native `Modal` window; full-screen routes in a full-screen window | Sheets with their stops, drags, swipe dismissal and the route's status bar                                                         |
 | `AstryxModalHost`        | React Native's modal host, presenting from the top of the stack                                                                          | Not registered: React Native's `Modal`, whose Dialog windows stack                                                     | Sibling windows in presentation order, `onShow`, `onDismiss`, the escape's `onRequestClose`                                        |
 
+- FR5 gap: the presentation host presents no system alert; `AlertDialog`
+  draws its alert in the over-full-screen window.
+- FR5 gap: the presentation host presents no popover; `Popover` draws its
+  anchored surface, and an iPad gets no UIPopoverPresentationController.
 - FR3 gap: in Astryx Stage the context menu does not play the lift
   animation, a held finger cannot slide onto a row, and `medium` row elements
   draw as a list.
@@ -350,7 +361,7 @@ resolves `{index, reason, message}`; `show` is its positional form.
 | FR2      | Unit tests of the description and its native form; library tests of which menus describe as data                              | every row type; an unmapped icon; a glyph; React content in a row; a nested submenu                                             | A row loses a field, an unmapped icon draws an image, or a menu with React content uses the system menu             |
 | FR3      | Simulator checks of both triggers; Astryx Stage contract suites; unit tests of the unavailable reasons                        | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card; a preview project | The trigger also opens the drawn menu, `present()` fails without `onUnavailable`, or a preview project shows a card |
 | FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet                                                | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                                    | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                |
-| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind; Astryx Stage contract suites              | each kind; a reserved kind; `animation` values; an undimmed sheet                                                               | A reserved kind presents something or reports nothing, or a full-screen kind lets the page take touches             |
+| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind; Astryx Stage contract suites              | each kind; a kind the host does not build; `animation` values; an undimmed sheet                                                | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches             |
 | FR6      | Simulator detent checks; Astryx Stage contract suites; UI-thread frame checks of a drag                                       | `large`, `fit`, `height`; several stops; a covered and a retained sheet                                                         | A stop height includes the bottom inset twice, a borrowed detent is reported, or a drag runs JavaScript per frame   |
 | FR7      | Unit tests of the event mapping; Simulator checks                                                                             | a resisted swipe; a refused escape; a swipe dismissal; dismissal by `isPresented`                                               | `onDismissed` fires twice or not at all, or the host unmounts before it                                             |
 | FR8      | Simulator checks of sibling, nested, and deep-linked stacks                                                                   | three sheets; a dialog over a sheet; a replaced flow closing                                                                    | UIKit refuses a presentation, or the order differs from the request order                                           |
@@ -361,6 +372,7 @@ resolves `{index, reason, message}`; `show` is its positional form.
 | FR13     | UI-thread frame checks during drags and menu tracking                                                                         | a detent drag; a pull-down drag                                                                                                 | A JavaScript event per frame                                                                                        |
 | FR14     | Unit tests through the `./testing` doubles                                                                                    | each host absent                                                                                                                | A throw, a rejection, or a silent no-op                                                                             |
 | FR15     | The platform's spec rules check; Astryx Stage version floor check                                                             | a contract hash change; an older Stage                                                                                          | A changed contract without a named feature, or an older Stage that runs the project                                 |
+| FR16     | Source review of the native code against the public headers                                                                   | a React Native version that renames the modal host's state                                                                      | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault       |
 
 ## Decision log
 
@@ -403,23 +415,9 @@ behave exactly as the system's, with its Dynamic Type, VoiceOver, and
 haptics, and the same component description drives the drawn fallback. The
 one React subtree a menu takes is a context menu's preview card.
 
-### DEC-4 — Android draws its menus and sheets
+### DEC-4 — The host reports a blocked dismissal; the caller decides
 
 **Reference:** `spec:AST-128/DEC-4`
-**Decider:** imdreamrunner, 2026-11-17
-
-Android's framework menus cannot carry subtitles, loading rows, or a
-preview card, and its bottom sheet comes from Material Components, a library
-rather than the system. The library draws Material 3 menus, sheets, and
-dialogs in React Native `Modal` windows with the theme, so Android keeps
-every row feature and the same events.
-
-Rejected: bridging PopupMenu and BottomSheetDialog, because they would add a
-dependency and drop row features the components promise.
-
-### DEC-5 — The host reports a blocked dismissal; the caller decides
-
-**Reference:** `spec:AST-128/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
 
 With `canDismiss` false, the host resists the swipe and refuses the
@@ -439,11 +437,11 @@ draft is lost to one.
   (`human-design`) Options: keep the platform's module, which reports `busy`,
   `no-window`, and the calling surface; or wrap `ActionSheetIOS` in the same
   result shape, with Astryx Stage implementing that wrapper.
-- **OQ3 — Do the reserved kinds present natively?** (`human-api`) `popover`
-  (UIPopoverPresentationController, anchored to a trigger on iPad), `dialog`,
-  `alert`, and `overlay` answer `unsupported`. Options: build `popover` for
-  iPad with an anchor in the request; or remove the reserved kinds from the
-  contract.
+- **OQ3 — What does a request carry for a system alert and a popover?**
+  (`human-api`) The FR5 gaps need a request shape. Options: an alert with a
+  title, a message, and buttons, and a popover with an anchor (the trigger's
+  rect on its surface); or one anchor field shared with the action sheet
+  (OQ4).
 - **OQ4 — Does the iPad action sheet anchor at the control that asked?**
   (`human-api`) Options: add an anchor (the trigger's rect on its surface) to
   the request; or keep the bottom centre of the presenting view.
@@ -457,3 +455,8 @@ draft is lost to one.
   host for drawn sheets, the presentation host for dialogs and full-screen
   routes. Options: keep both; or present drawn sheets through the
   presentation host's `overFullScreen` kind and retire the modal host.
+- **OQ7 — Does Android present menus, sheets, and dialogs through system
+  hosts?** (`human-design`) Android menus are drawn, and Android sheets and
+  dialogs are a drawn panel in a React Native `Modal` window. Options: native
+  hosts over Material Components (its menu, its bottom sheet, its dialog); or
+  the drawn surfaces.
