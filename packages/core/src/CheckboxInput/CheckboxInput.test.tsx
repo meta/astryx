@@ -702,7 +702,15 @@ describe('CheckboxInput', () => {
           }),
         ).toHaveLength(1),
       );
-      expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
+      const describedBy = checkbox.getAttribute('aria-describedby') ?? '';
+      const reason = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(
+          element =>
+            element?.textContent === 'Terms are managed by your administrator',
+        );
+      expect(tooltip.contains(reason ?? null)).toBe(true);
       expect(checkbox).toHaveAccessibleDescription(
         'Terms are managed by your administrator',
       );

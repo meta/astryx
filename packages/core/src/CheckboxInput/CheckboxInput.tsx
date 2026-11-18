@@ -4,7 +4,7 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltipInternal
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, useIsHydrating
  *   (only while a disabled message can show),
  *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
@@ -24,7 +24,6 @@ import {
   useCallback,
   useOptimistic,
   useRef,
-  useState,
   useTransition,
   type ChangeEvent,
   type FocusEvent,
@@ -50,7 +49,8 @@ import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
-import {useTooltipInternal} from '../Tooltip/useTooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -389,14 +389,13 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  // The disabled reason describes the input from the first markup on, server
-  // and hydration included: a visually hidden copy until the tooltip's text is
-  // in the document, then the tooltip itself, so the reason renders once. The
-  // tooltip mounts only while it can show, so a checkbox with no reason runs
-  // none of the tooltip's work.
-  const hiddenReasonID = useId();
-  const [tooltipReasonID, setTooltipReasonID] = useState('');
-  const disabledMessageID = tooltipReasonID || hiddenReasonID;
+  // The disabled reason describes the input from the first markup on. The
+  // server and hydrating markup has no tooltip layer, so a visually hidden
+  // copy carries the reason's id there; every later render gives that id to
+  // the tooltip's text instead, so the reason renders once. The tooltip mounts
+  // only while it can show, so a checkbox with no reason runs none of its work.
+  const disabledMessageID = useId();
+  const isHydrating = useIsHydrating();
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -656,16 +655,16 @@ export function CheckboxInput({
       )}
       {isDisabled && disabledMessage ? (
         <>
-          {tooltipReasonID ? null : (
-            <VisuallyHidden id={hiddenReasonID}>
+          {isHydrating ? (
+            <VisuallyHidden id={disabledMessageID}>
               {disabledMessage}
             </VisuallyHidden>
-          )}
+          ) : null}
           <DisabledMessageTooltip
             message={disabledMessage}
+            messageID={isHydrating ? undefined : disabledMessageID}
             rowRef={rowElementRef}
             inputRef={inputRef}
-            onDescribing={setTooltipReasonID}
           />
         </>
       ) : null}
@@ -675,40 +674,29 @@ export function CheckboxInput({
 
 interface DisabledMessageTooltipProps {
   readonly message: string;
+  /** The id the input's description names, once hydration is over. */
+  readonly messageID: string | undefined;
   readonly rowRef: RefObject<HTMLElement | null>;
   readonly inputRef: RefObject<HTMLElement | null>;
-  /** Called with the tooltip's id once its text is in the document. */
-  readonly onDescribing: (id: string) => void;
 }
 
 /**
  * A disabled checkbox's message as a tooltip: hover or focus anywhere on the
- * row opens it above the checkbox. Once its text is in the document, it
- * describes the input in place of the parent's visually hidden copy.
+ * row opens it above the checkbox. Its text carries the id that describes the
+ * input.
  */
 function DisabledMessageTooltip({
   message,
+  messageID,
   rowRef,
   inputRef,
-  onDescribing,
 }: DisabledMessageTooltipProps): ReactNode {
-  // Once the tooltip's surface is in the document, its text describes the
-  // input in place of the parent's visually hidden copy.
-  const onSurfaceMount = useCallback(
-    (surface: HTMLElement | null) => {
-      onDescribing(surface?.closest('[role="tooltip"]')?.id ?? '');
-    },
-    [onDescribing],
-  );
-  const tooltip = useTooltipInternal(
-    {
-      placement: 'above',
-      // The container row is not naturally focusable; focusin bubbles up from
-      // the native checkbox, so always attach focus listeners.
-      focusTrigger: 'always',
-    },
-    {onSurfaceMount},
-  );
+  const tooltip = useTooltip({
+    placement: 'above',
+    // The container row is not naturally focusable; focusin bubbles up from the
+    // native checkbox, so always attach focus listeners.
+    focusTrigger: 'always',
+  });
   const {interactionRef, positionRef} = tooltip;
   // Attaches the tooltip to the row and the checkbox, which the parent
   // renders.
@@ -720,7 +708,8 @@ function DisabledMessageTooltip({
       positionRef(null);
     };
   }, [interactionRef, positionRef, rowRef, inputRef]);
-  return tooltip.renderTooltip(message);
+  // The span names the reason for the input's aria-describedby.
+  return tooltip.renderTooltip(<span id={messageID}>{message}</span>);
 }
 
 CheckboxInput.displayName = 'CheckboxInput';
