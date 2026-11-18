@@ -40,12 +40,6 @@ import type {MenuBottomSheet as EagerMenuBottomSheet} from './MenuBottomSheet';
 import type {MenuBottomSheetActionList as EagerMenuBottomSheetActionList} from './MenuBottomSheetActionList';
 import type * as ActionListModule from './MenuBottomSheetActionList';
 
-const LazyMenuBottomSheet = lazy(async () =>
-  import('./MenuBottomSheet').then(module => ({
-    default: module.MenuBottomSheet,
-  })),
-);
-
 // The action list renders inside the sheet, which renders nothing while
 // closed, so its first render is the first open. Once preloaded, it renders
 // directly instead of through lazy(): a suspended render on open would hold
@@ -75,6 +69,18 @@ export async function preloadMenuBottomSheetActionList(): Promise<ActionListPrel
     return {isLoaded: false, error};
   }
 }
+
+// The sheet reveals only once its rows' module has loaded too. A menu opened
+// before the at-rest preload finishes (a press right after mount) then shows
+// the sheet with its actions in one commit, never an empty sheet first. A
+// failed row load does not hold the sheet: the rows then fail through lazy().
+const LazyMenuBottomSheet = lazy(async () => {
+  const [module] = await Promise.all([
+    import('./MenuBottomSheet'),
+    loadActionList().catch(() => undefined),
+  ]);
+  return {default: module.MenuBottomSheet};
+});
 
 const LazyMenuBottomSheetActionList = lazy(async () =>
   loadActionList().then(module => ({
