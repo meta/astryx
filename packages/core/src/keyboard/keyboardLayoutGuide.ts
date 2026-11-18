@@ -27,6 +27,7 @@ import {
   type KeyboardTransition,
   type KeyboardCurveSchedule,
 } from './keyboardModel';
+import {isElement} from '../utils/nodeType';
 import {sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
@@ -316,6 +317,12 @@ function createGuide(win: Window): KeyboardLayoutGuide {
           : null;
     };
     sync();
+    // A field in a shadow root or a custom element blurs with its host as the
+    // target. So does a frame's field once focus leaves the frame. Under
+    // UIKit's rules that blur waits as a field's does, and the element that
+    // focus settles on decides.
+    const leavesHiddenField = (target: EventTarget | null): boolean =>
+      rules != null && isElement(target) && hidesField(target);
     // When a field that brings up a keyboard last gained focus.
     let keyboardFocusAt = -Infinity;
     let handoffTimer: ReturnType<typeof setTimeout> | null = null;
@@ -362,7 +369,7 @@ function createGuide(win: Window): KeyboardLayoutGuide {
           publish(model.focused(event.timeStamp));
         }
       } else if (
-        keepsInputView(event.target) &&
+        (keepsInputView(event.target) || leavesHiddenField(event.target)) &&
         !keepsInputView(event.relatedTarget) &&
         rules?.blurred(event.relatedTarget, event.timeStamp) !== true
       ) {

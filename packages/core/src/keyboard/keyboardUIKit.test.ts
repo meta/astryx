@@ -330,6 +330,46 @@ describe('the keyboard layout guide in Safari on iOS', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('rides a hide down from the blur when Done leaves a field inside an open shadow root', () => {
+    const host = document.createElement('div');
+    const inner = host
+      .attachShadow({mode: 'open'})
+      .appendChild(document.createElement('input'));
+    document.body.append(host);
+    a.focus();
+    report(336);
+    inner.focus();
+    vi.advanceTimersByTime(0);
+    seen.length = 0;
+    inner.blur();
+    vi.advanceTimersByTime(0);
+    expect(seen.at(-1)).toMatchObject({
+      kind: 'hide',
+      to: 0,
+      predicted: true,
+    });
+  });
+
+  it('rides a hide down from the blur when Done leaves a field inside a custom element’s closed shadow root', () => {
+    const host = document.createElement('x-closed-field');
+    const inner = host
+      .attachShadow({mode: 'closed'})
+      .appendChild(document.createElement('input'));
+    document.body.append(host);
+    a.focus();
+    report(336);
+    inner.focus();
+    vi.advanceTimersByTime(0);
+    seen.length = 0;
+    inner.blur();
+    vi.advanceTimersByTime(0);
+    expect(seen.at(-1)).toMatchObject({
+      kind: 'hide',
+      to: 0,
+      predicted: true,
+    });
+  });
+
   it('turns a predicted hide back up when focus moves into a frame before the keyboard is down', () => {
     const frame = document.createElement('iframe');
     document.body.append(frame);
