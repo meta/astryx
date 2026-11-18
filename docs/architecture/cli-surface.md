@@ -827,6 +827,12 @@ non-interactive guarantee.
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `foundation/render/render-page.mjs` sizes and `clients/cli/commands/experimental/render-output.mjs`
+  — the size output of `astryx experimental export`: a `bytes` line, with a
+  note when the page's script is more than half of the file, then one line per
+  part under its JSON key (`scriptBytes`, `cssBytes`, `markupBytes`,
+  `sourceBytes`); `markupBytes` (the markup with its inlined images) and
+  `sourceBytes` (the embedded source) are experimental fields.
 - `authoring/example/preview.mjs` — `previewableExample`, the rule for whether
   a component example runs on its own, which Doctor and preview tools share
   (DEC-14).

@@ -1027,7 +1027,9 @@ export default function Page() {
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^scriptBytes:\s+[\d.]+ KB$/m);
+    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB/m);
+    for (const key of ['scriptBytes', 'cssBytes', 'markupBytes', 'sourceBytes'])
+      expect(page.stdout).toMatch(new RegExp(`^${key}:\\s+[\\d.]+ (?:KB|B)$`, 'm'));
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(
