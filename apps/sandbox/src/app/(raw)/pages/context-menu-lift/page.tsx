@@ -72,6 +72,8 @@ const styles = stylex.create({
     overflow: 'hidden',
     height: 120,
   },
+  // Taller than the room above or below it leaves for its menu.
+  tallCard: {minHeight: '70vh'},
   // The trigger fills its table cell.
   cellTrigger: {display: 'block'},
   iconRow: {
@@ -124,6 +126,24 @@ export default function ContextMenuLiftPage() {
             Hold any row, card, cell or picture until its menu shows. The page
             scrolls on its own; tap the dimmed page to close a menu.
           </Text>
+          <VStack gap={1}>
+            <Text weight="semibold">What to look for</Text>
+            <Text type="supporting">
+              1. A held finger lifts and zooms the trigger where it is, over a
+              tint in the theme’s overlay color, with no blur.
+            </Text>
+            <Text type="supporting">
+              2. The lifted trigger casts no shadow.
+            </Text>
+            <Text type="supporting">
+              3. The menu opens above or below the trigger where it fits, and
+              never covers it.
+            </Text>
+            <Text type="supporting">4. A tap on the tint closes the menu.</Text>
+            <Text type="supporting">
+              5. The trigger never moves, at the screen’s edges too.
+            </Text>
+          </VStack>
           <Switch
             label="Dark mode"
             value={mode === 'dark'}
@@ -247,7 +267,24 @@ export default function ContextMenuLiftPage() {
         </VStack>
 
         <VStack gap={2}>
+          <Heading level={2}>Taller than the room for its menu</Heading>
+          <Text type="supporting">
+            Its menu fits neither above nor below it, so the menu opens beside
+            it, or scrolls on the roomier side. It never covers the card.
+          </Text>
+          <ContextMenu items={MENU} label="Tall card">
+            <Card xstyle={styles.tallCard}>
+              <Text>A card taller than the room for its menu</Text>
+            </Card>
+          </ContextMenu>
+        </VStack>
+
+        <VStack gap={2}>
           <Heading level={2}>The side edges</Heading>
+          <Text type="supporting">
+            At an edge the card lifts where it is and grows past the page’s
+            margin. Its menu keeps the margin.
+          </Text>
           <HStack gap={2} justify="between">
             <ContextMenu items={MENU} label="Left edge">
               <Card padding={2}>
