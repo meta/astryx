@@ -115,20 +115,11 @@ core (`spec:AST-112/FR1`) and link in every app.
   `version()` with `null`. The probes are `isSystemMenuAvailable()`,
   `isSystemMenuPreviewAvailable()`, `isPresentationHostAvailable()`, and
   `nativePresentationHost.supports(kind)`.
-  - `render` (`'auto' | 'system' | 'drawn'`) says who draws the element's
-    pixels. The system menu, the action sheet, and the chrome of a sheet the
-    presentation host presents are `system`: the platform draws them. The
+  - Under `spec:AST-112/FR21`, the system menu, the action sheet, and the
+    chrome of a sheet the presentation host presents are `system`. The
     library's drawn menus and sheets, a drawn sheet in the modal host included,
-    are `drawn`: Astryx draws them in React. `auto` is each component's own
-    default, per platform where it differs (`spec:AST-112/FR21`). The theme's
-    `render.default` overrides every `auto`; `spec:AST-112` adds it to the
-    `defineNativeTheme` configuration of `spec:AST-082/FR10`. Where the host
-    is absent, the component draws (FR14).
-  - A drawn menu or sheet on a native glass or material view is still
-    `drawn`; its look is its `surface` (`spec:AST-123`).
-  - FR1 gap: the code spells the axis two ways: the navigators take
-    `render: 'system' | 'drawn'`, and the components take `presentation`
-    with a `'native'` value (such as `'popover' | 'bottom-sheet' | 'native'`).
+    are `drawn`, and their look is their `surface` (`spec:AST-123`). Where the
+    host is absent, the component draws (FR14).
 - **FR2 — The system menu takes a menu description.** The host's component
   wraps a trigger view and takes `menu`, `trigger`, `isDisabled`, `onSelect`,
   `onOpenChange`, `onUnavailable`, `preview`, `previewColorScheme`, and a
