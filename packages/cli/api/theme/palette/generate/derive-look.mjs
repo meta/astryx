@@ -587,6 +587,10 @@ export function deriveStatusColors({
             Math.min(...grounds(m).map(g => contrast(c, g))) < NON_TEXT
           )
             continue;
+          // (A bright fill already starts at the palest stop that reads as
+          // a fill on a light page: one kept apart from the accent moves
+          // deeper, never paler toward the page.)
+          if (bright && m === 'light' && s > s0) continue;
           const a = accent(m);
           if (a && perceptualDelta(c, a) < APART_FROM_ACCENT) continue;
           if (contrast(ink.color, c) >= TEXT) {
