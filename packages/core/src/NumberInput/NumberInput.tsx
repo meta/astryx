@@ -38,7 +38,6 @@ import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
-  sizeVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
@@ -63,6 +62,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -84,7 +84,9 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 // layout metric and would resize every themed field). Built as chained const
 // strings — no function calls — so StyleX can statically analyze them; same
 // shape as the card/section/dialog chains in Layout/container.stylex.ts.
-const FIELD_PAD_BLOCK = spacingVars['--spacing-1'];
+// The row size sets `--_field-row-pad` beside its minimum height: the block
+// padding left after the text line and the borders.
+const FIELD_PAD_BLOCK = `var(--_field-row-pad, ${spacingVars['--spacing-1']})`;
 const FIELD_PAD_INLINE = spacingVars['--spacing-2'];
 const padBlockAll = `var(--astryx-number-input-padding, ${FIELD_PAD_BLOCK})`;
 const padInlineAll = `var(--astryx-number-input-padding, ${FIELD_PAD_INLINE})`;
@@ -208,17 +210,7 @@ const styles = stylex.create({
   },
 });
 
-const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
-});
+const sizeStyles = inputRowSizeStyles;
 
 export type NumberInputSize = keyof typeof sizeStyles;
 

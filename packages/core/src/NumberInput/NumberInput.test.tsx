@@ -3087,9 +3087,9 @@ describe('NumberInput stepper padding coupling', () => {
   // rather than imported so the test pins the actual token names a theme sets:
   // if the chain is renamed or a level is dropped, this fails.
   const BLOCK_START =
-    'var(--astryx-number-input-padding-block-start, var(--astryx-number-input-padding, var(--spacing-1)))';
+    'var(--astryx-number-input-padding-block-start, var(--astryx-number-input-padding, var(--_field-row-pad, var(--spacing-1))))';
   const BLOCK_END =
-    'var(--astryx-number-input-padding-block-end, var(--astryx-number-input-padding, var(--spacing-1)))';
+    'var(--astryx-number-input-padding-block-end, var(--astryx-number-input-padding, var(--_field-row-pad, var(--spacing-1))))';
 
   // jsdom re-serializes a var() chain without the spaces after its commas.
   const noSpace = (value: string) => value.replace(/\s+/g, '');
