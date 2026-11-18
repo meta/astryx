@@ -39,11 +39,7 @@ describe('the single contract-leg dispatch', () => {
     ]);
     expect(workflow.permissions).toEqual({});
     expect(job.permissions).toEqual({contents: 'read'});
-    expect(room.permissions).toEqual({
-      actions: 'read',
-      contents: 'read',
-      'pull-requests': 'read',
-    });
+    expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
   });
 
   it('waits for room under the CI ceiling as a pull-request run does, so a main check or release re-check fits first', () => {
@@ -67,9 +63,9 @@ describe('the single contract-leg dispatch', () => {
       path: '.ci-admission',
       'persist-credentials': false,
     });
-    expect(step('Stop when CI is full').if).toBe(
-      "steps.room.outputs.full == 'true'",
-    );
+    // The action turns away only a pull-request run; a dispatch starts after
+    // its longest wait, so no step reads `full`.
+    expect(JSON.stringify(workflow)).not.toContain('outputs.full');
     // A standard runner: the wait outlasts a slim job's fifteen minutes.
     expect(room['runs-on']).toBe('ubuntu-latest');
   });
@@ -140,6 +136,12 @@ describe('the single contract-leg dispatch', () => {
     expect(run.env.ASTRYX_TABLE_TIMING_GATE).toBe('0');
     expect(step('Build packages and Storybook').run).toBe(
       'node .github/scripts/build-packages-and-storybook.mjs',
+    );
+  });
+
+  it('gives each repeat of the leg its own time', () => {
+    expect(job['timeout-minutes']).toBe(
+      '${{ 20 + 13 * fromJSON(inputs.repeat) }}',
     );
   });
 

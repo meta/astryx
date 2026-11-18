@@ -33,15 +33,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Waits for room under the CI ceiling like a pull-request run, so it yields
-  # to a waiting main check or release re-check (spec:AST-030 FR16, DEC-16).
+  # Waits for room under the CI ceiling, yielding to a waiting main check or
+  # release re-check (spec:AST-030 FR16, DEC-16). After its longest wait it
+  # starts, as every run that is not a pull request's does.
   room:
     runs-on: ubuntu-latest
     timeout-minutes: 130
     permissions:
       actions: read
       contents: read
-      pull-requests: read
     steps:
       - name: Check the inputs
         env:
@@ -77,19 +77,14 @@ jobs:
           max-wait-minutes: 120
           max-looks: 30
 
-      - name: Stop when CI is full
-        if: steps.room.outputs.full == 'true'
-        run: |
-          echo "::error title=CI is full::CI is full: dispatch again later. The run found no room under the CI ceiling."
-          exit 1
-
   shard:
     name: Accessibility spec-test contracts (${{ inputs.a11y-shard }}/6) at ${{ inputs.expected-head }}
     needs: [room]
     # A free standard runner: the same four vCPUs and 16 GB as the release
     # check's paid 4-core-ubuntu pool.
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # About 12 minutes of tests a pass, after about 20 of install and build.
+    timeout-minutes: ${{ 20 + 13 * fromJSON(inputs.repeat) }}
     permissions:
       contents: read
     steps:
