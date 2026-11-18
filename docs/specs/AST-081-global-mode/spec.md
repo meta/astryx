@@ -422,8 +422,10 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    each integration's components with the doc parts the not-found matcher
-    scores, integrations' theme records, what `theme build` checks a theme
+    whether the installed Core matches the component list the CLI was
+    published with, Core's and each integration's components with the doc
+    parts the not-found matcher scores, Core hooks' declared keywords for the
+    not-found hint, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the JavaScript `theme build` compiles
     from a theme's local TypeScript or JSX modules, what `theme build` finds
     when it checks a theme's pseudo-class keys and token names, the lookup
@@ -452,18 +454,31 @@ works on is `spec:AST-040` FR9's.
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
-    and in such a run says that it keeps none;
+    and in such a run says that it keeps none. Text output prints the row's
+    brief in place of that message: the folder, its entry count and size, the
+    `doctor --json` command that prints the whole message, and the command
+    that removes the catalogs folder and, when it exists, the transpile
+    folder;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
     topics and codemods, a TypeScript config, a built theme artifact, and the
-    theme sources `theme build` loads), in `astryx/jiti`: made `0700` on first
-    use and used at once, only while it is a real folder the user owns and
-    others cannot open, and kept within the same size limit as the catalogs
-    by removing its least recently used copies once it has grown, never one
-    written in the last day or read in the last day where the file system
-    records reads; otherwise nothing is
-    cached on disk; where the system has no user ids jiti keeps its own
-    default, and a set `JITI_FS_CACHE` is left to jiti;
+    theme sources `theme build` loads), in `astryx/transpiled`: made `0700`
+    on first use and used at once, only while it is a real folder the user
+    owns and others cannot open; otherwise nothing is cached on disk. Each
+    copy is named for its source text and transpile settings, not its
+    location, so the same file in many folders shares one copy; a file whose
+    text contains the word `meta`, as every use of `import.meta` must, also
+    gets a copy per location, because such a copy can hold its own path.
+    Errors still name the real file, and an unreadable copy is made again.
+    Copies are spread over 256 subfolders; a run that writes one trims only
+    that subfolder to its share of the catalogs' size limit, removing the
+    copies made longest ago first, and a copy larger than that share is used
+    for the run but not kept, so no run reads the whole folder. Copies that
+    earlier CLIs left in the old single folder (`astryx/jiti`) are never read
+    or listed; project doctor names that folder and the command that removes
+    it.
+    Where the system has no user ids jiti keeps its own default, and a set
+    `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
     verifying a package, for a scratch copy of a template at a path the caller
     names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
@@ -707,7 +722,8 @@ works on is `spec:AST-040` FR9's.
     lists each computer-level integration the project does not install, whose
     peer range admits the release that answers there and whose manifest loads,
     among the packages the project could add, with source
-    `installed for this computer` and the project's install command. Those are
+    `installed for this computer` and the project's install command, or the
+    install guidance a loaded integration gives (`spec:AST-039` FR16). Those are
     the integrations beside the copy that answers when it was installed outside
     the project, otherwise beside the first `astryx` on the search path that is
     installed for the computer. The command name a door passes still applies
@@ -720,7 +736,7 @@ works on is `spec:AST-040` FR9's.
   - `doctor` outside a project lists each computer-level integration it uses and
     each the folder loads its own copy of, and warns about each it skips or
     cannot load, naming why; inside a project, it lists the ones `discover`
-    lists as available, with the project's install command.
+    lists as available, with the same install command or guidance.
 
 - **FR13 — The repository may ship one plugin skill, shared by the Claude
   Code and Codex plugins.** The repository MAY ship one plugin skill, shared
@@ -1169,6 +1185,14 @@ notice needs no check. Unlike `gh`, which prints only to a terminal, a notice
 prints when standard error is not one, because agents, the CLI's main
 callers, run it without a terminal and would otherwise never learn of a newer
 release; `CI` and `NO_UPDATE_NOTIFIER` still silence it.
+
+The setup reminder, in a project that installs Astryx but has not run `init`,
+is the one notice that prints before the command's output: on standard error,
+at most once a day per project, on a failing command too (which uses up the
+day), and never into standard output or machine-readable output; `CI` and its
+other quiet paths silence it. It comes first because agents keep the start of
+a long answer (`2>&1 | head`), so a line after the output is cut and its one
+showing of the day is spent unseen.
 
 Rejected: a line on every run, which agents learn to ignore; printing only to
 a terminal, which no agent sees; staying silent, which leaves copies and

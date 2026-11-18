@@ -12,6 +12,7 @@ import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {partData} from './_parts.mjs';
 import {openProject} from './_project.mjs';
+import {recordReads} from '../../foundation/fs/read-record.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -56,5 +57,34 @@ describe('the part data cache key', () => {
     const again = await partData(project);
     expect(again.censusKey).toBe(first.censusKey);
     expect(Object.keys(again.map).length).toBeGreaterThan(10);
+  }, 240_000);
+});
+
+describe('the part data read from the cache file', () => {
+  it('is read again after a rewrite that keeps its size, mtime and inode', async () => {
+    const project = await openProject(cwd);
+    const file = path.join(project.cacheDir, 'parts.json');
+    const built = JSON.parse(JSON.stringify(await partData(project)));
+    // Only the change time tells this rewrite apart.
+    const pinned = new Date('1985-10-26T08:15:00Z');
+    /** @param {string} mark */
+    const writeMarked = mark => {
+      fs.writeFileSync(file, JSON.stringify({...built, mark}));
+      fs.utimesSync(file, pinned, pinned);
+    };
+    writeMarked('a');
+    expect(/** @type {any} */ (await partData(project)).mark).toBe('a');
+    writeMarked('b');
+    expect(/** @type {any} */ (await partData(project)).mark).toBe('b');
+  }, 240_000);
+
+  it('counts a kept read as a read of the file', async () => {
+    const project = await openProject(cwd);
+    const file = path.join(project.cacheDir, 'parts.json');
+    await partData(project);
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    await recordReads(seen, () => partData(project));
+    expect(seen.has(file)).toBe(true);
   }, 240_000);
 });

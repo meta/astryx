@@ -112,7 +112,12 @@ import {
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
-import {keyPathLine, keyValueLine, nullThemeValues} from './null-values.mjs';
+import {
+  keyPathIndex,
+  keyPathLine,
+  keyValueLine,
+  nullThemeValues,
+} from './null-values.mjs';
 import {typographyInputProblems} from './typography-values.mjs';
 import {radiusInputProblems} from './radius-values.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
@@ -130,9 +135,17 @@ import {
   writtenPrimitives,
   writtenValueProblems,
 } from './written-values.mjs';
+import {
+  settingEffectIssues,
+  settingIssueEntries,
+  blockPaths,
+  declarationPaths,
+  settingIssueLocation,
+} from './setting-effects.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
+  installStepFor,
   parsedSpecifiers,
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
@@ -609,6 +622,15 @@ function inAstryxRepository(cwd) {
 }
 
 /**
+ * The step that installs Core in the project at `cwd`, as message text.
+ * @param {string} cwd
+ */
+function coreInstallText(cwd) {
+  const {line, note} = installStepFor(['@astryxdesign/core'], cwd);
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
  * Why `theme build` has no Core to generate with, and the fix for where it
  * ran: the Astryx repository builds Core, an app installs it, and an installed
  * Core that will not load is named.
@@ -635,7 +657,7 @@ export function coreUnavailableMessage(cwd, importError) {
   }
   return (
     `This project does not have @astryxdesign/core installed: ${why}. Install ` +
-    `it: \`npm install @astryxdesign/core\` (or yarn/pnpm/bun).${detail}`
+    `it: ${coreInstallText(cwd)}.${detail}`
   );
 }
 
@@ -3516,14 +3538,15 @@ function themeLoadSuggestions(error, shown, cwd, mode = {}) {
     ];
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
-    const {installCommand} = installCommandFor(
+    const {installCommand, installGuidance} = installCommandFor(
       [missing],
       findPackageRoot(cwd) ?? cwd,
     );
-    if (installCommand) {
+    const install = installGuidance ?? installCommand;
+    if (install) {
       return [
         {
-          name: installCommand,
+          name: install,
           reason: `install ${missing}, which the theme imports`,
         },
       ];
@@ -4471,11 +4494,13 @@ async function getKnownComponents() {
  *
  * @param {{components?: Record<string, Record<string, unknown>>, onDark?: {components?: Record<string, Record<string, unknown>>}, onLight?: {components?: Record<string, Record<string, unknown>>}, __onDark?: {components?: Record<string, Record<string, unknown>>}, __onLight?: {components?: Record<string, Record<string, unknown>>}}} themeDef
  * @param {{propsByKey: Record<string, string[]>}} knownComponents
+ * @param {Set<string>} [deadKeys] takes each `<part>\u0000<style key>` the warnings say builds a selector nothing matches
  * @returns {string[]}
  */
 export function validateComponentOverridesAgainstRegistry(
   themeDef,
   knownComponents,
+  deadKeys = new Set(),
 ) {
   /** @type {string[]} */
   const warnings = [];
@@ -4531,6 +4556,7 @@ export function validateComponentOverridesAgainstRegistry(
         for (const pair of pairs) {
           const [prop] = pair.split(':');
           if (prop && !knownProps.includes(prop)) {
+            deadKeys.add(`${component}\u0000${key}`);
             const hint =
               knownProps.length > 0
                 ? ` Known props/states: ${knownProps.join(', ')}`
@@ -4552,14 +4578,16 @@ export function validateComponentOverridesAgainstRegistry(
  * Warns on unknown component and prop names.
  *
  * @param {{components?: Record<string, Record<string, unknown>>, onDark?: {components?: Record<string, Record<string, unknown>>}, onLight?: {components?: Record<string, Record<string, unknown>>}, __onDark?: {components?: Record<string, Record<string, unknown>>}, __onLight?: {components?: Record<string, Record<string, unknown>>}}} themeDef
+ * @param {Set<string>} [deadKeys] takes each `<part>\u0000<style key>` that builds a selector nothing matches
  * @returns {Promise<string[]>}
  */
-async function validateComponentOverrides(themeDef) {
+async function validateComponentOverrides(themeDef, deadKeys = new Set()) {
   const knownComponents = await getKnownComponents();
   if (knownComponents == null) return [];
   const warnings = validateComponentOverridesAgainstRegistry(
     themeDef,
     knownComponents,
+    deadKeys,
   );
   // Style keys no element can carry: a pseudo-class or pseudo-element
   // written as a style key (`':hover'` builds `[data-="hover"]`), and a
@@ -4578,6 +4606,7 @@ async function validateComponentOverrides(themeDef) {
       for (const key of Object.keys(rules))
         for (const {prop, value} of componentValuePairs(key)) {
           if (!prop) {
+            deadKeys.add(`${component}\u0000${key}`);
             warnings.push(
               `Style key "${key}" on component "${component}" is no prop or state: a pseudo-class or pseudo-element goes inside a style key, such as base: {'${key}': {…}}. As written it builds a selector nothing matches.`,
             );
@@ -4589,10 +4618,12 @@ async function validateComponentOverrides(themeDef) {
             values.length > 0 &&
             (await classifyComponentValue(component, prop, value)) ===
               'unresolved'
-          )
+          ) {
+            deadKeys.add(`${component}\u0000${key}`);
             warnings.push(
               `Style key "${key}" on component "${component}": ${prop} takes ${values.join(', ')}, and a theme cannot add a value to it, so "${value}" builds a selector nothing matches.`,
             );
+          }
         }
     }
   return [...new Set(warnings)];
@@ -5379,11 +5410,17 @@ async function themeBuildInternal(
   });
 
   // Validate component overrides
-  const warnings = await validateComponentOverrides(themeDef);
+  // The style keys that build a selector nothing matches (warned below):
+  // no setting of theirs, and none they hold, takes part in which shows.
+  /** @type {Set<string>} */
+  const deadKeys = new Set();
+  const warnings = await validateComponentOverrides(themeDef, deadKeys);
   /** @type {string[]} */
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
+  /** @type {Array<import('./setting-effects.mjs').SettingIssueEntry & {line: number | null}>} */
+  const settingIssues = [];
   const blankSpecifier = handOff.prepareFamily
     ? null
     : blankSpecifierWarning(options.iconsSpecifier);
@@ -5663,6 +5700,60 @@ async function themeBuildInternal(
       throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
     }
     const {component, prose} = themeRules;
+    // A setting the browser never shows as written: another rule of the
+    // theme layer reaching the same element sets the same property and
+    // wins there (a shorthand after the setting, a more specific rule of
+    // the theme it extends, two situations whose order decides). Read from
+    // the rules just generated; a declaration is the theme's when its
+    // source, or a local theme it extends, writes it. Warned at its line,
+    // with the change that makes it show; the output is the same.
+    const writtenIn = [
+      {file: filePath, source: themeSource},
+      ...extendedSources,
+    ].map(s => ({file: s.file, lineOf: keyPathIndex(s.source, s.file)}));
+    // The rules of the theme it extends, generated once when first asked.
+    const blocks = blockPaths(
+      resolvedTheme.components,
+      components =>
+        _generateThemeRulesSplit(
+          _defineTheme({name: resolvedTheme.name, components}),
+          [],
+        ).component,
+    );
+    for (const entry of settingIssueEntries(
+      settingEffectIssues(
+        component,
+        at => {
+          for (const [layer, {lineOf}] of writtenIn.entries())
+            for (const keys of declarationPaths(at, blocks))
+              if (lineOf(keys, {fromRoot: true}) != null)
+                return {path: keys, layer};
+          return null;
+        },
+        {
+          skip: at =>
+            declarationPaths(at, blocks).some(p =>
+              deadKeys.has(`${p[1]}\u0000${p[2]}`),
+            ),
+        },
+      ),
+    )) {
+      // At its line in the theme's file, or in the local theme it extends
+      // that writes it (a family member's included).
+      const writer = writtenIn.find(
+        w => w.lineOf(entry.path, {fromRoot: true}) != null,
+      );
+      const line = writer?.lineOf(entry.path, {fromRoot: true}) ?? null;
+      const file =
+        writer && writer.file !== filePath
+          ? path.relative(cwd, writer.file) || writer.file
+          : null;
+      const placedEntry = {...entry, line, ...(file ? {file} : {})};
+      const w = `${entry.message}${settingIssueLocation(placedEntry)}. Fix: ${entry.fix}.`;
+      settingIssues.push(placedEntry);
+      warningMessages.push(w);
+      logger.warn(`  [warn] ${source}${w}`);
+    }
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
     // (generateThemeCSS) always emits them, so the build must too, or the
@@ -5694,9 +5785,10 @@ async function themeBuildInternal(
         ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`
         : '';
 
-    // #3658: also emit attribute-specific rules so <Theme mode> can override
-    // color-scheme. Inspect root and rule-owned values, not generated CSS, which
-    // also carries theme-independent data-token defaults with light-dark().
+    // A theme with light-dark() values pins the scheme where html forces a
+    // mode (a Theme's mode, or the host's data-theme). Inspect root and
+    // rule-owned values, not generated CSS, which also carries
+    // theme-independent data-token defaults with light-dark().
     const themeOwnValues = JSON.stringify(
       [
         resolvedTheme.tokens ?? {},
@@ -5714,10 +5806,14 @@ async function themeBuildInternal(
       ],
       bigIntAsText,
     );
+    // A theme follows the page's scheme: it pins the scheme only where the
+    // page or the Theme provider forces a mode (`data-theme` on html).
+    // Following the reader's device is the page's own choice, made by
+    // reset.css or the app's own `color-scheme` on html, never by a theme.
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')
-        ? '  :root { color-scheme: light dark; }\n  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
+        ? '  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
         : '';
     if (colorSchemeDecl || componentScope) {
       cssParts.push(
@@ -6091,6 +6187,7 @@ async function themeBuildInternal(
       tokenCount,
       componentCount,
       warnings: warningMessages,
+      settingIssues,
       unloadedFonts,
       unbuiltStylesheets,
     };
@@ -6192,6 +6289,9 @@ async function themeBuildInternal(
         checked: checkedBuildOutputs(writes, cwd),
         // The code a stale check exits 1 with, for --json callers.
         ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
+        // A check reads the settings a build would warn about, so a check
+        // (`astryx doctor`, an editor) can say them without writing.
+        ...(settingIssues.length ? {settingIssues} : {}),
       },
     });
   }
@@ -6288,6 +6388,7 @@ async function themeBuildInternal(
       },
       warnings: warningMessages,
       notices: noticeMessages,
+      settingIssues,
     },
   };
 }
@@ -7033,6 +7134,26 @@ async function buildFamily(
       onWarning: message => outputWarnings.push(message),
     });
   }
+  // Each member's settings that do not show as written, at the member's
+  // file when the member's own source writes them.
+  // (A member that extends another reports the other's setting too: once.)
+  const familySettingIssues = [
+    ...new Map(
+      members
+        .flatMap(member =>
+          (member.settingIssues ?? []).map(
+            (/** @type {any} */ issue) => ({
+              ...issue,
+              file: issue.file ?? path.relative(cwd, member.filePath),
+            }),
+          ),
+        )
+        .map(issue => [
+          JSON.stringify([issue.file, issue.path, issue.by.path, issue.by.key]),
+          issue,
+        ]),
+    ).values(),
+  ];
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
@@ -7070,6 +7191,9 @@ async function buildFamily(
         checked: checkedBuildOutputs(writes, cwd),
         // The code a stale check exits 1 with, for --json callers.
         ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
+        ...(familySettingIssues.length
+          ? {settingIssues: familySettingIssues}
+          : {}),
       },
     });
   }
@@ -7142,6 +7266,9 @@ Or load the same stylesheet natively:
       outputs,
       warnings,
       notices,
+      // Each member's settings that do not show as written, at the member's
+      // file when its own source writes them.
+      settingIssues: familySettingIssues,
       // The base the family's root extends that the family does not select:
       // a requirement of the outputs (an installed package the app keeps).
       ...(familyBase ? {base: familyBase} : {}),

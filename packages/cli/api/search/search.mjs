@@ -11,7 +11,8 @@
  * block), and themes. The adapter gathers every candidate (_adapter.mjs),
  * and search's tree (tree.mjs) picks the searcher that answers.
  * `searchCore(query)` is the lexical ranker alone (_lexical.mjs); `build`
- * reads it, so build's output does not move when search's tree does. A doc
+ * reads it, so build's output does not move when search's tree does. Only
+ * `search` adds the icon section (_icons.mjs). A doc
  * keyword that is another entry's name is not a match (_named-keywords.mjs)
  * in three places: `search`, `rankSearchIndex` (search-index.mjs), and
  * `searchCore` with `ownKeywords`. `searchCore` without it, which build
@@ -23,7 +24,11 @@ import {
   runWithDocPackageManager,
 } from '../../foundation/env/package-manager.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
-import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
+import {
+  gatherCandidatesReused,
+  loadSearchData,
+  searchIconSection,
+} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {searchView} from './_named-keywords.mjs';
 import {checkSearchArgs} from './_result.mjs';
@@ -47,11 +52,13 @@ export {componentKeywords} from './_adapter.mjs';
 
 /**
  * Unified ranked search across components, hooks, docs, templates, and themes.
+ * With an icon set installed, a query that asks for an icon also lists the
+ * icons that answer it in `data.icons`, after the results.
  *
  * @param {string} query - Free-text search term.
  * @param {object} [options]
  * @param {string} [options.cwd]
- * @param {'component'|'hook'|'doc'|'template'|'theme'} [options.type] - Restrict to one domain.
+ * @param {'component'|'hook'|'doc'|'template'|'theme'} [options.type] - Restrict to one domain. A search for one domain lists no icons.
  * @param {number} [options.limit] - Max results (default 20).
  * @returns {Promise<import('./search.type.mjs').SearchResponse>}
  */
@@ -64,32 +71,66 @@ export async function search(query, options = {}) {
 }
 
 /**
- * The search itself, inside its project's package-manager scope.
+ * The search itself, inside its project's package-manager scope: the ranked
+ * results, then, for a query that asks for an icon, the installed icons that
+ * answer it as a trailing `icons` section (_icons.mjs).
  * @param {string} query
  * @param {any} options
  */
 async function searchRead(query, options) {
-  return withListingCache(
-    async () =>
-      /** @type {import('./search.type.mjs').SearchResponse} */ (
-        await linkSearchResponse(
-          /** @type {import('./search.type.mjs').SearchResponse} */ (
-            await runTree(
-              SEARCH_TREE,
-              {query, options},
-              {
-                // A keyword that names another entry is not a match here
-                // (_named-keywords.mjs); searchCore, which build reads,
-                // keeps every keyword.
-                ...(await searchCatalog(options)),
-                data: loadSearchData(),
-              },
-            )
-          ),
-          options.cwd ?? process.cwd(),
-        )
-      ),
-  );
+  const {response, catalog} = await rankedSearch(query, options);
+  // A search for one `type` keeps to that domain, and icons are not one.
+  if (options.type == null) {
+    const icons = await searchIconSection(query, {
+      cwd: options.cwd ?? process.cwd(),
+      declaredNames: declaredNames(catalog.all),
+      resultDomains: response.data.results.map(result => result.domain),
+      limit: options.limit ?? 20,
+    });
+    if (icons) response.data.icons = icons;
+  }
+  return response;
+}
+
+/**
+ * The names of the components and hooks in a gathered catalog.
+ * @param {import('./_lexical.mjs').Candidate[]} all
+ * @returns {string[]}
+ */
+function declaredNames(all) {
+  return all
+    .filter(c => c.domain === 'component' || c.domain === 'hook')
+    .map(c => c.name);
+}
+
+/**
+ * The ranked results, as the tree picks them, and the catalog it ranked.
+ * @param {string} query
+ * @param {any} options
+ */
+async function rankedSearch(query, options) {
+  return withListingCache(async () => {
+    const catalog = await searchCatalog(options);
+    const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
+      await linkSearchResponse(
+        /** @type {import('./search.type.mjs').SearchResponse} */ (
+          await runTree(
+            SEARCH_TREE,
+            {query, options},
+            {
+              // A keyword that names another entry is not a match here
+              // (_named-keywords.mjs); searchCore, which build reads,
+              // keeps every keyword.
+              ...catalog,
+              data: loadSearchData(),
+            },
+          )
+        ),
+        options.cwd ?? process.cwd(),
+      )
+    );
+    return {response, catalog};
+  });
 }
 
 /**

@@ -4,7 +4,7 @@
  * @file A rendered page works as the app works. One page with tabs, a
  * popover, a menu, a dialog and a form is built into a Vite app (the way a
  * builder's app is built, with the Vite plugin from @astryxdesign/build) and
- * rendered to one file with `astryx experimental render`. Chromium runs the
+ * rendered to one file with `astryx experimental export`. Chromium runs the
  * same clicks, keys and typing in both, the file inside a sandboxed frame
  * under a strict content security policy, as an artifact viewer shows it.
  * After each step the two pages must show the same thing, and the app must

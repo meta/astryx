@@ -1082,7 +1082,8 @@ export function builtIntegrationPackages(target, cwd) {
 
 /**
  * The install line for the font families a known package loads (an open
- * font the editor's table names), in the project's package manager, and
+ * font the editor's table names), as the project's integration install
+ * guidance gives it, else in the project's package manager, and
  * whether it loads every family given. A family no known package loads (a
  * self-hosted face) gets none: its package name would be a guess.
  * @param {string} projectDir

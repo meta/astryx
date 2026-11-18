@@ -164,10 +164,8 @@ export function templateCopy(
 
   // Analyze what the template needs that the project lacks: external packages
   // and the StyleX compiler. Derived from the source's own imports.
-  const {notes, missingPackages, installCommand} = analyzeTemplateNeeds(
-    outputSource,
-    cwd,
-  );
+  const {notes, missingPackages, installCommand, installGuidance} =
+    analyzeTemplateNeeds(outputSource, cwd);
   const missing = missingPackages;
 
   const relOutput = scratch ? outputDir : path.relative(cwd, outputDir) || '.';
@@ -184,6 +182,7 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
+      ...(installGuidance ? {installGuidance} : {}),
       ...(path.isAbsolute(targetPath) && !scratch
         ? {givenPath: targetPath}
         : {}),
