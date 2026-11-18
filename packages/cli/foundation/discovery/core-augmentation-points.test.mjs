@@ -175,6 +175,50 @@ declare module 'somewhere-else' {
     ).toBe(true);
   });
 
+  it('reads a hidden folder the tsconfig includes, as Next.js does', () => {
+    put(
+      'tsconfig.json',
+      JSON.stringify({
+        include: [
+          'next-env.d.ts',
+          '**/*.ts',
+          '**/*.tsx',
+          '.next/types/**/*.ts',
+        ],
+      }),
+    );
+    put(
+      '.next/types/brand.d.ts',
+      "export {};\ndeclare module '@astryxdesign/core/Button' { interface ButtonVariantMap { brand: true } }\n",
+    );
+    const {keys, complete} = projectAugmentations(
+      dir,
+      path.join(dir, 'src', 'page.tsx'),
+    );
+    expect(complete).toBe(true);
+    expect([...(keys.get('ButtonVariantMap') ?? [])]).toEqual(['brand']);
+  });
+
+  it('reads the declarations of a package whose integration manifest is TypeScript', () => {
+    put(
+      'node_modules/@acme/theme/package.json',
+      JSON.stringify({name: '@acme/theme'}),
+    );
+    put(
+      'node_modules/@acme/theme/astryx.integration.ts',
+      'export default {};\n',
+    );
+    put(
+      'node_modules/@acme/theme/dist/acme.variants.d.ts',
+      "export {};\ndeclare module '@astryxdesign/core/Banner' { interface BannerStatusMap { neutral: true } }\n",
+    );
+    expect([
+      ...(projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).keys.get(
+        'BannerStatusMap',
+      ) ?? []),
+    ]).toEqual(['neutral']);
+  });
+
   it('says it is incomplete when the walk meets a linked folder', () => {
     const outside = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-augmentations-linked-'),
