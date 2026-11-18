@@ -23,6 +23,8 @@ import {
   durationVars,
   easeVars,
   borderVars,
+  sizeVars,
+  typeScaleVars,
 } from '../theme/tokens.stylex';
 
 /**
@@ -86,6 +88,44 @@ export const inputWrapperStyles = stylex.create({
       default: durationVars['--duration-fast'],
       '@media (prefers-reduced-motion: reduce)': '0s',
       '@media (pointer: coarse)': '0s',
+    },
+  },
+});
+
+/**
+ * The row height of a one-line text field, by size. The size token is the
+ * height at the theme's default text size: the block padding is what is left
+ * after the text line and the two borders, so the row is exactly the size
+ * there. Larger text grows the row instead of being cut, keeping at least a
+ * hairline of padding. The coarse-pointer line follows the iOS 16px floor the
+ * input's own font size has.
+ */
+export const inputRowSizeStyles = stylex.create({
+  sm: {
+    minHeight: sizeVars['--size-element-sm'],
+    paddingBlock: {
+      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-sm']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
+    },
+  },
+  md: {
+    minHeight: sizeVars['--size-element-md'],
+    paddingBlock: {
+      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-md']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
+    },
+  },
+  lg: {
+    minHeight: sizeVars['--size-element-lg'],
+    paddingBlock: {
+      default: `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - ${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(${spacingVars['--spacing-0-5']}, calc((${sizeVars['--size-element-lg']} - max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} - 2 * ${borderVars['--border-width']}) / 2))`,
+      },
     },
   },
 });
