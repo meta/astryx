@@ -70,8 +70,8 @@ third-party libraries beside these components without conflict.
 
 ## Non-goals
 
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - What `AstryxPlatformInfo` reports: the binary's components, capabilities and
   feature rows, this run's process start and prewarm, memory, and bundle size
   (`spec:AST-130/FR8`). This record names only the feature row of FR6.
