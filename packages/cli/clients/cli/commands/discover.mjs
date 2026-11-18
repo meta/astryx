@@ -28,6 +28,7 @@ import {
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
 import {definitionCoverageText} from '../../../foundation/text/definition-coverage.mjs';
+import {defaultVariantText} from '../../../foundation/text/default-variant.mjs';
 import {
   answersQueries,
   discover as discoverApi,
@@ -637,26 +638,23 @@ export function registerDiscover(program) {
 
           case 'discover.item': {
             const d = result.data;
+            const shown =
+              d.kind === 'icon-set'
+                ? {...d, default: defaultVariantText(d.default)}
+                : d;
             emit(
-              record(withIconSetCoverage(d, iconSetCoverageOf(result)), {
+              record(withIconSetCoverage(shown, iconSetCoverageOf(result)), {
                 omit: ['install', 'experimental'],
-                format: {
-                  // An icon set is experimental (spec:AST-017 FR27): its name
-                  // carries the mark, as in the list.
-                  ...(d.experimental
-                    ? {
+                // An icon set is experimental (spec:AST-017 FR27): its name
+                // carries the mark, as in the list.
+                ...(d.experimental
+                  ? {
+                      format: {
                         name: (/** @type {string} */ name) =>
                           `${name} [experimental]`,
-                      }
-                    : {}),
-                  // An icon set's default look reads as its variant name.
-                  ...(d.kind === 'icon-set'
-                    ? {
-                        default: (/** @type {{variant?: string}} */ look) =>
-                          look.variant ?? '',
-                      }
-                    : {}),
-                },
+                      },
+                    }
+                  : {}),
               }),
               // A doc that adds sections to another package's topic says how
               // to read each one.
