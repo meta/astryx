@@ -311,7 +311,7 @@ Dialog and DropdownMenu.
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a non-modal participant takes Escape only
   while focus is inside it, or on or inside its anchor or trigger (FR15). A platform close
-  request follows the same presence rule (FR3). Its `FR2 gap:` line cites the
+  request follows the same presence rule (FR3). Its `FR2 and FR3 gap:` line cites the
   FR15 gap.
 - Consumer docs: `usePopover.doc.mjs` documents the anchoring inputs;
   `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
@@ -412,9 +412,9 @@ contains Tab and says so with `aria-modal`; a non-modal popover does neither,
 and Tab follows the browser's order: the popover's controls come after its
 trigger, or after the anchor when there is no trigger (FR12). A coachmark or tour step is non-modal so the person can reach the control
 it describes. This supersedes `component:Popover` DEC-9 and AR3 for
-`isModal: false`, and DEC-8's modal, always light-dismissing sheet for an
+`isModal: false`, and `component:Popover` DEC-8's modal, always light-dismissing sheet for an
 `isModal: false` sheet (FR16), and adds FR15's exception to
-`family:overlay-dismissal`'s topmost Escape; DEC-9 and DEC-8 still govern the
+`family:overlay-dismissal`'s topmost Escape; Popover's DEC-9 and DEC-8 still govern the
 modal default.
 
 Rejected: a separate focus-region input with a value that cycles through the

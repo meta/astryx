@@ -181,7 +181,7 @@ this record's current membership snapshot must be updated with it.
   to a member behind it. A non-modal Popover is present for Escape only while
   focus is inside it, or on or inside its anchor or trigger (`spec:AST-116`
   FR15); otherwise
-  the press goes to the member beneath it.
+  the press goes to the member beneath it, or to the page when none is.
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
   registered present member. A request aimed at a lower member is declined.
@@ -251,7 +251,7 @@ this record's current membership snapshot must be updated with it.
   layer returns it, or else on the host itself. The rule is the same for a
   mouse, a pen, and a finger.
 
-FR2 gap: Escape and platform close requests reach a non-modal Popover through
+FR2 and FR3 gap: Escape and platform close requests reach a non-modal Popover through
 the shared stack and native auto light dismiss wherever focus is
 (`spec:AST-116` FR15 gap).
 
