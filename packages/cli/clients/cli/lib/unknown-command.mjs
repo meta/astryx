@@ -623,12 +623,23 @@ async function pointed({word, before, after: rest}, program, findEntry) {
 
   // An experimental command a stable answer may name, asked for by a word
   // that means it (`share page.tsx` is `experimental export page.tsx`).
+  // A share word before a name another command reads (`export Button`)
+  // leaves that name to the lookup below.
   const asked = NAMED_EXPERIMENTAL.find(e =>
     spellings(word).some(w => e.asks.includes(w)),
   );
-  if (asked && runParses(program, [...before, ...asked.words])) {
-    // `render experimental page.tsx` already named the group.
-    const carried = rest.filter(w => w !== asked.words[0]);
+  const readName =
+    asked && rest[0] && !rest[0].startsWith('-')
+      ? await findEntry(rest[0]).catch(() => null)
+      : null;
+  if (
+    asked &&
+    !(readName && topNames.includes(readName.command)) &&
+    runParses(program, [...before, ...asked.words])
+  ) {
+    // `render experimental page.tsx` already named the group: drop that
+    // one word, never a later `experimental` (a `--title` value, say).
+    const carried = rest[0] === asked.words[0] ? rest.slice(1) : rest;
     return [
       run(
         runParses(program, [...before, ...asked.words, ...carried])

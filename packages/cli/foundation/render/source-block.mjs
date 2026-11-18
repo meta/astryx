@@ -2,7 +2,7 @@
 
 /**
  * @file The page source a rendered file carries, so `astryx experimental
- * render --reverse` can give it back byte for byte. It is one
+ * export --reverse` can give it back byte for byte. It is one
  * `<script type="application/x-astryx-source">` data block: browsers never run
  * it, and its JSON holds each file base64-encoded with its SHA-256, so no text
  * in the source (`</script>` included) can end the block early.

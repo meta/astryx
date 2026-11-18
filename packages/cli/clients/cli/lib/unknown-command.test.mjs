@@ -63,7 +63,10 @@ function program() {
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
   experimental.command('icon').argument('[query...]');
-  experimental.command('export').argument('[page]');
+  experimental
+    .command('export')
+    .argument('[page]')
+    .option('--title <title>', 'title');
   return root;
 }
 
@@ -261,6 +264,16 @@ describe('words from another command line', () => {
     expect(await names(['share', 'page.tsx'])).toEqual([
       'astryx experimental export page.tsx',
     ]);
+    expect(
+      await names(['share', 'page.tsx', '--title', 'experimental']),
+    ).toEqual(['astryx experimental export page.tsx --title experimental']);
+  });
+
+  it('leaves a name another command reads after a share word to the name lookup', async () => {
+    expect(await names(['export', 'button'])).toEqual([
+      'astryx component Button',
+    ]);
+    expect(await names(['share', 'Card'])).toEqual(['astryx component Card']);
   });
 
   it('keeps the program options after the name in the props, add and template-kind runs', async () => {
