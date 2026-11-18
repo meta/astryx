@@ -72,7 +72,8 @@
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
  *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
- *   CACHE_LIMIT_BYTES (cache-eviction.mjs). Any failure to read, check, parse or write is silent
+ *   CACHE_LIMIT_BYTES (cache-eviction.mjs) once a run that wrote ends, or by
+ *   doctor's summary when it finds the folder over that. Any failure to read, check, parse or write is silent
  *   and the run gathers fresh, as it would with no cache.
  */
 
@@ -164,7 +165,7 @@ const UNSET = null;
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather, or, in a run armed throughout
  * (`doctor`), to its end. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed, trims: Set<string>} | null}
  */
 let run = null;
 
@@ -501,13 +502,44 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     armedThroughout,
     realEnv,
     confirmed: new Map(),
+    trims: new Set(),
   };
+  const {trims} = run;
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
     disarm();
     run = null;
+    for (const dir of trims) trimNow(dir);
   }
+}
+
+/**
+ * Keep a catalogs folder within its size limit after a write to it. In a
+ * recorded run the folder is trimmed once, when the run ends, so a run that
+ * keeps many values (a first `theme build` keeps one per Core component doc)
+ * reads the folder once, not once per value. Outside a run it is trimmed at
+ * once.
+ * @param {string} dir
+ */
+function trimAfterWrite(dir) {
+  if (run) run.trims.add(dir);
+  else trimNow(dir);
+}
+
+/**
+ * Trim a catalogs folder to its size limit now, the oldest entries first.
+ * @param {string} dir
+ */
+function trimNow(dir) {
+  // The cache's own upkeep, never an input of what it keeps.
+  withoutRecording(() => {
+    try {
+      evictOldest(dir, isEntry);
+    } catch {
+      // A folder that cannot be read is trimmed by a later run.
+    }
+  });
 }
 
 /**
@@ -1123,7 +1155,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evictOldest(dir, isEntry);
+      trimAfterWrite(dir);
     } catch {
       // A value that cannot be stored is computed again next time.
     }
@@ -1195,7 +1227,7 @@ export function persistedValue(key, compute, codec) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evictOldest(dir, isEntry);
+      trimAfterWrite(dir);
     } catch {
       // A value that cannot be stored is computed again next time.
     }
@@ -1408,7 +1440,7 @@ function storeSummary({dir, file, entry}, value, made) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evictOldest(dir, isEntry);
+      trimAfterWrite(dir);
     } catch {
       // A summary that cannot be stored is made again next time.
     }
@@ -1544,7 +1576,7 @@ function store(dir, file, entry, value, codec) {
       deps: deps.map(([name]) => path.join(dir, name)),
     });
     markUsed(file, run.confirmed);
-    evictOldest(dir, isEntry);
+    trimAfterWrite(dir);
   } catch {
     // A gather that cannot be stored is gathered again next time.
   }
@@ -1574,11 +1606,13 @@ export function gatherCacheSummary() {
   return withoutRecording(summarize);
 }
 
-/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null} */
-function summarize() {
-  if (buildId() == null) return null;
-  const dir = gatherCacheDir();
-  if (dir == null) return null;
+/**
+ * The entries a catalogs folder holds and their bytes, or null when the
+ * folder cannot be read.
+ * @param {string} dir
+ * @returns {{bytes: number, entries: number} | null}
+ */
+function heldIn(dir) {
   let bytes = 0;
   let entries = 0;
   try {
@@ -1594,6 +1628,23 @@ function summarize() {
   } catch {
     return null;
   }
+  return {bytes, entries};
+}
+
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, transpiledDir: string} | null} */
+function summarize() {
+  if (buildId() == null) return null;
+  const dir = gatherCacheDir();
+  if (dir == null) return null;
+  let held = heldIn(dir);
+  // A folder over its limit is trimmed first: this run's own writes are
+  // trimmed only when it ends, and a run that stopped early never trimmed.
+  if (held != null && held.bytes > CACHE_LIMIT_BYTES) {
+    trimNow(dir);
+    held = heldIn(dir);
+  }
+  if (held == null) return null;
+  const {bytes, entries} = held;
   return {
     dir,
     bytes,
