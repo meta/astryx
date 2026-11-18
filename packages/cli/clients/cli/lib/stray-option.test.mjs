@@ -237,16 +237,24 @@ describe('an option that answers a question', () => {
     ).toEqual(['component --list']);
   });
 
-  it('names the approval on a command that goes ahead only with one', () => {
+  it('names --apply on upgrade, which writes only with it', () => {
     const {upgrade} = program();
     upgrade.option('--apply', 'apply');
     const a = answer(upgrade, '--yes', ['upgrade', '--from', '0.6.0', '--yes']);
     expect(a?.message).toBe(
-      '--yes is not needed: Astryx commands never ask questions. upgrade goes ahead only with --apply.',
+      '--yes is not needed: Astryx commands never ask questions. upgrade writes only with --apply.',
     );
     expect(
       a?.suggestions.map(s => s.name.replace(/^.*?astryx\S*\s+/, '')),
     ).toEqual(['upgrade --from 0.6.0 --apply', 'upgrade --from 0.6.0']);
+  });
+
+  it('gives the plain answer to a listing run, which takes no approval', () => {
+    const {upgrade} = program();
+    upgrade.option('--apply', 'apply').option('--list', 'list');
+    const a = answer(upgrade, '--yes', ['upgrade', '--list', '--yes']);
+    expect(a?.message).toMatch(/Drop it and run the command again\.$/);
+    expect(runs(a)).toEqual(['upgrade --list']);
   });
 
   it('gives the usual answer for an option that is no answer to a question', () => {

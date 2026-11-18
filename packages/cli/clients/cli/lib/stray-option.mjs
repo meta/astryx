@@ -305,11 +305,11 @@ const CONFIRM_OPTIONS = new Set([
 ]);
 
 /**
- * The option that approves the action on a command that only previews
+ * The option that lets a command write, on a command that only previews
  * without it. A `--yes` there means "go ahead", so the answer names it.
  * @type {Record<string, string>}
  */
-const APPROVAL_OPTIONS = {upgrade: '--apply', 'gap-report': '--confirm-public'};
+const APPROVAL_OPTIONS = {upgrade: '--apply'};
 
 /**
  * The answer to an option a command does not take.
@@ -355,20 +355,23 @@ export function strayOptionAnswer(
     const line = (/** @type {string[]} */ w) =>
       formatCliCommand(w.map(x => quoteCommandArgument(x)).join(' '));
     const approval = APPROVAL_OPTIONS[path.join(' ')];
+    // A listing run writes nothing, so it takes no approval.
     const approved =
-      approval && !run.includes(approval) ? [...run, approval] : null;
+      approval && !run.includes(approval) && !run.includes('--list')
+        ? [...run, approval]
+        : null;
     if (
       approved &&
       runParses(rootOf(cmd), approved) &&
       runParses(rootOf(cmd), run)
     )
       return {
-        message: `${flag} is not needed: Astryx commands never ask questions. ${path.join(' ')} goes ahead only with ${approval}.`,
+        message: `${flag} is not needed: Astryx commands never ask questions. ${path.join(' ')} writes only with ${approval}.`,
         suggestions: [
-          {name: line(approved), reason: 'do this instead: go ahead'},
+          {name: line(approved), reason: 'do this instead: write the changes'},
           {
             name: line(run),
-            reason: `without ${approval}: see what it would do first`,
+            reason: `without ${approval}: see what it would change first`,
           },
         ],
       };
