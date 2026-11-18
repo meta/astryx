@@ -80,10 +80,12 @@ owns response fields and compatibility.
   never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
-  ranker's answer unchanged. In search's reading, an entry whose name of two
-  or more words a longer query writes as one word, in any casing or
-  separator, leads the lexical answer, and the order inside runs keeps it
-  first.
+  ranker's answer unchanged. In search's reading, a match whose name of two
+  or more words a longer query writes as one word (`TableSortableTable`,
+  `table-sortable-table`) leads the lexical answer, and the order inside runs
+  keeps it first. It does not lead when a longer named run of the query
+  contains that word, or when a block's display name or a doc's title or
+  heading that the query holds contains it.
 - **FR4 — build orders the block catalog for its block slots.**
   `spec:AST-048` owns which blocks build lists and delegates their order here.
   Build's `blocks` hold as many blocks as build itself lists, each once, each

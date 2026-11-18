@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file In search's reading, an entry whose name of two or more words the
- * query writes as one whole word, in any casing or separator, leads the
- * answer, alone or inside a longer ask. Words written apart, one-word names,
- * a name inside a longer named run or a held display name or title, and a
- * typed word that only starts a name lead nothing. searchCore,
- * which build reads, keeps the gathered order. All entries here are made up.
+ * @file In search's reading, a match whose name of two or more words the
+ * query writes as one whole word leads the answer, alone or inside a longer
+ * ask. Words written apart, one-word names, a typed word that only starts a
+ * name, and a name inside a longer named run or inside a display name, title
+ * or heading the query holds lead nothing. searchCore, which build reads,
+ * keeps the gathered order. All entries here are made up.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -64,7 +64,7 @@ const fluxColors = {
   domain: 'doc',
   name: 'guides/flux-colors',
   _topic: 'guides/flux-colors',
-  titles: ['Palette picks'],
+  titles: ['Palette picks', 'GlimTray tray heading'],
   keywords: [],
   description: 'Which flux colors to pick.',
 };
@@ -111,7 +111,7 @@ const leadsOf = (query, view = true) => {
 };
 
 describe('a name written as one word', () => {
-  it('leads inside a longer ask, in any casing or separator', () => {
+  it('leads inside a longer ask, however the one word is written', () => {
     for (const query of [
       'GlimTraySortedRows with paging',
       'glim-tray-sorted-rows with paging',
@@ -156,6 +156,14 @@ describe('nothing leads', () => {
   it('for a name inside a held display name', () => {
     expect(leadsOf('GlimTray — Sorted rows example')).toEqual([]);
     expect(leadsOf('GlimTray paging example')).toEqual(['GlimTray']);
+  });
+
+  it('for a name inside a held title, read as the title tier reads it', () => {
+    expect(leadsOf('GlimTray — Sorted row example')).toEqual([]);
+    expect(leadsOf('how do I pick palette GlimTray colors')).toEqual([
+      'GlimTray',
+    ]);
+    expect(leadsOf('GlimTray tray heading example')).toEqual([]);
   });
 
   it('for a name inside a longer named run', () => {

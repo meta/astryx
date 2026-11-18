@@ -56,6 +56,7 @@ import {spellIdentifiers, joined} from './_words.mjs';
 import {tokenizeQuery, phraseWords, pluralOf} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
+import {heldTitle} from './_titles.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf, namedLeadsOf} from './_result.mjs';
@@ -501,9 +502,9 @@ export function rankLexical(query, options, catalog) {
     scored.sort((a, b) => Number(ahead.has(b)) - Number(ahead.has(a)));
   }
   // In search's reading (`ownEvidence`), an entry whose name of two or more
-  // words the query writes as one word, in any casing or separator (`TableSortableTable`, `table-sortable-table`,
-  // `tablesortabletable`, `tokens-color` for `tokens/tokens-color`), leads the
-  // answer, alone or inside a longer ask. Words written apart are plain
+  // words the query writes as one word (`TableSortableTable`,
+  // `table-sortable-table`, `tokens-color` for `tokens/tokens-color`), leads
+  // the answer, alone or inside a longer ask. Words written apart are plain
   // language (`multiline text input` asks for no TextInput), and a one-word
   // name (`card`, `table`) names too much: both keep their lexical place. A
   // name inside a longer named run does not lead (`FileInputBasic` names no
@@ -542,22 +543,23 @@ export function rankLexical(query, options, catalog) {
   const typedNamed = typed.filter(
     ({span}) => !runs.some(run => inside(span, run)),
   );
-  // A longer name of another entry the query holds word for word, a block's
-  // display name or a doc's title (`ChatComposerInput — Controlled`), names
-  // that entry more fully, so the name inside it does not lead.
+  // A longer name of another entry the query holds, a block's display name or
+  // a doc's title or heading (`ChatComposerInput — Controlled`), names that
+  // entry more fully, so the name inside it does not lead. It is held as the
+  // title tier holds a title (heldTitle), with the query's identifiers spelled
+  // out on both sides.
   /** @type {[number, number][]} */
   const labels = [];
   if (typedNamed.length) {
+    const spelledWords = (/** @type {string} */ text) =>
+      phraseWords(spellIdentifiers(text));
     for (const candidate of all) {
-      for (const label of [candidate._displayName, candidate.titles?.[0]]) {
-        if (!label) continue;
-        const words = phraseWords(spellIdentifiers(String(label)));
-        if (words.length < 2) continue;
-        for (let a = 0; a + words.length <= queryWords.length; a++) {
-          if (words.every((w, n) => queryWords[a + n] === w)) {
-            labels.push([a, a + words.length]);
-          }
-        }
+      for (const label of [
+        candidate._displayName,
+        ...(candidate.titles ?? []),
+      ]) {
+        const held = heldTitle(queryWords, [label], spelledWords);
+        if (held) labels.push(held.at);
       }
     }
   }
