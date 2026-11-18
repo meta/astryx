@@ -15,9 +15,11 @@
  *   inherits that theme's chat radius, so its tokens are left alone when the
  *   base sets the token: an Astryx theme, or a theme this project defines,
  *   which this upgrade migrates (a relative or aliased import, a
- *   `defineTheme()` binding in the file, or an inline `defineTheme()`). Any
- *   other base, such as a theme from another package, gets a TODO: an upgrade
- *   never edits installed dependencies.
+ *   `defineTheme()` binding in the file, or an inline `defineTheme()`). A
+ *   relative or aliased import is trusted to be such a theme, so a project
+ *   file that re-exports a theme from another package is not detected. Any
+ *   other base, such as a theme from another package, gets a TODO that covers
+ *   its adaptation rules too: an upgrade never edits installed dependencies.
  * - Each adaptation rule with a radius scale gets its page step in its own
  *   tokens, with `base` and `multiplier` completed from the theme's scale.
  *   A theme's own radius scale also completes its base theme's adaptation
@@ -46,9 +48,10 @@ export const meta = {
     "adaptation rule's radius scale to that rule's tokens. This keeps the " +
     'corners of ChatComposer, its drawer and status bar, the buttons inside ' +
     'the composer other than the send button, and ChatMessageBubble. A ' +
-    'theme that extends an Astryx theme or one this project defines, and ' +
-    "has no radius scale of its own, inherits that theme's value; one that " +
-    'extends another theme gets a TODO. Remove ' +
+    'theme that extends an Astryx theme or one this project defines (a ' +
+    'relative or aliased import is trusted to be one), and has no radius ' +
+    "scale of its own, inherits that theme's value; one that extends " +
+    'another theme gets a TODO. Remove ' +
     'an added token to adopt the container radius.',
 };
 
@@ -63,12 +66,25 @@ const TODO_COMMENT =
   'its radius scale (base × 7 × multiplier, in px). Add the page step of ' +
   "each adaptation rule's radius scale to that rule's tokens too. ";
 
+const BASE_RULES_SENTENCE =
+  'If the base has an adaptation rule with a radius scale, add a rule with ' +
+  'the same condition here whose tokens set "--radius-chat" to that ' +
+  "rule's page step (base × 7 × multiplier, in px, completed from the " +
+  "theme's radius scale). ";
+
 const TODO_EXTENDS_COMMENT =
   ' TODO(astryx upgrade): --radius-chat now follows the container radius, ' +
   'and this theme extends a theme this upgrade does not migrate. To keep ' +
   'its previous chat corners, add "--radius-chat" to its tokens: the base ' +
   "theme's own --radius-chat, else 28px, or the page step of the base's " +
-  'radius scale (base × 7 × multiplier, in px). ';
+  'radius scale (base × 7 × multiplier, in px). ' +
+  BASE_RULES_SENTENCE;
+
+const TODO_EXTENDS_RULES_COMMENT =
+  ' TODO(astryx upgrade): --radius-chat now follows the container radius, ' +
+  'and this theme extends a theme this upgrade does not migrate, whose ' +
+  'radius scale no longer sets it. ' +
+  BASE_RULES_SENTENCE;
 
 const TODO_BASE_RULES_COMMENT =
   ' TODO(astryx upgrade): --radius-chat now follows the container radius, ' +
@@ -285,8 +301,11 @@ function migrateConfig(config, edits) {
   } else if (!setsToken && (radius || !extendsTheme)) {
     edits.token(config, `${scale ? pageStep(scale) : PREVIOUS_CHAT_RADIUS}px`);
     changed = true;
-  } else if (!setsToken && base === 'other') {
-    changed = todo(TODO_EXTENDS_COMMENT);
+  } else if (!radius && base === 'other') {
+    // The base's own adaptation rules lose their chat radius too.
+    changed = todo(
+      setsToken ? TODO_EXTENDS_RULES_COMMENT : TODO_EXTENDS_COMMENT,
+    );
   }
   if (radius && extendsTheme && base !== 'astryx') {
     changed = todo(TODO_BASE_RULES_COMMENT) || changed;
