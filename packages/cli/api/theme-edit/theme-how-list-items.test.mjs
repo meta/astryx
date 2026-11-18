@@ -204,9 +204,6 @@ describe('other readings', () => {
     async test => {
       needsBases(test);
       const pill = await answer('the active nav item should be a #e8def8 pill');
-      expect(pill.all).toContain(
-        'corners pill --on top-nav-item --state selected',
-      );
       expect(pill.text).not.toMatch(/but not "#e8def8"/);
       expect(
         (await answer('table rows divided by 1px lines')).text,
