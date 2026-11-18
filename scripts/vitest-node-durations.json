@@ -1637,6 +1637,5 @@
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 4.7,
     "scripts/vitest-shard-watchdog.test.mjs": 11.2
-  },
-  "packages/cli/api/theme-edit/theme-edit-box-shorthand-sides.test.mjs": 20000
+  }
 }
