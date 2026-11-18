@@ -64,8 +64,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 - `AstryxPlatformInfo`: the binary's own contract facts (linked capabilities
   and named features), which only the binary can report.
 - `AstryxPermissions`: a small gap. A closed set of permissions tied to the
-  camera and photo capabilities, with `not-declared` where the system would
-  end the app (OQ1).
+  camera capability, with `not-declared` where the system would end the app
+  (OQ1).
 - `AstryxBack`: React Native's activity takes every back press; this gate
   hands the root press to the system, so Android plays its back-to-home
   animation.
@@ -474,12 +474,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   Astryx itself uses; every module of this group is such code.
 - Is the System modules group record that `spec:AST-112/FR7` names: it lists
   the group's ten core modules and the core cache location (FR1, FR14).
-- Changes `spec:AST-112/FR5`: the `./network` entry and its cookies leave the
-  package's app API, since no Astryx component uses them.
 - Camera capture, the camera source of a picker included, is the `camera`
   capability's (`spec:AST-112/FR7`; FR12).
-- Details an exception to `spec:AST-112/FR7` for the hint calls that return
-  no value (FR2); OQ2 asks whether the exception stands.
+- Departs from `spec:AST-112/FR7` ("never a silent no-op") for the hint calls
+  that return no value (FR2); OQ2 asks whether FR7 names them as an
+  exception.
 - Details `spec:AST-112` FR7 (each module's probes) and FR9 (the haptic moment mapping), and `spec:AST-140/FR3`
   (each module's results).
 
