@@ -36,6 +36,7 @@ import {
   oncePerListing,
   withListingCache,
 } from '../../foundation/fs/listing-cache.mjs';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -118,11 +119,23 @@ function nodeModulesRoot(dir) {
 }
 
 /**
- * The install line for packages, in the project's package manager.
+ * The step that adds packages to the app: the install guidance its
+ * integrations give, else {@link packageManagerAddLine}.
  * @param {string} cwd
  * @param {string[]} packages
  */
 export function installLine(cwd, packages) {
+  return (
+    installGuidanceFor(packages, cwd) ?? packageManagerAddLine(cwd, packages)
+  );
+}
+
+/**
+ * The command that adds packages, in the project's package manager.
+ * @param {string} cwd
+ * @param {string[]} packages
+ */
+export function packageManagerAddLine(cwd, packages) {
   const pm = detectPackageManager(cwd);
   return `${pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} add`} ${packages.join(' ')}`;
 }

@@ -216,7 +216,7 @@
  * @property {string[]} data.added - Pages added by this call.
  * @property {string[]} data.refreshed - Pages that were there already and are written again.
  * @property {Array<{page: string, why: string}>} data.matched - Each template page added for a description or --template, and why it was picked.
- * @property {Array<{page: string, reason: string, installCommand: string | null}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing.
+ * @property {Array<{page: string, reason: string, installCommand: string | null, installGuidance?: string}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing, and `installGuidance`, the line a loaded integration gives for adding them, when one is given.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.

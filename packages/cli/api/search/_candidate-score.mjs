@@ -240,6 +240,8 @@ function weakKeywordScore(t, kw) {
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
  * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
  * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
+ * @param {any[]} [candidate._summarizes] - The docs beneath a doc that
+ *   opens a level, in search's view only (_named-keywords.mjs).
  * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean, mentions?: boolean, ownEvidence?: boolean}} [opts] - `ownEvidence`: search's reading, where a template's used components (`_uses`) are marked as such (`used`). `mentions`: also say whether the hit is only a mention (see `inText`); only the reading of a one-identifier query asks, so other searches pay nothing for it. `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
  * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true, used?: true, own?: number} | null}
  *   `used` marks a hit on a component the template uses, and `own` is then
@@ -282,6 +284,18 @@ export function scoreCandidate(
   let byUse = false;
   /** The best hit that is not a component the template uses. */
   let bestOwn = 0;
+  // A doc that opens a level (search's view, _named-keywords.mjs) sums up the
+  // docs beneath it: a term its text mentions that one of them answers at
+  // least as strongly is that doc's evidence, not this page's.
+  const summarized = candidate._summarizes;
+  /** @param {number} score */
+  const answeredBelow = score =>
+    summarized != null &&
+    summarized.some(
+      doc =>
+        (scoreCandidate(term, doc, {fuzzy, joins, part, synonym})?.score ??
+          0) >= score,
+    );
   /**
    * @param {number} score
    * @param {string} why
@@ -289,6 +303,10 @@ export function scoreCandidate(
    *   query's words joined, into part of a name or into a keyword
    * @param {boolean} [mention] - the hit is the term mentioned in text
    * @param {boolean} [use] - the hit is a component the template uses
+   * @param {boolean} [text] - the hit is the page's text (its prose, or a
+   *   keyword that text gathers) rather than its name, title, description or
+   *   declared keywords; a page that sums up the docs beneath it does not
+   *   take it when one of them answers the term as strongly
    */
   const consider = (
     score,
@@ -296,7 +314,9 @@ export function scoreCandidate(
     byAlias = false,
     mention = false,
     use = false,
+    text = false,
   ) => {
+    if (text && score > best && answeredBelow(score)) return;
     if (!use && score > bestOwn) bestOwn = score;
     if (score > best) {
       best = score;
@@ -401,6 +421,9 @@ export function scoreCandidate(
   // as its keywords do, after its own keywords, and the hit says it came from
   // one.
   const termJoined = joined(term);
+  /** Whether a keyword is one the page's text gathers (see `consider`). */
+  const byText = (/** @type {string} */ lower) =>
+    summarized != null && mentionKeyword(candidate, lower);
   const keywordList = ownEvidence
     ? (p.ownFirst ??= [
         ...p.keywords.filter(k => !k.used),
@@ -426,6 +449,7 @@ export function scoreCandidate(
         false,
         mentions && mentionKeyword(candidate, kwLower),
         used,
+        byText(kwLower),
       );
       continue;
     }
@@ -436,6 +460,7 @@ export function scoreCandidate(
         'keyword',
         mentions && mentionKeyword(candidate, kwLower),
         used,
+        byText(kwLower),
       );
       continue;
     }
@@ -446,6 +471,7 @@ export function scoreCandidate(
         false,
         mentions && mentionKeyword(candidate, kwLower),
         used,
+        byText(kwLower),
       );
       continue;
     }
@@ -456,6 +482,7 @@ export function scoreCandidate(
         false,
         mentions && mentionKeyword(candidate, kwLower),
         used,
+        byText(kwLower),
       );
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
@@ -466,6 +493,7 @@ export function scoreCandidate(
           false,
           mentions && mentionKeyword(candidate, kwLower),
           used,
+          byText(kwLower),
         );
       }
     }
@@ -497,7 +525,7 @@ export function scoreCandidate(
       let matchedProse = false;
       for (let i = 0; i < prose.length; i++) {
         if (prose[i] && re.test(loweredAt(p.prose, prose, i))) {
-          consider(50, `docs mention "${term}"`, false, true);
+          consider(50, `docs mention "${term}"`, false, true, false, true);
           matchedProse = true;
           break;
         }
@@ -508,7 +536,14 @@ export function scoreCandidate(
       if (!matchedProse) {
         for (let i = 0; i < guidance.length; i++) {
           if (guidance[i] && re.test(loweredAt(p.guidance, guidance, i))) {
-            consider(45, `guidance mentions "${term}"`, false, true);
+            consider(
+              45,
+              `guidance mentions "${term}"`,
+              false,
+              true,
+              false,
+              true,
+            );
             break;
           }
         }
