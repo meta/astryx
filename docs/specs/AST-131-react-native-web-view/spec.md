@@ -145,7 +145,8 @@ grantsOrigin?}` (an HTML string).
     `allowedExternalSchemes` (FR5).
   - Each contract's baseline is its first release's shape
     (`spec:AST-140/FR5`). The web view's named features (FR13) are listed with
-    every other contract's by the platform info module; `AstryxWebViewInfo`
+    every other contract's by the platform info module (`spec:AST-130`);
+    `AstryxWebViewInfo`
     carries no feature list and no revision number.
 
 - **FR4 — Safe defaults.** A page in the view cannot read local files or
@@ -168,7 +169,9 @@ grantsOrigin?}` (an HTML string).
   - The view shows the first page, and any top-level page on that page's
     origin or on an origin listed in `allowedOrigins`. The first page's origin
     is the origin of the source the caller passed (`url`, or `baseUrl` with
-    `grantsOrigin`), whatever the first load's redirects reach. The policy covers
+    `grantsOrigin`), whatever the first load's redirects reach. An HTML string
+    without `grantsOrigin` has an opaque origin, which no web origin matches,
+    so only `allowedOrigins` keep a navigation in the view. The policy covers
     top-level navigation only; images, scripts, and frames load as the
     page's own rules allow.
   - A top-level navigation to any other origin that a person causes (tapping
@@ -182,7 +185,8 @@ grantsOrigin?}` (an HTML string).
     no event; only a pin limits it. A page reached that way does not change
     the view's own origin: a person's link or form there to an origin that is
     neither the first page's nor allowed follows `externalNavigation`, and
-    the message channel does not accept that page's messages (FR8).
+    on a device with channel isolation the message channel does not accept
+    that page's messages (FR8).
   - A non-web scheme opens outside the view only when it is in
     `allowedExternalSchemes` (default `mailto`, `tel`, `sms`; an empty list
     allows none). Any other scheme is cancelled and reported as
@@ -218,9 +222,10 @@ grantsOrigin?}` (an HTML string).
     goes. A change reloads the page.
   - Pages in views without an ephemeral store share the runtime's page data.
     Where the device can keep it apart from the app's network cookies (the
-    `pageProfile` constant), clearing page data never signs the app's own
-    requests out. Where it cannot, those pages run with no page storage, and
-    clearing page data still leaves the app's network cookies.
+    `pageProfile` constant), it is kept apart. Where it cannot, those pages
+    run with no page storage. The `web` capability has no call that clears
+    the shared page data; an app that needs one uses its host platform's
+    implementation (`spec:AST-112/FR20`).
 - **FR8 — One message channel.**
   - The page sends with `window.astryx.postMessage(string)`. On a device with
     channel isolation, the view accepts a message only from the main frame,
@@ -256,6 +261,9 @@ grantsOrigin?}` (an HTML string).
   true (the default) the view reloads the page on its own. With false, the
   view shows nothing until the app calls `ref.reload()` or mounts it again, so
   the screen can show its own message. The app keeps running in every case.
+  Android reports a content process end from Android 8.0; before it, the
+  binary reports `contentProcessEnd` as not supported, and a content process
+  end can end the app.
 - **FR11 — Capture prevention and the link menu.**
   - `preventsCapture` keeps screenshots, screen recordings, and the app
     switcher's image of the window out while the view is on screen, however
@@ -296,7 +304,8 @@ grantsOrigin?}` (an HTML string).
     (`spec:AST-140/FR5`): `preventsCapture` on iOS; `linkMenu` on Android.
   - `AstryxWebViewInfo.supports(feature)` answers true when the binary reports
     the feature as supported and, for `channelIsolation` and `pageProfile`, the device's
-    constant is not false. `isAvailable()` answers whether the module is
+    constant is not false; `contentProcessEnd` also needs Android 8.0 or
+    later (FR10). `isAvailable()` answers whether the module is
     linked. Without it (not opted in, Jest, the web), nothing is claimed.
   - The library's `useWebViewSupports(feature)` answers the same, and false
     without a web view.
@@ -391,7 +400,7 @@ grantsOrigin?}` (an HTML string).
 | FR7      | Unit tests of the session refusals; Simulator and emulator checks of page data                                                                            | a handle; an empty handle; a handle from another runtime; an ephemeral view; page storage off; a device without separate page data                                                                                                                                        | A cookie value appears in props, an empty or foreign handle loads the page, an ephemeral view leaves data behind, or a page-storage-off page keeps storage                                                                                           |
 | FR8      | Unit tests through the doubles; Simulator and emulator scripts                                                                                            | both directions; a message from an iframe; a device without channel isolation; a page a redirect reached on another origin                                                                                                                                                | An iframe's message is delivered as the main frame's, an origin comes from the page's data, or a message from a page outside the first page's and allowed origins is delivered                                                                       |
 | FR9      | Simulator and emulator renders                                                                                                                            | light, dark, and system schemes; no `textScale` at the largest system text size; text scale 2; auto height; a custom user agent                                                                                                                                           | The page ignores the scheme or text scale, unscaled text without the prop, a stale height, or a non-ASCII user agent applied                                                                                                                         |
-| FR10     | Device-level termination checks on the Simulator and emulator                                                                                             | reload on; reload off then `reload()`                                                                                                                                                                                                                                     | The app ends, the event reaches `onError`, or a view with reload off reloads by itself                                                                                                                                                               |
+| FR10     | Device-level termination checks on the Simulator and emulator                                                                                             | reload on; reload off then `reload()`; Android 7.x                                                                                                                                                                                                                        | The app ends, the event reaches `onError`, or a view with reload off reloads by itself, or Android 7.x reports `contentProcessEnd` as supported                                                                                                      |
 | FR11     | Emulator check of capture; unit tests of the link-menu matchers shared by every platform; Simulator long press                                            | a protected view; matchers with schemes, hosts, `*.` over a public suffix, prefixes                                                                                                                                                                                       | A screenshot captures a protected view on Android, a `javascript:` link gets a menu, or a menu loads a preview                                                                                                                                       |
 | FR12     | Unit tests through the doubles in their absent, older, and current shapes                                                                                 | each reason; an unknown native reason; a refusal                                                                                                                                                                                                                          | A call throws, a reason falls outside the set, or a refusal crosses to the host                                                                                                                                                                      |
 | FR13     | Unit tests of `supports` through `./testing` doubles of binaries with and without each feature, per platform and device constant                          | each feature on iOS and Android; no module                                                                                                                                                                                                                                | A feature answers true when the binary reports it as not supported, a feature a platform lacks is reported supported there or missing from the report, or a device constant is ignored                                                               |
