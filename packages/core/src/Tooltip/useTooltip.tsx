@@ -396,7 +396,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     clearTapOpen,
     armOutsideDismiss,
     answerTap,
-    isTouchHover,
+    handleMouseArrival,
   } = useTouchTriggerInternal(
     {
       touchTrigger,
@@ -517,11 +517,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — including the tap that just opened the
     // tooltip, which would otherwise be double-handled.
-    if (isTouchHover()) {
+    if (handleMouseArrival()) {
       return;
     }
     scheduleShow();
-  }, [isTouchHover, scheduleShow]);
+  }, [handleMouseArrival, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {

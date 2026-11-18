@@ -360,6 +360,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
     isTouchHover,
+    handleMouseArrival,
   } = useTouchTriggerInternal({
     touchTrigger,
     isEnabled,
@@ -401,11 +402,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — without this a hover card opens on every
     // tap of its trigger and has nothing to close it.
-    if (isTouchHover()) {
+    if (handleMouseArrival()) {
       return;
     }
     scheduleShow();
-  }, [isTouchHover, scheduleShow]);
+  }, [handleMouseArrival, scheduleShow]);
 
   const handleMouseLeave = useCallback(() => {
     // On touch the synthesized mouseleave arrives with the next tap elsewhere,

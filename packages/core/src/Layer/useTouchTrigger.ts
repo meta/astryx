@@ -309,6 +309,13 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * pointer check, so a mouse-opened layer still closes.
    */
   isTouchHover: () => boolean;
+  /**
+   * The trigger's own mouse arrival: answers `isTouchHover()`, and when the
+   * arrival is a finger's compatibility event on a trigger that saw no
+   * pointer of its own (a tap moved it under the finger), the focus that tap
+   * then gives the trigger counts as touch in `isTouchInteraction()`.
+   */
+  handleMouseArrival: () => boolean;
 }
 
 /**
@@ -478,12 +485,18 @@ export function useTouchTriggerInternal(
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
-  // Focus a finger press gave, on the trigger or elsewhere (a tap whose
-  // control moved the trigger under the finger), with no navigation key since.
+  // A finger's compatibility arrival on a trigger that saw no pointer of its
+  // own: a tap moved the trigger under the finger.
+  const isFingerArrivalRef = useRef(false);
+
+  // Focus a finger press gave the trigger, with no navigation key since. A
+  // focus that script moves after a tap elsewhere is not one.
   const isTouchInteraction = useCallback(() => {
     const trigger = triggerRef.current;
+    const isFingerArrival =
+      isFingerArrivalRef.current && getLastPointerType(trigger) === 'touch';
     return (
-      (isTouchPointerRef.current || getLastPointerType(trigger) === 'touch') &&
+      (isTouchPointerRef.current || isFingerArrival) &&
       isTextEntrySincePointer(trigger)
     );
   }, [triggerRef]);
@@ -501,12 +514,19 @@ export function useTouchTriggerInternal(
       : lastPointerType === 'touch';
   }, [triggerRef]);
 
+  const handleMouseArrival = useCallback(() => {
+    const isFinger = isTouchHover();
+    isFingerArrivalRef.current = isFinger && !isTouchPointerRef.current;
+    return isFinger;
+  }, [isTouchHover]);
+
   const handlePointerEnter = useCallback((event: PointerEvent) => {
     // Only a finger is hoverless on arrival. A pen in detection range hovers
     // like a mouse, and treating its arrival as touch would bail out of the
     // hover path and leave a stylus user with no tooltip at all. A pen that
     // presses is a tap, and `handlePointerDown` still reads it as one.
     isTouchPointerRef.current = event.pointerType === 'touch';
+    isFingerArrivalRef.current = false;
   }, []);
 
   // A tap's `click` runs this after a commit. It reads that commit's props
@@ -561,6 +581,7 @@ export function useTouchTriggerInternal(
     (event: PointerEvent): boolean => {
       const isTouch = TOUCH_POINTER_TYPES.has(event.pointerType);
       isTouchPointerRef.current = isTouch;
+      isFingerArrivalRef.current = false;
       if (!isTouch || isControlled) {
         tapRecognizer.forget();
         return false;
@@ -604,5 +625,6 @@ export function useTouchTriggerInternal(
     armOutsideDismiss,
     answerTap,
     isTouchHover,
+    handleMouseArrival,
   };
 }
