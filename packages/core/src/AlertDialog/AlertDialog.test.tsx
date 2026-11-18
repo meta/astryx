@@ -479,6 +479,63 @@ describe('AlertDialog', () => {
       trigger.remove();
     });
 
+    it('disables the action, not Cancel, while isActionDisabled', async () => {
+      const onAction = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <AlertDialog
+          {...defaultProps}
+          onAction={onAction}
+          onOpenChange={onOpenChange}
+          isActionDisabled
+        />,
+      );
+      const action = screen.getByRole('button', {name: /Delete/});
+      // Button keeps a disabled control focusable and marks it aria-disabled.
+      expect(action).toHaveAttribute('aria-disabled', 'true');
+      fireEvent.click(action);
+      fireEvent.keyDown(action, {key: 'Enter'});
+      expect(onAction).not.toHaveBeenCalled();
+      expect(action).not.toHaveAttribute('aria-busy');
+      const cancel = screen.getByRole('button', {name: 'Cancel'});
+      expect(cancel).toBeEnabled();
+      fireEvent.click(cancel);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('keeps the loading look and blocks activation with both flags set', () => {
+      const onAction = vi.fn();
+      render(
+        <AlertDialog
+          {...defaultProps}
+          onAction={onAction}
+          isActionDisabled
+          isActionLoading
+        />,
+      );
+      const action = screen.getByRole('button', {name: /Delete/});
+      expect(action).toHaveAttribute('aria-busy', 'true');
+      fireEvent.keyDown(action, {key: ' '});
+      fireEvent.click(action);
+      expect(onAction).not.toHaveBeenCalled();
+    });
+
+    it('enables the action once isActionDisabled clears', () => {
+      const onAction = vi.fn();
+      const {rerender} = render(
+        <AlertDialog {...defaultProps} onAction={onAction} isActionDisabled />,
+      );
+      rerender(
+        <AlertDialog
+          {...defaultProps}
+          onAction={onAction}
+          isActionDisabled={false}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: /Delete/}));
+      expect(onAction).toHaveBeenCalledTimes(1);
+    });
+
     it('does not disable the cancel button while the action is loading', () => {
       render(<AlertDialog {...defaultProps} isActionLoading />);
       expect(screen.getByRole('button', {name: 'Cancel'})).toBeEnabled();

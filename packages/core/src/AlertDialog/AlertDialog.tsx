@@ -137,6 +137,16 @@ export interface AlertDialogProps extends BaseProps<HTMLDialogElement> {
   isActionLoading?: boolean;
 
   /**
+   * Whether the action button is disabled: it shows the disabled look and
+   * cannot be activated, while Cancel and Escape still work. Use it for a
+   * confirmation that waits on the person, such as an unchecked "I
+   * understand" box, or on other work. For the action's own work in progress,
+   * use `isActionLoading`.
+   * @default false
+   */
+  isActionDisabled?: boolean;
+
+  /**
    * Callback fired when the action button is clicked.
    * The dialog does NOT auto-close — call `onOpenChange(false)` when done.
    */
@@ -189,6 +199,7 @@ export function AlertDialog({
   actionLabel,
   actionVariant = 'destructive',
   isActionLoading,
+  isActionDisabled = false,
   onAction,
   width: widthProp,
   xstyle,
@@ -272,6 +283,7 @@ export function AlertDialog({
       label={actionLabel}
       onClick={onAction}
       isLoading={isActionLoading}
+      isDisabled={isActionDisabled}
       xstyle={buttonActionStyle}
     />
   );
