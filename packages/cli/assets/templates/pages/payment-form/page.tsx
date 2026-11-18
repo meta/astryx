@@ -2,7 +2,6 @@
 
 'use client';
 
-import * as stylex from '@stylexjs/stylex';
 import {useState, type CSSProperties} from 'react';
 import {
   VStack,
@@ -162,6 +161,13 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 // :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
 
 const fullWidth: CSSProperties = {width: '100%'};
+// An order line's name and badge start from no width and grow into the row,
+// so the price stays beside them while they fit, even wrapped onto two lines,
+// and moves under them only when the badge itself does not fit. They never
+// need more than the row (maxWidth): a badge wider than it ellipsizes.
+const itemName: CSSProperties = {flexBasis: 0, flexGrow: 1};
+// A price moved under its line keeps to the end, under the other prices.
+const itemPrice: CSSProperties = {marginInlineStart: 'auto'};
 // Form column flex-basis so the two checkout columns share width evenly.
 const formColBasis: CSSProperties = {flexBasis: 0};
 // Space the Order Summary content below its collapsible trigger title.
@@ -199,22 +205,6 @@ const cardLogo: CSSProperties = {
   borderColor: 'var(--color-border)',
   backgroundColor: 'var(--color-background-surface)',
 };
-
-const styles = stylex.create({
-  // An order line's name and badge start from no width and grow into the
-  // row, so the price stays beside them while they fit, even wrapped onto
-  // two lines, and moves under them only when the badge itself does not fit.
-  // They never need more than the row: a badge wider than it ellipsizes.
-  itemName: {
-    flexBasis: 0,
-    flexGrow: 1,
-    maxWidth: '100%',
-  },
-  // A price moved under its line keeps to the end, under the other prices.
-  itemPrice: {
-    marginInlineStart: 'auto',
-  },
-});
 
 export default function PaymentFormPage() {
   const showToast = useToast();
@@ -920,7 +910,8 @@ export default function PaymentFormPage() {
                                           gap={2}
                                           vAlign="center"
                                           wrap="wrap"
-                                          xstyle={styles.itemName}>
+                                          maxWidth="100%"
+                                          style={itemName}>
                                           <Text type="body" weight="medium">
                                             {item.name}
                                           </Text>
@@ -934,7 +925,7 @@ export default function PaymentFormPage() {
                                         <Text
                                           type="body"
                                           weight="bold"
-                                          xstyle={styles.itemPrice}>
+                                          style={itemPrice}>
                                           {fmt(item.price)}
                                         </Text>
                                       </HStack>
