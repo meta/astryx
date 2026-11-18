@@ -1201,7 +1201,6 @@ const wrappedLabelStyles = stylex.create({
   tab: {
     whiteSpace: 'normal',
     flexShrink: 1,
-    minWidth: 0,
     height: 'auto',
   },
 });
