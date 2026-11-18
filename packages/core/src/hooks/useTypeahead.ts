@@ -16,7 +16,11 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
+import {
+  findTypeaheadMatch,
+  nextTypeaheadBuffer,
+  isShortcutChord,
+} from '../utils/typeaheadMatch';
 
 export interface UseTypeaheadOptions {
   /**
@@ -72,10 +76,8 @@ function isPrintableCharacter(e: React.KeyboardEvent | KeyboardEvent): boolean {
     e.key.length === 1 &&
     // Alt alone is not excluded: Option+letter on macOS composes a printable
     // character (Option+a → "å"), and dropping those makes accented labels
-    // untypeable. Real chords still carry ctrl or meta — including AltGr,
-    // which sets ctrlKey on Windows and Linux.
-    !e.ctrlKey &&
-    !e.metaKey &&
+    // untypeable. AltGr sets ctrlKey on Windows and still types a letter.
+    !isShortcutChord(e) &&
     // A key that is part of an input method's composition is the IME's, not
     // a jump. React's synthetic event surfaces `isComposing` too.
     !isComposingKey(e) &&
@@ -162,8 +164,7 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
       // consuming it would append a raw space that poisons the whole buffer.
       const isSpaceMidType =
         e.key === ' ' &&
-        !e.ctrlKey &&
-        !e.metaKey &&
+        !isShortcutChord(e) &&
         !isComposingKey(e) &&
         bufferRef.current.length > 0;
       if (!isPrintableCharacter(e) && !isSpaceMidType) {

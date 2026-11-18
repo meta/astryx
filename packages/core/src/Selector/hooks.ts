@@ -32,6 +32,7 @@ import {layoutViewportHeight} from '../utils/layoutViewport';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
+import {isShortcutChord} from '../utils/typeaheadMatch';
 
 // The selected row renders one optical pixel below the closed trigger label at
 // the same mathematical center, so compensate before viewport clamping.
@@ -664,8 +665,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
             hasSearch &&
             onSearchSeed &&
             e.key.length === 1 &&
-            !e.ctrlKey &&
-            !e.metaKey
+            !isShortcutChord(e)
           ) {
             if (isOpen || onOpen() !== false) {
               onSearchSeed(e.key);
