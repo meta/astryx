@@ -258,7 +258,9 @@ const styles = stylex.create({
     borderStyle: 'none',
     padding: 0,
     borderRadius: '50%',
-    backgroundColor: colorVars['--color-neutral'],
+    // A dot is a radio control, so its fill is the form-control edge role,
+    // which meets 3:1 against the page (WCAG 1.4.11).
+    backgroundColor: colorVars['--color-border-control'],
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
