@@ -28,10 +28,7 @@ display cutout on every screen and in every orientation; sees a chat composer or
 a sheet footer stand on the software keyboard through every frame of its motion,
 including when they drag the keyboard down; sees a drawn full-screen modal on
 Android with status bar glyphs that match it; and can select and copy prose
-across paragraphs, headings and list items as one piece of text. The developer
-gets these from six native pieces: the safe-area provider, view and module, the
-keyboard dock, the window status bar, and the selectable text view, each with a
-JavaScript wrapper in the platform layer.
+across paragraphs, headings and list items as one piece of text. The developer gets these from six native pieces: the safe-area provider, view and module, the keyboard dock, the window status bar, and the selectable text view, each with a JavaScript wrapper in the platform layer. Dates, numbers, counts and relative times in every component format through the JavaScript engine's `Intl`, which the package declares as a runtime contract, with a library fallback for each feature the engine lacks.
 
 This record details the platform layer of `spec:AST-112` for this group. It
 uses the result and probe vocabulary of `spec:AST-112/FR6` and
@@ -52,6 +49,7 @@ pieces for specific gaps, stated per piece.
 | Keyboard dock                    | react-native-keyboard-controller tracks the keyboard on the UI thread on both platforms, including interactive dismissal. React Native's `KeyboardAvoidingView` is simple and dependency-free. `InputAccessoryView` rides the iOS keyboard natively, interactive dismissal included. | `KeyboardAvoidingView` moves content from JavaScript keyboard events at the start and end of a change and cannot follow a drag. `InputAccessoryView` is iOS-only and lives in the keyboard's window, outside the screen's layout and theme. The controller library adds a native dependency and its animated values reach layout through an animation library; the dock moves Astryx's own composer and transcript together with no JavaScript per frame and has an Astryx Stage implementation. |
 | Window status bar (Android)      | React Native's `StatusBar` sets the activity window's bar style and visibility from JavaScript.                                                                                                                                                                                      | On Android, React Native's `Modal` is its own Dialog window, which copies the activity's bar look once when it opens; nothing written through `StatusBar` reaches it afterwards. A drawn full-screen modal needs its own window's bar.                                                                                                                                                                                                                                                           |
 | Selectable text                  | React Native's `Text` with `selectable` gives the system's selection on one `Text` element.                                                                                                                                                                                          | A selection cannot cross from one `Text` to the next, so a heading and the paragraph under it cannot be copied as one piece. `Text` reports no selection, takes no programmatic selection, and gives a screen reader one element for the whole run.                                                                                                                                                                                                                                              |
+| `Intl` runtime                   | Hermes ships `Intl` with collation, date and number formatting. FormatJS's polyfills fill the members an engine lacks and are thorough.                                                                                                                                              | Polyfilling the whole set adds bundle weight for members a newer engine ships. Astryx declares which members the engine has, keeps a fallback for each one it lacks, and has Astryx Stage reproduce the same set, so a missing fallback shows in Stage as on a device. The library takes only FormatJS's CLDR plural data.                                                                                                                                                                       |
 
 ## Who uses it
 
@@ -63,6 +61,7 @@ pieces for specific gaps, stated per piece.
 | `AstryxKeyboardDock` (`KeyboardDockView`)            | native component (Fabric Native Component) | `KeyboardAccessoryView`; `ChatLayout` (the composer, through `KeyboardAccessoryView`, and the transcript's bottom inset); `BottomSheet` (a footer that rides the keyboard, and the Android sheet lift); `CommandPalette` (the Android lift). On Android its reports also feed the library's shared keyboard frame, which every keyboard-aware surface reads.                                                                                                                                                                         | A composer or footer that stands on the keyboard through a show, a hide and a drag down, with the newest message kept above it.                     |
 | `AstryxWindowStatusBar`                              | native component (Fabric Native Component) | The Astryx router's stack navigator: drawn full-screen and transparent modal routes on Android.                                                                                                                                                                                                                                                                                                                                                                                                                                      | A modal over a dark photo shows light status bar glyphs, and the screen under it keeps its own look after the modal closes.                         |
 | `AstryxSelectableText` (`NativeSelectableTextView`)  | native component (Fabric Native Component) | `Markdown` with `isSelectable`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Long-press a word in a notes app's rendered note, drag across a heading and two paragraphs, and copy them as one text, with the system's edit menu. |
+| `Intl`                                               | runtime contract (JavaScript engine)       | Every component that formats through the library's internationalization helpers (`./i18n`, `InternationalizationProvider`): `Calendar`, `DateInput`, `DateRangeInput`, `TimeInput`, `Timestamp`, `Timer`, `NumberInput`, `Slider`, `Stepper`, `ProgressBar`, `Pagination`, `TextArea` (the count's plural words), `Avatar` (initials), `DonutChart`, and every other component that writes a number.                                                                                                                                 | Dates, times, numbers and counts in the person's locale and digits, and right-to-left layout for right-to-left languages.                           |
 
 ## Non-goals
 
@@ -78,6 +77,8 @@ pieces for specific gaps, stated per piece.
   interoperating systems intentionally depend on that exact mechanism as a public
   protocol. In that case, state who depends on it and why an equivalent
   implementation would not satisfy the contract.
+- The strings catalog's words and translations, and each component's own
+  date and number formats.
 - Markdown parsing, rich text editing, and text input. Selectable text draws
   resolved, read-only blocks.
 - Corner adaptation of insets (react-native-safe-area-context's
@@ -272,6 +273,46 @@ pieces for specific gaps, stated per piece.
   the oldest Stage that implements its contract set, and an older Stage refuses
   the project and lists the gaps.
 
+- **FR15 — The JavaScript engine provides a declared `Intl` set.** The
+  `Intl` runtime contract names each `Intl` member the package relies on and
+  each member it must not use, per platform:
+  - Required on iOS and Android: `Collator`, `DateTimeFormat` with
+    `formatToParts`, `NumberFormat`, and `getCanonicalLocales`;
+    `NumberFormat.prototype.formatToParts` on Android.
+  - Absent, so the package never calls them unguarded:
+    `NumberFormat.prototype.formatToParts` on iOS, `formatRange` and
+    `formatRangeToParts` of `DateTimeFormat` and `NumberFormat`,
+    `RelativeTimeFormat`, `PluralRules`, `ListFormat`, `Segmenter`,
+    `DisplayNames`, `Locale`, and `supportedValuesOf`.
+  - The table comes from a measurement of the engine in release builds on the
+    iOS Simulator and the Android emulator, never from belief. A newer engine
+    that gains a member changes nothing until a new measurement moves it to
+    required.
+  - Astryx Stage provides the same set: its engine's `Intl` at start is
+    compared with the table, a required member it lacks fails its contract
+    check, and a stand-in it installs is reported as partial.
+- **FR16 — Every member outside the required set has a library fallback.**
+  The library reads each member through one feature check at call time and
+  keeps a fallback:
+  - `DateTimeFormat#formatRange`: the two dates joined by the strings
+    catalog's range separator.
+  - `RelativeTimeFormat`: English relative words from CLDR's English
+    patterns; other locales show the absolute date and time; calendar words
+    such as "today" and "next month" come from the strings catalog.
+  - `PluralRules`: the library's own plural rules, with English built in and
+    other languages from registered CLDR plural data. Importing the package
+    installs no `Intl.PluralRules` (`spec:AST-112/DEC-10`).
+  - `NumberFormat#formatToParts` (iOS): a locale's decimal and grouping
+    symbols come from formatted sample numbers. `DateTimeFormat` parts are
+    used only when they match what `format()` writes, and day-period words
+    fall back to the difference between 01:00 and 13:00, then to the catalog.
+  - `Segmenter`: initials split by code point instead of by grapheme cluster.
+  - `Locale`: writing direction from the language's known script direction,
+    and locale matching by lookup (`ar-EG`, then `ar`, then the default).
+  - Typed numbers and dates in native digits are read as ASCII digits.
+- FR16 gap: evaluating the library's root or `./i18n` entry installs the
+  library's plural rules as `Intl.PluralRules` where the engine has none.
+
 ### Native contract
 
 | Contract                 | Kind                                       | Props                                                                                                   | Commands       | Events                                                                                              | Platforms    |
@@ -285,6 +326,10 @@ pieces for specific gaps, stated per piece.
 | Contract         | Kind                                | Methods                                                                               | Platforms    |
 | ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------- | ------------ |
 | `AstryxSafeArea` | native module (Turbo Native Module) | `getConstants` (`version`, `initialWindowMetrics`: the key window's insets and frame) | iOS, Android |
+
+| Contract | Kind                                 | Features                                                                                                                                                                                          | Platforms    |
+| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `Intl`   | runtime contract (JavaScript engine) | Required: `Collator`, `DateTimeFormat`, `DateTimeFormat.formatToParts`, `NumberFormat`, `getCanonicalLocales`, and `NumberFormat.formatToParts` on Android. Absent: every other member FR15 names | iOS, Android |
 
 `AstryxSelectableText`'s `content` is the blocks as JSON, with sizes in dp
 before font scaling and colours as processed colour numbers; the wrapper builds
@@ -300,6 +345,7 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 | `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, transcript inset, side-inset animation | `WindowInsetsAnimationCompat` and a UI-thread translation on show and hide; transcript drag hides the IME. Interactive dismissal and `animatesSideInsets` are iOS behaviour | Implemented on both looks                                                                  |
 | `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                      | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                          | Implemented on the Android look                                                            |
 | `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                      | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                | Implemented on both looks: word selection by long press or double tap, Copy and Select All |
+| `Intl`                   | Hermes: the required set; no `NumberFormat#formatToParts`                                                                                               | Hermes: the required set, `NumberFormat#formatToParts` included                                                                                                             | The same set from its engine, checked at start; a stand-in reported as partial             |
 
 - FR7 gap: Astryx Stage draws a dock side-inset change with
   `animatesSideInsets` in one frame instead of animating it.
@@ -325,6 +371,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 - The capability model is unchanged for this group: every piece is core and
   links by default.
 - `spec:AST-099` is unchanged; it keeps the keyboard in browsers.
+- The package's `Intl` runtime contract is owned here; FR16's plural rules
+  follow `spec:AST-112/DEC-10` (no global installed by an import).
 
 ## Verification
 
@@ -344,6 +392,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 | FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                                 | per-block elements; a heading; a link action; the largest text size; Reduce Motion                       | One element for every block, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion    |
 | FR13     | Unit tests with each view and the module absent                                                                                   | every fallback                                                                                           | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                              |
 | FR14     | The platform's spec rules check; Astryx Stage contract suites and the Stage version floor                                         | a contract at revision 1; a missing named feature; a Stage below the floor                               | A revision above 1, a feature used without `hasContractFeature`, or an older Stage that runs the project                       |
+| FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds; Astryx Stage's runtime contract check            | each member on iOS and Android; a Stage engine without a required member                                 | The table differs from the probe, or Stage runs without a required member and reports nothing                                  |
+| FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                                 | each fallback; an English and a non-English locale; native digits                                        | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import    |
 
 ## Decision log
 
@@ -412,6 +462,21 @@ as everywhere else in Astryx.
 
 Rejected: one selectable `Text` per block, because a selection cannot cross
 from one block to the next.
+
+### DEC-6 — The engine's `Intl` is a measured contract with fallbacks
+
+**Reference:** `spec:AST-129/DEC-6`
+**Decider:** imdreamrunner, 2026-11-17
+
+The library formats with the engine's own `Intl` where it exists and keeps a
+small fallback for each member it lacks, so the bundle stays small and a newer
+engine improves the output with no change. The set is declared from a
+measurement and reproduced by Astryx Stage, so a missing fallback fails in
+Stage and in tests as it would on a device.
+
+Rejected: polyfilling every missing `Intl` member, because the bundle would
+carry code the engine may ship and Stage would no longer show the device's
+gaps.
 
 ## Open questions
 
