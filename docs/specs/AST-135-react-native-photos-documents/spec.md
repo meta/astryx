@@ -22,11 +22,13 @@ affects_consumer_docs: []
 
 ## Intent
 
-An app shows the person's photos. A person scrolls the photos they allowed the
-app to see in a grid inside the app, changes which photos a limited app sees,
-and sends a few of them as files. The developer gets the system's own photo
-library behind one result vocabulary, with access the app asks for explicitly
-and thumbnails that draw with the access the app already has.
+An app lets a person pick from their photos inside the app. In `FileInput`'s
+photo picker a person scrolls the photos they allowed the app to see in a
+grid, changes which photos a limited app sees, and sends a few of them as
+files. The developer gets the system's own photo library behind one result
+vocabulary: listing, counting, and exporting, with access the app asks for
+explicitly. The picker's thumbnails draw with the access the app already
+has.
 
 This record details the photo library pieces of `spec:AST-112`: the photo
 library module (`AstryxPhotoLibrary`) and the photo thumbnail view
@@ -48,8 +50,8 @@ capability shape (`spec:AST-112/FR7`), and additive evolution
 dependency; apps may use third-party
 libraries beside these components without conflict.
 
-- `AstryxPhotoLibrary`: `FileInput`'s photo picker and an app that shows the
-  library inside its own screens need a native module. Choosing a few photos
+- `AstryxPhotoLibrary`: `FileInput`'s photo picker needs a native module to
+  list, count, and export the library, and apps reach the same calls. Choosing a few photos
   in the system's photo picker goes through the core file picker, which
   presents it without a permission (`spec:AST-130/FR12`).
 - `AstryxPhotoThumbnailView`: iOS draws a library asset through native code.
@@ -58,10 +60,10 @@ libraries beside these components without conflict.
 
 ## Who uses it
 
-| Native piece               | Kind                                       | Astryx components that use it                                                                    | What a person sees                                                                                                                  |
-| -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxPhotoLibrary`       | native module (Turbo Native Module)        | `FileInput` (its photo picker); apps through the `./photos` entry's `AstryxPhotoLibrary` (DEC-1) | The app's own grid of the photos and videos they allowed, a system prompt only when the app asks, and a way to change the selection |
-| `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `FileInput`'s photo picker, its public face (the picker's thumbnails)                            | Thumbnails that fill in quickly as they scroll a grid, iCloud photos included                                                       |
+| Native piece               | Kind                                       | Astryx components that use it                                                                    | What a person sees                                                                                                                                    |
+| -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxPhotoLibrary`       | native module (Turbo Native Module)        | `FileInput` (its photo picker); apps through the `./photos` entry's `AstryxPhotoLibrary` (DEC-1) | A grid of the photos and videos they allowed in `FileInput`'s photo picker, a system prompt only when the app asks, and a way to change the selection |
+| `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `FileInput`'s photo picker, its public face (the picker's thumbnails)                            | Thumbnails that fill in quickly as they scroll a grid, iCloud photos included                                                                         |
 
 Scope notes: these pieces are specified elsewhere.
 
