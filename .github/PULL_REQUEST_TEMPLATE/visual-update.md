@@ -25,6 +25,8 @@ Choose one and link it:
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] Appearance is the primary intent.
 - [ ] Behavior, API, interaction model, and unrelated layout changes were removed or split.
 - [ ] The evidence shows the changed pixels actively running, not only source or computed styles.

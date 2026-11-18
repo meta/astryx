@@ -96,8 +96,8 @@ function reachableModules(entry) {
 
 /**
  * The issue codes and finding codes one module can raise: a `code:` it
- * writes (or its fallback), each code in the first argument of `issueError`
- * and `issueWarning` under any name it imports them as (both branches of a
+ * writes (or its fallback), each code in the first argument of `issueError`,
+ * `issueWarning` and `issueNote` under any name it imports them as (both branches of a
  * conditional), the code an error list is added under, the members of a
  * `code` property typed as a union of codes, and the members of a
  * finding-kind union whose members are all snake-case codes.
@@ -112,8 +112,10 @@ function codesIn(text) {
       ),
     ].map(m => [m[1], m[2]]),
   );
-  const raisers = ['issueError', 'issueWarning'];
-  for (const m of text.matchAll(/\bissue(?:Error|Warning)\s+as\s+(\w+)/g)) {
+  const raisers = ['issueError', 'issueWarning', 'issueNote'];
+  for (const m of text.matchAll(
+    /\bissue(?:Error|Warning|Note)\s+as\s+(\w+)/g,
+  )) {
     raisers.push(m[1]);
   }
   const raise = new RegExp(`\\b(?:${raisers.join('|')})\\(([^,]*),`, 'g');
@@ -180,9 +182,18 @@ beforeAll(async () => {
     'tsconfig.json',
     `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
+  // A logo, so the fixture draws no listing note.
   write(
     'package.json',
-    JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    JSON.stringify({
+      name: '@acme/widgets',
+      version: '1.2.3',
+      marketplace: {logo: {light: 'logo.svg'}},
+    }),
+  );
+  write(
+    'logo.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>',
   );
   write(
     'astryx.integration.mjs',

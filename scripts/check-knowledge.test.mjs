@@ -3073,9 +3073,24 @@ describe('INV25 record reachability', () => {
   });
 
   it('runs from the command line without deadlocking on its own import', () => {
+    // The reachability check imports scripts/specs-for-file.mjs, which imports
+    // this module back. A small tracked fixture runs that check in well under
+    // a second; the whole repository takes seconds even on an idle machine.
+    const root = fixtureRoot();
+    writeSystemSpec(
+      root,
+      'AST-900',
+      systemSpecRecord().replace(
+        '# Fixture system spec\n',
+        '# Fixture system spec\n\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": ["apps/site/**"]}\n```\n',
+      ),
+    );
+    fs.mkdirSync(path.join(root, 'apps/site'), {recursive: true});
+    fs.writeFileSync(path.join(root, 'apps/site/index.md'), '# Site\n');
+    gitFixture(root);
     const output = execFileSync(
       process.execPath,
-      [path.join(repoRoot, 'scripts/check-knowledge.mjs')],
+      [path.join(repoRoot, 'scripts/check-knowledge.mjs'), '--root', root],
       {cwd: repoRoot, encoding: 'utf8'},
     );
     expect(output).toContain('Knowledge templates and records are aligned.');

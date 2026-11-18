@@ -301,14 +301,24 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   await page.evaluate(() => {
     const frames = {
       samples: [] as [number, number][],
+      moveStamp: Number.NEGATIVE_INFINITY,
+      upStamp: Number.POSITIVE_INFINITY,
       upAt: Number.POSITIVE_INFINITY,
       done: false,
     };
     (window as unknown as {sheetFrames: typeof frames}).sheetFrames = frames;
     window.addEventListener(
+      'pointermove',
+      event => {
+        frames.moveStamp = event.timeStamp;
+      },
+      {capture: true},
+    );
+    window.addEventListener(
       'pointerup',
-      () => {
+      event => {
         frames.upAt = performance.now();
+        frames.upStamp = event.timeStamp;
       },
       {capture: true},
     );
@@ -352,7 +362,6 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
     return played;
   });
   expect(exitPlayed).toBe(false);
-  await expect(dialog).toBeHidden({timeout: 2_000});
   const read = async () =>
     page.evaluate(
       () =>
@@ -360,12 +369,42 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
           window as unknown as {
             sheetFrames: {
               samples: [number, number][];
+              moveStamp: number;
+              upStamp: number;
               upAt: number;
               done: boolean;
             };
           }
         ).sheetFrames,
     );
+  // The sheet drops aria-modal when the release asks it to close. A release
+  // read as still projects short of the dismiss line and keeps it. The gap
+  // uses the events' own times: CDP delivers them back to back.
+  const lift = await read();
+  const gap = Math.round(lift.upStamp - lift.moveStamp);
+  // Read the DOM, not the accessibility tree: a closing dialog leaves the
+  // tree, so a role locator finds nothing once the close has started.
+  // Past the tracker's 40 ms stillness interval the release reads as still.
+  const cause =
+    gap > 40
+      ? `the drag read as a still release (${gap} ms from the last move to the lift)`
+      : `${gap} ms from the last move to the lift`;
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () =>
+            document
+              .querySelector('dialog[open]')
+              ?.getAttribute('aria-modal') ?? null,
+        ),
+      {
+        message: `the release did not ask the sheet to close: ${cause}, so its projection stayed short of the dismiss line`,
+        timeout: 2_000,
+      },
+    )
+    .toBeNull();
+  await expect(dialog).toBeHidden({timeout: 2_000});
   await expect
     .poll(async () => (await read()).done, {timeout: 2_000})
     .toBe(true);

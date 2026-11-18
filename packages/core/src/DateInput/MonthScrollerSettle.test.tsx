@@ -214,6 +214,31 @@ describe('MonthScroller settle', () => {
     ).toEqual([10 * PANE]);
   });
 
+  it('ends a steer on any key from a day, as Tab, whose focus move can scroll the scroller', () => {
+    const {handleRef, scroller} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => scrollBy(scroller, 9 * PANE + 0.3 * PANE));
+    // Tab leaves the day for another month's Tab stop, and the browser
+    // scrolls that month in: the person's scroll replaces the steer.
+    const day = scroller.querySelector<HTMLElement>('button[tabindex="0"]');
+    if (day == null) {
+      throw new Error('no Tab stop');
+    }
+    act(() => {
+      day.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Tab', bubbles: true}),
+      );
+    });
+    scrollTo.mockClear();
+    act(() => scrollBy(scroller, 9 * PANE + 0.2 * PANE));
+    act(() => {
+      vi.advanceTimersByTime(SCROLL_QUIET_MS + 50);
+    });
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([9 * PANE]);
+  });
+
   it('ends a steer on a person’s input, so the settle rounds their scroll to the nearest month', () => {
     const {handleRef, scroller} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));

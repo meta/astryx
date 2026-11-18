@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file SelectorOption.tsx
  * @output Exports SelectorOption component for custom option rendering

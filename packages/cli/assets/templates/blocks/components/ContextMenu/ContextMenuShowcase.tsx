@@ -17,10 +17,10 @@ export default function ContextMenuShowcase() {
           padding: '48px',
           borderWidth: '2px',
           borderStyle: 'dashed',
-          borderColor: '#d1d5db',
+          borderColor: 'var(--color-border-emphasized)',
           borderRadius: '8px',
           textAlign: 'center',
-          color: '#6b7280',
+          color: 'var(--color-text-secondary)',
           userSelect: 'none',
         }}>
         Long-press or right-click this area

@@ -175,9 +175,9 @@ const liftedAt = (page: Page) =>
     () => (window as unknown as {__tabBarLifted?: number}).__tabBarLifted ?? 0,
   );
 
-async function openBar(page: Page, story = 'default') {
+async function openBar(page: Page, story = 'default', title = 'lab-tabbar') {
   await page.addInitScript(animationLog);
-  await openStory(page, storybook(), `lab-tabbar--${story}`);
+  await openStory(page, storybook(), `${title}--${story}`);
   const driver = await touchDriver(page);
   const bar = page.getByRole('tablist', {name: 'Sections'});
   await expect(bar).toBeVisible();
@@ -385,6 +385,54 @@ async function setExitDuration(page: Page, value: string) {
         element.style.setProperty('--duration-exit', duration),
       value,
     );
+}
+
+/** A scroller's scroll offset, by test id. */
+async function scrollTopOf(page: Page, testId: string) {
+  return page.getByTestId(testId).evaluate(element => element.scrollTop);
+}
+
+/** Scrolls a scroller to `top` at once, by test id. */
+async function setScrollTop(page: Page, testId: string, top: number) {
+  await page
+    .getByTestId(testId)
+    .evaluate((element, offset) => element.scrollTo({top: offset}), top);
+  await expect.poll(() => scrollTopOf(page, testId)).toBe(top);
+}
+
+/**
+ * Starts recording a scroller's offset every frame, from now until it has
+ * read 0 or 2 s have passed. The returned function waits for the end and
+ * gives the offsets.
+ */
+async function recordScrollTop(page: Page, testId: string) {
+  await page.getByTestId(testId).evaluate(element => {
+    const record = {offsets: [] as number[], isDone: false};
+    (window as unknown as {__scrollRecord: typeof record}).__scrollRecord =
+      record;
+    const start = performance.now();
+    const sample = () => {
+      record.offsets.push(element.scrollTop);
+      if (element.scrollTop === 0 || performance.now() - start > 2000) {
+        record.isDone = true;
+        return;
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  return async () => {
+    await page.waitForFunction(
+      () =>
+        (window as unknown as {__scrollRecord: {isDone: boolean}})
+          .__scrollRecord.isDone,
+    );
+    return page.evaluate(
+      () =>
+        (window as unknown as {__scrollRecord: {offsets: number[]}})
+          .__scrollRecord.offsets,
+    );
+  };
 }
 
 /** How long a tab's paint takes to change now, in ms. */
@@ -1299,6 +1347,64 @@ test('a finger’s release fades only its paint layer’s opacity, which the com
       }),
     );
   expect(fades).toEqual([{property: 'opacity', layer: '::before'}]);
+});
+
+test('choosing the selected tab again scrolls its own panel to the top, and no other scroller moves', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 1 times');
+  await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+});
+
+test('the panel glides back to the top over several frames', async ({page}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  // A glide passes through offsets between where it started and the top.
+  expect(read.some(offset => offset > 0 && offset < 800)).toBe(true);
+});
+
+test('with Reduce Motion the panel jumps to the top at once', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  expect(read.filter(offset => offset > 0 && offset < 800)).toEqual([]);
+});
+
+test('choosing another tab switches without scrolling any panel', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const library = await itemCenter(page, 'Library');
+  await driver.play(tapScript(library));
+  await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
+  await page.waitForTimeout(500);
+  expect(await scrollTopOf(page, 'scroller-home')).toBe(800);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 0 times');
 });
 
 test('past the last item, still on the bar, the lens rubber-bands beyond it and the lift commits the last item; past the bar’s end the lift chooses nothing', async ({
@@ -2576,6 +2682,22 @@ test.describe('touch work costs nothing under a fine pointer', () => {
   test.describe('under a mouse', () => {
     test.use({hasTouch: false, isMobile: false});
 
+    test('a click on the selected tab scrolls its own panel to the top, and nothing else', async ({
+      page,
+    }) => {
+      await expectFinePointer(page);
+      await openStory(page, storybook(), 'lab-tabbar--scroll-to-top');
+      await expect(page.getByRole('tablist', {name: 'Sections'})).toBeVisible();
+      await setScrollTop(page, 'scroller-home', 800);
+      await setScrollTop(page, 'other-scroller', 100);
+      await tab(page, 'Home').click();
+      await expect(page.getByTestId('reselects')).toHaveText(
+        'Reselected 1 times',
+      );
+      await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+      expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+    });
+
     test('a click chooses a tab, and so do the keys', async ({page}) => {
       await expectFinePointer(page);
       await openBar(page);
@@ -3028,5 +3150,171 @@ test.describe('a disabled tab under a mouse', () => {
     await tab(page, 'Library').focus();
     await page.keyboard.press('ArrowRight');
     await expect(tab(page, 'Profile')).toBeFocused();
+  });
+});
+
+/** Flips the story to right to left: the tab bar's own direction ancestor. */
+async function rightToLeft(page: Page) {
+  await page.evaluate(() => {
+    document
+      .querySelector('[role="tablist"]')
+      ?.closest('[dir]')
+      ?.setAttribute('dir', 'rtl');
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+/** The More tab's stories live under TabBarMoreList's own title. */
+const MORE_LIST = 'lab-tabbarmorelist';
+
+test.describe('More tab', () => {
+  test('six tabs: the bar shows the first four and More at the five-tab layout, as UIKit does', async ({
+    page,
+  }) => {
+    await openBar(page, 'more-tab', MORE_LIST);
+    const tabs = page.getByRole('tab');
+    await expect(tabs).toHaveCount(5);
+    await expect(tabs.last()).toHaveAccessibleName('More');
+    // iOS 26.2 on a 402 pt screen: five 77 pt items at x 25, 93.75, 162.5,
+    // 231.25 and 300.
+    const viewport = page.viewportSize();
+    const lefts: number[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const box = await tabs.nth(index).locator('span').first().boundingBox();
+      if (box == null) {
+        throw new Error('no item');
+      }
+      // Within the item-width fit's 1 px (tabBar.ts `itemWidth`).
+      expect(Math.abs(box.width - 77)).toBeLessThan(1);
+      lefts.push(box.x);
+    }
+    if (viewport?.width === 402) {
+      [25, 93.75, 162.5, 231.25, 300].forEach((x, index) => {
+        expect(Math.abs(lefts[index] - x)).toBeLessThan(1);
+      });
+    }
+  });
+
+  test('with Reduce Motion a tap on More changes the lens by opacity only, with no slide', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    const more = await itemCenter(page, 'More');
+    const since = await timelineNow(page);
+    await driver.tap(more);
+    // The fade starts with the input; what it changes follows a few
+    // frames later.
+    await expectCrossFade(page, since);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    assertOpacityOnly(await runningAnimations(page, since));
+    // Nothing travels, so the lens carries no copy: it lands on More, and
+    // More draws its own selected look.
+    await waitForRest(lensBody(page));
+    await expect(lensCopy(page)).toHaveCount(0);
+    expect(Math.abs((await lensCenterX(page)) - more.x)).toBeLessThan(0.5);
+    expect(await labelWeight(page, 'More')).toBe('600');
+  });
+
+  test('a section chosen in More opens inside it, More staying selected; More again returns to the list', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    const more = await itemCenter(page, 'More');
+    await driver.tap(more);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const settings = page.getByRole('button', {name: /Settings/});
+    await expect(settings).toBeVisible();
+    await settings.click();
+    await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    await waitForRest(page.getByRole('tablist'));
+    expect(Math.abs((await lensCenterX(page)) - more.x)).toBeLessThan(0.5);
+    await driver.tap(more);
+    await expect(page.getByRole('heading', {name: 'More'})).toBeVisible();
+  });
+
+  test('a disabled tab past the fourth stays disabled in the More list: a tap on its row chooses nothing (spec:AST-085 FR2)', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-disabled-row', MORE_LIST);
+    await driver.tap(await itemCenter(page, 'More'));
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const help = page.getByRole('button', {name: /Help/});
+    await expect(page.locator('.astryx-item', {has: help})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    const box = await help.boundingBox();
+    if (box == null) {
+      throw new Error('no Help row');
+    }
+    await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    // The list stays: no section opened inside More.
+    await expect(page.getByRole('heading', {name: 'More'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Help'})).toHaveCount(0);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    // Its enabled neighbour still opens.
+    await page.getByRole('button', {name: /Settings/}).click();
+    await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+  });
+
+  test('right to left, the More list’s disclosure chevrons point left, as Core’s disclosure rows’ do', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    await rightToLeft(page);
+    await driver.tap(await itemCenter(page, 'More'));
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const settings = page.getByRole('button', {name: /Settings/});
+    await expect(settings).toBeVisible();
+    // On screen first: the row's chevron.
+    await expectPainted(
+      page.locator('li', {has: settings}).locator('svg').last(),
+    );
+    // The row's last glyph is its chevron (beside the label's button): flipped
+    // on it or a wrapper.
+    const transform = await settings.evaluate(button => {
+      const row = button.closest('li') ?? button;
+      const glyphs = [...row.querySelectorAll('svg')];
+      for (
+        let node: Element | null = glyphs[glyphs.length - 1] ?? null;
+        node != null && node !== row;
+        node = node.parentElement
+      ) {
+        const value = getComputedStyle(node).transform;
+        if (value !== 'none') {
+          return value;
+        }
+      }
+      return 'none';
+    });
+    expect(transform).toBe('matrix(-1, 0, 0, 1, 0, 0)');
+  });
+
+  test.describe('under a mouse', () => {
+    test.use({hasTouch: false, isMobile: false});
+
+    test('More works the same, the lens on the theme’s motion', async ({
+      page,
+    }) => {
+      await expectFinePointer(page);
+      await openStory(page, storybook(), `${MORE_LIST}--more-tab`);
+      const more = await itemCenter(page, 'More');
+      await tab(page, 'More').click();
+      await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+      await page.getByRole('button', {name: /Settings/}).click();
+      await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+      await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+      await expect
+        .poll(async () => Math.abs((await lensCenterX(page)) - more.x))
+        .toBeLessThan(0.5);
+      await expectCssSlide(page, {isRunning: false});
+    });
   });
 });

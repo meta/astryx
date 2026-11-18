@@ -2,7 +2,7 @@
 
 /**
  * @file TextArea.test.tsx
- * @input Uses vitest, @testing-library/react, TextArea component
+ * @input Uses vitest, @testing-library/react, react-dom/server, TextArea component
  * @output Unit tests for TextArea component behavior
  * @position Testing; validates TextArea.tsx implementation
  *
@@ -10,6 +10,7 @@
  */
 
 import {useState} from 'react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -849,6 +850,109 @@ describe('TextArea', () => {
       // The counter now lives inside the bordered input container as a sibling
       // overlay of the textarea, not below it as an out-of-container element.
       expect(textarea.parentElement).toBe(counter.parentElement);
+    });
+  });
+
+  describe('htmlMaxLength prop', () => {
+    it('sets the native maxlength attribute', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      // The prop name must not reach the DOM as an unknown attribute.
+      expect(textarea).not.toHaveAttribute('htmlmaxlength');
+    });
+
+    it('shows no character counter without maxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value="Hello"
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox')).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('keeps the counter on maxLength while the native limit comes from htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(150)}
+          onChange={() => {}}
+          maxLength={100}
+          htmlMaxLength={400}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('maxlength', '400');
+      expect(screen.getByText('150/100')).toBeInTheDocument();
+      expect(textarea).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('does not truncate a controlled value longer than htmlMaxLength', () => {
+      render(
+        <TextArea
+          label="Notes"
+          value={'a'.repeat(50)}
+          onChange={() => {}}
+          htmlMaxLength={10}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveValue('a'.repeat(50));
+      expect(textarea).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('renders no native maxlength when htmlMaxLength is omitted, including after the caller removes it', () => {
+      const {rerender} = render(
+        <TextArea label="Notes" value="" onChange={() => {}} />,
+      );
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+
+      rerender(
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute('maxlength', '400');
+
+      rerender(<TextArea label="Notes" value="" onChange={() => {}} />);
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+    });
+
+    it('is present in server-rendered markup', () => {
+      const html = renderToString(
+        <TextArea
+          label="Notes"
+          htmlName="notes"
+          value=""
+          onChange={() => {}}
+          htmlMaxLength={400}
+        />,
+      );
+      // React writes the attribute as `maxLength`. The HTML parser reads it as
+      // the native `maxlength`, so assert on the parsed element.
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      expect(host.querySelector('textarea')).toHaveAttribute(
+        'maxlength',
+        '400',
+      );
+      expect(html).not.toMatch(/htmlmaxlength/i);
     });
   });
 

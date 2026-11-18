@@ -5,12 +5,13 @@
 /**
  * @file PickerWheel.tsx
  * @input Wheel's props (wheelOptions.ts): options, value and change callback;
- *   optionally a ref for programmatic turns
+ *   optionally a ref for programmatic turns, and looping
  * @output PickerWheel: one picker column that moves like UIPickerView
  * @position Internal component; the Wheel under a finger (Wheel.tsx picks it)
  *
  * It moves on the gesture system and the shared animator, not on a native
- * scroller. One strip holds the rows and is the only element that moves.
+ * scroller. One strip holds the rows and is the only element that moves. A
+ * looping wheel also draws hidden copies of its rows along the strip.
  *
  * SYNC: When modified, update PickerWheel.test.tsx, Wheel.tsx,
  * DateInputTouch.test.tsx, DateInput.doc.mjs and TimeInput.doc.mjs.
@@ -43,6 +44,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {mod, nearestLoopCopy} from '../hooks/usePager';
 import {lockSelection} from '../gestures/selectionLock';
 import {dateInputTouchGeometry, dateInputTouchSizes} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
@@ -60,9 +62,12 @@ import {
 import {
   canSpinTo,
   endIndex,
+  loopedStep,
   nearestEnabledIndex,
+  restingLoopStep,
   steppedIndex,
   WHEEL_ROW_HEIGHT,
+  type WheelOption,
   type WheelProps,
 } from './wheelOptions';
 
@@ -72,6 +77,13 @@ const ROW_HEIGHT = WHEEL_ROW_HEIGHT;
 const UIKIT_SCALE = ROW_HEIGHT / picker.geometry.rowHeight;
 /** UIKit's rubber band dimension for the picker's table, at that pitch. */
 const RUBBER_BAND_DIMENSION = picker.geometry.rubberBandDimension * UIKIT_SCALE;
+
+/**
+ * How many rows a looping wheel draws past the band each way, beyond its own
+ * rows and any motion's span. That is more than half a column in every
+ * shipped size.
+ */
+const DRAWN_PAST_BAND = 10;
 
 /**
  * The rows' opacity at the column's edges. At 0.7 the row four from the band
@@ -187,9 +199,54 @@ function turnCurve(
   );
 }
 
+/**
+ * The position of row `row` in the lap that holds `position`: on a looping
+ * wheel, the copy between the same two seams.
+ */
+function lapPosition(
+  row: number,
+  position: number,
+  layout: WheelLayout,
+): number {
+  if (!layout.looping || layout.rowCount === 0) {
+    return row;
+  }
+  return row + Math.floor(position / layout.rowCount) * layout.rowCount;
+}
+
 interface DragState {
   /** The finger's offset at the pan's start, before any rubber band. */
   readonly start: number;
+}
+
+/** The positions a looping wheel draws rows at, first and last. */
+interface DrawnSpan {
+  readonly from: number;
+  readonly to: number;
+}
+
+/** A looping wheel's span at rest: its own rows, and copies past each end. */
+function restingSpan(rowCount: number): DrawnSpan {
+  return {from: -DRAWN_PAST_BAND, to: rowCount - 1 + DRAWN_PAST_BAND};
+}
+
+/**
+ * The position of row `row` nearest `offset`: on a looping wheel, the copy
+ * nearest it (`nearestLoopCopy`).
+ */
+function nearestPosition(
+  row: number,
+  offset: number,
+  layout: WheelLayout,
+): number {
+  if (!layout.looping || layout.rowCount === 0) {
+    return row;
+  }
+  return nearestLoopCopy(row, offset / layout.rowHeight, layout.rowCount);
+}
+
+function isEnabledOption(option: WheelOption | undefined): boolean {
+  return option != null && !option.isDisabled;
 }
 
 /**
@@ -212,19 +269,31 @@ export function PickerWheel({
   onChange,
   isActive = true,
   ref,
+  isLooping = false,
 }: WheelProps) {
   const columnRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
   const rowCount = options.length;
+  const loops = isLooping && rowCount > 1;
   const layout = useMemo<WheelLayout>(
-    () => ({rowHeight: ROW_HEIGHT, rowCount}),
-    [rowCount],
+    () => ({rowHeight: ROW_HEIGHT, rowCount, looping: loops}),
+    [rowCount, loops],
   );
+  // A looping wheel's offset is unbounded, so it draws copies of its rows over
+  // the span any motion covers. They are drawn directly, as the band's mark is
+  // painted, so a gesture never re-renders the wheel. At rest the offset moves
+  // back onto the wheel's own rows, and the span shrinks again.
+  const copiesRef = useRef<HTMLDivElement | null>(null);
+  const spanRef = useRef<DrawnSpan | null>(null);
+  const drawnRef = useRef<Map<number, HTMLElement>>(new Map());
   const [motion] = useState(() => createWheelStrip(layout));
   const selectedIndex = Math.max(
     0,
     options.findIndex(option => option.value === value),
   );
+  // Where the committed row sits on a looping strip. Every commit moves the
+  // strip so that this row sits among its own rows.
+  const committedRef = useRef(selectedIndex);
   const dragRef = useRef<DragState | null>(null);
   /** A finger landed on a moving wheel and stopped it. */
   const caughtRef = useRef(false);
@@ -236,6 +305,84 @@ export function PickerWheel({
     latestRef.current = {options, value, onChange, layout};
   });
 
+  // Reads the option a looping wheel shows at any position: a copy shows the
+  // row it copies.
+  const optionReader = useCallback(() => {
+    const {options: own, layout: current} = latestRef.current;
+    const count = own.length;
+    return (position: number): WheelOption | undefined =>
+      current.looping && count > 0 ? own[mod(position, count)] : own[position];
+  }, []);
+
+  // Draws the copies over `next`, or none. It adds the positions it lacks and
+  // drops those past the span. `isRedrawn` draws every copy again.
+  const drawCopies = useCallback(
+    (next: DrawnSpan | null, isRedrawn: boolean = false) => {
+      const container = copiesRef.current;
+      const drawn = drawnRef.current;
+      spanRef.current = next;
+      if (container == null) {
+        return;
+      }
+      const count = latestRef.current.options.length;
+      const optionAt = optionReader();
+      for (const [position, row] of drawn) {
+        if (
+          isRedrawn ||
+          next == null ||
+          position < next.from ||
+          position > next.to
+        ) {
+          row.remove();
+          drawn.delete(position);
+        }
+      }
+      if (next == null) {
+        return;
+      }
+      for (let position = next.from; position <= next.to; position++) {
+        if ((position >= 0 && position < count) || drawn.has(position)) {
+          continue;
+        }
+        const option = optionAt(position);
+        if (option == null) {
+          continue;
+        }
+        const row = document.createElement('div');
+        row.className =
+          stylex.props(styles.row, option.isDisabled && styles.rowDisabled)
+            .className ?? '';
+        row.style.insetBlockStart = `${position * ROW_HEIGHT}px`;
+        row.textContent = option.label;
+        container.append(row);
+        drawn.set(position, row);
+      }
+    },
+    [optionReader],
+  );
+
+  // The span grows to cover positions `a` to `b` and the band's surroundings.
+  const cover = useCallback(
+    (a: number, b: number) => {
+      const current = spanRef.current;
+      if (current == null) {
+        return;
+      }
+      const from = Math.min(current.from, Math.min(a, b) - DRAWN_PAST_BAND);
+      const to = Math.max(current.to, Math.max(a, b) + DRAWN_PAST_BAND);
+      if (from !== current.from || to !== current.to) {
+        drawCopies({from, to});
+      }
+    },
+    [drawCopies],
+  );
+
+  // The copies follow the rows: their labels, their disabled rows, and
+  // whether the wheel loops at all.
+  useIsomorphicLayoutEffect(() => {
+    drawCopies(loops ? (spanRef.current ?? restingSpan(rowCount)) : null, true);
+  }, [options, loops, rowCount, drawCopies]);
+
   // The row under the band is marked as the scrolling column marks it. At rest
   // that is the committed row, styled in render. While a finger drags the
   // wheel, the row reaching the band is painted directly, so marking it never
@@ -243,45 +390,53 @@ export function PickerWheel({
   // stops or ends on. The compositor then plays it with no layout or paint per
   // frame, and no mark rides away from the band.
   const paintedRef = useRef<Set<HTMLElement>>(new Set());
-  const paintRow = useCallback((position: number | null) => {
-    const container = rowsRef.current;
-    if (container == null || container.children.length === 0) {
-      return;
-    }
-    const rows = container.children;
-    const {options: currentOptions, value: currentValue} = latestRef.current;
-    const active =
-      position == null
-        ? null
-        : ((rows[position] as HTMLElement | undefined) ?? null);
-    const painted = paintedRef.current;
-    for (const row of painted) {
-      row.style.removeProperty('color');
-      row.style.removeProperty('font-weight');
-    }
-    painted.clear();
-    const selected = currentOptions.findIndex(
-      option => option.value === currentValue,
-    );
-    if (rows[selected] != null && rows[selected] !== active) {
-      // The committed row's own mark gives way while another row is under
-      // the band.
-      const row = rows[selected] as HTMLElement;
-      row.style.color = currentOptions[selected]?.isDisabled
+  const paintRow = useCallback(
+    (position: number | null) => {
+      const container = rowsRef.current;
+      if (container == null || container.children.length === 0) {
+        return;
+      }
+      const {options: currentOptions, value: currentValue} = latestRef.current;
+      // The wheel's own rows come first on the strip, and a looping wheel's
+      // copies sit in its own map.
+      const rowAt = (at: number): HTMLElement | null =>
+        at >= 0 && at < currentOptions.length
+          ? ((container.children[at] as HTMLElement | undefined) ?? null)
+          : (drawnRef.current.get(at) ?? null);
+      const active = position == null ? null : rowAt(position);
+      const painted = paintedRef.current;
+      for (const row of painted) {
+        row.style.removeProperty('color');
+        row.style.removeProperty('font-weight');
+      }
+      painted.clear();
+      const selected = currentOptions.findIndex(
+        option => option.value === currentValue,
+      );
+      const own = selected < 0 ? null : rowAt(selected);
+      if (own != null && own !== active) {
+        // The committed row's own mark gives way while another row is under
+        // the band.
+        const row = own;
+        row.style.color = currentOptions[selected]?.isDisabled
+          ? colorVars['--color-text-disabled']
+          : colorVars['--color-text-primary'];
+        row.style.fontWeight = fontWeightVars['--font-weight-normal'];
+        painted.add(row);
+      }
+      if (active == null || position == null) {
+        return;
+      }
+      // A copy shows the option it copies.
+      const option = optionReader()(position);
+      active.style.color = option?.isDisabled
         ? colorVars['--color-text-disabled']
-        : colorVars['--color-text-primary'];
-      row.style.fontWeight = fontWeightVars['--font-weight-normal'];
-      painted.add(row);
-    }
-    if (active == null || position == null) {
-      return;
-    }
-    active.style.color = currentOptions[position]?.isDisabled
-      ? colorVars['--color-text-disabled']
-      : colorVars['--color-text-accent'];
-    active.style.fontWeight = fontWeightVars['--font-weight-semibold'];
-    painted.add(active);
-  }, []);
+        : colorVars['--color-text-accent'];
+      active.style.fontWeight = fontWeightVars['--font-weight-semibold'];
+      painted.add(active);
+    },
+    [optionReader],
+  );
 
   // Every motion the wheel starts. Under Reduce Motion a transition lands
   // without travel: the animator cross-fades the strip onto its row. The
@@ -297,26 +452,84 @@ export function PickerWheel({
     [motion, paintRow],
   );
 
+  // At rest on a copy, the offset moves onto the wheel's own row, where the
+  // strip shows the same rows. The drawn span shrinks back with it. Returns
+  // the offset there.
+  const settle = useCallback(
+    (offset: number): number => {
+      const current = latestRef.current;
+      const count = current.options.length;
+      if (!current.layout.looping || count === 0) {
+        return offset;
+      }
+      const position = nearestIndex(offset, current.layout);
+      const shift = position - mod(position, count);
+      if (shift !== 0) {
+        motion.setOffset(offset - shift * ROW_HEIGHT);
+        committedRef.current -= shift;
+      }
+      drawCopies(restingSpan(count));
+      return offset - shift * ROW_HEIGHT;
+    },
+    [motion, drawCopies],
+  );
+
+  const commit = useCallback((option: WheelOption | undefined) => {
+    const current = latestRef.current;
+    if (
+      option != null &&
+      !option.isDisabled &&
+      option.value !== current.value
+    ) {
+      current.onChange(option.value);
+    }
+  }, []);
+
   // The wheel came to rest at `offset`: commit, or turn on to the row the
   // rest rule names first.
   const arrive = useCallback(
     (offset: number) => {
       const current = latestRef.current;
-      const row = nearestIndex(offset, current.layout);
-      const committed = current.options.findIndex(
-        option => option.value === current.value,
-      );
+      const count = current.options.length;
+      const position = nearestIndex(offset, current.layout);
+      const optionAt = optionReader();
       // A rest on the committed row is not a stop to correct. A committed value
       // outside the bounds stays until a person moves the wheel off it, as in
-      // the scrolling column.
+      // the scrolling column. On a loop the nearest enabled row is measured
+      // around the seam, and the wheel turns the shorter way to it. The
+      // committed row counts at its copy nearest the rest, so a rest whole
+      // laps away is on it.
       let step = 0;
-      if (row !== committed) {
-        step =
-          nearestEnabledIndex(current.options, row, Math.max(0, committed)) -
-          row;
+      if (current.layout.looping && count > 0) {
+        const committed = nearestLoopCopy(
+          committedRef.current,
+          position,
+          count,
+        );
+        if (position !== committed) {
+          step = restingLoopStep(
+            at => isEnabledOption(optionAt(at)),
+            position,
+            committed,
+            count,
+          );
+        }
+      } else {
+        const committed = current.options.findIndex(
+          option => option.value === current.value,
+        );
+        if (position !== committed) {
+          step =
+            nearestEnabledIndex(
+              current.options,
+              position,
+              Math.max(0, committed),
+            ) - position;
+        }
       }
       if (step !== 0) {
-        const target = row + step;
+        const target = position + step;
+        cover(position, target);
         move(turnCurve(columnRef.current, offset, target * ROW_HEIGHT), {
           onEnd: (outcome, end) => {
             if (outcome === 'arrived') {
@@ -326,16 +539,13 @@ export function PickerWheel({
         });
         return;
       }
-      const option = current.options[row];
-      if (
-        option != null &&
-        !option.isDisabled &&
-        option.value !== current.value
-      ) {
-        current.onChange(option.value);
-      }
+      const option = optionAt(position);
+      // The offset moves onto the wheel's own rows before the commit, so a
+      // value the owner clamps turns the wheel on from there.
+      committedRef.current = nearestIndex(settle(offset), current.layout);
+      commit(option);
     },
-    [move],
+    [move, cover, settle, commit, optionReader],
   );
 
   const onEnd = useCallback(
@@ -410,27 +620,36 @@ export function PickerWheel({
     ) {
       return;
     }
-    const target = selectedIndex * ROW_HEIGHT;
     const shown = motion.isMoving() ? motion.stop() : motion.offset();
+    // On a loop, the committed row's copy nearest the wheel: a value set from
+    // outside turns the shorter way round.
+    const position = nearestPosition(selectedIndex, shown, layout);
+    const target = position * ROW_HEIGHT;
     const isAway = Math.abs(shown - target) > 0.01;
+    committedRef.current = position;
     if (isAway && parkedRef.current) {
       // The turn's own end paints the band's row.
       const turn = {};
       parkTurnRef.current = turn;
+      cover(nearestIndex(shown, layout), position);
       move(turnCurve(columnRef.current, shown, target), {
-        onEnd: () => {
+        onEnd: (outcome, end) => {
           if (parkTurnRef.current === turn) {
             parkTurnRef.current = null;
+          }
+          if (outcome === 'arrived') {
+            settle(end);
           }
         },
       });
       return;
     }
     if (isAway) {
-      motion.setOffset(target);
+      motion.setOffset(selectedIndex * ROW_HEIGHT);
+      committedRef.current = selectedIndex;
     }
     parkedRef.current = true;
-  }, [isActive, selectedIndex, motion, move]);
+  }, [isActive, selectedIndex, layout, motion, move, cover, settle]);
 
   // A hidden wheel keeps no motion running and holds no drag. Hiding it
   // mid-drag ends the pan without calling its listener, because the toggle's
@@ -463,12 +682,14 @@ export function PickerWheel({
   const release = useCallback(
     (velocity: number) => {
       registerWheelTables();
+      const currentLayout = latestRef.current.layout;
       const plan = planRelease(
         motion.offset(),
         velocity,
-        latestRef.current.layout,
+        currentLayout,
         resolveMotion(columnRef.current, scroll.bounce),
       );
+      cover(nearestIndex(motion.offset(), currentLayout), plan.index);
       move(plan.curve, {
         ticks: true,
         onEnd,
@@ -476,7 +697,7 @@ export function PickerWheel({
         momentum: plan.kind === 'coast' || plan.kind === 'edge',
       });
     },
-    [motion, move, onEnd],
+    [motion, move, onEnd, cover],
   );
 
   const pan = useGestureRecognizer(
@@ -518,10 +739,15 @@ export function PickerWheel({
           if (drag == null) {
             break;
           }
-          motion.setOffset(
-            dragOffset(drag.start - recognizer.translation().y, currentLayout),
-            {ticks: true},
+          const offset = dragOffset(
+            drag.start - recognizer.translation().y,
+            currentLayout,
           );
+          if (currentLayout.looping) {
+            const position = nearestIndex(offset, currentLayout);
+            cover(position, position);
+          }
+          motion.setOffset(offset, {ticks: true});
           break;
         }
         case 'ended': {
@@ -583,6 +809,9 @@ export function PickerWheel({
       if (target == null || target === nearestIndex(offset, currentLayout)) {
         return;
       }
+      // On a loop the tapped row can be a copy: the wheel turns onto it, as
+      // UIKit's does.
+      cover(nearestIndex(offset, currentLayout), target);
       move(turnCurve(columnRef.current, offset, target * ROW_HEIGHT), {
         onEnd,
       });
@@ -610,7 +839,12 @@ export function PickerWheel({
           return;
         }
         const offset = motion.offset();
-        move(turnCurve(columnRef.current, offset, index * ROW_HEIGHT), {
+        const currentLayout = latestRef.current.layout;
+        const target = nearestPosition(index, offset, currentLayout);
+        // The owner commits this row: on a loop it becomes the committed copy.
+        committedRef.current = target;
+        cover(nearestIndex(offset, currentLayout), target);
+        move(turnCurve(columnRef.current, offset, target * ROW_HEIGHT), {
           onEnd: (outcome, end) => {
             if (outcome === 'arrived') {
               arrive(end);
@@ -619,21 +853,35 @@ export function PickerWheel({
           },
         });
       }),
-    [motion, move, arrive],
+    [motion, move, arrive, cover],
   );
 
   useImperativeHandle(ref, () => ({spinTo}), [spinTo]);
 
+  // A key or a click turns the wheel from `offset` onto `position` and
+  // commits that row at once. On a loop the strip first moves the target's lap
+  // onto its own rows, as a rest does. The turn starts before the commit, so a
+  // value the owner clamps turns the wheel on from it (`spinTo`).
   const turnToPosition = useCallback(
     (position: number, offset: number) => {
       const current = latestRef.current;
-      const option = current.options[position];
-      if (option.value !== current.value) {
-        current.onChange(option.value);
+      const count = current.options.length;
+      const option = optionReader()(position);
+      const shift =
+        current.layout.looping && count > 0
+          ? position - mod(position, count)
+          : 0;
+      const from = offset - shift * ROW_HEIGHT;
+      const to = position - shift;
+      if (shift !== 0) {
+        motion.setOffset(from);
       }
-      move(turnCurve(columnRef.current, offset, position * ROW_HEIGHT));
+      committedRef.current = to;
+      cover(nearestIndex(from, current.layout), to);
+      move(turnCurve(columnRef.current, from, to * ROW_HEIGHT));
+      commit(option);
     },
-    [move],
+    [motion, move, cover, commit, optionReader],
   );
 
   const moveBy = useCallback(
@@ -645,6 +893,22 @@ export function PickerWheel({
       // Keys step from the row the wheel is heading to, not the one it is
       // passing: two quick presses move two rows. A key with nowhere to go
       // leaves a turn in flight to finish on its row.
+      if (current.layout.looping) {
+        const optionAt = optionReader();
+        const heading = nearestIndex(motion.target(), current.layout);
+        const travel = loopedStep(
+          at => isEnabledOption(optionAt(at)),
+          heading,
+          delta,
+          current.options.length,
+        );
+        if (travel == null) {
+          return;
+        }
+        const offset = motion.isMoving() ? motion.stop() : motion.offset();
+        turnToPosition(heading + travel, offset);
+        return;
+      }
       const row = steppedIndex(
         current.options,
         nearestIndex(motion.target(), current.layout),
@@ -656,7 +920,7 @@ export function PickerWheel({
       const offset = motion.isMoving() ? motion.stop() : motion.offset();
       turnToPosition(row, offset);
     },
-    [motion, turnToPosition],
+    [motion, turnToPosition, optionReader],
   );
 
   // A mouse wheel's notch turns the wheel one row, as an arrow key does, with
@@ -687,15 +951,20 @@ export function PickerWheel({
     return () => column.removeEventListener('wheel', onWheel);
   }, [isActive, moveBy]);
 
-  // Home and End: the first and the last enabled row.
+  // Home and End: the first and the last enabled row. On a loop they are the
+  // rows of the committed row's lap, so they never pass the seam.
   const moveToEnd = useCallback(
     (end: 'first' | 'last') => {
-      const row = endIndex(latestRef.current.options, end);
+      const current = latestRef.current;
+      const row = endIndex(current.options, end);
       if (row == null) {
         return;
       }
       const offset = motion.isMoving() ? motion.stop() : motion.offset();
-      turnToPosition(row, offset);
+      turnToPosition(
+        lapPosition(row, committedRef.current, current.layout),
+        offset,
+      );
     },
     [motion, turnToPosition],
   );
@@ -707,18 +976,20 @@ export function PickerWheel({
   // system.
   const activateRow = useCallback(
     (row: number) => {
-      const current = latestRef.current;
-      const option = current.options[row];
-      if (option == null || option.isDisabled) {
+      // A click names a value: on a loop, the row of the committed row's lap,
+      // never across the seam.
+      const target = lapPosition(
+        row,
+        committedRef.current,
+        latestRef.current.layout,
+      );
+      if (!isEnabledOption(optionReader()(target))) {
         return;
       }
       const offset = motion.isMoving() ? motion.stop() : motion.offset();
-      if (option.value !== current.value) {
-        current.onChange(option.value);
-      }
-      move(turnCurve(columnRef.current, offset, row * ROW_HEIGHT));
+      turnToPosition(target, offset);
     },
-    [motion, move],
+    [motion, turnToPosition, optionReader],
   );
 
   const {listboxProps, optionProps} = useWheelListbox({
@@ -759,6 +1030,11 @@ export function PickerWheel({
               {option.label}
             </div>
           ))}
+          {loops && (
+            // The copies, drawn directly: assistive technology meets each
+            // value once, on the wheel's own row.
+            <div ref={copiesRef} aria-hidden="true" />
+          )}
         </div>
       </div>
     </div>
@@ -768,8 +1044,8 @@ export function PickerWheel({
 PickerWheel.displayName = 'PickerWheel';
 
 /**
- * The row under a point `dy` px below the band's centre, or null past either
- * end of the list.
+ * The position of the row under a point `dy` px below the band's centre. It is
+ * null past either end of a list that does not loop.
  */
 function rowAtPoint(
   dy: number,
@@ -777,7 +1053,7 @@ function rowAtPoint(
   layout: WheelLayout,
 ): number | null {
   const position = Math.round((offset + dy) / layout.rowHeight);
-  if (position < 0 || position >= layout.rowCount) {
+  if (!layout.looping && (position < 0 || position >= layout.rowCount)) {
     return null;
   }
   return position;

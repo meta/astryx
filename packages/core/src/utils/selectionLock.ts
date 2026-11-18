@@ -38,6 +38,7 @@ import {
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
 import {isElement, isNode} from './nodeType';
+import {sharedWeakMap} from './sharedRealm';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [
@@ -66,14 +67,18 @@ export function locksSelectionFor(pointerType: string): boolean {
   return pointerType !== 'mouse';
 }
 
-/** Locked elements, how many contacts hold each, and what to restore. */
-const locks = new WeakMap<
+/**
+ * Locked elements, how many contacts hold each, and what to restore. Every
+ * copy of Core counts here, so the first lock's saved styles come back only
+ * after the last release in any copy.
+ */
+const locks = sharedWeakMap<
   Element,
   {
     count: number;
     saved: ReadonlyArray<{name: string; value: string; priority: string}>;
   }
->();
+>('utils/selection-lock/locks', 1);
 
 /**
  * Refuse a selection and the touch callout on `elements` (and on a non-text

@@ -15,6 +15,7 @@
  */
 
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {sharedWeakMap} from './sharedRealm';
 import {
   getInteractionModality,
   type InteractionModality,
@@ -83,7 +84,10 @@ export function moveFocusLeftBehind(
   return target.ownerDocument.activeElement === target;
 }
 
-const temporaryFocus = new WeakMap<HTMLElement, () => void>();
+const temporaryFocus = sharedWeakMap<HTMLElement, () => void>(
+  'utils/focus-return/temporary-focus',
+  1,
+);
 
 /** Release only a temporary tab stop owned by this module. Internal. */
 export function releaseTemporaryFocus(element: HTMLElement): void {
@@ -237,7 +241,10 @@ export function prepareFocusRepairOnRemoval(
 // Whether focus rested on the page body when the current commit began
 // removing surfaces, per document. One removal can drop focus before a later
 // surface's cleanup runs, so every cleanup of the commit reads the first value.
-const focusDetachedAtRemovalStart = new WeakMap<Document, boolean>();
+const focusDetachedAtRemovalStart = sharedWeakMap<Document, boolean>(
+  'utils/focus-return/focus-detached-at-removal-start',
+  1,
+);
 function wasFocusDetachedBeforeRemoval(doc: Document): boolean {
   let wasDetached = focusDetachedAtRemovalStart.get(doc);
   if (wasDetached === undefined) {

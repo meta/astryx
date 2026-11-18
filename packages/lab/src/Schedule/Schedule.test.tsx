@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -25,6 +26,34 @@ import type {
   ScheduleCategory,
   SchedulePlugin,
 } from './types';
+
+/** Fires a popover toggle event of `type` to the closed state. */
+function fireCloseToggle(layer: HTMLElement, type: 'beforetoggle' | 'toggle') {
+  const event = new Event(type);
+  Object.defineProperty(event, 'newState', {value: 'closed'});
+  fireEvent(layer, event);
+}
+
+/**
+ * A pointer press on `button` while `openTrigger`'s popover is open, as a
+ * browser runs it: the press's light dismiss starts the popover's hide
+ * (`beforetoggle`) before its click, and the hide ends (`toggle`) after it.
+ */
+function pressWithLightDismiss(button: HTMLElement, openTrigger: HTMLElement) {
+  const layer = document.getElementById(
+    openTrigger.getAttribute('aria-controls') ?? '',
+  ) as HTMLElement;
+  fireEvent.pointerDown(button);
+  // A popover the press itself closed is no longer open for the browser.
+  const isOpen = openTrigger.getAttribute('aria-expanded') === 'true';
+  if (isOpen) {
+    fireCloseToggle(layer, 'beforetoggle');
+  }
+  fireEvent.click(button);
+  if (isOpen) {
+    act(() => fireCloseToggle(layer, 'toggle'));
+  }
+}
 
 describe('createEventFromISO', () => {
   it('creates all-day PlainDate events from date-only ISO strings', () => {
@@ -936,11 +965,10 @@ describe('Schedule event popover', () => {
     // attribute rather than through the accessibility tree.
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
-    // A pointer press on another block closes the popover ahead of the
-    // browser's light dismiss; the click that follows opens the pressed block.
-    fireEvent.pointerDown(later);
-    expect(earlier).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(later);
+    // A pointer press on another block: the browser's light dismiss closes
+    // the popover as the press ends, and the click that follows opens the
+    // pressed block.
+    pressWithLightDismiss(later, earlier);
     expect(earlier).toHaveAttribute('aria-expanded', 'false');
     expect(later).toHaveAttribute('aria-expanded', 'true');
     expect(dialogOf(later)).toHaveAttribute('aria-label', 'Later sync');
@@ -1239,11 +1267,10 @@ describe('Schedule month overflow', () => {
     ]);
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
-    // A press on another day's button closes the popover ahead of the
-    // browser's light dismiss; the click that follows opens that day.
-    fireEvent.pointerDown(friday);
+    // A press on another day's button: the browser's light dismiss closes the
+    // popover as the press ends, and the click that follows opens that day.
+    pressWithLightDismiss(friday, wednesday);
     expect(wednesday).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(friday);
     expect(friday).toHaveAttribute('aria-expanded', 'true');
     expect(dialogOf(friday)).toHaveAttribute(
       'aria-label',
@@ -1510,7 +1537,16 @@ describe('Schedule month event popover', () => {
     expect(event).toHaveTextContent('Bravo sync details');
     expect(more).toHaveAttribute('aria-expanded', 'true');
 
-    fireEvent.keyDown(event, {key: 'Escape'});
+    // A press on "+N more" while its handed event is open shows the day's
+    // list again in the same gesture.
+    pressWithLightDismiss(more, more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(openDialog()).toHaveAttribute(
+      'aria-label',
+      'Wednesday, May 13, 2026',
+    );
+
+    fireEvent.keyDown(openDialog(), {key: 'Escape'});
     expect(more).toHaveAttribute('aria-expanded', 'false');
   });
 

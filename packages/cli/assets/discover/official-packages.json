@@ -202,6 +202,10 @@
         },
         {
           "kind": "component",
+          "name": "TabBarMoreList"
+        },
+        {
+          "kind": "component",
           "name": "ThreeDBar"
         },
         {
@@ -231,6 +235,10 @@
         {
           "kind": "component",
           "name": "TransferList"
+        },
+        {
+          "kind": "component",
+          "name": "WeightedSVGIcon"
         },
         {
           "kind": "template",

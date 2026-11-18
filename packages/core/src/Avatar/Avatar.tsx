@@ -245,6 +245,19 @@ const styles = stylex.create({
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
+  // Generated content draws the initials. They are part of the picture, not
+  // text of the control. On a link or button, visible text that the name does
+  // not contain fails Label in Name. Newer engines get empty alternative text.
+  // Older engines draw the plain string; the aria-label still names the
+  // control.
+  initials: (quoted: string) => ({
+    '::before': {
+      content: {
+        default: quoted,
+        '@supports (content: "a" / "")': `${quoted} / ""`,
+      },
+    },
+  }),
   size: (size: number) => ({
     width: size,
     height: size,
@@ -429,6 +442,11 @@ const INITIAL_CHARACTER = new RegExp(
 function initialCharacter(word: string): string {
   const index = word.search(INITIAL_CHARACTER);
   return index === -1 ? '' : firstCharacter(word.slice(index));
+}
+
+/** The text as a CSS string literal, with quotes and backslashes escaped. */
+function cssString(text: string): string {
+  return `"${text.replace(/[\\"]/g, char => `\\${char}`).replace(/\n/g, '\\a ')}"`;
 }
 
 /**
@@ -808,10 +826,10 @@ export function Avatar({
                 styles.fallback,
                 avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
+                dynamicStyles.initials(cssString(initials)),
               ),
-            )}>
-            {initials}
-          </div>
+            )}
+          />
         )}
         {showIcon && (
           <div

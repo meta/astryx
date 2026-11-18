@@ -46,6 +46,7 @@ import {
 import {isDisabledControl} from '../utils/pressDisabled';
 import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {isHTMLElement} from '../utils/nodeType';
+import {sharedSequence} from '../utils/sharedRealm';
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -82,7 +83,8 @@ const VISUALLY_HIDDEN =
   'overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;' +
   'opacity:0;pointer-events:none;';
 
-let nextLabelId = 0;
+// One sequence for every copy of Core, so label ids stay unique on the page.
+const nextLabelId = sharedSequence('gestures/haptics/label-id', 1);
 
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
@@ -179,7 +181,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
       !existing.hasAttribute('aria-label')
     ) {
       if (label.id === '') {
-        label.id = `astryx-haptic-label-${(nextLabelId += 1)}`;
+        label.id = `astryx-haptic-label-${nextLabelId()}`;
         addedLabelId = true;
       }
       existing.setAttribute('aria-labelledby', label.id);

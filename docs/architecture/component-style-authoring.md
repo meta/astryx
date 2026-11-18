@@ -112,7 +112,9 @@ not evidence of conformance or violation.
   to one component is flagged. Its pull request either takes that JavaScript
   from the shared internal touch modules (`architecture:react-component-runtime`
   INV13), which a page carries once however many components use them, or
-  justifies the cost. For flagged CSS, its pull request
+  justifies the cost. A flagged component that defers a surface revealed by
+  interaction (`architecture:component-import-boundaries` INV1) counts only its
+  eager JavaScript. For flagged CSS, its pull request
   justifies the cost, because that CSS stays in the package stylesheet
   (`spec:AST-080` FR1, FR8). Sizes are gzip at the default compression level,
   and 1 KB is 1,024 bytes; measured as `spec:AST-080` FR8 measures CSS, a
@@ -232,6 +234,8 @@ This record does not absorb adjacent audit rules:
   define client entry points, directive placement, mixed/server-safe barrels,
   built-output preservation, and RSC-usable exports. This record does not turn
   `'use client'` placement into style policy.
+  Which modules a public import reaches eagerly, including surfaces revealed by
+  interaction and opt-in capabilities, is `architecture:component-import-boundaries`.
 
 ## Audit-row routing
 

@@ -479,6 +479,34 @@ describe('busyWindowProof against a control', () => {
       judgedFromMs: 20,
     });
   });
+
+  it('throws BusyWindowTooLateError when a settle bound leaves the control too few frames, where judging on would have held enough', () => {
+    // It comes within 4 px of its end at +33 ms: the block started late for
+    // the motion, while the control moves on every frame.
+    const late = moving().map((f, i) => {
+      const y = i <= 12 ? 256 - 4 * i : i === 13 ? 206 : i === 14 ? 203 : 200;
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const run = () =>
+      busyWindowProof(late, BLOCK, {
+        control: asControl(moving()),
+        settledWithin: 4,
+      });
+    expect(run).toThrow(BusyWindowTooLateError);
+    expect(run).toThrow(
+      /busyWindowProof: the tracked y came within 4 px of where it ends 33 ms after the block began, so the part judged from 20 ms held 1 of the control's frames, under the 4 it needs, where judging on to 680 ms would have held \d+ \(\d+ frames presented in the block\): the block started late for the motion\./,
+    );
+    let caught: unknown = null;
+    try {
+      run();
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as BusyWindowTooLateError).numbers).toMatchObject({
+      judgedFromMs: 20,
+      controlFrames: 1,
+    });
+  });
 });
 
 /**
@@ -589,6 +617,27 @@ describe('pooledBusyProof', () => {
     ]);
     expect(pooled.summary).toMatch(/run 1: too late to judge/);
     expect(pooled.summary).toMatch(/run 2: too late to judge/);
+  });
+
+  it('pools a short travel that comes within its settle bound early in an on-time block: each run adds its frames, and only a single window throws', () => {
+    // It comes within 4 px of its end at t = 1033, while the block runs on.
+    // That is two or three of the control's frames into each judged part.
+    const settling = moving().map((f, i) => {
+      const y = i <= 12 ? 256 - 4 * i : i === 13 ? 206 : i === 14 ? 203 : 200;
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const control = asControl(moving());
+    const window = {from: 972, to: 1300};
+    expect(() =>
+      busyWindowProof(settling, window, {control, settledWithin: 4}),
+    ).toThrow(BusyWindowTooLateError);
+    const pooled = pooledBusyProof(
+      [0, 1, 2].map(() => ({tracked: settling, control, window})),
+      {settledWithin: 4},
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.late).toEqual([null, null, null]);
+    expect(pooled.judged).toEqual([true, true, true]);
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {
@@ -1047,5 +1096,143 @@ describe('a hold that starts before the block', () => {
     });
     expect(proof.verdict.pass, proof.summary).toBe(false);
     expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  // A window that caught the animation (`blockMainThread`'s `during`) knows
+  // its start. The position on the cast's last frame before that start then
+  // stands for the position the page set.
+  const caught = {
+    ...BLOCK,
+    animation: {from: holdFrom, to: BLOCK.to + 500, holds: true},
+  };
+
+  it('takes the position from the last frame before the caught animation starts when no position is given', () => {
+    const proof = busyWindowProof(sheet(), caught, {axis: 'y', control});
+    const named = busyWindowProof(sheet(), caught, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(100);
+    expect(proof.summary).toBe(named.summary);
+  });
+
+  it("keeps the position the page set over the caught animation's start", () => {
+    const proof = busyWindowProof(sheet(), caught, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 6,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('still fails a main-thread animation held at its start until after the block', () => {
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t < holdFrom || f.t >= BLOCK.to + 50) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const proof = busyWindowProof(frames, caught, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('does not excuse a hold at a position the animation moved to after its start', () => {
+    // Moving for 60 ms after the caught animation's start, then held there
+    // until 100 ms into the block, then moving on every frame.
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t < holdFrom + 60 || f.t >= holdTo) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const proof = busyWindowProof(frames, caught, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it("judges a recorded slider coast the same with the caught animation's start as with the position the page set", () => {
+    // Recorded in Chromium on a loaded runner: SliderTouch's coast through a
+    // 400 ms block, with the busy control. Each row is [ms from the block's
+    // start, thumb x, control x] on one cast frame. The thumb holds at its
+    // release position, 163 px, from before the coast's start. Here the hold
+    // is extended through the second judged frame, as a late hand-off can be.
+    const recorded: ReadonlyArray<readonly [number, number, number]> = [
+      [-222.1, 156, 130],
+      [-188.6, 156, 150],
+      [-179, 156, 160],
+      [-153.7, 163, 180],
+      [-144.6, 163, 190],
+      [-122.4, 163, 200],
+      [-86.2, 163, 210],
+      [-85.6, 163, 220],
+      [-45.2, 163, 240],
+      [-29.8, 163, 230],
+      [-24.1, 163, 220],
+      [15.2, 206, 190],
+      [42.1, 214, 180],
+      [49.2, 220, 170],
+      [66.8, 225, 160],
+      [93.7, 229, 150],
+      [135.3, 232, 140],
+      [139, 236, 130],
+      [171.4, 241, 100],
+      [186.5, 243, 90],
+      [210.6, 244, 80],
+      [231.8, 245, 60],
+      [259.7, 246, 50],
+      [279.9, 246, 40],
+      [287.7, 247, 30],
+      [318.4, 247, 20],
+    ];
+    const from = 10_000;
+    const coastStart = from - 74.7;
+    const holdUntil = from + 49.2;
+    const thumb = recorded.map(
+      ([t, x]) =>
+        ({
+          t: from + t,
+          box: {
+            x: from + t > coastStart && from + t <= holdUntil ? 163 : x,
+            y: 0,
+            width: 28,
+            height: 28,
+          },
+          pixels: 400,
+          step: {x: 1, y: 1},
+        }) as TrackedFrame,
+    );
+    const slider = recorded.map(
+      ([t, , x]) =>
+        ({
+          t: from + t,
+          box: {x, y: 0, width: 12, height: 12},
+          pixels: 100,
+        }) as TrackedFrame,
+    );
+    const window = {
+      from,
+      to: from + 400,
+      animation: {from: coastStart, to: coastStart + 564.3, holds: true},
+    };
+    const options = {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control: slider,
+    } as const;
+    const byStart = busyWindowProof(thumb, window, options);
+    const named = busyWindowProof(thumb, window, {
+      ...options,
+      setBeforeBlock: 163,
+    });
+    const plain = busyWindowProof(thumb, {from, to: from + 400}, options);
+    expect(byStart.verdict.failures, byStart.summary).toEqual([]);
+    expect(byStart.summary).toBe(named.summary);
+    expect(plain.verdict.pass, plain.summary).toBe(false);
   });
 });

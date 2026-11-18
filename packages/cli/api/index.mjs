@@ -49,6 +49,7 @@ export {
 export {hook} from './hook/hook.mjs';
 export {search} from './search/search.mjs';
 export {exportSearchIndex, rankSearchIndex} from './search/search-index.mjs';
+export {exportIconIndex, rankIconIndex} from './icon/search/icon-index.mjs';
 export {build} from './build/build.mjs';
 export {swizzle} from './swizzle/swizzle.mjs';
 export {gapReport} from './gap-report/gap-report.mjs';
@@ -75,6 +76,7 @@ export {
   integrationDocConflicts,
 } from './integration/authoring-checks.mjs';
 export {integrationCheck} from './integration/check/check.mjs';
+export {integrationExampleScope} from './integration/example-scope.mjs';
 export {AstryxError} from './error.mjs';
 // The one shared logger: the `logger` instance side-effecting commands write
 // through, plus its generated `Logger` type. Part of the public surface so an
@@ -109,3 +111,4 @@ export * from './integration/pack-check.type.mjs';
 export * from './integration/validate-integration.type.mjs';
 export * from './integration/authoring-checks.type.mjs';
 export * from './integration/integration-check.type.mjs';
+export * from './integration/example-scope.type.mjs';

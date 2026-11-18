@@ -255,18 +255,69 @@ async function settledAndBusy(
 ): Promise<string | null> {
   const search = page.getByRole('combobox');
   await search.fill('a');
+  await expect(search).toHaveAttribute('aria-busy', 'true');
   await expect(search).not.toHaveAttribute('aria-busy', 'true');
   const settled = await fieldBoxAt(page, width);
-  await search.press('b');
-  await expect(search).toHaveAttribute('aria-busy', 'true');
-  const busy = await fieldBoxAt(page, width);
-  const stillBusy = (await search.getAttribute('aria-busy')) === 'true';
-  if (!stillBusy) {
-    throw new Error(`The search settled before ${width} was measured`);
+  // Capture busy geometry in the page. A delayed driver read must not
+  // sample the settled field instead of the search it started.
+  const measurement = await search.evaluateHandle(
+    (input, {settled, width}) => {
+      const field = document.querySelector('button[aria-label="Clear all"]')
+        ?.parentElement?.parentElement;
+      if (!field) {
+        throw new Error('Field did not render');
+      }
+      let sawBusy = false;
+      let frame = 0;
+      let change: string | null = null;
+      let finish!: (change: string | null) => void;
+      const result = new Promise<string | null>(resolve => {
+        finish = resolve;
+      });
+      const sample = () => {
+        if (input.getAttribute('aria-busy') !== 'true') {
+          return;
+        }
+        sawBusy = true;
+        const rect = field.getBoundingClientRect();
+        const busy = {
+          width: Math.round(rect.width * 100) / 100,
+          height: Math.round(rect.height * 100) / 100,
+        };
+        if (settled.width !== busy.width || settled.height !== busy.height) {
+          change ??= `${width}: settled ${settled.width}x${settled.height}, busy ${busy.width}x${busy.height}`;
+        }
+        frame = requestAnimationFrame(sample);
+      };
+      const observer = new MutationObserver(() => {
+        if (input.getAttribute('aria-busy') === 'true') {
+          if (!sawBusy) {
+            sample();
+          }
+        } else if (sawBusy) {
+          stop();
+          finish(change);
+        }
+      });
+      const stop = () => {
+        observer.disconnect();
+        cancelAnimationFrame(frame);
+      };
+      observer.observe(input, {
+        attributes: true,
+        attributeFilter: ['aria-busy'],
+      });
+      return {result, stop};
+    },
+    {settled, width},
+  );
+  try {
+    await search.press('b');
+    return await measurement.evaluate(async ({result}) => result);
+  } finally {
+    await measurement.evaluate(({stop}) => stop());
+    await measurement.dispose();
   }
-  return settled.width === busy.width && settled.height === busy.height
-    ? null
-    : `${width}: settled ${settled.width}x${settled.height}, busy ${busy.width}x${busy.height}`;
 }
 
 /**

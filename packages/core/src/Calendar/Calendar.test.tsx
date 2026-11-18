@@ -603,6 +603,29 @@ describe('Calendar', () => {
       expect(screen.getByText('March 2019 – April 2019')).toBeInTheDocument();
     });
 
+    it('keeps max in the last pane in the two-month layout when max is today (#9357)', () => {
+      render(<Calendar numberOfMonths={2} max="2026-08-21" />);
+
+      expect(screen.getByText('July 2026 – August 2026')).toBeInTheDocument();
+      expect(getDayButton(31, 'July', 2026)).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    });
+
+    it('keeps max in the last pane in the two-month layout when the value starts in its month (#9357)', () => {
+      render(
+        <Calendar
+          mode="range"
+          numberOfMonths={2}
+          defaultValue={{start: '2026-06-02', end: '2026-06-10'}}
+          max="2026-06-30"
+        />,
+      );
+
+      expect(screen.getByText('May 2026 – June 2026')).toBeInTheDocument();
+    });
+
     it('still honors an explicit focusDate outside the window', () => {
       render(
         <Calendar focusDate="2026-01-01" min="2027-03-04" max="2027-06-30" />,
@@ -881,6 +904,97 @@ describe('Calendar', () => {
     // Should have more than just day numbers (week numbers add extra cells)
     expect(weekNumberCells.length).toBeGreaterThan(5);
   });
+
+  // Each pair is a row's first day and its week number. October 1, 2026 is a
+  // Thursday in ISO week 40. December 28, 2026 to January 3, 2027 is ISO week
+  // 53, and January 1, 2027 is a Friday.
+  it.each([
+    [
+      'Sunday start, October 2026',
+      'sun',
+      '2026-10-01',
+      [
+        ['2026-09-27', '40'],
+        ['2026-10-04', '41'],
+        ['2026-10-11', '42'],
+        ['2026-10-18', '43'],
+        ['2026-10-25', '44'],
+        ['2026-11-01', '45'],
+      ],
+    ],
+    [
+      'Monday start, October 2026',
+      'mon',
+      '2026-10-01',
+      [
+        ['2026-09-28', '40'],
+        ['2026-10-05', '41'],
+        ['2026-10-12', '42'],
+        ['2026-10-19', '43'],
+        ['2026-10-26', '44'],
+        ['2026-11-02', '45'],
+      ],
+    ],
+    [
+      'Saturday start, October 2026',
+      'sat',
+      '2026-10-01',
+      [
+        ['2026-09-26', '40'],
+        ['2026-10-03', '41'],
+        ['2026-10-10', '42'],
+        ['2026-10-17', '43'],
+        ['2026-10-24', '44'],
+        ['2026-10-31', '45'],
+      ],
+    ],
+    [
+      'Monday start, January 2027',
+      'mon',
+      '2027-01-01',
+      [
+        ['2026-12-28', '53'],
+        ['2027-01-04', '1'],
+        ['2027-01-11', '2'],
+        ['2027-01-18', '3'],
+        ['2027-01-25', '4'],
+        ['2027-02-01', '5'],
+      ],
+    ],
+    [
+      'Sunday start, January 2027',
+      'sun',
+      '2027-01-01',
+      [
+        ['2026-12-27', '53'],
+        ['2027-01-03', '1'],
+        ['2027-01-10', '2'],
+        ['2027-01-17', '3'],
+        ['2027-01-24', '4'],
+        ['2027-01-31', '5'],
+      ],
+    ],
+  ] as const)(
+    'numbers each row by the ISO week of its Thursday: %s',
+    (_name, weekStartsOn, focusDate, expected) => {
+      render(
+        <Calendar
+          hasWeekNumbers
+          weekStartsOn={weekStartsOn}
+          focusDate={focusDate}
+        />,
+      );
+      const rows = Array.from(
+        screen.getByRole('grid').querySelectorAll('[role="row"]'),
+      ).slice(1);
+      expect(
+        rows.map(row => [
+          row.querySelector('button[data-date]')?.getAttribute('data-date'),
+          row.querySelector('[role="rowheader"]')?.textContent,
+        ]),
+      ).toEqual(expected);
+    },
+  );
 
   it('respects weekStartsOn option', () => {
     render(<Calendar weekStartsOn={1} />);
