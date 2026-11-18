@@ -15,6 +15,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useRef,
   type ReactElement,
@@ -31,6 +32,7 @@ import {
 } from './useTooltip';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
+import {TooltipDescribesContext} from './tooltipPresentInterest';
 
 export type {TooltipFocusTrigger, TooltipTouchTrigger} from './useTooltip';
 
@@ -213,6 +215,7 @@ export function Tooltip({
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
+  const isDescribing = use(TooltipDescribesContext);
 
   // Determine if hover indication should be shown
   const showHoverIndication =
@@ -250,6 +253,11 @@ export function Tooltip({
     const attach = (el: HTMLElement) => {
       // Use combined ref for position + interaction
       tooltip.ref(el);
+      if (!isDescribing) {
+        return () => {
+          tooltip.ref(null);
+        };
+      }
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
@@ -293,7 +301,7 @@ export function Tooltip({
       cancelled = true;
       detach?.();
     };
-  }, [anchorRef, tooltip.ref, tooltip.describedBy]);
+  }, [anchorRef, tooltip.ref, tooltip.describedBy, isDescribing]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {

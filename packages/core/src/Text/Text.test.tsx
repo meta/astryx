@@ -557,9 +557,8 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         },
         {timeout: 3000},
       );
-      expect(text.getAttribute('aria-describedby')).toBe(
-        screen.getByRole('tooltip', {hidden: true}).id,
-      );
+      // Its text is the element's own: no description, read once.
+      expect(text).not.toHaveAttribute('aria-describedby');
     } finally {
       restore();
     }
@@ -693,6 +692,9 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         },
         {timeout: 3000},
       );
+      // The focused text is announced once: the tooltip adds no description.
+      expect(link).not.toHaveAttribute('aria-describedby');
+      expect(link.parentElement).not.toHaveAttribute('aria-describedby');
     } finally {
       restore();
     }

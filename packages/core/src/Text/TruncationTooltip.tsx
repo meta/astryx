@@ -34,6 +34,7 @@ import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {useTapRecognizer} from '../Layer/gestureCounter';
 import {isElement} from '../utils/nodeType';
 import {
+  TooltipDescribesContext,
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
@@ -193,7 +194,15 @@ export function TruncationTooltip({
   }
   return (
     <TooltipPresentInterestContext value={interest.interestRef}>
-      <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
+      {/* The full text is already the element's own content, so the
+          tooltip adds no description: a screen reader reads it once. */}
+      <TooltipDescribesContext value={false}>
+        <Tooltip
+          anchorRef={anchorRef}
+          content={content}
+          placement={placement}
+        />
+      </TooltipDescribesContext>
     </TooltipPresentInterestContext>
   );
 }
