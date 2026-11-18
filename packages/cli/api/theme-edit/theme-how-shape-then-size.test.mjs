@@ -84,6 +84,21 @@ describe('a shape, then a length', () => {
     await follow(lines);
   }, 240_000);
 
+  it('a length after rounded on a part with corners is its corners', async () => {
+    expect(writes(await how('q0', 'cards: rounded, 12px'))[0]).toBe(
+      'set q0 border-radius 12px --on card',
+    );
+    expect(writes(await how('q0', 'buttons round, 6px'))[0]).toBe(
+      'set q0 border-radius 6px --on button',
+    );
+    // (Round on a part drawn as a circle is its shape: the length is its
+    // size.)
+    await themeEditNew('q2', {cwd, like: 'neutral'});
+    expect(writes(await how('q2', 'avatars round, 32px'))).toContain(
+      'set q2 width 32px --on avatar',
+    );
+  });
+
   it('a length after corners said with one stays the corners', async () => {
     expect(writes(await how('q0', 'buttons square, 8px corners'))).toContain(
       'set q0 border-radius 8px --on button',
