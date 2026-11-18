@@ -217,6 +217,8 @@ import {
 import {
   renderPreview,
   renderSheet,
+  partSizeChanges,
+  sizeChangeNote,
   pageInTheWay,
   inTheWayPhrase,
   previewIsCurrent,
@@ -1889,6 +1891,84 @@ export function stoppedAfterSave(
     );
     if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
   };
+}
+
+/**
+ * The width a border at the theme's border width draws, as the build
+ * resolves --border-width (its mode's value; the light one when the theme
+ * shows both).
+ * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} res
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+function borderWidthOf(res, data) {
+  const mode = data.mode === 'dark-only' ? 'dark' : 'light';
+  const v = String(res?.[mode]?.['--border-width'] ?? '').trim();
+  return /^\d*\.?\d+(?:px|rem|em)$/.test(v) ? v : 'theme-width';
+}
+
+/**
+ * The sheet of every component as the theme's build draws it now, written
+ * to the project's cache to be measured: before a change is built, it is
+ * the theme as it was. Null when it cannot be made (the measure then says
+ * so).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {'before' | 'after'} tag
+ * @returns {Promise<{file: string} | {problem: string}>}
+ */
+async function sizeSheet(ctx, slug, data, tag) {
+  const out = path.join(
+    ctx.project.cacheDir,
+    `size-${slug}-${process.pid}-${tag}.html`,
+  );
+  try {
+    await renderSheet(ctx, slug, data, {out});
+    return {file: out};
+  } catch (e) {
+    if (/** @type {any} */ (e)?.lockLost) throw e;
+    return {
+      problem: `the sheet could not be drawn (${e instanceof Error ? e.message.split('\n')[0] : String(e)})`,
+    };
+  }
+}
+
+/**
+ * What the border brought for a color moves on the page: the part's boxes
+ * on the sheet before and after the change, at rest and in each state the
+ * sheet draws, measured in one browser run. Says how much the part grows,
+ * that it keeps its size, or why it was not measured.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} added
+ * @param {{file: string} | {problem: string}} before
+ * @returns {Promise<string>}
+ */
+async function borderSizeNote(ctx, slug, data, added, before) {
+  const unmeasured = (/** @type {string} */ why) =>
+    `the size change the added border makes on ${added.on} was not measured: ${why}`;
+  if ('problem' in before) return unmeasured(before.problem);
+  const after = await sizeSheet(ctx, slug, data, 'after');
+  try {
+    if ('problem' in after) return unmeasured(after.problem);
+    const parts = partsOf(ctx, added);
+    const r = await partSizeChanges(
+      ctx.project,
+      before.file,
+      after.file,
+      parts,
+      data.mode === 'dark-only' ? 'dark' : 'light',
+    );
+    if ('problem' in r) return unmeasured(r.problem);
+    return (
+      sizeChangeNote(r.changes, 'the added border') ??
+      unmeasured(`${parts.join(', ')} is not drawn on the sheet`)
+    );
+  } finally {
+    for (const f of [before.file, 'file' in after ? after.file : null])
+      if (f) fs.rmSync(f, {force: true});
+  }
 }
 
 /**
@@ -6633,8 +6713,19 @@ async function changeOnce(
       data.settings = data.settings.filter(x => x !== s);
     }
   }
+  // A border brought for a color: the sheet as the build draws it now,
+  // before the change is built, to measure what the added width moves.
+  // Measured every time, a rare path: the result says, never leaves it to
+  // be asked for.
+  const sizeBefore = borderAdded
+    ? await sizeSheet(ctx, slug, data, 'before')
+    : null;
   const r = await commitTheme(ctx, slug, data, {history: true});
   await sayNextStepClears(ctx, slug, s, r);
+  const sizeNote =
+    borderAdded && sizeBefore
+      ? await borderSizeNote(ctx, slug, data, borderAdded, sizeBefore)
+      : null;
   const compiledAfter = compileTheme(ctx, data, base);
   // What the spacing dial said of the sizes it could not keep apart.
   // What the build said of settings it could not write as they are.
@@ -6949,7 +7040,8 @@ async function changeOnce(
     ...fieldNotes,
     ...(borderAdded
       ? [
-          `${borderAdded.on} drew no border${borderAdded.when ? ` when ${borderAdded.when}` : ''}, so this adds one for the color to show on: ${describe(borderAdded)}, transparent at rest so ${borderAdded.on} keeps one size in every state; undo ${slug} takes back both`,
+          `added a ${borderWidthOf(r.res, data)} border to ${borderAdded.on}${borderAdded.when ? ` when ${borderAdded.when}` : ''} so the color shows: ${borderAdded.on} drew none there; ${describe(borderAdded)}, see-through at rest, so ${borderAdded.on} keeps one size in every state; undo ${slug} takes back both`,
+          ...(sizeNote ? [sizeNote] : []),
         ]
       : []),
     ...(alsoReplaced.length && prev

@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
+import {PART_BOXES_PREFIX, partBoxes} from './part-boxes.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -37,7 +38,7 @@ import {
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [chrome, batch] = process.argv.slice(2);
-/** @type {Array<{html: string, png: string, mode: string}>} */
+/** @type {Array<{html: string, png: string, mode: string, boxes?: string[]}>} */
 const jobs = JSON.parse(batch);
 /** A line for one job of the batch. @param {number} i @param {string} line */
 const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
@@ -158,10 +159,10 @@ function event(method, sessionId) {
 /**
  * One page of the batch in a tab of its own: drawn, pictured whole, and
  * measured.
- * @param {{html: string, png: string, mode: string}} job
+ * @param {{html: string, png: string, mode: string, boxes?: string[]}} job
  * @param {number} i
  */
-async function picture({html, png, mode}, i) {
+async function picture({html, png, mode, boxes}, i) {
   // Each page in a window of its own: a page in a background tab runs
   // no animation frames, so a chart drawn over frames never finishes.
   const {targetId} = await send('Target.createTarget', {url: 'about:blank', newWindow: true});
@@ -254,6 +255,20 @@ async function picture({html, png, mode}, i) {
   ).catch(() => null);
   if (Array.isArray(faint?.result?.value) && !faint.exceptionDetails)
     say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint.result.value)}`);
+  // The size of each part the job names, for a check that compares two
+  // pictures' boxes.
+  if (boxes?.length) {
+    const sized = await send(
+      'Runtime.evaluate',
+      {
+        expression: `(${partBoxes})(${JSON.stringify(boxes)})`,
+        returnByValue: true,
+      },
+      sessionId,
+    ).catch(() => null);
+    if (sized?.result?.value && !sized.exceptionDetails)
+      say(i, `${PART_BOXES_PREFIX}${JSON.stringify(sized.result.value)}`);
+  }
   await send('Target.closeTarget', {targetId}).catch(() => {});
   say(i, PICTURE_TAKEN);
 }
