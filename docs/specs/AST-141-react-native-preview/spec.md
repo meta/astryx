@@ -39,8 +39,7 @@ libraries and another router beside the package. This record owns the
 `astryx rn preview …` commands, what a person does in the host, the
 namespaces that keep a project apart, the Preview policy per module, and the
 checks and preparation before a project's code runs. A Preview project meets
-the same limits wherever it runs: Astryx Stage (`spec:AST-139`) applies this
-record's namespaces and policy when it runs one.
+the same limits in every host that runs it (FR4).
 
 ## Why this exists
 
@@ -60,7 +59,7 @@ project away from the app's own identity and data.
 | A developer building an Astryx app     | Scans a QR code from `astryx rn preview` and uses the project on a real phone while it hot-reloads.                 |
 | An AI agent working on an Astryx app   | Prints the Preview link or writes a hosted bundle for a person, and checks the project against the host beforehand. |
 | A reviewer, designer, or product owner | Opens a hosted bundle from a link and tries the change on a phone.                                                  |
-| Astryx's own maintainers               | Check that a project meets the same limits in the Astryx app on iOS and Android and in Astryx Stage.                |
+| Astryx's own maintainers               | Check that a project meets the same limits in the Astryx app on iOS and on Android.                                 |
 
 ## Non-goals
 
@@ -94,7 +93,7 @@ project away from the app's own identity and data.
   - a developer's computer: the project's dev server on the local network,
     which `astryx rn preview` prints as a link and a QR code; or
   - a hosted bundle: a bundle that `astryx rn preview bundle` writes, served
-    over HTTPS from any host (FR11).
+    over HTTPS from any host (FR12).
 - **FR2 — No project code runs without the person's confirmation.** A
   scanned code and a Preview link opened from outside the app show a
   confirmation first, with the name the link carries and the address it comes
@@ -138,8 +137,7 @@ project away from the app's own identity and data.
     cannot remove its own namespace's data that way, another project's, or
     the app's.
   - Every host that runs a Preview project applies these namespaces and
-    FR5's policy, Astryx Stage included (`spec:AST-139`), so a project meets
-    the same limits on a phone and on a desktop.
+    FR5's policy, so a project meets the same limits wherever it runs.
 - **FR5 — The Preview policy per module.** A module the table does not name
   answers a project as it answers the app, within the app's own permissions.
 
@@ -181,7 +179,7 @@ project away from the app's own identity and data.
     modules, versions, and named features it has; a project that needs one
     the host lacks is refused with a screen that names what is missing.
     `astryx rn preview check` answers the same question on the developer's
-    computer (FR11).
+    computer (FR12).
   - The host runs source bundles only. A precompiled bytecode bundle is
     refused before it runs.
 - **FR8 — An encrypted hosted bundle keeps its key on the phone.** For an
@@ -204,13 +202,29 @@ project away from the app's own identity and data.
 
 - **FR10 — The inspector picks an element without touching the project.**
   The app's inspector picks an element on a running Preview project's screen
-  and shows the component under it. While the inspector is picking, every
-  touch goes to the inspector and none reaches the project. When picking
-  ends, the project receives touches again.
+  and shows the component under it. Its touch shield covers the project's
+  screen while picking is on: it shows when the person turns picking on, and
+  it goes when they pick an element, turn picking off, or leave the project.
+  While it shows, every touch goes to the inspector and none reaches the
+  project: a tap selects the element under it instead of acting on it, a
+  press, a long press, a scroll, or a drag moves nothing in the project, and
+  a system menu trigger opens no menu. When the shield goes, the project
+  receives touches again.
+
+### Preview's own controls
+
+- **FR11 — Preview's own controls float above the project.** While a project
+  runs, the app draws its own controls, the exit control that returns to the
+  app and the inspector while it is on, in a layer above everything the
+  project shows, its sheets, menus, and modal windows included. A touch on
+  one of those controls goes to it; a touch anywhere else in the layer passes
+  through to the project. A screen reader reaches the exit control at any
+  point by its own label, and the layer hides nothing in the project from
+  assistive technology.
 
 ### The commands
 
-- **FR11 — `astryx rn preview` makes what a Preview host opens.**
+- **FR12 — `astryx rn preview` makes what a Preview host opens.**
   `@astryxdesign/react-native` contributes the group to the Astryx CLI with
   its other commands as an experimental group (DEC-6): its help text and its
   documentation say that it is experimental, and it is outside the stable
@@ -254,7 +268,7 @@ project away from the app's own identity and data.
 
 ### Evidence
 
-- **FR12 — A Preview run is development evidence.** A Preview run shows what
+- **FR13 — A Preview run is development evidence.** A Preview run shows what
   the project does on the platform's contracts on a phone. A claim about
   native behavior is checked on the Simulator, the emulator, or a device
   (`spec:AST-112/FR15`); a Preview run alone does not back it.
@@ -278,27 +292,26 @@ project away from the app's own identity and data.
   `astryx rn preview …` commands; its library layer keeps the types and
   manifest shape a previewed project uses (`spec:AST-112/FR1`), and its
   installers (`spec:AST-112/FR5`) are what the prelude installs (FR6).
-- `spec:AST-139` runs a Preview project under this record's namespaces and
-  policy (FR4, FR5).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states what a Preview project reaches of them (FR5).
 
 ## Verification
 
-| Contract | Verification                                                                                                                | Representative states                                                                        | Mutation or failure expectation                                                                                                                                                              |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android                            | QR code; photo; link; typed address; dev server; hosted bundle                               | A way in that does not open the project                                                                                                                                                      |
-| FR2      | Links and codes from outside the app; a link that claims a confirmation                                                     | local network; internet; typed; opened before                                                | Any request or code that runs before the person confirms                                                                                                                                     |
-| FR3      | Reload, return, and opening another listed project while a project runs; a dev server that stops; removing a listed project | a running project; an unreachable address; an encrypted project                              | A project that cannot be left, an encrypted project in the list, or stored data left after removal                                                                                           |
-| FR4      | The app and two projects that read and write each store; a refused capability; a removed project; the same in Astryx Stage  | each store; each refused capability; a project that tries to remove another namespace's data | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, a project that removes data it does not own, or a Stage run with other limits |
-| FR5      | Device and Stage runs of a project that calls each module in the table                                                      | each row of FR5's table; a photo picked through the system picker                            | A project that changes the app's appearance, reads its launch facts, takes the app's players, reads the photo library, or gets a picked item outside its own cache                           |
-| FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project       | a project; an app with two routers                                                           | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                     |
-| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                | a missing native piece; an older host                                                        | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                          |
-| FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                  | a valid link; each failed check; data written while open                                     | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                        |
-| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                          | the Astryx app's build; a plain project                                                      | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                                 |
-| FR10     | Inspector picking over a project that counts its touches, on iOS and Android                                                | picking on; picking ended                                                                    | A touch that reaches the project while picking, a project that gets no touches after picking ends, or an inspector that names the wrong component                                            |
-| FR11     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR11's table; a share without terms          | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                    |
-| FR12     | Review of each native change's evidence                                                                                     | a native behavior change                                                                     | A native claim backed only by a Preview run                                                                                                                                                  |
+| Contract | Verification                                                                                                                                        | Representative states                                                                        | Mutation or failure expectation                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Opening a project by each way in, from a dev server and from a hosted bundle, on iOS and Android                                                    | QR code; photo; link; typed address; dev server; hosted bundle                               | A way in that does not open the project                                                                                                                                                                                      |
+| FR2      | Links and codes from outside the app; a link that claims a confirmation                                                                             | local network; internet; typed; opened before                                                | Any request or code that runs before the person confirms                                                                                                                                                                     |
+| FR3      | Reload, return, and opening another listed project while a project runs; a dev server that stops; removing a listed project                         | a running project; an unreachable address; an encrypted project                              | A project that cannot be left, an encrypted project in the list, or stored data left after removal                                                                                                                           |
+| FR4      | The app and two projects that read and write each store; a refused capability; a removed project, on iOS and Android                                | each store; each refused capability; a project that tries to remove another namespace's data | One namespace that reads another's data, a refusal that is a silent no-op, a removed project that leaves data, or a project that removes data it does not own                                                                |
+| FR5      | iOS and Android device runs of a project that calls each module in the table                                                                        | each row of FR5's table; a photo picked through the system picker                            | A project that changes the app's appearance, reads its launch facts, takes the app's players, reads the photo library, or gets a picked item outside its own cache                                                           |
+| FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project                               | a project; an app with two routers                                                           | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                                                     |
+| FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx rn preview check`                                                        | a missing native piece; an older host                                                        | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                                                          |
+| FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                                          | a valid link; each failed check; data written while open                                     | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                                                        |
+| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                                                  | the Astryx app's build; a plain project                                                      | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                                                                 |
+| FR10     | Inspector picking over a project that counts its touches, presses, scrolls, drags, and menu opens, on iOS and Android                               | picking on; an element picked; picking turned off; leaving the project                       | A touch, press, scroll, drag, or menu that reaches the project while the shield shows, a project that gets no touches after the shield goes, or an inspector that names the wrong component                                  |
+| FR11     | A project that shows a sheet, a menu, and a modal window, with the exit control and the inspector over it, on iOS and Android; a screen reader walk | each kind of presentation; a touch outside the controls; screen reader on                    | A project surface drawn above the exit control, a touch outside the controls that does not reach the project, an exit control the screen reader cannot reach, or a project element the layer hides from assistive technology |
+| FR12     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR12's table; a share without terms                                  | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                                                    |
+| FR13     | Review of each native change's evidence                                                                                                             | a native behavior change                                                                     | A native claim backed only by a Preview run                                                                                                                                                                                  |
 
 ## Decision log
 
@@ -363,10 +376,10 @@ would then carry a development tool's requirements.
 **Reference:** `spec:AST-141/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
 
-A project checked in Astryx Stage and opened on a phone has to meet the same
-limits, or a check on one says nothing about the other. This record owns the
+A project checked in one host and opened in another has to meet the same
+limits, or a check in one says nothing about the other. This record owns the
 namespaces and the per-module policy, and every host that runs a Preview
-project, Astryx Stage included, applies them.
+project applies them.
 
 ### DEC-6 — Preview is experimental
 
