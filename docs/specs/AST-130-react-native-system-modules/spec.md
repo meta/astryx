@@ -40,16 +40,17 @@ system's own picker, and the app's navigation state survives a cold start.
 This record details the system modules of the platform layer that
 `spec:AST-112` defines. Ten of them are core modules (`spec:AST-112/FR1`):
 every app links them. `AstryxNetwork` and `AstryxCrypto` are part of the
-optional add-on package, not core. Every asynchronous call resolves the result vocabulary of
-`spec:AST-112/FR6`, every module has the capability shape of
-`spec:AST-112/FR7`, and every interface evolves additively under
-`spec:AST-112/FR8`.
+optional add-on package, not core. The shared platform rules are
+`spec:AST-140`'s: every asynchronous call resolves the result vocabulary of
+`spec:AST-140/FR3`, every interface evolves additively under
+`spec:AST-140/FR5`, and every module has the capability shape of
+`spec:AST-112/FR7`.
 
 ## Why this exists
 
 The package takes no runtime dependency outside React and React Native
 (`spec:AST-112/FR2`); apps may use third-party libraries, haptics libraries
-included, beside these modules without conflict. Each module exists for one
+included, beside these modules without conflict (`spec:AST-140/FR9`). Each module exists for one
 concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 - `AstryxAppearance`: the saved light or dark choice is in force from the first
@@ -134,7 +135,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   (`spec:AST-112/FR1`). `AstryxNetwork` and `AstryxCrypto` are part of the
   optional add-on package, not core: an app links them only when it installs
   that package, and without it their wrappers answer as an absent module. Each module is read with `TurboModuleRegistry.get`,
-  only by its own wrapper (`spec:AST-112/FR8`), and its wrapper answers
+  only by its own wrapper (`spec:AST-140/FR1`, FR2), and its wrapper answers
   `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` have
   no public object: the library is their one caller.
 
@@ -164,7 +165,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     answer `null`, `'system'`, or all-false where the module or the constant is
     absent.
   - Every asynchronous call resolves `AstryxResult` and never rejects
-    (`spec:AST-112/FR6`). Each module adds only these reasons to the common
+    (`spec:AST-140/FR3`). Each module adds only these reasons to the common
     ones:
 
     | Module                        | Module reasons                                                                                                                                                            |
@@ -422,7 +423,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     the runtime lacks them, and installs nothing and reports `no-module`
     without it.
 
-- **FR16 — Threads and lifecycle.**
+- **FR16 — Threads and lifecycle.** The threading rules of
+  `spec:AST-140/FR6` apply; for this group:
   - Constants are read on the JavaScript thread once per module, at the first
     call that needs them. Asynchronous calls do their native work off the
     JavaScript thread, and a measure that walks files (`bundleSize()`) runs off
@@ -449,7 +451,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     no view.
 
 - **FR18 — The group's named features.**
-  - Every contract in the group is at revision 1 (`spec:AST-112/FR8`). Its
+  - Every contract in the group is at revision 1 (`spec:AST-140/FR5`). Its
     named features are `AstryxAppearance.persist-false`,
     `AstryxAppearance.run-override` and `AstryxAppearance.launch-link`, and
     `AstryxPlatformInfo`'s `contractFeatures` constant is the list a binary
@@ -504,8 +506,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 - Relies on `spec:AST-112` FR3 (amended): the core links in every app; ten
   modules of this group are core.
-- Relies on `spec:AST-112` FR8 (amended): every contract is at revision 1, and
-  later behaviour is a named feature that the platform info module reports.
+- Relies on `spec:AST-140` FR5: every contract is at revision 1, and later
+  behaviour is a named feature that the platform info module reports.
 - Relies on `spec:AST-112` DEC-15 (amended): native code uses public platform
   API only.
 - Changes `spec:AST-112/FR1`: the core's list gains appearance, accessibility
@@ -517,8 +519,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   `web` capability carries web view data and its cookie store (FR19).
 - Departs from `spec:AST-112/FR7` ("never a silent no-op") for the calls that
   return nothing (FR2); OQ3 asks whether the exception stands.
-- Details `spec:AST-112` FR5 (the crypto installer's module), FR6 and FR7
-  (each module's results and probes), and FR9 (the haptic moment mapping).
+- Details `spec:AST-112` FR5 (the crypto installer's module), FR7 (each
+  module's probes) and FR9 (the haptic moment mapping), and `spec:AST-140/FR3`
+  (each module's results).
 
 ## Verification
 
