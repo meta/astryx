@@ -16,11 +16,15 @@ affects_contributing: []
 affects_consumer_docs: []
 ---
 
-# React Native: Astryx Stage system spec
+# React Native: Astryx Stage (experimental) system spec
 
 <!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, research, or project status (what is built so far, what goes first) in the record. A requirement gap reads `<FR or INV id> gap: <observable mismatch>`; one line such as `Status: in progress` may say the record is still in progress. See docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
+
+Astryx Stage is an experimental feature: its commands, flags, results and
+behaviour may change or be removed in any release, and nothing in Astryx React
+Native depends on it.
 
 **Astryx Stage** is a desktop app for developers and their agents, beside the
 React Native packages of `spec:AST-112`. It runs the real JavaScript of an app
@@ -222,6 +226,9 @@ define, so Astryx React Native itself stays the same with or without it.
   | `astryx rn stage install`       | Gets the Stage release that the package pins, and verifies each binary's checksum and signature.                                                    |
   | `astryx rn stage windows`       | Lists this user's open Stage windows, each with its id.                                                                                             |
   | `astryx rn stage which`         | Says which Stage binary the commands use, its version, where it comes from (the pinned release or `--engine`), and the contracts it declares (FR7). |
+  - The group is experimental (`spec:AST-017` FR21, DEC-6): its help and its
+    docs say so, the docs carry `stability: 'experimental'`, and its commands,
+    flags, and results may change or be removed in any release.
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
     - the device: `--platform ios|android`, `--device <name>`,
@@ -297,6 +304,9 @@ define, so Astryx React Native itself stays the same with or without it.
   lists the gap in the report (FR5).
 - Browser evidence: none. Stage claims are checked against the Simulator and
   the emulator.
+- Compatibility: experimental (DEC-6). No release promises Stage's commands,
+  flags, reports, or behavior, and an app's build and run never depend on
+  them.
 
 ## Current-state impact
 
@@ -380,6 +390,18 @@ cover (FR5).
 
 Rejected: Stage rules inside the package's records, because every contract
 would then carry the requirements of a development tool.
+
+### DEC-6 — Stage is experimental
+
+**Reference:** `spec:AST-139/DEC-6`
+**Decider:** imdreamrunner, 2026-11-17
+
+Stage is a tool that follows the contracts, not part of them, so its commands,
+flags, reports, and behavior stay free to change with its simulation, and no
+app or contract depends on them.
+
+Rejected: a stable compatibility promise for Stage, because it would bind the
+contracts to a development tool's output.
 
 ## Open questions
 
