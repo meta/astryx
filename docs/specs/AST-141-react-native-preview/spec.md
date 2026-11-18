@@ -29,8 +29,8 @@ without building or installing it. The Astryx app, the native iOS and Android
 app for Astryx React Native, is the Preview host: a person opens a project
 from a developer's computer or from a hosted bundle, and the project's own
 JavaScript runs inside the app, apart from the app and from every other
-project. The app also shows every component running natively, with the
-example apps and the themes (FR13).
+project. Preview lives in the Astryx app, which also hosts Astryx's
+documentation and showcase; those are outside this record.
 
 Preview conforms to Astryx React Native's contracts (`spec:AST-112`) and never
 defines them. `@astryxdesign/react-native` depends on no Preview host: an app
@@ -60,7 +60,6 @@ project away from the app's own identity and data.
 | A developer building an Astryx app     | Scans a QR code from `astryx rn preview` and uses the project on a real phone while it hot-reloads.                 |
 | An AI agent working on an Astryx app   | Prints the Preview link or writes a hosted bundle for a person, and checks the project against the host beforehand. |
 | A reviewer, designer, or product owner | Opens a hosted bundle from a link and tries the change on a phone.                                                  |
-| A person evaluating Astryx             | Browses every component, the example apps, and the themes in the Astryx app.                                        |
 | Astryx's own maintainers               | Check that a project meets the same limits in the Astryx app on iOS and Android and in Astryx Stage.                |
 
 ## Non-goals
@@ -254,14 +253,6 @@ project away from the app's own identity and data.
     | `preview share` finds a file that its deny rules refuse                                                                                                    | `ERR_PREVIEW_SHARE_DENIED`         |
     | `preview share` uses a carrier that no `--accept-carrier` names; the suggestions name the same run with `--accept-carrier <name>` and each carrier's terms | `ERR_PREVIEW_CARRIER_NOT_ACCEPTED` |
 
-### The Astryx app's catalog
-
-- **FR13 — The app shows Astryx React Native running natively.** Beside
-  Preview, the Astryx app shows every component of
-  `@astryxdesign/react-native` with live examples, searchable by name;
-  example apps built only with Astryx; and the themes, with light, dark, and
-  system appearance. The examples are the documentation's examples.
-
 ### Evidence
 
 - **FR12 — A Preview run is development evidence.** A Preview run shows what
@@ -313,7 +304,6 @@ project away from the app's own identity and data.
 | FR10     | Inspector picking over a project that counts its touches, on iOS and Android                                                | picking on; picking ended                                                                            | A touch that reaches the project while picking, a project that gets no touches after picking ends, or an inspector that names the wrong component                  |
 | FR11     | CLI contract tests of `astryx rn preview`: envelopes, exit codes, each code in FR11's table; a share without terms          | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                        | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                          |
 | FR12     | Review of each native change's evidence                                                                                     | a native behavior change                                                                             | A native claim backed only by a Preview run                                                                                                                        |
-| FR13     | A walk of every component page and example app on the Simulator and emulator                                                | each component; each example app; each appearance                                                    | A component without live examples, or an example that differs from the documentation's                                                                             |
 
 ## Decision log
 
