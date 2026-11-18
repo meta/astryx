@@ -47,8 +47,8 @@ shared icon names under FR17.
 - Which candidate wins a platform. `spec:AST-082/FR12` decides that by
   measurement.
 - The contract of any one component. Each component's own record and
-  `spec:AST-082/FR3` own it, and `spec:AST-138` lists the component set; this
-  record owns where the React Native implementation lives and how its packages
+  `spec:AST-082/FR3` own it, with each component's React Native platform
+  contract in its own component record; this record owns where the React Native implementation lives and how its packages
   relate.
 - macOS and Windows as targets for apps built with these packages.
 - Adding Astryx React Native screens to an existing native iOS or Android app
@@ -85,8 +85,8 @@ shared icon names under FR17.
       capability shape (FR7), the types of every capability, the registry
       seams the capabilities plug into, the generic capabilities that Astryx's
       components use (storage, cookies, permissions, haptics, and clipboard),
-      system symbols, safe-area insets, and the
-      native half of the library's own components: the native controls, the
+      system symbols, safe-area insets, the photo library and its thumbnails
+      (the photo picker input uses them), and the native half of the library's own components: the native controls, the
       navigation hosts, gestures and drag (the gesture owner and gesture
       root included), system materials and glass surfaces, the
       presentation, menu, and action-sheet hosts, icons and drawing, and
@@ -425,12 +425,13 @@ shared icon names under FR17.
     job is the React Native app's lifecycle; and its results are data. Each
     subcommand stays inside that job:
 
-    | Subcommand | The question it answers                                                             | Why an option on another subcommand cannot answer it                                     | Function | Its result as data                                    |
-    | ---------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
-    | `create`   | How do I start a React Native app on Astryx?                                        | Every other subcommand needs an app that exists.                                         | `create` | The app's folder, its files, and the next commands    |
-    | `shell`    | Are this app's generated native projects what its configuration generates?          | `apply` changes files the app owns, in place; `shell` replaces generated projects whole. | `shell`  | The written or differing paths                        |
-    | `apply`    | Do the native projects this app keeps carry the declarations its capabilities need? | `shell` owns generated projects only.                                                    | `apply`  | The changed or differing files                        |
-    | `run`      | How do I see this app on a simulator, an emulator, or a device?                     | No other subcommand builds or launches.                                                  | `run`    | The plan, each step's result, and the launched target |
+    | Subcommand | The question it answers                                                             | Why an option on another subcommand cannot answer it                                                                                                                                                      | Function                        | Its result as data                                    |
+    | ---------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------- |
+    | `create`   | How do I start a React Native app on Astryx?                                        | Every other subcommand needs an app that exists.                                                                                                                                                          | `create`                        | The app's folder, its files, and the next commands    |
+    | `shell`    | Are this app's generated native projects what its configuration generates?          | `apply` changes files the app owns, in place; `shell` replaces generated projects whole.                                                                                                                  | `shell`                         | The written or differing paths                        |
+    | `apply`    | Do the native projects this app keeps carry the declarations its capabilities need? | `shell` owns generated projects only.                                                                                                                                                                     | `apply`                         | The changed or differing files                        |
+    | `run`      | How do I see this app on a simulator, an emulator, or a device?                     | No other subcommand builds or launches.                                                                                                                                                                   | `run`                           | The plan, each step's result, and the launched target |
+    | `doctor`   | Is this machine and this app ready to build and run a React Native app?             | It is an alias, not a new job: it runs `astryx doctor` with the package as its base, so `astryx doctor --base @astryxdesign/react-native` answers the same and the group keeps the question in one place. | `doctor` (the shared command's) | `doctor`'s issue report                               |
 
   - Flags keep the Astryx CLI's names and meanings (`spec:AST-042` FR5).
     `--json` and `--base` are the CLI's global flags. `astryx rn shell`,
@@ -439,7 +440,8 @@ shared icon names under FR17.
     platform as its argument. `--check` compares instead of writing.
     `--dry-run` prints the plan and changes nothing. `--dev-server-port <n>`
     names the port of the dev server a command starts or probes.
-    `--display-name <words>` is the name a person sees.
+    `astryx rn create --display-name <words>` is the app's name on the home
+    screen.
     `astryx rn create --package-spec <version|tarball>` names what the app
     depends on. The app is the project that encloses the working folder; no
     command takes a folder option for it, because the run's release and base
