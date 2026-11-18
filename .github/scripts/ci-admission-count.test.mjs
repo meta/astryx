@@ -246,11 +246,62 @@ describe('the count command', () => {
       }).stdout,
     );
     expect(skipped.ceiling).toBe(OPEN_CEILING);
-    // Once that run has started, the ceiling goes back up.
-    const started = JSON.parse(
-      run(['--repo', 'o/r', '--peak', '30'], outsideRun('completed')).stdout,
+    // Between its two waits (room has waited, admission has not yet
+    // appeared, or has not reached its wait) it still has not started.
+    const roomWaited = {
+      name: 'room',
+      status: 'completed',
+      conclusion: 'success',
+      steps: [
+        {
+          name: 'Wait for room under the CI ceiling',
+          status: 'completed',
+          started_at: longAgo,
+          completed_at: now,
+        },
+      ],
+    };
+    for (const jobs of [
+      [roomWaited],
+      [roomWaited, {name: 'admission', status: 'queued', steps: []}],
+      [
+        roomWaited,
+        {
+          name: 'admission',
+          status: 'in_progress',
+          steps: [{name: 'Set up job', status: 'completed'}],
+        },
+      ],
+    ]) {
+      const between = JSON.parse(
+        run(['--repo', 'o/r', '--peak', '30'], {
+          ...outsideRun(null),
+          'repos/o/r/actions/runs/13/jobs': {jobs},
+        }).stdout,
+      );
+      expect(between.ceiling, jobs.map(job => job.name).join('+')).toBe(
+        CI_CEILING,
+      );
+    }
+    // Admission has waited: the run has started.
+    const admitted = JSON.parse(
+      run(['--repo', 'o/r', '--peak', '30'], {
+        ...outsideRun(null),
+        'repos/o/r/actions/runs/13/jobs': {
+          jobs: [
+            roomWaited,
+            {
+              ...roomWaited,
+              name: 'admission',
+              status: 'in_progress',
+            },
+            {name: 'test', status: 'in_progress', steps: []},
+          ],
+        },
+      }).stdout,
     );
-    expect(started.ceiling).toBe(OPEN_CEILING);
+    // Once that run has started, the ceiling goes back up.
+    expect(admitted.ceiling).toBe(OPEN_CEILING);
   });
 
   it("leaves out the pull request's own run with --run, and runs through a symlinked path", () => {

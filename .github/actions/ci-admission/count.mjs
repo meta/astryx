@@ -156,18 +156,26 @@ export const isOutsidePullRun = run =>
   run.head_repository?.full_name != null &&
   run.head_repository.full_name !== run.repository?.full_name;
 /**
- * Whether a pull-request run has not started its jobs yet: a wait for room is
- * still open, or its `room` job has not finished (or not appeared) before
- * any wait began. A run whose `room` job was skipped, as a draft's or an
- * unlabelled fork's is, never waits.
+ * Whether a pull-request run has not started its jobs yet. A run waits twice,
+ * in `room` and then in `admission`, and starts once `admission` has waited:
+ * until then a wait is open, a job has not finished, or `admission` has not
+ * appeared after `room`'s wait. A run whose `room` job was skipped, as a
+ * draft's or an unlabelled fork's is, never waits.
  * @param {object[]} jobs the run's jobs
  * @param {object[]} waits the run's wait steps
  */
 export const notStarted = (jobs, waits) => {
   if (waits.some(step => step.status !== 'completed')) return true;
-  if (waits.length > 0) return false;
+  const waited = job =>
+    (job?.steps ?? []).some(
+      step => step.name === STEP && step.status === 'completed',
+    );
+  const admission = jobs.find(job => job.name === 'admission');
+  if (admission != null)
+    return admission.status !== 'completed' && !waited(admission);
   const room = jobs.find(job => job.name === 'room');
-  return room == null ? jobs.length === 0 : room.status !== 'completed';
+  if (room == null) return jobs.length === 0;
+  return room.status !== 'completed' || waited(room);
 };
 /**
  * The ceiling one look holds CI to: CI_CEILING while an outside contributor's

@@ -1207,11 +1207,13 @@ each).
 
 Amended 2026-11-18 by the chief of staff with CI & Release: the ceiling is one
 hundred twenty jobs, and ninety while an outside contributor's pull-request run
-(from a branch in another repository, FR17) waits for room or has not reached
-its wait, the looking run included. A run whose `room` job was skipped (a draft,
+(from a branch in another repository, FR17) has not started: it waits in
+`room` or `admission`, or is between those two waits, or has not reached the
+first, the looking run included. A run whose `room` job was skipped (a draft,
 or a fork without `ci:run`) does not wait. Once no such run waits, the next look
 reads one hundred twenty again. Every other rule above holds at whichever
-ceiling a look reads, and "ninety" above names the lower one.
+ceiling a look reads: where it says "ninety", read the ceiling that look
+holds.
 
 ### DEC-18 — A release re-check takes main's lanes
 
