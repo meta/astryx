@@ -9,6 +9,7 @@ import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
 import {createToastQueue, ToastQueueConnector} from '../Layer/toastHost';
 import {ThemeNestingContext} from '../theme/Theme';
+import {ThemeContext} from '../theme/useTheme';
 import {warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
@@ -29,11 +30,12 @@ const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
 
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
 
-// The fallback container is a detached tree with no ThemeContext, so this
-// mirrors <html>'s theme attributes onto it directly (live via
-// MutationObserver) for the theme's @scope'd CSS to reach it. It's a
-// lifetime-of-app singleton that's never torn down, so there's nothing to
-// disconnect — this returns void.
+// The fallback container is a detached tree with no ThemeContext. A toast
+// shown from inside a Theme draws under that Theme (ToastRow). For a toast
+// shown with no Theme around it, this mirrors <html>'s theme attributes onto
+// the container (live via MutationObserver) for the theme's @scope'd CSS to
+// reach it. It's a lifetime-of-app singleton that's never torn down, so
+// there's nothing to disconnect — this returns void.
 function syncRootThemeAttrs(container: HTMLElement): void {
   const sync = () => {
     let mirroredMode: string | null = null;
@@ -138,16 +140,27 @@ function generateToastId(): string {
  */
 export function useToast(): ShowToastFn {
   const contextFromProvider = use(ToastContext);
+  // The Theme this toast is shown from. The fallback viewport sits outside
+  // the app's tree, so it draws the toast under this Theme rather than read
+  // the page's <html>, which a host page can rewrite.
+  const callerTheme = use(ThemeContext);
 
   const showToast = useCallback(
     (options: ToastOptions): ToastDismissFn => {
       const ctx = contextFromProvider ?? getFallbackContext();
       const id = generateToastId();
-      const entry: ToastEntry = {id, options, createdAt: Date.now()};
+      const entry: ToastEntry = {
+        id,
+        options,
+        createdAt: Date.now(),
+        ...(contextFromProvider == null && callerTheme != null
+          ? {callerTheme}
+          : null),
+      };
       ctx.addToast(entry);
       return () => ctx.removeToast(id, 'manual');
     },
-    [contextFromProvider],
+    [contextFromProvider, callerTheme],
   );
 
   return showToast;

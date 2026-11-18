@@ -66,6 +66,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+import {Theme} from '../theme/Theme';
 
 registerEnglishFallback(english);
 
@@ -360,24 +361,48 @@ function ToastRow({
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
         )}>
-        <ToastSurface
-          type={type}
-          body={o.body}
-          endContent={o.endContent}
-          isAutoHide={isAutoHide}
-          autoHideDuration={dur}
-          isExiting={isExiting}
-          gestureDirection={isReversed ? -1 : 1}
-          onDismiss={reason => onDismiss(entry.id, reason)}
-          renderContent={o.renderContent}
-          timerKey={entry.id}
-          isLiveRegion={isLiveRegion}
-          announce={announce}
-          isRenderedBodyAnnouncement={
-            o.renderContent == null && getNodeText(o.body) === ''
-          }
-          hasEntryStarted={hasEntryStarted}
-        />
+        {entry.callerTheme == null ? (
+          <ToastSurface
+            type={type}
+            body={o.body}
+            endContent={o.endContent}
+            isAutoHide={isAutoHide}
+            autoHideDuration={dur}
+            isExiting={isExiting}
+            gestureDirection={isReversed ? -1 : 1}
+            onDismiss={reason => onDismiss(entry.id, reason)}
+            renderContent={o.renderContent}
+            timerKey={entry.id}
+            isLiveRegion={isLiveRegion}
+            announce={announce}
+            isRenderedBodyAnnouncement={
+              o.renderContent == null && getNodeText(o.body) === ''
+            }
+            hasEntryStarted={hasEntryStarted}
+          />
+        ) : (
+          // Shown from a Theme into the fallback viewport: drawn under it.
+          <Theme theme={entry.callerTheme.theme} mode={entry.callerTheme.mode}>
+            <ToastSurface
+              type={type}
+              body={o.body}
+              endContent={o.endContent}
+              isAutoHide={isAutoHide}
+              autoHideDuration={dur}
+              isExiting={isExiting}
+              gestureDirection={isReversed ? -1 : 1}
+              onDismiss={reason => onDismiss(entry.id, reason)}
+              renderContent={o.renderContent}
+              timerKey={entry.id}
+              isLiveRegion={isLiveRegion}
+              announce={announce}
+              isRenderedBodyAnnouncement={
+                o.renderContent == null && getNodeText(o.body) === ''
+              }
+              hasEntryStarted={hasEntryStarted}
+            />
+          </Theme>
+        )}
       </div>
     </div>
   );

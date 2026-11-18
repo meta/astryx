@@ -232,6 +232,39 @@ describe('useToast fallback viewport theme mode', () => {
     ).toBe('light');
   });
 
+  it('draws a toast shown from a Theme under that Theme, whatever <html> says', async () => {
+    // A host page (an artifact viewer) can rewrite <html data-astryx-theme>
+    // to its own theme. A toast shown from inside the app's Theme still
+    // draws under that Theme and mode.
+    const caller = defineTheme({name: 'fallback-caller', tokens: {}});
+    render(
+      <Theme theme={caller} mode="light">
+        <ShowToastButton label="Trigger Caller" />
+      </Theme>,
+    );
+    document.documentElement.setAttribute('data-astryx-theme', 'host-page');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Caller'));
+    });
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          '[data-astryx-toast-fallback] [data-astryx-theme="fallback-caller"]',
+        ),
+      ).not.toBeNull();
+    });
+    const scope = document.querySelector(
+      '[data-astryx-toast-fallback] [data-astryx-theme="fallback-caller"]',
+    ) as HTMLElement;
+    expect(scope).toHaveAttribute('data-theme', 'light');
+    // The toast card sits inside the caller's scope, so the caller's theme
+    // CSS reaches it and the host page's stops at the scope.
+    expect(scope.querySelector('[data-astryx-media]')).not.toBeNull();
+    // Light page: the inverted card is the dark side.
+    expect(newestMediaAttr(scope)).toBe('dark');
+  });
+
   it('mirrors <html data-theme> and data-astryx-theme onto the fallback container', async () => {
     mockMatchMedia(false);
 

@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {ReactNode} from 'react';
+import type {ThemeContextValue} from '../theme/useTheme';
 
 /** Toast status type. Controls color scheme. */
 export type ToastType = 'info' | 'error';
@@ -106,4 +107,11 @@ export interface ToastEntry {
    * toast's, so the card updates in place and focus inside it stays.
    */
   rowKey?: string;
+  /**
+   * The Theme the toast was shown from, when the fallback viewport draws it:
+   * that viewport sits outside the app's tree, so the row draws the toast
+   * under this theme and mode.
+   * @internal
+   */
+  callerTheme?: ThemeContextValue;
 }
