@@ -394,7 +394,7 @@ describe('imageRequest', () => {
 });
 
 describe('imageSinks', () => {
-  it('gives the carried data where the browser takes an image address, and nowhere else', () => {
+  it('gives the carried data where the browser takes an image address, and nowhere else', async () => {
     const data = 'data:image/png;base64,QUJD';
     const dom = new JSDOM('<!doctype html><body></body>', {
       runScripts: 'outside-only',
@@ -404,8 +404,11 @@ describe('imageSinks', () => {
     const img = doc.createElement('img');
     img.src = 'https://x.example/a.png';
     expect(img.getAttribute('src')).toBe(data);
-    img.setAttribute('src', 'https://x.example/a.png?w=200');
+    img.setAttribute('src', 'https://x.example/a.png#top');
     expect(img.getAttribute('src')).toBe(data);
+    // Another query can name another image, so it keeps its own address.
+    img.setAttribute('src', 'https://x.example/a.png?u=alex');
+    expect(img.getAttribute('src')).toBe('https://x.example/a.png?u=alex');
     img.setAttribute(
       'srcset',
       'https://x.example/a.png 1x, https://y.example/b.png 2x',
@@ -413,13 +416,24 @@ describe('imageSinks', () => {
     expect(img.getAttribute('srcset')).toBe(
       `${data} 1x, https://y.example/b.png 2x`,
     );
+    // A style takes the carried data before the browser next draws: set on
+    // an element in the page, or on one the script then adds.
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 0));
     const box = doc.createElement('div');
+    doc.body.append(box);
     box.style.backgroundImage = 'url("https://x.example/a.png")';
+    await settle();
     expect(box.style.backgroundImage).toContain(data);
     box.style.setProperty('--hero', 'url(https://x.example/a.png#top)');
+    await settle();
     expect(box.style.getPropertyValue('--hero')).toContain(data);
     box.setAttribute('style', 'background: url(https://x.example/a.png)');
     expect(box.getAttribute('style')).toContain(data);
+    const later = doc.createElement('section');
+    later.innerHTML = '<p style="background-image: url(https://x.example/a.png)">Later</p>';
+    doc.body.append(later);
+    await settle();
+    expect(later.querySelector('p')?.getAttribute('style')).toContain(data);
     const image = doc.createElementNS('http://www.w3.org/2000/svg', 'image');
     image.setAttributeNS(
       'http://www.w3.org/1999/xlink',
@@ -595,6 +609,7 @@ describe('a render with images from the web', () => {
       const box = dom.window.document.querySelector(`#${ROOT_ID} div`);
       /** @type {any} */ (box).style.backgroundImage =
         'url(https://example.com/bg.png)';
+      await new Promise(resolve => dom.window.setTimeout(resolve, 0));
       expect(/** @type {any} */ (box).style.backgroundImage).toContain(data);
       dom.window.close();
     } finally {
@@ -969,10 +984,11 @@ describe('a render with images from the web', () => {
       await click('button');
       const src = (/** @type {string} */ alt) =>
         doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src');
-      // Every image draws from the carried data, also with a query added.
+      // Every image the file carries draws from its data; an address the
+      // code gives another query is another image, which keeps its address.
       expect(src('Hero')).toBe(data);
-      expect(src('Wide')).toBe(data);
-      expect(src('Sized')).toBe(data);
+      expect(src('Wide')).toBe('https://cdn.example.com/h.png?w=640');
+      expect(src('Sized')).toBe('https://cdn.example.com/p.png?w=200');
       expect(
         doc.querySelector(`#${ROOT_ID} div`)?.getAttribute('style'),
       ).toContain(data);

@@ -261,10 +261,10 @@ function locatedFile(file) {
  * address, the script gives it the carried data instead: an image's or an
  * image input's `src`, an image's or a picture source's `srcset`, a video's
  * `poster`, an SVG image's `href`, and a CSS `url()` in a style the script
- * sets. An address the page's code extends with a query or a fragment
- * (`${hero}?w=640`, the URL API's `searchParams`) gets the carried image too.
- * The page's code keeps every address as it wrote it, so a link, a text, a
- * comparison or the URL API reads the page's own address.
+ * sets. The address must be one the file carries, also with a fragment
+ * added; one with another query is another image. The page's code keeps
+ * every address as it wrote it, so a link, a text, a comparison or the URL
+ * API reads the page's own address.
  * @param {[string, string][]} entries each carried address with its data: URI
  * @returns {string} a statement that runs before the page's script
  */
@@ -296,16 +296,12 @@ const SINKS = `(carried => (${compact(installImageSinks)})(carried, ${compact(pa
  */
 function installImageSinks(carried, parse, format) {
   const g = /** @type {any} */ (globalThis);
-  // The carried data for an address, also with a query or a fragment added.
+  // A fragment names no other file; a query can (`/40?u=alex`), so an
+  // address with another query is another image.
   /** @param {string} address */
   const lookup = address => {
     const whole = address.trim();
-    const noFragment = whole.split('#')[0];
-    return (
-      carried.get(whole) ??
-      carried.get(noFragment) ??
-      carried.get(noFragment.split('?')[0])
-    );
+    return carried.get(whole) ?? carried.get(whole.split('#')[0]);
   };
   /** @param {unknown} value */
   const one = value => (typeof value === 'string' && lookup(value)) || value;
@@ -388,44 +384,27 @@ function installImageSinks(carried, parse, format) {
   ])) {
     if (type) wrap(type.prototype, prop, map);
   }
-  const declaration = g.CSSStyleDeclaration?.prototype;
-  if (declaration) {
-    const setProperty = declaration.setProperty;
-    declaration.setProperty = function (
-      /** @type {string} */ name,
-      /** @type {unknown} */ value,
-      /** @type {string} */ priority,
-    ) {
-      return setProperty.call(this, name, css(value), priority);
-    };
-  }
-  const sample = g.document?.documentElement?.style;
-  if (sample) {
-    for (const prop of [
-      'cssText',
-      'background',
-      'backgroundImage',
-      'background-image',
-      'borderImage',
-      'border-image',
-      'borderImageSource',
-      'border-image-source',
-      'listStyle',
-      'list-style',
-      'listStyleImage',
-      'list-style-image',
-      'mask',
-      'maskImage',
-      'mask-image',
-      'webkitMaskImage',
-      '-webkit-mask-image',
-      'content',
-      'cursor',
-      'shapeOutside',
-      'shape-outside',
-    ]) {
-      wrap(Object.getPrototypeOf(sample), prop, css);
-    }
+  // A style the script sets reaches the element's `style` attribute: some
+  // browsers give no setter for a property such as `backgroundImage`. The
+  // swap runs before the browser next draws, so it asks for no image.
+  /** @param {any} node */
+  const restyle = node => {
+    const written = node.getAttribute?.('style');
+    if (!written || !written.includes('url(')) return;
+    const swapped = css(written);
+    if (swapped !== written) setAttribute.call(node, 'style', swapped);
+  };
+  if (g.MutationObserver && g.document) {
+    new g.MutationObserver((/** @type {any[]} */ records) => {
+      for (const record of records) {
+        if (record.type === 'attributes') restyle(record.target);
+        for (const node of record.addedNodes ?? []) {
+          if (node.nodeType !== 1) continue;
+          restyle(node);
+          for (const styled of node.querySelectorAll('[style]')) restyle(styled);
+        }
+      }
+    }).observe(g.document, {subtree: true, childList: true, attributes: true, attributeFilter: ['style']});
   }
 }
 
