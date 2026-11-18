@@ -73,8 +73,10 @@
  *   removed in a patch release. Present only when an icon set
  *   is installed, the search has no `type`, the query asks for an icon (one
  *   word as typed is `icon` or `icons`, an installed set's name, or an icon
- *   export name such as `SearchIcon`, and is not a component or hook name),
- *   and an icon answers it. It never changes `results` or `matchCount`.
+ *   export name such as `SearchIcon`, and is not a component or hook name;
+ *   an icon word right after `with` names a feature of an answered component
+ *   or template, as in `card with an icon`, and asks for none), and an icon
+ *   answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,
