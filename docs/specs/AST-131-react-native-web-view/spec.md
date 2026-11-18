@@ -57,14 +57,13 @@ opt-in `web` capability. The capability's four other modules are outside the cor
   channel, separate page data), so a caller that needs a guarantee is refused
   loudly instead of getting a weaker page (DEC-5). OQ7 asks whether it folds
   into the platform info.
-- `AstryxAuthSession`: the gap is narrow: closed result reasons, no Expo
-  library (`spec:AST-112/FR11`), and a redirect URI per runtime. OQ3 asks
-  whether sign-in is its own opt-in.
 - `AstryxWebSessions`: it holds an embedded page's session natively, so
   `WebView` passes a handle instead of cookie values (FR8, DEC-3). OQ8 asks
   whether its create and remove calls belong in this record.
-- `AstryxWebData`, `AstryxWebBundles`, and `AstryxPageSnapshots` serve the
-  web view's page data, bundled folders, and thumbnails; they are outside the core package, because no Astryx component uses them.
+- `AstryxWebData`, `AstryxWebBundles`, `AstryxAuthSession`, and
+  `AstryxPageSnapshots` serve page data, bundled folders, sign-in, and
+  thumbnails; they are outside the core package, because no Astryx component
+  uses them (`spec:AST-112/FR20`).
 
 ## Who uses it
 
@@ -75,7 +74,7 @@ opt-in `web` capability. The capability's four other modules are outside the cor
 | `AstryxWebSessions`   | native module (Turbo Native Module)        | `WebView` uses it through its session handle (`session={{sessionId}}`, FR8): the native view resolves the handle; core, within the `web` capability       | A signed-in embedded page                                                                               |
 | `AstryxWebData`       | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package                                                                                            | Web pages that keep nothing after sign-out                                                              |
 | `AstryxWebBundles`    | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package (a `NativeWebView` with a `{bundle}` source shows its folders)                             | A bundled web app that works offline and opens at once when warmed up                                   |
-| `AstryxAuthSession`   | native module (Turbo Native Module)        | No Astryx component uses it (the library's `useAuthSession` hook reaches it), so it is outside the core package                                           | The system's sign-in sheet                                                                              |
+| `AstryxAuthSession`   | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package                                                                                            | The system's sign-in sheet                                                                              |
 | `AstryxPageSnapshots` | native module (Turbo Native Module)        | No Astryx component uses it, so it is outside the core package                                                                                            | A thumbnail of an HTML document                                                                         |
 
 Notes on the `web` capability's other modules:
@@ -114,13 +113,13 @@ Notes on the `web` capability's other modules:
 
 ## Requirements
 
-- **FR1 — `web` is an opt-in capability.** The web view and its modules belong
-  to the `web` capability, which an app opts in (`spec:AST-112/FR3`). An app
-  that does not opt it in links no web engine and no sign-in redirect
-  handling. The `./web` entry exports `NativeWebView`,
-  `isNativeWebViewAvailable()`, `AstryxWebViewInfo`, and the capability's other
-  modules. The library reaches the capability only through
-  `AstryxPlatform.capability('web')` (`spec:AST-112/FR2`).
+- **FR1 — `web` is an opt-in capability.** The web view, its device report,
+  and the session registry belong to the `web` capability, which an app opts
+  in (`spec:AST-112/FR3`). An app that does not opt it in links no web engine.
+  The `./web` entry exports `NativeWebView`, `isNativeWebViewAvailable()`,
+  `AstryxWebViewInfo`, and `AstryxWebSessions`. The library reaches the
+  capability only through `AstryxPlatform.capability('web')`
+  (`spec:AST-112/FR2`).
 - **FR2 — `NativeWebView` is the platform's web view.** Its props:
   - `source`, one of `{uri}` (an http or https page), `{html, baseUrl?,
 grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
@@ -175,7 +174,9 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 
 - **FR5 — Navigation follows declared policy, decided natively.**
   - The view shows the first page, and any top-level page on that page's
-    origin or on an origin listed in `allowedOrigins`. The policy covers
+    origin or on an origin listed in `allowedOrigins`. The first page's origin
+    is the origin of the source the caller passed (`url`, or `baseUrl` with
+    `grantsOrigin`), whatever the first load's redirects reach. The policy covers
     top-level navigation only; images, scripts, and frames load as the
     page's own rules allow.
   - A top-level navigation to any other origin that a person causes (tapping
@@ -184,6 +185,9 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     and sends `onOpenExternal`; `report` opens nothing and sends
     `onNavigationBlocked` with `external` or `newWindow`; `block` opens
     nothing and sends nothing.
+  - A top-level navigation that no person caused (a server redirect, a
+    script, a meta refresh) stays in the view whatever its origin, and sends
+    no event; only a pin limits it.
   - A non-web scheme opens outside the view only when it is in
     `allowedExternalSchemes` (default `mailto`, `tel`, `sms`; an empty list
     allows none). Any other scheme is cancelled and reported as
@@ -247,9 +251,9 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     requests out. Where it cannot, those pages run with no page storage, and
     clearing page data still leaves the app's network cookies.
 - **FR9 — One message channel.**
-  - The page sends with `window.astryx.postMessage(string)`. The view accepts a
-    message only from the main frame of the page's own origin or an allowed
-    origin, and sends `onMessage({data, origin, isMainFrame})`. `origin` and
+  - The page sends with `window.astryx.postMessage(string)`. On a device with
+    channel isolation, the view accepts a message only from the main frame of
+    the page's own origin or an allowed origin, and sends `onMessage({data, origin, isMainFrame})`. `origin` and
     `isMainFrame` come from the engine, never from the page's data.
   - The app sends with `ref.postMessage(data)` (the `postMessage` command). The
     page receives it through `window.astryx.addListener` and as a `message`
@@ -284,7 +288,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   - `preventsCapture` keeps screenshots, screen recordings, and the app
     switcher's image of the window out while the view is on screen, however
     many views ask for it. iOS has no view-level equivalent: it ignores the
-    prop, shows the page, and does not list the feature, so capture
+    prop, shows the page, and reports the feature as not supported, so capture
     prevention there is best effort. A caller that requires it checks
     `supports('preventsCapture')` first.
   - `linkMenu` describes the menu a long press on a link shows: actions
@@ -315,11 +319,12 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   `externalSchemes`, `grantsOrigin`, `channelIsolation`, `preventsCapture`,
   `pageStorage`, `bundledOrigin`, `pageProfile`, `linkMenu`, `messageOrigin`,
   `warmBundle`, and `contentProcessEnd` (`spec:AST-140/FR5`).
-  - The binary of each platform lists the features it implements. A feature
-    one platform implements is listed only there: `preventsCapture` on
-    Android; `linkMenu` and `warmBundle` on iOS.
-  - `AstryxWebViewInfo.supports(feature)` answers true when the binary lists
-    the feature and, for `channelIsolation` and `pageProfile`, the device's
+  - The binary of each platform reports every feature by the same name, with
+    `isSupported` false and a note on a platform that lacks it
+    (`spec:AST-140/FR5`): `preventsCapture` on iOS; `linkMenu` and
+    `warmBundle` on Android.
+  - `AstryxWebViewInfo.supports(feature)` answers true when the binary reports
+    the feature as supported and, for `channelIsolation` and `pageProfile`, the device's
     constant is not false. `isAvailable()` answers whether the module is
     linked. Without it (not opted in, Jest, the web), nothing is claimed.
   - The library's `useWebViewSupports(feature)` answers the same, and false
@@ -351,15 +356,17 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   uses the behaviour; without it, JavaScript keeps the revision-1 behaviour
   or answers `unsupported`, never a silent weaker path (DEC-5).
 - **FR19 — Native code uses public platform API only.** The web view and its
-  modules use only public platform API (`spec:AST-112/FR4`). One exception
-  exists, and it is off by default: an app may opt in through its
-  configuration (`web.privateHardening`) to private WebKit settings that turn
-  peer connections, media devices, and DNS prefetching off in every frame on
-  iOS. WebKit has no public setting for them, and they cover frames that the
-  page-level protection of FR4 cannot reach. The view uses each setting only
-  when the running WebKit has it, and the app that opts in takes the review
-  risk of private API. Without the opt-in, FR4's protection is the same on
-  both platforms.
+  core modules (`AstryxWebViewInfo`, `AstryxWebSessions`) use only public
+  platform API (`spec:AST-112/FR4`). One exception exists, and it is off by
+  default: an app may opt in through its configuration
+  (`web.privateHardening`) to private `WKPreferences` setters and WebKit
+  feature flags that turn peer connections, media devices, DNS prefetching,
+  and link preconnect off in every frame on iOS. WebKit has no public setting
+  for them, and they cover frames that the page-level protection of FR4
+  cannot reach. The view checks that the running WebKit answers to each
+  setting before it uses it, and the app that opts in takes the review risk
+  of private API. Without the opt-in, FR4's protection is the same on both
+  platforms.
 
 ### Platform support
 
@@ -380,7 +387,11 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 
 ## Current-state impact
 
-- Relies on `spec:AST-112` FR1 (amended): the `web` capability holds the web view and its modules.
+- Relies on `spec:AST-112` FR1 (amended): the `web` capability holds the web
+  view, its device report, and the session registry.
+- Relies on `spec:AST-112` FR20 (amended): native capabilities no Astryx
+  component uses are outside the core package; the four web modules of
+  "Who uses it" are.
 - Relies on `spec:AST-112` FR7 (amended): each group of the platform has its
   own record, and this is the web group's.
 - Relies on `spec:AST-112` FR3 (amended): the `web` capability is a device
@@ -395,27 +406,27 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 
 ## Verification
 
-| Contract | Verification                                                                                                                                              | Representative states                                                                                                                                                               | Mutation or failure expectation                                                                                                                            |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Built app with the core only compared with one that opts `web` in; unit tests of the loader                                                               | `web` opted out; opted in                                                                                                                                                           | An opted-out app links WebKit or the redirect activity, or the library imports the capability outside its loader                                           |
-| FR2      | Unit tests of `NativeWebView` through the `./testing` doubles                                                                                             | each source kind; each event; the `ref` handle                                                                                                                                      | An event arrives with more than one argument, or a prop does not reach the host                                                                            |
-| FR3      | The platform's spec rules check of the codegen specs                                                                                                      | the view's props, commands, and events; the module's constants                                                                                                                      | A listed member is missing, a shipped member changes, or a contract carries a revision counter or a feature list of its own                                |
-| FR4      | Simulator and emulator checks with a hostile page; tests that keep the page protection equal on every platform; the same checks with FR19's opt-in on iOS | a page that opens WebRTC, a pop-up, a file URL, mixed content, a preconnect link, inside a scripted iframe; a parser-inserted preconnect link and a new blank frame (the named gap) | Any of them succeeds in a frame that runs script, or the named gap is not closed on iOS with the opt-in                                                    |
-| FR5      | Simulator and emulator scripts                                                                                                                            | an allowed origin; another origin under `allow`, `report`, `block`; a blocked scheme; a pin with a redirect out                                                                     | A navigation outside policy stays in the view, opens without its event, or sends the wrong reason                                                          |
-| FR6      | Simulator and emulator checks                                                                                                                             | `html` with and without `grantsOrigin`                                                                                                                                              | An ungranted page reads the base origin's cookies or storage                                                                                               |
-| FR7      | Unit tests of the refusals; Simulator and emulator scripts of a bundled folder                                                                            | a valid bundle; a bad name or path; a bundle with a pin; a device without channel isolation; `warm` with and without a ready page                                                   | A bundle page reaches a network, loads with a refused config, or a warm view loads twice or loses an early message                                         |
-| FR8      | Unit tests of the session refusals; Simulator and emulator checks of page data                                                                            | a handle; an empty handle; a handle from another runtime; an ephemeral view; page storage off; a device without separate page data                                                  | A cookie value appears in props, an empty or foreign handle loads the page, an ephemeral view leaves data behind, or a page-storage-off page keeps storage |
-| FR9      | Unit tests through the doubles; Simulator and emulator scripts                                                                                            | both directions; a message from an iframe; a device without channel isolation                                                                                                       | An iframe's message is delivered as the main frame's, or an origin comes from the page's data                                                              |
-| FR10     | Simulator and emulator renders                                                                                                                            | light, dark, and system schemes; no `textScale` at the largest system text size; text scale 2; auto height; a custom user agent                                                     | The page ignores the scheme or text scale, unscaled text without the prop, a stale height, or a non-ASCII user agent applied                               |
-| FR11     | Device-level termination checks on the Simulator and emulator                                                                                             | reload on; reload off then `reload()`                                                                                                                                               | The app ends, the event reaches `onError`, or a view with reload off reloads by itself                                                                     |
-| FR12     | Emulator check of capture; unit tests of the link-menu matchers shared by every platform; Simulator long press                                            | a protected view; matchers with schemes, hosts, `*.` over a public suffix, prefixes                                                                                                 | A screenshot captures a protected view on Android, a `javascript:` link gets a menu, or a menu loads a preview                                             |
-| FR13     | Unit tests through the doubles in their absent, older, and current shapes                                                                                 | each reason; an unknown native reason; a refusal                                                                                                                                    | A call throws, a reason falls outside the set, or a refusal crosses to the host                                                                            |
-| FR14     | Unit tests of `supports` through `./testing` doubles of binaries with and without each feature, per platform and device constant                          | each feature on iOS and Android; no module                                                                                                                                          | A feature answers true when the binary does not list it, a one-platform feature is listed on the other platform, or a device constant is ignored           |
-| FR15     | Platform tests through the `./testing` doubles                                                                                                            | a colour scheme or text scale change on a loaded page                                                                                                                               | The new value does not reach the page, or an event's shape differs from the library's                                                                      |
-| FR16     | Platform tests with the module absent, not linked, and switched off                                                                                       | a `NativeWebView` with and without `fallback`; a module call                                                                                                                        | `fallback` is not drawn, `no-native-view` is reported more than once, or a call rejects                                                                    |
-| FR17     | VoiceOver and TalkBack checks on the Simulator, emulator, and device; text-size checks                                                                    | a page with headings, links, and a form; the largest text size                                                                                                                      | The page's content is not read, the platform hides part of it, or the text does not scale                                                                  |
-| FR18     | Unit tests through `./testing` doubles of a binary without a named feature                                                                                | each named feature absent                                                                                                                                                           | The JavaScript uses a feature the binary does not list, or falls back silently instead of keeping the revision-1 behaviour or answering `unsupported`      |
-| FR19     | Source check of the native code's symbols on both platforms; Simulator check with the opt-in on and off                                                   | the default app; an app that opts in to `web.privateHardening`                                                                                                                      | A private symbol is used without the opt-in, or on Android at all                                                                                          |
+| Contract | Verification                                                                                                                                              | Representative states                                                                                                                                                                                     | Mutation or failure expectation                                                                                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built app with the core only compared with one that opts `web` in; unit tests of the loader; the `./web` export list                                      | `web` opted out; opted in                                                                                                                                                                                 | An opted-out app links WebKit, `./web` exports a module outside the core package, or the library imports the capability outside its loader                                                                           |
+| FR2      | Unit tests of `NativeWebView` through the `./testing` doubles                                                                                             | each source kind; each event; the `ref` handle                                                                                                                                                            | An event arrives with more than one argument, or a prop does not reach the host                                                                                                                                      |
+| FR3      | The platform's spec rules check of the codegen specs                                                                                                      | the view's props, commands, and events; the module's constants                                                                                                                                            | A listed member is missing, a shipped member changes, or a contract carries a revision counter or a feature list of its own                                                                                          |
+| FR4      | Simulator and emulator checks with a hostile page; tests that keep the page protection equal on every platform; the same checks with FR19's opt-in on iOS | a page that opens WebRTC, a pop-up, a file URL, mixed content, a preconnect link, inside a scripted iframe; a parser-inserted preconnect link and a new blank frame (the named gap)                       | Any of them succeeds in a frame that runs script, or the named gap is not closed on iOS with the opt-in                                                                                                              |
+| FR5      | Simulator and emulator scripts                                                                                                                            | an allowed origin; another origin under `allow`, `report`, `block`; a blocked scheme; a pin with a redirect out; a script navigation and a server redirect to another origin; a first load that redirects | A navigation outside policy stays in the view, opens without its event, or sends the wrong reason; a navigation no person caused leaves the view or sends an event; or the first page's origin follows its redirects |
+| FR6      | Simulator and emulator checks                                                                                                                             | `html` with and without `grantsOrigin`                                                                                                                                                                    | An ungranted page reads the base origin's cookies or storage                                                                                                                                                         |
+| FR7      | Unit tests of the refusals; Simulator and emulator scripts of a bundled folder                                                                            | a valid bundle; a bad name or path; a bundle with a pin; a device without channel isolation; `warm` with and without a ready page                                                                         | A bundle page reaches a network, loads with a refused config, or a warm view loads twice or loses an early message                                                                                                   |
+| FR8      | Unit tests of the session refusals; Simulator and emulator checks of page data                                                                            | a handle; an empty handle; a handle from another runtime; an ephemeral view; page storage off; a device without separate page data                                                                        | A cookie value appears in props, an empty or foreign handle loads the page, an ephemeral view leaves data behind, or a page-storage-off page keeps storage                                                           |
+| FR9      | Unit tests through the doubles; Simulator and emulator scripts                                                                                            | both directions; a message from an iframe; a device without channel isolation                                                                                                                             | An iframe's message is delivered as the main frame's, or an origin comes from the page's data                                                                                                                        |
+| FR10     | Simulator and emulator renders                                                                                                                            | light, dark, and system schemes; no `textScale` at the largest system text size; text scale 2; auto height; a custom user agent                                                                           | The page ignores the scheme or text scale, unscaled text without the prop, a stale height, or a non-ASCII user agent applied                                                                                         |
+| FR11     | Device-level termination checks on the Simulator and emulator                                                                                             | reload on; reload off then `reload()`                                                                                                                                                                     | The app ends, the event reaches `onError`, or a view with reload off reloads by itself                                                                                                                               |
+| FR12     | Emulator check of capture; unit tests of the link-menu matchers shared by every platform; Simulator long press                                            | a protected view; matchers with schemes, hosts, `*.` over a public suffix, prefixes                                                                                                                       | A screenshot captures a protected view on Android, a `javascript:` link gets a menu, or a menu loads a preview                                                                                                       |
+| FR13     | Unit tests through the doubles in their absent, older, and current shapes                                                                                 | each reason; an unknown native reason; a refusal                                                                                                                                                          | A call throws, a reason falls outside the set, or a refusal crosses to the host                                                                                                                                      |
+| FR14     | Unit tests of `supports` through `./testing` doubles of binaries with and without each feature, per platform and device constant                          | each feature on iOS and Android; no module                                                                                                                                                                | A feature answers true when the binary reports it as not supported, a feature a platform lacks is reported supported there or missing from the report, or a device constant is ignored                               |
+| FR15     | Platform tests through the `./testing` doubles                                                                                                            | a colour scheme or text scale change on a loaded page                                                                                                                                                     | The new value does not reach the page, or an event's shape differs from the library's                                                                                                                                |
+| FR16     | Platform tests with the module absent, not linked, and switched off                                                                                       | a `NativeWebView` with and without `fallback`; a module call                                                                                                                                              | `fallback` is not drawn, `no-native-view` is reported more than once, or a call rejects                                                                                                                              |
+| FR17     | VoiceOver and TalkBack checks on the Simulator, emulator, and device; text-size checks                                                                    | a page with headings, links, and a form; the largest text size                                                                                                                                            | The page's content is not read, the platform hides part of it, or the text does not scale                                                                                                                            |
+| FR18     | Unit tests through `./testing` doubles of a binary without a named feature                                                                                | each named feature absent                                                                                                                                                                                 | The JavaScript uses a feature the binary does not list, or falls back silently instead of keeping the revision-1 behaviour or answering `unsupported`                                                                |
+| FR19     | Source check of the native code's symbols on both platforms; Simulator check with the opt-in on and off                                                   | the default app; an app that opts in to `web.privateHardening`                                                                                                                                            | A private symbol is used without the opt-in, or on Android at all                                                                                                                                                    |
 
 ## Decision log
 
@@ -487,12 +498,6 @@ a working page that leaks what the app meant to keep.
 - **OQ2 — Do `WebView` and `WebContent` take a bundle source?**
   (`human-api`) Options: bundled folders show only through `NativeWebView`;
   or the library's components take a `bundle` source too.
-- **OQ3 — Is web sign-in (`AstryxAuthSession`) an opt-in capability of its
-  own?** (`human-api`) It needs no embedded web view and no Astryx component
-  uses it. Options: keep it in `web` beside the web view with the
-  `useAuthSession` hook; or make sign-in its own opt-in, so an app that signs
-  in links no WebKit web view and an app with a web view links no redirect
-  activity.
 - **OQ4 — Do `WebView` and `WebContent` expose `preventsCapture`,
   `linkMenu`, and `allowedExternalSchemes`, which only `NativeWebView` takes?**
   (`human-api`)
