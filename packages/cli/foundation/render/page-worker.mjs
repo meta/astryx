@@ -1886,7 +1886,7 @@ try {
   ) {
     fail(
       'ERR_RENDER_NOT_ASTRYX',
-      `${describeFile(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Share this page with your app's own build instead; nothing was written.`,
+      `${describeFile(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
     );
   } else {
     parentPort?.postMessage({

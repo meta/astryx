@@ -279,7 +279,7 @@ describe('render(): a page that uses nothing from Astryx', () => {
     const text = await runCli(['experimental', 'export', 'none/page.tsx'], dir);
     expect(text.status).toBe(1);
     expect(text.stderr).toContain(
-      "page.tsx uses no Astryx components or styles; `astryx experimental export` only writes pages built with Astryx. Share this page with your app's own build instead; nothing was written.",
+      "page.tsx uses no Astryx components or styles; `astryx experimental export` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.",
     );
     const json = await runCli(['--json', 'experimental', 'export', 'none/page.tsx'], dir);
     expect(json.status).toBe(1);
