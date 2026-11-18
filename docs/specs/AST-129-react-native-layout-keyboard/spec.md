@@ -32,8 +32,7 @@ across paragraphs, headings and list items as one piece of text. The developer g
 
 This record details the platform layer of `spec:AST-112` for this group. It
 uses the result and probe vocabulary of `spec:AST-112/FR6` and
-`spec:AST-112/FR7`, the additive evolution of `spec:AST-112/FR8`, and the Astryx
-Stage contract of `spec:AST-112/FR12`. Every piece in the group belongs to the
+`spec:AST-112/FR7`, and the additive evolution of `spec:AST-112/FR8`. Every piece in the group belongs to the
 platform's core (`spec:AST-112/FR1`): it links in every app and is not an opt-in
 capability. The on-screen keyboard in browsers is `spec:AST-099`; this record
 owns the keyboard on native React Native.
@@ -42,12 +41,12 @@ owns the keyboard on native React Native.
 
 - Safe-area provider, view and module: no behaviour gap with the ecosystem's
   safe-area library. Astryx owns them so the package takes no third-party
-  native dependency for layout (`spec:AST-112/FR2`), Astryx Stage simulates
-  them, and a previewed project needs no native code; OQ1 asks about scope.
+  native dependency for layout (`spec:AST-112/FR2`); an app may still use
+  react-native-safe-area-context beside these components without conflict.
+  OQ1 asks about scope.
 - Keyboard dock: Astryx's own composer and its linked list must stay on the
   keyboard through every frame of a show, a hide and an interactive dismissal,
-  on both platforms, with no JavaScript per frame and with an Astryx Stage
-  simulation.
+  on both platforms, with no JavaScript per frame.
 - Window status bar (Android): a drawn modal is its own window, and the
   status bar set from JavaScript reaches only the activity's window.
 - Selectable text: a selection must cross headings, paragraphs and list items
@@ -74,6 +73,8 @@ owns the keyboard on native React Native.
   transitions (`spec:AST-112/DEC-9` and the navigation record); the
   activity-level status bar and the iOS status bar, which the presentation and
   navigation hosts answer.
+- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
+  they conform to this record's contracts.
 - Equivalent internal implementations remain valid when they satisfy this contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
@@ -138,11 +139,11 @@ owns the keyboard on native React Native.
   the two contexts, `initialWindowMetrics`, `withSafeAreaInsets`,
   `SafeAreaListener`, `SafeAreaConsumer`, `SafeAreaContext`, `useSafeArea`,
   `initialWindowSafeAreaInsets`, and the types. `useSafeAreaInsets` accepts
-  `cornerAdaptation` and ignores it. In the Astryx app's preview, a project
-  that imports `react-native-safe-area-context` gets this entry and renders.
-  The entry implements that API itself and needs no react-native-safe-area-context
+  `cornerAdaptation` and ignores it. The entry implements that API itself and needs no react-native-safe-area-context
   installed; the package's only declaration of it is the optional peer of
-  `./navigation-legacy` (`spec:AST-112/FR2`, `spec:AST-112/FR5`).
+  `./navigation-legacy` (`spec:AST-112/FR2`, `spec:AST-112/FR5`). An app may
+  also install react-native-safe-area-context itself and use it beside these
+  components without conflict.
 - **FR6 — `KeyboardDockView` holds content that stays on the keyboard.** The
   caller sizes the dock and gives it bottom padding equal to the part of the
   dock the keyboard covers; the dock itself never resizes.
@@ -270,8 +271,7 @@ owns the keyboard on native React Native.
     comes.
 - **FR14 — The group follows the package's contract baseline.** Every
   contract in this group is at revision 1 and grows only by named features
-  (`spec:AST-112/FR8`), and Astryx Stage runs a project with this group only
-  at or above the package's Stage version floor (`spec:AST-112/FR12`). The
+  (`spec:AST-112/FR8`). The
   keyboard dock's `transcriptNativeID`, `bottomInset`, `restingInset` and
   `animatesSideInsets` belong to revision 1; the group lists no named features.
 
@@ -291,8 +291,6 @@ owns the keyboard on native React Native.
     iOS Simulator and the Android emulator, never from belief. A newer engine
     that gains a member changes nothing until a new measurement moves it to
     required.
-  - Astryx Stage offers the same set and reports at start any required
-    member it lacks and any member it only approximates.
 - **FR16 — Every member outside the required set has a fallback or no use.**
   Where the engine lacks a member, the library's output falls back:
   - `DateTimeFormat#formatRange`: the two dates joined by the strings
@@ -344,22 +342,17 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 
 ### Platform support
 
-| Contract                 | iOS                                                                                                                                                                                                                                                                       | Android                                                                                                                                                                                                 | Astryx Stage                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                                                                                                                                      | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                                                                                       | Simulated on both looks                                                                  |
-| `AstryxSafeAreaView`     | Applies the edge rule during native layout                                                                                                                                                                                                                                | Applies the edge rule during native layout                                                                                                                                                              | Simulated on both looks                                                                  |
-| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                                                                                                                                               | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                                                                             | Simulated on both looks                                                                  |
-| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, the linked scroll view's inset, side-inset animation. A gap the caller's padding leaves between the children and the keyboard is kept through the motion | `WindowInsetsAnimationCompat` and a UI-thread offset on show and hide; the children sit on the IME's top, so a gap above the keyboard is not kept. No interactive dismissal and no `animatesSideInsets` | Simulated on both looks                                                                  |
-| `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                                                      | Simulated on the Android look                                                            |
-| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                                            | Simulated on both looks: word selection by long press or double tap, Copy and Select All |
+| Contract                 | iOS                                                                                                                                                                                                                                                                       | Android                                                                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSafeAreaProvider` | UIKit `safeAreaInsets` and `safeAreaInsetsDidChange`                                                                                                                                                                                                                      | `WindowInsetsCompat` `systemBars` and `displayCutout` against the view's place in its window, IME excluded, in dp                                                                                       |
+| `AstryxSafeAreaView`     | Applies the edge rule during native layout                                                                                                                                                                                                                                | Applies the edge rule during native layout                                                                                                                                                              |
+| `AstryxSafeArea`         | The key window's `safeAreaInsets` and frame                                                                                                                                                                                                                               | The activity window's root insets for `systemBars` and `displayCutout`, IME excluded, in dp                                                                                                             |
+| `AstryxKeyboardDock`     | `keyboardLayoutGuide` and Core Animation on the render server: show, hide, height change, interactive dismissal, the linked scroll view's inset, side-inset animation. A gap the caller's padding leaves between the children and the keyboard is kept through the motion | `WindowInsetsAnimationCompat` and a UI-thread offset on show and hide; the children sit on the IME's top, so a gap above the keyboard is not kept. No interactive dismissal and no `animatesSideInsets` |
+| `AstryxWindowStatusBar`  | Not registered; the presentation host answers a route's status bar                                                                                                                                                                                                        | The Dialog window's `WindowInsetsControllerCompat`                                                                                                                                                      |
+| `AstryxSelectableText`   | Non-editable, selectable `UITextView`; `UIFontMetrics` per block; system edit menu                                                                                                                                                                                        | `TextView` with `setTextIsSelectable` over one `Spannable`; sizes in sp; `ExploreByTouchHelper` per block; system text-selection action mode                                                            |
 
-- FR7 gap: Astryx Stage draws a dock side-inset change with
-  `animatesSideInsets` in one frame instead of animating it.
-- FR10 gap: Astryx Stage selects by word and Select All and has no
-  selection-handle drags.
 - Engine: Hermes on iOS meets FR15 without `NumberFormat#formatToParts`;
-  Hermes on Android meets it with it; Astryx Stage reports at start any
-  required member it lacks.
+  Hermes on Android meets it with it.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, which has UIKit's keyboard layout guide; Android API level
   24; the New Architecture only).
@@ -368,7 +361,7 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
   named feature a binary lacks keeps the revision-1 behaviour or answers
   `unsupported` (FR14).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
-  emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
+  emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
@@ -380,8 +373,6 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
   API only.
 - Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and
   grow by named features.
-- Relies on `spec:AST-112` FR12 (amended): the package's Astryx Stage version
-  floor.
 - Details `spec:AST-112/FR6`, `spec:AST-112/FR7` and `spec:AST-112/FR9` for
   this group's probes, fallbacks and app root.
 - `spec:AST-099` is unchanged; it keeps the keyboard in browsers.
@@ -390,25 +381,25 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                | Representative states                                                                                           | Mutation or failure expectation                                                                                                                                     |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests through the `./testing` view doubles; Simulator and emulator checks; Astryx Stage contract checks                                                | portrait, landscape, a notch and a cutout; a nested provider; a change under one pixel                          | Insets include the keyboard, an event per sub-pixel change, or a hook that answers outside every provider                                                           |
-| FR2      | Unit tests with absent, older and current module doubles                                                                                                    | explicit, inherited and window metrics; `initialMetrics={null}`; a provider mounted after rotation              | The initial frame lays out with zeros where metrics exist, or stale metrics after a rotation                                                                        |
-| FR3      | Unit tests of the edge rule; Simulator and emulator layout checks; Astryx Stage contract checks                                                             | each edge mode; padding and margin; logical start and end; right to left with and without the swap              | Padding a frame late, a wrong combined value, or an inset on the wrong side in right to left                                                                        |
-| FR4      | Unit tests with absent, malformed and current module doubles                                                                                                | no window; a malformed constant                                                                                 | A throw, or a value other than `null` without the module                                                                                                            |
-| FR5      | Unit tests of the entry's names against react-native-safe-area-context 5.x; a previewed project that imports it; package manifest check                     | each exported name; `cornerAdaptation`; the package's dependencies and peer dependencies                        | A missing name, or a previewed project that renders blank, or a declaration of react-native-safe-area-context other than the optional peer of `./navigation-legacy` |
-| FR6      | Unit tests through the `./testing` view doubles                                                                                                             | `followsKeyboard` false; an unknown `nativeID`; the library-only prop set by an app                             | An event per frame, a held dock that moves, or an app that gets the library-only behaviour                                                                          |
-| FR7      | Simulator, emulator and device checks with UI-thread frame checks (no JavaScript per frame); Android unit tests of the offset; Astryx Stage contract checks | show, hide and height change on both platforms; interactive drag and release on iOS; a side-inset commit on iOS | The docked content leaves the keyboard's top on any frame, a band opens between it and the IME, an offset remains at rest, or JavaScript runs per frame             |
-| FR8      | Simulator and emulator checks with UI-thread frame checks; Astryx Stage contract checks                                                                     | a list at its end; a list scrolled up; a list under a finger; a show, a hide and an interactive drag            | The last row slips under the docked content, the list jumps, or the list's own inset props fight the dock's                                                         |
-| FR9      | Emulator checks; Android unit tests; Astryx Stage contract checks; router tests with the view registered and absent                                         | light and dark style; hidden and shown; nested stack; closing the modal; a view in the activity's window        | The activity's window or the navigation bar is written, or the look stays after the modal closes                                                                    |
-| FR10     | Unit tests through the `./testing` doubles; Simulator, emulator and Astryx Stage selection checks                                                           | a selection across blocks; `setSelection` and `selectBlocks`; a link tap with and without a selection           | A selection that stops at a block edge, wrong UTF-16 offsets, or a link opened natively                                                                             |
-| FR11     | Simulator and emulator layout checks; Android instrumentation of font scaling                                                                               | a width change; a text change; a `height` in style                                                              | A clipped or stale height, or a face that differs from `Text`'s                                                                                                     |
-| FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                                                           | per-block elements; a heading; a link action; the largest text size; Reduce Motion                              | One element for the whole text, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion                                      |
-| FR13     | Unit tests with each view and the module absent                                                                                                             | every fallback                                                                                                  | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                                                                   |
-| FR14     | The platform's spec rules check; Astryx Stage contract checks and the package's Stage version floor                                                         | a contract at revision 1; a missing named feature; a Stage below the floor                                      | A revision above 1, a named feature used without checking that the binary has it, or an older Stage that runs the project                                           |
-| FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds; Astryx Stage's report at start                                             | each member on iOS and Android; a Stage without a required member                                               | The table differs from the probe, or Stage runs without a required member and reports nothing                                                                       |
-| FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                                                           | each fallback; an English and a non-English locale; native digits                                               | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import                                         |
-| FR17     | Review of the native source against the public iOS SDK and the Android SDK and AndroidX                                                                     | each native piece on iOS and Android                                                                            | A private selector, a private class, or reflection into a framework                                                                                                 |
+| Contract | Verification                                                                                                                  | Representative states                                                                                           | Mutation or failure expectation                                                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests through the `./testing` view doubles; Simulator and emulator checks                                                | portrait, landscape, a notch and a cutout; a nested provider; a change under one pixel                          | Insets include the keyboard, an event per sub-pixel change, or a hook that answers outside every provider                                               |
+| FR2      | Unit tests with absent, older and current module doubles                                                                      | explicit, inherited and window metrics; `initialMetrics={null}`; a provider mounted after rotation              | The initial frame lays out with zeros where metrics exist, or stale metrics after a rotation                                                            |
+| FR3      | Unit tests of the edge rule; Simulator and emulator layout checks                                                             | each edge mode; padding and margin; logical start and end; right to left with and without the swap              | Padding a frame late, a wrong combined value, or an inset on the wrong side in right to left                                                            |
+| FR4      | Unit tests with absent, malformed and current module doubles                                                                  | no window; a malformed constant                                                                                 | A throw, or a value other than `null` without the module                                                                                                |
+| FR5      | Unit tests of the entry's names against react-native-safe-area-context 5.x; package manifest check                            | each exported name; `cornerAdaptation`; the package's dependencies and peer dependencies                        | A missing name, or a declaration of react-native-safe-area-context other than the optional peer of `./navigation-legacy`                                |
+| FR6      | Unit tests through the `./testing` view doubles                                                                               | `followsKeyboard` false; an unknown `nativeID`; the library-only prop set by an app                             | An event per frame, a held dock that moves, or an app that gets the library-only behaviour                                                              |
+| FR7      | Simulator, emulator and device checks with UI-thread frame checks (no JavaScript per frame); Android unit tests of the offset | show, hide and height change on both platforms; interactive drag and release on iOS; a side-inset commit on iOS | The docked content leaves the keyboard's top on any frame, a band opens between it and the IME, an offset remains at rest, or JavaScript runs per frame |
+| FR8      | Simulator and emulator checks with UI-thread frame checks                                                                     | a list at its end; a list scrolled up; a list under a finger; a show, a hide and an interactive drag            | The last row slips under the docked content, the list jumps, or the list's own inset props fight the dock's                                             |
+| FR9      | Emulator checks; Android unit tests; router tests with the view registered and absent                                         | light and dark style; hidden and shown; nested stack; closing the modal; a view in the activity's window        | The activity's window or the navigation bar is written, or the look stays after the modal closes                                                        |
+| FR10     | Unit tests through the `./testing` doubles; Simulator and emulator selection checks                                           | a selection across blocks; `setSelection` and `selectBlocks`; a link tap with and without a selection           | A selection that stops at a block edge, wrong UTF-16 offsets, or a link opened natively                                                                 |
+| FR11     | Simulator and emulator layout checks; Android instrumentation of font scaling                                                 | a width change; a text change; a `height` in style                                                              | A clipped or stale height, or a face that differs from `Text`'s                                                                                         |
+| FR12     | VoiceOver and TalkBack checks on Simulator, emulator and device; Reduce Motion on                                             | per-block elements; a heading; a link action; the largest text size; Reduce Motion                              | One element for the whole text, a missing header trait, a dock that adds motion, or a side-inset animation under Reduce Motion                          |
+| FR13     | Unit tests with each view and the module absent                                                                               | every fallback                                                                                                  | A held-back subtree, lost padding, an event from a fallback, or a missing `no-native-view` report                                                       |
+| FR14     | The platform's spec rules check                                                                                               | a contract at revision 1; a missing named feature                                                               | A revision above 1, or a named feature used without checking that the binary has it                                                                     |
+| FR15     | On-device probe of the engine's `Intl` in Simulator and emulator release builds                                               | each member on iOS and Android                                                                                  | The table differs from the probe                                                                                                                        |
+| FR16     | Unit tests in an engine shaped like the device's, with the absent members removed                                             | each fallback; an English and a non-English locale; native digits                                               | A call to an absent member without its check, a component that throws or writes nothing, or a global installed by an import                             |
+| FR17     | Review of the native source against the public iOS SDK and the Android SDK and AndroidX                                       | each native piece on iOS and Android                                                                            | A private selector, a private class, or reflection into a framework                                                                                     |
 
 ## Decision log
 
@@ -420,8 +411,8 @@ it. A platform-only prop says so in its documentation (`spec:AST-112/FR8`).
 Apps and libraries already speak `SafeAreaProvider`, `SafeAreaView`,
 `useSafeAreaInsets` and `initialWindowMetrics`, so moving an app over is an
 import change, and the `./safe-area-context` entry lets code written for that
-library run unchanged in the Astryx app's preview. The native side is Astryx's,
-so the package keeps one dependency set and Astryx Stage simulates it.
+library run unchanged. The native side is Astryx's, so the package keeps one
+dependency set.
 
 Rejected: an Astryx-specific inset API, because every app and navigation
 library would need a second vocabulary for the same numbers.
@@ -486,11 +477,10 @@ from one block to the next.
 The library formats with the engine's own `Intl` where it exists and keeps a
 small fallback for each member it lacks, so the bundle stays small and a newer
 engine improves the output with no change. The set is declared from a
-measurement and reproduced by Astryx Stage, so a missing fallback fails in
-Stage and in tests as it would on a device.
+measurement, so a missing fallback fails in tests as it would on a device.
 
 Rejected: polyfilling every missing `Intl` member, because the bundle would
-carry code the engine may ship and Stage would no longer show the device's
+carry code the engine may ship and tests would no longer show the device's
 gaps.
 
 ## Open questions
