@@ -17,6 +17,13 @@
  */
 export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (An action, "a toast's action", is the button it holds. Read first,
+  // before the parts it can name, so "actions menu" and "action sheet" are
+  // that menu and that sheet.)
+  [
+    /\bactions?(?: buttons?)?\b(?!\s+(?:bars?|sheets?|menus?|lists?))/,
+    {on: 'button'},
+  ],
   // (The page's main panel, the area its content sits in.)
   [
     /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
@@ -164,8 +171,6 @@ export const OVERRIDES = [
   // (Kbd's key badges, each key's own box, by their own name.)
   [/\bkey badges?\b/, {on: 'kbd-key'}],
   [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
-  // (An action, "a toast's action", is the button it holds.)
-  [/\bactions?(?: buttons?)?\b(?!\s+(?:bar|sheet|menu|list))/, {on: 'button'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],

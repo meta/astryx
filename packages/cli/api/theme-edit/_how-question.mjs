@@ -3741,6 +3741,15 @@ function clausesOf(q, partWords, words = null) {
         decl[m[1]] = noMode(m[2]).replace(/\s+/g, ' ').trim();
     // A part whose name has a state word ("hover card") is the part, not
     // the state: read the state from the words left once parts are taken.
+    // (A status word said right before a part, "error banners", "in error
+    // toasts", is that part's status look, never the invalid state.)
+    const statusBefore = parts.map(
+      x =>
+        new RegExp(
+          `\\b(?:error|danger|warning|success|info)\\s+(?=${x.on.replace(/-/g, '[\\s-]?')}s?\\b)`,
+          'g',
+        ),
+    );
     const stateText = parts
       .filter(x => /hover|focus|active|disabled|selected|checked/.test(x.on))
       .reduce(
@@ -3749,7 +3758,7 @@ function clausesOf(q, partWords, words = null) {
             new RegExp(`\\b${x.on.replace(/-/g, '[\\s-]?')}s?\\b`, 'g'),
             ' ',
           ),
-        text,
+        statusBefore.reduce((t, re) => t.replace(re, ' '), text),
       );
     const state = stateWord(stateText);
     // (A second state said beside it, "hovered selected tabs": both at

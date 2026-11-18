@@ -242,3 +242,37 @@ describe('plain looks', () => {
     );
   }, 240_000);
 });
+
+describe('part words read in place', () => {
+  it("an action is a button, never a menu's or a sheet's; a status before a part is its status look", async () => {
+    for (const [ask, on] of [
+      ['actions menu 8px corners', 'dropdown-menu'],
+      ['the action sheet blue', 'bottom-sheet'],
+    ]) {
+      const w = writes(await how('q0', ask));
+      expect(w.length, ask).toBeGreaterThan(0);
+      expect(
+        w.some(c => / --on button\b/.test(c)),
+        ask,
+      ).toBe(false);
+      expect(w[0], ask).toMatch(new RegExp(` --on ${on}\\b`));
+    }
+    expect(writes(await how('q0', 'the action buttons rounder'))[0]).toMatch(
+      / --on button$/,
+    );
+    for (const [ask, when] of [
+      ['white text in error banners', 'status:error'],
+      ['white text in error toasts', 'type:error'],
+    ]) {
+      const rs = await how('q0', ask);
+      expect(
+        rs.some(r => /has no invalid state/.test(r.text)),
+        ask,
+      ).toBe(false);
+      expect(
+        writes(rs).some(c => c.includes(`--when ${when}`)),
+        ask,
+      ).toBe(true);
+    }
+  });
+});
