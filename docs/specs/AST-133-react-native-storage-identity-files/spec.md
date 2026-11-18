@@ -34,8 +34,9 @@ for a device certificate without a certificate prompt, and saves or shares a
 file through the system's own sheets.
 
 This record details these three modules of the platform layer that
-`spec:AST-112` defines. They are core modules (`spec:AST-112/FR1`), so every
-app links them (`spec:AST-112/FR3`). Every asynchronous call resolves the
+`spec:AST-112` defines. They are part of the optional add-on package, not the
+core package: no Astryx component uses them, so an app links them only when
+it adds that package. Every asynchronous call resolves the
 result vocabulary of `spec:AST-112/FR6`, every module has the capability shape
 of `spec:AST-112/FR7`, and every interface evolves additively under
 `spec:AST-112/FR8`.
@@ -45,10 +46,11 @@ of `spec:AST-112/FR7`, and every interface evolves additively under
 The React Native ecosystem covers each of these needs with a library that
 ships its own native code. An app that adds one is no longer a
 JavaScript-only app: it needs its own native build for that library. That is
-why the package carries these modules although no library component uses
-them (`spec:AST-112/FR1`). Each stays a thin wrapper with one result shape
-and no third-party native dependency, and an app that prefers an ecosystem
-library can still use it beside these modules (FR17).
+why Astryx ships these modules although no Astryx component uses them, in the
+optional add-on package rather than the core package. Each stays a thin
+wrapper with one result shape and no third-party native dependency, and an
+app that prefers an ecosystem library can still use it beside these modules
+(FR17).
 
 - `AstryxSecureStorage`: the ecosystem's secure stores match it in capability,
   and their Android biometric gating goes further (OQ1). Astryx keeps it so a
@@ -63,11 +65,11 @@ library can still use it beside these modules (FR17).
 
 ## Who uses it
 
-| Native piece           | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                | What a person sees                                                                                                                                       |
-| ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSecureStorage`  | native module (Turbo Native Module) | No Astryx component. App API only (`./storage` entry): an app that signs in keeps its tokens here.                                                                                                                                                                                                           | The app opens signed in after a relaunch; Face ID or the passcode appears before a secret the app protects with it.                                      |
-| `AstryxClientIdentity` | native module (Turbo Native Module) | No Astryx component. App API only (`./network` entry): an app that enrols a device certificate. The platform's networking presents a bound identity on the app's `fetch`, `XMLHttpRequest`, `Image`, WebSocket, and `AstryxFiles` downloads; the `web` capability presents it in web views (`spec:AST-131`). | A work app reaches servers that require a device certificate with no certificate prompt; on Android, the system's certificate picker appears once.       |
-| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The `pdf` capability writes its page pictures (`PdfView` thumbnails) into the cache, and the camera, photo, recorder and image markup modules return their files there. App API (`./storage` entry): `AstryxFiles` and `readBundledAsset`.                            | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
+| Native piece           | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                     | What a person sees                                                                                                                                       |
+| ---------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSecureStorage`  | native module (Turbo Native Module) | No Astryx component. App API only, from the add-on package: an app that signs in keeps its tokens here.                                                                                                                                                                                                           | The app opens signed in after a relaunch; Face ID or the passcode appears before a secret the app protects with it.                                      |
+| `AstryxClientIdentity` | native module (Turbo Native Module) | No Astryx component. App API only, from the add-on package: an app that enrols a device certificate. The platform's networking presents a bound identity on the app's `fetch`, `XMLHttpRequest`, `Image`, WebSocket, and `AstryxFiles` downloads; the `web` capability presents it in web views (`spec:AST-131`). | A work app reaches servers that require a device certificate with no certificate prompt; on Android, the system's certificate picker appears once.       |
+| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The `pdf` capability writes its page pictures (`PdfView` thumbnails) into the cache, and the camera, photo, recorder and image markup modules return their files there. App API, from the add-on package: `AstryxFiles` and `readBundledAsset` (OQ5).                      | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
 
 ## Non-goals
 
@@ -100,12 +102,13 @@ library can still use it beside these modules (FR17).
 
 ## Requirements
 
-- **FR1 — The group is three core native modules.** Every app links them
-  (`spec:AST-112/FR1`, FR3). Each module is read with `TurboModuleRegistry.get`,
-  only by its own wrapper (`spec:AST-112/FR8`), and its wrapper answers
-  `no-module` where the module is absent. `./storage` exports
-  `AstryxSecureStorage`, `AstryxFiles` and `readBundledAsset`; `./network`
-  exports `AstryxClientIdentity` (`spec:AST-112/FR5`).
+- **FR1 — The group is three native modules of the optional add-on
+  package.** They are part of the optional add-on package, not the core
+  package. An app that does not add the package links none of their native
+  code. The package exports `AstryxSecureStorage`, `AstryxClientIdentity`,
+  `AstryxFiles` and `readBundledAsset`. Each module is read with
+  `TurboModuleRegistry.get`, only by its own wrapper (`spec:AST-112/FR8`), and
+  its wrapper answers `no-module` where the module is absent.
 
   | Contract               | Kind                                | Methods                                                                                                                                                               | Platforms    |
   | ---------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -379,6 +382,8 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 | `AstryxClientIdentity` | Secure Enclave keys; React Native's request handler and `URLSession` challenges for presentation                       | StrongBox or TEE Keystore keys; a client key manager on React Native's HTTP client; `KeyChain` for `system-identity`                              |
 | `AstryxFiles`          | The caches folder; `URLSession` downloads; `UIDocumentPickerViewController` in export mode; `UIActivityViewController` | The cache folder; React Native's HTTP client for downloads; the create-document picker; the share chooser through the module's own `FileProvider` |
 
+- Packaging: all three modules are part of the optional add-on package, not
+  the core package (FR1).
 - Supported feature/engine floor: the platform floor of `spec:AST-112`
   (iOS at React Native's minimum, Android API level 24, the New Architecture
   only). Below Android API level 28, `accessibleClasses` omits
@@ -395,15 +400,15 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 ## Current-state impact
 
-- This record details `spec:AST-112`: its FR1 (secure storage, files, and
-  client identity in the package), FR2 (no third-party native dependency),
-  FR3 (the core links in every app), FR5 (the `./storage` and `./network`
-  entries), FR6 and FR7 for each module's results and probes, and FR8 for the
-  revision-1 baseline and named features.
+- This record details `spec:AST-112`: its FR2 (no third-party native
+  dependency), FR6 and FR7 for each module's results and probes, and FR8 for
+  the revision-1 baseline and named features.
 - It relies on `spec:AST-130/FR18` for `contractFeatures` and
   `hasContractFeature`.
-- It changes no other record. The split between core and opt-in capabilities
-  does not change for this group: every module in it is core (OQ5).
+- It places secure storage, client identity, and files in the optional
+  add-on package, not the core package. `spec:AST-112/FR1` and FR5, which
+  list them in the core and its `./storage` and `./network` entries, change
+  to match.
 
 ## Verification
 
@@ -424,7 +429,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 | FR13     | Log and crash-report review of each module's failure paths; a backup and restore of a device              | each failure with a secret, key and token present; restore on another device                                               | A secret or token appears in a log or message, or a device-only secret is restored on another device                        |
 | FR14     | VoiceOver and TalkBack runs over each system sheet                                                        | a protected read; the certificate picker; save; share                                                                      | A sheet is not reachable, or the `prompt` is not read                                                                       |
 | FR15     | The platform's spec rules check; unit tests with a binary that lacks each feature                         | each named feature present and absent                                                                                      | A behaviour runs without its feature, a missing feature answers anything but `unsupported`, or no warning                   |
-| FR16     | Review of each native change for private API; a symbol check of a core-only build                         | a core-only iOS and Android build                                                                                          | A private API call in the group's native code                                                                               |
+| FR16     | Review of each native change for private API; a symbol check of an add-on build                           | an add-on iOS and Android build                                                                                            | A private API call in the group's native code                                                                               |
 | FR17     | A sample app that also uses an ecosystem secure store and file library; a dependency check of the package | both libraries writing, reading and clearing their own items and files                                                     | A third-party native dependency in the package, or one library reads, changes or removes the other's items or files         |
 
 ## Decision log
@@ -501,8 +506,10 @@ would carry it and an app's own copy could conflict with it.
   group's. Options: a module of their own in this record, with
   `AstryxNetwork` keeping only the path state; or they stay in
   `AstryxNetwork` under `spec:AST-130`.
-- **OQ5 — Does client identity stay in the core?** (`human-design`) No Astryx
-  component calls `AstryxClientIdentity`, and only apps that talk to servers
-  requiring device certificates use it. Options: keep it in the core, so an
-  app's requests present a bound identity with no opt-in step; or make it an
-  opt-in capability, so only apps that opt it in link its code.
+- **OQ5 — Where does the files cache live?** (`human-design`) No Astryx
+  component calls `AstryxFiles`, but the `pdf` capability writes `PdfView`'s
+  page pictures into its cache, and the camera, photo, recorder and image
+  markup modules return their files there. Options: keep `AstryxFiles` in the
+  add-on package, with the core keeping only a cache folder those modules
+  write to; or move `AstryxFiles` into the core package because those modules
+  use its cache.
