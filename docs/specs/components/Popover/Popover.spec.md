@@ -60,7 +60,6 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 ## Compatibility and migration
 
 - Released default preserved: `yes`, except the accessibility fixes `spec:AST-116` FR22 names
-  and `spec:AST-059` FR5's hide for a popover that no person is using
 - `presentation` (DEC-6) defaults to `popover`, the released anchored surface;
   `presentation="popover"` is also the value that keeps it wherever a touch
   default would otherwise apply (`architecture:public-component-api` INV16,
