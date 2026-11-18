@@ -39,7 +39,8 @@ capability shape (`spec:AST-112/FR7`), additive evolution
 audio module (`AstryxAudio`), the video view (`AstryxVideoView`), and the
 camera view (`AstryxCameraView`), and how the library's `VideoView`,
 `useVideoPlayer`, and `useAudioPlayer` use them. The capabilities' other
-modules and views are listed under "Who uses it" as scope notes.
+modules and views belong to the platform package and are specified in their own
+records.
 
 ## Why this exists
 
@@ -47,7 +48,7 @@ modules and views are listed under "Who uses it" as scope notes.
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `AstryxAudio`      | expo-audio gives a hook-based player with rate, volume, looping, background playback, and lock-screen controls. react-native-video and expo-video cover streaming formats, DRM, captions, and the system's Now Playing card. Libraries such as react-native-audio-waveform extract peaks for a waveform. | The gaps are specific. One player model for sound and video, so the library's media controls wire to either the same way. Players keyed by owning runtime, so a previewed project and the app share one Now Playing card and one set of remote commands and never take each other's away. Peak levels of a local file or of in-memory bytes that never touch disk, with no size limit. Results with closed reasons, never a throw. No Expo runtime library (`spec:AST-112/FR11`). Astryx Stage parity. |
 | `AstryxVideoView`  | expo-video separates the player from the view and offers picture in picture, full screen, and native controls; react-native-video is the most complete video component in React Native, with picture in picture, controls, and a large prop set.                                                         | The view draws an `AstryxAudio` player and plays nothing itself, so the library's full screen shows the same player without restarting it, and the app's own controls (the library's `MediaScrubber`, `PlaybackRateMenu`, and media icon buttons) drive sound and video alike. Picture in picture on Android shows only the video, never the whole app. One dependency set (`spec:AST-112/FR2`) and Astryx Stage parity.                                                                               |
-| `AstryxCameraView` | react-native-vision-camera is fast and complete: formats, frame processors, a code scanner, photo and video capture. expo-camera gives a simple camera view with photos, video, and barcode scanning.                                                                                                    | The gap is narrow: a view that never prompts (`spec:AST-112/FR7`), a simulated camera where there is none (the iOS Simulator, an emulator, Jest, Astryx Stage) so a capture or scanner flow runs everywhere, closed results, and no Expo runtime library. No library component uses it (OQ1).                                                                                                                                                                                                          |
+| `AstryxCameraView` | react-native-vision-camera is fast and complete: formats, frame processors, a code scanner, photo and video capture. expo-camera gives a simple camera view with photos, video, and barcode scanning.                                                                                                    | The gap is narrow: a view that never prompts (`spec:AST-112/FR7`), a simulated camera where there is none (the iOS Simulator, an emulator, Jest, Astryx Stage) so a capture or scanner flow runs everywhere, closed results, and no Expo runtime library. No library component uses it; it stays in the platform because an app's alternative is a library with native code of its own (DEC-5).                                                                                                        |
 
 ## Who uses it
 
@@ -55,32 +56,32 @@ modules and views are listed under "Who uses it" as scope notes.
 | ------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxAudio`      | native module (Turbo Native Module)        | The library's `useAudioPlayer` and `useVideoPlayer` hooks (the controllers an app wires to `MediaScrubber`, `PlaybackRateMenu`, and the media icon buttons); apps through the `./media` entry | Sound that keeps playing on the lock screen, the system's Now Playing card and remote controls, and a waveform of a recording       |
 | `AstryxVideoView`  | native component (Fabric Native Component) | `VideoView` (inline and in full screen, for a `useVideoPlayer` controller); apps through the `./media` entry's `NativeVideoView`                                                              | A video inside the screen, the same video in full screen, and a floating picture-in-picture window                                  |
-| `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (OQ1)                                                                      | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
+| `AstryxCameraView` | native component (Fabric Native Component) | No library component; the `camera` create template's screens, and apps through the `./camera` entry's `CameraView` (DEC-5)                                                                    | A live camera preview, a photo taken, a QR code or barcode found in view; a moving placeholder scene where the device has no camera |
 
-Scope notes (their contracts are outside this record):
+Scope notes: these pieces are part of the platform package and are specified
+elsewhere, in their own records.
 
 - `AstryxBarcode` (`camera`) reads machine-readable codes from a still image
-  the app already has. It is camera-class for permission and policy, and no
-  library component uses it (OQ2).
+  the app already has. It is camera-class for permission and policy.
 - `AstryxAudioRecorder` records sound for the `microphone` capability.
 - `AstryxPhotoLibrary` and `AstryxPhotoThumbnailView` read the device's photo
   library.
 - `AstryxPdfView` and `AstryxPdfModule` show and render PDF documents.
-- `AstryxImageMarkup` and `AstryxScreenCapture` mark up an image and report or
-  prevent screen capture. Whether they stay in the core platform or move to an
-  optional package is open (OQ7).
+- `AstryxImageMarkup` marks up an image, and `AstryxScreenCapture` reports or
+  prevents screen capture.
 
 ## Non-goals
 
 - The contracts of the library's `VideoView`, `MediaScrubber`, and
-  `PlaybackRateMenu` beyond how they use the platform (FR11). Each component's
+  `PlaybackRateMenu` beyond how they use the platform (FR12). Each component's
   own record and `spec:AST-082/FR3` own them.
 - Streaming formats beyond what the platform's players open from a URL, DRM,
   captions and subtitle tracks, advertising, playlists, and offline downloads.
 - Video recording, live photos, depth, RAW, HDR control, frame processors, and
   per-frame image access from the camera.
-- Recording sound, the photo library, PDF documents, image markup, and screen
-  capture (scope notes above).
+- Still-image code decoding, recording sound, the photo library, PDF
+  documents, image markup, and screen capture: each is specified in its own
+  record (scope notes above).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
@@ -454,22 +455,24 @@ Simulator, and in Astryx Stage.
 Rejected: a view that asks for permission when it mounts, because the app
 then cannot explain the request first.
 
+### DEC-5 — A native piece stays in the platform package when the alternative needs native code
+
+**Reference:** `spec:AST-132/DEC-5`
+**Decider:** imdreamrunner, 2026-11-17
+
+A native piece is part of the platform package whenever an app's alternative
+would be an open-source library that needs native code of its own, even when no
+library component uses it. `AstryxCameraView` stays in the `camera` capability
+on this rule, as do the pieces in the scope notes. An app adds no second
+native dependency set for them (`spec:AST-112/FR2`).
+
 ## Open questions
 
-- **OQ1 — Does `AstryxCameraView` stay in the core platform when no library
-  component uses it?** (`human-api`) Options: keep `CameraView` in the
-  `camera` capability for apps and the create template; or move it to an
-  optional package and point apps to the ecosystem's camera libraries.
-- **OQ2 — Does `AstryxBarcode` stay in the `camera` capability?**
-  (`human-api`) Options: keep it beside `CameraView` as camera-class code
-  decoding; or move it to a capability of its own, since it needs no camera.
-- **OQ3 — Does the library offer a camera component of its own over
+- **OQ1 — Does the library offer a camera component of its own over
   `CameraView`, with a label and the theme's appearance?** (`human-design`)
-- **OQ4 — Does Android report several codes per frame, as iOS does?**
+- **OQ2 — Does Android report several codes per frame, as iOS does?**
   (`human-design`)
-- **OQ5 — Does Android offer automatic picture in picture, which needs the
+- **OQ3 — Does Android offer automatic picture in picture, which needs the
   app's own activity in picture-in-picture mode?** (`human-design`)
-- **OQ6 — Does `useAudioPlayer` expose `levels` as a hook for a waveform, or
+- **OQ4 — Does `useAudioPlayer` expose `levels` as a hook for a waveform, or
   does the waveform stay app API on `AstryxAudio`?** (`human-api`)
-- **OQ7 — Do `AstryxImageMarkup` and `AstryxScreenCapture` stay in the core
-  platform or move to an optional extras package?** (`human-api`)
