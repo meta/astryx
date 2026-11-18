@@ -10,6 +10,7 @@
  *   as from its top and bottom, at both ends, with either pointer and in
  *   either direction, so a resized switch never stops short or overshoots;
  *   and that the track's size containment leaves its own box as shipped
+ *   and the control's box is the track's, the hidden input covering it
  *   (component:Switch FR13, FR14)
  * @position Box sizes need a real layout engine; jsdom has none
  */
@@ -24,6 +25,10 @@ const RESIZED =
 
 interface Rest {
   track: [number, number];
+  /** The control's box (the track's parent) and the hidden input's, px. */
+  control: [number, number];
+  /** Whether the hidden input covers the whole control. */
+  covered: boolean;
   /** Gap from the thumb to the track's start, end and top edges, px. */
   start: number;
   end: number;
@@ -42,10 +47,22 @@ async function rest(page: Page): Promise<Rest> {
     const t = track.getBoundingClientRect();
     const h = thumb.getBoundingClientRect();
     const rtl = getComputedStyle(track).direction === 'rtl';
+    const box = track.parentElement?.getBoundingClientRect();
+    const input = track.parentElement
+      ?.querySelector<HTMLElement>('[role="switch"]')
+      ?.getBoundingClientRect();
+    if (box == null || input == null) throw new Error('no control box');
+    const covered =
+      input.left <= box.left + 0.5 &&
+      input.right >= box.right - 0.5 &&
+      input.top <= box.top + 0.5 &&
+      input.bottom >= box.bottom - 0.5;
     const left = h.left - t.left;
     const right = t.right - h.right;
     return {
       track: [t.width, t.height],
+      control: [box.width, box.height],
+      covered,
       start: rtl ? right : left,
       end: rtl ? left : right,
       top: h.top - t.top,
@@ -91,7 +108,10 @@ for (const pointer of ['coarse', 'fine'] as const) {
 
       test('the track keeps its shipped box', async ({page}) => {
         await open(page, 'core-switch--default', dir, pointer);
-        expect((await rest(page)).track).toEqual([40, 24]);
+        const r = await rest(page);
+        expect(r.track).toEqual([40, 24]);
+        expect(r.control).toEqual([40, 24]);
+        expect(r.covered).toBe(true);
       });
 
       for (const [story, at] of [
@@ -106,6 +126,10 @@ for (const pointer of ['coarse', 'fine'] as const) {
           await page.waitForTimeout(200);
           const r = await rest(page);
           expect(r.track).toEqual([51, 31]);
+          // The control's box is the track's: the row widens with it, and
+          // the hidden input still covers the whole control.
+          expect(r.control).toEqual([51, 31]);
+          expect(r.covered).toBe(true);
           expect(r.top).toBeCloseTo(2, 1);
           expect(r.bottom).toBeCloseTo(2, 1);
           expect(r[at]).toBeCloseTo(r.top, 1);
