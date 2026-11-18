@@ -3819,6 +3819,7 @@ jobs:
       # validation and the fast interaction guards in pr-a11y; they must not
       # pay for every component's browser bindings on every change.
       - name: Run accessibility spec-test contracts
+        id: contracts
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -3859,6 +3860,17 @@ jobs:
           name: component-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}
           path: test-results/chat-layout-audit-evidence/
           retention-days: 30
+          if-no-files-found: ignore
+
+      # A failing contract leaves its page snapshot (error-context.md) and any
+      # screenshot under test-results/; this keeps them for the leg's attempt.
+      - name: Keep the failing contracts' Playwright results
+        if: failure() && steps.contracts.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-contracts-results-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 14
           if-no-files-found: ignore
 
   # Joins the contract shards for release-check: every shard must pass, and
