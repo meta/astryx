@@ -91,7 +91,7 @@ describe('exportedTypeDeclarations', () => {
     ).toEqual([
       {
         name: 'SearchSource',
-        via: 'SearchSource',
+        via: ['SearchSource'],
         declaration: [
           'interface SearchSource<T extends SearchItem = SearchItem> {',
           '    search(query: string): Promise<T[]>;',
@@ -100,7 +100,7 @@ describe('exportedTypeDeclarations', () => {
       },
       {
         name: 'SearchItem',
-        via: 'SearchSource',
+        via: ['SearchSource'],
         declaration: [
           'type SearchItem = {',
           '    id: string;',
@@ -116,7 +116,7 @@ describe('exportedTypeDeclarations', () => {
     expect(exportedTypeDeclarations(root, ['WidgetSize'])).toEqual([
       {
         name: 'WidgetSize',
-        via: 'WidgetSize',
+        via: ['WidgetSize'],
         declaration: 'type Size = number | string;',
       },
     ]);
@@ -129,13 +129,25 @@ describe('exportedTypeDeclarations', () => {
     ).toEqual([]);
   });
 
+  it('gives a type that two names reach to both of them', () => {
+    const root = /** @type {string} */ (packageRootDeclarationFile(pkg));
+    const found = exportedTypeDeclarations(root, [
+      'SearchItem',
+      'SearchSource',
+    ]);
+    expect(found.find(type => type.name === 'SearchItem')?.via).toEqual([
+      'SearchItem',
+      'SearchSource',
+    ]);
+  });
+
   it('names a nested type without its declaration once the nested budget is spent', () => {
     const root = /** @type {string} */ (packageRootDeclarationFile(pkg));
     expect(
       exportedTypeDeclarations(root, ['SearchSource'], {nestedChars: 10}),
     ).toEqual([
       expect.objectContaining({name: 'SearchSource'}),
-      {name: 'SearchItem', via: 'SearchSource'},
+      {name: 'SearchItem', via: ['SearchSource']},
     ]);
   });
 });

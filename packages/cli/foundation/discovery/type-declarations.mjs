@@ -12,7 +12,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse} from '../runtime/lazy-dependencies.mjs';
 
 const EXPORT_FROM_RE =
   /export\s+(?:type\s+)?(\*|\{([^}]*)\})\s+from\s+['"]([^'"]+)['"]/g;
@@ -183,7 +183,7 @@ function typeDeclarationIn(file, local) {
   if (!parsedCache.has(file)) {
     const text = fs.readFileSync(file, 'utf8');
     try {
-      const ast = parse(text, {
+      const ast = babelParse(text, {
         sourceType: 'module',
         plugins: [['typescript', {dts: true}]],
       });
@@ -219,53 +219,74 @@ function typeDeclarationIn(file, local) {
  * @param {string} rootDeclarationFile
  * @param {readonly string[]} names
  * @param {{nestedChars?: number}} [options]
- * @returns {{name: string, declaration?: string, via: string}[]} `via` is
- *   the name in `names` that the type was reached from
+ * @returns {{name: string, declaration?: string, via: string[]}[]} `via` is
+ *   every name in `names` that the type was reached from, so a type that
+ *   two names reach belongs to both
  */
 export function exportedTypeDeclarations(
   rootDeclarationFile,
   names,
   {nestedChars = 1200} = {},
 ) {
-  const depth = 2;
-  let nestedLeft = nestedChars;
-  /** @type {{name: string, declaration?: string, via: string}[]} */
-  const found = [];
-  /** @type {Set<string>} */
-  const tried = new Set();
-  /** @type {[string, string][]} each name to look up, and the name in `names` it was reached from */
-  let level = [...new Set(names)].map(name => [name, name]);
-  for (let step = 0; step < depth && level.length > 0; step++) {
-    /** @type {[string, string][]} */
-    const next = [];
-    for (const [name, via] of level) {
-      if (tried.has(name)) continue;
-      tried.add(name);
-      let source;
+  /** @type {Map<string, {declaration: string, inner: string[]} | null>} */
+  const looked = new Map();
+  /** @param {string} name */
+  const lookUp = name => {
+    if (!looked.has(name)) {
+      let found = null;
       try {
-        source = exportedDeclaration(rootDeclarationFile, name, new Set());
+        const source = exportedDeclaration(
+          rootDeclarationFile,
+          name,
+          new Set(),
+        );
+        const declaration = source
+          ? typeDeclarationIn(source.file, source.local)
+          : null;
+        if (declaration) {
+          found = {
+            declaration,
+            inner: typeNamesIn(declaration).filter(inner => inner !== name),
+          };
+        }
       } catch {
-        continue;
+        found = null;
       }
-      if (!source) continue;
-      const declaration = typeDeclarationIn(source.file, source.local);
-      if (!declaration) continue;
-      if (step === 0) {
-        found.push({name, declaration, via});
-      } else if (declaration.length <= nestedLeft) {
-        nestedLeft -= declaration.length;
-        found.push({name, declaration, via});
-      } else {
-        nestedLeft = 0;
-        found.push({name, via});
-      }
-      for (const inner of typeNamesIn(declaration)) {
-        if (inner !== name) next.push([inner, via]);
-      }
+      looked.set(name, found);
     }
-    level = next;
+    return looked.get(name) ?? null;
+  };
+
+  /** @type {Map<string, {name: string, declaration?: string, via: string[]}>} */
+  const byName = new Map();
+  const roots = [...new Set(names)].filter(name => lookUp(name) !== null);
+  for (const root of roots) {
+    byName.set(root, {
+      name: root,
+      declaration: lookUp(root)?.declaration,
+      via: [root],
+    });
   }
-  return found;
+  let nestedLeft = nestedChars;
+  for (const root of roots) {
+    for (const inner of lookUp(root)?.inner ?? []) {
+      const found = lookUp(inner);
+      if (!found) continue;
+      let entry = byName.get(inner);
+      if (!entry) {
+        if (found.declaration.length <= nestedLeft) {
+          nestedLeft -= found.declaration.length;
+          entry = {name: inner, declaration: found.declaration, via: []};
+        } else {
+          nestedLeft = 0;
+          entry = {name: inner, via: []};
+        }
+        byName.set(inner, entry);
+      }
+      if (!entry.via.includes(root)) entry.via.push(root);
+    }
+  }
+  return [...byName.values()];
 }
 
 /**

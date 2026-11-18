@@ -694,7 +694,7 @@ export function withPropTypes(props, ownerPackage, docPath) {
   return props.map(prop => {
     const names = new Set(namesOf(prop));
     const types = found
-      .filter(type => names.has(type.via))
+      .filter(type => type.via.some(via => names.has(via)))
       .map(({name, declaration}) =>
         declaration === undefined ? {name} : {name, declaration},
       );

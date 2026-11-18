@@ -100,6 +100,28 @@ describe('componentDetailProps types', () => {
     ]);
   });
 
+  it('gives a prop every type its own declarations name, also when an earlier prop reached it first', () => {
+    const response = componentDetailProps(
+      {
+        props: [
+          {name: 'item', type: 'SearchItem', description: 'One match.'},
+          {name: 'source', type: 'SearchSource<T>', description: 'Matches.'},
+        ],
+      },
+      'fixture-ui',
+      {docPath: path.join(pkg, 'src/Search/Search.doc.mjs')},
+    );
+    expect(
+      response.data.map(prop => [
+        prop.name,
+        prop.types?.map(type => type.name),
+      ]),
+    ).toEqual([
+      ['item', ['SearchItem']],
+      ['source', ['SearchItem', 'SearchSource']],
+    ]);
+  });
+
   it('leaves the props as written when the doc is not inside the owner package', () => {
     const response = componentDetailProps({props: PROPS}, 'another-ui', {
       docPath: path.join(pkg, 'src/Search/Search.doc.mjs'),
