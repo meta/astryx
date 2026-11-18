@@ -6,7 +6,7 @@
 
 - `astryx experimental theme editor set` says when a fill on a part leaves one of its own sub-parts on the fill it had (a code block's header), so the part shows two tones, with the line that gives the sub-part the same fill.
 
-- `astryx experimental theme editor how` now answers every clause of an ask: each one ends as a command or a named "not used" line, never silence. Long asks also keep each clause's own reading:
+- `astryx experimental theme editor how` keeps each clause's own reading in a long ask:
 
 - What a look turns into in a state ("1px bottom border that turns accent and 2px when focused") is that look in that state. The border before it stays at rest.
 - A typed text color beside "never use pure black for text" already keeps the rule, so nothing else is written.
@@ -40,6 +40,6 @@
 
 - `astryx experimental theme editor`: a text color set on a highlighted row (a command palette, typeahead or selector item) over its see-through tint gets the line that makes the highlight a solid fill that text reads on, not a line that turns the text dark; and a fill set on a toast names the `--when type:…` line for each type it covers.
 
-- `astryx experimental theme editor`: the status roles a theme leaves unset (info, success, warning, danger) now follow its look. Each grows from the base theme's color for the role, at the accent's strength and the palette's vibrancy. It keeps the base theme's hue (an error stays its red, info its blue), and a role that would read as the accent keeps the base theme's colors. Text on each fill, on its tint and on the page reads at 4.5:1; warning stays a bright, visible fill with near-black text, and each light tint is paler than its own fill. A role that cannot be drawn readable keeps the base theme's colors and says why. A role the theme sets, or a token set exactly, wins. Badges, banners, status dots and field status follow.
+- `astryx experimental theme editor`: the status roles a theme leaves unset (info, success, warning, danger) now follow its look. Each grows from the base theme's color for the role, at the accent's strength and the palette's vibrancy. It keeps the base theme's hue (an error stays its red, info its blue), and a role whose fill would read as the accent takes the nearest shade of its own hue that stands apart from it (a red accent gives error a deeper red); it keeps the base theme's colors only when no shade does. Text on each fill, on its tint and on the page reads at 4.5:1; warning stays a bright, visible fill with near-black text, and each light tint is paler than its own fill. A role that cannot be drawn readable keeps the base theme's colors and says why. A role the theme sets, or a token set exactly, wins. Badges, banners, status dots and field status follow.
 
 @josephfarina
