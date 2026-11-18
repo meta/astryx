@@ -42,6 +42,12 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+/** What every answer says it applied. @param {string} q */
+const said = async q => {
+  const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+  return (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n');
+};
+
 /** The set lines of the first answer, without the command prefix. @param {string} q */
 const first = async q => {
   const {data} = await themeEditHow(q, {cwd, theme: 'n'});
@@ -58,7 +64,15 @@ describe('per-side border asks', () => {
       if (unbuilt) return;
       expect(
         await first('border-color: #eee #eee #ddd on hovered tabs'),
-      ).toEqual(["border-color '#eee #eee #ddd' --on tab --state hover"]);
+      ).toEqual([
+        "border-color '#eee #eee #ddd' --on tab --state hover --mode light",
+      ]);
+      expect(await first('tabs with a #eee #eee #ddd border')).toEqual([
+        "border-color '#eee #eee #ddd' --on tab --mode light",
+      ]);
+      expect(await said('tabs with a #eee #eee #ddd border')).toContain(
+        'one per side as written (top, then left and right, then bottom)',
+      );
     },
     T,
   );
@@ -77,6 +91,9 @@ describe('per-side border asks', () => {
         "border-right '1px solid #dddddd' --on tab --state selected",
         'border-bottom none --on tab --state selected',
       ]);
+      expect(
+        await said('selected tab: #dddddd border on top and sides'),
+      ).toContain('a border on its top, left and right');
       expect(await first('no border on the sides of cards')).toEqual([
         'border-left none --on card',
         'border-right none --on card',
@@ -96,6 +113,9 @@ describe('per-side border asks', () => {
         "border-bottom '1px solid transparent' --on tab --state selected",
       );
       expect(lines.join('\n')).not.toMatch(/background/);
+      expect(
+        await said('selected tab border #dddddd with transparent bottom'),
+      ).toContain('read "transparent" as that side\'s line');
     },
     T,
   );
@@ -107,6 +127,9 @@ describe('per-side border asks', () => {
       const lines = await first('input border #dddddd, bottom border #999999');
       expect(lines.at(-1)).toBe("border-bottom '1px solid #999999' --on inputs");
       expect(lines.join('\n')).not.toMatch(/--color-border /);
+      expect(
+        await said('input border #dddddd, bottom border #999999'),
+      ).toMatch(/read "bottom border #999999" as inputs' bottom border/);
     },
     T,
   );
@@ -117,6 +140,85 @@ describe('per-side border asks', () => {
       if (unbuilt) return;
       const lines = await first('buttons padding top and bottom 8px');
       expect(lines.some(l => /^padding-bottom 8px/.test(l))).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'keeps a padding list beside a border word whole',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'cards with a #dddddd border, buttons padding top and bottom 8px',
+      );
+      expect(lines).toContainEqual(
+        expect.stringMatching(/^padding-bottom 8px --on button$/),
+      );
+    },
+    T,
+  );
+
+  it(
+    'reads "on top of" as a place, never a side',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'make the header transparent on top of the hero',
+      );
+      expect(lines.join('\n')).not.toMatch(/border-top/);
+      expect(lines.join('\n')).toMatch(/background-color transparent/);
+    },
+    T,
+  );
+
+  it(
+    'leaves a slightly see-through side to the fainter border',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first(
+        'inputs with a slightly transparent bottom border',
+      );
+      expect(lines.join('\n')).not.toMatch(/solid transparent/);
+    },
+    T,
+  );
+
+  it(
+    'writes a light run of per-side colors for the light mode only',
+    async () => {
+      if (unbuilt) return;
+      expect(await first('card border #eee #eee #ddd')).toEqual([
+        "border-color '#eee #eee #ddd' --on card --mode light",
+      ]);
+      expect(
+        await first(
+          'a rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25) border on primary buttons',
+        ),
+      ).toEqual([
+        "border-color 'rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)' --on button --when variant:primary",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'draws every side of a comma list, and only the sides said',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        await first('cards with a #dddddd border on top, left and right'),
+      ).toEqual([
+        "border-top '1px solid #dddddd' --on card",
+        "border-left '1px solid #dddddd' --on card",
+        "border-right '1px solid #dddddd' --on card",
+      ]);
+      expect(
+        await first('inputs with only a top and bottom border #999999'),
+      ).toEqual([
+        'border none --on inputs',
+        "border-top '1px solid #999999' --on inputs",
+        "border-bottom '1px solid #999999' --on inputs",
+      ]);
     },
     T,
   );
