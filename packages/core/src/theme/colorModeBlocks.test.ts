@@ -9,7 +9,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {defineTheme} from './defineTheme';
-import {generateThemeCSS} from './generateThemeRules';
+import {generateAdaptationCSS, generateThemeCSS} from './generateThemeRules';
 import {deepMergeComponents} from './mergeComponents';
 
 const css = (components: Parameters<typeof defineTheme>[0]['components']) =>
@@ -298,5 +298,71 @@ describe('color-mode blocks', () => {
     ).toEqual({
       button: {base: {'@dark': {color: 'blue', backgroundColor: 'black'}}},
     });
+  });
+});
+
+describe('color-mode blocks inside a surface a dark page flips', () => {
+  // A theme whose inverted surface (a toast's card) is light on a dark page.
+  const FLIP_TOKENS = {
+    '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+    '--color-on-dark': ['#ffffff', '#ffffff'],
+    '--color-on-light': ['#111111', '#111111'],
+  } satisfies Record<string, [string, string]>;
+  const MODES = {
+    button: {
+      base: {'@light': {color: '#111111'}, '@dark': {color: '#ffffff'}},
+    },
+  };
+  const FLIPPED =
+    ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"]';
+  const NESTED_DARK = `${FLIPPED} [data-astryx-media="dark"] *`;
+  const rulesWith = (out: string, color: string) =>
+    out
+      .split('}')
+      .map(rule => rule.trim())
+      .filter(rule => rule.includes(`color: ${color}`));
+
+  it('leaves a nested surface of the other side its own block', () => {
+    const out = generateThemeCSS(
+      defineTheme({
+        name: 'flip-nested',
+        tokens: FLIP_TOKENS,
+        components: MODES,
+      }),
+    ).component;
+    // The light block reaches the flipped surface's content, but not the
+    // content of a dark surface nested in it...
+    expect(
+      rulesWith(out, '#111111').some(rule =>
+        rule.includes(`${FLIPPED} *:not(${NESTED_DARK})`),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves out only the
+    // flipped surface's own content, so the nested dark surface keeps it.
+    expect(
+      rulesWith(out, '#ffffff').some(rule =>
+        rule.includes(`:where(:not(${FLIPPED} *:not(${NESTED_DARK})`),
+      ),
+    ).toBe(true);
+  });
+
+  it("draws an adaptation's blocks by the flipped side, as the root's", () => {
+    const out = generateAdaptationCSS(
+      defineTheme({
+        name: 'flip-adapt',
+        tokens: FLIP_TOKENS,
+        adaptations: {
+          rules: [{when: {motion: 'reduce'}, value: {components: MODES}}],
+        },
+      }),
+    ).component;
+    expect(
+      rulesWith(out, '#111111').some(rule => rule.includes(`${FLIPPED} *`)),
+    ).toBe(true);
+    expect(
+      rulesWith(out, '#ffffff').some(rule =>
+        rule.includes(`:where(:not(${FLIPPED} *`),
+      ),
+    ).toBe(true);
   });
 });

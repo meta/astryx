@@ -1279,10 +1279,11 @@ function generateComponentRules(
           const nearest = `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`;
           // A surface that takes another side on a dark page draws
           // that side's block inside it there, and not this one, before any
-          // script names its side in `data-astryx-media`.
+          // script names its side in `data-astryx-media`. A surface nested
+          // in it keeps its own side, as on the nearest-surface chain.
           const onDarkPage = (side: MediaSide, preference: boolean) =>
-            darkPageConditions(preference).map(
-              condition => `${condition} ${mediaDarkPageIs(side)} *`,
+            darkPageConditions(preference).flatMap(condition =>
+              darkPageNearestIs(`${condition} ${mediaDarkPageIs(side)}`, side),
             );
           const byPreference = (rule: string) =>
             wrap(`  @media (prefers-color-scheme: dark) {\n${rule}\n  }`);
@@ -1354,6 +1355,27 @@ const NEAREST_SURFACE_DEPTH = 5;
  * conditions 1 to NEAREST_SURFACE_DEPTH - 1, that reads R up to
  * NEAREST_SURFACE_DEPTH.
  */
+/**
+ * Selectors for elements whose nearest surface draws `side`, where `outer`
+ * is a surface that draws `side` (a flipped surface on a dark page): inside
+ * it and no nearer surface of the other side, or inside a nested surface of
+ * `side` that follows one of the other side, down to the same depth as
+ * nearestSurfaceIs.
+ */
+function darkPageNearestIs(outer: string, side: MediaSide): string[] {
+  const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+  const pair = `${mediaSelector(other)} ${mediaSelector(side)}`;
+  return Array.from(
+    {length: Math.floor((NEAREST_SURFACE_DEPTH - 1) / 2)},
+    (_, depth) => {
+      const chain = [outer, ...Array.from({length: depth}, () => pair)].join(
+        ' ',
+      );
+      return `${chain} *:not(${chain} ${mediaSelector(other)} *)`;
+    },
+  );
+}
+
 function nearestSurfaceIs(mode: MediaSide): string[] {
   const other: MediaSide = mode === 'dark' ? 'light' : 'dark';
   const chain = (length: number, last: MediaSide) =>
@@ -1871,6 +1893,7 @@ function generateAdaptationRuleRules(
   location: string,
   sink: DiagnosticSink,
   statusRoleDefaults: [string, string][],
+  themeDarkPageSides: ReadonlySet<MediaSide>,
 ): string[] {
   const parts: string[] = [];
   const tokens = tokenBlock(rule, location, sink, [
@@ -1882,10 +1905,13 @@ function generateAdaptationRuleRules(
   }
 
   if (rule.components) {
+    // An adaptation's color-mode blocks follow a flipped surface's
+    // dark-page side as the root blocks do.
     generateComponentRules(rule.components, parts, {
       resetInheritedPaddingSpecificity: true,
       sink,
       location,
+      darkPageSides: themeDarkPageSides,
     });
     generateColorOverrides(rule.components, parts);
     generateSizeOverrides(rule.components, parts);
@@ -1944,6 +1970,9 @@ export function generateAdaptationCSS(
   );
 
   const statusRoleDefaults = adaptationStatusRoleDefaults(context);
+  const themeDarkPageSides = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
 
   // Emit ordinary rule writes first, without inherited Heading weight
   // fallbacks. Carrying an earlier weight into a later block makes that value
@@ -1956,6 +1985,7 @@ export function generateAdaptationCSS(
       `adaptations[${index}].`,
       sink,
       statusRoleDefaults[index],
+      themeDarkPageSides,
     );
     if (parts.length === 0) {
       continue;
