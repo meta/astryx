@@ -42,6 +42,7 @@ import {
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
+import {packageOf} from '../render/served-packages.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {
   ALL_TEMPLATE_SUFFIXES,
@@ -2241,24 +2242,13 @@ export function answeredComponentsInSource(src, {ownersOf, qualified}) {
  * @returns {string | null}
  */
 function answeredName({module, imported}, ownersOf, qualified) {
-  const pkg = packageOfModule(module);
+  const pkg = packageOf(module);
   const root = module.split('/').at(-1) ?? '';
   for (const name of [imported, root]) {
     if (!imported.startsWith(name) || !ownersOf(name).includes(pkg)) continue;
     return qualified ? `${pkg}/${name}` : name;
   }
   return null;
-}
-
-/**
- * The package an import specifier names: `@scope/name` for a scoped one,
- * else its first segment.
- * @param {string} module
- * @returns {string}
- */
-function packageOfModule(module) {
-  const parts = module.split('/');
-  return module.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
 export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
