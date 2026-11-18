@@ -61,8 +61,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   Android plays the view feedback its API level has (OQ1).
 - `AstryxClipboard`: no capability gap. The module gives the result
   vocabulary with no extra dependency (OQ1).
-- `AstryxPlatformInfo`: the binary's own contract facts (component revisions,
-  linked capabilities, named features), which only the binary can report.
+- `AstryxPlatformInfo`: the binary's own contract facts (linked capabilities
+  and named features), which only the binary can report.
 - `AstryxPermissions`: a small gap. A closed set of permissions tied to the
   capabilities, with `not-declared` where the system would end the app (OQ1).
 - `AstryxBack`: React Native's activity takes every back press, so Android's
@@ -82,7 +82,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `AstryxProvider` and every component styled with `createStyles` (`./styles` entry); through the library's system-settings hook also `BottomSheet`, `Popover`, `Overlay`, `HoverCard`, `ContextMenu`, `Switch`, `SegmentedControl`, `ProgressBar`, `Carousel`, `TabBar`, `TopNav`, `Header`, `Toolbar`, `Table`, `Item`, `Markdown`, `SearchField`, `BarButton`, `Button` and the glass and material surfaces; app API `useAccessibilitySettings` | Drawn bars, sheets and menus turn opaque under Reduce Transparency, show borders under Show Borders, and cross-fade under Reduce Motion. |
 | `AstryxHaptics`               | native module (Turbo Native Module) | Through the library's moment table (`useHaptics`): `Button`, `Switch`, `Slider`, `SegmentedControl`, `Selector`, `TabList`, `ToggleButton`, `Toast`, `BottomSheet`, `InlineSheet`, `ContextMenu`, `ReorderableList`, `Item` swipe actions, `Calendar`'s picker field, `DonutChart` and the charts                                                                                                                                                | A tick on a selection change, a click on a toggle, a bump at a slider's end, a threshold tick in a swipe.                                |
 | `AstryxClipboard`             | native module (Turbo Native Module) | `PasteButton` (reads on the person's press); `CodeBlock`, `Chat` message actions and `Timestamp` through the library's copy hook (`useCopy`)                                                                                                                                                                                                                                                                                                     | A copy button shows its check glyph and announces "Copied"; a paste fills the field.                                                     |
-| `AstryxPlatformInfo`          | native module (Turbo Native Module) | Its revision and feature probes: every component that renders an `Icon` (where icon images load), the system menu of `ContextMenu`, `DropdownMenu` and `Selector`, the native presentation host of `BottomSheet` and modal windows, `Item` (native swipe-row support), the router's stack navigator (modal presentation kinds, header search field, stack host), the zoom pager gesture, and `useComponentRevision`; app API                     | Nothing directly: each component picks the native path the binary has, or its drawn fallback.                                            |
+| `AstryxPlatformInfo`          | native module (Turbo Native Module) | Its named-feature probes: every component that renders an `Icon` (where icon images load), the system menu of `ContextMenu`, `DropdownMenu` and `Selector`, the native presentation host of `BottomSheet` and modal windows, `Item` (native swipe-row support), the router's stack navigator (modal presentation kinds, header search field, stack host), and the zoom pager gesture; app API                                                    | Nothing directly: each component picks the native path the binary has, or its drawn fallback.                                            |
 | `AstryxPermissions`           | native module (Turbo Native Module) | No library component. `CameraView` (`./camera` entry) reads it; app API `useCameraPermission`                                                                                                                                                                                                                                                                                                                                                    | The system prompt appears only when the app asks, never when a view mounts.                                                              |
 | `AstryxBack`                  | native module (Turbo Native Module) | Through the library's back handling: `AppShell`, `SearchField`, the router's stack navigator (back, modals, header search field), and the dismissible layers `BottomSheet`, `Drawer`, `Popover`, `HoverCard`, `ContextMenu`, `DropdownMenu`, `Selector`, `SplitView`, `TabMenu`, `TopNav` menus                                                                                                                                                  | Back closes the open sheet or menu first; at the root, Android plays its back-to-home animation.                                         |
 | `AstryxLaunch`                | native module (Turbo Native Module) | The router (its root's first state and its first focused screen's layout) and `AstryxPerformance.markFirstFrame`                                                                                                                                                                                                                                                                                                                                 | On Android the launch screen stays until the first screen is drawn, and a cold deep link opens on its own screen.                        |
@@ -127,27 +127,28 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` have
   no public object: the library is their one caller.
 
-  | Contract                      | Kind                                | Methods                                                                                                                     | Platforms    |
-  | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxAppearance`            | native module (Turbo Native Module) | `getConstants` (`initialOverride`), `setOverride`, `getRunOverride`                                                         | iOS, Android |
-  | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `getConstants` (`initialSettings`), `getSettings`, `onSettingsChange` (event)                                               | iOS          |
-  | `AstryxHaptics`               | native module (Turbo Native Module) | `getConstants`, `isSupported`, `play`, `prepare`                                                                            | iOS, Android |
-  | `AstryxClipboard`             | native module (Turbo Native Module) | `getConstants`, `isSupported`, `write`, `getString`, `detectPatterns`                                                       | iOS, Android |
-  | `AstryxPlatformInfo`          | native module (Turbo Native Module) | `getConstants` (`app`, `capabilities`, `components`, `contractFeatures`, `launch`), `getInfo`, `getMemory`, `getBundleSize` | iOS, Android |
-  | `AstryxPermissions`           | native module (Turbo Native Module) | `getConstants`, `get`, `request`                                                                                            | iOS, Android |
-  | `AstryxBack`                  | native module (Turbo Native Module) | `getConstants`, `setRootBackEnabled`                                                                                        | Android      |
-  | `AstryxFilePicker`            | native module (Turbo Native Module) | `getConstants`, `getSources`, `pick`                                                                                        | iOS, Android |
-  | `AstryxStorage`               | native module (Turbo Native Module) | `getConstants`, `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`, `getInfo`                                        | iOS, Android |
-  | `AstryxLaunch`                | native module (Turbo Native Module) | `getConstants`, `firstContent`, `initialURL`                                                                                | Android      |
+  | Contract                      | Kind                                | Methods                                                                                                       | Platforms    |
+  | ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ |
+  | `AstryxAppearance`            | native module (Turbo Native Module) | `getConstants` (`initialOverride`), `setOverride`, `getRunOverride`                                           | iOS, Android |
+  | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `getConstants` (`initialSettings`), `getSettings`, `onSettingsChange` (event)                                 | iOS          |
+  | `AstryxHaptics`               | native module (Turbo Native Module) | `getConstants`, `isSupported`, `play`, `prepare`                                                              | iOS, Android |
+  | `AstryxClipboard`             | native module (Turbo Native Module) | `getConstants`, `isSupported`, `write`, `getString`, `detectPatterns`                                         | iOS, Android |
+  | `AstryxPlatformInfo`          | native module (Turbo Native Module) | `getConstants` (`app`, `capabilities`, `contractFeatures`, `launch`), `getInfo`, `getMemory`, `getBundleSize` | iOS, Android |
+  | `AstryxPermissions`           | native module (Turbo Native Module) | `getConstants`, `get`, `request`                                                                              | iOS, Android |
+  | `AstryxBack`                  | native module (Turbo Native Module) | `getConstants`, `setRootBackEnabled`                                                                          | Android      |
+  | `AstryxFilePicker`            | native module (Turbo Native Module) | `getConstants`, `getSources`, `pick`                                                                          | iOS, Android |
+  | `AstryxStorage`               | native module (Turbo Native Module) | `getConstants`, `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`, `getInfo`                          | iOS, Android |
+  | `AstryxLaunch`                | native module (Turbo Native Module) | `getConstants`, `firstContent`, `initialURL`                                                                  | Android      |
 
 - **FR2 — Constants are synchronous; everything else is a result.**
   - What the system knows at launch is a launch value, read once and then
     answered synchronously: the saved appearance and the run's override, the
     accessibility snapshot, the app's version, build, identifier and install
-    time, the linked capabilities, the component revisions, the named contract
-    features, and the process start. Synchronous members (`isAvailable()`,
+    time, the linked capabilities, the named contract features, and the
+    process start. Synchronous members (`isAvailable()`,
     `getOverride()`, `getRunOverride()`, `current()`, `app`,
-    `capabilities`, `launch`, `componentRevision(name)`) never throw; they
+    `capabilities`, `launch`, and `AstryxLaunch`'s `initialURL()`) never
+    throw; they
     answer `null`, `'system'`, or all-false where the module or the constant is
     absent.
   - Every asynchronous call resolves `AstryxResult` and never rejects
@@ -165,7 +166,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     | `AstryxStorage`               | `invalid-key`, `invalid-value`, `invalid-json`, `no-space`, `io`, `no-namespace` |
 
   - `AstryxHaptics.play` and `prepare` return nothing: they play or do nothing,
-    and `isAvailable()` says which. `AstryxBack` and `AstryxLaunch` calls
+    and `isAvailable()` says which. `setRootBackEnabled` and `firstContent`
     return nothing either; they are hints that the native side may ignore.
 
 - **FR3 — Change events start with the first subscriber and stop after the
@@ -263,12 +264,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   - Constants: `app` (version, build, identifier, and `installedAt` in ISO
     8601 UTC: the bundle container's creation date on iOS,
     `PackageInfo.lastUpdateTime` on Android), `capabilities` (the opted-in
-    capabilities this binary links; `[]` for core only), `components` (each
-    native component's revision), `contractFeatures` (the named contract
+    capabilities this binary links; `[]` for core only), `contractFeatures` (the named contract
     features, FR17), and `launch` (`processStartedAt` in epoch milliseconds,
     and `isPrewarmed`, always false on Android). `packageVersion` is the
     JavaScript package's version.
-  - `get()` answers the platform, the calling runtime's namespace, the components, the per-platform feature rows
+  - `get()` answers the platform, the calling runtime's namespace, the per-platform feature rows
     (`<capability>.<behaviour>`, with `isSupported` and a note), and the
     self-checks of the platform internals the package relies on (`compat`).
     `supports(name)` reads a feature row from the last answer and is `null`
@@ -360,9 +360,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     and the free space (`null` when the platform does not say).
   - Every call works in the calling runtime's namespace, decided natively and
     never by JavaScript; `info()` names it.
-  - Values are kept across launches: one file per key in Application Support
-    on iOS and in the app's internal files directory on Android. The package
-    sets no size limit; only the device's free space limits a value.
+  - Values are kept across launches in storage the system keeps for the app.
+    The package sets no size limit; only the device's free space limits a
+    value.
   - The router's state persistence uses it as its default store, and the app
     update check keeps its "Not now" in the app's namespace.
 
@@ -432,7 +432,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 | `AstryxPlatformInfo`          | Bundle info, `sysctl` process start, `ActivePrewarm`, `task_vm_info`                              | `PackageInfo`, `Process.getStartElapsedRealtime()`, `Debug.MemoryInfo`, APK sizes            |
 | `AstryxPermissions`           | `AVCaptureDevice` authorization                                                                   | Runtime permission with its "don't ask again" state; `PermissionsAndroid` without the module |
 | `AstryxFilePicker`            | `PHPickerViewController`, `UIDocumentPickerViewController`                                        | Photo Picker, Storage Access Framework                                                       |
-| `AstryxStorage`               | One file per key in Application Support                                                           | One file per key in the internal files directory                                             |
+| `AstryxStorage`               | Application Support                                                                               | The app's internal files directory                                                           |
 | Cache location (FR14)         | The app's Caches directory                                                                        | The app's cache directory                                                                    |
 | `AstryxBack`                  | No module (native back)                                                                           | `OnBackPressedCallback` on the shell activity, enabled by the gate                           |
 | `AstryxLaunch`                | No module (the launch screen stays until the first frame)                                         | The shell activity holds the launch window; synchronous launch intent data                   |
