@@ -13899,6 +13899,66 @@ export function paddedParts(ctx, part) {
 }
 
 /**
+ * The square a member of the checks group sizes itself (a checkbox's box, a
+ * radio's circle), at a size: its width and height in px, from the theme's
+ * latest plain setting of each on the part or a group it is in (a setting
+ * for that size counts too), else what the part data records Core drawing at
+ * that size. Null for a part outside the checks group, one that reads a size
+ * token or sets no width and height of its own, and for a size neither the
+ * theme nor the part data gives in px.
+ * @param {any} C the part census
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} part
+ * @param {string} [size] the size value (`md`); none: the size drawn
+ * @returns {{w: number, h: number} | null}
+ */
+export function selfSizedBox(C, settings, part, size) {
+  if (!(FAMILIES.checks ?? []).includes(part)) return null;
+  if ((C.partReads(part, 'size') ?? []).length) return null;
+  const at = C.MAP[part]?.at ?? {};
+  if (!Object.hasOwn(at, 'width') || !Object.hasOwn(at, 'height')) return null;
+  const ons = [
+    part,
+    ...Object.keys(FAMILIES).filter(g => FAMILIES[g].includes(part)),
+  ];
+  /** @param {unknown} v */
+  const px = v => {
+    const m = /^\s*(\d*\.?\d+)px\s*$/.exec(String(v));
+    return m ? Number(m[1]) : null;
+  };
+  /** @param {string} k */
+  const core = k => {
+    const rows = Object.entries(at[k] ?? {}).filter(
+      ([cond, v]) =>
+        !/:/.test(cond) &&
+        px(v) != null &&
+        (size == null || cond.split(',').includes(`size=${size}`)),
+    );
+    rows.sort((a, b) => a[0].split(',').length - b[0].split(',').length);
+    return rows[0] ? px(rows[0][1]) : null;
+  };
+  /** @param {string} k */
+  const own = k => {
+    const st = [...settings]
+      .reverse()
+      .find(
+        x =>
+          x.thing === k &&
+          ons.includes(String(x.on)) &&
+          !x.state &&
+          !x.mode &&
+          (!x.when || (size != null && x.when === `size:${size}`)),
+      );
+    return st ? {v: px(st.value)} : null;
+  };
+  const ow = own('width');
+  const oh = own('height');
+  const w = ow ? ow.v : core('width');
+  const h = oh ? oh.v : core('height');
+  return w != null && h != null ? {w, h} : null;
+}
+
+/**
  * Whether a part is drawn as a radio's mark, as the part data records it:
  * a part with a checked state and a square box of a fixed size.
  * @param {any} C the part census

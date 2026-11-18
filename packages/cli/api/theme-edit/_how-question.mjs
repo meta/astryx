@@ -59,6 +59,7 @@ import {
 import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
+  selfSizedBox,
   pillShapes,
   DIAL_RADII,
   borderParts,
@@ -25657,34 +25658,11 @@ export function draftAnswer(ctx, env, question) {
               options: [[set('width', len, f), set('height', len, f)]],
               sequence: true,
             };
-          // ("smaller checkboxes", "bigger radios": a square box that sets
-          // its own width and height and reads no size token is that square
-          // one step, 4px, from the size it draws at rest, as a control
-          // height steps; spacing never reaches it. Core draws the marks
-          // inside it as a share of the box.)
-          // (The theme's own size first: its setting on the part, or on a
-          // group the part is in; else the size Core draws at rest.)
-          const rest = (/** @type {string} */ k) => {
-            const own = [
-              on,
-              one(on),
-              ...Object.keys(FAMILIES).filter(g =>
-                FAMILIES[g].includes(one(on)),
-              ),
-            ]
-              .map(o => partValue(o, k))
-              .find(v => v != null && lengthPx(String(v)) != null);
-            if (own != null) return lengthPx(String(own));
-            const sized = Object.entries(at[k] ?? {}).filter(
-              ([cond, v]) =>
-                !/:/.test(cond) && /^\s*\d*\.?\d+px\s*$/.test(String(v)),
-            );
-            sized.sort(
-              (a, b) => a[0].split(',').length - b[0].split(',').length,
-            );
-            return sized[0] ? lengthPx(String(sized[0][1])) : null;
-          };
-          const now = rest('width');
+          // ("smaller checkboxes", "bigger radios": the square a member of
+          // the checks group sizes itself steps 4px, at each of its sizes
+          // from that size's own value, the theme's first (selfSizedBox);
+          // spacing never reaches it. A size whose value the editor does not
+          // know is named, never given another size's value.)
           if (
             !len &&
             c.dir &&
@@ -25693,19 +25671,40 @@ export function draftAnswer(ctx, env, question) {
             !/\b(?:wide|wider|narrower|width|tall|taller|shorter|height)\b/.test(
               c.text,
             ) &&
-            now != null &&
-            rest('height') != null &&
-            !(C.partReads(one(on), 'size') ?? []).length
+            selfSizedBox(C, env.data.settings, one(on)) != null
           ) {
-            const tallNow = /** @type {number} */ (rest('height'));
+            const all = C.variantValues(one(on)).size ?? [];
+            const named = /^size:(.+)$/.exec(String(f.when ?? ''))?.[1];
+            const sizes = named ? [named] : all.length > 1 ? all : [undefined];
             const step = c.dir === 'less' ? -4 : 4;
-            const [w, h] = [now + step, tallNow + step];
-            if (w > 0 && h > 0)
+            /** @type {Step[]} */
+            const steps = [];
+            /** @type {string[]} */
+            const said = [];
+            /** @type {string[]} */
+            const unknown = [];
+            for (const sz of sizes) {
+              const box = selfSizedBox(C, env.data.settings, one(on), sz);
+              if (!box) {
+                if (sz) unknown.push(sz);
+                continue;
+              }
+              const [w, h] = [box.w + step, box.h + step];
+              if (w <= 0 || h <= 0) continue;
+              const flags =
+                sz && all.length > 1 ? {...f, when: `size:${sz}`} : f;
+              steps.push(
+                set('width', `${w}px`, flags),
+                set('height', `${h}px`, flags),
+              );
+              said.push(
+                `${sz ? `${sz} ` : ''}${w === h ? `${w}px` : `${w}px by ${h}px`} (now ${box.w === box.h ? `${box.w}px` : `${box.w}px by ${box.h}px`})`,
+              );
+            }
+            if (steps.length)
               return {
-                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: ${w === h ? `width and height ${w}px` : `width ${w}px and height ${h}px`} (now ${now === tallNow ? `${now}px` : `${now}px by ${tallNow}px`}), one 4px step, as it sets them itself`,
-                options: [
-                  [set('width', `${w}px`, f), set('height', `${h}px`, f)],
-                ],
+                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: width and height one 4px step at each size, as it sets them itself: ${said.join(', ')}${unknown.length ? `; ${unknown.join(', ')}: no size the editor knows, so it keeps its own (give one, such as width 16px --on ${on} --when size:${unknown[0]})` : ''}`,
+                options: [steps],
                 sequence: true,
               };
           }
