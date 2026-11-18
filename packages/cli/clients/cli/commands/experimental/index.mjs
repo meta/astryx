@@ -69,6 +69,15 @@ export function experimentalSubcommandOf(program, argv) {
  *   of a run of this group alone: load only the subcommand they name
  */
 export async function registerExperimental(program, {argv} = {}) {
+  // Each subcommand's module loads before the group is defined: a module
+  // that fails to load then fails the whole group, and the root registers
+  // its stand-in, as it does for a command that fails to load.
+  const only = experimentalSubcommandOf(program, argv);
+  const registrars = [];
+  for (const command of SUBCOMMANDS) {
+    if (only == null || command.name === only)
+      registrars.push(await command.load());
+  }
   /** @type {import('commander').Command} */
   const experimental = defineCommand(program, experimentalGroup, {
     action: (
@@ -92,11 +101,7 @@ export async function registerExperimental(program, {argv} = {}) {
       return NO_RESULT_SET;
     },
   });
-  const only = experimentalSubcommandOf(program, argv);
-  for (const command of SUBCOMMANDS) {
-    if (only != null && command.name !== only) continue;
-    (await command.load())(experimental, program);
-  }
+  for (const register of registrars) register(experimental, program);
   for (const [old, renamed] of Object.entries(RENAMED_EXPERIMENTAL)) {
     // Hidden, and never runs the command: the old name's line, and its help,
     // fail and name the new one, whatever options follow it, in text and in
