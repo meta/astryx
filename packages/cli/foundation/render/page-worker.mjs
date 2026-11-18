@@ -228,6 +228,66 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
+/**
+ * The real folders of the packages that a `node_modules` folder links to
+ * inside the folder whose modules the page carries (`npm link`, a `file:`
+ * dependency). Node loads such a package's modules by their real path, so
+ * they read as the page's own. They compile as the page's own do, but the
+ * file does not carry them, because the page imports them by the package's
+ * name. The search covers each `node_modules` folder that Node reads for the
+ * page's imports, from the page's folder up. A link to a folder that holds
+ * the page is not a package of the page's. Empty when no link leads into
+ * the carried folder.
+ * @returns {string[]} each folder, with a trailing separator
+ */
+function linkedPackageRoots() {
+  /** @type {Set<string>} */
+  const roots = new Set();
+  /** @param {string} link */
+  const addIfLinkedIn = link => {
+    let real;
+    try {
+      if (!fs.lstatSync(link).isSymbolicLink()) return;
+      real = fs.realpathSync(link);
+    } catch {
+      return;
+    }
+    const folder = real + path.sep;
+    if (isLocal(folder) && !entry.startsWith(folder)) roots.add(folder);
+  };
+  for (let dir = path.dirname(entry); ; dir = path.dirname(dir)) {
+    const modules = path.join(dir, 'node_modules');
+    /** @type {string[]} */
+    let names = [];
+    try {
+      names = fs.readdirSync(modules);
+    } catch {
+      // No node_modules folder here.
+    }
+    for (const name of names) {
+      const at = path.join(modules, name);
+      if (!name.startsWith('@')) {
+        addIfLinkedIn(at);
+        continue;
+      }
+      try {
+        for (const scoped of fs.readdirSync(at)) addIfLinkedIn(path.join(at, scoped));
+      } catch {
+        // A scope that cannot be read holds no package that Node can load.
+      }
+    }
+    if (path.dirname(dir) === dir) break;
+  }
+  return [...roots];
+}
+const LINKED_ROOTS = linkedPackageRoots();
+
+/** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
+const inLinkedPackage = file => LINKED_ROOTS.length > 0 && LINKED_ROOTS.some(root => file.startsWith(root));
+
+/** A local file that the rendered file carries: one of the page's own, not a linked package's. @param {string} file */
+const isCarried = file => isLocal(file) && !inLinkedPackage(file);
+
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
 /** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
@@ -743,7 +803,7 @@ function pagePlugin(filename, browser = false) {
               /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
               throw err;
             }
-            if (!localFiles.includes(file)) localFiles.push(file);
+            if (!inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
             // The text is the module's default export, as Vite gives it, to
             // every way of importing it.
             const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
@@ -771,7 +831,7 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.json$/i.test(bare) && (bare.startsWith('.') || path.isAbsolute(bare))) {
           const file = path.resolve(dir, bare);
-          if (fs.existsSync(file) && !localFiles.includes(file)) localFiles.push(file);
+          if (fs.existsSync(file) && !inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
         }
         if (/\.(css|scss|sass|less)$/i.test(bare) && (/\.module\.[a-z]+$/i.test(bare) || p.node.specifiers.length > 0)) {
           // CSS Modules (any stylesheet imported as a value) give class names
@@ -823,7 +883,7 @@ function pagePlugin(filename, browser = false) {
             }
             if (/\.css$/i.test(bare) && fs.existsSync(file) && !importedCss.some(c => c.file === file)) {
               importedCss.push({file, css: fs.readFileSync(file, 'utf8')});
-              if (!localFiles.includes(file)) localFiles.push(file);
+              if (!inLinkedPackage(file) && !localFiles.includes(file)) localFiles.push(file);
             }
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
@@ -1140,7 +1200,7 @@ const jiti = createJiti(entry, {
  */
 function compilePageModule(source, filename, browser = false) {
   if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-    if (!localFiles.includes(filename)) localFiles.push(filename);
+    if (!inLinkedPackage(filename) && !localFiles.includes(filename)) localFiles.push(filename);
     moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
@@ -1211,7 +1271,7 @@ function transformModule(opts) {
   // Without this, no file reads as local there and none is transformed.
   const filename = opts.filename ? path.normalize(opts.filename) : '';
   let source = opts.source;
-  if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
+  if (filename && isCarried(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
     localFiles.push(filename);
   }
   const compiled = filename ? compilePageModule(source, filename) : null;
@@ -1883,7 +1943,7 @@ try {
       if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
-      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isCarried(target) && !localFiles.includes(target)) {
         localFiles.push(target);
       } else if (
         target &&
