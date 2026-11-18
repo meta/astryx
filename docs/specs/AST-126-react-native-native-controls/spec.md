@@ -343,8 +343,7 @@ edit through React Native's `TextInput` directly.
   control in its place (`spec:AST-112/FR7`, `spec:AST-140/FR2`). A dialog call
   on a binary without the module resolves `not-linked` or `no-module`
   (`spec:AST-112/FR3`, `spec:AST-140/FR3`).
-- **FR15 — The contracts follow the platform's evolution rules.** Each
-  contract's baseline is its first release's shape (`spec:AST-140/FR5`). A
+- **FR15 — The contracts follow the platform's evolution rules.** Each contract keeps the baseline that `spec:AST-140/FR5` sets. A
   later behaviour is a named feature that the JavaScript checks before it uses
   it, keeping the baseline behaviour or answering `unsupported` without it.
 - **FR16 — Native code uses public platform API only.** The controls' native
@@ -407,8 +406,7 @@ FR7's results.
 - Relies on `spec:AST-112` FR5 (amended): the native controls and the gesture
   views are internal; `./controls` holds the library's components whose
   native half they are.
-- Relies on `spec:AST-140/FR5`: each contract's baseline is its first
-  release's shape, and later behaviour is a named feature.
+- Relies on `spec:AST-140/FR5`: each contract keeps the baseline that `spec:AST-140/FR5` sets, and later behaviour is a named feature.
 - Departs from `spec:AST-082/FR11` on Android: Slider and SegmentedControl,
   and a Button or TextInput with an icon, draw the Astryx control where
   Material 3 has its own. OQ2 asks whether this stands.
