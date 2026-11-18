@@ -491,6 +491,11 @@ export const STATUS_STOPS = /** @type {const} */ ({
   warningFill: [85, 85],
   text: [45, 80],
   muted: [85, 75],
+  /**
+   * Warning's light fill already sits at the pale stop the other tints
+   * take: its tint is paler still, so the two stay apart.
+   */
+  warningMuted: [90, 75],
   /** The dark tint is see-through, as the official neutral theme's is. */
   mutedDarkAlpha: '3D',
   onMuted: [25, 80],
@@ -614,7 +619,11 @@ export function deriveStatusColors({
       return at(m, s0);
     });
     const muted = each(m => {
-      const stop = near(STATUS_STOPS.muted[m === 'light' ? 0 : 1]);
+      const stop = near(
+        (bright ? STATUS_STOPS.warningMuted : STATUS_STOPS.muted)[
+          m === 'light' ? 0 : 1
+        ],
+      );
       const solid = at(m, stop);
       return m === 'dark'
         ? {
