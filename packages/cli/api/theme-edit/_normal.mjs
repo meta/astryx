@@ -1976,3 +1976,91 @@ export function typoNear(typed, word) {
     }) <= limit
   );
 }
+
+/**
+ * Words besides the color reader's shade words that a color said by itself
+ * may carry beside its hue ("a deep dark plum", "near-black", "warm
+ * brown-black", "chocolate brown").
+ */
+const TONE_WORDS = new Set([
+  'a',
+  'an',
+  'warm',
+  'cool',
+  'dusty',
+  'muted',
+  'very',
+  'near',
+  'almost',
+  'off',
+  'bright',
+  'chocolate',
+  'charcoal',
+  'inky',
+  'midnight',
+  'smoky',
+  'black',
+  'white',
+  'gray',
+  'grey',
+  'ivory',
+  'cream',
+  'beige',
+]);
+
+/**
+ * A hue said for one mode's page, or for everything, as the page it
+ * means: "dark mode should be a deep dark plum" and "light mode is pale
+ * blush" are that mode's page ("page … in dark mode"), whose answer takes
+ * the color at the page's own lightness there; "dark mode goes near-black
+ * with a purple tint" is the tint's hue; "blush pink everything" is the
+ * page. Never a theme of one mode, or an accent. Only a color said by
+ * itself, said at the start of its clause (or of a line or a list item)
+ * and ending it, is read so: a
+ * phrase with a part, role or token word ("a red accent", "blue links", "red for errors"), one a
+ * "with", "and" or "but" goes on from, and a gray, are left as said.
+ * @param {string} question
+ * @param {(word: string) => boolean} isHue
+ * @param {(word: string) => boolean} isShade the color reader's shade words
+ * @returns {string}
+ */
+export function colorsSaidForPages(question, isHue, isShade) {
+  /** @param {string} words */
+  const wordsOf = words =>
+    words
+      .toLowerCase()
+      .split(/[\s-]+/)
+      .filter(Boolean);
+  // (A gray is the theme's own neutral, not a hue to tone.)
+  /** @param {string} w */
+  const hue = w => isHue(w) && !/^gr[ae]y$/.test(w);
+  /** A color by itself: every word a hue or a tone word, one a hue. @param {string} words */
+  const colorAlone = words =>
+    wordsOf(words).some(hue) &&
+    wordsOf(words).every(w => hue(w) || isShade(w) || TONE_WORDS.has(w));
+  return question
+    .replace(
+      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+(?:a\s+|an\s+)?((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?=\s*[,.;!\n]|\s*$)/gi,
+      (m, lead, mode, phrase, tint) => {
+        // (With a tint, the tint gives the hue; the rest is tone words.)
+        const said = tint
+          ? colorAlone(String(tint)) &&
+            wordsOf(String(phrase)).every(
+              w => hue(w) || isShade(w) || TONE_WORDS.has(w),
+            )
+          : colorAlone(String(phrase));
+        return said
+          ? `${lead}page ${String(tint ?? phrase).trim()} in ${mode} mode`
+          : m;
+      },
+    )
+    .replace(
+      /(^\s*(?:[-*•]\s+)?|[,.;!\n]\s*(?:[-*•]\s+)?)((?:[a-z]+\s+)?[a-z]+(?:\s+[a-z]+)?)\s+everything\b/gi,
+      // (A warm or cool look said for everything is the neutral's grays,
+      // as the reader already takes it: "warm beige everything".)
+      (m, lead, color) =>
+        colorAlone(String(color)) && !/\b(?:warm|cool)\b/i.test(String(color))
+          ? `${lead}${color} page`
+          : m,
+    );
+}

@@ -157,6 +157,8 @@ export const HUES = wordTable(
     forest: '#166534',
     ruby: '#be123c',
     plum: '#7e22ce',
+    blush: '#f4c2c2',
+    raspberry: '#c2185b',
     lavender: '#c4b5fd',
     peach: '#fdba74',
     ivory: '#fffff0',
