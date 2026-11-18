@@ -69,7 +69,7 @@ app that prefers an ecosystem library can still use it beside these modules
 | ---------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxSecureStorage`  | native module (Turbo Native Module) | No Astryx component. App API only, from the add-on package: an app that signs in keeps its tokens here.                                                                                                                                                                                                           | The app opens signed in after a relaunch; Face ID or the passcode appears before a secret the app protects with it.                                      |
 | `AstryxClientIdentity` | native module (Turbo Native Module) | No Astryx component. App API only, from the add-on package: an app that enrols a device certificate. The platform's networking presents a bound identity on the app's `fetch`, `XMLHttpRequest`, `Image`, WebSocket, and `AstryxFiles` downloads; the `web` capability presents it in web views (`spec:AST-131`). | A work app reaches servers that require a device certificate with no certificate prompt; on Android, the system's certificate picker appears once.       |
-| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The `pdf` capability writes its page pictures (`PdfView` thumbnails) into the cache, and the camera, photo, recorder and image markup modules return their files there. App API, from the add-on package: `AstryxFiles` and `readBundledAsset` (OQ5).                      | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
+| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The core package owns the cache it reads: `CameraView` returns captured photos there, and the add-on's `PdfView` page pictures, photo export, recorder and image markup write there too (FR8). App API, from the add-on package: `AstryxFiles` and `readBundledAsset`.     | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
 
 ## Non-goals
 
@@ -243,9 +243,13 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     URL and size; `read(name, {encoding?})` and `remove(name)` complete it.
     Encodings are `utf8` (default) and `base64`. A name is one path component
     that does not start with a dot; anything else answers `invalid-name`.
-  - The cache is the module's own folder in the app's caches folder. The
-    system may delete cached files when space runs low; data that must last
-    belongs in `AstryxStorage`.
+  - The cache is one folder in the app's caches folder, and the core package
+    owns it: core pieces such as `CameraView` write their files there and
+    return `file://` URIs into it, and the add-on's modules (`PdfView` page
+    pictures, photo export, the recorder, image markup) write there too.
+    `AstryxFiles` reads, lists, trims, and shares that same folder. The system
+    may delete cached files when space runs low; data that must last belongs
+    in `AstryxStorage`.
   - `list({prefix?})` answers the folder's `file://` URL, its entries (name,
     URL, size, and last use), most recently used first, and the total bytes.
     A write, a read, and a download each count as use.
@@ -383,7 +387,8 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 | `AstryxFiles`          | The caches folder; `URLSession` downloads; `UIDocumentPickerViewController` in export mode; `UIActivityViewController` | The cache folder; React Native's HTTP client for downloads; the create-document picker; the share chooser through the module's own `FileProvider` |
 
 - Packaging: all three modules are part of the optional add-on package, not
-  the core package (FR1).
+  the core package (FR1); the cache location `AstryxFiles` works in belongs to
+  the core package (FR8).
 - Supported feature/engine floor: the platform floor of `spec:AST-112`
   (iOS at React Native's minimum, Android API level 24, the New Architecture
   only). Below Android API level 28, `accessibleClasses` omits
@@ -481,6 +486,16 @@ them.
 Rejected: wrapping an ecosystem library's native code, because every app
 would carry it and an app's own copy could conflict with it.
 
+### DEC-5 — The core package owns the cache; the files API is an add-on
+
+**Reference:** `spec:AST-133/DEC-5`
+**Decider:** imdreamrunner, 2026-11-17
+
+Core pieces such as `CameraView` hand back files, so the core package owns the
+cache location and returns URIs into it. The API that lists, reads, writes,
+removes, and shares those files serves apps, not components, so it stays in
+the optional add-on, and the add-on's modules write into the same cache.
+
 ## Open questions
 
 - **OQ1 — Does Android implement user presence for secure storage?**
@@ -506,10 +521,3 @@ would carry it and an app's own copy could conflict with it.
   group's. Options: a module of their own in this record, with
   `AstryxNetwork` keeping only the path state; or they stay in
   `AstryxNetwork` under `spec:AST-130`.
-- **OQ5 — Where does the files cache live?** (`human-design`) No Astryx
-  component calls `AstryxFiles`, but the `pdf` capability writes `PdfView`'s
-  page pictures into its cache, and the camera, photo, recorder and image
-  markup modules return their files there. Options: keep `AstryxFiles` in the
-  add-on package, with the core keeping only a cache folder those modules
-  write to; or move `AstryxFiles` into the core package because those modules
-  use its cache.
