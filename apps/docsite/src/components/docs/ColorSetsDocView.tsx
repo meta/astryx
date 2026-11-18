@@ -3,9 +3,9 @@
 'use client';
 
 /**
- * @file Color-set documentation with live, paired mode swatches.
- * @input Authored section tables and Neutral theme token resolution.
- * @output The same reference layout with visible colors and exact token labels.
+ * @file Color-set documentation with paired Neutral swatches.
+ * @input Authored section tables and canonical theme token resolution.
+ * @output Visible colors, token labels, and light/dark reference values.
  * @position The Color sets subpage under Data visualization.
  */
 
@@ -14,17 +14,20 @@ import {Card} from '@astryxdesign/core/Card';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Table, proportional} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
-import {Theme, useTheme} from '@astryxdesign/core/theme';
+import {resolveThemeTokens} from '@astryxdesign/core/theme/tokens';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import type {ContentBlock, DocSection} from '../../generated/docsRegistry';
-import {useResolveTokenForMode} from '../tokens/helpers';
 import {AnchorHeading} from './AnchorHeading';
 import {ContentBlockRenderer} from './ContentBlockRenderer';
 import {buildOutline, normalizeHeadingLevel} from './docOutline';
 import {ReferenceDocView, type SectionOverrides} from './ReferenceDocView';
 import {renderInlineMarkdown} from './inlineMarkdown';
 
+const modeTokens = {
+  light: resolveThemeTokens(neutralTheme, {mode: 'light'}),
+  dark: resolveThemeTokens(neutralTheme, {mode: 'dark'}),
+};
 const styles = stylex.create({
   surface: (color: string) => ({
     width: 28,
@@ -37,7 +40,7 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderColor: colorVars['--color-border-gray'],
   }),
-  value: (ink: string) => ({whiteSpace: 'nowrap', color: ink}),
+  value: {whiteSpace: 'nowrap'},
   token: {overflowWrap: 'anywhere'},
   fill: (color: string, strength: number) => ({
     width: '100%',
@@ -60,20 +63,17 @@ export function colorLabel(value: string, strength: number): string {
   return `color-mix(in srgb, ${value} ${strength * 100}%, transparent)`;
 }
 
-function ResolvedModePreview({
+function ModePreview({
   token,
   mode,
   strength,
-  ink,
 }: {
   token: string;
   mode: 'light' | 'dark';
   strength: number;
-  ink: string;
 }) {
-  const resolve = useResolveTokenForMode();
-  const color = resolve(token, mode);
-  const surface = resolve('--color-background-surface', mode);
+  const color = modeTokens[mode][token];
+  const surface = modeTokens[mode]['--color-background-surface'];
   if (!color || !surface) {
     throw new Error(`Cannot resolve ${token} in ${mode} mode`);
   }
@@ -86,31 +86,17 @@ function ResolvedModePreview({
         {...stylex.props(styles.surface(surface))}>
         <div {...stylex.props(styles.fill(color, strength))} />
       </div>
-      <Text type="code" color="secondary" xstyle={styles.value(ink)}>
+      <Text type="code" color="secondary" xstyle={styles.value}>
         {label}
       </Text>
     </HStack>
   );
 }
 
-function ModePreview(props: {
-  token: string;
-  mode: 'light' | 'dark';
-  strength: number;
-}) {
-  const theme = useTheme();
-  const ink = theme.token('--color-text-secondary');
-  return (
-    <Theme theme={neutralTheme} mode={props.mode}>
-      <ResolvedModePreview {...props} ink={ink} />
-    </Theme>
-  );
-}
-
 function ColorSetTable({block}: {block: ContentBlock}) {
   const headers = block.headers ?? [];
-  const tokenIndex = headers.indexOf('Token');
-  const strengthIndex = headers.indexOf('Strength');
+  const tokenIndex = headers.indexOf('Token'),
+    strengthIndex = headers.indexOf('Strength');
   if (tokenIndex < 0 || strengthIndex < 0) {
     throw new Error('Color-set tables require Token and Strength columns');
   }
