@@ -47,7 +47,7 @@ const columns: TableColumn<User>[] = [
 
 export default function TableShowcase() {
   return (
-    <Card width={600}>
+    <Card width={600} maxWidth="100%">
       <Table data={users} columns={columns} idKey="id" hasHover />
     </Card>
   );

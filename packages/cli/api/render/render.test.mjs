@@ -948,6 +948,15 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('reads a root-relative image from the public/ folder of a site that shares its project', async () => {
+    put('shared-site/public/pics/shoe.png', PNG);
+    put('shared-site/src/page.tsx', 'export default function Page() { return <img src="/pics/shoe.png" alt="Shoe" />; }\n');
+    const r = /** @type {any} */ (await render('shared-site/src/page.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
+    expect(r.data.files).toEqual(['src/page.tsx', 'public/pics/shoe.png']);
+    expect(fs.readFileSync(path.join(dir, 'shared-site/src/page.html'), 'utf8')).toMatch(/<img src="data:image\/png;base64,[^"]*" alt="Shoe"/);
+  }, 60_000);
+
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     'leaves out a named image it cannot read, and says so, instead of ending the render',
     async () => {
@@ -960,7 +969,7 @@ describe('render(): every write stays inside the current folder', () => {
         expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
         expect(result.data.warnings).toContainEqual({
           code: 'not-embedded',
-          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so --reverse cannot give it back.',
+          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so experimental import cannot give it back.',
         });
       } finally {
         fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o644);
@@ -2017,7 +2026,7 @@ describe('render --reverse: a received file may carry only what a render embeds'
     expect(r.data.warnings).toContainEqual({
       code: 'not-carried',
       message:
-        "package.json is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
+        "package.json is not carried: it is a tool's configuration, which experimental import never writes. The page shows what it reads from it, but experimental import cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
     });
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
@@ -2066,10 +2075,10 @@ describe('astryx experimental export (CLI)', () => {
         const line = rendered.stdout.split('\n').find(l => l.startsWith('Give it back: '));
         expect(line).toBeDefined();
         // The printed command, run as printed after the CLI's own name.
-        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental export ')[1];
+        const words = /** @type {string} */ (line).slice('Give it back: '.length).split(' experimental import ')[1];
         const args = [...words.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g)].map(m => (m[1] ?? m[2]).replace(/'\\''/g, "'"));
-        expect(args).toEqual(['--reverse', out, '--out', `${folder}/page.tsx`]);
-        const back = await runCli(['experimental', 'export', ...args], dir);
+        expect(args).toEqual([out, '--out', `${folder}/page.tsx`]);
+        const back = await runCli(['experimental', 'import', ...args], dir);
         expect(back.status, back.stderr).toBe(0);
         expect(fs.readFileSync(path.join(dir, folder, 'page.tsx'), 'utf8')).toBe(
           fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8'),
@@ -2518,15 +2527,15 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-carried',
       message:
-        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
+        "chart.config.json is not carried: its name reads as a tool's configuration, which experimental import never writes. The page shows it, but experimental import cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
     });
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     expect(html).toContain('Sales in USD');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (--reverse cannot give them back)\n');
+    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (experimental import cannot give them back)\n');
     expect(note).not.toContain('come back exactly');
-    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.');
+    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; experimental import gives back the rest.');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
@@ -2552,7 +2561,7 @@ describe('render(): a page outside a project', () => {
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     const note = html.slice(0, html.indexOf('-->'));
     const line = note.split('\n').find(l => l.trim().startsWith('Not carried:'));
-    expect(line?.trim().replace(/^Not carried: | \(--reverse cannot give them back\)$/g, '').split(', ').sort()).toEqual([
+    expect(line?.trim().replace(/^Not carried: | \(experimental import cannot give them back\)$/g, '').split(', ').sort()).toEqual([
       'chart.config.json',
       'fake.png',
       'rows.test.ts',
@@ -2594,12 +2603,12 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
     });
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html).toContain('North South');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
@@ -2702,6 +2711,22 @@ describe('render(): a page outside a project', () => {
     expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.png']);
   }, 60_000);
 
+  it('follows a TypeScript-style .js import in a module from outside the carried folder to its source', () => {
+    const tree = path.join(away, 'outside-ts-js');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south: string = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper.js';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8')).toContain('North South');
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
+  }, 60_000);
+
   it('in a project, tells the reader to move a file from outside the project inside it', () => {
     const tree = path.join(away, 'outside-project');
     fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
@@ -2718,7 +2743,7 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.",
+        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Move it inside the project's folder.",
     });
   }, 60_000);
 
@@ -2742,12 +2767,12 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
-        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and experimental import writes nothing outside it. The page shows it, but experimental import cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
     });
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html).toContain('North South');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: ../shared/rows.ts (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: ../shared/rows.ts (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
     // --reverse cannot resolve the alias, but the file records what the
     // render left out, so it names the module as missing.
@@ -2803,7 +2828,7 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: site.scss (experimental import cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.json.data.exact).toBe(false);
@@ -2830,6 +2855,93 @@ describe('render(): a page outside a project', () => {
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: true, files: expect.arrayContaining(['page-restored/page.tsx', 'page-restored/chart-data.json'])});
     expect(back.json.data).not.toHaveProperty('missing');
+  }, 60_000);
+
+  it('shows a root-relative image from the public/ folder of the folder it runs in, and gives it back there', () => {
+    const site = path.join(away, 'public-site');
+    fs.mkdirSync(path.join(site, 'public/pics'), {recursive: true});
+    fs.mkdirSync(path.join(site, 'src/pages/p'), {recursive: true});
+    fs.writeFileSync(path.join(site, 'public/pics/shoe.png'), PNG);
+    fs.writeFileSync(path.join(site, 'public/pics/bg.png'), PNG);
+    fs.writeFileSync(path.join(site, 'src/pages/p/page.css'), '.hero { background: url(/pics/bg.png); }\n');
+    fs.writeFileSync(
+      path.join(site, 'src/pages/p/page.tsx'),
+      "import './page.css';\nconst shoe = {src: '/pics/shoe.png'};\nexport default function Page() {\n  return <main className=\"hero\"><img src={shoe.src} alt=\"Shoe\" /></main>;\n}\n",
+    );
+    const run = runBin(site, ['experimental', 'export', 'src/pages/p/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
+    expect(run.json.data.files).toEqual(expect.arrayContaining(['public/pics/shoe.png', 'public/pics/bg.png']));
+    const html = fs.readFileSync(path.join(site, 'src/pages/p/page.html'), 'utf8');
+    const markup = html.slice(0, html.indexOf('<script'));
+    expect(markup).toContain('alt="Shoe"');
+    expect(markup).not.toMatch(/src="\/pics\//);
+    expect(markup).toMatch(/<img src="data:image\/png;base64,/);
+    expect(markup).not.toContain('url(/pics/bg.png)');
+    const back = runBin(site, ['experimental', 'export', '--reverse', 'src/pages/p/page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data.exact).toBe(true);
+    const restored = path.join(site, 'src/pages/p/page-restored');
+    expect(fs.readFileSync(path.join(restored, 'public/pics/shoe.png'))).toEqual(PNG);
+    expect(fs.readFileSync(path.join(restored, 'public/pics/bg.png'))).toEqual(PNG);
+    // The restored folder renders the same page, with its images.
+    const again = runBin(restored, ['experimental', 'export', 'src/pages/p/page.tsx']);
+    expect(again.status).toBe(0);
+    expect(again.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
+  }, 120_000);
+
+  it('reads a root-relative image only from public/: a path that climbs out of it, or a file not there, is named and left as is', () => {
+    const site = path.join(away, 'public-climb');
+    fs.mkdirSync(path.join(site, 'public'), {recursive: true});
+    fs.writeFileSync(path.join(site, 'secret.png'), PNG);
+    fs.writeFileSync(path.join(site, 'top.png'), PNG);
+    fs.writeFileSync(
+      path.join(site, 'page.tsx'),
+      'export default function Page() {\n  return <main><img src="/../secret.png" alt="" /><img src="/top.png" alt="" /><img src="/gone.png" alt="" /></main>;\n}\n',
+    );
+    const run = runBin(site, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    const missing = run.json.data.warnings.filter((/** @type {any} */ w) => w.code === 'missing-asset').map((/** @type {any} */ w) => w.message);
+    expect(missing).toEqual([
+      "/../secret.png was not found in public/, where a path from the site's root is read, so it is left as is and will not show.",
+      "/top.png was not found in public/, where a path from the site's root is read, so it is left as is and will not show.",
+      "/gone.png was not found in public/, where a path from the site's root is read, so it is left as is and will not show.",
+    ]);
+    const html = fs.readFileSync(path.join(site, 'page.html'), 'utf8');
+    expect(html).not.toContain('data:image/png');
+  }, 60_000);
+
+  it('names public/ from the page\'s folder in a missing-image warning, also for a stylesheet in another folder', () => {
+    const site = path.join(away, 'public-from-page');
+    fs.mkdirSync(path.join(site, 'public'), {recursive: true});
+    fs.mkdirSync(path.join(site, 'src/pages/p'), {recursive: true});
+    fs.mkdirSync(path.join(site, 'src/styles'), {recursive: true});
+    fs.writeFileSync(path.join(site, 'src/styles/a.css'), '.hero { background: url(/gone-bg.png); }\n');
+    fs.writeFileSync(
+      path.join(site, 'src/pages/p/page.tsx'),
+      "import '../../styles/a.css';\nexport default function Page() {\n  return <main className=\"hero\"><img src=\"/gone.png\" alt=\"\" /></main>;\n}\n",
+    );
+    const run = runBin(site, ['experimental', 'export', 'src/pages/p/page.tsx']);
+    expect(run.status).toBe(0);
+    const missing = run.json.data.warnings.filter((/** @type {any} */ w) => w.code === 'missing-asset').map((/** @type {any} */ w) => w.message);
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        "/gone.png was not found in ../../../public/, where a path from the site's root is read, so it is left as is and will not show.",
+        "/gone-bg.png was not found in ../../../public/, where a path from the site's root is read, so it is left as is and will not show.",
+      ]),
+    );
+  }, 60_000);
+
+  it('finishes when the folder it runs in is the filesystem root and no public/ is above the page', () => {
+    const lone = path.join(away, 'from-root');
+    fs.mkdirSync(lone, {recursive: true});
+    const page = path.join(lone, 'page.tsx');
+    fs.writeFileSync(page, 'export default function Page() {\n  return <main><img src="/none.png" alt="" /></main>;\n}\n');
+    const root = path.parse(lone).root;
+    const run = runBin(root, ['experimental', 'export', path.relative(root, page), '--out', path.relative(root, path.join(lone, 'page.html'))]);
+    expect(run.status).toBe(0);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('missing-asset');
   }, 60_000);
 
   it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {

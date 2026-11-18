@@ -814,7 +814,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   };
   if (block.found && 'newer' in block) {
     const {format, cli} = block.newer;
-    const command = `${cliCommand(cli ?? 'latest')} experimental export --reverse ${shellArg(shown(cwd, input))}`;
+    const command = `${cliCommand(cli ?? 'latest')} experimental import ${shellArg(shown(cwd, input))}`;
     throw new AstryxError(
       `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
       [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
@@ -871,7 +871,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases, publicDir: source.publicDir});
       // A file the render could not carry is missing too, also when no
       // import here names it (an alias this reverse cannot resolve). An
       // import already in missing names one recorded file, the one it

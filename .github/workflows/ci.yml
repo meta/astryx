@@ -1414,9 +1414,98 @@ jobs:
         run: pnpm test:ui:isolated
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
+  # Builds the core package once for every test-node leg, which downloads the
+  # output instead of building it again. The output is every file the build
+  # writes under packages/core that git ignores. A specialized lane builds
+  # nothing and uploads nothing, as its legs skip their work.
+  build-core:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        id: checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Check out the scope action (second try)
+        id: checkout_again
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Stop when the checkout failed twice
+        if: steps.checkout.outcome != 'success' && steps.checkout.outcome != 'skipped' && steps.checkout_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - name: Check out the repository
+        id: checkout_2
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Check out the repository (second try)
+        id: checkout_2_again
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Stop when the checkout failed twice
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true') && steps.checkout_2.outcome != 'success' && steps.checkout_2.outcome != 'skipped' && steps.checkout_2_again.outcome != 'success'
+        run: |
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within its time bound; the two checkout steps above show why."
+          exit 1
+
+      - uses: ./.github/actions/setup
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      - name: Build core package
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Pack the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: |
+          git ls-files -z --others --ignored --exclude-standard -- packages/core ':!:packages/core/node_modules/**' > "$RUNNER_TEMP/core-output.list"
+          tar --null -T "$RUNNER_TEMP/core-output.list" -cf "$RUNNER_TEMP/core-build.tar"
+          echo "Packed $(tr -cd '\0' < "$RUNNER_TEMP/core-output.list" | wc -c) files."
+
+      - name: Upload the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-build
+          path: ${{ runner.temp }}/core-build.tar
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+          compression-level: 6
+
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [room, admission, heavy-ci]
+    needs: [room, admission, heavy-ci, build-core]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
@@ -1496,6 +1585,16 @@ jobs:
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
+
+      # This job runs even when build-core failed (its gate uses
+      # `!cancelled()`), so name the cause here before checkout and install.
+      - name: Stop when build-core did not build Core
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && needs.build-core.result != 'success'
+        env:
+          RESULT: ${{ needs.build-core.result }}
+        run: |
+          echo "::error title=Core build missing::build-core ended with '${RESULT}', so this leg has no Core build to test; see the build-core job."
+          exit 1
 
       # A spec-only change runs no other test here, so it runs the tests that
       # read a record it changes: a record such a test reads can break it, and
@@ -1582,10 +1681,20 @@ jobs:
       # unresolvable Core, an optional peer of the CLI, with a stub it caches
       # for the run: every theme-build test then fails with "Could not resolve
       # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
-      # setup then finds Core built and skips its own build.
-      - name: Build core package
+      # setup then finds Core built and skips its own build. build-core built it
+      # from this same commit; `-m` stamps the unpacked files with the time
+      # they land, after this job's checkout, so the global setup reads the
+      # build as fresh instead of rebuilding it.
+      - name: Download the core build output
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
-        run: pnpm -F @astryxdesign/core build
+        uses: actions/download-artifact@v8
+        with:
+          name: core-build
+          path: ${{ runner.temp }}
+
+      - name: Unpack the core build output
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: tar -m -xf "$RUNNER_TEMP/core-build.tar"
 
       # Scoped like test-ui's run. The shard watchdog
       # (scripts/vitest-shard-watchdog.mjs) fires a minute before the job's
@@ -3819,6 +3928,7 @@ jobs:
       # validation and the fast interaction guards in pr-a11y; they must not
       # pay for every component's browser bindings on every change.
       - name: Run accessibility spec-test contracts
+        id: contracts
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -3859,6 +3969,22 @@ jobs:
           name: component-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}
           path: test-results/chat-layout-audit-evidence/
           retention-days: 30
+          if-no-files-found: ignore
+
+      # A failing contract leaves error-context.md under test-results/, with a
+      # page snapshot only when its page is still open at the failure. A
+      # component audit closes its own page and writes the frames and receipt
+      # of every state it checked to <name>-audit-evidence/. This keeps both
+      # for the leg's attempt.
+      - name: Keep the failing contracts' Playwright results
+        if: failure() && steps.contracts.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-contracts-results-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            *-audit-evidence/
+          retention-days: 14
           if-no-files-found: ignore
 
   # Joins the contract shards for release-check: every shard must pass, and

@@ -724,6 +724,12 @@
             "available": true
           },
           {
+            "flag": "--to <places>",
+            "description": "<text>",
+            "type": "string",
+            "available": true
+          },
+          {
             "flag": "--remove-agents",
             "description": "<text>",
             "type": "boolean",
@@ -756,6 +762,7 @@
           "<text>"
         ],
         "examples": [
+          "<text>",
           "<text>",
           "<text>",
           "<text>",

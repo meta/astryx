@@ -204,6 +204,13 @@ const RUNNERS = {
       'import ../experimental-export.doc.mjs',
     ],
   },
+  'clients/cli/commands/experimental/import.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-import.doc.mjs',
+    ],
+  },
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
     sites: ['import ./manifest.doc.mjs'],
@@ -378,6 +385,10 @@ const RUNNERS = {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
+  'foundation/agent-docs/skill-place-files.mjs': {
+    runs: 'astryx.config, through the config parser, to read the skill places it saves (only the config, not its integrations)',
+    sites: ['loadModuleWithParser(..., parseConfig)'],
+  },
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
@@ -479,8 +490,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
-    sites: ['child_process.fork', 'child_process.spawnSync'],
+    runs: "the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, a one-line Intl.Segmenter check after a crash, and the naming module of the page's own Core, to keep the theme rules for the class names Core builds while the page runs",
+    sites: ['child_process.fork', 'child_process.spawnSync', 'importUrl'],
   },
   'foundation/render/page-host.mjs': {
     runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
