@@ -2,16 +2,19 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, the time limit, and drawing the overlays a page opens.
+ * HTML reader, the time limit, drawing the overlays a page opens, and the
+ * names a render does not carry.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage} from './render-page.mjs';
+import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -113,6 +116,16 @@ describe('the embedded source', () => {
       found: true,
       damaged: 'its embedded source is cut short: the file ends inside it',
     });
+  });
+});
+
+describe('the record of files a render could not carry', () => {
+  it('round-trips through the embedded source, and is left out when empty', () => {
+    const files = [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}];
+    const read = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: ['../shared/rows.ts', 'site.scss']})}</body>`);
+    expect(read).toMatchObject({found: true, source: {notCarried: ['../shared/rows.ts', 'site.scss']}});
+    const none = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: []})}</body>`);
+    expect(/** @type {any} */ (none).source).not.toHaveProperty('notCarried');
   });
 });
 
@@ -223,10 +236,83 @@ export default function Page() {
 }
 `,
       );
-      await renderPage(file, {openLayers: true, timeoutMs: 60_000});
+      // The page reads Node's fs, which no script in a browser can, so only
+      // its markup is drawn.
+      await renderPage(file, {openLayers: true, markupOnly: true, timeoutMs: 60_000});
       expect(fs.readFileSync(heard, 'utf8')).toBe('');
     } finally {
       removeLinkedFixture(dir);
     }
   }, 120_000);
+});
+
+describe('withCarriedPaths', () => {
+  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    expect(
+      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
+    ).toBe(
+      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    );
+  });
+});
+
+describe('withUncarriedImages', () => {
+  it('writes in the data: URI of an image the embedded source does not carry', () => {
+    const kept = 'a'.repeat(64);
+    const left = 'b'.repeat(64);
+    const script = `x=c("${kept}","data:image/png;base64");y=c('${left}','data:image/png;base64')`;
+    expect(
+      withUncarriedImages(script, new Set([kept]), (sha, prefix) => (sha === left ? `${prefix},QUJD` : null)),
+    ).toBe(`x=c("${kept}","data:image/png;base64");y="data:image/png;base64,QUJD"`);
+  });
+
+  it('reads a script with a long run of name characters in one pass', () => {
+    const left = 'b'.repeat(64);
+    // A large string in the page (a minified data blob) is one long run of
+    // name characters; a reader that starts a match at each of them takes
+    // minutes on this.
+    const script = `s="${'a1'.repeat(200_000)}";y=c("${left}","data:image/png;base64")`;
+    const started = performance.now();
+    const out = withUncarriedImages(script, new Set(), () => 'data:image/png;base64,QUJD');
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(out.endsWith('y="data:image/png;base64,QUJD"')).toBe(true);
+  });
+});
+
+describe('a name that reads as configuration', () => {
+  it('is left out, and the name its warning offers is carried', () => {
+    for (const name of [
+      'chart.config.json',
+      'test.config.json',
+      'package.json',
+      'tsconfig.app.json',
+      'yarn-lock.json',
+      'vite.config.ts',
+      'test.config.ts',
+    ]) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig, name).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(`data/${name}`).name}`), name).toBeNull();
+    }
+  });
+
+  it('offers a rename for a *.config.json, and a file of its own for a tool\'s file', () => {
+    expect(carriedNameFor('chart.config.json')).toEqual({action: 'rename', name: 'chart-data.json'});
+    expect(carriedNameFor('data/a.b.config.json')).toEqual({action: 'rename', name: 'a-b-data.json'});
+    for (const name of ['package.json', 'tsconfig.json', 'package-lock.json', 'vite.config.ts']) {
+      expect(carriedNameFor(name).action, name).toBe('move');
+    }
+    expect(carriedNameFor('package.json').name).toBe('page-data.json');
+    expect(carriedNameFor('vite.config.ts').name).toBe('page-data.ts');
+  });
+
+  it('never offers a name a runner picks up: test.config.ts gets page-data.ts, not test-data.ts', () => {
+    expect(embeddedPathProblem('test-data.ts')).not.toBeNull();
+    expect(carriedNameFor('test.config.ts')).toEqual({action: 'move', name: 'page-data.ts'});
+  });
+
+  it('is not the reason a runner file or a dotfile is left out', () => {
+    expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
+    expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
 });

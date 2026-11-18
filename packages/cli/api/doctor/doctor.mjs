@@ -27,6 +27,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
+import {
+  oldTranspileCacheDir,
+  transpiledCacheDir,
+} from '../../foundation/env/user-dirs.mjs';
+import {SUBFOLDERS} from '../../foundation/fs/jiti-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -52,10 +57,13 @@ import {
   formatCliCommand,
   getCliInvocation,
   guessCliInvocation,
+  quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {
   chooseDeclaredCliCommand,
+  chooseDeclaredValue,
   declaredCliCommandsOf,
+  declaredValuesOf,
 } from '../../foundation/env/cli-command.mjs';
 import {
   findConfigPath,
@@ -88,6 +96,8 @@ import {
 import {
   checkAppThemes,
   checkThemes,
+  moduleSpecifiers,
+  stringValues,
   themeImportWiring,
   withProviderWiring,
 } from './theme-checks.mjs';
@@ -109,6 +119,8 @@ import {
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
+  packageInstallCommand,
+  packageInstallStep,
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
@@ -128,8 +140,13 @@ import {
   isLocalThemeOwner,
   readThemeState,
   builtTargetOf,
+  listProjectSourceFiles,
+  readTextFile,
+  doctorStylesheetImports,
+  doctorStylesheetAtRules,
+  builtProjectRoot,
 } from './_adapter.mjs';
-import {checkBuilt} from './built-checks.mjs';
+import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {
@@ -145,6 +162,9 @@ import {
  * @property {string} label - Human-readable check name.
  * @property {DoctorStatus} status
  * @property {string} message - One-line result summary.
+ * @property {string} [brief] - A short form of a long message, which text
+ *   output prints in its place. It names the command that prints the whole
+ *   message.
  * @property {string} [fix] - Actionable remediation, present when not 'pass'.
  *
  * @typedef {object} DoctorReport
@@ -336,6 +356,34 @@ export function checkNodeVersion(ctx) {
 }
 
 /**
+ * An install step as fix text: the line in backticks, then its note.
+ * @param {{line: string, note: string | null}} step
+ */
+function stepText({line, note}) {
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
+ * The fix text for peers to install: the project's integration guidance when
+ * it gives one, followed by the versions the peers need, else one install
+ * command with each range.
+ * @param {string} cwd
+ * @param {string[]} names every peer to install, by name
+ * @param {string[]} targets the same peers, each with its range when it has one
+ * @returns {string}
+ */
+function peerInstallText(cwd, names, targets) {
+  const {installGuidance} = packageInstallCommand(names, cwd);
+  if (installGuidance) {
+    const versioned = targets.filter(t => !names.includes(t));
+    return versioned.length
+      ? `\`${installGuidance}\`, at these versions: ${versioned.join(', ')}`
+      : `\`${installGuidance}\``;
+  }
+  return stepText(packageInstallStep(targets, cwd));
+}
+
+/**
  * Check 2 — @astryxdesign/core is installed and resolvable from the project.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
@@ -361,8 +409,237 @@ export function checkCoreInstalled(ctx) {
       : {
           fix: install
             ? `Install the project's dependencies: \`${install}\`.`
-            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+            : `Install the design system: ${stepText(packageInstallStep(['@astryxdesign/core'], ctx.cwd))}.`,
         }),
+  };
+}
+
+/** Core's component styles, the stylesheet an Astryx app imports once. */
+const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
+
+/** Config files a build that compiles Core from source names its plugin in. */
+const SOURCE_BUILD_CONFIGS = [
+  {stem: 'next.config', plugin: 'withAstryx()'},
+  {stem: 'vite.config', plugin: 'astryxStylex()'},
+];
+
+/** The extensions those config files take. */
+const CONFIG_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
+
+/** The PostCSS config files PostCSS reads in JSON. */
+const POSTCSS_JSON_CONFIGS = ['.postcssrc', '.postcssrc.json'];
+
+/** @param {string} name */
+function namesBuildPackage(name) {
+  return (
+    name === '@astryxdesign/build' || name.startsWith('@astryxdesign/build/')
+  );
+}
+
+/**
+ * Every string in a JSON value, object keys included.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function jsonStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(jsonStrings);
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) => [
+      key,
+      ...jsonStrings(child),
+    ]);
+  }
+  return [];
+}
+
+/**
+ * The PostCSS config file that loads a plugin of `@astryxdesign/build`, which
+ * compiles Core's styles into the stylesheet's `@stylex;` rule, or null. A
+ * JavaScript or TypeScript config names it as a string (an import, a
+ * `require()` or a `plugins` key); a JSON config, or `package.json`'s
+ * `postcss` field, as a key or a value.
+ * @param {string} root
+ * @returns {string | null}
+ */
+function postcssConfigLoadingBuild(root) {
+  for (const extension of CONFIG_EXTENSIONS) {
+    const name = `postcss.config${extension}`;
+    for (const config of [name, `.postcssrc${extension}`]) {
+      let source;
+      try {
+        source = readTextFile(path.join(root, config));
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if ([...stringValues(source)].some(namesBuildPackage)) return config;
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const config of [...POSTCSS_JSON_CONFIGS, 'package.json']) {
+    let value;
+    try {
+      value = JSON.parse(readTextFile(path.join(root, config)));
+    } catch {
+      continue;
+    }
+    const postcss = config === 'package.json' ? value?.postcss : value;
+    if (jsonStrings(postcss).some(namesBuildPackage)) return config;
+  }
+  return null;
+}
+
+/**
+ * How an app compiles Core's styles from its source with
+ * `@astryxdesign/build`, so it loads no `astryx.css`: a `next.config` or
+ * `vite.config` that imports the build's plugin (`withAstryx()`,
+ * `astryxStylex()`), a stylesheet with the `@astryx;` rule the Next.js
+ * PostCSS plugin writes the compiled rules into, or one with the `@stylex;`
+ * rule while the PostCSS config loads the build's plugin. An `@stylex;` rule
+ * alone is the app's own StyleX, which still needs Core's prebuilt styles.
+ * Null when it does none of these.
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function sourceBuildSetup(root) {
+  for (const {stem, plugin} of SOURCE_BUILD_CONFIGS) {
+    for (const extension of CONFIG_EXTENSIONS) {
+      const file = path.join(root, `${stem}${extension}`);
+      let source;
+      try {
+        source = readTextFile(file);
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if (
+          [...moduleSpecifiers(source)].some(
+            specifier =>
+              specifier === '@astryxdesign/build' ||
+              specifier.startsWith('@astryxdesign/build/'),
+          )
+        ) {
+          return `${plugin} in ${stem}${extension}`;
+        }
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+    if (!file.endsWith('.css')) continue;
+    let css;
+    try {
+      css = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!/@(?:astryx|stylex)\s*;/iu.test(css)) continue;
+    const rules = doctorStylesheetAtRules(css);
+    const where = path.relative(root, file) || file;
+    if (rules.has('astryx')) return `the \`@astryx;\` rule in ${where}`;
+    if (rules.has('stylex')) {
+      const config = postcssConfigLoadingBuild(root);
+      if (config) {
+        return `the \`@stylex;\` rule in ${where}, with @astryxdesign/build in ${config}`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * {@link sourceBuildSetup} for a project folder, or null without one.
+ * @param {string | null} root
+ * @returns {string | null}
+ */
+function sourceBuildOf(root) {
+  return root ? sourceBuildSetup(root) : null;
+}
+
+/**
+ * The first project file that loads Core's component styles: a stylesheet
+ * that `@import`s them, a module that imports them, or a page that links
+ * them. Each is read as a syntax tree or its tags, so comments never count.
+ * @param {string} root
+ * @returns {{file: string | null, unparsed: number}}
+ */
+function coreStylesheetLoad(root) {
+  let unparsed = 0;
+  for (const file of listProjectSourceFiles(root, '', {
+    stylesheets: true,
+    pages: true,
+  })) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!source.includes('astryx.css')) continue;
+    if (file.endsWith('.css')) {
+      if (doctorStylesheetImports(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+      continue;
+    }
+    if (/\.html?$/u.test(file)) {
+      if (linksCoreStylesheet(source)) return {file, unparsed};
+      continue;
+    }
+    try {
+      if (moduleSpecifiers(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+    } catch {
+      unparsed += 1;
+    }
+  }
+  return {file: null, unparsed};
+}
+
+/**
+ * The app loads Core's component styles. Without them, Astryx components
+ * render unstyled, and nothing else fails: the build passes and the page
+ * loads. An app that loads none but compiles Core's styles from source is
+ * not checked. Read from the project's own source, stylesheets and pages,
+ * never run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreStylesheets(ctx) {
+  if (!ctx.coreDir) return null;
+  const root = projectRootOf(ctx);
+  const label = "Core's component styles loaded";
+  const {file, unparsed} = coreStylesheetLoad(root);
+  if (file) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'pass',
+      message: `${path.relative(root, file) || file} loads ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  const setup = sourceBuildSetup(root);
+  if (setup) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${setup}), so it does not need ${CORE_STYLESHEET}.`,
+    };
+  }
+  return {
+    id: 'core-stylesheets',
+    label,
+    status: 'warn',
+    message: `Found nothing in project source, stylesheets or pages that imports or links ${CORE_STYLESHEET}, Core's component styles. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
+    fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first.",
   };
 }
 
@@ -1025,7 +1302,14 @@ export function checkPeerDeps(ctx) {
       label: '@astryxdesign/core peer dependencies',
       status: 'warn',
       message: `Peer dependency issues — ${problems.join('; ')}.`,
-      fix: `Install compatible peers: \`npm install ${targets.join(' ')}\`.`,
+      fix: `Install compatible peers: ${peerInstallText(
+        ctx.cwd,
+        [
+          ...missing.map(spec => spec.replace(/^(@?[^@]+)@.*$/, '$1')),
+          ...mismatched.map(m => m.name),
+        ],
+        targets,
+      )}.`,
     };
   }
 
@@ -2020,6 +2304,46 @@ export function checkCliCommand(ctx) {
   };
 }
 
+/**
+ * Install guidance: whether the loaded integrations agree on how this app
+ * adds a dependency. Left out when none gives any.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkInstallGuidance(ctx) {
+  const id = 'install-guidance';
+  const label = 'Install guidance';
+  const {
+    value: guidance,
+    conflict,
+    declared,
+  } = chooseDeclaredValue(
+    declaredValuesOf(ctx.integrations ?? [], 'installGuidance'),
+  );
+  if (conflict) {
+    const claims = declared
+      .map(entry => `${entry.package} (\`${entry.value}\`)`)
+      .join(', ');
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `Loaded integrations give different install guidance: ${claims}. Neither is used, so install steps use the package manager's command.`,
+      fix: 'Remove the integration that does not belong here, or have every package give the same `installGuidance` in its astryx.integration manifest.',
+    };
+  }
+  if (guidance) {
+    const packages = declared.map(entry => entry.package).join(', ');
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `Install steps follow the installGuidance of ${packages}: \`${guidance}\`.`,
+    };
+  }
+  return null;
+}
+
 /* ── outside a project: the computer ─────────────────────────────────── */
 
 /**
@@ -2507,19 +2831,81 @@ async function runComputerChecks(cwd) {
  * Where `search` and `build` keep their gathered catalog between runs, how
  * much it holds, and the most it and jiti's transpile cache hold; and, in a
  * run under Yarn Plug'n'Play's loader, that the run keeps none
- * (runsUnderPnp). Left out of a checkout, which keeps none.
+ * (runsUnderPnp). Left out of a checkout, which keeps none. The brief names
+ * only the folder, its entries and size, the command that prints the whole
+ * message, and the command that removes the kept folders.
+ * @param {Pick<DoctorContext, 'cwd'>} ctx
  * @returns {DoctorCheck | null}
  */
-export function checkGatherCache() {
+export function checkGatherCache(ctx) {
   const summary = gatherCacheSummary();
   if (summary == null) return null;
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const entries = `${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}`;
+  const kept = [summary.dir];
+  if (isDirectory(summary.transpiledDir)) kept.push(summary.transpiledDir);
   return {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies of transpiled
+ * code, which this CLI never reads, and the command that removes it. Found by
+ * one stat, never a listing: that folder can hold so many files that reading
+ * it takes minutes.
+ * @param {import('../../foundation/env/user-dirs.mjs').UserDirOptions} [options]
+ * @returns {DoctorCheck | null}
+ */
+export function checkOldTranspileCache(options) {
+  const dir = oldTranspileCacheDir(options);
+  try {
+    if (!fs.lstatSync(dir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const remove = removeFolderCommand(dir, options?.platform);
+  return {
+    id: 'old-transpile-cache',
+    label: 'Old transpile cache',
+    status: 'info',
+    message: `An earlier Astryx CLI left transpiled copies in ${dir}. This CLI keeps its copies in ${transpiledCacheDir(options)} and never reads the old folder.`,
+    fix: `To remove it, run: ${remove}. An earlier CLI that still runs on this computer makes it again.`,
+  };
+}
+
+/**
+ * The command that removes one or more folders and all they hold:
+ * PowerShell's on Windows, a POSIX shell's elsewhere, each path quoted as
+ * each shell reads it.
+ * @param {string | string[]} dirs
+ * @param {string} [platform]
+ * @returns {string}
+ */
+export function removeFolderCommand(dirs, platform = process.platform) {
+  const folders = (Array.isArray(dirs) ? dirs : [dirs]).map(dir =>
+    quoteCommandArgument(dir, platform),
+  );
+  return platform === 'win32'
+    ? `Remove-Item -Recurse -Force -LiteralPath ${folders.join(', ')}`
+    : `rm -rf ${folders.join(' ')}`;
+}
+
+/**
+ * Whether a path is a folder, by one stat.
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isDirectory(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2531,6 +2917,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
@@ -2545,7 +2932,9 @@ export const SYNC_CHECKS = [
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkInstallGuidance,
   checkGatherCache,
+  () => checkOldTranspileCache(),
 ];
 
 /**
@@ -2556,6 +2945,7 @@ export const SYNC_CHECKS = [
  */
 const CORE_CHECKS = new Set([
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkVersionAlignment,
   checkPeerDeps,
 ]);
@@ -2580,6 +2970,7 @@ export async function runChecks(options = {}) {
       ...checkBuilt(built, {
         cwd,
         packages: builtIntegrationPackages(built, cwd),
+        sourceBuild: sourceBuildOf(builtProjectRoot(built, cwd)),
       }),
     ];
     const summary = {pass: 0, warn: 0, fail: 0, info: 0};

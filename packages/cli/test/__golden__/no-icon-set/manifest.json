@@ -233,7 +233,7 @@
           {
             "name": "query",
             "required": false,
-            "variadic": false,
+            "variadic": true,
             "description": "<text>"
           }
         ],
@@ -1325,6 +1325,7 @@
               "<text>"
             ],
             "examples": [
+              "<text>",
               "<text>",
               "<text>"
             ],

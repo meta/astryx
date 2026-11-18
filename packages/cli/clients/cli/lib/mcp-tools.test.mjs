@@ -240,6 +240,7 @@ describe('projectAgentText', () => {
       expect(text).toMatch(/^Astryx v\S+ · \d+ components/);
       expect(text).not.toContain('ASTRYX:START');
       expect(text).not.toContain('ASTRYX:END');
+      expect(text).not.toContain('init --remove-agents');
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

@@ -273,21 +273,33 @@ function ProductInfo() {
         <Divider />
         <Collapsible
           value="composition"
-          trigger={<Heading level={3}>Composition</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Composition
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.composition}</Text>
         </Collapsible>
         <Divider />
         <Collapsible
           value="delivery"
           defaultIsOpen={false}
-          trigger={<Heading level={3}>Delivery &amp; Returns</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Delivery &amp; Returns
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.deliveryReturns}</Text>
         </Collapsible>
         <Divider />
         <Collapsible
           value="dimensions"
           defaultIsOpen={false}
-          trigger={<Heading level={3}>Dimensions</Heading>}>
+          trigger={
+            <Heading level={3} accessibilityLevel={2}>
+              Dimensions
+            </Heading>
+          }>
           <Text type="body">{PRODUCT.dimensions}</Text>
         </Collapsible>
         <Divider />
@@ -305,8 +317,8 @@ export default function ProductDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={5}>
+        <LayoutContent role="main" padding={6}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={5}>
             <ImageGallery
               selected={selectedThumb}
               onSelect={setSelectedThumb}

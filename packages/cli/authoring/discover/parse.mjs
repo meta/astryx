@@ -24,44 +24,59 @@ export const DISCOVER_KINDS = /** @type {const} */ ([
   'icon-set',
 ]);
 
-const text = (/** @type {number} */ max) => z.string().min(1).max(max);
+/**
+ * The catalog's schema, built on first use: building it takes a few
+ * milliseconds that a run reading no catalog, such as a search reading its
+ * kept discover record, should not pay.
+ * @type {() => ReturnType<typeof buildCatalogSchema>}
+ */
+const catalogSchema = (() => {
+  /** @type {ReturnType<typeof buildCatalogSchema> | undefined} */
+  let built;
+  return () => (built ??= buildCatalogSchema());
+})();
 
-const contributionSchema = z.object({
-  kind: text(32),
-  name: text(512),
-  title: z.string().max(512).optional(),
-  summary: z.string().max(4096).optional(),
-  keywords: z.array(z.string().max(128)).max(64).optional(),
-  iconCount: z.number().int().min(0).optional(),
-  definitions: z.array(z.string().max(128)).max(2048).optional(),
-});
+function buildCatalogSchema() {
+  const text = (/** @type {number} */ max) => z.string().min(1).max(max);
 
-const versionSchema = z.object({
-  version: text(256),
-  publishedAt: z.string().max(64).nullable(),
-  prerelease: z.boolean(),
-  status: text(64),
-});
+  const contributionSchema = z.object({
+    kind: text(32),
+    name: text(512),
+    title: z.string().max(512).optional(),
+    summary: z.string().max(4096).optional(),
+    keywords: z.array(z.string().max(128)).max(64).optional(),
+    iconCount: z.number().int().min(0).optional(),
+    license: z.string().max(256).optional(),
+    definitions: z.array(z.string().max(128)).max(2048).optional(),
+  });
 
-const packageSchema = z.object({
-  package: text(214),
-  integration: text(214),
-  aliases: z.array(text(214)).max(64),
-  description: z.string().max(1024).optional(),
-  latest: text(256).nullable(),
-  versions: z.array(versionSchema).max(50_000),
-  contributions: z.array(contributionSchema).max(50_000),
-});
+  const versionSchema = z.object({
+    version: text(256),
+    publishedAt: z.string().max(64).nullable(),
+    prerelease: z.boolean(),
+    status: text(64),
+  });
 
-const catalogSchema = z.object({
-  schemaVersion: z.literal(1),
-  source: z.object({
-    name: text(256),
-    generatedAt: text(64),
-    complete: z.boolean(),
-  }),
-  packages: z.array(packageSchema).max(20_000),
-});
+  const packageSchema = z.object({
+    package: text(214),
+    integration: text(214),
+    aliases: z.array(text(214)).max(64),
+    description: z.string().max(1024).optional(),
+    latest: text(256).nullable(),
+    versions: z.array(versionSchema).max(50_000),
+    contributions: z.array(contributionSchema).max(50_000),
+  });
+
+  return z.object({
+    schemaVersion: z.literal(1),
+    source: z.object({
+      name: text(256),
+      generatedAt: text(64),
+      complete: z.boolean(),
+    }),
+    packages: z.array(packageSchema).max(20_000),
+  });
+}
 
 /**
  * Newest first by publish time. A version with no known publish time goes
@@ -78,7 +93,11 @@ function newestFirst(a, b) {
 }
 
 /** Item fields read only for the experimental `icon-set` kind. */
-const ICON_SET_FIELDS = /** @type {const} */ (['iconCount', 'definitions']);
+const ICON_SET_FIELDS = /** @type {const} */ ([
+  'iconCount',
+  'license',
+  'definitions',
+]);
 
 /**
  * The catalog with every icon-set-only field taken off its items, so a project
@@ -117,7 +136,8 @@ function withoutIconSetFields(value) {
  * put newest first whatever order the source used.
  *
  * The experimental `icon-set` kind and its item fields (`iconCount`,
- * `definitions`) are read only with `iconSets` (spec:AST-084). Without it they
+ * `license`, `definitions`) are read only with `iconSets` (spec:AST-084),
+ * and those fields only on an `icon-set` item. Without it they
  * are unknown: the fields are taken off before the check and the items are
  * dropped after it, exactly as for any kind or field this CLI does not know
  * (spec:AST-051 FR7).
@@ -142,7 +162,7 @@ export function parseDiscoverCatalog(
       `${label} returned schemaVersion ${String(version)}; this CLI reads schemaVersion 1`,
     );
   }
-  const parsed = catalogSchema.safeParse(
+  const parsed = catalogSchema().safeParse(
     iconSets ? value : withoutIconSetFields(value),
   );
   if (!parsed.success) {
@@ -160,9 +180,24 @@ export function parseDiscoverCatalog(
     packages: parsed.data.packages.map(pkg => ({
       ...pkg,
       versions: [...pkg.versions].sort(newestFirst),
-      contributions: pkg.contributions.filter(c => known.includes(c.kind)),
+      contributions: pkg.contributions
+        .filter(c => known.includes(c.kind))
+        .map(c => (c.kind === 'icon-set' ? c : withoutFields(c))),
     })),
   });
+}
+
+/**
+ * An item that is not an icon set, without the icon-set-only fields: they
+ * belong to the `icon-set` kind alone.
+ * @template {object} T
+ * @param {T} item
+ * @returns {T}
+ */
+function withoutFields(item) {
+  const copy = /** @type {Record<string, unknown>} */ ({...item});
+  for (const field of ICON_SET_FIELDS) delete copy[field];
+  return /** @type {T} */ (copy);
 }
 
 /**
