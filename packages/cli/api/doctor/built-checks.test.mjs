@@ -352,7 +352,7 @@ describe('what a --built path counts', () => {
         [
           {
             slug: 'brand',
-            owner: 'local',
+            owner: './src/themes',
             exportName: 'brandTheme',
             module: './themes/brand/brand.js',
             stylesheet: './themes/brand/brand.css',
@@ -373,6 +373,37 @@ describe('what a --built path counts', () => {
     expect(styling).toEqual([
       'src/main.tsx:imports the stylesheet `./extra.css`: use component props and tokens',
     ]);
+  });
+
+  it('flags a stylesheet a person adds to the theme module', () => {
+    const module = renderThemeModule(
+      [
+        {
+          slug: 'brand',
+          owner: './src/themes',
+          exportName: 'brandTheme',
+          module: './themes/brand/brand.js',
+          stylesheet: './themes/brand/brand.css',
+        },
+      ],
+      'brand',
+      true,
+    );
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': module.replace(
+        'import "./themes/brand/brand.css";',
+        'import "./themes/brand/brand.css";\nimport "./extra.css";',
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+    });
+    expect(
+      scanBuilt(dir, [])
+        .findings.filter(f => f.category === 'Styling')
+        .map(f => f.message),
+    ).toContain(
+      'imports the stylesheet `./extra.css`: use component props and tokens',
+    );
   });
 
   it('names the integrations by the declared dependencies that ship a manifest, running nothing', () => {

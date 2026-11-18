@@ -79,6 +79,11 @@ import {
 } from '../../foundation/discovery/theme-discovery.mjs';
 import {resolveThemeImports} from '../../foundation/discovery/theme-imports.mjs';
 import {
+  isLocalThemeOwner as isLocalThemeOwnerForWiring,
+  readThemeState as readThemeStateForWiring,
+  themeModuleStylesheets,
+} from '../../foundation/config/theme-state.mjs';
+import {
   CLI_ROOT,
   findProjectCoreDir,
   findInstalledPackage,
@@ -93,7 +98,6 @@ export {
   planThemeAppWrite,
   readThemeState,
   resolveThemeModule,
-  themeModuleStylesheets,
 } from '../../foundation/config/theme-state.mjs';
 export {
   fileMark,
@@ -458,6 +462,55 @@ export function realDoctorFile(file) {
  */
 export function doctorElementPropOrigins(file, element) {
   return elementPropOrigins(file, element);
+}
+
+/**
+ * The stylesheets the app's registered themes load, read from the theme
+ * module the CLI writes for them: an import of one is theme wiring, never
+ * page styling. A package stylesheet matches by its name; a local one by
+ * the file it names.
+ * @param {string} target the scanned folder or file
+ * @returns {{has: (spec: string, rel: string) => boolean}}
+ */
+export function doctorThemeWiring(target) {
+  const none = {has: () => false};
+  let base;
+  try {
+    base = fs.statSync(target).isDirectory() ? target : path.dirname(target);
+  } catch {
+    return none;
+  }
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {Set<string>} */
+  const files = new Set();
+  try {
+    const {configured, module, projectDir} = readThemeStateForWiring(base);
+    if (!configured || !module.expectedOriginal) return none;
+    // (Only a stylesheet from its theme's recorded owner: the owner's
+    // package, or a file in a local theme's folder. Another import in the
+    // module is no wiring.)
+    for (const {spec, owner} of themeModuleStylesheets(
+      module.expectedOriginal.toString('utf-8'),
+      module.typescript,
+    )) {
+      if (!isLocalThemeOwnerForWiring(owner)) {
+        if (spec.startsWith(`${owner}/`)) names.add(spec);
+        continue;
+      }
+      const file = path.resolve(path.dirname(module.file), spec);
+      const folder = path.resolve(projectDir, owner);
+      if (!path.relative(folder, file).startsWith('..')) files.add(file);
+    }
+  } catch {
+    return none;
+  }
+  return {
+    has: (spec, rel) =>
+      names.has(spec) ||
+      (spec.startsWith('.') &&
+        files.has(path.resolve(base, path.dirname(rel), spec))),
+  };
 }
 
 /**
