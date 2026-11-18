@@ -25,6 +25,7 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 import {
   classifyReleaseDiff,
   diffEntryFiles,
+  isCodemodPromotionApplicabilityPath,
   isReleaseOutputPath,
   isReleaseTestRepairPath,
 } from './release-paths.mjs';
@@ -586,10 +587,28 @@ function validateMergeBackAtRef(
     plan.cutSha,
     releaseRef,
   ]);
+  const releaseEntries = releaseDiff.split('\n').filter(Boolean);
+  const releasePromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base: plan.cutSha,
+    head: releaseRef,
+    entries: releaseEntries,
+    version: marker.version,
+  });
+  const projectedPromotion = validateCodemodPromotionApplicabilityAtRef(root, {
+    base,
+    head,
+    entries,
+    version: marker.version,
+    workingTree,
+  });
+  errors.push(...releasePromotion.errors, ...projectedPromotion.errors);
+  const validatedCodemodPromotionPaths = new Set(
+    [...releasePromotion.validatedPaths].filter(file =>
+      projectedPromotion.validatedPaths.has(file),
+    ),
+  );
   const releaseRenames = new Set(
-    releaseDiff
-      .split('\n')
-      .filter(Boolean)
+    releaseEntries
       .map(entry => entry.split('\t'))
       .filter(
         ([status, ...files]) => status?.startsWith('R') && files.length === 2,
@@ -643,6 +662,7 @@ function validateMergeBackAtRef(
       releaseOutputs,
       headOutputs,
       releaseRenames,
+      validatedCodemodPromotionPaths,
       releaseVersion: marker.version,
       fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
       cutManifests,
@@ -1259,7 +1279,108 @@ function validateReleasePolicyCarryAtRef(
   };
 }
 
-function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+const CODEMOD_PROMOTION_SPEC_PATH =
+  'docs/specs/AST-057-row-actions/spec.md';
+const CODEMOD_PROMOTION_POINTERS = [
+  'packages/cli/assets/codemods/transforms/next/migrate-item-swipe-actions-to-swipe.mjs',
+  'packages/cli/assets/codemods/transforms/next/__tests__/migrate-item-swipe-actions-to-swipe.test.mjs',
+];
+
+function validateCodemodPromotionApplicabilityMove({
+  before,
+  after,
+  entries,
+  status,
+  version,
+}) {
+  const errors = [];
+  if (status !== 'M')
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may only be modified by a generated codemod promotion`,
+    );
+
+  let expected = before;
+  for (const from of CODEMOD_PROMOTION_POINTERS) {
+    const to = from.replace('/transforms/next/', `/transforms/v${version}/`);
+    if (before.split(from).length !== 2)
+      errors.push(
+        `${CODEMOD_PROMOTION_SPEC_PATH} must contain the exact pre-promotion pointer once: ${from}`,
+      );
+    const hasRename = entries.some(entry => {
+      if (!entry.startsWith('R')) return false;
+      const files = diffEntryFiles(entry);
+      return files?.[0] === from && files[1] === to;
+    });
+    if (!hasRename)
+      errors.push(`codemod promotion does not rename ${from} to ${to}`);
+    expected = expected.replace(from, to);
+  }
+  if (after !== expected)
+    errors.push(
+      `${CODEMOD_PROMOTION_SPEC_PATH} may change only the exact applicability pointers moved by the codemod promotion`,
+    );
+  return errors;
+}
+
+function validateCodemodPromotionApplicabilityAtRef(
+  root,
+  {base, head, entries, version, workingTree = false},
+) {
+  const matchingEntries = entries.filter(entry =>
+    (diffEntryFiles(entry) ?? []).some(isCodemodPromotionApplicabilityPath),
+  );
+  if (matchingEntries.length === 0)
+    return {errors: [], validatedPaths: new Set()};
+  if (matchingEntries.length !== 1)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must have exactly one modified diff entry`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const before = filesAtRef(root, base, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+    CODEMOD_PROMOTION_SPEC_PATH,
+  );
+  const after = workingTree
+    ? fs.existsSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      ? fs.readFileSync(path.join(root, CODEMOD_PROMOTION_SPEC_PATH))
+      : null
+    : filesAtRef(root, head, [CODEMOD_PROMOTION_SPEC_PATH]).get(
+        CODEMOD_PROMOTION_SPEC_PATH,
+      );
+  if (before === null || after === null)
+    return {
+      errors: [
+        `${CODEMOD_PROMOTION_SPEC_PATH} must exist before and after the codemod promotion`,
+      ],
+      validatedPaths: new Set(),
+    };
+
+  const [status] = matchingEntries[0].split('\t');
+  const errors = validateCodemodPromotionApplicabilityMove({
+    before: before.toString('utf8'),
+    after: after.toString('utf8'),
+    entries,
+    status,
+    version,
+  });
+  return {
+    errors,
+    validatedPaths: errors.length
+      ? new Set()
+      : new Set([CODEMOD_PROMOTION_SPEC_PATH]),
+  };
+}
+
+function validateReleaseDiff(
+  entries,
+  {
+    plan,
+    baseChangesets,
+    validatedCodemodPromotionPaths = new Set(),
+  } = {},
+) {
   const errors = [];
   const planned = plan
     ? new Map(plan.changesets.map(entry => [entry.path, entry.sha256]))
@@ -1273,8 +1394,16 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
       continue;
     }
     for (const file of files) {
-      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file))
-        errors.push(`release bump contains a non-generated path: ${file}`);
+      if (!file.startsWith('.changeset/') && !isReleaseOutputPath(file)) {
+        if (isCodemodPromotionApplicabilityPath(file)) {
+          if (!validatedCodemodPromotionPaths.has(file))
+            errors.push(
+              `release bump contains an unvalidated codemod-promotion applicability move: ${file}`,
+            );
+        } else {
+          errors.push(`release bump contains a non-generated path: ${file}`);
+        }
+      }
       if (file.startsWith('.changeset/')) {
         if (status !== 'D')
           errors.push(
@@ -1410,6 +1539,7 @@ function validateReleaseMergeBack({
   releaseOutputs,
   headOutputs,
   releaseRenames = new Set(),
+  validatedCodemodPromotionPaths = new Set(),
   releaseVersion,
   fixedNames = new Set(),
   cutManifests = new Map(),
@@ -1455,6 +1585,14 @@ function validateReleaseMergeBack({
         if (!releaseManifestPaths.has(file))
           errors.push(
             `release merge-back changed a manifest not changed on the published branch: ${file}`,
+          );
+      } else if (isCodemodPromotionApplicabilityPath(file)) {
+        if (
+          status !== 'M' ||
+          !validatedCodemodPromotionPaths.has(file)
+        )
+          errors.push(
+            `release merge-back contains an unvalidated codemod-promotion applicability move: ${file}`,
           );
       } else if (isReleaseOutputPath(file)) {
         if (!releaseOutputPaths.has(file) && !releaseRenamePaths.has(file))
@@ -1853,7 +1991,20 @@ async function main() {
       patchId = repair.patchId;
       diffErrors = repair.errors;
     } else if (kind === 'version-bump') {
-      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
+      const promotion = validateCodemodPromotionApplicabilityAtRef(root, {
+        base,
+        head,
+        entries,
+        version: marker.version,
+      });
+      diffErrors = [
+        ...validateReleaseDiff(entries, {
+          plan,
+          baseChangesets,
+          validatedCodemodPromotionPaths: promotion.validatedPaths,
+        }),
+        ...promotion.errors,
+      ];
     } else {
       diffErrors = [
         'release candidate contains paths outside the generated version bump or test-repair classes',
@@ -1992,6 +2143,8 @@ export {
   latestStableVersion,
   listActiveBranches,
   mergeBackEntries,
+  validateCodemodPromotionApplicabilityAtRef,
+  validateCodemodPromotionApplicabilityMove,
   validateIdentity,
   validateRefMarker,
   validateReleaseDiff,
