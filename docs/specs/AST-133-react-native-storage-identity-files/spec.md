@@ -14,6 +14,7 @@ affects_architecture: []
 affects_families: []
 affects_contributing: []
 affects_consumer_docs: []
+system_specs: [spec:AST-140]
 ---
 
 # React Native platform: Storage, identity and files system spec
@@ -37,9 +38,9 @@ This record details these three modules of the platform layer that
 `spec:AST-112` defines. They are part of the optional add-on package, not the
 core package: no Astryx component uses them, so an app links them only when
 it adds that package. Every asynchronous call resolves the
-result vocabulary of `spec:AST-112/FR6`, every module has the capability shape
+result vocabulary of `spec:AST-140/FR3`, every module has the capability shape
 of `spec:AST-112/FR7`, and every interface evolves additively under
-`spec:AST-112/FR8`.
+`spec:AST-140/FR5`.
 
 ## Why this exists
 
@@ -107,7 +108,7 @@ app that prefers an ecosystem library can still use it beside these modules
   package. An app that does not add the package links none of their native
   code. The package exports `AstryxSecureStorage`, `AstryxClientIdentity`,
   `AstryxFiles` and `readBundledAsset`. Each module is read with
-  `TurboModuleRegistry.get`, only by its own wrapper (`spec:AST-112/FR8`), and
+  `TurboModuleRegistry.get`, only by its own wrapper (`spec:AST-140/FR2`), and
   its wrapper answers `no-module` where the module is absent.
 
   | Contract               | Kind                                | Methods                                                                                                                                                               | Platforms    |
@@ -118,7 +119,7 @@ app that prefers an ecosystem library can still use it beside these modules
 
 - **FR2 — Every call is a result; constants are synchronous.**
   - Every asynchronous call resolves `AstryxResult` and never rejects
-    (`spec:AST-112/FR6`), `readBundledAsset` included. Each module adds only
+    (`spec:AST-140/FR3`), `readBundledAsset` included. Each module adds only
     these reasons to the common ones:
 
     | Module                 | Module reasons                                                                                                                                                                                              |
@@ -136,10 +137,10 @@ app that prefers an ecosystem library can still use it beside these modules
 null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     Removing something that is not there answers `ok`.
   - A behaviour that the binary lacks answers `unsupported`
-    (`spec:AST-112/FR7`, FR8); a module reason names a limit of the platform or
+    (`spec:AST-112/FR7`, `spec:AST-140/FR5`); a module reason names a limit of the platform or
     the device.
   - `message` never carries a stored value, a key's name, a token, a
-    certificate, or a URL's query (`spec:AST-112/FR6`).
+    certificate, or a URL's query (`spec:AST-140/FR3`).
 
 - **FR3 — `AstryxSecureStorage` keeps short secrets.**
   - `get(key, {prompt?})`, `set(key, value, options?)`, `remove(key)`,
@@ -311,7 +312,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
   - FR11 gap: `readBundledAsset` rejects with an error instead of resolving a
     result.
 
-- **FR12 — Threads and lifecycle.**
+- **FR12 — Threads and lifecycle (`spec:AST-140/FR6`).**
   - Constants are read on the JavaScript thread once per module, at the first
     call that needs them.
   - Keychain and Keystore work, key generation, signing, file reads and
@@ -343,14 +344,14 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     sheet. VoiceOver and TalkBack read them as the system does, and the
     `prompt` of a protected read is the line the system speaks.
   - `cancelled` is not an error: a caller that receives it shows no error
-    (`spec:AST-112/FR6`).
+    (`spec:AST-140/FR3`).
   - These modules expose nothing to VoiceOver or TalkBack themselves; they have
     no view.
 
 - **FR15 — Every contract is at revision 1; later behaviour is a named
   feature.**
   - Every contract in the group is at revision 1 on iOS and Android, and none
-    carries a revision counter (`spec:AST-112/FR8`). A behaviour added after
+    carries a revision counter (`spec:AST-140/FR5`). A behaviour added after
     revision 1 is a named feature, `<Contract>.<feature>`, that the binary
     lists in `AstryxPlatformInfo`'s `contractFeatures` constant
     (`spec:AST-130/FR18`). JavaScript checks it with `hasContractFeature`
@@ -370,7 +371,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 - **FR17 — No third-party native dependency, and room for one beside it.**
   - The modules take no third-party native dependency
-    (`spec:AST-112/FR2`).
+    (`spec:AST-112/FR2`, `spec:AST-140/FR9`).
   - An app may use an ecosystem library for the same need beside these
     modules, such as `expo-secure-store`, `react-native-keychain`,
     `expo-file-system` or `react-native-fs`, without conflict. The modules
@@ -405,9 +406,10 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 ## Current-state impact
 
-- This record details `spec:AST-112`: its FR2 (no third-party native
-  dependency), FR6 and FR7 for each module's results and probes, and FR8 for
-  the revision-1 baseline and named features.
+- This record details `spec:AST-112` (FR2, no third-party native dependency;
+  FR7, the capability shape) and `spec:AST-140` (FR2 and FR3, results; FR5,
+  the revision-1 baseline and named features; FR6, threads; FR7, conformance
+  suites; FR9, coexistence) for these three modules.
 - It relies on `spec:AST-130/FR18` for `contractFeatures` and
   `hasContractFeature`.
 - It places secure storage, client identity, and files in the optional
@@ -417,25 +419,25 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 ## Verification
 
-| Contract | Verification                                                                                              | Representative states                                                                                                      | Mutation or failure expectation                                                                                             |
-| -------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | The platform's spec rules check; the contracts list                                                       | each module's spec; the Android-only method                                                                                | A module read with `getEnforcing`, read outside its wrapper, or missing from the contracts list                             |
-| FR2      | Unit tests through the `./testing` doubles in absent, older and current shapes                            | each synchronous member; each call; a native throw; a missing key, identity and file                                       | A synchronous member throws, a call rejects, a missing item reads as a failure, or a message carries a value                |
-| FR3      | Unit tests; Simulator and emulator runs; device runs with Face ID and the passcode                        | each `accessible`; a locked device; `thisDeviceOnly`; a protected read passed, failed and dismissed; no passcode set       | A failed write loses the old secret, an unknown option falls back silently, or a protected read returns without asking      |
-| FR4      | Unit tests; Simulator and emulator runs; device runs on secure hardware                                   | a hardware key; `allowSoftware`; a request with every field type; a digest signature; a mismatched chain; the Simulator    | A key leaves the hardware, a request does not verify, a mismatched chain is stored, or `isSimulator()` is true on a device  |
-| FR5      | Unit tests of the host rules and the check order                                                          | exact names; `*.example.com`; an unknown label; a label with no key                                                        | A pattern binds, a failed check changes the binding, or an unbound identity is presented                                    |
-| FR6      | Simulator and emulator runs against a server that asks for a client certificate                           | each request kind; a download with each `credentials` mode; a redirect to another host                                     | An identity is presented after a redirect, to an unbound host, or on a download with `credentials: 'omit'`                  |
-| FR7      | Emulator runs with an installed system certificate                                                        | first use with the picker; a granted alias; dismissed; no certificate; iOS                                                 | The picker shows for a granted alias, a dismissal reads as an error, or iOS answers anything but `no-system-identities`     |
-| FR8      | Unit tests through the `./testing` doubles; Simulator and emulator runs                                   | write and read in each encoding; a nested or hidden name; list order; trim by size and by age; clear by prefix             | A nested name writes, the list order ignores use, or a trim removes a recently used file first                              |
-| FR9      | Unit tests; Simulator and emulator runs against a test server                                             | a 2xx and a 404; redirects in each mode; a cross-origin hop with headers; `https:` to `http:`; a stall; a cancel; progress | A header crosses origins, a downgrade is followed, a partial body replaces a file, or progress floods the JavaScript thread |
-| FR10     | Simulator and emulator runs                                                                               | save; share; cancel; a missing source; a second sheet; a source outside the app's folders                                  | A cancel reads as an error, Android reports a completion, or a source outside the app's folders is shared                   |
-| FR11     | Unit tests; Simulator and emulator release builds                                                         | an image asset; a text asset; a `..` path; a symbolic link out; a path outside the bundle                                  | A read leaves the app's assets or follows a link out                                                                        |
-| FR12     | Thread checks during a large download and a key generation; reload tests                                  | a 100 MB download while scrolling; a reload during a download                                                              | Work blocks the JavaScript or main thread, or a download survives a reload                                                  |
-| FR13     | Log and crash-report review of each module's failure paths; a backup and restore of a device              | each failure with a secret, key and token present; restore on another device                                               | A secret or token appears in a log or message, or a device-only secret is restored on another device                        |
-| FR14     | VoiceOver and TalkBack runs over each system sheet                                                        | a protected read; the certificate picker; save; share                                                                      | A sheet is not reachable, or the `prompt` is not read                                                                       |
-| FR15     | The platform's spec rules check; unit tests with a binary that lacks each feature                         | each named feature present and absent                                                                                      | A behaviour runs without its feature, a missing feature answers anything but `unsupported`, or no warning                   |
-| FR16     | Review of each native change for private API; a symbol check of an add-on build                           | an add-on iOS and Android build                                                                                            | A private API call in the group's native code                                                                               |
-| FR17     | A sample app that also uses an ecosystem secure store and file library; a dependency check of the package | both libraries writing, reading and clearing their own items and files                                                     | A third-party native dependency in the package, or one library reads, changes or removes the other's items or files         |
+| Contract | Verification                                                                                                                         | Representative states                                                                                                      | Mutation or failure expectation                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | The platform's spec rules check; the contracts list                                                                                  | each module's spec; the Android-only method                                                                                | A module read with `getEnforcing`, read outside its wrapper, or missing from the contracts list                             |
+| FR2      | Each module's conformance suite (`spec:AST-140/FR7`); unit tests through the `./testing` doubles in absent, older and current shapes | each synchronous member; each call; a native throw; a missing key, identity and file                                       | A synchronous member throws, a call rejects, a missing item reads as a failure, or a message carries a value                |
+| FR3      | Unit tests; Simulator and emulator runs; device runs with Face ID and the passcode                                                   | each `accessible`; a locked device; `thisDeviceOnly`; a protected read passed, failed and dismissed; no passcode set       | A failed write loses the old secret, an unknown option falls back silently, or a protected read returns without asking      |
+| FR4      | Unit tests; Simulator and emulator runs; device runs on secure hardware                                                              | a hardware key; `allowSoftware`; a request with every field type; a digest signature; a mismatched chain; the Simulator    | A key leaves the hardware, a request does not verify, a mismatched chain is stored, or `isSimulator()` is true on a device  |
+| FR5      | Unit tests of the host rules and the check order                                                                                     | exact names; `*.example.com`; an unknown label; a label with no key                                                        | A pattern binds, a failed check changes the binding, or an unbound identity is presented                                    |
+| FR6      | Simulator and emulator runs against a server that asks for a client certificate                                                      | each request kind; a download with each `credentials` mode; a redirect to another host                                     | An identity is presented after a redirect, to an unbound host, or on a download with `credentials: 'omit'`                  |
+| FR7      | Emulator runs with an installed system certificate                                                                                   | first use with the picker; a granted alias; dismissed; no certificate; iOS                                                 | The picker shows for a granted alias, a dismissal reads as an error, or iOS answers anything but `no-system-identities`     |
+| FR8      | Unit tests through the `./testing` doubles; Simulator and emulator runs                                                              | write and read in each encoding; a nested or hidden name; list order; trim by size and by age; clear by prefix             | A nested name writes, the list order ignores use, or a trim removes a recently used file first                              |
+| FR9      | Unit tests; Simulator and emulator runs against a test server                                                                        | a 2xx and a 404; redirects in each mode; a cross-origin hop with headers; `https:` to `http:`; a stall; a cancel; progress | A header crosses origins, a downgrade is followed, a partial body replaces a file, or progress floods the JavaScript thread |
+| FR10     | Simulator and emulator runs                                                                                                          | save; share; cancel; a missing source; a second sheet; a source outside the app's folders                                  | A cancel reads as an error, Android reports a completion, or a source outside the app's folders is shared                   |
+| FR11     | Unit tests; Simulator and emulator release builds                                                                                    | an image asset; a text asset; a `..` path; a symbolic link out; a path outside the bundle                                  | A read leaves the app's assets or follows a link out                                                                        |
+| FR12     | Thread checks during a large download and a key generation; reload tests                                                             | a 100 MB download while scrolling; a reload during a download                                                              | Work blocks the JavaScript or main thread, or a download survives a reload                                                  |
+| FR13     | Log and crash-report review of each module's failure paths; a backup and restore of a device                                         | each failure with a secret, key and token present; restore on another device                                               | A secret or token appears in a log or message, or a device-only secret is restored on another device                        |
+| FR14     | VoiceOver and TalkBack runs over each system sheet                                                                                   | a protected read; the certificate picker; save; share                                                                      | A sheet is not reachable, or the `prompt` is not read                                                                       |
+| FR15     | The platform's spec rules check; unit tests with a binary that lacks each feature                                                    | each named feature present and absent                                                                                      | A behaviour runs without its feature, a missing feature answers anything but `unsupported`, or no warning                   |
+| FR16     | Review of each native change for private API; a symbol check of an add-on build                                                      | an add-on iOS and Android build                                                                                            | A private API call in the group's native code                                                                               |
+| FR17     | A sample app that also uses an ecosystem secure store and file library; a dependency check of the package                            | both libraries writing, reading and clearing their own items and files                                                     | A third-party native dependency in the package, or one library reads, changes or removes the other's items or files         |
 
 ## Decision log
 
