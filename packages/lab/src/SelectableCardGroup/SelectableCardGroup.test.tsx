@@ -52,7 +52,7 @@ function Multiple({onChange}: {onChange?: (value: string[]) => void}) {
   return (
     <SelectableCardGroup
       label="Add-ons"
-      selectionMode="multiple"
+      type="multiple"
       value={value}
       onChange={v => {
         setValue(v);
@@ -79,6 +79,20 @@ describe('SelectableCardGroup', () => {
     expect([...names][0]).toBeTruthy();
     expect(screen.getByRole('radio', {name: 'Pro'})).toBeChecked();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('reflects its type to themes as data-type', () => {
+    const {unmount} = render(<Single />);
+    expect(screen.getByRole('radiogroup')).toHaveAttribute(
+      'data-type',
+      'single',
+    );
+    unmount();
+    render(<Multiple />);
+    expect(screen.getByRole('group', {name: 'Add-ons'})).toHaveAttribute(
+      'data-type',
+      'multiple',
+    );
   });
 
   it('choosing a card moves the selection and reports its value', () => {
