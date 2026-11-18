@@ -77,8 +77,9 @@ export async function pullsForRun({github, owner, repo, run}) {
 
 /**
  * Starts the heavy suites for a pull request whose review passes at its head:
- * re-runs its newest CI run there in full when that run's first attempt
- * deferred them. Returns what it did, in words.
+ * re-runs its newest CI run there in full while that run's latest attempt
+ * still defers them (a failed-jobs re-run keeps the deferral). Returns what
+ * it did, in words.
  * @param {{
  *   github: any,
  *   owner: string,
@@ -104,7 +105,6 @@ export async function startHeavy({github, owner, repo, pull}) {
       Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id,
   )[0];
   if (run == null) return `${at}: no CI run`;
-  if (run.run_attempt > 1) return `${at}: run ${run.id} already ran again`;
   if (run.status !== 'completed') return `${at}: run ${run.id} still runs`;
   const {
     data: {jobs},

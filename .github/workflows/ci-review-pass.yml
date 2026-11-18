@@ -84,8 +84,9 @@ jobs:
                 ? (await turn.pullsForRun({github, ...context.repo, run: context.payload.workflow_run}))[0]
                 : undefined);
             if (event === 'schedule' || event === 'workflow_dispatch' || number == null) {
-              // Every recent first attempt that failed: a deferred run fails
-              // its required checks. Each page holds at most 100 runs.
+              // Every recent run that failed: a deferred run fails its required
+              // checks, and so does one re-run with "Re-run failed jobs", which
+              // keeps the deferral. Each page holds at most 100 runs.
               const since = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
               const failed = [];
               for (let page = 1; page <= 10; page += 1) {
@@ -102,7 +103,7 @@ jobs:
                 if (data.workflow_runs.length < 100) break;
               }
               const numbers = new Set();
-              for (const run of failed.filter(run => run.run_attempt === 1))
+              for (const run of failed)
                 for (const n of await turn.pullsForRun({github, ...context.repo, run})) numbers.add(n);
               for (const n of numbers) {
                 const {data: pull} = await github.rest.pulls.get({...context.repo, pull_number: n});

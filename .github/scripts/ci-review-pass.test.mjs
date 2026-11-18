@@ -168,10 +168,10 @@ describe('starting the heavy suites', () => {
       },
     ],
     [
-      'the run already ran again',
+      'the run already ran again in full',
       {
-        runs: [ciRun(11, 'h1', {run_attempt: 2})],
-        jobs: {11: deferredJobs},
+        runs: [ciRun(11, 'h1', {run_attempt: 2, conclusion: 'success'})],
+        jobs: {11: ranJobs},
         statuses: {h1: passed},
       },
     ],
@@ -189,6 +189,23 @@ describe('starting the heavy suites', () => {
       pull: pull(1, 'h1'),
     });
     expect(stub.calls.reRunWorkflow).toEqual([]);
+  });
+
+  it('re-runs a run that "Re-run failed jobs" left deferred', async () => {
+    // A failed-jobs re-run keeps heavy-ci's deferred output, so its required
+    // checks still fail at the deferral step on the later attempt.
+    const stub = stubGithub({
+      runs: [ciRun(11, 'h1', {run_attempt: 2})],
+      jobs: {11: deferredJobs},
+      statuses: {h1: passed},
+    });
+    await turn.startHeavy({
+      ...stub,
+      owner: 'o',
+      repo: 'r',
+      pull: pull(1, 'h1'),
+    });
+    expect(stub.calls.reRunWorkflow).toEqual([11]);
   });
 
   it("reads the newest run at the head, not an older head's", async () => {
@@ -320,30 +337,40 @@ describe('the workflow', () => {
       ...extra,
     });
 
-  it("sweeps recent failed first attempts on the schedule, a fork's included", async () => {
+  it("sweeps recent failed runs on the schedule, a fork's and a failed-jobs re-run's included", async () => {
     vi.useFakeTimers();
     const {calls} = await pass(
       'schedule',
       {},
       {
-        pulls: [pull(1, 'h1'), pull(2, 'h2'), pull(3, 'h3'), forkPull(4, 'h4')],
+        pulls: [
+          pull(1, 'h1'),
+          pull(2, 'h2'),
+          pull(3, 'h3'),
+          forkPull(4, 'h4'),
+          pull(5, 'h5'),
+        ],
         runs: [
           ciRun(11, 'h1', {pull_requests: [{number: 1}]}),
           ciRun(12, 'h2', {pull_requests: [{number: 2}]}),
+          // "Re-run failed jobs" keeps heavy-ci's deferral.
           ciRun(13, 'h3', {pull_requests: [{number: 3}], run_attempt: 2}),
           forkRun(14, 'h4'),
+          // A run that ran every suite and failed for another reason.
+          ciRun(15, 'h5', {pull_requests: [{number: 5}], run_attempt: 2}),
         ],
         jobs: {
           11: deferredJobs,
           12: deferredJobs,
           13: deferredJobs,
           14: deferredJobs,
+          15: ranJobs,
         },
-        statuses: {h1: passed, h2: pending, h3: passed, h4: passed},
+        statuses: {h1: passed, h2: pending, h3: passed, h4: passed, h5: passed},
       },
     );
     vi.useRealTimers();
-    expect(calls.reRunWorkflow).toEqual([11, 14]);
+    expect(calls.reRunWorkflow).toEqual([11, 13, 14]);
   });
 
   it('starts a fork head admitted after its gates passed, once its deferred run ends', async () => {
