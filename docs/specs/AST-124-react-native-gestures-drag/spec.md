@@ -81,7 +81,14 @@ handles of `spec:AST-112/FR18`.
 
 ## Non-goals
 
-None.
+- Equivalent internal implementations remain valid when they satisfy this
+  contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
+  topology belong in architecture or implementation unless callers or
+  interoperating systems intentionally depend on that exact mechanism as a public
+  protocol. In that case, state who depends on it and why an equivalent
+  implementation would not satisfy the contract.
 
 ## Requirements
 
@@ -340,8 +347,13 @@ None.
   touch goes through. The binary reports a self-check for
   this exception through the platform info module (`spec:AST-140/FR9`).
 - **FR16 — Gesture handles.** Each recognizer of a mounted Astryx gesture view
-  has a handle, so other recognizers in the app declare their relationship to
-  it (`spec:AST-112/FR18`).
+  has a handle, so a recognizer from outside Astryx, such as a
+  react-native-gesture-handler gesture or a custom native recognizer, declares
+  its relationship to it (`spec:AST-112/FR18`). Astryx's own recognizers relate
+  to one another through the gesture owner view's declarations (`ownsLeft`,
+  `ownsRight`, `ownsUp`, `ownsDown`, `ownsEdge`, `releasesScroll`, and
+  `backGesture`, FR3), so the library's components negotiate with no app
+  wiring.
   - A handle is a plain, serialisable value, `{viewTag, recognizer}`: the
     view's React Native tag and the recognizer's name in the view's contract.
     The names are `pan` for the gesture owner, drag-and-snap, and swipe-row
@@ -357,12 +369,13 @@ None.
     fails), the vocabulary of Core's web recognizers
     (`recognizeSimultaneouslyWith`, `requireToFail`). From JavaScript,
     `relateGesture(handle, other, relation)` declares one between a handle and
-    a second handle, with the handle's recognizer as the waiter for
+    `other`, the React Native tag of the view a non-Astryx recognizer is
+    attached to, with the handle's recognizer as the waiter for
     `requireToFail`, and returns a function that removes it; a relationship
     also ends when either view unmounts. Native code resolves a handle through
-    the gesture module to its platform recognizer and declares a relationship
-    with its own recognizers directly, which is how another gesture library
-    joins.
+    the gesture module to its platform recognizer, so a custom native
+    recognizer or another gesture library declares the relationship with it
+    directly, in either direction.
   - iOS applies `simultaneous` through the recognizer delegate's
     simultaneous-recognition answer and `requireToFail` through the
     recognizer's failure requirement. Android applies both through touch
