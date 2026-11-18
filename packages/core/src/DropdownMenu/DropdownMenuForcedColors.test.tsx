@@ -87,7 +87,7 @@ function expectSystemFocusOutline(row: HTMLElement) {
   const declarations = rowDeclarations(row);
   // The width scales by the shared ring switch, 0 after a pointer press.
   expect(declarations).toContain(
-    'outline-width: calc(var(--focus-outline-width) * var(--_focus-ring))',
+    'outline-width: calc(var(--focus-outline-width) * var(--_focus-ring, 1))',
   );
   expect(declarations).toContain('outline-style: var(--focus-outline-style)');
   expect(declarations).toContain('outline-color: var(--focus-outline-color)');

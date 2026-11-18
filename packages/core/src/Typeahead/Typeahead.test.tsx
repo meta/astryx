@@ -32,7 +32,6 @@ import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {colorVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 import {
   createRef,
   Profiler,
@@ -107,7 +106,7 @@ const NESTED_RING = stylex
       ring: {
         boxShadow: {
           default: null,
-          ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
+          ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
         },
       },
     }).ring,

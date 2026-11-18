@@ -432,7 +432,7 @@ describe('TreeList', () => {
       // The width scales by the shared ring switch, 0 after a pointer press.
       FOCUS_OUTLINE.replace(
         'var(--focus-outline-width)',
-        'calc(var(--focus-outline-width) * var(--_focus-ring))',
+        'calc(var(--focus-outline-width) * var(--_focus-ring, 1))',
       ),
     );
     // Mid and Leaf are DOM descendants of Root's <li> (nested <ul role="group">

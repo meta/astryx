@@ -15,7 +15,6 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import {registerIcons, resetIcons} from '../Icon';
@@ -32,7 +31,7 @@ const RING = stylex
       ring: {
         boxShadow: {
           default: null,
-          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * ${focusRingVars['--_focus-ring']}) ${colorVars['--color-accent-muted']}`,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
         },
       },
     }).ring,

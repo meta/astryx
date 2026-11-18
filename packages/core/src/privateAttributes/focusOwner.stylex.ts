@@ -14,10 +14,9 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
-import {focusRingVars} from '../utils/focusOutline.stylex';
 
 // Keyboard focus only, as every shared ring (focusOutline.stylex.ts).
-const RING_WIDTH = `calc(${focusVars['--focus-outline-width']} * ${focusRingVars['--_focus-ring']})`;
+const RING_WIDTH = `calc(${focusVars['--focus-outline-width']} * var(--_focus-ring, 1))`;
 
 /** Spread on the wrapper's primary control: the control the ring is for. */
 export const focusOwnerProps = {'data-astryx-focus-owner': ''} as const;
