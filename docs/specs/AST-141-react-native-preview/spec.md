@@ -164,8 +164,8 @@ project away from the app's own identity and data.
   - Before a project's main module runs, the host checks it (FR7), gives it
     its runtime and namespace (FR4), and installs the prelude: the host's own
     `crypto.getRandomValues` and `crypto.randomUUID` from the system's secure
-    generator, and the `fetch` installer of `spec:AST-112/FR5`, so `fetch`
-    honors `redirect: 'error'` and `redirect: 'manual'`. The project imports
+    generator, and the host's own global `fetch`, which honors
+    `redirect: 'error'` and `redirect: 'manual'`. The project imports
     nothing for them, and the host installs no other global.
   - The host root is the router root that the host names, else the
     outermost root that mounted first and is still mounted. The Preview
@@ -192,11 +192,17 @@ project away from the app's own identity and data.
   with one line saying why.
 - **FR9 — Preview is part of the Astryx app.** Opening and running a project
   is a feature of the Astryx app, which carries its own native pieces for it.
-  `@astryxdesign/react-native` keeps only the project side of Preview: the
-  types and manifest shape that a previewed project uses
-  (`spec:AST-112/FR1`), and it imports nothing from a host. A project carries
-  no Preview code of its own: the host sets up what the project needs before
-  the project's code runs (FR6).
+  `@astryxdesign/react-native` carries nothing of Preview and imports nothing
+  from a host. A project carries no Preview code of its own: the host sets up
+  what the project needs before the project's code runs (FR6).
+  - Every way in (FR1) carries a Preview manifest: the name the link carries
+    (FR2), the platform, and what the project requires from the host (FR7).
+    `astryx experimental rn preview` writes it from the project, and the host
+    reads it before anything of the project runs.
+  - The manifest's shape and its types are Preview's own and experimental
+    (DEC-6). They ship with the Preview commands, never in
+    `@astryxdesign/react-native`, and a project's code neither imports nor
+    reads them.
 
 ### The inspector
 
@@ -261,7 +267,10 @@ project away from the app's own identity and data.
   - The group answers: how does a Preview host open this project?
     `template --cdn` writes a web page, and no command makes what a Preview
     host opens. Its result is links, URLs, and host-check items.
-  - Outcomes beyond the shared ones of `spec:AST-112/FR13`:
+  - Outcomes beyond the shared ones of `spec:AST-112/FR13`. Like the group,
+    these codes, the link, the manifest, and the bundle's shape are
+    experimental (DEC-6): any release may change or remove them, and they are
+    outside the stable code list:
 
     | Outcome                                                                                                                                                    | Code                               |
     | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
@@ -292,10 +301,9 @@ project away from the app's own identity and data.
 
 ## Current-state impact
 
-- `spec:AST-112` names this record for the Astryx app's Preview and the
-  `astryx experimental rn preview …` commands; its library layer keeps the types and
-  manifest shape a previewed project uses (`spec:AST-112/FR1`), and its
-  `fetch` installer (`spec:AST-112/FR5`) is part of the prelude (FR6).
+- `spec:AST-112` points to this record for Preview in the Astryx app;
+  Astryx React Native carries nothing of Preview, its manifest types and its
+  prelude included (FR6, FR9).
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states what a Preview project reaches of them (FR5).
 
@@ -311,7 +319,7 @@ project away from the app's own identity and data.
 | FR6      | A project that uses the prelude's globals without importing them; the Preview chrome and the inspector over a project                               | a project; an app with two routers                                                                               | A project that starts without the globals, a global the host adds beyond the prelude, or an app's routes offered without the host asking                                                                                                      |
 | FR7      | A project that requires a piece the host lacks; a bytecode bundle; `astryx experimental rn preview check`                                           | a missing native piece; an older host                                                                            | A project's main module that runs on a failed check, or a bytecode bundle that runs                                                                                                                                                           |
 | FR8      | Encrypted bundles with a bad key, a changed part, and a redirect; the server's request log                                                          | a valid link; each failed check; data written while open                                                         | A key that reaches the server, code that runs before every check passes, decrypted bytes written to the device, or data kept after the project closes                                                                                         |
-| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code                                                                  | the Astryx app's build; a plain project                                                                          | The app's native Preview pieces in `@astryxdesign/react-native`, or a project that needs Preview code to run                                                                                                                                  |
+| FR9      | A dependency check of `@astryxdesign/react-native`; a project with no Preview code; the manifest of each way in                                     | the Astryx app's build; a plain project; a dev server link; a hosted bundle                                      | The app's native Preview pieces or Preview's manifest types in `@astryxdesign/react-native`, a project that needs Preview code to run, or a way in whose manifest the host does not read before the project runs                              |
 | FR10     | Inspector picking over a project that counts its touches, presses, scrolls, drags, and menu opens, on iOS and Android                               | picking on; an element picked; picking turned off; leaving the project; a screen reader activation while picking | A touch, press, scroll, drag, screen reader activation, or menu that reaches the project while the shield shows, a project that gets no touches after the shield goes, or an inspector that names the wrong component                         |
 | FR11     | A project that shows a sheet, a menu, and a modal window, with the exit control and the inspector over it, on iOS and Android; a screen reader walk | each kind of presentation; a touch outside the controls with picking off; screen reader on                       | A project surface drawn above the exit control, a touch outside the controls with picking off that does not reach the project, an exit control the screen reader cannot reach, or a project element the layer hides from assistive technology |
 | FR12     | CLI contract tests of `astryx experimental rn preview`: envelopes, exit codes, each code in FR12's table; a share without terms                     | a link; a QR PNG; a plain and an encrypted bundle; a share with a denied file                                    | A share that runs without accepted terms, a key outside the link's fragment, or a QR code printed as text                                                                                                                                     |
@@ -356,8 +364,8 @@ the app's.
 
 Running a separate React Native project inside an app is the job of a Preview
 host, so the Astryx app carries its own native pieces for it.
-`@astryxdesign/react-native` keeps only what every previewed project needs:
-its manifest shape and its types.
+`@astryxdesign/react-native` carries nothing of Preview: the manifest, its
+types, and the prelude belong to Preview.
 
 Rejected: a `preview` capability that an app opts into, because no app other than a host needs it, and every app's package would carry its code.
 
