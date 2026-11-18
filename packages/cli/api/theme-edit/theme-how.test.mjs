@@ -3496,7 +3496,7 @@ const QUESTIONS_K = [
   ],
   [
     'in daytime mode use a cream background',
-    {top: /^set q --color-background-body '#fef3c7' --mode light$/},
+    {top: /^set q --color-background-body '#f8f1e3' --mode light$/},
   ],
   [
     'at night the page background should be pure black',
@@ -3629,7 +3629,7 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       {cwd, theme: 'q'},
     );
     expect(bare(data.results[0].commands[0])).toBe(
-      "set q --color-background-body '#fef3c7' --mode light",
+      "set q --color-background-body '#f8f1e3' --mode light",
     );
   });
 
@@ -4443,7 +4443,7 @@ const QUESTIONS_Y = [
   ],
   [
     'except in dark mode, make the background cream',
-    /^set q --color-background-body '#fef3c7' --mode light$/,
+    /^set q --color-background-body '#f8f1e3' --mode light$/,
   ],
   ["rimuovi l'ombra dalle card", /^set q box-shadow none --on card$/],
   ['🚫 shadows on cards', /^set q box-shadow none --on card$/],

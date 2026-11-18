@@ -295,7 +295,7 @@ const COLOR_RULE = [
     "a light page color is the light mode's",
     {
       q: 'cream background',
-      lead: "--color-background-body '#fef3c7' --mode light",
+      lead: "--color-background-body '#f8f1e3' --mode light",
     },
   ],
   [
@@ -404,7 +404,7 @@ const COLOR_RULE = [
     'the color a complaint names is the part now, never a value',
     {
       q: 'the pink page background is a bit much, make the page a warm cream in light mode',
-      lead: "--color-background-body '#fef3c7' --mode light",
+      lead: "--color-background-body '#f8f1e3' --mode light",
       never: /#db2777|#fceef4|#360a1e/,
     },
   ],

@@ -436,7 +436,7 @@ const HUES = wordTable(
     grey: '#9ca3af',
     black: '#000000',
     white: '#ffffff',
-    cream: '#fef3c7',
+    cream: '#f8f1e3',
     beige: '#f5f5dc',
     silver: '#c0c0c0',
     // (The color names designers use for a palette, beside the hues.)
@@ -4044,9 +4044,19 @@ function clausesOf(q, partWords, words = null) {
         )?.[1];
       if (p.on === 'banner' && status)
         p.when = `status:${status === 'danger' ? 'error' : status}`;
+      // (The page said in the plural, "cream pages", is the page ground
+      // only while no other part in the clause claims the word: below.)
+      if (p.on === 'page' && /^pages$/i.test(m[0].trim()))
+        /** @type {any} */ (p).plainPages = true;
       parts.push(p);
       rest = `${rest.slice(0, m.index)} ${rest.slice(/** @type {number} */ (m.index) + m[0].length)}`;
     }
+    // ("pagination pages": the pages are the pagination's own page items,
+    // its anatomy's pieces, never the page ground.)
+    if (parts.some(x => x.on !== 'page'))
+      for (let i = parts.length - 1; i >= 0; i--)
+        if (/** @type {any} */ (parts[i]).plainPages) parts.splice(i, 1);
+    for (const x of parts) delete /** @type {any} */ (x).plainPages;
     // "the sidebar the page color", "the header the card color", "cards
     // the color of the page": a part named as its color after another part
     // is a color to take, read from that part and never changed.
