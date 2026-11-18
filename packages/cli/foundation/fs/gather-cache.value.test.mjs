@@ -184,17 +184,25 @@ describe('a value kept by its key', () => {
     'trims a folder a stopped run left over its limit when the next run that keeps a value ends',
     async () => {
       const left = leftOverLimit();
-      await keptRun('after-a-stopped-run', () => ({kept: true}));
-      expect(fs.existsSync(left)).toBe(false);
-      expect(keptFiles('after-a-stopped-run')).toHaveLength(1);
+      try {
+        await keptRun('after-a-stopped-run', () => ({kept: true}));
+        expect(fs.existsSync(left)).toBe(false);
+        expect(keptFiles('after-a-stopped-run')).toHaveLength(1);
+      } finally {
+        fs.rmSync(left, {force: true});
+      }
     },
   );
 
   it("trims a folder over its limit in doctor's summary, which reports the trimmed size", () => {
     const left = leftOverLimit();
-    const summary = cache.gatherCacheSummary();
-    expect(fs.existsSync(left)).toBe(false);
-    expect(summary?.bytes).toBeLessThanOrEqual(CACHE_LIMIT_BYTES);
+    try {
+      const summary = cache.gatherCacheSummary();
+      expect(fs.existsSync(left)).toBe(false);
+      expect(summary?.bytes).toBeLessThanOrEqual(CACHE_LIMIT_BYTES);
+    } finally {
+      fs.rmSync(left, {force: true});
+    }
   });
 
   it('is worked out, and nothing is kept, outside a run that keeps catalogs', () => {

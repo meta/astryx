@@ -165,7 +165,7 @@ const UNSET = null;
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather, or, in a run armed throughout
  * (`doctor`), to its end. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed, trims: Set<string>} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed, trims: Set<string>, trimNoted: () => void} | null}
  */
 let run = null;
 
@@ -494,6 +494,12 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     }
   };
   if (!arm()) return fn();
+  // The catalogs folders this run wrote to, each trimmed once when it ends.
+  /** @type {Set<string>} */
+  const trims = new Set();
+  const trimNoted = () => {
+    for (const dir of trims) trimNow(dir);
+  };
   run = {
     reads,
     env,
@@ -502,15 +508,16 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     armedThroughout,
     realEnv,
     confirmed: new Map(),
-    trims: new Set(),
+    trims,
+    trimNoted,
   };
-  const {trims} = run;
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
     disarm();
     run = null;
-    for (const dir of trims) trimNow(dir);
+    process.removeListener('exit', trimNoted);
+    trimNoted();
   }
 }
 
@@ -523,8 +530,14 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
  * @param {string} dir
  */
 function trimAfterWrite(dir) {
-  if (run) run.trims.add(dir);
-  else trimNow(dir);
+  if (!run) {
+    trimNow(dir);
+    return;
+  }
+  // A command that fails ends through process.exit, which skips the run's
+  // finally: the folders it noted are trimmed as the process exits.
+  if (run.trims.size === 0) process.once('exit', run.trimNoted);
+  run.trims.add(dir);
 }
 
 /**
