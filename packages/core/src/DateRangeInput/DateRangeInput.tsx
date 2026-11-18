@@ -29,7 +29,6 @@ import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
-  plainDateToday,
   plainDateDiffDays,
   type PlainDate,
   DATE_FORMAT_SHORT,
@@ -85,6 +84,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useToday} from '../hooks/useToday';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -274,6 +274,7 @@ function formatRangeDisplay(
   range: DateRange | null,
   locale: Locale,
   calendar: CalendarSystem,
+  today: PlainDate | null,
 ): string {
   if (!range) {
     return '';
@@ -282,9 +283,11 @@ function formatRangeDisplay(
   const end = plainDateFromISO(range.end);
   const yearOf = (pd: PlainDate) =>
     calendarYearMonthOf(calendar, calendarMonthOf(calendar, pd)).year;
-  const currentYear = yearOf(plainDateToday());
+  // While today is unknown (server render, hydration) the year shows.
   const sameYear =
-    yearOf(start) === yearOf(end) && yearOf(start) === currentYear;
+    today != null &&
+    yearOf(start) === yearOf(end) &&
+    yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
   return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
@@ -664,9 +667,10 @@ export function DateRangeInput({
       .filter(Boolean)
       .join(' ') || undefined;
 
+  const today = useToday();
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale, calendar),
-    [optimisticValue, locale, calendar],
+    () => formatRangeDisplay(optimisticValue, locale, calendar, today),
+    [optimisticValue, locale, calendar, today],
   );
 
   const popover = usePopover({
@@ -786,6 +790,7 @@ export function DateRangeInput({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
             isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,

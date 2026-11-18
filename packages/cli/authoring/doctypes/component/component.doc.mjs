@@ -68,7 +68,7 @@ export const doc = {
       name: 'keywords',
       type: 'string[]',
       description:
-        'Search keywords for CLI discovery: synonyms and related UI concepts from other design systems (MUI, Chakra, Radix, and others). Lowercase. `astryx search` matches them; `astryx component <term>` also suggests Core components by keyword.',
+        "Words to find the component by: each is a word or short phrase a person would type when they need this component and not another, before they know its name. Use another name for the same whole component, such as another library's name, or the job in the person's words. Lowercase, best first. `astryx search` ranks a match on them. `astryx component <term>` never opens a component by a keyword; it gives that component first in its answer.",
     },
     {
       name: 'hiddenComponents',
@@ -102,7 +102,7 @@ export const doc = {
     },
     {
       name: 'theming',
-      type: '{ container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }',
+      type: '{ container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }',
       description:
         'Theming configuration: the stable selector surface (astryx-* classes + data-attribute reflections) that themes target via @scope selectors in defineTheme.',
       fields: [
@@ -129,6 +129,12 @@ export const doc = {
           type: 'ComponentThemingDerivedVar[]',
           description:
             "Maps standard CSS properties to internal vars for theme-pipeline expansion. Ordered by priority: earlier entries emit first. The pipeline reads only Core components' entries, so an integration's have no effect.",
+        },
+        {
+          name: 'theming.componentIcons',
+          type: 'ComponentIconSlotDoc[]',
+          description:
+            "The component's icon slots, which a theme maps through `defineTheme({componentIcons})`: each slot's name, role, fallback per state, the state a slot function receives, and what `null` does. Each entry corresponds to a slot in `ComponentIconSlotMap`.",
         },
       ],
     },
@@ -175,13 +181,13 @@ export const doc = {
       name: 'examples',
       type: 'ComponentExampleDoc[]',
       description:
-        'Short code examples ({label?, code}) rendered by the CLI after the props table.',
+        "Short code examples ({label?, code, kind?}) rendered by the CLI after the props table. `kind` is `'demo'` (the default; it may render as a live preview) or `'setup'` (shown as code, never rendered live).",
     },
     {
       name: 'playground',
       type: 'ComponentPlaygroundConfig',
       description:
-        'Interactive-preview config: initial prop `defaults`, `overlay` for modal-only components, `appShellMobile` for components gated on AppShell mobile context, and a `wrapper` for context-dependent sub-components.',
+        'Interactive-preview config: initial prop `defaults`, `overlay` for modal-only components, `appShellMobile` for components gated on AppShell mobile context, `mobile` (props merged over `defaults` for a second render at a phone viewport, which the theme editor part census renders too) for a component whose layout changes at phone width, and a `wrapper` for context-dependent sub-components.',
     },
     {
       name: 'props',

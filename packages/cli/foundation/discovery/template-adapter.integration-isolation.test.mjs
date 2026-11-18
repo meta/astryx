@@ -12,8 +12,13 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {discoverAll, discoverAllWithErrors} from './template-adapter.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./template-adapter.mjs')} */
+const {discoverAll, discoverAllWithErrors} = require('./template-adapter.mjs');
+/** @type {typeof import('../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../test-utils/run-cli.mjs');
 
 let tmpDir = '';
 

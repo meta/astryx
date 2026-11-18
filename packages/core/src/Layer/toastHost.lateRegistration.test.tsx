@@ -2,23 +2,49 @@
 
 /**
  * @file toastHost.lateRegistration.test.tsx
- * @input LayerProvider and its toast context, with ToastViewport imported
- *   only inside a test
+ * @input LayerProvider and its toast context, with ToastViewport loaded once
+ *   at collection and reloaded fresh inside each test
  * @output Proves LayerProvider alone renders no viewport, that a toast added
  *   before Toast loads shows once it loads, and that the app stays mounted.
  *   A waiting toast that is removed reports onHide once and never shows. A
  *   waiting namesake follows the uniqueID rules and reports no onHide.
- * @position Unit tests for Layer/toastHost.tsx. Each test reloads the
- *   modules, so Toast's registration is fresh in each one.
+ * @position Unit tests for Layer/toastHost.tsx. Each test forgets the
+ *   registered viewport and reloads the modules, so Toast's registration is
+ *   fresh in each one.
  */
 
 import {act, render, screen} from '@testing-library/react';
 import {use, useEffect} from 'react';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {ToastEntry} from '../Toast/types';
 
-beforeEach(() => {
+// The modules load once while the file is collected, which no timeout bounds.
+// Each test then reloads them from code that is already transformed. So a
+// cold transform on a busy machine never runs inside a timed test.
+await import('./LayerProvider');
+await import('../Toast/ToastViewport');
+
+// A test that ends before its viewport import settles, such as one that times
+// out, would register that viewport in the next test's modules. So each
+// test's import settles before the modules reload.
+let viewportLoad: Promise<unknown> | null = null;
+
+async function loadViewport() {
+  viewportLoad = import('../Toast/ToastViewport');
+  await viewportLoad;
+}
+
+beforeEach(async () => {
+  // The registered viewport is shared across module loads (spec:AST-110
+  // FR3), so each test forgets it before it reloads the modules.
+  const {__resetToastHostForTest} = await import('./toastHost');
+  __resetToastHostForTest();
   vi.resetModules();
+});
+
+afterEach(async () => {
+  await viewportLoad?.catch(() => {});
+  viewportLoad = null;
 });
 
 async function loadLayer() {
@@ -67,7 +93,7 @@ describe('LayerProvider before Toast is imported', () => {
     const app = view.getByText('App');
     expect(screen.queryByText('Saved before the viewport')).toBeNull();
     await act(async () => {
-      await import('../Toast/ToastViewport');
+      await loadViewport();
     });
     expect(
       await screen.findByText('Saved before the viewport'),
@@ -101,7 +127,7 @@ describe('LayerProvider before Toast is imported', () => {
     expect(found?.id).toBe('second');
     expect(onHide.mock.calls).toEqual([['manual']]);
     await act(async () => {
-      await import('../Toast/ToastViewport');
+      await loadViewport();
     });
     expect(await screen.findByText('Kept while waiting')).toBeInTheDocument();
     expect(screen.queryByText('Removed while waiting')).toBeNull();
@@ -127,7 +153,7 @@ describe('LayerProvider before Toast is imported', () => {
       </LayerProvider>,
     );
     await act(async () => {
-      await import('../Toast/ToastViewport');
+      await loadViewport();
     });
     expect(await screen.findByText('Its namesake')).toBeInTheDocument();
     expect(screen.queryByText('Replaced while waiting')).toBeNull();
@@ -158,7 +184,7 @@ describe('LayerProvider before Toast is imported', () => {
       </LayerProvider>,
     );
     await act(async () => {
-      await import('../Toast/ToastViewport');
+      await loadViewport();
     });
     expect(await screen.findByText('Shown first')).toBeInTheDocument();
     expect(screen.queryByText('Ignored namesake')).toBeNull();

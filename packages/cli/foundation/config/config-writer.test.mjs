@@ -1,18 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `setConfigString` (the writer behind `astryx experimental icon use`):
- * a key written beside a spread could replace what the spread sets, so a
- * config whose object on the path spreads another is refused and left as it
- * was; a plain literal is written, and an existing literal object keeps its
- * other keys.
+ * @file `setConfigString` and `setConfigValues` (the writer behind
+ * `astryx experimental icon use`): a key written beside a spread could
+ * replace what the spread sets, so a config whose object on the path spreads
+ * another is refused and left as it was; a plain literal is written, and an
+ * existing literal object keeps its other keys; several fields are set and
+ * removed in one write.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {setConfigString} from './config-writer.mjs';
+import {setConfigString, setConfigValues} from './config-writer.mjs';
 
 /** @type {string} */
 let dir;
@@ -80,5 +81,71 @@ export default {
     expect(text).toContain("xle: {components: ['./xle']}");
     expect(text).toContain("iconSet: 'glyphs'");
     expect(text.match(/experimental:/gu)).toHaveLength(1);
+  });
+});
+
+describe('setConfigValues', () => {
+  it('creates a config with every field, nested objects shared', () => {
+    fs.rmSync(path.join(dir, 'astryx.config.mjs'), {force: true});
+    const result = setConfigValues(dir, [
+      ['experimental.iconSet', ['glyphs', 'lines']],
+      ['experimental.iconVariant', 'filled'],
+      ['experimental.xle.unused', null],
+    ]);
+    expect(result).toMatchObject({
+      created: true,
+      changed: true,
+      previous: [null, null, null],
+    });
+    expect(readConfig()).toBe(
+      "export default {\n  experimental: {\n    iconSet: ['glyphs', 'lines'],\n    iconVariant: 'filled',\n  },\n};\n",
+    );
+  });
+
+  it('sets one field and removes another in one write, reporting what each was', () => {
+    writeConfig(
+      "export default {\n  experimental: {\n    iconSet: 'glyphs',\n    iconVariant: 'filled',\n  },\n};\n",
+    );
+    const result = setConfigValues(dir, [
+      ['experimental.iconSet', 'lines'],
+      ['experimental.iconVariant', null],
+    ]);
+    expect(result).toMatchObject({
+      changed: true,
+      previous: ['glyphs', 'filled'],
+    });
+    const text = readConfig();
+    expect(text).toContain("iconSet: 'lines'");
+    expect(text).not.toContain('iconVariant');
+  });
+
+  it('writes nothing when every field already has its value, or is already gone', () => {
+    const before =
+      "export default {\n  experimental: {iconSet: 'glyphs'},\n};\n";
+    writeConfig(before);
+    const result = setConfigValues(dir, [
+      ['experimental.iconSet', 'glyphs'],
+      ['experimental.iconVariant', null],
+      ['other.key', null],
+    ]);
+    expect(result).toMatchObject({
+      changed: false,
+      previous: ['glyphs', null, null],
+    });
+    expect(readConfig()).toBe(before);
+  });
+
+  it('refuses beside a spread, naming every edit, and writes none of them', () => {
+    const before = 'const base = {};\nexport default {\n  ...base,\n};\n';
+    writeConfig(before);
+    expect(() =>
+      setConfigValues(dir, [
+        ['experimental.iconSet', 'glyphs'],
+        ['experimental.iconVariant', null],
+      ]),
+    ).toThrow(
+      /a written "experimental\.iconSet" or "experimental\.iconVariant" could replace\. Set "experimental\.iconSet: 'glyphs'" and remove "experimental\.iconVariant" in it yourself\./u,
+    );
+    expect(readConfig()).toBe(before);
   });
 });

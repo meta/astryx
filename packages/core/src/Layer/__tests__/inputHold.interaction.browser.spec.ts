@@ -4,23 +4,23 @@
  * @file inputHold.interaction.browser.spec.ts
  * @input The input-hold fixture bundled with esbuild, a phone-sized
  *   touch screen, and real engine touch input (touchDriver)
- * @output Browser proof of what the unit tests cannot see: the hold's shield
- *   is the hit target over the whole viewport, above a modal dialog in the
- *   top layer; a tap during a hold reaches no click and no recognizer on the
- *   layer (the gesture host's touch gate) and leaves a light-dismissing
- *   popover open; a mouse the page heard last passes a presentation's hold,
- *   and after a finger a mouse press meets its shield to the press's end; a
- *   layer root that takes no hits itself (pointer-events:
- *   none, or visibility: hidden, its content opting back in) is held all the
- *   same; keys still act during a presentation's input hold; a dismissal's
- *   hold makes the content inert and moves focus out of it, so no key acts
- *   on it either (a focused button that turns inert still takes Enter and
- *   Space in both engines); each release gives input back; a hit test
- *   that skips shields (isInputShield) finds what lies beneath, and
- *   a layer above the held one still wins; a one-finger
- *   pan on the shield scrolls nothing while a pinch on it still zooms the
- *   page (spec:AST-094 FR10, FR18, FR35; Chromium, which pinch-zooms from
- *   injected touches)
+ * @output Browser proof of what the unit tests cannot see. The hold's
+ *   shield is the hit target over the whole viewport, above a modal dialog
+ *   in the top layer. A tap during a hold reaches no click and no recognizer
+ *   on the layer (the gesture host's touch gate). It leaves a
+ *   light-dismissing popover open. A mouse the page heard last passes a
+ *   presentation's hold. After a finger, a still mouse's press passes it
+ *   where the mouse rests, while a finger's tap there is held. A layer root
+ *   that takes no hits itself is held all the same: pointer-events: none, or
+ *   visibility: hidden, with its content opting back in. Keys still act
+ *   during a presentation's input hold. A dismissal's hold makes the content
+ *   inert and moves focus out of it, so no key acts on it either. A focused
+ *   button that turns inert still takes Enter and Space in both engines.
+ *   Each release gives input back. A hit test that skips shields
+ *   (isInputShield) finds what lies beneath, and a layer above the held one
+ *   still wins. A one-finger pan on the shield scrolls nothing, while a pinch
+ *   on it still zooms the page. It proves spec:AST-094 FR10, FR18 and FR35.
+ *   The pinch case runs in Chromium, which pinch-zooms from injected touches.
  * @position Browser tests of packages/core/src/Layer/inputHold.ts, run
  *   by the interaction project (`pnpm test:interaction inputHold`)
  */
@@ -280,32 +280,35 @@ test("a mouse the page heard last passes a presentation's hold at once: a press 
   expect(await landings()).toEqual(['pointerup:action', 'click:action']);
 });
 
-test("after a finger, a mouse press made before the mouse moves meets a presentation's shield to its end: its release and click land on the shield and reach nothing, and once the mouse moves its press reaches the dialog's recognizer (spec:AST-094 FR35)", async ({
+test("after a finger, a still mouse's press passes a presentation's shield where the mouse rests: the press, its release and its click reach the dialog's recognizer, while a finger's tap on that spot is still held (spec:AST-094 FR35)", async ({
   page,
 }) => {
   const driver = await load(page);
   await open(page, 'dialog');
   const action = await centre(page, 'action');
   const message = await centre(page, 'message');
+  // Recorded from before the first tap: a recognized tap's click guard then
+  // listens after it, and cannot hide the click from it.
+  const landings = await recordLandings(page);
   await page.mouse.move(action.x - 40, action.y);
   await page.mouse.move(action.x, action.y, {steps: 4});
   // A finger is the page's last pointer: it taps the dialog's text, which
   // the recognizer on the dialog counts.
   await driver.tap(message);
   await expect.poll(async () => (await readLog(page)).taps).toBe(1);
-  const landings = await recordLandings(page);
   await hold(page, 'dialog', 'viewport');
-  await page.mouse.down();
-  await page.mouse.up();
+  // A finger's tap where the mouse rests is held all the same.
+  await driver.tap(action);
   await settle(page);
-  expect(await landings()).toEqual(['pointerup:shield', 'click:shield']);
   expect(await readLog(page)).toEqual({clicks: [], taps: 1, toggles: []});
-  // The mouse moves: its next press reaches the dialog's recognizer, as with
-  // no hold.
-  await page.mouse.move(action.x + 4, action.y, {steps: 4});
+  // The mouse has not moved since the finger: its press lands where it rests.
+  await page.evaluate(() => {
+    (window as unknown as {__seen: string[]}).__seen.splice(0);
+  });
   await page.mouse.down();
   await page.mouse.up();
   await expect.poll(async () => (await readLog(page)).taps).toBe(2);
+  await expect.poll(landings).toEqual(['pointerup:action', 'click:action']);
 });
 
 test('a touch that lands during a hold and lifts after its release reaches nothing to its end: no release, end or click lands anywhere, and the next tap clicks (spec:AST-094 FR35)', async ({
@@ -442,6 +445,44 @@ test('a light-dismissing popover stays open when a hold takes a tap outside it; 
   await expect
     .poll(async () => (await readLog(page)).toggles)
     .toEqual(['pop:open', 'pop:closed']);
+});
+
+test('a finger that goes down outside a light-dismissing popover before its hold and lifts during it dismisses the popover, as with no hold, every time', async ({
+  page,
+}) => {
+  const driver = await load(page);
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error('no viewport');
+  }
+  const outside = {x: 20, y: viewport.height - 20};
+  // The lift that lands on the shield is intermittent in WebKit, so the case
+  // runs ten times.
+  for (let run = 0; run < 10; run += 1) {
+    await open(page, 'pop');
+    await driver.play(
+      [
+        {t: 0, fingers: [{id: 7, ...outside}]},
+        {t: 600, fingers: [{id: 7, ...outside}]},
+        {t: 616, fingers: []},
+      ],
+      {
+        onEvent: async step => {
+          if (step.type === 'touchStart') {
+            await hold(page, 'pop', 'viewport');
+          }
+        },
+      },
+    );
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document.getElementById('pop')?.matches(':popover-open'),
+        ),
+      )
+      .toBe(false);
+    await release(page);
+  }
 });
 
 test('a hit test that skips shields sees past a hold: under a held modal dialog’s shield, its own action', async ({

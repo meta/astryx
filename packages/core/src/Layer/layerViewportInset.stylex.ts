@@ -2,8 +2,10 @@
 
 /**
  * @file layerViewportInset.stylex.ts
- * @input Uses the spacing token, the device safe-area insets, and the
- *   app-declared `--astryx-layer-inset-*` custom properties
+ * @input Uses the spacing token, the device safe-area insets, the
+ *   app-declared `--astryx-layer-inset-*` custom properties, and the
+ *   keyboard cap each layer's own style declares
+ *   (`--_layer-keyboard-max-block-size`)
  * @output Exports the one definition of an anchored layer's viewport gutter
  *   and the size caps derived from it
  * @position Layer runtime geometry; read by useLayer and by consumers that
@@ -27,6 +29,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Layer/useLayer.tsx
+ * - /packages/core/src/Layer/useLayerKeyboardClearance.ts
  * - /packages/core/src/Layer/layerViewportInset.test.ts
  * - /docs/specs/AST-059-layer-viewport-inset/spec.md
  */
@@ -42,6 +45,10 @@ const INSET_BLOCK_START = 'var(--astryx-layer-inset-block-start, 0px)';
 const INSET_BLOCK_END = 'var(--astryx-layer-inset-block-end, 0px)';
 const INSET_INLINE_START = 'var(--astryx-layer-inset-inline-start, 0px)';
 const INSET_INLINE_END = 'var(--astryx-layer-inset-inline-end, 0px)';
+// Each layer's own style declares the room the software keyboard leaves it
+// (useLayer.tsx's `keyboardCap`, from useLayerKeyboardClearance.ts). An
+// uncapped layer declares a limit out of reach.
+const KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
 
 const GUTTER_BLOCK_START = `calc(max(${SPACING}, env(safe-area-inset-top, 0px)) + ${INSET_BLOCK_START})`;
 const GUTTER_BLOCK_END = `calc(max(${SPACING}, env(safe-area-inset-bottom, 0px)) + ${INSET_BLOCK_END})`;
@@ -79,7 +86,11 @@ export const layerViewportInset = stylex.defineConsts({
   /** The largest inline size a layer may take: the viewport minus both gutters. */
   maxInlineSize: `calc(100vi - ${GUTTER_INLINE_LEFT} - ${GUTTER_INLINE_RIGHT})`,
   maxInlineSizeFallback: `calc(100vw - ${SPACING} - ${SPACING} - ${INSET_INLINE_START} - ${INSET_INLINE_END})`,
-  /** The largest block size a layer may take: the viewport minus both gutters. */
-  maxBlockSize: `calc(100dvb - ${GUTTER_BLOCK_START} - ${GUTTER_BLOCK_END})`,
-  maxBlockSizeFallback: `calc(100vh - ${SPACING} - ${SPACING} - ${INSET_BLOCK_START} - ${INSET_BLOCK_END})`,
+  /**
+   * The largest block size a layer may take: the viewport minus both
+   * gutters. It is no more than the room the software keyboard leaves while
+   * it caps the layer.
+   */
+  maxBlockSize: `min(calc(100dvb - ${GUTTER_BLOCK_START} - ${GUTTER_BLOCK_END}), var(${KEYBOARD_CAP_PROPERTY}, 100dvb))`,
+  maxBlockSizeFallback: `min(calc(100vh - ${SPACING} - ${SPACING} - ${INSET_BLOCK_START} - ${INSET_BLOCK_END}), var(${KEYBOARD_CAP_PROPERTY}, 100vh))`,
 });

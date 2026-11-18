@@ -18,6 +18,7 @@ import {render, screen} from '@testing-library/react';
 import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
 import {useTableColumnResize} from '../columnResize/useTableColumnResize';
+import {useTableRowIndex} from '../rowIndex/useTableRowIndex';
 import {pixel, proportional} from '../../columnUtils';
 import type {TableColumn} from '../../types';
 
@@ -68,6 +69,30 @@ describe('useTableStickyColumns', () => {
     }
     render(<Harness />);
     expect(getHeader('Name').style.insetInlineStart).toBe('0px');
+  });
+
+  it("adds a row-number column's windowed extra width to the pinned offsets after it", () => {
+    function Harness() {
+      const rowIndex = useTableRowIndex<Row>();
+      const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex, stickyColumns: sticky}}
+        />
+      );
+    }
+    render(<Harness />);
+    // The number column comes first, so Name sits after its 48px floor plus
+    // whatever extra width a windowed table gives it (none here).
+    expect(getHeader('Name').getAttribute('style')).toContain(
+      'calc(48px + var(--_table-logical-extra-0, 0px))',
+    );
+    expect(screen.getByRole('table').getAttribute('style') ?? '').not.toContain(
+      '--_table-logical-extra',
+    );
   });
 
   it('computes cumulative start offsets for contiguous pinned columns', () => {
@@ -330,5 +355,69 @@ describe('useTableStickyColumns', () => {
         expect(observers).toBe(attached);
       },
     );
+  });
+});
+
+describe('useTableStickyColumns key changes', () => {
+  const pinColumns: TableColumn<Record<string, string>>[] = Array.from(
+    {length: 6},
+    (_, index) => ({key: `c${index}`, header: `Column ${index}`}),
+  );
+  const pinData = Array.from({length: 3}, (_, row) => {
+    const item: Record<string, string> = {id: `r${row}`};
+    for (const column of pinColumns) {
+      item[column.key] = `${row}:${column.key}`;
+    }
+    return item;
+  });
+  function Pinned({startKeys}: {startKeys?: string[]}) {
+    const sticky = useTableStickyColumns<Record<string, string>>({startKeys});
+    return (
+      <Table
+        aria-label="Pinned"
+        data={pinData}
+        columns={pinColumns}
+        idKey="id"
+        plugins={{sticky}}
+      />
+    );
+  }
+  function firstColumnPinned(container: HTMLElement) {
+    const header = container.querySelector('thead [data-column-key="c0"]');
+    return {
+      header: header?.hasAttribute('data-astryx-table-pinned'),
+      body: Array.from(container.querySelectorAll('tbody tr')).map(row =>
+        (row as HTMLTableRowElement).cells[0].hasAttribute(
+          'data-astryx-table-pinned',
+        ),
+      ),
+    };
+  }
+
+  it('pins and unpins body cells with their header when the keys change', () => {
+    const {container, rerender} = render(<Pinned />);
+    rerender(<Pinned startKeys={['c0']} />);
+    expect(firstColumnPinned(container)).toEqual({
+      header: true,
+      body: [true, true, true],
+    });
+    rerender(<Pinned />);
+    expect(firstColumnPinned(container)).toEqual({
+      header: false,
+      body: [false, false, false],
+    });
+  });
+
+  it('keeps one plugin object while the keys keep their values', () => {
+    const seen = new Set<unknown>();
+    function Recorder({startKeys}: {startKeys: string[]}) {
+      seen.add(useTableStickyColumns({startKeys}));
+      return null;
+    }
+    const {rerender} = render(<Recorder startKeys={['c0']} />);
+    rerender(<Recorder startKeys={['c0']} />);
+    expect(seen.size).toBe(1);
+    rerender(<Recorder startKeys={['c0', 'c1']} />);
+    expect(seen.size).toBe(2);
   });
 });

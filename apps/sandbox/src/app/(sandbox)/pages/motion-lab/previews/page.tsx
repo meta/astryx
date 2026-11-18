@@ -13,11 +13,16 @@
  * order the brief argues for and the order these should be picked up in.
  */
 
+import {useState} from 'react';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Link} from '@astryxdesign/core/Link';
 import {VStack} from '@astryxdesign/core/Layout';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from '@astryxdesign/core/SegmentedControl';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {LabPage} from '../PageFrame';
 import {ComparePanes, DemoBody, DemoCard, TokenSlider} from '../LabPrimitives';
@@ -27,6 +32,7 @@ import {
   DisclosureRig,
   ListReorderRig,
   NavTintRig,
+  OutlineMarkerRig,
   ProgressFillRig,
   RailRig,
   SkeletonSwapRig,
@@ -313,6 +319,8 @@ export default function PreviewsPage() {
             ]}
           />
         </DemoCard>
+
+        <OutlinePreview />
       </Grid>
 
       <DemoCard
@@ -349,5 +357,52 @@ export default function PreviewsPage() {
         </Text>
       </VStack>
     </LabPage>
+  );
+}
+
+/**
+ * Outline's marker, on top/height (today) and on transform (proposed), at
+ * reading pace or at the rate a fast scroll moves it.
+ */
+function OutlinePreview() {
+  const [pace, setPace] = useState<'reading' | 'scroll'>('reading');
+  const intervalMs = pace === 'reading' ? 1700 : 250;
+  return (
+    <DemoCard
+      title="Outline marker"
+      question="The marker follows the reading position, so on a scroll-linked page it moves on every scroll frame. Switch to the scroll rate: top and height re-lay-out the list each frame; transform never does."
+      badges={<Badge variant="warning" label="PARTIAL" />}>
+      <SegmentedControl
+        label="How fast the marker moves on"
+        size="sm"
+        value={pace}
+        onChange={value => setPace(value as 'reading' | 'scroll')}>
+        <SegmentedControlItem value="reading" label="Reading pace" />
+        <SegmentedControlItem value="scroll" label="Scroll rate" />
+      </SegmentedControl>
+      <ComparePanes
+        panes={[
+          {
+            tone: 'before',
+            label: 'Today — top and height',
+            content: <OutlineMarkerRig mode="before" intervalMs={intervalMs} />,
+          },
+          {
+            tone: 'after',
+            label: 'Proposed — transform only',
+            content: <OutlineMarkerRig mode="after" intervalMs={intervalMs} />,
+          },
+        ]}
+      />
+      <DemoBody>
+        <Text type="supporting" color="secondary">
+          The proposed marker uses a CSS transition on transform, so a move that
+          starts mid-slide begins from where the marker is. The public
+          useAnimator keeps each channel's velocity through an interrupted move,
+          but it drives one scale, not scaleY, so it can move this 1px marker
+          but not stretch it to the item's height.
+        </Text>
+      </DemoBody>
+    </DemoCard>
   );
 }

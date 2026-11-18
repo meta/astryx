@@ -199,13 +199,12 @@ export function useCalendarNavigation(
         setPendingFocus(plainDateToISO(targetDate));
       }
 
-      if (onFocusDateChange) {
-        onFocusDateChange(newISO);
-      } else {
+      onFocusDateChange?.(newISO);
+      if (!isControlledFocus) {
         setInternalFocusDate(newMonth);
       }
     },
-    [calendar, shownMonths, onFocusDateChange],
+    [calendar, shownMonths, isControlledFocus, onFocusDateChange],
   );
 
   // Clear pending focus

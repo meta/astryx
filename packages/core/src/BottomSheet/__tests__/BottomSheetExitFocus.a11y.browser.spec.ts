@@ -7,11 +7,11 @@
  *   closes the sheet, and during the exit the Done control is removed or
  *   disabled.
  * @output Real-engine proof that a closing sheet that held focus goes inert
- *   and aria-hidden as soon as that focus drops to the page, while its exit
- *   still runs.
- * @position Chromium and WebKit; the disabled case runs in Chromium only. The
- *   removed case needs a real engine: React drops Chromium's focusout for an
- *   element it removes, and WebKit sends none.
+ *   and aria-hidden as soon as that focus drops to the page (removed case);
+ *   when the control is disabled, focus stays on Done during the exit and
+ *   returns to Open sheet when the sheet closes (FR9).
+ * @position Chromium and WebKit. The removed case needs a real engine: React
+ *   drops Chromium's focusout for an element it removes, and WebKit sends none.
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -89,18 +89,37 @@ async function sawInertExit(page: Page, story: string): Promise<boolean> {
   return result;
 }
 
-for (const [story, change] of [
-  ['exit-focus-control-removed', 'removed'],
-  ['exit-focus-control-disabled', 'disabled'],
-] as const) {
-  test(`goes inert once its focused control is ${change} during the exit`, async ({
-    page,
-    browserName,
-  }) => {
-    test.skip(
-      change === 'disabled' && browserName !== 'chromium',
-      'Where focus goes from a disabled control is engine-specific; Chromium moves it to the page.',
-    );
-    expect(await sawInertExit(page, story)).toBe(true);
-  });
-}
+test('goes inert once its focused control is removed during the exit', async ({
+  page,
+}) => {
+  expect(await sawInertExit(page, 'exit-focus-control-removed')).toBe(true);
+});
+
+test('keeps focus on Done when disabled during the exit and returns to Open sheet when closed', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-bottomsheet--exit-focus-control-disabled&viewMode=story`,
+  );
+  const opener = page.getByRole('button', {name: 'Open sheet', exact: true});
+  await opener.focus();
+  await page.keyboard.press('Enter');
+  const done = page.getByRole('button', {name: 'Done', exact: true});
+  await expect(done).toBeVisible();
+  const dialog = page.locator('dialog[aria-label="Exit focus"]');
+  await expect
+    .poll(async () =>
+      dialog.evaluate(node => node.getAnimations({subtree: true}).length),
+    )
+    .toBe(0);
+  await done.focus();
+  await page.keyboard.press('Enter');
+
+  // Done becomes disabled during the exit motion; focus stays on Done (FR9).
+  await expect(done).toHaveAttribute('aria-disabled', 'true');
+  await expect(done).toBeFocused();
+
+  // Once the exit ends, the dialog closes and focus returns to the opener.
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+});

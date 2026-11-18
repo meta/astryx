@@ -24,6 +24,7 @@ import {Project} from '../../foundation/config/project.mjs';
 import * as readRecord from '../../foundation/fs/read-record.mjs';
 import {gatherCandidates, gatherCandidatesReused} from './_adapter.mjs';
 import {searchCore} from './search.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock('../../foundation/fs/read-record.mjs', async original => {
   const real = /** @type {typeof readRecord} */ (await original());
@@ -132,7 +133,7 @@ describe('gatherCandidatesReused', () => {
       // A consumer whose integration is a symlink to a package folder
       // elsewhere, as a workspace package is.
       const dir = fs.mkdtempSync(
-        path.join(process.cwd(), '.astryx-gather-reuse-'),
+        path.join(REPO_ROOT, '.astryx-gather-reuse-'),
       );
       const pkg = fs.mkdtempSync(
         path.join(os.tmpdir(), 'astryx-linked-widgets-'),

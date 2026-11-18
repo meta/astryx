@@ -13,8 +13,9 @@
  * example block. That list is a report too and never fails the run.
  *
  * @input Authored component docs and template descriptors across documented
- *   packages, committed API reports, plus the generated block and component
- *   registries
+ *   packages, the built API surface named by ASTRYX_API_SURFACE (written by
+ *   `node scripts/api-report/cli.mjs --surface <dir>`), plus the generated
+ *   block and component registries
  * @output CI-visible coverage inventory (components and public hooks) and
  *   regression coverage for authored-block admission into the registry
  * @position Build-time docsite documentation-coverage reporting
@@ -22,6 +23,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import docsiteConfig from '../../astryx.config.mjs';
@@ -31,6 +33,9 @@ import {
   formatCoverageReport,
   resolveTemplatesRoot,
   readReportedHooks,
+  resolveApiSurface,
+  NOT_BUILT_IN_DOCSITE_BUILD,
+  NOT_BUILT_REASON,
   pairHookExampleCoverage,
   formatHookCoverageReport,
 } from '../lib/exampleCoverage.mjs';
@@ -115,11 +120,31 @@ describe('example coverage (report-only)', () => {
   }, 120_000);
 
   it('reports public hooks with no hook doc or no example block', async () => {
+    // The hook list comes from the built API surface.
+    const surface = resolveApiSurface({env: process.env, repoRoot: REPO_ROOT});
+    if ('skip' in surface) {
+      process.stdout.write(`${surface.skip}\n`);
+      return;
+    }
+    if (surface.excluded.length) {
+      process.stdout.write(
+        `Hook coverage excludes ${surface.excluded.join(', ')}: ${NOT_BUILT_REASON}.\n`,
+      );
+    }
+    if (surface.unexpected.length) {
+      process.stdout.write(
+        `Hook coverage skips ${surface.unexpected.join(', ')}: not built (fails in CI).\n`,
+      );
+    }
     const inventories = await inventoryAllPackages();
     // A block in any package can be the example for a hook.
     const allBlocks = inventories.flatMap(inventory => inventory.blocks);
     for (const inventory of inventories) {
-      const reportPath = path.join(inventory.packageDir, 'api-report.md');
+      const reportPath = path.join(
+        surface.dir,
+        path.relative(REPO_ROOT, inventory.packageDir),
+        'api-report.md',
+      );
       if (!fs.existsSync(reportPath)) {
         continue;
       }
@@ -141,6 +166,95 @@ describe('example coverage (report-only)', () => {
       );
     }
   }, 120_000);
+
+  describe('the API surface for hook coverage', () => {
+    const withSurface = (skipped: string[] = []) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-surface-'));
+      fs.mkdirSync(path.join(root, '.surface'));
+      fs.writeFileSync(
+        path.join(root, '.surface/surface.json'),
+        JSON.stringify({
+          version: 1,
+          packages: [],
+          skipped: skipped.map(name => ({name, dir: 'x', missing: []})),
+        }),
+      );
+      return root;
+    };
+    const ciEnv = {CI: 'true', ASTRYX_API_SURFACE: '.surface'};
+
+    it('names the packages docsite-build does not build, and passes in CI', () => {
+      const root = withSurface([...NOT_BUILT_IN_DOCSITE_BUILD]);
+      try {
+        expect(resolveApiSurface({env: ciEnv, repoRoot: root})).toEqual({
+          dir: path.join(root, '.surface'),
+          excluded: ['@astryxdesign/cli', '@astryxdesign/build'],
+          unexpected: [],
+        });
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('fails in CI when the surface lists another package as not built', () => {
+      const root = withSurface(['@astryxdesign/cli', '@astryxdesign/vega']);
+      try {
+        expect(() => resolveApiSurface({env: ciEnv, repoRoot: root})).toThrow(
+          'The API surface lists @astryxdesign/vega as not built',
+        );
+        // Outside CI it is named, not fatal.
+        expect(
+          resolveApiSurface({
+            env: {ASTRYX_API_SURFACE: '.surface'},
+            repoRoot: root,
+          }),
+        ).toMatchObject({unexpected: ['@astryxdesign/vega']});
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('fails in CI when the surface is unset or unreadable', () => {
+      const root = withSurface();
+      try {
+        for (const env of [
+          {CI: 'true'},
+          {CI: 'true', ASTRYX_API_SURFACE: '.missing'},
+        ]) {
+          expect(() => resolveApiSurface({env, repoRoot: root})).toThrow(
+            'ASTRYX_API_SURFACE is required in CI: build it with node scripts/api-report/cli.mjs --surface <dir>',
+          );
+        }
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('reads a surface relative to the repository root', () => {
+      const root = withSurface();
+      try {
+        expect(
+          resolveApiSurface({
+            env: {CI: 'true', ASTRYX_API_SURFACE: '.surface'},
+            repoRoot: root,
+          }),
+        ).toEqual({
+          dir: path.join(root, '.surface'),
+          excluded: [],
+          unexpected: [],
+        });
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('skips with a note outside CI', () => {
+      const result = resolveApiSurface({env: {}, repoRoot: os.tmpdir()});
+      expect(result).toEqual({
+        skip: expect.stringContaining('Hook coverage skipped'),
+      });
+    });
+  });
 
   it('reads hook names only from Hooks sections, once each', () => {
     const report = [

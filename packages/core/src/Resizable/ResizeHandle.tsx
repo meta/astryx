@@ -26,6 +26,7 @@ import {
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
 import {
+  endResizeAt,
   getCollapseControls,
   getEffectiveMaxPx,
   resizablePropsOf,
@@ -39,6 +40,7 @@ import {
 } from './resizeGesture';
 import {
   handOverPane,
+  regionOfProps,
   registerResizeHandle,
   resizablePaneFor,
   watchResizablePanes,
@@ -48,6 +50,7 @@ import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
 
 import {useDevWarning} from '../hooks/useDevWarning';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -79,6 +82,10 @@ function resolveEffectiveSide(
 const styles = stylex.create({
   handle: {
     position: 'relative',
+    // The grab zone and the pill stay above the content beside the handle. A
+    // glide's translate makes the handle a stacking context, which traps
+    // their own z-index inside it.
+    zIndex: 2,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
@@ -431,15 +438,13 @@ export function ResizeHandle({
 
   // --- The region a `resizable` prop describes ---
 
-  // The gesture reads the latest props at each input. A drag sees the region
-  // as it is now, not as it was at the press.
-  const resizableRef = useRef(resizable);
-  resizableRef.current = resizable;
+  // The gesture reads the committed props at each input. A drag sees the
+  // region as it is now, not as it was at the press.
+  const resizableRef = useCommittedRef(resizable);
   // The region a drag in flight started on: told the gesture is over even
   // after the prop has gone.
   const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
-  const configRef = useRef({direction, isReversed, isDisabled});
-  configRef.current = {direction, isReversed, isDisabled};
+  const configRef = useCommittedRef({direction, isReversed, isDisabled});
   const [isDragging, setIsDragging] = useState(false);
   const [regionGesture] = useState<ResizeGesture>(() => {
     const model: ResizeGestureModel = {
@@ -460,10 +465,12 @@ export function ResizeHandle({
         resizableRef.current?._onResizeStart();
       },
       move: delta => resizableRef.current?._onResizeMove(delta),
-      end: () => {
+      end: velocity => {
         const region = resizableRef.current ?? dragRegionRef.current;
         dragRegionRef.current = undefined;
-        region?._onResizeEnd();
+        if (region != null) {
+          endResizeAt(region, velocity ?? 0);
+        }
       },
       // Not a resize end, but the gesture is over. The region froze its state
       // for the drag, so it must hear that the drag ended.
@@ -491,7 +498,15 @@ export function ResizeHandle({
         isDisabled:
           configRef.current.isDisabled || resizableRef.current == null,
       }),
-      setIsDragging,
+      dragging => {
+        setIsDragging(dragging);
+        // The hook's region lets a pointer drag reopen its pane without a
+        // slide; a hand-built object has none.
+        const region = resizableRef.current;
+        if (region != null) {
+          regionOfProps(region)?.setPointerDragging(dragging);
+        }
+      },
     );
   });
 
@@ -564,6 +579,7 @@ export function ResizeHandle({
       heldPaneRef.current = handOverPane(
         heldPaneRef.current,
         null,
+        null,
         false,
         null,
       );
@@ -586,6 +602,7 @@ export function ResizeHandle({
     heldPaneRef.current = handOverPane(
       heldPaneRef.current,
       pane,
+      null,
       isRegionCollapsed,
       element,
     );

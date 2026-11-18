@@ -62,11 +62,20 @@ const DPR = 2;
 
 test.use({viewport: {width: 402, height: 200}, deviceScaleFactor: DPR});
 
+/**
+ * Resolves once the story shows its first bar. Storybook renders the story
+ * after it loads the story's module, and a loaded runner can take longer than
+ * an assertion's 5 s for that. The test's timeout bounds the wait.
+ */
+async function barShown(page: Page) {
+  await page.getByRole('progressbar').first().waitFor();
+}
+
 async function open(page: Page, value: number, globals = '') {
   await page.goto(
     `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story${globals ? `&globals=${globals}` : ''}`,
   );
-  await expect(page.getByRole('progressbar')).toBeVisible();
+  await barShown(page);
   await setValue(page, value);
   // Let any transition from the story's own value finish.
   await settle(page);
@@ -581,7 +590,7 @@ for (const pointer of ['a mouse', 'a finger'] as const) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
       );
-      await expect(page.getByRole('progressbar').first()).toBeVisible();
+      await barShown(page);
       expect(
         await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
       ).toBe(pointer === 'a finger');
@@ -704,8 +713,11 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
   await page.goto(
     `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
   );
-  await expect(page.getByRole('progressbar').first()).toBeVisible();
-  await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
+  await barShown(page);
+  // On the bar itself: the story's theme root declares its own tempo.
+  await page.addStyleTag({
+    content: '[role="progressbar"] { --_astryx-motion-tempo: 1.5; }',
+  });
   const durations = await page.evaluate(() =>
     Array.from(document.querySelectorAll('[role="progressbar"]')).map(track =>
       Number(
@@ -743,7 +755,7 @@ test('at the pulse floor every tone with 3:1 against the track keeps it, light a
     await page.goto(
       `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story&globals=astryxTheme:none;colorMode:${mode}`,
     );
-    await expect(page.getByRole('progressbar').first()).toBeVisible();
+    await barShown(page);
     rows.push(
       ...(await page.evaluate(
         ({mode: m, opacities}) => {
@@ -1016,7 +1028,10 @@ test('storyboard: the fill moving from 20% to 80% @storyboard', async ({
   // frame interval at a time through its end. A screencast of the change
   // shows only the frames a loaded runner gets to capture, and one it misses
   // doubles the step between the two around it.
-  const hold = await armHold(page, page.getByRole('progressbar'));
+  const bar = page.getByRole('progressbar');
+  const hold = await armHold(page, bar, {
+    judges: {target: bar.locator(':scope > *').first(), property: 'transform'},
+  });
   await setValue(page, 80);
   const {storyboard} = await animationStoryboard(page, {
     name: 'progress-bar-fill-move',

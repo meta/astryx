@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[fix] `astryx theme build` now writes a built theme module that loads in any bundler and in plain Node. A local module the built module imports (an icon registry, a component icon slot value, or the helpers they import) that is TypeScript or JSX is compiled to JavaScript named after its source (`icons.tsx` → `icons.tsx.js`) in a folder beside the built module named for it (`w98.modules` beside `w98.js`, whatever `--out` names the stylesheet), at the place each source has under the folder that holds the theme and its compiled sources, so every compiled module has a path of its own: `import { icons } from './icons'` with `icons.tsx` beside the theme becomes `import { icons } from './w98.modules/icons.tsx.js'`, and a helper it imports becomes `w98.modules/helper.ts.js`. Each local import names its file with its extension. Before, the built module kept the TypeScript import, so an app whose bundler does not compile TypeScript from `node_modules` (a plain Next.js app) failed to build after it added the theme. The compiled modules carry the build header, `--check` compares them, and a file of your own at a compiled module's path is never replaced (that import stays as written, with a warning saying so). A theme with no local module writes the same outputs as before; package imports stay as they are. `--family` builds compile each member's TypeScript registry the same way, in a folder named for the family key.
+
+@josephfarina

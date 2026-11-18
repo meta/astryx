@@ -3,12 +3,13 @@
  * @file privateAttributes/pressGroupItem.stylex.ts
  * @input Nothing: the private press-group-item attribute
  * @output pressGroupItemProps, which marks an action a group's tracker
- *   follows with the pointers it follows, and isTrackedByGroup, which reads
- *   the mark
+ *   follows with the pointers it follows, and the readers isPressGroupItem
+ *   and isTrackedByGroup
  * @position Owner module of the private press-group-item attribute: the only
- *   file that writes its name. AlertDialog marks its actions, and the press
- *   controller (utils/pressFeedback.ts) leaves a press of those pointers to
- *   the group's tracker. No package entry exports it.
+ *   file that writes its name. AlertDialog's actions and a Button inside a
+ *   tracking group carry the mark. The press controller
+ *   (utils/pressFeedback.ts) leaves a press of those pointers to the group's
+ *   tracker. No package entry exports it.
  */
 
 const PRESS_GROUP_ITEM = 'data-astryx-press-group-item';
@@ -21,6 +22,11 @@ export function pressGroupItemProps(
   pointerTypes: ReadonlyArray<string>,
 ): Readonly<Record<string, string>> {
   return {[PRESS_GROUP_ITEM]: pointerTypes.join(' ')};
+}
+
+/** Whether `element` is an action that a group's tracker follows. */
+export function isPressGroupItem(element: Element): boolean {
+  return element.hasAttribute(PRESS_GROUP_ITEM);
 }
 
 /**

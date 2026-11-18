@@ -32,9 +32,13 @@ import {
   containsAlongFlatTree,
   deepActiveElement,
   parentAcrossShadow,
+  shadowHostOf,
+  shadowRootsOutward,
 } from './flatTree';
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
+import {isElement, isNode} from './nodeType';
+import {sharedWeakMap} from './sharedRealm';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [
@@ -63,14 +67,18 @@ export function locksSelectionFor(pointerType: string): boolean {
   return pointerType !== 'mouse';
 }
 
-/** Locked elements, how many contacts hold each, and what to restore. */
-const locks = new WeakMap<
+/**
+ * Locked elements, how many contacts hold each, and what to restore. Every
+ * copy of Core counts here, so the first lock's saved styles come back only
+ * after the last release in any copy.
+ */
+const locks = sharedWeakMap<
   Element,
   {
     count: number;
     saved: ReadonlyArray<{name: string; value: string; priority: string}>;
   }
->();
+>('utils/selection-lock/locks', 1);
 
 /**
  * Refuse a selection and the touch callout on `elements` (and on a non-text
@@ -315,9 +323,7 @@ export function startsOnSelectableText(
   // Text directly under a shadow root takes its host's style.
   const element =
     node.parentElement ??
-    (node.parentNode?.nodeType === 11
-      ? (node.parentNode as ShadowRoot).host
-      : null);
+    (node.parentNode == null ? null : shadowHostOf(node.parentNode));
   if (element == null || !allowsSelection(element) || isInButton(node)) {
     return false;
   }
@@ -357,7 +363,7 @@ function isInButton(node: Node): boolean {
 }
 
 /** The caret position the engine puts at a point, by either query. */
-function caretAt(
+export function caretAt(
   doc: Document,
   x: number,
   y: number,
@@ -602,22 +608,12 @@ function ownShadowRoot(target: EventTarget | null): ShadowRoot[] {
 
 /** The open shadow roots on `target`'s root chain, innermost first. */
 function openShadowRootsOf(target: EventTarget | null): ShadowRoot[] {
-  const roots: ShadowRoot[] = [];
-  let root =
-    target != null && typeof (target as Node).nodeType === 'number'
-      ? (target as Node).getRootNode()
-      : null;
-  while (root != null && root.nodeType === 11) {
-    const host = (root as ShadowRoot).host as Element | undefined;
-    if (host == null) {
-      break;
-    }
-    if ((root as ShadowRoot).mode === 'open') {
-      roots.push(root as ShadowRoot);
-    }
-    root = host.getRootNode();
+  if (target == null || typeof (target as Node).nodeType !== 'number') {
+    return [];
   }
-  return roots;
+  return shadowRootsOutward((target as Node).getRootNode())
+    .map(({root}) => root)
+    .filter(root => root.mode === 'open');
 }
 
 /**
@@ -679,7 +675,7 @@ function lockStyles(set: ReadonlySet<Element>): () => void {
  */
 function isSelectableControl(node: unknown): node is HTMLInputElement {
   return (
-    node instanceof Element &&
+    isElement(node) &&
     node.localName === 'input' &&
     !TEXT_ENTRY_TYPES.has((node as HTMLInputElement).type)
   );
@@ -687,12 +683,11 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
 
 /** Text a held finger edits: it places the caret there. */
 function isTextEntry(node: EventTarget | null): boolean {
-  const element =
-    node instanceof Element
-      ? node
-      : node instanceof Node
-        ? node.parentElement
-        : null;
+  const element = isElement(node)
+    ? node
+    : isNode(node)
+      ? node.parentElement
+      : null;
   if (element == null) {
     return false;
   }
@@ -705,8 +700,11 @@ function isTextEntry(node: EventTarget | null): boolean {
   return (element as HTMLElement).isContentEditable;
 }
 
-/** An element's inline style, when it has one (HTML and SVG elements). */
+/**
+ * An element's inline style, when it has one (HTML and SVG elements). It is
+ * checked as an object, so another window's style passes too.
+ */
 function styleOf(element: Element): CSSStyleDeclaration | null {
   const style = (element as Partial<ElementCSSInlineStyle>).style;
-  return style instanceof Object ? style : null;
+  return typeof style === 'object' && style !== null ? style : null;
 }

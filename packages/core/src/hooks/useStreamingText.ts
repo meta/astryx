@@ -145,30 +145,32 @@ export function useStreamingText(
     return Math.max(4, Math.round(tick));
   }, [token, speed]);
 
-  const [displayedLen, setDisplayedLen] = useState(0);
+  // Where the reveal restarts: at 0 on a clear (a new message), at the whole
+  // text on a stream's end. Adjusted during render, and only then, never per
+  // chunk. State, not refs: a render React discards takes its adjustment with
+  // it. The frame clock alone advances `revealed`, which counts only within
+  // its restart's epoch.
+  const [restart, setRestart] = useState({epoch: 0, len: 0});
+  const [revealed, setRevealed] = useState({epoch: 0, len: 0});
+  const displayedLen =
+    revealed.epoch === restart.epoch ? revealed.len : restart.len;
   const targetRef = useRef(targetText);
-  const displayedLenRef = useRef(0);
   const lastTickRef = useRef(0);
   const rafRef = useRef<number | null>(null);
 
   targetRef.current = targetText;
 
-  // Reset when target clears (new message)
-  const prevTargetLenRef = useRef(targetText.length);
-  if (targetText.length !== prevTargetLenRef.current) {
-    prevTargetLenRef.current = targetText.length;
-    if (targetText.length === 0 && displayedLen !== 0) {
-      displayedLenRef.current = 0;
-      setDisplayedLen(0);
-    }
+  if (targetText.length === 0 && displayedLen !== 0) {
+    setRestart(previous => ({epoch: previous.epoch + 1, len: 0}));
   }
-
-  const prevIsStreamingRef = useRef(isStreaming);
-  if (isStreaming !== prevIsStreamingRef.current) {
-    prevIsStreamingRef.current = isStreaming;
+  const [wasStreaming, setWasStreaming] = useState(isStreaming);
+  if (isStreaming !== wasStreaming) {
+    setWasStreaming(isStreaming);
     if (!isStreaming && targetText.length > 0) {
-      displayedLenRef.current = targetText.length;
-      setDisplayedLen(targetText.length);
+      setRestart(previous => ({
+        epoch: previous.epoch + 1,
+        len: targetText.length,
+      }));
     }
   }
 
@@ -190,14 +192,17 @@ export function useStreamingText(
       if (elapsed >= tickMs) {
         lastTickRef.current = now;
         const target = targetRef.current;
-        const currentLen = displayedLenRef.current;
-
-        if (currentLen < target.length) {
-          const nextLen = Math.min(currentLen + charsPerTick, target.length);
-
-          displayedLenRef.current = nextLen;
-          setDisplayedLen(nextLen);
-        }
+        setRevealed(previous => {
+          const currentLen =
+            previous.epoch === restart.epoch ? previous.len : restart.len;
+          if (currentLen >= target.length) {
+            return previous;
+          }
+          return {
+            epoch: restart.epoch,
+            len: Math.min(currentLen + charsPerTick, target.length),
+          };
+        });
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -210,7 +215,7 @@ export function useStreamingText(
         rafRef.current = null;
       }
     };
-  }, [isStreaming, charsPerTick, tickMs, speed, prefersReducedMotion]);
+  }, [isStreaming, charsPerTick, tickMs, speed, prefersReducedMotion, restart]);
 
   if (!isStreaming || speed === 'instant' || prefersReducedMotion) {
     return targetText;

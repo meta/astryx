@@ -5,7 +5,7 @@
  * @input Nothing; data only
  * @output Exports `refreshControl`, UIRefreshControl's pull values: the
  *   refreshing inset, the trigger, the pull after it, the reveal, the end, and
- *   the theme tokens the end plays
+ *   the end's duration token
  * @position Internal to the refresh pull. A release onto the inset uses Core's
  *   `scroll.bounce`, and a pull past `height` uses Core's rubber band.
  */
@@ -61,13 +61,16 @@ export const refreshControl = {
   revealCurve: [0.42, 0, 0.58, 1],
   /**
    * `endRefreshing()` while the control is visible: the inset leaves (the
-   * content moves up by `height`) over this long. The end plays the theme
-   * duration token nearest it (`endDurationToken`). This value stays as the
+   * content moves up by `height`) over this long. UIView.animate plays it on
+   * its default curve, easeInEaseOut, which has the control points of
+   * `revealCurve`. The end plays that curve over the theme duration token
+   * nearest this value (`endDurationToken`). This value stays as the
    * reference for that choice.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, setContentOffset per frame over 0.3 s inside
    *   UIView.animate(withDuration: 0.3), three runs at rest identical to the
    *   frame, Oct 23 2026
+   * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easeineaseout
    */
   endMs: 300,
   /**
@@ -75,6 +78,4 @@ export const refreshControl = {
    * value is the one nearest `endMs`: 300 ms. The theme's tempo scales it.
    */
   endDurationToken: '--duration-medium',
-  /** The easing token that the end plays: the content moves. */
-  endEasingToken: '--ease-move',
 } as const;

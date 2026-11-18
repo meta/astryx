@@ -5,7 +5,7 @@
 /**
  * @file useDrawerDialogPresence.ts
  * @input Controlled open state, modal mode, dialog ref, and rendered-state setter
- * @output Coordinates native top-layer presence, the touch entrance's input hold, exit timing, focus restoration, and unmount cleanup
+ * @output Coordinates native top-layer presence, the touch entrance's input hold, exit timing, focus restoration, and unmount cleanup, including focus return after removal while open
  * @position Drawer-internal hook; consumed only by Drawer.tsx
  *
  * The drawer has two independent notions of presence:
@@ -36,6 +36,7 @@ import {flushSync} from 'react-dom';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {runPopoverOperation} from '../Layer/popoverOperations';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -194,14 +195,19 @@ export function useDrawerDialogPresence({
   // that cleanup would cut off every delayed slide-out.
   useEffect(() => {
     const dialog = dialogRef.current;
+    const returnFocusOnRemoval =
+      dialog == null ? null : prepareFocusReturnOnRemoval(dialog);
     return () => {
       if (dialog && isDrawerHostOpen(dialog, isModal)) {
         if (hideDrawerHost(dialog, isModal)) {
-          // No focus restore on this path — the drawer is being torn down, so
-          // the owed synthetic close fires immediately (still exactly once).
+          // The drawer is being torn down, so the owed synthetic close fires
+          // immediately (still exactly once).
           dispatchDialogClose(dialog);
         }
       }
+      // Removal already hid a popover host, so this runs outside the check
+      // above. The trigger is null outside an open cycle.
+      returnFocusOnRemoval?.(triggerElementRef.current);
     };
   }, [dialogRef, isModal]);
 }

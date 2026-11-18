@@ -16,6 +16,13 @@
         "message": "<text>"
       },
       {
+        "id": "core-stylesheets",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
         "id": "version-alignment",
         "label": "<text>",
         "status": "pass",
@@ -62,8 +69,16 @@
       {
         "id": "integration-issues",
         "label": "<text>",
-        "status": "pass",
-        "message": "<text> 1"
+        "status": "warn",
+        "message": "<text> 1 1 1 1 2",
+        "fix": "<text>"
+      },
+      {
+        "id": "icon-sets",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text> 1 1 2",
+        "fix": "<text>"
       },
       {
         "id": "agent-docs",
@@ -103,19 +118,19 @@
         "id": "authoring-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 19"
+        "message": "<text> 20"
       },
       {
         "id": "cli-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 101 82 19"
+        "message": "<text> 104 84 20"
       },
       {
         "id": "docs-tree",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 201 32 13"
+        "message": "<text> 203 32 13"
       },
       {
         "id": "docs-progressive-disclosure",
@@ -125,8 +140,8 @@
       }
     ],
     "summary": {
-      "pass": 12,
-      "warn": 1,
+      "pass": 11,
+      "warn": 4,
       "fail": 0,
       "info": 5
     }

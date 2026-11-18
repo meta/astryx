@@ -24,9 +24,18 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {component} from './component.mjs';
-import {search} from '../search/search.mjs';
-import {resolveIntegrationImportPath} from '../../foundation/discovery/component-discovery.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./component.mjs')} */
+const {component} = require('./component.mjs');
+/** @type {typeof import('../search/search.mjs')} */
+const {search} = require('../search/search.mjs');
+/** @type {typeof import('../../foundation/discovery/component-discovery.mjs')} */
+const {
+  resolveIntegrationImportPath,
+} = require('../../foundation/discovery/component-discovery.mjs');
 
 const SLOW = 30_000;
 
@@ -119,7 +128,7 @@ const SUBPATH_EXPORTS = {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-import-agreement-test-'),
+    path.join(REPO_ROOT, '.astryx-import-agreement-test-'),
   );
 });
 

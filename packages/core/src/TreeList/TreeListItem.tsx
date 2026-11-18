@@ -31,7 +31,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
-  cancelNestedTouchPress,
+  cancelNestedPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
@@ -93,9 +93,9 @@ const styles = stylex.create({
     // collapse, so adjacent rows end up a full gap apart — and it rides the
     // `rowWrapper`, which carries no theme target, so the paintable
     // `tree-list-item` stays a pure paint seam (layout lives off it). The <li>s
-    // stay contiguous — the gap is padding INSIDE each <li>, not space between
-    // them — so the per-<li> connector guide can still span it and read as a
-    // continuous line (see TreeListBranches). The lever's default is a subtle
+    // stay contiguous, because the gap is padding inside each <li>, not space
+    // between them. So the per-row connector guide can still span it and read
+    // as one line (see TreeListBranches). The lever's default is a subtle
     // `--spacing-0-5` (2px, set on the tree-list root); a theme widens or closes
     // it via the `tree-list` target.
     paddingBlock: 'calc(var(--tree-list-row-gap, 0px) / 2)',
@@ -122,14 +122,23 @@ const styles = stylex.create({
   // when its own treeitem publishes focus (`--_tree-focus-z` on `wrapper`).
   // The ring is the row's outline, so it cannot be lifted on its own: a
   // focused row that is also filled (selected or hovered) covers the guides at
-  // that row. That is the accepted trade-off (DD3). Applied only with
-  // `focusWithinOrPublished`, the rows that draw the ring: a plain row shows
-  // no ring, so its fill stays under the guides.
+  // that row. That is the accepted trade-off (DD3). Its conditions match the
+  // ring's, so only the row whose ring shows rises above the guides.
   focusLift: {
     zIndex: {
       default: 'var(--_tree-focus-z, auto)',
       ':has(:focus-visible)': 2,
     },
+  },
+  // A plain row rings and lifts only on its own treeitem's focus, from the
+  // variables `publishFocusVisibleVars` sets on `wrapper`. A control in its
+  // start or end content rings itself.
+  plainRowFocusRing: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
+  publishedFocusLift: {
+    zIndex: 'var(--_tree-focus-z, auto)',
   },
   // Per-level indent, drawn INSIDE the row box: the row (`contentWrapper`)
   // stays full width, so a nested row's hover and selected fill spans the
@@ -508,7 +517,7 @@ export function TreeListItem({
       chevron.contains(event.target)
         ? chevron
         : (linkRef.current ?? actionButtonRef.current);
-    cancelNestedTouchPress(event, event.currentTarget, ownAction);
+    cancelNestedPress(event, event.currentTarget, ownAction);
   };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
@@ -712,16 +721,16 @@ export function TreeListItem({
       data-tree-level={nestedLevel + 1}
       data-tree-disabled={isDisabled || undefined}
       {...focusOutlineProps.publishFocusVisibleVars(styles.wrapper)}>
-      {variant !== 'noGuides' && (
-        <div {...stylex.props(styles.treeBranches)}>
-          <TreeListBranches
-            ancestorsIsLast={ancestorsIsLast}
-            isLast={isLast}
-            nestedLevel={nestedLevel}
-          />
-        </div>
-      )}
       <div {...stylex.props(styles.rowWrapper)}>
+        {variant !== 'noGuides' && (
+          <div {...stylex.props(styles.treeBranches)}>
+            <TreeListBranches
+              ancestorsIsLast={ancestorsIsLast}
+              isLast={isLast}
+              nestedLevel={nestedLevel}
+            />
+          </div>
+        )}
         <div
           {...(isInteractive || (hasChildren && onClick == null)
             ? pressable
@@ -747,8 +756,12 @@ export function TreeListItem({
                   isSelected && styles.selected,
                   xstyle,
                 )
-              : stylex.props(
+              : // A plain row has no action, but it is a stop in the roving
+                // focus. It rings while its treeitem has focus.
+                stylex.props(
+                  styles.plainRowFocusRing,
                   styles.contentWrapper,
+                  styles.publishedFocusLift,
                   densityStyles[density],
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,

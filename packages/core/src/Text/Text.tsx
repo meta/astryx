@@ -16,15 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {
-  lazy,
-  Suspense,
-  use,
-  useCallback,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import {use, useCallback, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -56,15 +48,17 @@ import {
 } from './text.stylex';
 import {useTruncation} from './useTruncation';
 import {TextFocusOwnerContext} from './TextFocusOwnerContext';
+import {
+  TruncationTooltip,
+  useTruncationTooltipInterest,
+} from './TruncationTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-
-const LazyXDSTooltip = lazy(async () =>
-  import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
+import {TextClampContext} from './textClampContext';
 
 export type {TextType, TextSize};
 
@@ -108,7 +102,7 @@ export interface TextProps extends Omit<BaseProps, 'children'> {
   /**
    * Maximum lines before truncation. 0 = no truncation.
    * When set, truncated content shows its full text in a tooltip on hover,
-   * and is a tab stop so the tooltip opens on keyboard focus too (FR4).
+   * and is a tab stop so the tooltip opens on keyboard focus too.
    * @default 0
    */
   maxLines?: number;
@@ -314,31 +308,33 @@ export function Text({
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
+  // The tooltip mounts on the first hover, tap or focus, not with the text.
+  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
   // Ref for the text element (used as tooltip anchor)
   const textRef = useRef<HTMLElement>(null);
 
-  // A truncated Text is a tab stop so its tooltip opens from the keyboard
-  // (FR4), unless it sits inside a control that already takes focus: one that
-  // wraps it in the DOM (a link, a button, a menu item), found from its
-  // ancestors when the element attaches, or one that provides
-  // TextFocusOwnerContext (a clickable card). A focusable span nested in a
-  // control would add a second, unnamed tab stop inside it. Text hidden from
-  // assistive technology (`aria-hidden`, `inert`) adds none either: focus
-  // would land on content a screen reader cannot perceive. The stop renders
-  // as a prop, so it is in the DOM before the tooltip attaches its focus
-  // trigger, and a caller's own tabIndex still wins.
+  // A truncated Text is a tab stop, so its tooltip opens from the keyboard.
+  // It takes no stop when a control already takes the focus: one that wraps
+  // it in the DOM (a link, a button, a menu item), one it holds (a link or a
+  // field inside it), or one that provides TextFocusOwnerContext (a clickable
+  // card). A second, unnamed stop in such a control would confuse keyboard
+  // users. Text hidden from assistive technology (`aria-hidden`, `inert`)
+  // takes no stop either, because focus would land on content a screen
+  // reader cannot perceive. The stop is a prop, so it is in the DOM before
+  // the tooltip attaches its focus trigger. A caller's own tabIndex wins.
   const isInsideFocusOwner = use(TextFocusOwnerContext);
   const [isExcludedByAncestor, setIsExcludedByAncestor] = useState(false);
   const controlRef = useCallback((element: HTMLElement | null) => {
     if (element == null) {
       return;
     }
-    const isInsideControl =
-      element.parentElement?.closest(CONTROL_SELECTOR) != null;
+    const sharesControl =
+      element.parentElement?.closest(CONTROL_SELECTOR) != null ||
+      element.querySelector(CONTROL_SELECTOR) != null;
     const update = () =>
       setIsExcludedByAncestor(
-        isInsideControl || element.closest(HIDDEN_SELECTOR) != null,
+        sharesControl || element.closest(HIDDEN_SELECTOR) != null,
       );
     update();
     // Content revealed later (a closed Overlay's inert scrim, a collapsed
@@ -374,6 +370,9 @@ export function Text({
     textRef,
     maxLines > 0 && hasTruncateTooltip !== false ? controlRef : undefined,
   );
+  const isInClampedText = use(TextClampContext);
+  // A capsize block removes a multi-line clamp.
+  const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
@@ -414,26 +413,40 @@ export function Text({
           {...style, ...inlineStyle},
         )}
         tabIndex={isTabStop ? 0 : undefined}
-        {...props}>
-        {children}
+        {...props}
+        onPointerEnter={composeEventHandlers(
+          tooltipInterest.onPointerEnter,
+          props.onPointerEnter,
+        )}
+        onPointerLeave={composeEventHandlers(
+          tooltipInterest.onPointerLeave,
+          props.onPointerLeave,
+        )}
+        onPointerDown={composeEventHandlers(
+          tooltipInterest.onPointerDown,
+          props.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
+        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
+        {/* Always mounted, so a change of maxLines keeps every child mounted. */}
+        <TextClampContext value={isClamped || isInClampedText}>
+          {children}
+        </TextClampContext>
       </Component>
-      {tooltipEnabled && (
-        <Suspense fallback={null}>
-          <LazyXDSTooltip
-            anchorRef={textRef}
-            content={
-              <span {...stylex.props(truncationTooltipStyles.content)}>
-                {truncation.fullText}
-              </span>
-            }
-            placement={tooltipPlacement}
-            // The tooltip decides once, when it attaches, whether to listen
-            // for focus; a stop added later (revealed content) re-attaches it.
-            focusTrigger={
-              isTabStop && callerTabIndex == null ? 'always' : 'auto'
-            }
-          />
-        </Suspense>
+      {tooltipEnabled && tooltipInterest.isWanted && (
+        <TruncationTooltip
+          anchorRef={textRef}
+          content={
+            <span {...stylex.props(truncationTooltipStyles.content)}>
+              {truncation.fullText}
+            </span>
+          }
+          placement={tooltipPlacement}
+          interest={tooltipInterest}
+          // The tooltip decides once, when it attaches, whether to listen
+          // for focus; a stop added later (revealed content) re-attaches it.
+          focusTrigger={isTabStop && callerTabIndex == null ? 'always' : 'auto'}
+        />
       )}
     </>
   );

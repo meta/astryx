@@ -11,7 +11,7 @@ import {
 } from '@astryxdesign/core/Table';
 import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 import type {TableColumn} from '@astryxdesign/core/Table';
-import {Theme} from '@astryxdesign/core/theme';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {VStack, HStack} from '@astryxdesign/core/Stack';
 import {Text, Heading} from '@astryxdesign/core/Text';
@@ -227,7 +227,8 @@ const sevenOrders = manyOrders.slice(0, 7);
  * fourth order's row itself (`tr`), which glides with the row too; `edgeBorder`
  * sets one on the tbody's bottom (`tbody`) or as the top of the fifth order's
  * cells (`top`), each of which wins the collapse and glides with its row;
- * `wideBorder` sets a theme's 2 px green divider on every row.
+ * `wideBorder` sets a theme's 2 px green divider on every row; `muted` sets
+ * `panelVariant="muted"`, whose wash slides in with the panel's content.
  */
 export const GlidingRows: StoryObj<{
   themed?: boolean;
@@ -235,6 +236,7 @@ export const GlidingRows: StoryObj<{
   wideBorder?: boolean;
   edgeBorder?: 'none' | 'tbody' | 'top';
   dividers?: 'rows' | 'columns' | 'grid';
+  muted?: boolean;
 }> = {
   args: {
     themed: false,
@@ -242,8 +244,9 @@ export const GlidingRows: StoryObj<{
     wideBorder: false,
     edgeBorder: 'none',
     dividers: 'rows',
+    muted: false,
   },
-  render: ({themed, rowBorder, wideBorder, edgeBorder, dividers}) => {
+  render: ({themed, rowBorder, wideBorder, edgeBorder, dividers, muted}) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animatedLayout = useAnimatedLayout({containerRef});
     const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
@@ -255,6 +258,7 @@ export const GlidingRows: StoryObj<{
       getRowKey: item => item.id,
       renderExpanded: item => <OrderItems order={item} />,
       animatedLayout,
+      panelVariant: muted === true ? 'muted' : 'transparent',
     });
     const sticky = useTableStickyColumns<Order>({startKeys: ['customer']});
     const wideColumns = useMemo(
@@ -330,4 +334,61 @@ export const GlidingRowsLongTable: StoryObj<{glide?: boolean}> = {
       </div>
     );
   },
+};
+
+const rowExpandSlotThemes = [
+  {label: 'default', theme: null},
+  ...(['sm', 'md', 'lg'] as const).map(size => ({
+    label: size,
+    theme: defineTheme({
+      name: `story-row-expand-${size}`,
+      componentIcons: {'table-row-expand': {size}},
+    }),
+  })),
+  {
+    label: 'hidden',
+    theme: defineTheme({
+      name: 'story-row-expand-hidden',
+      componentIcons: {'table-row-expand': null},
+    }),
+  },
+];
+
+function SlotTable() {
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const expansion = useTableRowExpansion<Order>({
+    expandedKeys,
+    onToggle: key => setExpandedKeys(prev => toggleKey(prev, key)),
+    getRowKey: item => item.id,
+    getRowLabel: item => item.customer,
+    renderExpanded: item => <OrderItems order={item} />,
+  });
+  return (
+    <Table data={orders} columns={columns} idKey="id" plugins={{expansion}} />
+  );
+}
+
+/**
+ * The same table with the default expansion glyph, with a theme that asks the
+ * `table-row-expand` slot for each glyph size, and with a theme that hides it.
+ * The glyph changes; the rows keep their height.
+ */
+export const IconSlotRowHeight: Story = {
+  render: () => (
+    <VStack gap={4}>
+      {rowExpandSlotThemes.map(({label, theme}) => (
+        <div key={label} data-testid={`row-expand-${label}`}>
+          {theme ? (
+            <Theme theme={theme}>
+              <SlotTable />
+            </Theme>
+          ) : (
+            <SlotTable />
+          )}
+        </div>
+      ))}
+    </VStack>
+  ),
 };

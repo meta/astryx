@@ -36,6 +36,9 @@ export const meta = {
     'Keeps the old prop with a TODO where the language is computed, missing, ' +
     'or `plaintext`, and where the CodeBlock also spreads props; the ' +
     'deprecated prop still works there.',
+  // A file can change only through a JSX `tokenizer` prop, so a file whose text
+  // never says `tokenizer` is left as it is (assets/codemods/run-codemod.mjs).
+  mentions: ['tokenizer'],
 };
 
 const OLD_NAME = 'tokenizer';

@@ -3,11 +3,11 @@
 /**
  * @file refreshPull.ts
  * @input The pull values (refreshValues.ts), and the rubber band, the cubic
- *   Bézier and the motion-role parsers (Core's internal touch entry)
+ *   Bézier and the duration parser (Core's internal touch entry)
  * @output Exports the pull mapping (finger travel → overscroll), its slope
  *   and its inverse, and the trigger distance. It also exports the reveal, a
- *   refresh's release and end targets, and the end's timing from the theme's
- *   tokens.
+ *   refresh's release and end targets, and the end's timing: the theme's
+ *   duration token and UIKit's curve.
  * @position Pure math for useRefreshControl; no DOM, no React
  *
  * SYNC: When modified, update:
@@ -27,10 +27,7 @@ import {
   rubberBandInverse,
   rubberBandSlope,
 } from '@astryxdesign/core/internal/touch';
-import {
-  parseCssEasing,
-  parseMotionRoleValue,
-} from '@astryxdesign/core/internal/touch';
+import {parseMotionRoleValue} from '@astryxdesign/core/internal/touch';
 import {refreshControl} from './refreshValues';
 
 /** The refreshing inset and one-to-one stretch, pt. */
@@ -168,9 +165,10 @@ export function endMotion(scrolled: number): {
 }
 
 /**
- * The end's duration and curve: the theme tokens that `refreshControl` names,
- * as the end's element computes them. Null when either token is missing or
- * in a form it cannot read, such as `calc()`, `var()` or `steps()`.
+ * The end's duration and curve. The duration is the theme token that
+ * `refreshControl` names, as the end's element computes it. The curve is
+ * UIView.animate's easeInEaseOut, whatever the theme's easing. Null when the
+ * token is missing or in a form it cannot read, such as `calc()` or `var()`.
  */
 export function endTiming(
   style: Pick<CSSStyleDeclaration, 'getPropertyValue'>,
@@ -179,8 +177,5 @@ export function endTiming(
     'duration',
     style.getPropertyValue(refreshControl.endDurationToken),
   );
-  const points = parseCssEasing(
-    style.getPropertyValue(refreshControl.endEasingToken),
-  );
-  return ms == null || points == null ? null : {ms, points};
+  return ms == null ? null : {ms, points: refreshControl.revealCurve};
 }

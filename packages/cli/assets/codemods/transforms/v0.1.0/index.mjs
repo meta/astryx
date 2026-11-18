@@ -24,7 +24,7 @@ import migrateXdsCssSurfaces, {
 
 export default [
   {
-    // XDS-prefix migration (P2380608025). Mandatory in v0.1.0: the release
+    // XDS-prefix migration. Mandatory in v0.1.0: the release
     // dropped the prefixed compatibility aliases (useXDSTheme, XDSButton,
     // XDSIconRegistry, ...), so consumers upgrading from 0.0.x MUST rewrite
     // prefixed imports to their bare names.

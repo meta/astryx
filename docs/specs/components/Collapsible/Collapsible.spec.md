@@ -115,6 +115,10 @@ not parallel public names for this axis.
 - **AV4 — Existing non-chevron behavior.** Open-state ownership, disabled behavior,
   divider/density presentation, content layout, and reveal motion remain governed
   by their existing authority and are not changed by this decision.
+- **AV5 — Internal region element.** The content region always wraps its
+  children in one inner element, so an edge reveal or conceal slides them
+  under the region's clip (`spec:AST-105` FR9). The element is internal: it is
+  not a styling target or a promised structure.
 
 ### Representative states
 

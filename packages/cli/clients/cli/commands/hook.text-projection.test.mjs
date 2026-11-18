@@ -6,8 +6,13 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {runCli} from '../../../test-utils/run-cli.mjs';
-import {findRelatedBlocks} from '../../../api/template/template.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
+/** @type {typeof import('../../../api/template/template.mjs')} */
+const {findRelatedBlocks} = require('../../../api/template/template.mjs');
 
 const HOOK = 'useAnnounce';
 

@@ -26,7 +26,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {isRenderable} from '../utils/isRenderable';
-import {spacingVars} from '../theme/tokens.stylex';
+import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {TreeListItem} from './TreeListItem';
@@ -38,6 +38,7 @@ import type {
 import {themeProps} from '../utils/themeProps';
 import {useTreeFocusInternal} from '../hooks/useTreeFocus';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   moveFocusLeftBehind,
   noteFocusWithin,
@@ -46,6 +47,7 @@ import {
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
   applyLayoutChangeTransition,
   holdLayoutExit,
@@ -55,6 +57,46 @@ import {
   type AnimatedLayout,
   type LayoutChange,
 } from '../motion/animatedLayout';
+
+/**
+ * The clip a tree with no handle takes while it moves. Rows that glide up into
+ * a shorter tree show only inside it, so they never paint over the content
+ * after it. A table view clips to its bounds the same way. Only the bottom
+ * edge clips, past the reach of a row's focus ring.
+ */
+const MOVING_CLIP = `inset(-100vmax -100vmax calc(-1 * (${focusVars['--focus-outline-width']} + ${focusVars['--focus-outline-offset']})) -100vmax)`;
+
+const clipGenerations = new WeakMap<HTMLElement, number>();
+
+/** Clips `tree` with `MOVING_CLIP` until each finite motion in it settles. */
+function clipWhileMoving(tree: HTMLElement): void {
+  if (typeof tree.getAnimations !== 'function') {
+    return;
+  }
+  const moving = tree
+    .getAnimations({subtree: true})
+    .filter(
+      animation =>
+        animation.playState === 'running' &&
+        Number.isFinite(
+          animation.effect?.getComputedTiming().endTime ?? Infinity,
+        ),
+    );
+  if (moving.length === 0) {
+    return;
+  }
+  const generation = (clipGenerations.get(tree) ?? 0) + 1;
+  clipGenerations.set(tree, generation);
+  tree.style.setProperty('clip-path', MOVING_CLIP);
+  void Promise.allSettled(
+    moving.map(async animation => animation.finished),
+  ).then(() => {
+    if (clipGenerations.get(tree) === generation) {
+      clipGenerations.delete(tree);
+      tree.style.removeProperty('clip-path');
+    }
+  });
+}
 
 // =============================================================================
 // Types
@@ -246,7 +288,7 @@ export function TreeList({
   'aria-labelledby': ariaLabelledby,
   ref,
   onKeyDown: onKeyDownProp,
-  animatedLayout,
+  animatedLayout: animatedLayoutProp,
   ...restProps
 }: TreeListProps) {
   const headerId = useId();
@@ -270,6 +312,14 @@ export function TreeList({
   // (`architecture:react-component-runtime` INV12). Read through a ref
   // because the tree element comes from the focus hook below.
   const treeElementRef = useRef<HTMLUListElement | null>(null);
+  const {isTouch} = useTouchPresentation();
+  // Under a finger, a tree with no handle animates inside itself. The rows
+  // after a toggled row glide while its group fades on the same timing.
+  // Content after the tree takes its place at once, because only an app's own
+  // handle moves it.
+  const ownLayout = useAnimatedLayout({containerRef: treeElementRef});
+  const animatedLayout =
+    animatedLayoutProp ?? (isTouch ? ownLayout : undefined);
   // The rows expanded now, whatever expanded them (a click, the keyboard, or
   // `isExpanded` changed in `items`).
   const expandedIds = useMemo(() => {
@@ -557,7 +607,11 @@ export function TreeList({
         endAll();
       }
     }
-  }, [expandedIds, animatedLayout, endExit]);
+    const tree = treeElementRef.current;
+    if (pendings.length > 0 && animatedLayout === ownLayout && tree != null) {
+      clipWhileMoving(tree);
+    }
+  }, [expandedIds, animatedLayout, ownLayout, endExit]);
 
   const {treeRef, handleKeyDown, handleFocus, takeTabStop} =
     useTreeFocusInternal<HTMLUListElement>({
@@ -595,7 +649,6 @@ export function TreeList({
   const hasExpandableItems = items.some(
     item => item.children != null && item.children.length > 0,
   );
-
   function renderItems(
     items: TreeListItemData[],
     nestedLevel: number,

@@ -74,6 +74,7 @@ export function shardFile({
   cards,
   d8BrowserContract,
   pageRecoveries,
+  storyRetries = [],
 }) {
   return {
     version: RTL_SHARD_FILE_VERSION,
@@ -82,6 +83,7 @@ export function shardFile({
     planDigest: planDigest(plan),
     d8BrowserContract,
     pageRecoveries,
+    storyRetries,
     cards: Object.fromEntries(
       PARTS.map(part => [part, Object.fromEntries(cards[part])]),
     ),
@@ -111,7 +113,7 @@ export function readShardFiles(dir) {
 }
 
 /**
- * @returns {{d1: object[], stories: object[], curated: object[], d8BrowserContract: object, pageRecoveries: object[]}}
+ * @returns {{d1: object[], stories: object[], curated: object[], d8BrowserContract: object, pageRecoveries: object[], storyRetries: object[]}}
  *   cards in plan order
  */
 export function mergeRtlShards(files, {plan, storybookSha}) {
@@ -187,5 +189,15 @@ export function mergeRtlShards(files, {plan, storybookSha}) {
     curated: ordered('curated'),
     d8BrowserContract: shards[0].d8BrowserContract,
     pageRecoveries: shards.flatMap(content => content.pageRecoveries ?? []),
+    storyRetries: shards.flatMap(content => content.storyRetries ?? []),
   };
+}
+
+/**
+ * One line a log search can count across runs: the number of stories retried
+ * after an ERROR, and their ids.
+ */
+export function retriesLine(storyRetries) {
+  const ids = [...new Set(storyRetries.map(retry => retry.storyId))].sort();
+  return `rtl-audit-retries: ${storyRetries.length} [${ids.join(' ')}]`;
 }

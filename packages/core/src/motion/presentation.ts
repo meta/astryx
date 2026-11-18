@@ -5,12 +5,13 @@
  * @input Animators reporting, while a translate runs on the compositor, how
  *   far their element is drawn from where the engine hit-tests it, and how
  *   to make the engine hit-test it where it is drawn
- * @output Exports registerPresentedOffset, presentedElements,
- *   presentedOffsetOf, resolvePresented and watchPresentedElements: the
- *   registry the gesture host reads at touch-down to send a touch to what is
- *   drawn, and follows to keep a drag on a moving element blocking
- * @position Motion foundation (DOM, no React). Written by animator.ts, read
- *   by gestures/GestureHost.ts; internal to core
+ * @output The registry that the gesture host reads at touch-down, to send a
+ *   touch to what is drawn. The host also follows it to keep a drag on a
+ *   moving element blocking. Exports: registerPresentedOffset,
+ *   batchPresented, presentedElements, presentedOffsetOf, resolvePresented,
+ *   watchPresentedElements and the resolve write
+ * @position Motion foundation (DOM, no React). Written by animator.ts and
+ *   animatedLayout.ts, read by gestures/GestureHost.ts; internal to core
  *
  * iOS WebKit hit-tests an element that a Web Animations transform moves on
  * the compositor where the animation STARTED: it keeps the transform it
@@ -34,6 +35,8 @@
  */
 
 import {parentAcrossShadow} from '../utils/flatTree';
+import {isElement} from '../utils/nodeType';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /** How far an element is drawn from where the engine hit-tests it, CSS px. */
 export interface PresentedOffset {
@@ -58,11 +61,23 @@ export interface PresentedSource {
 
 const ZERO: PresentedOffset = {x: 0, y: 0};
 
-const sources = new Map<Element, PresentedSource>();
-const watchers = new Set<() => void>();
+// Registered, so the gesture host hit-tests elements a swizzled copy moves
+// as it does the package's.
+const presented = realmValue(sharedKey('motion/presentation', 1), () => ({
+  sources: new Map<Element, PresentedSource>(),
+  watchers: new Set<() => void>(),
+  // Inside batchPresented, a change waits for the batch's end.
+  batchDepth: 0,
+  isChanged: false,
+}));
+const {sources, watchers} = presented;
 
 /** Tell every watcher the reported elements changed; one's throw stops none. */
 function notifyWatchers(): void {
+  if (presented.batchDepth > 0) {
+    presented.isChanged = true;
+    return;
+  }
   for (const watcher of [...watchers]) {
     try {
       watcher();
@@ -70,6 +85,24 @@ function notifyWatchers(): void {
       queueMicrotask(() => {
         throw error;
       });
+    }
+  }
+}
+
+/**
+ * Runs `apply`, which reports elements or removes reports, and tells the
+ * watchers once, at its end, when the reported elements changed. So the
+ * moves of one layout change cost one notice.
+ */
+export function batchPresented(apply: () => void): void {
+  presented.batchDepth += 1;
+  try {
+    apply();
+  } finally {
+    presented.batchDepth -= 1;
+    if (presented.batchDepth === 0 && presented.isChanged) {
+      presented.isChanged = false;
+      notifyWatchers();
     }
   }
 }
@@ -128,7 +161,7 @@ export function presentedOffsetOf(
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    const source = node instanceof Element ? sources.get(node) : undefined;
+    const source = isElement(node) ? sources.get(node) : undefined;
     if (source != null) {
       const offset = source.offset(time);
       x += offset.x;
@@ -136,6 +169,25 @@ export function presentedOffsetOf(
     }
   }
   return {x, y};
+}
+
+/** The custom property whose writes make WebKit resolve a moving element. */
+const RESOLVE_PROPERTY = '--astryx-presented';
+
+/**
+ * Makes iOS WebKit resolve `element`'s transform again, to the value drawn
+ * now: one write of a value the property does not have yet. The animator and
+ * the animated layout both write it, so it counts up from the element's own
+ * last value.
+ */
+export function writePresentedResolve(element: ElementCSSInlineStyle): void {
+  const last = Number(element.style.getPropertyValue(RESOLVE_PROPERTY)) || 0;
+  element.style.setProperty(RESOLVE_PROPERTY, String(last + 1));
+}
+
+/** Removes the resolve write from `element`. */
+export function clearPresentedResolve(element: ElementCSSInlineStyle): void {
+  element.style.removeProperty(RESOLVE_PROPERTY);
 }
 
 /**

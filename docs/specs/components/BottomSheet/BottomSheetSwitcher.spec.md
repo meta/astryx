@@ -63,11 +63,14 @@ modality, identifier, and theming questions below stay open.
   change under `spec:AST-017` FR3. The element the `ref` resolves
   to, and that it changes on a handoff, is implementation rather than public
   contract (DEC-2). A switcher flow presented on its own behaves as released,
-  with two fixes: a toast raised from a step renders above the flow and can be
-  pressed (FR10, `component:BottomSheet` FR13), where it rendered behind the
-  flow before; and a flow whose active sheet is set on the server renders
-  closed until hydration, then opens that sheet settled, with no entry motion
+  with three fixes: a toast raised from a step renders above the flow and can
+  be pressed (FR10, `component:BottomSheet` FR13), where it rendered behind the
+  flow before; a flow whose active sheet is set on the server renders closed
+  until hydration, then opens that sheet settled, with no entry motion
   (`component:BottomSheet` FR17), where it painted open over a live page
+  before; and a step that opens with an eligible `data-autofocus` field (a
+  `TextInput` with `hasAutoFocus`) focuses that field in every engine
+  (`component:BottomSheet` AR4), where Chromium focused the step's panel
   before.
   A switcher flow presented while other sheets are open is one level of the
   stack `component:BottomSheet` FR12 describes; that is behavior of the stack,

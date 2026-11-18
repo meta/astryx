@@ -18,7 +18,7 @@ import {
 
 export default function CenterHorizontal() {
   return (
-    <Card width={520} padding={2}>
+    <Card width={520} maxWidth="100%" padding={2}>
       <Center axis="horizontal" width="100%">
         <Stack direction="horizontal" gap={0} vAlign="center">
           <IconButton

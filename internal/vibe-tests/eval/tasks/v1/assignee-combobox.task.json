@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "assignee-combobox",
+  "source": "cwm-2",
+  "title": "Filtering assignee combobox",
+  "prompt": "Build an \"Assignee\" field where people pick one teammate from this list: Ada Lovelace, Alan Turing, Grace Hopper, Katherine Johnson, Linus Torvalds, Margaret Hamilton, Radia Perlman, Tim Berners-Lee. The field is a combobox that assistive technology reads as one, with the label \"Assignee\", and people type directly into it. Typing filters the options to names that contain the typed text, ignoring case. ArrowDown moves through the shown options, Enter picks the highlighted option, and Escape closes the list. Below the field, show \"Assigned to: \" followed by the picked name, or \"Unassigned\" when nothing is picked."
+}

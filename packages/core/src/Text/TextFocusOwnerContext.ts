@@ -29,5 +29,8 @@ import {createLayerScopedContext} from '../Layer/layerScopedContext';
  * layer opened from such a component starts again at false, so its content
  * gets its own tab stops.
  */
-export const TextFocusOwnerContext = createLayerScopedContext(false);
-TextFocusOwnerContext.displayName = 'TextFocusOwnerContext';
+export const TextFocusOwnerContext = createLayerScopedContext(
+  'TextFocusOwnerContext',
+  1,
+  false,
+);

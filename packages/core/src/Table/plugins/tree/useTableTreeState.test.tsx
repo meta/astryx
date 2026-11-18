@@ -8,8 +8,14 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {act, renderHook} from '@testing-library/react';
+import {Suspense, startTransition, use} from 'react';
+import {act, render, renderHook, screen, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {Table} from '../../Table';
+import type {TableColumn} from '../../types';
+import {useTableTreeData} from './useTableTreeData';
 import {useTableTreeState} from './useTableTreeState';
+import type {UseTableTreeStateConfig} from './useTableTreeState';
 
 // =============================================================================
 // Test Data
@@ -736,5 +742,86 @@ describe('useTableTreeState: isAllExpanded', () => {
     });
     expect(result.current.isAllExpanded).toBe(false);
     expect(result.current.treeConfig.isAllExpanded).toBe(false);
+  });
+});
+
+// A render that reads this promise suspends for good.
+const pending = new Promise<never>(() => {});
+function Pending(): null {
+  use(pending);
+  return null;
+}
+
+const nameColumn: TableColumn<FileRow>[] = [{key: 'name', header: 'Name'}];
+
+type FileTreeState = Pick<
+  UseTableTreeStateConfig<FileRow>,
+  'expandedIds' | 'onExpandedIdsChange'
+>;
+
+function FileTree(state: FileTreeState) {
+  const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+    data: fileTree,
+    idKey: 'id',
+    ...state,
+  });
+  const tree = useTableTreeData(treeConfig);
+  return (
+    <Table
+      data={visibleData}
+      columns={nameColumn}
+      idKey="id"
+      plugins={{tree}}
+    />
+  );
+}
+
+function FileTable({
+  isPending,
+  ...state
+}: FileTreeState & {isPending: boolean}) {
+  return (
+    <Suspense fallback={null}>
+      <FileTree {...state} />
+      {isPending ? <Pending /> : null}
+    </Suspense>
+  );
+}
+
+describe('useTableTreeState after a render React discards', () => {
+  it('a row toggle starts from the rows on screen and reports to the committed callback', async () => {
+    const user = userEvent.setup();
+    const committed: string[][] = [];
+    const discarded: string[][] = [];
+    const {rerender} = render(
+      <FileTable
+        expandedIds={new Set()}
+        onExpandedIdsChange={next => committed.push([...next])}
+        isPending={false}
+      />,
+    );
+    // The next props render in a transition, then suspend for good, so React
+    // keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <FileTable
+            expandedIds={new Set(['src'])}
+            onExpandedIdsChange={next => discarded.push([...next])}
+            isPending
+          />,
+        );
+      });
+    });
+    const srcRow = screen
+      .getAllByRole('row')
+      .find(row => within(row).queryByText('src') != null);
+
+    await user.click(
+      within(srcRow as HTMLElement).getByRole('button', {name: 'Expand row'}),
+    );
+
+    expect(discarded).toEqual([]);
+    expect(committed).toEqual([['src']]);
   });
 });

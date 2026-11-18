@@ -28,6 +28,7 @@ import {
   strictIssues,
 } from '../../api/integration/check/check.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const CODES = new Set([
   'component_import_not_exported',
@@ -97,7 +98,7 @@ function writeTsconfig() {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-public-imports-'));
+  dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-public-imports-'));
   writeTsconfig();
   write(
     'package.json',

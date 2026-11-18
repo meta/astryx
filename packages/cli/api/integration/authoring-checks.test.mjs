@@ -8,6 +8,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock('../../foundation/discovery/template-conflict-release.mjs', () => ({
   expandedTemplateConflictSchemaActive: () => true,
@@ -28,7 +29,6 @@ import {
   integrationComponentConflicts,
   integrationDocConflicts,
   integrationTemplateConflicts,
-  shellArg,
 } from './authoring-checks.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
 
@@ -150,7 +150,7 @@ const PASSAGE =
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-template-conflicts-'),
+    path.join(REPO_ROOT, '.astryx-template-conflicts-'),
   );
   // The fixture is a package with its own TypeScript config, scoped to its
   // own files. Without one, the prop check reads the repository's root
@@ -165,6 +165,12 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
+
+/** The listing notes a fixture with no logo draws; package-listing-check.test.mjs covers them. */
+const LISTING_CODES = new Set([
+  'package_without_logo',
+  'package_without_example',
+]);
 
 describe('integrationTemplateConflicts', () => {
   it('warns on an id shared with Core and gives the package-qualified command', async () => {
@@ -381,13 +387,6 @@ describe('integrationTemplateConflicts', () => {
     );
     expect(conflict?.message).toContain('Rename');
     expect(conflict?.message).not.toContain('set replaces');
-  });
-
-  it('shell-quotes unusual ids instead of allowing command substitution', () => {
-    expect(shellArg('safe/id')).toBe('safe/id');
-    expect(shellArg('my$thing')).toBe("'my$thing'");
-    expect(shellArg("a'b")).toBe("'a'\\''b'");
-    expect(shellArg('foo`id`')).toBe("'foo`id`'");
   });
 
   it('returns a malformed template once as an invalid_template issue', async () => {
@@ -1564,7 +1563,8 @@ describe('validateIntegration runner-command notes', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     const notes = (data.notes ?? []).filter(
-      (/** @type {any} */ note) => note.code !== 'runner_command',
+      (/** @type {any} */ note) =>
+        note.code !== 'runner_command' && !LISTING_CODES.has(note.code),
     );
 
     expect(
@@ -1684,7 +1684,11 @@ describe('validateIntegration runner-command notes', () => {
     );
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
-    expect(data.notes ?? []).toEqual([]);
+    expect(
+      (data.notes ?? []).filter(
+        (/** @type {any} */ note) => !LISTING_CODES.has(note.code),
+      ),
+    ).toEqual([]);
   });
 
   it('lists nothing for bare commands and the scoped install step', async () => {

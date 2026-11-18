@@ -159,6 +159,35 @@ export function registerMotionTable(
   walk(table as Record<string, unknown>, id);
 }
 
+/**
+ * Registers `leaf` as the spring role `id` (a table path such as
+ * `springs.settle`) and returns it, so a table row can register itself. A row
+ * that calls it under a pure annotation drops out of a bundle that does not
+ * use it, call included. Registering the same leaf under the same id again
+ * does nothing.
+ */
+export function registerSpringRole<T extends SpringDescription>(
+  id: string,
+  leaf: T,
+): T {
+  if (!isMotionRoleId(id)) {
+    throw new Error(
+      `motion role "${id}" must be a dotted table path such as "springs.settle"`,
+    );
+  }
+  if (roleOfLeaf.get(leaf)?.id !== id) {
+    const role: MotionRole = {
+      id,
+      kind: 'spring',
+      variable: motionRoleVariable(id),
+      value: leaf,
+    };
+    rolesById.set(id, role);
+    roleOfLeaf.set(leaf, role);
+  }
+  return leaf;
+}
+
 /** The role a spring or curve leaf of a registered table plays, if any. */
 export function motionRoleOf(leaf: unknown): MotionRole | undefined {
   return leaf !== null && typeof leaf === 'object'

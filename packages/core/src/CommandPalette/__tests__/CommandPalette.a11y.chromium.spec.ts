@@ -135,7 +135,7 @@ async function capture(page: Page, scenario: Case) {
     await expect(
       subject
         .getByRole('region', {name: 'Pending command palette'})
-        .locator('.astryx-spinner[role="status"]'),
+        .locator('.astryx-spinner[role="progressbar"]'),
     ).toHaveCount(1);
     await page.waitForTimeout(200);
     await holdMotionStill(page);

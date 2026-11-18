@@ -5,8 +5,8 @@
 /**
  * @file sharedMutationObserver.ts
  * @input MutationObserver API
- * @output Exports observeMutations (one shared observer per set of options)
- *   and observeContent, its text-and-children form
+ * @output Exports observeMutations (one shared observer per set of options),
+ *   observeContent, its text-and-children form, and flushMutations
  * @position Internal utility; consumed by useTruncation, hitArea, AppShell's
  *   main-overflow observer, ModalAnnounceProvider's presentation watch and
  *   CheckboxList's required group. The mutation counterpart of sharedResizeObserver:
@@ -14,7 +14,12 @@
  *   repeated cell, row or region does not create one observer per instance.
  */
 
-type MutationCallback = () => void;
+/**
+ * Called once per batch with the records that reached the registration: those
+ * whose target is its element or, with `subtree`, one of its descendants.
+ * A caller that needs only to know that something changed ignores them.
+ */
+type MutationCallback = (records: ReadonlyArray<MutationRecord>) => void;
 
 const CONTENT_OPTIONS: MutationObserverInit = {
   characterData: true,
@@ -25,6 +30,7 @@ const CONTENT_OPTIONS: MutationObserverInit = {
 interface SharedObserver {
   readonly observer: MutationObserver;
   readonly callbacks: Map<Node, Set<MutationCallback>>;
+  readonly deliver: (records: MutationRecord[]) => void;
 }
 
 /**
@@ -40,6 +46,7 @@ function optionsKey(options: MutationObserverInit): string {
     options.attributeFilter == null
       ? null
       : [...options.attributeFilter].sort(),
+    options.attributeOldValue === true,
     options.characterData === true,
     options.childList === true,
     options.subtree === true,
@@ -49,29 +56,36 @@ function optionsKey(options: MutationObserverInit): string {
 function createSharedObserver(options: MutationObserverInit): SharedObserver {
   const callbacks = new Map<Node, Set<MutationCallback>>();
   const isSubtree = options.subtree === true;
-  const observer = new MutationObserver(records => {
+  const deliver = (records: MutationRecord[]) => {
     // One call per callback per batch, however many records it received.
     // With `subtree`, a record's target can be any descendant, so walk up to
     // the observed roots; without it, the target is the observed node.
-    const pending = new Set<MutationCallback>();
+    const pending = new Map<MutationCallback, MutationRecord[]>();
     for (const record of records) {
+      const due = new Set<MutationCallback>();
       if (!isSubtree) {
-        callbacks
-          .get(record.target)
-          ?.forEach(callback => pending.add(callback));
-        continue;
+        callbacks.get(record.target)?.forEach(callback => due.add(callback));
+      } else {
+        for (
+          let node: Node | null = record.target;
+          node;
+          node = node.parentNode
+        ) {
+          callbacks.get(node)?.forEach(callback => due.add(callback));
+        }
       }
-      for (
-        let node: Node | null = record.target;
-        node;
-        node = node.parentNode
-      ) {
-        callbacks.get(node)?.forEach(callback => pending.add(callback));
-      }
+      due.forEach(callback => {
+        const received = pending.get(callback);
+        if (received) {
+          received.push(record);
+        } else {
+          pending.set(callback, [record]);
+        }
+      });
     }
-    pending.forEach(callback => callback());
-  });
-  return {observer, callbacks};
+    pending.forEach((received, callback) => callback(received));
+  };
+  return {observer: new MutationObserver(deliver), callbacks, deliver};
 }
 
 /**
@@ -134,4 +148,17 @@ export function observeContent(
   callback: MutationCallback,
 ): () => void {
   return observeMutations(element, CONTENT_OPTIONS, callback);
+}
+
+/**
+ * Deliver at once the records that the shared observer for `options` holds
+ * but has not yet delivered. The observer delivers a mutation in a microtask.
+ * A read in the same task calls this first to see it.
+ */
+export function flushMutations(options: MutationObserverInit): void {
+  const shared = observers.get(optionsKey(options));
+  const records = shared?.observer.takeRecords() ?? [];
+  if (shared != null && records.length > 0) {
+    shared.deliver(records);
+  }
 }

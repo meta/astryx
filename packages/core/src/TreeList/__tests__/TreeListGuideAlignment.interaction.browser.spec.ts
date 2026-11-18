@@ -125,3 +125,124 @@ test('guide visibility does not move chevrons', async ({page}) => {
   expect(withGuides.chevronCenters).toEqual(withoutGuides.chevronCenters);
   expect(withoutGuides.guideCenters).toEqual([]);
 });
+
+/**
+ * The stretches no guide line paints in the bottom row's connector column,
+ * from the top row's bottom edge to the bottom row's middle.
+ */
+async function guideGaps(page: Page, ids: {top: string; bottom: string}) {
+  return page.evaluate(({top, bottom}) => {
+    const row = (id: string) => {
+      const item = document.querySelector(`[data-tree-id="${id}"]`);
+      return item?.querySelector('.astryx-tree-list-item') ?? item;
+    };
+    const topRow = row(top)?.getBoundingClientRect();
+    const bottomRow = row(bottom)?.getBoundingClientRect();
+    // The column of the bottom row's own connector.
+    const own = [
+      ...(document
+        .querySelector(`[data-tree-id="${bottom}"]`)
+        ?.querySelectorAll('.astryx-tree-list-guide') ?? []),
+    ]
+      .map(line => line.getBoundingClientRect())
+      .filter(box => box.height > 0)
+      .sort((a, b) => b.left - a.left)[0];
+    if (topRow == null || bottomRow == null || own == null) {
+      throw new Error('rows or connector not found');
+    }
+    const x = own.left + own.width / 2;
+    const spans = [
+      ...document.querySelectorAll('[role="tree"] .astryx-tree-list-guide'),
+    ]
+      .map(line => line.getBoundingClientRect())
+      .filter(
+        box => box.height > 0 && Math.abs(box.left + box.width / 2 - x) < 1,
+      )
+      .map(box => [box.top, box.bottom] as const)
+      .sort((a, b) => a[0] - b[0]);
+    const from = topRow.bottom;
+    const to = bottomRow.top + bottomRow.height / 2;
+    const gaps: [number, number][] = [];
+    let reached = from;
+    for (const [start, end] of spans) {
+      if (start > reached + 0.5 && start < to) {
+        gaps.push([reached, Math.min(start, to)]);
+      }
+      reached = Math.max(reached, end);
+    }
+    if (reached < to - 0.5) {
+      gaps.push([reached, to]);
+    }
+    return gaps;
+  }, ids);
+}
+
+test("a parent's guide line runs unbroken past an expanded child's rows to its last child, at rest, with a mouse and under a finger", async ({
+  page,
+  browser,
+}) => {
+  // Project is the last row at its level, and src, its expanded child, is not
+  // its last. So the line from src to package.json passes src's own rows.
+  const open = async (target: Page) => {
+    await target.goto(
+      `${storybook.origin}/iframe.html?id=core-treelist--themed-guides&viewMode=story`,
+    );
+    await target.locator('[data-tree-id="pkg"]').waitFor();
+  };
+  await open(page);
+  expect(await guideGaps(page, {top: 'src', bottom: 'pkg'})).toEqual([]);
+  const context = await browser.newContext({hasTouch: true, isMobile: true});
+  try {
+    const touchPage = await context.newPage();
+    await open(touchPage);
+    expect(await guideGaps(touchPage, {top: 'src', bottom: 'pkg'})).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('at a wide row gap a last connector ends at its row, and a first one starts at its parent', async ({
+  page,
+}) => {
+  await openStory(page, 'ltr', 'lineGuides');
+  const issues = await page.evaluate(async () => {
+    const tree = document.querySelector<HTMLElement>('.astryx-tree-list');
+    tree?.style.setProperty('--tree-list-row-gap', '16px');
+    await new Promise(requestAnimationFrame);
+    const found: string[] = [];
+    for (const item of document.querySelectorAll('[role="treeitem"]')) {
+      if (Number(item.getAttribute('aria-level')) < 2) {
+        continue;
+      }
+      const wrapper = item.firstElementChild;
+      const row = wrapper?.querySelector('.astryx-tree-list-item');
+      // The row's own connector is the guide in its innermost column.
+      const own = [
+        ...(wrapper?.firstElementChild?.querySelectorAll(
+          '.astryx-tree-list-guide',
+        ) ?? []),
+      ]
+        .map(line => line.getBoundingClientRect())
+        .sort((a, b) => b.left - a.left)[0];
+      if (wrapper == null || row == null || own == null) {
+        found.push(`${item.getAttribute('data-tree-id')}: no connector`);
+        continue;
+      }
+      const name = item.getAttribute('data-tree-id');
+      const last =
+        item.getAttribute('aria-posinset') ===
+        item.getAttribute('aria-setsize');
+      if (last && own.bottom > row.getBoundingClientRect().bottom + 0.5) {
+        found.push(
+          `${name}: ends ${own.bottom} past ${row.getBoundingClientRect().bottom}`,
+        );
+      }
+      const top = wrapper.getBoundingClientRect().top;
+      if (item.getAttribute('aria-posinset') === '1' && own.top > top + 0.5) {
+        found.push(`${name}: starts ${own.top} below ${top}`);
+      }
+    }
+    return found;
+  });
+  expect(issues).toEqual([]);
+});

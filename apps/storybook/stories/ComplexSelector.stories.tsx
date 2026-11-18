@@ -1060,3 +1060,46 @@ export const AuditMatrix: Story = {
     },
   },
 };
+
+// Disabled with an explanation tooltip. Hover or keyboard-focus the trigger to
+// see why it's disabled — the reason is announced to assistive tech via
+// aria-describedby, and the trigger stays focusable (activation is still
+// blocked). Use disabledMessage instead of wrapping a disabled ComplexSelector
+// in Tooltip: disabled controls swallow the pointer events a Tooltip wrapper
+// needs.
+export const DisabledWithMessage: Story = {
+  name: 'Disabled with message',
+  render: () => {
+    const value: FruitValue = {fruit: 'Apple', ripeness: 'Juicy'};
+
+    return (
+      <VStack gap={4} xstyle={styles.wrapper}>
+        <ComplexSelector<FruitValue>
+          label="Fruit blend"
+          value={value}
+          triggerLabel={formatFruitValue(value)}
+          isDisabled
+          disabledMessage="You need the Editor role to change this"
+          contentXstyle={styles.fruitContent}>
+          {(selectedValue, onChange, close) => (
+            <FruitRipenessMatrix
+              value={selectedValue}
+              onChange={nextValue => {
+                onChange(nextValue);
+                close();
+              }}
+            />
+          )}
+        </ComplexSelector>
+      </VStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A disabled selector that explains why. The reason shows as a tooltip on hover and keyboard focus and is linked through aria-describedby; the trigger stays focusable via aria-disabled while opening the popup stays blocked.',
+      },
+    },
+  },
+};

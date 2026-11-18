@@ -10,6 +10,11 @@
  *   once for the run (`npm pack`), or packs one itself when no run did.
  *   `extractTarball` unpacks it with no external tool, so the copies hold
  *   exactly the published files.
+ * - `cliTarball()` is that tarball, and `tarballFiles(file)` lists the files
+ *   a tarball holds, the published file set, without unpacking it.
+ * - `releasePackedCli()` removes what this process unpacked or packed, unless
+ *   it sits in the run's folder, which the global teardown removes.
+ *   `runFolder()` is that folder, for a suite's own fixture.
  * - `placeCli(dir, version)` puts a copy at `dir`, labeled `version`: every
  *   file is a hard link to the unpacked package except a rewritten
  *   package.json, and its `node_modules` links to this package's installed
@@ -25,7 +30,8 @@
  *   from inside this process, the way the cross-platform smoke workflow does,
  *   with no network.
  *
- * @position packages/cli/test-utils — used by test/global-local.test.mjs.
+ * @position packages/cli/test-utils — used by the test/global-local*.test.mjs files,
+ *   and by the theme build test of a packed CLI with an older Core.
  */
 
 import * as fs from 'node:fs';
@@ -39,17 +45,18 @@ import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
 import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
+import {scopedList} from './fixture-scope.mjs';
 
 /** This CLI package's folder. */
 export const CLI_DIR = fileURLToPath(new URL('..', import.meta.url));
 
 /**
- * Unpack a `.tgz` written by `npm pack` into `dest`, dropping its leading
- * `package/` folder.
+ * Each entry of a `.tgz` written by `npm pack`: its path below the leading
+ * `package/` folder, its tar type flag, and its contents.
  * @param {string} file
- * @param {string} dest
+ * @returns {Generator<{rel: string, type: string, body: Buffer}>}
  */
-export function extractTarball(file, dest) {
+function* tarballEntries(file) {
   const buf = zlib.gunzipSync(fs.readFileSync(file));
   let off = 0;
   /** @type {string | null} */
@@ -82,21 +89,84 @@ export function extractTarball(file, dest) {
     longName = null;
     const rel = name.replace(/^[^/]+\//u, '');
     if (!rel || rel.split('/').includes('..')) continue;
-    const target = path.join(dest, ...rel.split('/'));
-    if (type === '5') {
-      fs.mkdirSync(target, {recursive: true});
-    } else if (type === '0' || type === '\0') {
-      fs.mkdirSync(path.dirname(target), {recursive: true});
-      fs.writeFileSync(target, body);
-      if (/\.(?:mjs|cjs|js)$/u.test(rel) && rel.includes('/bin/')) {
-        fs.chmodSync(target, 0o755);
-      }
+    yield {rel, type, body};
+  }
+}
+
+/**
+ * Unpack a `.tgz` written by `npm pack` into `dest`, dropping its leading
+ * `package/` folder.
+ * @param {string} file
+ * @param {string} dest
+ */
+export function extractTarball(file, dest) {
+  for (const entry of tarballEntries(file)) writeEntry(dest, entry);
+}
+
+/**
+ * Write one tarball entry under `dest`: a folder, or a file with its
+ * contents. A script under a `bin` folder is made executable.
+ * @param {string} dest
+ * @param {{rel: string, type: string, body: Buffer}} entry
+ */
+function writeEntry(dest, {rel, type, body}) {
+  const target = path.join(dest, ...rel.split('/'));
+  if (type === '5') {
+    fs.mkdirSync(target, {recursive: true});
+  } else if (type === '0' || type === '\0') {
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, body);
+    if (/\.(?:mjs|cjs|js)$/u.test(rel) && rel.includes('/bin/')) {
+      fs.chmodSync(target, 0o755);
     }
   }
 }
 
+/**
+ * The files a `.tgz` written by `npm pack` holds, by their path below its
+ * leading `package/` folder: the package's published file set.
+ * @param {string} file
+ * @returns {string[]}
+ */
+export function tarballFiles(file) {
+  return [...tarballEntries(file)]
+    .filter(({type}) => type === '0' || type === '\0')
+    .map(({rel}) => rel);
+}
+
 /** @type {string | null} */
 let packed = null;
+
+/** @type {string | null} */
+let cliTarballFile = null;
+
+/** The folder this process packed its own tarball in, when no run did. */
+let ownTarballDir = '';
+
+/**
+ * The folder the node project's global setup made for this run, or null when
+ * nothing provided one. Its teardown removes the folder once, after every
+ * suite, with each unpacked CLI, pooled copy and suite fixture inside it.
+ * @returns {string | null}
+ */
+export function runFolder() {
+  let dir;
+  try {
+    dir = inject('astryxPackedCliRunDir');
+  } catch {
+    return null;
+  }
+  return typeof dir === 'string' && fs.existsSync(dir) ? dir : null;
+}
+
+/**
+ * Whether the unpacked package `dir` sits in the run's folder.
+ * @param {string} dir
+ */
+function inRunFolder(dir) {
+  const run = runFolder();
+  return Boolean(run && path.dirname(path.dirname(dir)) === run);
+}
 
 /**
  * The tarball the node project's global setup packed for this run, or null
@@ -114,19 +184,59 @@ function providedTarball() {
 }
 
 /**
+ * This CLI's tarball: the one the node project's global setup packed for the
+ * run, or one packed once per process when no run packed it.
+ * @returns {string} the `.tgz` file
+ */
+export function cliTarball() {
+  if (cliTarballFile) return cliTarballFile;
+  const provided = providedTarball();
+  if (provided) {
+    cliTarballFile = provided;
+  } else {
+    ownTarballDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-cli-tarball-'),
+    );
+    cliTarballFile = packCli(ownTarballDir);
+  }
+  return cliTarballFile;
+}
+
+/**
  * This CLI, packed once per run (or once per process when no run packed it)
  * and unpacked once per process.
  * @returns {string} the unpacked package folder
  */
 export function packedCli() {
   if (packed) return packed;
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-packed-cli-'));
-  packedTarball = providedTarball() ?? packCli(out);
+  const out = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'astryx-packed-cli-'),
+  );
+  packedTarball = cliTarball();
   const dir = path.join(out, 'package');
   extractTarball(packedTarball, dir);
   packed = dir;
   packedRecord = treeRecord(dir, {contents: true});
   return dir;
+}
+
+/**
+ * Remove the CLI this process unpacked, with the copies given back to its
+ * pool, and a tarball it packed itself. Leave what sits in the run's folder:
+ * the node project's global teardown removes that once, after every suite.
+ */
+export function releasePackedCli() {
+  if (packed && !inRunFolder(packed)) {
+    fs.rmSync(path.dirname(packed), {recursive: true, force: true});
+    pool.clear();
+    packed = null;
+    packedRecord = null;
+  }
+  if (ownTarballDir) {
+    fs.rmSync(ownTarballDir, {recursive: true, force: true});
+    ownTarballDir = '';
+    cliTarballFile = null;
+  }
 }
 
 /** The tarball {@link packedCli} made, to unpack again. */
@@ -190,13 +300,55 @@ function treeRecord(dir, {contents = false} = {}) {
  * @returns {string | null}
  */
 function firstChange(before, after) {
+  return changedPaths(before, after)[0] ?? null;
+}
+
+/**
+ * Every path whose entry differs between two records, in the order
+ * {@link firstChange} finds the first.
+ * @param {Map<string, string>} before
+ * @param {Map<string, string>} after
+ * @returns {string[]}
+ */
+function changedPaths(before, after) {
+  const changed = [];
   for (const [rel, entry] of before) {
-    if (after.get(rel) !== entry) return rel;
+    if (after.get(rel) !== entry) changed.push(rel);
   }
   for (const rel of after.keys()) {
-    if (!before.has(rel)) return rel;
+    if (!before.has(rel)) changed.push(rel);
   }
-  return null;
+  return changed;
+}
+
+/**
+ * Put each of `paths` below `dir` back as the tarball has it. What is there
+ * is removed, and the tarball's entries at or below each path are unpacked
+ * again. A path the tarball does not have stays removed.
+ * @param {string} dir
+ * @param {string} tarball
+ * @param {string[]} paths
+ */
+function restorePaths(dir, tarball, paths) {
+  const wanted = new Set(paths);
+  // The package folder itself changed: no single entry restores it.
+  if (wanted.has('.')) {
+    fs.rmSync(dir, {recursive: true, force: true});
+    extractTarball(tarball, dir);
+    return;
+  }
+  for (const rel of paths) {
+    fs.rmSync(path.join(dir, ...rel.split('/')), {
+      recursive: true,
+      force: true,
+    });
+  }
+  for (const entry of tarballEntries(tarball)) {
+    const parts = entry.rel.split('/');
+    if (parts.some((_, i) => wanted.has(parts.slice(0, i + 1).join('/')))) {
+      writeEntry(dir, entry);
+    }
+  }
 }
 
 /**
@@ -240,23 +392,26 @@ function linkTree(from, to, shared = new Set(), rel = '') {
  * The copy leaves out the global copy's background Core step
  * (core-worker.mjs), as a release that predates it does, so no test's run
  * starts a download behind its back; `coreStep: true` keeps it.
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * `withoutCore: true` leaves `@astryxdesign/core` out of the packages the copy
+ * resolves, as a global install does: npm does not install an optional peer.
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string}}
  */
 export function placeCli(dir, version, options = {}) {
   const key = JSON.stringify([
     version,
     Boolean(options.coreStep),
+    Boolean(options.withoutCore),
     options.engines ?? null,
   ]);
   const ready = fs.existsSync(dir) ? undefined : pool.get(key)?.pop();
   if (ready) {
     fs.mkdirSync(path.dirname(dir), {recursive: true});
     fs.renameSync(ready.dir, dir);
-    placed.push({dir, key, record: ready.record});
+    scopedList('placed', placed).push({dir, key, record: ready.record});
   } else {
     buildCopy(dir, version, options);
-    placed.push({dir, key, record: treeRecord(dir)});
+    scopedList('placed', placed).push({dir, key, record: treeRecord(dir)});
   }
   return {dir, bin: path.join(dir, 'clients', 'cli', 'bin', 'astryx.mjs')};
 }
@@ -269,7 +424,8 @@ export function placeCli(dir, version, options = {}) {
 const pool = new Map();
 
 /**
- * Copies placed since the last {@link recyclePlacedCopies}.
+ * Copies placed outside a fixture scope since the last
+ * {@link recyclePlacedCopies}. A scope keeps its own list.
  * @type {{dir: string, key: string, record: Map<string, string>}[]}
  */
 const placed = [];
@@ -284,28 +440,41 @@ let pooledCount = 0;
  * A copy whose entries changed stays where it is, for its folder's removal.
  * So does every copy when `keep` is false: a step that is still running may
  * still use one.
- * @param {{keep?: boolean}} [options]
+ * `copies` names a fixture scope's own list; by default, the copies placed
+ * outside any scope. `besideOthers` says the test ran beside others, so a
+ * change to a shared file may be theirs.
+ * @param {{keep?: boolean, copies?: typeof placed, besideOthers?: boolean}} [options]
  * @throws {Error} when a test wrote into a file every copy shares. The pool is
- * then emptied, and the package is unpacked again from its tarball.
+ * then emptied, and the changed files are unpacked again from the tarball.
  */
-export function recyclePlacedCopies({keep = true} = {}) {
-  const copies = placed.splice(0);
+export function recyclePlacedCopies({
+  keep = true,
+  copies: list = placed,
+  besideOthers = false,
+} = {}) {
+  const copies = list.splice(0);
   if (packed && packedRecord) {
-    const changed = firstChange(
+    const changed = changedPaths(
       packedRecord,
       treeRecord(packed, {contents: true}),
     );
-    if (changed) {
+    if (changed.length > 0) {
+      // Each pooled copy links the changed files, so none is used again. The
+      // run's teardown removes their folders; outside a run, they go now.
       pool.clear();
-      fs.rmSync(path.join(path.dirname(packed), 'pool'), {
-        recursive: true,
-        force: true,
-      });
-      fs.rmSync(packed, {recursive: true, force: true});
-      extractTarball(packedTarball, packed);
+      if (!inRunFolder(packed)) {
+        fs.rmSync(path.join(path.dirname(packed), 'pool'), {
+          recursive: true,
+          force: true,
+        });
+      }
+      // Only the changed paths are unpacked again. Removing and unpacking
+      // the whole package rewrites thousands of files, which a busy machine
+      // can make outlast the test.
+      restorePaths(packed, packedTarball, changed);
       packedRecord = treeRecord(packed, {contents: true});
       throw new Error(
-        `A test changed ${changed}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
+        `${besideOthers ? 'This test, or a test that ran beside it,' : 'A test'} changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
       );
     }
   }
@@ -340,7 +509,7 @@ export function recyclePlacedCopies({keep = true} = {}) {
  * Link a new copy of the packed CLI at `dir`, labeled `version`.
  * @param {string} dir
  * @param {string} version
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} options
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} options
  */
 function buildCopy(dir, version, options) {
   const from = packedCli();
@@ -360,11 +529,44 @@ function buildCopy(dir, version, options) {
     pkgFile,
     `${JSON.stringify({...pkg, version, ...(options.engines ? {engines: options.engines} : {})}, null, 2)}\n`,
   );
+  if (options.withoutCore) {
+    linkPackagesExceptCore(
+      path.join(CLI_DIR, 'node_modules'),
+      path.join(dir, 'node_modules'),
+    );
+    return;
+  }
   fs.symlinkSync(
     path.join(CLI_DIR, 'node_modules'),
     path.join(dir, 'node_modules'),
     process.platform === 'win32' ? 'junction' : 'dir',
   );
+}
+
+/**
+ * Link each package folder of `from` into a new folder `to`, except
+ * `@astryxdesign/core`.
+ * @param {string} from
+ * @param {string} to
+ */
+function linkPackagesExceptCore(from, to) {
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.mkdirSync(to);
+  for (const name of fs.readdirSync(from)) {
+    if (name !== '@astryxdesign') {
+      fs.symlinkSync(path.join(from, name), path.join(to, name), type);
+      continue;
+    }
+    fs.mkdirSync(path.join(to, name));
+    for (const scoped of fs.readdirSync(path.join(from, name))) {
+      if (scoped === 'core') continue;
+      fs.symlinkSync(
+        path.join(from, name, scoped),
+        path.join(to, name, scoped),
+        type,
+      );
+    }
+  }
 }
 
 /**
@@ -448,7 +650,7 @@ const LAYOUTS = {
  * `astryx` command linked into its bin folder.
  * @param {keyof typeof LAYOUTS} layout
  * @param {string} version
- * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string, binDir: string}}
  */
 export function globalCli(layout, version, options = {}) {

@@ -32,6 +32,7 @@ import {
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
+import {containerBlockBleedStyles} from './containerBlockBleed.stylex';
 
 const styles = stylex.create({
   content: {
@@ -51,18 +52,18 @@ const styles = stylex.create({
     // Publish container padding vars for bleed children (Table, Divider, etc.)
     '--container-padding-inline-start': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     '--container-padding-inline-end': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
-    '--container-padding-block-start': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-    '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
+    '--container-padding-block-start': `var(--_layout-flush-block-start, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-end': `var(--_layout-flush-block-end, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
   },
   // When no start panel: outer-x on left edge
   noStart: {
     paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
     '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
-    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
   // When no end panel: outer-x on right edge
   noEnd: {
     paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
   // When no header: outer-y on top
   noHeader: {
@@ -155,13 +156,13 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     header={<LayoutHeader>Title</LayoutHeader>}
  *     content={<LayoutContent>Main body content</LayoutContent>}
  *   />
- * </LayoutContainer>
- * <LayoutContainer variant="card">
+ * </Card>
+ * <Card>
  *   <Layout
  *     content={
  *       <LayoutContent padding={0}>
@@ -169,8 +170,8 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *       </LayoutContent>
  *     }
  *   />
- * </LayoutContainer>
- * <LayoutContainer variant="card">
+ * </Card>
+ * <Card>
  *   <Layout
  *     content={
  *       <LayoutContent isScrollable={false}>
@@ -178,7 +179,7 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
  *       </LayoutContent>
  *     }
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutContent({
@@ -235,6 +236,7 @@ export function LayoutContent({
             hasEnd &&
             !isZeroPadding &&
             styles.constrainedSingleEndPanel,
+          containerBlockBleedStyles.publish,
           xstyle,
         ),
         className,

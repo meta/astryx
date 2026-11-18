@@ -24,6 +24,9 @@
  * and the cache is kept on the host (`~/.cache/astryx-webkit-shaders/<image>`,
  * or `ASTRYX_WEBKIT_SHADER_CACHE`), so a run starts with every shader an
  * earlier run compiled instead of paying for them in its first tests.
+ *
+ * With `CI` set, the container gets CI's four CPUs (`ASTRYX_WEBKIT_CPUS` sets
+ * another count). On Linux it runs only on the CPUs this script may use.
  */
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -51,6 +54,38 @@ if (engine == null) {
   process.exit(1);
 }
 const args = process.argv.slice(2);
+// CI's WebKit legs run on four-CPU runners, so with `CI` set the container
+// gets four CPUs as a quota; `ASTRYX_WEBKIT_CPUS` sets another count.
+const cpusSetting =
+  process.env.ASTRYX_WEBKIT_CPUS || ((process.env.CI ?? '') !== '' ? '4' : '');
+const cpus = cpusSetting === '' ? null : Number(cpusSetting);
+if (cpus != null && (!Number.isInteger(cpus) || cpus < 1)) {
+  console.error(
+    `webkit-container: ASTRYX_WEBKIT_CPUS must be a positive integer, got "${cpusSetting}"`,
+  );
+  process.exit(1);
+}
+// A container starts on every CPU, whatever the caller's affinity. On Linux it
+// keeps the CPUs this script may run on, so `taskset` limits it too.
+const cpuset = (() => {
+  try {
+    const allowed = /^Cpus_allowed_list:\s*(\S+)/m.exec(
+      fs.readFileSync('/proc/self/status', 'utf8'),
+    )?.[1];
+    const online = fs
+      .readFileSync('/sys/devices/system/cpu/online', 'utf8')
+      .trim();
+    return allowed != null && allowed !== online ? allowed : null;
+  } catch {
+    return null;
+  }
+})();
+const cpuLimits = [
+  // llvmpipe sizes its thread pool from the CPUs it may run on, not from the
+  // quota. So it gets the same count, as in CI's WebKit step.
+  ...(cpus == null ? [] : [`--cpus=${cpus}`, '-e', `LP_NUM_THREADS=${cpus}`]),
+  ...(cpuset == null ? [] : [`--cpuset-cpus=${cpuset}`]),
+];
 // Where the container sees the host's shader cache (see the header).
 const containerShaderCache = '/astryx-shader-cache';
 // Resolved to an absolute path: a bare relative value would be mounted as a
@@ -106,6 +141,7 @@ const command = [
   // at eight workers WebKit could not start a page's process: `newPage` (a
   // frame decode's scratch page) waited out the test.
   '--pids-limit=-1',
+  ...cpuLimits,
   '-v',
   `${root}:${root}`,
   '-v',
@@ -125,8 +161,9 @@ const command = [
   'test',
   '--config',
   'playwright.interaction.config.ts',
-  '--project',
-  'webkit',
+  // One token: a bare `--project` would take the spec paths after it as more
+  // project names.
+  '--project=webkit',
   ...args,
 ];
 console.log(`${engine} ${command.join(' ')}`);

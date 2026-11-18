@@ -10,6 +10,7 @@ import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const previewCard: CSSProperties = {
   borderRadius: 'var(--radius-element)',
@@ -207,24 +208,32 @@ const COMPONENT_CATEGORIES = [
 // ---------------------------------------------------------------------------
 
 export default function DocumentationOverviewPage() {
+  const showToast = useToast();
   return (
     <Layout
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={8}>
+        <LayoutContent role="main" padding={8}>
           <VStack gap={10}>
             <Card variant="gray" padding={10}>
               <HStack gap={8} vAlign="center">
                 <StackItem size="fill">
                   <VStack gap={4}>
-                    <Text type="display-1">Web overview</Text>
+                    <Text as="h1" type="display-1">
+                      Web overview
+                    </Text>
                     <Text type="large" weight="normal" color="secondary">
                       An open-source UI library to help developers quickly build
                       beautiful, accessible products.
                     </Text>
                     <HStack>
-                      <Button label="Get started" variant="primary" size="lg" />
+                      <Button
+                        label="Get started"
+                        variant="primary"
+                        size="lg"
+                        href="#"
+                      />
                     </HStack>
                   </VStack>
                 </StackItem>
@@ -240,7 +249,13 @@ export default function DocumentationOverviewPage() {
                     <ClickableCard
                       key={item.key}
                       label={`Open ${item.name}`}
-                      onClick={() => {}}
+                      onClick={() =>
+                        // Demo only: replace this toast with the link to the section.
+                        showToast({
+                          body: `Demo: the ${item.name} docs would open here`,
+                          uniqueID: `open-${item.key}`,
+                        })
+                      }
                       variant="transparent"
                       padding={2}>
                       <VStack gap={3}>

@@ -2,46 +2,35 @@
 
 /**
  * @file themeTiming.interaction.browser.spec.ts
- * @input themeTiming.ts bundled with esbuild onto a blank fixture page;
- *   Chromium and WebKit on the phone profile
+ * @input themeTiming.ts and the press release clock, bundled with esbuild
+ *   onto a blank fixture page; Chromium and WebKit on the phone profile
  * @output Proof that readThemeTiming resolves a motion's timing as the
  *   browser resolves a transition. A hand-written `calc()` token, a nested
  *   theme scope and a tempo-scaled value give one length in both of its
  *   patterns. In one, the element's own transition carries the token. In the
  *   other, the token is read where the element is. That length is the
  *   element's computed transition. A `calc()` value resolves the same way
- *   for a caller that needs the values. With no stylesheet,
- *   `--duration-exit` reads its declared default where the element is
+ *   for the press release clock and for a caller that needs the values. An
+ *   easing that is not a cubic Bézier, `linear()` or `steps()`, plays as the
+ *   browser plays it in both patterns. With no stylesheet, `--duration-exit`
+ *   reads its declared default where the element is
  * @position Browser proof for themeTiming.ts, run by `pnpm test:interaction`;
  *   jsdom resolves no `calc()`
  */
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {build, type Plugin} from 'esbuild';
-import type * as ThemeTimingModule from '../themeTiming';
+import {build} from 'esbuild';
+import type * as ThemeTimingModule from './themeTimingBundle';
+import {stylexDeclarations} from './stylexDeclarationsPlugin';
 
 let script = '';
 
-// The token file declares its variables through StyleX, which the build
-// compiles away; the page needs only the plain defaults beside them.
-const stylexDeclarations: Plugin = {
-  name: 'stylex-declarations',
-  setup(builder) {
-    builder.onResolve({filter: /^@stylexjs\/stylex$/}, () => ({
-      path: 'stylex',
-      namespace: 'stylex-declarations',
-    }));
-    builder.onLoad({filter: /.*/, namespace: 'stylex-declarations'}, () => ({
-      contents: 'export const defineVars = values => values;',
-      loader: 'js',
-    }));
-  },
-};
-
 test.beforeAll(async () => {
   const result = await build({
-    entryPoints: [fileURLToPath(new URL('../themeTiming.ts', import.meta.url))],
+    entryPoints: [
+      fileURLToPath(new URL('./themeTimingBundle.ts', import.meta.url)),
+    ],
     plugins: [stylexDeclarations],
     bundle: true,
     write: false,
@@ -179,6 +168,32 @@ test('both patterns play the same easing, a calc() argument included', async ({
   expect(outer.tokensAt).toEqual(outer.ownAt);
 });
 
+test('an easing that is not a cubic Bézier plays as the browser plays it, in both patterns', async ({
+  page,
+}) => {
+  await open(page);
+  // The eased progress at a quarter and three quarters of the length.
+  for (const [easing, expected] of [
+    ['linear(0, 0.8 50%, 1)', [0.4, 0.9]],
+    ['steps(3, jump-end)', [0, 2 / 3]],
+  ] as const) {
+    const {outer, nested} = await readBoth(page, {
+      theme: {'--ease-standard': easing},
+    });
+    for (const at of [
+      outer.ownAt,
+      outer.tokensAt,
+      nested.ownAt,
+      nested.tokensAt,
+    ]) {
+      expect(at, easing).toHaveLength(2);
+      at.forEach((value, i) =>
+        expect(value, easing).toBeCloseTo(expected[i], 6),
+      );
+    }
+  }
+});
+
 test('a duration that is not a positive length gives no curve in either pattern', async ({
   page,
 }) => {
@@ -191,6 +206,27 @@ test('a duration that is not a positive length gives no curve in either pattern'
 
 /** The page's bundle. */
 type Bundle = typeof ThemeTimingModule;
+
+test('a calc() --duration-exit times the press release clock as its release animation resolves it', async ({
+  page,
+}) => {
+  await open(page);
+  const read = await page.evaluate(() => {
+    const {pressFadeMs, readThemeTokens} = (
+      window as unknown as {ThemeTiming: Bundle}
+    ).ThemeTiming;
+    const plain = document.querySelector<HTMLElement>('#plain');
+    if (plain == null) {
+      throw new Error('the fixture has no #plain');
+    }
+    plain.style.setProperty('--duration-exit', 'calc(0.1s * 2)');
+    return {
+      clock: pressFadeMs(plain),
+      token: readThemeTokens(plain, {duration: '--duration-exit'}).ms,
+    };
+  });
+  expect(read).toEqual({clock: 200, token: 200});
+});
 
 test('resolveTiming resolves calc() values for a caller that needs them', async ({
   page,

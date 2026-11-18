@@ -19,6 +19,25 @@ import {scoreCandidate} from './_candidate-score.mjs';
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
+ * The doc's topic as an entry of its own name, one per doc: scoreCandidate
+ * prepares an entry once, so every query word reads the same one.
+ * @param {Candidate} candidate
+ * @param {string} topic
+ * @returns {{name: string}}
+ */
+function topicEntry(candidate, topic) {
+  let entry = topicEntries.get(candidate);
+  if (entry === undefined || entry.name !== topic) {
+    entry = {name: topic};
+    topicEntries.set(candidate, entry);
+  }
+  return entry;
+}
+
+/** @type {WeakMap<object, {name: string}>} */
+const topicEntries = new WeakMap();
+
+/**
  * A match's domain priority: 0 (none), 1, or 2 (a doc the whole query names).
  * A component, hook, template, or theme with priority ranks ahead of any doc
  * without it, whatever the two scores are. Docs among themselves rank by
@@ -56,6 +75,10 @@ import {scoreCandidate} from './_candidate-score.mjs';
  * @param {Candidate} candidate
  * @param {{score: number, matched: number, total: number}} hit - The
  *   candidate's scoreQuery result.
+ * @param {string[]} [queryWords]
+ * @param {Map<string, {fuzzy: boolean, hit: {score: number} | null}>} [tokenHits] -
+ *   the token results scoreQuery kept for this candidate and these tokens
+ *   (see scoreQuery's `tokenHits`)
  * @returns {0 | 1 | 2}
  */
 export function domainPriority(
@@ -64,6 +87,7 @@ export function domainPriority(
   candidate,
   hit,
   queryWords = phraseWords(term),
+  tokenHits,
 ) {
   const words = [term, ...tokens];
   if (candidate.domain === 'doc') {
@@ -93,10 +117,10 @@ export function domainPriority(
     ) {
       return 1;
     }
+    const asName = topicEntry(candidate, topic);
     if (
       words.some(
-        w =>
-          (scoreCandidate(w, {name: topic}, {fuzzy: false})?.score ?? 0) >= 95,
+        w => (scoreCandidate(w, asName, {fuzzy: false})?.score ?? 0) >= 95,
       )
     ) {
       return 1;
@@ -132,11 +156,17 @@ export function domainPriority(
   const fuzzy = tokens.length <= 1;
   // The whole query is read as the whole query; its words are parts of it
   // only when there are several.
-  return words.some(
-    (w, i) =>
-      (bestForToken(w, candidate, {fuzzy, part: i > 0 && tokens.length > 1})
-        ?.score ?? 0) >= STRONG_TOKEN_SCORE,
-  )
+  return words.some((w, i) => {
+    const part = i > 0 && tokens.length > 1;
+    // scoreQuery scored each token with `part` set: the same result, when it
+    // was scored with the same `fuzzy`.
+    const kept = part ? tokenHits?.get(w) : undefined;
+    const best =
+      kept !== undefined && kept.fuzzy === fuzzy
+        ? kept.hit
+        : bestForToken(w, candidate, {fuzzy, part});
+    return (best?.score ?? 0) >= STRONG_TOKEN_SCORE;
+  })
     ? 1
     : 0;
 }
