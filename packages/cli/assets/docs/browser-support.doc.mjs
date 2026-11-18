@@ -155,6 +155,10 @@ export const docs = {
           text: 'In Chrome on Android, ChatLayout\u2019s composer rides the keyboard as Gboard slides it up and down. A Tall BottomSheet\u2019s focused field rides the keyboard as Gboard slides it up, and as Gboard slides it down after the field loses focus. The scroll room stays until the keyboard is down. A hide Chrome reports late, such as Back, which keeps the focus, rides down from Chrome\u2019s report. When the keyboard is reported, the sheet places the field just above it in that same frame, so Chrome has no covered field to pan to; if Chrome pans anyway, the sheet puts the page back when that pan ends. Chrome follows your viewport setting, which Astryx documents and never sets: your app owns its viewport `<meta>` element. By default (`interactive-widget=resizes-visual`) Chrome lays the keyboard over the page and pans to a focused field elsewhere on the page. With `interactive-widget=resizes-content` it shrinks the layout viewport instead, so content anchored to the bottom sits above the keyboard, and those components measure no keyboard and change nothing: the browser has already made the room.',
         },
         {
+          type: 'prose',
+          text: 'In Safari on iOS, in the browser and as a home-screen app, ChatLayout\u2019s composer and a Tall BottomSheet\u2019s focused field ride the keyboard on UIKit\u2019s own keyboard motion. They rise from Safari\u2019s report of the keyboard, which comes as the keyboard starts up, and go down from the blur that takes the keyboard down. Safari reports the keyboard gone only once it is down, so the scroll room stays until then. The ride starts once the page has loaded Core\u2019s touch support, shortly after first paint; before that, they move in one step.',
+        },
+        {
           type: 'code',
           lang: 'html',
           label: 'Chrome on Android resizes the page for the keyboard',

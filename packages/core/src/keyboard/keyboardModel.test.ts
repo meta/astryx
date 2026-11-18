@@ -6,7 +6,9 @@
  * @output Tests the keyboard layout guide's core on Chrome. Transitions come
  *   from Chrome's reports, dated back to Gboard's start, on Gboard's slides.
  *   Also covered: a hide predicted from the blur, the accessory bar's
- *   report, and focus that comes back during a predicted hide.
+ *   report, and focus that comes back during a predicted hide. On iOS,
+ *   transitions ride UIKit's keyboard spring from Safari's report and from
+ *   the blur.
  * @position Unit tests for keyboard/keyboardModel.ts
  */
 
@@ -14,6 +16,17 @@ import {describe, expect, it} from 'vitest';
 import {createKeyboardModel} from './keyboardModel';
 import {keyboard as androidKeyboard} from '../motion/android';
 import {cubicBezier} from '../motion/bezier';
+import {KEYBOARD_SPRING} from '../motion/uikit/springs';
+import {timing as uikitTiming} from '../motion/uikit/timing';
+import {isElement} from '../utils/nodeType';
+import {mayKeepKeyboard} from './keyboardTarget';
+import {createUIKitKeyboardSchedule} from './uikitKeyboardSchedule';
+
+const uikitKeyboardSchedule = createUIKitKeyboardSchedule({
+  notificationMs: uikitTiming.keyboardNotificationMs,
+  mayKeepKeyboard,
+  isElement,
+});
 
 describe('createKeyboardModel on Chrome', () => {
   const ease = cubicBezier(androidKeyboard.hideCurve);
@@ -98,5 +111,84 @@ describe('createKeyboardModel on Chrome', () => {
     const back = model.focused(2060);
     expect(back).toMatchObject({kind: 'show', to: 312, animated: true});
     expect(back?.curve?.durationMs).toBe(androidKeyboard.showMs);
+  });
+});
+
+describe('createKeyboardModel on iOS Safari', () => {
+  const safari = () => createKeyboardModel(0, uikitKeyboardSchedule);
+  // UIKit's keyboard spring is critically damped: 1 − (1 + ω₀t)·e^(−ω₀t).
+  const omega = Math.sqrt(KEYBOARD_SPRING.stiffness / KEYBOARD_SPRING.mass);
+  const progress = (ms: number) =>
+    1 - (1 + (omega * ms) / 1000) * Math.exp((-omega * ms) / 1000);
+  const span = uikitTiming.keyboardNotificationMs;
+
+  it('rides a keyboard coming up from Safari’s one report, on UIKit’s keyboard spring cut at the notification’s duration (FR8)', () => {
+    const model = safari();
+    const show = model.report(336, 1000);
+    expect(show).toMatchObject({
+      kind: 'show',
+      from: 0,
+      to: 336,
+      start: 1000,
+      animated: true,
+      predicted: false,
+      curve: uikitKeyboardSchedule.curve,
+    });
+    expect(model.presentation(1000)).toBe(0);
+    expect(model.presentation(1100)).toBeCloseTo(336 * progress(100), 6);
+    expect(model.presentation(1200)).toBeCloseTo(336 * progress(200), 6);
+    // Core Animation cuts the spring at the notification's duration.
+    expect(model.presentation(1000 + span)).toBe(336);
+  });
+
+  it('takes Safari’s one report as the keyboard’s own height, accessory bar included, with no prediction', () => {
+    const model = safari();
+    model.report(336, 1000);
+    model.report(0, 2000);
+    const show = model.report(290, 3000);
+    expect(show).toMatchObject({kind: 'show', to: 290, predicted: false});
+  });
+
+  it('rides a hide down from the blur on the same spring, and Safari’s report once the keyboard is down confirms it (FR3)', () => {
+    const model = safari();
+    model.report(336, 1000);
+    const hide = model.blurred(2000);
+    expect(hide).toMatchObject({
+      kind: 'hide',
+      from: 336,
+      to: 0,
+      start: 2000,
+      animated: true,
+      predicted: true,
+      curve: uikitKeyboardSchedule.curve,
+    });
+    expect(model.presentation(2100)).toBeCloseTo(336 * (1 - progress(100)), 6);
+    expect(model.presentation(2000 + span)).toBe(0);
+    // Safari reports the hide about half a second after the blur.
+    expect(model.report(0, 2500)).toBeNull();
+    expect(model.transition.predicted).toBe(false);
+  });
+
+  it('rides a hide no blur predicted down from Safari’s report, never at once', () => {
+    const model = safari();
+    model.report(336, 1000);
+    const hide = model.report(0, 2000);
+    expect(hide).toMatchObject({
+      kind: 'hide',
+      to: 0,
+      start: 2000,
+      animated: true,
+      curve: {durationMs: span},
+    });
+  });
+
+  it('turns back up on the spring when focus returns during a hide it predicted', () => {
+    const model = safari();
+    model.report(336, 1000);
+    model.blurred(2000);
+    const back = model.focused(2100);
+    expect(back).toMatchObject({kind: 'show', to: 336, animated: true});
+    expect(back?.from).toBeCloseTo(336 * (1 - progress(100)), 6);
+    expect(back?.curve).toBe(uikitKeyboardSchedule.curve);
   });
 });

@@ -33,12 +33,14 @@ import {
 } from '../keyboard/keyboardLayoutGuide';
 import {
   deliverTap,
+  followTouchRuntimeKeyboardSchedule,
   followsKeyboard,
   watchPans,
 } from '../keyboard/keyboardTarget';
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {scheduleTouchRuntimeLoad} from '../utils/touchRuntime';
 import {
   useInteractionModalityTrackingFor,
   type InteractionModality,
@@ -262,6 +264,12 @@ export function useChatKeyboard({
     // keyboard's own motion. These are values, not motion roles, since the
     // system moves the keyboard on them whatever the page does.
     const follow = (transition: KeyboardTransition) => {
+      // Without a keyboard schedule, the layout follows the height alone.
+      // Safari on iOS's schedule arrives with the touch runtime, so the guide
+      // is followed from the mount and rides once it has one.
+      if (keyboardProfileOf(win) == null) {
+        return;
+      }
       // The ride: the dock goes where the guide says the keyboard will be,
       // from the keyboard's start, relative to the layout it rests in now.
       const target = liftRef.current - liftFor(transition.to);
@@ -318,12 +326,16 @@ export function useChatKeyboard({
         .catch(() => undefined);
     };
     // The ride attaches only under a coarse primary pointer, where the guide
-    // publishes the keyboard's own slide: Gboard's, in Chrome on Android.
-    // Elsewhere the layout follows the height alone.
-    const unsubscribe =
-      isTouch && keyboardProfileOf(win) === 'chromium'
-        ? getKeyboardLayoutGuide(win).subscribe(follow)
-        : undefined;
+    // publishes the keyboard's own motion: Gboard's slide in Chrome on Android,
+    // and UIKit's keyboard spring in Safari on iOS. UIKit's schedule comes with
+    // the touch runtime, so the layout schedules the page's one load of it.
+    if (isTouch) {
+      followTouchRuntimeKeyboardSchedule();
+      scheduleTouchRuntimeLoad();
+    }
+    const unsubscribe = isTouch
+      ? getKeyboardLayoutGuide(win).subscribe(follow)
+      : undefined;
     // A height change the guide has no ride for, as for a resize or a
     // rotation, takes its lift at once. This listener comes after the guide's,
     // so a ride claims the change first.

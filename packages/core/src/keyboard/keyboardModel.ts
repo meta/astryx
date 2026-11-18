@@ -3,7 +3,8 @@
 /**
  * @file keyboardModel.ts
  * @input `keyboard` from the Android table: Gboard's slides and Chrome's
- *   report timings
+ *   report timings. A schedule the caller passes, as the touch runtime's UIKit
+ *   schedule (uikitKeyboardSchedule.ts)
  * @output createKeyboardModel, the keyboard layout guide's clock-free core,
  *   and the KeyboardTransition and KeyboardModel types
  * @position The state of the keyboard layout guide (keyboardLayoutGuide.ts).
@@ -16,15 +17,45 @@
 import {keyboard as androidKeyboard} from '../motion/android/keyboard';
 import {cubicBezier} from '../motion/bezier';
 
-/** Which browser's keyboard reports the guide reads. */
-export type KeyboardProfile = 'chromium';
+/**
+ * Which keyboard's reports the guide reads: Gboard's in Chrome, or UIKit's in
+ * Safari on iOS.
+ */
+export type KeyboardProfile = 'chromium' | 'uikit';
 
-/** An eased slide: the curve a transition plays (Gboard going up or down). */
-export interface KeyboardCurve {
+/** An eased slide: Gboard going up or down. */
+export interface KeyboardSlideCurve {
   /** Length, ms. */
   readonly durationMs: number;
   /** Cubic-bézier control points. */
   readonly points: readonly [number, number, number, number];
+}
+
+/**
+ * A curve with its own progress: UIKit's keyboard spring, cut at
+ * `durationMs` (uikitKeyboardSchedule.ts).
+ */
+export interface KeyboardProgressCurve {
+  /** Length, ms. The motion lands on its target here. */
+  readonly durationMs: number;
+  /** How far along the curve the keyboard is, 0 to 1, `t` seconds in. */
+  readonly progress: (t: number) => number;
+}
+
+/** The curve a transition plays. */
+export type KeyboardCurve = KeyboardSlideCurve | KeyboardProgressCurve;
+
+/**
+ * How far along `curve` the keyboard is, from 0 to 1, `t` seconds after the
+ * transition's start.
+ */
+export function keyboardProgress(curve: KeyboardCurve): (t: number) => number {
+  if ('progress' in curve) {
+    return curve.progress;
+  }
+  const span = curve.durationMs / 1000;
+  const ease = cubicBezier(curve.points);
+  return t => ease(Math.min(1, Math.max(0, t / span)));
 }
 
 /** How the keyboard's cover changes. */
@@ -50,10 +81,11 @@ export interface KeyboardTransition {
   /** True until the visual viewport confirms a transition the guide inferred. */
   readonly predicted: boolean;
   /**
-   * The eased slide the keyboard moves on (Gboard in Chrome on Android), or
-   * null when the inset jumps. A surface riding the keyboard plays it from
-   * `start`, as rideKeyboard does. It is the keyboard's own motion, with no
-   * motion role.
+   * The curve the keyboard moves on, or null when the inset jumps. It is
+   * Gboard's slide in Chrome on Android, and UIKit's keyboard spring in Safari
+   * on iOS. A surface riding the keyboard plays it from `start`, as
+   * rideKeyboard does.
+   * It is the keyboard's own motion, with no motion role.
    */
   readonly curve: KeyboardCurve | null;
 }
@@ -96,6 +128,37 @@ interface InsetCurve {
 }
 
 /**
+ * When a keyboard moves against its reports, in the Android table's shape:
+ * one slide for the show and one for the hide.
+ */
+export interface KeyboardSlideSchedule {
+  readonly showMs: number;
+  readonly showCurve: readonly [number, number, number, number];
+  readonly hideMs: number;
+  readonly hideCurve: readonly [number, number, number, number];
+  /** How long before its report the show starts, ms. */
+  readonly showReportLagMs: number;
+  /** How long before its report a hide nothing predicted starts, ms. */
+  readonly hideReportLagMs: number;
+  /** How long after a blur the keyboard starts down, ms. */
+  readonly hideAfterBlurMs: number;
+}
+
+/**
+ * A keyboard that moves on one curve, show and hide alike. It reports its
+ * height once, accessory bar included, as UIKit's does in Safari on iOS.
+ */
+export interface KeyboardCurveSchedule {
+  readonly curve: KeyboardProgressCurve;
+  readonly showReportLagMs: number;
+  readonly hideReportLagMs: number;
+  readonly hideAfterBlurMs: number;
+}
+
+/** When a keyboard moves against its reports, and on what curve. */
+export type KeyboardSchedule = KeyboardSlideSchedule | KeyboardCurveSchedule;
+
+/**
  * Creates the guide's core. Tests drive it with explicit times, and the
  * window's guide feeds it events.
  *
@@ -117,10 +180,16 @@ interface InsetCurve {
  * - A keyboard that changes while up, such as another keyboard, lays out at
  *   once.
  *
+ * Another `schedule` sets other curves and timings, as the touch runtime's
+ * schedule for Safari on iOS does (uikitKeyboardSchedule.ts).
+ *
  * A prediction the viewport has not confirmed by its end gives way to what
  * the viewport says (`verify`).
  */
-export function createKeyboardModel(initialInset = 0): KeyboardModel {
+export function createKeyboardModel(
+  initialInset = 0,
+  schedule: KeyboardSchedule = androidKeyboard,
+): KeyboardModel {
   let transition: KeyboardTransition = {
     kind: 'change',
     from: initialInset,
@@ -133,16 +202,15 @@ export function createKeyboardModel(initialInset = 0): KeyboardModel {
   };
   // The inset over seconds since the transition's start.
   let curve: InsetCurve | null = null;
-  // An eased slide's value and velocity.
+  // A curve's value and velocity.
   const easedCurve = (
     from: number,
     to: number,
     slide: KeyboardCurve,
   ): InsetCurve => {
     const span = slide.durationMs / 1000;
-    const ease = cubicBezier(slide.points);
-    const value = (t: number) =>
-      from + (to - from) * ease(Math.min(1, Math.max(0, t / span)));
+    const progress = keyboardProgress(slide);
+    const value = (t: number) => from + (to - from) * progress(t);
     return {
       value,
       velocity: (t: number) => {
@@ -155,15 +223,15 @@ export function createKeyboardModel(initialInset = 0): KeyboardModel {
       },
     };
   };
-  // Gboard's slides, as Chrome draws them: the table's show and hide curves.
-  const showSlide: KeyboardCurve = {
-    durationMs: androidKeyboard.showMs,
-    points: androidKeyboard.showCurve,
-  };
-  const hideSlide: KeyboardCurve = {
-    durationMs: androidKeyboard.hideMs,
-    points: androidKeyboard.hideCurve,
-  };
+  // Gboard's slides, as Chrome draws them, unless the schedule has one curve.
+  const showSlide: KeyboardCurve =
+    'curve' in schedule
+      ? schedule.curve
+      : {durationMs: schedule.showMs, points: schedule.showCurve};
+  const hideSlide: KeyboardCurve =
+    'curve' in schedule
+      ? schedule.curve
+      : {durationMs: schedule.hideMs, points: schedule.hideCurve};
   // How long the current transition moves for.
   const lengthOf = () =>
     transition.curve != null ? transition.curve.durationMs : 0;
@@ -245,20 +313,23 @@ export function createKeyboardModel(initialInset = 0): KeyboardModel {
         return confirm();
       }
       if (inset <= EPSILON) {
-        // A hide nothing predicted (Back): Chrome reports it just after
-        // Gboard starts down, so it rides from that moment.
-        return begin('hide', 0, time - androidKeyboard.hideReportLagMs);
+        // A hide nothing predicted, as Back in Chrome: Chrome reports it just
+        // after Gboard starts down, so it rides from that moment. Safari
+        // reports it once the keyboard is down, and the content rides from
+        // the report.
+        return begin('hide', 0, time - schedule.hideReportLagMs);
       }
       if (target <= EPSILON) {
         // Chrome reports the show just after Gboard starts up: ride from
         // that moment, joining the slide where it is. A smaller first
         // report is the accessory bar, the keyboard's own following: ride
         // to the last keyboard's height and let its report confirm it.
-        const predicted = shownInset > inset + EPSILON;
+        const predicted =
+          !('curve' in schedule) && shownInset > inset + EPSILON;
         return begin(
           'show',
           predicted ? shownInset : inset,
-          time - androidKeyboard.showReportLagMs,
+          time - schedule.showReportLagMs,
           {predicted},
         );
       }
@@ -270,7 +341,7 @@ export function createKeyboardModel(initialInset = 0): KeyboardModel {
       if (transition.to <= EPSILON) {
         return null;
       }
-      return begin('hide', 0, time + androidKeyboard.hideAfterBlurMs, {
+      return begin('hide', 0, time + schedule.hideAfterBlurMs, {
         predicted: true,
       });
     },

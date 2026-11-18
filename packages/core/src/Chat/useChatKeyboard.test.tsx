@@ -7,8 +7,9 @@
  *   lift, the message area's room and the dock's ride down at a blur. It
  *   also covers the touches the composer claims, focus moves and Done's park
  *   on the composer group
- * @position Unit tests for Chat/useChatKeyboard.ts; the browser spec proves
- *   Chrome's ride
+ * @position Unit tests for Chat/useChatKeyboard.ts. They cover Chrome's ride
+ *   and Safari on iOS's ride on UIKit's keyboard spring. The browser spec
+ *   proves Chrome's ride
  */
 
 import fs from 'node:fs';
@@ -20,6 +21,8 @@ import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
 import {editableToClaim} from './useChatKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
+import {timing as uikitTiming} from '../motion/uikit/timing';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 
@@ -163,16 +166,24 @@ describe('ChatLayout and the software keyboard', () => {
     });
   };
 
-  it('rides nothing without the VirtualKeyboard API, as in Safari on iOS: the layout follows the height alone', async () => {
-    const guide = getKeyboardLayoutGuide(window);
-    const subscribe = vi.spyOn(guide, 'subscribe');
+  // Safari on iOS: WebKit on iOS is the one engine with -webkit-touch-callout,
+  // and the guide publishes UIKit's keyboard spring there.
+  const stubUIKitKeyboard = async () => {
+    // UIKit's schedule comes with the touch runtime, which ChatLayout reads.
+    await __loadTouchRuntimeForTest();
+    vi.stubGlobal('CSS', {
+      supports: (property: string, value: string) =>
+        property === '-webkit-touch-callout' && value === 'none',
+    });
+  };
+
+  it('rides nothing without a keyboard schedule, as in Firefox for Android: the layout follows the height alone', async () => {
     const {container} = renderLayout();
     report(window.innerHeight - 300);
     expect(dockOf(container).style.translate).toBe('');
     await settle();
     expect(layoutLift(dockOf(container))).toBe(300);
-    expect(subscribe).not.toHaveBeenCalled();
-    subscribe.mockRestore();
+    expect(dockOf(container).style.translate).toBe('');
   });
 
   it('attaches nothing of the ride under a fine pointer: the layout follows the height alone', async () => {
@@ -302,6 +313,52 @@ describe('ChatLayout and the software keyboard', () => {
     await settle();
     // The keyboard is still up (no report yet): the layout keeps its lift,
     // and the ride has taken the dock down on top of it.
+    expect(layoutLift(dockOf(container))).toBe(300);
+    expect(dockOf(container).style.translate).toBe('0px 300px');
+    report(window.innerHeight);
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(keyboardRoom(messagesOf())).toBe(0);
+    expect(dockOf(container).style.translate).toBe('');
+  });
+
+  it('rides the dock up from Safari’s one report on UIKit’s keyboard spring, in Safari on iOS (spec:AST-099 FR8)', async () => {
+    await stubUIKitKeyboard();
+    const guide = getKeyboardLayoutGuide(window);
+    const subscribe = vi.spyOn(guide, 'subscribe');
+    const {container} = renderLayout();
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    act(() => field.focus());
+    report(window.innerHeight - 300);
+    expect(subscribe).toHaveBeenCalled();
+    expect(guide.transition).toMatchObject({kind: 'show', to: 300});
+    expect(guide.transition.curve).toMatchObject({
+      durationMs: uikitTiming.keyboardNotificationMs,
+      progress: expect.any(Function),
+    });
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(300);
+    expect(dockOf(container).style.translate).toBe('');
+    subscribe.mockRestore();
+  });
+
+  it('rides the dock down from the blur on the same spring, ahead of Safari’s report of the keyboard down, in Safari on iOS', async () => {
+    await stubUIKitKeyboard();
+    const {container} = renderLayout();
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    act(() => field.focus());
+    report(window.innerHeight - 300);
+    await settle();
+    act(() => field.blur());
+    // A blur to nothing decides the hide on the next task, dated at the blur.
+    await settle();
+    expect(getKeyboardLayoutGuide(window).transition).toMatchObject({
+      kind: 'hide',
+      to: 0,
+      predicted: true,
+    });
+    // Safari reports the keyboard down only once it is gone. The layout keeps
+    // its lift until then, and the ride takes the dock down on top of it.
     expect(layoutLift(dockOf(container))).toBe(300);
     expect(dockOf(container).style.translate).toBe('0px 300px');
     report(window.innerHeight);
