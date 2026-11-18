@@ -25688,6 +25688,132 @@ export function draftAnswer(ctx, env, question) {
         if (lost.length && !/nearly the same color/.test(d.text))
           d.text += ` (note: ${[...new Set(lost)].slice(0, 4).join(', ')} inside ${st.on} ${lost.length > 1 ? 'have' : 'has'} nearly the same color as ${st.value}${st.mode ? ` in ${st.mode} mode` : ''}, so ${lost.length > 1 ? 'they' : 'it'} would barely show; give ${lost.length > 1 ? 'them' : 'it'} a fill of ${lost.length > 1 ? 'their' : 'its'} own too)`;
       }
+  // A text color written for a variant whose fill the same answer gives
+  // ("buttons tinted blue with white text") is measured on that fill as it
+  // draws, a see-through tint over the page, in each mode it applies to:
+  // text needs 4.5:1. Both words were asked, so a tint the text does not
+  // read on is deepened along its own hue, in steps of 5%, until the text
+  // reads in every mode, and said. Only when no strength of that hue reads
+  // is the text kept to the modes it reads in, or not written where it
+  // reads in none, said with the ink that reads there.
+  /** A fill as it draws over the page in a mode, or null. @param {string} value @param {'light' | 'dark'} mode */
+  const drawnFill = (value, mode) => {
+    const mix =
+      /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*transparent\)$/.exec(
+        value.trim(),
+      );
+    const raw = mix ? mix[1] : value;
+    const c = parseColor(raw);
+    if (!c) return null;
+    const a = mix ? Number(mix[2]) / 100 : alphaOf(raw);
+    if (a >= 1) return c;
+    const page = parseColor(
+      String(current('--color-background-body', mode) ?? ''),
+    );
+    return page ? compositeOver(c, a, page) : null;
+  };
+  for (const d of result)
+    for (const o of d.options)
+      for (let i = o.length - 1; i >= 0; i--) {
+        const st = o[i];
+        if (
+          !st.on ||
+          st.state ||
+          st.thing !== 'color' ||
+          !/^variant:/.test(String(st.when ?? ''))
+        )
+          continue;
+        const ink = parseColor(String(st.value ?? ''));
+        if (!ink || alphaOf(String(st.value)) < 1) continue;
+        const fill = o.find(
+          x =>
+            x !== st &&
+            x.on === st.on &&
+            !x.state &&
+            x.when === st.when &&
+            /^background(?:-color)?$/.test(x.thing) &&
+            (!x.mode || !st.mode || x.mode === st.mode),
+        );
+        if (!fill) continue;
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode
+            ? [st.mode]
+            : fill.mode
+              ? [fill.mode]
+              : modal
+                ? ['light', 'dark']
+                : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+        );
+        /** @type {Array<{mode: 'light' | 'dark', ratio: number, under: number[]}>} */
+        const measured = [];
+        for (const m of modes) {
+          const under = drawnFill(String(fill.value ?? ''), m);
+          if (under) measured.push({mode: m, ratio: ratio(ink, under), under});
+        }
+        const fails = measured.filter(x => x.ratio < 4.5);
+        if (!fails.length) continue;
+        const mixed =
+          /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*transparent\)$/.exec(
+            String(fill.value ?? '').trim(),
+          );
+        if (mixed) {
+          /** The weakest ratio across the modes at a strength. @param {number} pct */
+          const weakest = pct =>
+            Math.min(
+              ...modes.map(m => {
+                const under = drawnFill(
+                  pct >= 100
+                    ? mixed[1]
+                    : `color-mix(in srgb, ${mixed[1]} ${pct}%, transparent)`,
+                  m,
+                );
+                return under ? ratio(ink, under) : 0;
+              }),
+            );
+          let pct = Math.ceil(Number(mixed[2]) / 5) * 5;
+          while (pct < 100 && weakest(pct) < 4.5) pct += 5;
+          if (weakest(pct) >= 4.5) {
+            const value =
+              pct >= 100
+                ? mixed[1]
+                : `color-mix(in srgb, ${mixed[1]} ${pct}%, transparent)`;
+            for (const [k, x] of o.entries())
+              if (x === fill || (x.value === fill.value && x.on === fill.on))
+                o[k] = {...x, value};
+            const said = `deepened to ${pct >= 100 ? 'solid' : `${pct}%`} so ${st.value} text`;
+            // (The tint said at its first strength is said at this one.)
+            d.text = d.text.replace(
+              ` (a tint: ${mixed[1]} at ${mixed[2]}% over what is beneath)`,
+              '',
+            );
+            if (!d.text.includes(said))
+              d.text += ` (the ${mixed[1]} tint is ${said} reads at ${weakest(pct).toFixed(1)}:1${modes.length > 1 ? ' in light and dark mode' : ''})`;
+            continue;
+          }
+        }
+        const reads = modes.filter(m => !fails.some(x => x.mode === m));
+        o.splice(
+          i,
+          1,
+          ...reads.map(m =>
+            st.mode || fill.mode || reads.length === modes.length
+              ? st
+              : {...st, mode: m},
+          ),
+        );
+        const variant = String(st.when).slice('variant:'.length);
+        for (const x of fails) {
+          const dark = [0x11, 0x18, 0x27];
+          const light = [0xff, 0xff, 0xff];
+          const better =
+            ratio(dark, x.under) >= ratio(light, x.under)
+              ? '#111827'
+              : '#ffffff';
+          const said = `${st.value} text on the ${variant} ${st.on}`;
+          if (!d.text.includes(said))
+            d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${x.ratio.toFixed(2)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratio(better === '#ffffff' ? light : dark, x.under).toFixed(1)}:1)`;
+        }
+      }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
   // (The other reading of states said together, said last.)
