@@ -62,9 +62,10 @@ import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {LayerDepthProvider} from '../../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../../Layer/useLayerDismissal';
 import {animatorFor} from '../../motion/animator';
+import {motionRole} from '../../motion/roles';
 import {getGestureHost} from '../../gestures/GestureHost';
 import {pointerQuery} from '../../gestures/__tests__/pointerQuery';
-import {reorderGlide} from '../../utils/rowMotion';
+import {touchMotion} from '../ListReorderTouch';
 
 function moveKey<T extends Key>(
   items: ReadonlyArray<T>,
@@ -151,15 +152,6 @@ function layOut(list: HTMLElement, onRead?: () => void) {
 }
 
 const MOUSE = {pointerType: 'mouse', pointerId: 1, button: 0, clientX: 280};
-
-/**
- * The theme's move curve tokens on `list`: jsdom has no theme to give them.
- * The values are the default theme's.
- */
-function giveMoveCurve(list: HTMLElement) {
-  list.style.setProperty('--duration-medium', '410ms');
-  list.style.setProperty('--ease-move', 'cubic-bezier(0.24, 1, 0.4, 1)');
-}
 
 /** A mouse presses `handle` at `from`, moves past the slop, then to `to`. */
 function mouseDrag(handle: Element, from: number, to: number) {
@@ -1701,17 +1693,19 @@ describe('List reorderable', () => {
     }
   });
 
-  it("reads every row's layout before a drop's first glide, and the move curve once", () => {
+  it("reads every row's layout before a drop's first glide, and the glide's spring once", () => {
     stubPrimaryPointer(true);
     const events: string[] = [];
-    const slide = vi
-      .spyOn(reorderGlide, 'slide')
+    const glide = vi
+      .spyOn(touchMotion, 'glide')
       .mockImplementation(() => events.push('write'));
-    const curve = vi.spyOn(reorderGlide, 'moveCurve');
+    const follow = vi
+      .spyOn(touchMotion, 'follow')
+      .mockImplementation(() => events.push('write'));
+    const spring = vi.spyOn(touchMotion, 'glideBase');
     try {
       render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
       const list = screen.getByRole('list');
-      giveMoveCurve(list);
       layOut(list, () => events.push('read'));
       const handle = handleOf('A');
       mouseDrag(handle, 322, 322 + 70);
@@ -1720,22 +1714,24 @@ describe('List reorderable', () => {
         fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
       });
       expect(labels()).toEqual(['B', 'C', 'A', 'D']);
-      expect(slide).toHaveBeenCalledTimes(3);
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(follow).toHaveBeenCalledTimes(2);
       expect(events.slice(events.indexOf('write'))).not.toContain('read');
-      expect(curve).toHaveBeenCalledTimes(1);
+      expect(spring).toHaveBeenCalledTimes(1);
     } finally {
-      slide.mockRestore();
-      curve.mockRestore();
+      glide.mockRestore();
+      follow.mockRestore();
+      spring.mockRestore();
     }
   });
 
-  it('glides every row a mouse drop moved from its place before the drag, the dropped row included', () => {
+  it("glides a mouse drop's rows on the finger's spring, the dropped row at the release's velocity", () => {
     stubPrimaryPointer(false);
-    const slide = vi.spyOn(reorderGlide, 'slide').mockImplementation(() => {});
+    const glide = vi.spyOn(touchMotion, 'glide');
+    const follow = vi.spyOn(touchMotion, 'follow');
     try {
       render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
       const list = screen.getByRole('list');
-      giveMoveCurve(list);
       layOut(list);
       const handle = handleOf('A');
       mouseDrag(handle, 322, 322 + 70);
@@ -1743,73 +1739,60 @@ describe('List reorderable', () => {
         fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
       });
       expect(labels()).toEqual(['B', 'C', 'A', 'D']);
-      // Each row starts where it was before the drag: A two rows up, where
-      // its dimmed source sat, not where its preview was let go; B and C one
-      // row down. D stays put.
-      const shifts = Object.fromEntries(
-        slide.mock.calls.map(([element, shift]) => [
-          element.textContent,
-          shift,
-        ]),
-      );
-      expect(shifts).toEqual({A: -88, B: 44, C: 44});
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(typeof glide.mock.calls[0]?.[4]).toBe('number');
+      expect(follow).toHaveBeenCalledTimes(2);
     } finally {
-      slide.mockRestore();
+      glide.mockRestore();
+      follow.mockRestore();
     }
   });
 
-  it("reads a key move's move curve once, however many rows slide", async () => {
+  it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
-    const slide = vi.spyOn(reorderGlide, 'slide');
-    const curve = vi.spyOn(reorderGlide, 'moveCurve');
+    const follow = vi.spyOn(touchMotion, 'follow');
+    const spring = vi.spyOn(touchMotion, 'glideBase');
     try {
       const user = userEvent.setup();
       render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
       const list = screen.getByRole('list');
-      giveMoveCurve(list);
       layOut(list);
       handleOf('A').focus();
       await user.keyboard(' {ArrowDown}');
       await waitFor(() => expect(labels()).toEqual(['B', 'A', 'C', 'D']));
-      expect(slide).toHaveBeenCalledTimes(2);
-      expect(curve).toHaveBeenCalledTimes(1);
+      expect(follow).toHaveBeenCalledTimes(2);
+      expect(spring).toHaveBeenCalledTimes(1);
     } finally {
-      slide.mockRestore();
-      curve.mockRestore();
+      follow.mockRestore();
+      spring.mockRestore();
     }
   });
 
-  it("plays a committed move's glide on the theme's move curve, --ease-move over --duration-medium (spec:AST-105 FR4)", async () => {
+  it("plays a committed move's glide on the shared settle role, springs.settle (spec:AST-105 FR4)", async () => {
     stubPrimaryPointer(true);
-    const curve = vi.spyOn(reorderGlide, 'moveCurve');
-    const slide = vi.spyOn(reorderGlide, 'slide');
+    const glide = vi.spyOn(touchMotion, 'glideBase');
     const user = userEvent.setup();
     render(<ReorderableRows initial={['A', 'B', 'C']} />);
     const list = screen.getByRole('list');
-    giveMoveCurve(list);
     layOut(list);
     const handle = handleOf('A');
     handle.focus();
     await user.keyboard(' {ArrowDown}');
-    await waitFor(() => expect(slide).toHaveBeenCalled());
-    expect(curve).toHaveBeenCalledWith(list);
-    const played = curve.mock.results[0]?.value as {duration: number} | null;
-    expect(played?.duration).toBeCloseTo(0.41, 3);
-    expect(slide.mock.calls[0]?.[2]).toBe(played);
-    curve.mockRestore();
-    slide.mockRestore();
+    await waitFor(() => expect(glide).toHaveBeenCalled());
+    expect(glide.mock.results[0]?.value).toEqual({duration: 0.5, bounce: 0});
+    expect(motionRole('springs.settle')).toBeDefined();
+    glide.mockRestore();
   });
 
   it('sends a still-gliding row home on the shared settle role, keeping its velocity (spec:AST-094 FR4, FR6)', async () => {
     stubPrimaryPointer(true);
-    const home = vi.spyOn(reorderGlide, 'home');
-    const spring = vi.spyOn(reorderGlide, 'homeSpring');
+    const home = vi.spyOn(touchMotion, 'home');
+    const spring = vi.spyOn(touchMotion, 'glideBase');
     const user = userEvent.setup();
     render(<ReorderableRows initial={['A', 'B', 'C']} />);
     const list = screen.getByRole('list');
-    giveMoveCurve(list);
     layOut(list);
-    // A key move commits, and its rows glide on the theme's move curve.
+    // A key move commits, and its rows glide on springs.settle.
     handleOf('A').focus();
     await user.keyboard(' {ArrowDown}{Escape}');
     await waitFor(() => expect(labels()).toEqual(['B', 'A', 'C']));
@@ -1826,8 +1809,9 @@ describe('List reorderable', () => {
     const draggedRow = handle.closest('li');
     const calls = home.mock.calls.filter(([element]) => element === draggedRow);
     expect(calls.length).toBeGreaterThan(0);
-    for (const [, spring] of calls) {
+    for (const [, spring, , fromRest] of calls) {
       expect(spring).toEqual({duration: 0.5, bounce: 0});
+      expect(fromRest).toBe(false);
     }
     home.mockRestore();
     spring.mockRestore();

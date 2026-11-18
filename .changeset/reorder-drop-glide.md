@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[feat] A reorderable List's drop glides the rows to their new places with every pointer: each row the drop moved, the dropped row included, from its place before the drag, on the theme's move curve (`--ease-move` over `--duration-medium`), so it follows the theme's `character` and `tempo`. Before, a mouse drop put the rows there at once, and a finger's drop settled the dropped row from where its copy was released, on the slower settle spring. Under a finger, reorder mode's moves play the same curve. Lab TransferList and ListInput follow. Under Reduce Motion a mouse drop still lands at once, and a finger's drop dips each moved row: it fades out where it was and back in at its new place. With a mouse, a cancelled drag still puts everything back at once.
+[fix] List: a mouse drop now glides the rows to their new places on the same settle spring a finger's drop uses, with the dropped row starting from where its copy was let go, at the release's speed. Before, a mouse drop put the rows there at once. A finger's drop is unchanged. Under Reduce Motion a mouse drop still lands at once. Lab ListInput and TransferList follow.
 
 @ernestt
