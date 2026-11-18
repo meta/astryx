@@ -79,8 +79,8 @@ the rules above. Which pieces link in every app and which an app opts in is
   `spec:AST-112/FR5` and `spec:AST-112/FR7`.
 - Which capabilities link by default and which an app opts in:
   `spec:AST-112/FR3`.
-- Astryx Stage's internals beyond the contracts it implements:
-  `spec:AST-139`.
+- Astryx Stage's behavior. Astryx Stage conforms to these contracts
+  (`spec:AST-139`).
 - A second JavaScript engine or binding. This record keeps the contracts
   independent of the binding (FR8); it names no other engine.
 - Equivalent internal implementations remain valid when they satisfy this
@@ -148,8 +148,8 @@ the rules above. Which pieces link in every app and which an app opts in is
     result object with `status` (`ok`, `cancelled`, or `error`), `reason`, and
     `message`. A domain outcome, such as "not found", is a field of an `ok`
     result. The platform maps that object onto `AstryxResult`. Every host of
-    the contracts, Astryx Stage included, implements its methods in this
-    shape (FR8), so the same JavaScript runs on each.
+    the contracts implements its methods in this shape (FR8), so the same
+    JavaScript runs on each.
   - Native code never throws or rejects across the binding. A native
     exception, a failed system call, or a missing system service inside a
     method resolves `error` with a reason; the platform also turns any
@@ -209,9 +209,8 @@ the rules above. Which pieces link in every app and which an app opts in is
   - A binary of any earlier release and the JavaScript of a later release
     work together: every behavior the JavaScript uses on that binary is
     either in the binary's revision 1 or a feature the binary reports. A
-    host that runs other projects, Astryx Stage under its version floor
-    (`spec:AST-139`), and an app that updates its JavaScript apart from its
-    binary all depend on that pairing (DEC-3).
+    host that runs other projects and an app that updates its JavaScript
+    apart from its binary both depend on that pairing (DEC-3).
 
   FR5 gap: modules report a behavior revision number
   (`getConstants().version`) instead of named features, several contracts
@@ -244,7 +243,7 @@ the rules above. Which pieces link in every app and which an app opts in is
     contract: its methods, props, events, results, reasons, and named
     features. The same suite runs on iOS and on Android, and against the
     contract's JavaScript double in the package's `./testing` entry
-    (`spec:AST-112/FR5`). Astryx Stage runs it too (`spec:AST-139`).
+    (`spec:AST-112/FR5`).
   - The JavaScript double answers in the contract's absent, older, and
     current shapes, and passes the same suite as the native code, so a unit
     test that uses it matches a device.
@@ -303,10 +302,10 @@ the rules above. Which pieces link in every app and which an app opts in is
   - Each contract has a description in an engine-neutral form: its owner,
     platforms, first version, stability, members (with each platform-only
     member under its platform), and named features. Its codegen spec matches
-    it, and a check fails when they differ. Astryx Stage depends on that
-    description: it implements each contract from it and passes the same
-    suite, which a codegen spec alone, tied to one binding, would not
-    allow.
+    it, and a check fails when they differ. Any other host of the
+    contracts depends on that description: it implements each contract from
+    it and passes the same suite, which a codegen spec alone, tied to one
+    binding, would not allow.
   - No contract name, member, reason, or app-facing type names a
     binding-layer concept.
 
@@ -345,7 +344,7 @@ the rules above. Which pieces link in every app and which an app opts in is
   `no-module`, or `unsupported` (FR2, FR3, FR5); a view a binary lacks reports
   itself unavailable and the library draws its fallback.
 - Browser evidence: none. Native claims are proven on the Simulator, the
-  emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
+  emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
@@ -368,8 +367,8 @@ the rules above. Which pieces link in every app and which an app opts in is
 | FR4      | Spec rules check of value types; conformance cases of bytes, ids, and subscriptions                                                                                                                   | bytes sent from JavaScript as an `ArrayBuffer`; a byte result; a large byte value in each direction; a released id; an unknown id; a removed subscription                                                     | A non-plain value in a spec, an `ArrayBuffer` outside a request, bytes native code produces that cross other than as a file URI or a short base64 value, a size limit that refuses or cuts bytes, a crash on an unknown id, or an event after removal                                                                                                                                                                                     |
 | FR5      | An interface check of each contract against the interface every earlier release carries; unit tests of each named feature with an older double; the current JavaScript on the oldest supported binary | a new method; a new prop; a new union value; a binary without a feature; a canary build                                                                                                                       | A changed or removed shipped member, a new required member, a new member without a named feature, a revision counter, JavaScript that uses a feature or value the binary does not report, or a crash on an older binary                                                                                                                                                                                                                   |
 | FR6      | Gesture and transition runs on the Simulator, the emulator, and devices with a busy JavaScript thread; main-thread checker runs                                                                       | a drag; a sheet; a navigation transition; a file read from the main thread                                                                                                                                    | A dropped frame while JavaScript is busy, JavaScript per frame, a view change off the main thread, or main-thread file or network work                                                                                                                                                                                                                                                                                                    |
-| FR7      | The conformance suites on iOS, Android, Astryx Stage, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                | each contract; a binary with and without each feature; a push; a large title's collapse; a missing `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order |
-| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types; Astryx Stage's run of the suites                                                         | each contract                                                                                                                                                                                                 | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                   |
+| FR7      | The conformance suites on iOS, Android, and the JavaScript double; the frame recorder's behavior cases on the Simulator and unit tests of `recordFrames`                                              | each contract; a binary with and without each feature; a push; a large title's collapse; a missing `testID`; a second recording; a step that never settles; a Release binary; VoiceOver on during a recording | An implementation that fails its suite, a double that passes a case the device fails, a native behavior change without cases, a sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, a recorder in a Release binary, a `recordFrames` that passes without recording, or a recording that changes an element's label, value, or order |
+| FR8      | Check of each codegen spec against its engine-neutral description; source check of contract names and types                                                                                           | each contract                                                                                                                                                                                                 | A spec that differs from its description, a description without its owner, platforms, first version, stability, members, or named features, or a binding-layer name in a contract or an app-facing type                                                                                                                                                                                                                                   |
 | FR9      | Symbol and runtime checks of the built binaries; the compatibility apps of `spec:AST-112/FR2` on iOS and Android                                                                                      | a binary with each listed library beside Astryx; an exception's self-check that fails                                                                                                                         | An unprefixed symbol, a swizzled or exchanged method, a replaced delegate or appearance proxy, a conflict with a listed library, or a failed self-check without the public fallback                                                                                                                                                                                                                                                       |
 
 ## Decision log
@@ -405,9 +404,9 @@ a rejection's reason is untyped and a missed one is lost.
 **Decider:** imdreamrunner, 2026-11-17
 
 A binary and the JavaScript that runs on it do not always come from the same
-release: a host that runs other projects, Astryx Stage, and an app that
-updates its JavaScript apart from its binary all pair newer JavaScript with an
-older binary. An interface that only grows, with each addition a named
+release: a host that runs other projects and an app that updates its
+JavaScript apart from its binary both pair newer JavaScript with an older
+binary. An interface that only grows, with each addition a named
 feature, keeps every pairing working or failing loudly. Why the features carry
 names and no counter is `spec:AST-112/DEC-14`.
 
@@ -467,7 +466,7 @@ carry a per-frame reader of its view tree.
     host reads the contracts it must implement; their format then becomes part
     of the package's surface.
   - **Internal.** The descriptions stay in the repository as the source of the
-    checks of FR5 and FR8, and Astryx Stage reads them from there.
+    checks of FR5 and FR8.
 - **OQ2 — Is a reached time bound a common reason?** (`human-api`) Options:
   - **A common `timeout` reason.** Every capability answers the same reason,
     and a caller handles it once.
