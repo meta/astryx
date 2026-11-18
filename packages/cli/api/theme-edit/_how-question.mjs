@@ -21309,9 +21309,15 @@ export function draftAnswer(ctx, env, question) {
           const square =
             /\b(square[ds]?|sharp|squared off)\b/.test(c.text) ||
             Boolean(c.neg);
-          const sidePx = square
-            ? '0'
-            : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ?? null);
+          // (A bare 0 for a corner, "the top-left corner 0", is square.)
+          const sidePx =
+            square ||
+            /\b(?:corners?|radius|radii)\s+(?:of\s+|to\s+|at\s+)?0(?:px)?(?![\d.])|(?<![\d.])0(?:px)?\s+(?:corners?|radius)\b/.test(
+              c.text,
+            )
+              ? '0'
+              : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ??
+                null);
           const sideWords = (/** @type {string[]} */ ks) => {
             const NAME = /** @type {Record<string, string>} */ ({
               'start-start': 'top-left',
