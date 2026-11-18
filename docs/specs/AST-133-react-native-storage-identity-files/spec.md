@@ -34,9 +34,8 @@ for a device certificate without a certificate prompt, and saves or shares a
 file through the system's own sheets.
 
 This record details these three modules of the platform layer that
-`spec:AST-112` defines. They are core modules (`spec:AST-112/FR1`: secure
-storage, files, and client identity are generic capabilities of the core), so
-every app links them. Every asynchronous call resolves the result vocabulary
+`spec:AST-112` defines. They are core modules (`spec:AST-112/FR1`), so every
+app links them (`spec:AST-112/FR3`). Every asynchronous call resolves the result vocabulary
 of `spec:AST-112/FR6`, every module has the capability shape of
 `spec:AST-112/FR7`, every interface evolves additively under
 `spec:AST-112/FR8`, and Astryx Stage implements each module as the contract
@@ -48,30 +47,37 @@ The React Native ecosystem covers each of these needs with a library that
 ships its own native code. An app that adds one is no longer a
 JavaScript-only app: it needs its own native build, and a Preview of it in the
 Astryx app cannot run, because the host binary holds only the native code
-Astryx ships. Astryx owns a module where that cost meets a real gap, and keeps
-the module a thin, dependency-free wrapper with one result shape, one Preview
-policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
-`spec:AST-082/FR13`).
+Astryx ships. That is why the package carries these modules although no
+library component uses them (`spec:AST-112/FR1`). Each stays a thin,
+dependency-free wrapper with one result shape, one Preview policy, and one
+Astryx Stage simulation (`spec:AST-112/FR2`, `spec:AST-082/FR13`).
 
-| Module                 | What the ecosystem does well                                                                                                                                                                                                                                                                   | The gap Astryx fills                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSecureStorage`  | `expo-secure-store` and `react-native-keychain` keep values in the Keychain and in Keystore-backed storage, with accessibility classes and biometric gating on both platforms; `react-native-keychain` also stores credential pairs per server.                                                | The capability is close to theirs, and their Android biometric gating goes further (OQ1). The gap is the native code they add, and a store that belongs to the calling runtime: a Preview project gets its own secrets and never reads the app's, decided natively (FR5). Secrets stay out of backups by default.                                                                                 |
-| `AstryxClientIdentity` | Community TLS libraries pin server certificates, and some load a client certificate from a file that the app bundles, through their own HTTP client.                                                                                                                                           | A real capability gap. No widely used library creates a key in the Secure Enclave or StrongBox, builds its signing request, and presents the identity on React Native's own `fetch`, `XMLHttpRequest`, `Image` and WebSocket, under a host binding and a redirect rule. Android's system certificates (an administrator's or the person's) have no common wrapper either (FR8).                   |
-| `AstryxFiles`          | `expo-file-system`, `react-native-fs` and `react-native-blob-util` read, write and download files across the app's folders, with progress and resumable downloads; `expo-sharing` and `react-native-share` share files. React Native's `Share` shares text and URLs with no extra native code. | Little capability gap, and less reach on purpose: a cache per runtime, downloads whose body never crosses into JavaScript and whose redirects drop credentials across origins, one save and one share call on both platforms, and a read of the app's own bundled files that a Preview project cannot point at the host app (FR9 to FR12). Sharing a URL on iOS needs no added native code (OQ2). |
+- `AstryxSecureStorage`: the ecosystem's secure stores match it in capability,
+  and their Android biometric gating goes further (OQ1). Astryx keeps it so a
+  JavaScript-only app and a Preview can keep secrets, each runtime in its own
+  store (FR5).
+- `AstryxClientIdentity`: a real gap. No widely used library keeps the key in
+  secure hardware and presents the identity on React Native's own requests
+  under a host binding and a redirect rule (FR4, FR6, FR7).
+- `AstryxFiles`: little capability gap, and less reach on purpose: a cache per
+  runtime, downloads that keep credentials to their origin, one save and one
+  share call, and a confined read of bundled files (FR9 to FR12). React
+  Native's `Share` already shares a URL on iOS with no added native code
+  (OQ2).
 
 ## Who uses it
 
-| Native piece           | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                                                     | What a person sees                                                                                                                                       |
-| ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSecureStorage`  | native module (Turbo Native Module) | No Astryx component. App API only (`./storage` entry): an app that signs in keeps its tokens here.                                                                                                                                                                                                                                                | The app opens signed in after a relaunch; Face ID or the passcode appears before a secret the app protects with it.                                      |
-| `AstryxClientIdentity` | native module (Turbo Native Module) | No Astryx component. App API only (`./network` entry): an app that enrols a device certificate. The platform's networking presents a bound identity on the runtime's `fetch`, `XMLHttpRequest`, `Image`, WebSocket, and `AstryxFiles` downloads; the `web` capability presents it in web views through a core registration hook (`spec:AST-131`). | A work app reaches servers that require a device certificate with no certificate prompt; on Android, the system's certificate picker appears once (FR8). |
-| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The `pdf` capability writes its page pictures (`PdfView` thumbnails) into the runtime's cache, and the camera, photo, recorder and image markup modules return their files there. App API (`./storage` entry): `AstryxFiles` and `readBundledAsset`.                                                       | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
+| Native piece           | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                    | What a person sees                                                                                                                                       |
+| ---------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSecureStorage`  | native module (Turbo Native Module) | No Astryx component. App API only (`./storage` entry): an app that signs in keeps its tokens here.                                                                                                                                                                                                               | The app opens signed in after a relaunch; Face ID or the passcode appears before a secret the app protects with it.                                      |
+| `AstryxClientIdentity` | native module (Turbo Native Module) | No Astryx component. App API only (`./network` entry): an app that enrols a device certificate. The platform's networking presents a bound identity on the runtime's `fetch`, `XMLHttpRequest`, `Image`, WebSocket, and `AstryxFiles` downloads; the `web` capability presents it in web views (`spec:AST-131`). | A work app reaches servers that require a device certificate with no certificate prompt; on Android, the system's certificate picker appears once (FR8). |
+| `AstryxFiles`          | native module (Turbo Native Module) | No library component calls the module. The `pdf` capability writes its page pictures (`PdfView` thumbnails) into the runtime's cache, and the camera, photo, recorder and image markup modules return their files there. App API (`./storage` entry): `AstryxFiles` and `readBundledAsset`.                      | A downloaded document opens from the cache; Save opens the system's folder picker and Share opens the system's share sheet; backing out changes nothing. |
 
 ## Non-goals
 
 - `AstryxStorage`, the runtime's string key-value store, and its project-data
-  clear. `spec:AST-130` (FR14) owns them; this record names only the clearers
-  these modules register with it.
+  clear. `spec:AST-130` (FR14) owns them; this record names only what the
+  clear removes from these modules (FR5).
 - The cookie jar, domain information, redirect modes, and the request with no
   identity that `AstryxNetwork` carries. `spec:AST-130` owns them until OQ4 is
   answered.
@@ -100,30 +106,30 @@ policy, and one Astryx Stage simulation (`spec:AST-112/FR2`,
 ## Requirements
 
 - **FR1 — The group is three core native modules.** Every app links them
-  (`spec:AST-112/FR1`). Each module is read with `TurboModuleRegistry.get`,
+  (`spec:AST-112/FR1`, FR3). Each module is read with `TurboModuleRegistry.get`,
   only by its own wrapper (`spec:AST-112/FR8`), and its wrapper answers
   `no-module` where the module is absent. `./storage` exports
   `AstryxSecureStorage`, `AstryxFiles` and `readBundledAsset`; `./network`
   exports `AstryxClientIdentity` (`spec:AST-112/FR5`).
 
-  | Contract               | Kind                                | Methods                                                                                                                                                                           | Platforms    |
-  | ---------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxSecureStorage`  | native module (Turbo Native Module) | `getConstants` (`version`, `isUserPresenceAvailable`, `accessibleClasses`, `biometry`), `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`                                 | iOS, Android |
-  | `AstryxClientIdentity` | native module (Turbo Native Module) | `getConstants` (`version`, `isSimulator`), `createKey`, `createCsr`, `sign`, `storeCertificate`, `getInfo`, `list`, `bindToHosts`, `remove`, `useSystemIdentity` (Android)        | iOS, Android |
-  | `AstryxFiles`          | native module (Turbo Native Module) | `getConstants` (`version`), `write`, `read`, `remove`, `list`, `trim`, `clear`, `download`, `cancelDownload`, `onDownloadProgress` (event), `saveAs`, `share`, `readBundledAsset` | iOS, Android |
+  | Contract               | Kind                                | Methods                                                                                                                                                               | Platforms    |
+  | ---------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+  | `AstryxSecureStorage`  | native module (Turbo Native Module) | `getConstants` (`isUserPresenceAvailable`, `accessibleClasses`, `biometry`), `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`                                | iOS, Android |
+  | `AstryxClientIdentity` | native module (Turbo Native Module) | `getConstants` (`isSimulator`), `createKey`, `createCsr`, `sign`, `storeCertificate`, `getInfo`, `list`, `bindToHosts`, `remove`, `useSystemIdentity` (Android)       | iOS, Android |
+  | `AstryxFiles`          | native module (Turbo Native Module) | `getConstants`, `write`, `read`, `remove`, `list`, `trim`, `clear`, `download`, `cancelDownload`, `onDownloadProgress` (event), `saveAs`, `share`, `readBundledAsset` | iOS, Android |
 
 - **FR2 — Every call is a result; constants are synchronous.**
   - Every asynchronous call resolves `AstryxResult` and never rejects
     (`spec:AST-112/FR6`), `readBundledAsset` included. Each module adds only
     these reasons to the common ones:
 
-    | Module                 | Module reasons                                                                                                                                                                                               |
-    | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-    | `AstryxSecureStorage`  | `invalid-key`, `invalid-value`, `invalid-json`, `locked`, `unavailable`, `auth-failed`, `unsupported-option`, `no-namespace`; `cancelled` when the person dismisses Face ID, Touch ID or the passcode        |
-    | `AstryxClientIdentity` | `invalid-label`, `exists`, `no-secure-hardware`, `no-key`, `invalid-subject`, `invalid-certificate`, `key-mismatch`, `invalid-host`, `not-presentable`, `no-activity`, `no-system-identities`; `cancelled`   |
-    | `AstryxFiles`          | `invalid-name`, `invalid-data`, `invalid-url`, `invalid-uri`, `invalid-option`, `missing-file`, `no-space`, `no-window`, `busy`, `http`, `redirect`, `timeout`, `network`, `io`, `no-namespace`; `cancelled` |
+    | Module                 | Module reasons                                                                                                                                                                                                              |
+    | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `AstryxSecureStorage`  | `invalid-key`, `invalid-value`, `invalid-json`, `locked`, `unavailable`, `auth-failed`, `unsupported-option`, `no-namespace`; `cancelled` when the person dismisses Face ID, Touch ID or the passcode                       |
+    | `AstryxClientIdentity` | `invalid-label`, `exists`, `no-secure-hardware`, `no-key`, `invalid-subject`, `invalid-certificate`, `key-mismatch`, `invalid-host`, `not-presentable`, `no-activity`, `no-system-identities`, `unavailable`; `cancelled`   |
+    | `AstryxFiles`          | `invalid-name`, `invalid-data`, `invalid-url`, `invalid-uri`, `invalid-option`, `missing-file`, `no-space`, `no-window`, `busy`, `http`, `redirect`, `timeout`, `network`, `io`, `no-namespace`, `unavailable`; `cancelled` |
 
-  - Synchronous members (`isAvailable()`, `version()`, `supports(feature)`,
+  - Synchronous members (`isAvailable()`, `supports(feature)`,
     `AstryxSecureStorage.capabilities()`, `AstryxClientIdentity.isSimulator()`,
     `AstryxClientIdentity.hasSystemIdentities()`) read the module's constants
     once and never throw. They answer `false` or `null` where the module or the
@@ -204,9 +210,8 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     and identities, never the app's or another project's.
   - In a Preview project's runtime, the Astryx app asks the person before
     `createKey` and `bindToHosts`; a refusal answers `not-allowed`.
-  - The secure store and the identity store each register a clearer with the
-    core, so `AstryxStorage.clearProjectData` removes a project's secrets and
-    identities with the rest of its data (`spec:AST-130/FR14`).
+  - `AstryxStorage.clearProjectData` removes a project's secrets, identities,
+    and cache files with the rest of its data (`spec:AST-130/FR14`).
 
 - **FR6 — An identity is presented only to hosts it is bound to.**
   - `bindToHosts(label, hosts)` sets where the identity is presented; an empty
@@ -359,21 +364,24 @@ true`, never `ok` alone.
 
 - **FR16 — Every contract is at revision 1; later behaviour is a named
   feature.**
-  - Every contract in the group reports revision 1 on iOS and Android. A
-    behaviour added after revision 1 is a named feature,
-    `<Contract>.<feature>`, that the binary lists in `AstryxPlatformInfo`'s
-    `contractFeatures` constant (`spec:AST-130/FR18`). JavaScript checks it
-    with `hasContractFeature` before it uses the behaviour.
+  - Every contract in the group is at revision 1 on iOS and Android, and none
+    carries a revision counter (`spec:AST-112/FR8`). A behaviour added after
+    revision 1 is a named feature, `<Contract>.<feature>`, that the binary
+    lists in `AstryxPlatformInfo`'s `contractFeatures` constant
+    (`spec:AST-130/FR18`). JavaScript checks it with `hasContractFeature`
+    before it uses the behaviour.
   - The group's named features are `AstryxSecureStorage.user-presence` (FR3)
     and `AstryxClientIdentity.system-identity` (FR8).
-    `AstryxClientIdentity.supports('systemIdentity')` reads the second.
+    `AstryxSecureStorage.supports('userPresence')` and
+    `AstryxClientIdentity.supports('systemIdentity')` read them
+    (`spec:AST-112/FR7`).
   - Without a feature, JavaScript keeps the revision-1 behaviour or answers
     `unsupported-option` or `no-system-identities`, never a silently weaker
     path, and a missing feature is reported once with a development warning.
-  - Astryx Stage pairs with the package through the library's Stage version
-    floor: the package names the oldest Astryx Stage that implements its
-    contract set, and an older Astryx Stage refuses the project with the gaps
-    listed.
+  - Astryx Stage pairs with the package through its version floor
+    (`spec:AST-112/FR12`): the package names the oldest Astryx Stage that
+    implements these contracts, and an older Astryx Stage refuses the project
+    and lists the contracts it lacks.
 
 - **FR17 — Astryx Stage simulates each module.**
   - `AstryxSecureStorage`: secrets per namespace that last across runs and
@@ -392,16 +400,13 @@ true`, never `ok` alone.
     a save dialog and a share sheet, and `readBundledAsset` confined to the
     project's own assets and cache.
   - FR17 gap: Astryx Stage reports a download's progress only once, at the
-    end, and presents a bound identity on a download only with `credentials:
-'include'`.
+    end, and presents a bound identity on a download only with
+    `credentials: 'include'`.
 
 - **FR18 — Public platform API only.**
   - The native code of every module in the group uses public platform API
-    only: the Security and LocalAuthentication frameworks, UIKit's document
-    picker and activity sheet, and `URLSession` on iOS; the Android Keystore,
-    `KeyChain`, the Storage Access Framework, `FileProvider`, and React
-    Native's public HTTP client factory on Android. The group needs no
-    exception.
+    only, and public React Native API where it joins React Native's
+    networking. The group needs no exception.
 
 ### Platform support
 
@@ -429,9 +434,10 @@ true`, never `ok` alone.
 ## Current-state impact
 
 - This record details `spec:AST-112`: its FR1 (secure storage, files, and
-  client identity in the core), FR5 (the `./storage` and `./network` entries),
-  FR6 and FR7 for each module's results and probes, FR8 for the revision-1
-  baseline and named features, and FR12 for Astryx Stage's simulation.
+  client identity in the package), FR3 (the core links in every app), FR5
+  (the `./storage` and `./network` entries), FR6 and FR7 for each module's
+  results and probes, FR8 for the revision-1 baseline and named features, and
+  FR12 for Astryx Stage's simulation and version floor.
 - It relies on `spec:AST-130`: FR14 for the runtime namespace and the
   project-data clear, FR18 for `contractFeatures` and `hasContractFeature`.
 - It changes no other record. The split between core and opt-in capabilities
@@ -470,8 +476,8 @@ true`, never `ok` alone.
 The Astryx app runs other people's projects in the same process as its own
 code, so a store keyed only by the app would hand a project the app's tokens
 and certificates. Each module derives the namespace from the runtime
-natively, as `AstryxStorage` does, and registers a clearer so a removed
-project leaves nothing behind.
+natively, as `AstryxStorage` does, and a removed project's data clear
+removes its secrets, identities, and cache files too.
 
 Rejected: a namespace argument from JavaScript, because a project could name
 the app's.
@@ -540,4 +546,4 @@ open.
   component calls `AstryxClientIdentity`, and only apps that talk to servers
   requiring device certificates use it. Options: keep it in the core, so the
   runtime's requests present identities in every app and in Preview; or make
-  it an opt-in capability whose presentation hooks register with the core.
+  it an opt-in capability, so only apps that opt it in present identities.
