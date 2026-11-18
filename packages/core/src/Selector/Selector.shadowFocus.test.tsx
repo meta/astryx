@@ -155,4 +155,47 @@ describe('focus return inside a shadow root', () => {
       outer.remove();
     }
   });
+
+  it('Selector: inside a closed shadow root, a press on another field keeps focus on that field', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const container = document.createElement('div');
+    shadow.append(container);
+    const field = document.createElement('input');
+    field.setAttribute('aria-label', 'Other field');
+    shadow.append(field);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const trigger = within(container).getByRole('combobox');
+      await user.click(trigger);
+      act(() => {
+        field.focus();
+      });
+      const popover = shadow.querySelector('[popover]') as HTMLElement;
+      act(() => {
+        popover.dispatchEvent(
+          Object.assign(new Event('toggle'), {
+            oldState: 'open',
+            newState: 'closed',
+          }),
+        );
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(field);
+    } finally {
+      cleanup();
+      host.remove();
+    }
+  });
 });

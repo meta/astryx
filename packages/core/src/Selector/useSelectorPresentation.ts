@@ -30,7 +30,11 @@ import {
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {useOutsidePress} from '../Layer/outsidePress';
-import {containsAlongFlatTree, deepActiveElement} from '../utils/flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  shadowRootsOutward,
+} from '../utils/flatTree';
 import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
@@ -138,6 +142,13 @@ export function useSelectorPresentation({
       active != null &&
       list != null &&
       containsAlongFlatTree(active, list);
+    // A closed shadow root hides which element inside it holds focus, so its
+    // host is not a container around the list: focus may be on another field.
+    const isClosedRootHost =
+      active != null &&
+      active.shadowRoot == null &&
+      list != null &&
+      shadowRootsOutward(list.getRootNode()).some(({host}) => host === active);
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
       !isFocusFromPressInList &&
@@ -146,6 +157,7 @@ export function useSelectorPresentation({
       active !== trigger &&
       list?.contains(active) !== true &&
       (active.tabIndex >= 0 ||
+        isClosedRootHost ||
         list == null ||
         !containsAlongFlatTree(active, list));
     if (focusLandedElsewhere) {
