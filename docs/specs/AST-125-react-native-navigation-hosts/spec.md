@@ -264,8 +264,8 @@ no navigation host.
   host) sets one screen's chrome to light or dark whatever the app's mode.
   - While the screen is on top, its mode applies to the navigation bar, the
     status bar glyphs (and the Android navigation bar glyphs), the background
-    behind the screen, the surfaces the screen presents natively (through the
-    presentation host's `appearance`, `spec:AST-128/FR9`), and the tab bar of
+    behind the screen, the surfaces the screen presents natively on iOS
+    (through the presentation host's `appearance`, `spec:AST-128/FR9`), and the tab bar of
     the tabs that hold the stack.
   - The change happens within the frames of the push or pop transition. During
     an interactive back the top screen's mode stays until the back completes;
@@ -361,9 +361,9 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - After a push or pop, the system container moves VoiceOver and TalkBack
     focus to the incoming screen as the platform does.
 - **FR14 — Named features.**
-  - The group's native contracts follow `spec:AST-140/FR5`: each contract's
-    baseline is its first release's shape, and behaviour added later is a
-    named feature the JavaScript checks before use. The group's named features are
+  - The group's native contracts grow by named features under
+    `spec:AST-140/FR5`, and JavaScript checks a named feature before use. The
+    group's named features are
     `AstryxStackHost.pop-start` (`onPopStart`, FR3) and
     `AstryxStackScreen.appearance` (the screen's chrome, FR7); any further
     stack screen behaviour beyond the baseline is a named feature of
@@ -432,8 +432,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces,
   the navigation hosts included, link by default.
-- Relies on `spec:AST-140/FR5`: a native contract's baseline is its first
-  release's shape, and it grows by named features.
+- Relies on `spec:AST-140/FR5`: native contracts grow by named features.
 - Relies on `spec:AST-128` FR9: the presentation host's `appearance` styles
   the surfaces a screen presents natively (FR7 here).
 - Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
@@ -460,7 +459,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 | FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                                              | Any JavaScript work per frame during these motions                                                               |
 | FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; drawn tabs                                                                               | A blank screen, a silent fallback, or an error that does not name the capability                                 |
 | FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                                           | The escape pops while `canPop` is false, or a badge is not read                                                  |
-| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `features` lists what it implements                            | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A contract whose baseline changes, or a feature used without the check                                           |
+| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `features` lists what it implements                            | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A named feature used without the check, or one the record does not list                                          |
 | FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                                             | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
 
 ## Decision log
