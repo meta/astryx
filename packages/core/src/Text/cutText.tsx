@@ -13,6 +13,7 @@
  *   load
  */
 
+import type {RefObject} from 'react';
 import {UndescribedTooltip} from '../Tooltip/Tooltip';
 
 /** Whether a box clips its content. */
@@ -94,20 +95,25 @@ function hasCallerTooltip(anchor: HTMLElement): boolean {
 }
 
 /**
- * The text keyboard focus on `target` should show for `anchor`: `measured`'s
- * text when a box cuts it short and focus is inside the anchor; otherwise
- * `null`. With `yieldsToCallerTooltip` (a Button), a caller tooltip that
- * describes the anchor also gives `null`.
+ * The text keyboard focus on `target` should show for the anchor: the
+ * measured element's text (the anchor's own without `measureRef`) when a box
+ * cuts it short and focus is inside the anchor; otherwise `null`. With
+ * `yieldsToCallerTooltip` (a Button), a caller tooltip that describes the
+ * anchor also gives `null`.
  */
 export function cutTextFor(
-  anchor: HTMLElement,
-  measured: HTMLElement,
+  anchorRef: RefObject<HTMLElement | null>,
+  measureRef: RefObject<HTMLElement | null> | undefined,
   target: Element,
   yieldsToCallerTooltip: boolean,
 ): string | null {
+  const anchor = anchorRef.current;
+  const measured = measureRef?.current ?? anchor;
   // React delivers focus from a portal (a header's filter popover) to the
   // anchor's handlers; only focus inside the anchor counts.
   if (
+    anchor == null ||
+    measured == null ||
     !anchor.contains(target) ||
     (yieldsToCallerTooltip && hasCallerTooltip(anchor))
   ) {
