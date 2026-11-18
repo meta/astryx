@@ -4,8 +4,9 @@
  * @file `theme add` given a shared theme instead of a slug: a theme folder, a
  * `.tgz` archive of one, or an https URL to a `.tgz`. The theme is checked,
  * copied into the app's local themes root, the Astryx packages it imports
- * that the app lacks are installed with install scripts off (any other
- * package is only named), and it is recorded as the default. Nothing of the
+ * that the app lacks are installed with install scripts off (or, where an
+ * integration says how the project adds packages, named in its step; any
+ * other package is only named), and it is recorded as the default. Nothing of the
  * theme runs, nothing it did not write is replaced, every file written is
  * reported, a bad source writes nothing, and `theme remove` undoes it.
  */
@@ -251,11 +252,12 @@ describe('theme add with a shared theme', () => {
     ]);
     expect(result.data.copy).toMatchObject({
       installed: [`@astryxdesign/theme-neutral@${CLI_VERSION}`],
-      installRan: true,
       installCommand: expect.stringMatching(/^npm install left-pad/),
     });
-    // (No integration says how this project adds packages.)
+    // (No integration says how this project adds packages: the receipt is
+    // as before.)
     expect(result.data.copy).not.toHaveProperty('installGuidance');
+    expect(result.data.copy).not.toHaveProperty('installRan');
   });
 
   it('reports every file it wrote and the record and dependency it changed', async () => {

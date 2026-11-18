@@ -2020,9 +2020,7 @@ export async function addSharedThemeToApp(source, options) {
         outputDir,
         files,
         installed: install.installed,
-        ...(install.installRan === undefined
-          ? {}
-          : {installRan: install.installRan}),
+        ...(install.installRan === false ? {installRan: false} : {}),
         installCommand: install.installCommand,
         ...(install.installGuidance
           ? {installGuidance: install.installGuidance}
@@ -2271,11 +2269,14 @@ function relFrom(cwd, file) {
  * Install the Astryx packages a shared theme imports that the app lacks (its
  * base theme package), with the app's package manager, at the version of the
  * app's installed Core, as every Astryx package of one release shares it,
- * with install scripts off. A package from anywhere else is never installed
- * for the theme: the result names the command that installs it.
+ * with install scripts off. In a project whose integration gives install
+ * guidance, or whose lockfiles disagree, nothing is run: `installRan: false`,
+ * and `installRetryCommand` names the step. A package from anywhere else is
+ * never installed for the theme: the result names the command (or the
+ * guidance) that installs it.
  * @param {{missingAstryx: string[], missingPackages: string[], installCommand: string | null, installGuidance: string | null}} needs
  * @param {string} projectDir
- * @returns {{installed: string[], installRan?: boolean, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string}}
+ * @returns {{installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string}}
  */
 function installSharedThemeNeeds(needs, projectDir) {
   // (An integration that says how this project adds packages is followed
@@ -2322,10 +2323,9 @@ function installSharedThemeNeeds(needs, projectDir) {
     };
   }
   const run = runPackageManager(projectDir, 'add', specs);
-  if (run.ok) return {installed: specs, installRan: true, ...others};
+  if (run.ok) return {installed: specs, ...others};
   return {
     installed: [],
-    installRan: true,
     ...others,
     installError: run.why,
     installRetryCommand: run.command,
