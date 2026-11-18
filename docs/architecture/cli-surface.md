@@ -654,8 +654,9 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   `template.copy` receipt's `components` and the `template.show` response's
   `componentsToRead` list the components the source uses that
   `astryx component` answers in the project, in the order the source first
-  renders them, each once, each as the selector that command reads it by
-  (`<package>/<Name>` when more than one package answers the name), and text
+  renders them, each once, each in the form that command takes
+  (`<package>/<Name>`, for the package the import names, in a project with
+  an integration), and text
   prints them as one
   `Read the components it uses in one call: <command> component A B C` line,
   after the copy line or on stderr for a printed template, and prints no line

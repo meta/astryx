@@ -37,10 +37,10 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], ownersOf?: (name: string) => readonly string[], command?: string}} ctx
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean}, command?: string}} ctx
  *   `iconSets`: the project's icon sets; without them the icons are unchanged.
- *   `ownersOf`: the packages that answer `astryx component` for a name;
- *   without it the receipt names no component.
+ *   `components`: how `astryx component` reads the project's components
+ *   (loadComponentLookup); without it the receipt names no component.
  *   `command`: the command that selects this template, without a path; the
  *   refusal of a path outside the project suggests it
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
@@ -52,7 +52,7 @@ export function templateCopy(
     cwd,
     overwrite = false,
     iconSets = NO_ICON_SETS,
-    ownersOf = () => [],
+    components = {ownersOf: () => [], qualified: false},
     command = `astryx template ${match.dirName} --type ${match.type}`,
   },
 ) {
@@ -186,7 +186,7 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
-      components: answeredComponentsInSource(outputSource, ownersOf),
+      components: answeredComponentsInSource(outputSource, components),
       ...(installGuidance ? {installGuidance} : {}),
       ...(path.isAbsolute(targetPath) && !scratch
         ? {givenPath: targetPath}

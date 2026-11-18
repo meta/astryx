@@ -26,15 +26,18 @@ import {
 /**
  * Build the `template.show` envelope for an already-resolved template.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], ownersOf?: (name: string) => readonly string[]}} [options]
+ * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean}}} [options]
  *   `iconSets`: the project's icon sets; without them the template's icons
- *   are unchanged. `ownersOf`: the packages that answer `astryx component`
- *   for a name; without it `componentsToRead` is empty.
+ *   are unchanged. `components`: how `astryx component` reads the
+ *   project's components; without it `componentsToRead` is empty.
  * @returns {import('../template.type.mjs').TemplateShowResponse}
  */
 export function templateShow(
   match,
-  {iconSets = NO_ICON_SETS, ownersOf = () => []} = {},
+  {
+    iconSets = NO_ICON_SETS,
+    components = {ownersOf: () => [], qualified: false},
+  } = {},
 ) {
   if (!fs.existsSync(match.filePath)) {
     throw new AstryxError(
@@ -64,7 +67,7 @@ export function templateShow(
       description: renderTokens(match.description),
       type: match.type,
       components: componentsInSource(source),
-      componentsToRead: answeredComponentsInSource(source, ownersOf),
+      componentsToRead: answeredComponentsInSource(source, components),
       source,
       demoMediaReplaced,
       demoContentReplaced,

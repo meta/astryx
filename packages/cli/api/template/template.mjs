@@ -36,7 +36,7 @@ import {templateSkeleton} from './skeleton/skeleton.mjs';
 import {templateCopy} from './copy/copy.mjs';
 import {templateCdn} from './cdn/cdn.mjs';
 import {
-  loadComponentOwners,
+  loadComponentLookup,
   loadTemplateIconSets,
   withOtherCommandHint,
 } from './_adapter.mjs';
@@ -288,12 +288,12 @@ async function templateRead(name, options = {}) {
   // (AST-084 FR9): both the printed source and the copied file follow it.
   // The components it names for one `astryx component` read are the ones
   // that command answers in this project.
-  const [iconSets, ownersOf] = await Promise.all([
+  const [iconSets, components] = await Promise.all([
     loadTemplateIconSets(cwd),
-    loadComponentOwners(cwd),
+    loadComponentLookup(cwd),
   ]);
   if (show || !targetPath) {
-    return templateShow(match, {iconSets, ownersOf});
+    return templateShow(match, {iconSets, components});
   }
 
   // The command as typed selects the same template again, an integration
@@ -308,7 +308,7 @@ async function templateRead(name, options = {}) {
     cwd,
     overwrite,
     iconSets,
-    ownersOf,
+    components,
     command,
   });
 }

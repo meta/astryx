@@ -341,7 +341,7 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The template's source, as a copy writes it, with its description, kind, components (a sorted summary, without common ones such as Text), componentsToRead (what it renders, as `astryx component` selectors, in first-use order), demoMediaReplaced and demoContentReplaced (demo media and content replaced with placeholders), and isReady (false when its doc says so).",
+        "The template's source, as a copy writes it, with its description, kind, components (a sorted summary, without common ones such as Text), componentsToRead (what it renders, in the form `astryx component` takes, in first-use order), demoMediaReplaced and demoContentReplaced (demo media and content replaced with placeholders), and isReady (false when its doc says so).",
     },
     {
       value: 'template.skeleton',
@@ -351,7 +351,7 @@ export const doc = {
     {
       value: 'template.copy',
       description:
-        'A scaffold receipt: template id, outputDir (absolute for a scratch copy), fileName, filesCopied, givenPath (the absolute path given, only when inside the project), demoMediaReplaced, demoContentReplaced, notes (what the project lacks, such as missing packages or a StyleX compiler; empty when nothing), missingPackages, installCommand (null when nothing is missing, the package manager is undetermined, or no package.json holds the folder), installGuidance (how an integration adds them, used instead of installCommand), components (what it renders, as `astryx component` selectors, in first-use order), and isReady.',
+        'A scaffold receipt: template id, outputDir (absolute for a scratch copy), fileName, filesCopied, givenPath (the absolute path given, only when inside the project), demoMediaReplaced, demoContentReplaced, notes (what the project lacks, such as missing packages or a StyleX compiler; empty when nothing), missingPackages, installCommand (null when nothing is missing, the package manager is undetermined, or no package.json holds the folder), installGuidance (how an integration adds them, used instead of installCommand), components (what it renders, in the form `astryx component` takes, in first-use order), and isReady.',
     },
 
     {

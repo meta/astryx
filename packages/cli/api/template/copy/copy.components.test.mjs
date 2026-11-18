@@ -26,6 +26,10 @@ const {
 } = require('../../../foundation/discovery/template-adapter.mjs');
 /** @type {typeof import('../../../test-utils/run-cli.mjs')} */
 const {runCli} = require('../../../test-utils/run-cli.mjs');
+/** @type {typeof import('../../../foundation/integrations/cli-requirement.mjs')} */
+const {
+  COMPONENT_REPLACES_CLI,
+} = require('../../../foundation/integrations/cli-requirement.mjs');
 
 const SLOW = 60_000;
 const READ_LINE =
@@ -77,6 +81,21 @@ const MIXED_NAMES = [
   'InputGroup',
   'InputGroupText',
 ];
+
+/** MIXED_NAMES as a project with an integration reads them. */
+const MIXED_SELECTORS = MIXED_NAMES.map(name =>
+  name === 'AcmeBadge'
+    ? '@acme/widgets/AcmeBadge'
+    : `@astryxdesign/core/${name}`,
+);
+
+/** A source that renders Core's SideNav, which an integration replaces. */
+const SIDENAV_SOURCE = `import {SideNav} from '@astryxdesign/core/SideNav';
+
+export default function Page() {
+  return <SideNav />;
+}
+`;
 
 /** A source that renders Core's Button, a name an integration also ships. */
 const BUTTON_SOURCE = `import {Button} from '@astryxdesign/core/Button';
@@ -144,7 +163,9 @@ function makeConsumer(templates) {
         './AcmeBadge': './src/AcmeBadge.tsx',
         './Button': './src/Button.tsx',
         './SizeProvider': './src/SizeProvider.tsx',
+        './AcmeSideNav': './src/AcmeSideNav.tsx',
       },
+      peerDependencies: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
     }),
   );
   fs.writeFileSync(
@@ -182,6 +203,23 @@ function makeConsumer(templates) {
       props: [],
     })};\n`,
   );
+  // A replacement: bare `astryx component SideNav` reads this one.
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'AcmeSideNav.tsx'),
+    'export function AcmeSideNav() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'AcmeSideNav.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'component',
+      name: 'AcmeSideNav',
+      displayName: 'Acme Side Nav',
+      import: '@acme/widgets/AcmeSideNav',
+      replaces: 'SideNav',
+      usage: {description: 'The side navigation for Acme apps.'},
+      props: [],
+    })};\n`,
+  );
   // A component Core does not document, under a name a Core module exports.
   fs.writeFileSync(
     path.join(pkgDir, 'src', 'SizeProvider.tsx'),
@@ -215,6 +253,7 @@ beforeEach(() => {
     'acme-empty': EMPTY_SOURCE,
     'acme-button': BUTTON_SOURCE,
     'acme-core-size': CORE_SIZE_SOURCE,
+    'acme-sidenav': SIDENAV_SOURCE,
   });
   process.chdir(tmpDir);
 });
@@ -232,6 +271,12 @@ afterEach(() => {
 const ownersFrom = answers => name =>
   answers.has(name) ? [/** @type {string} */ (answers.get(name))] : [];
 
+/**
+ * A lookup that reads bare names, as in a project with no integration.
+ * @param {Map<string, string>} answers name to its package
+ */
+const bare = answers => ({ownersOf: ownersFrom(answers), qualified: false});
+
 describe('answeredComponentsInSource', () => {
   const catalog = new Map([
     ['Card', '@astryxdesign/core'],
@@ -247,13 +292,13 @@ describe('answeredComponentsInSource', () => {
   ]);
 
   it('keeps every bound catalog name in source order, each once', () => {
-    expect(
-      answeredComponentsInSource(MIXED_SOURCE, ownersFrom(catalog)),
-    ).toEqual(MIXED_NAMES);
+    expect(answeredComponentsInSource(MIXED_SOURCE, bare(catalog))).toEqual(
+      MIXED_NAMES,
+    );
   });
 
   it('counts no unbound tag, tag from another module, or tag in a comment', () => {
-    const names = answeredComponentsInSource(MIXED_SOURCE, ownersFrom(catalog));
+    const names = answeredComponentsInSource(MIXED_SOURCE, bare(catalog));
     for (const name of ['Ghost', 'Tooltip', 'Widget', 'HoverCard']) {
       expect(names).not.toContain(name);
     }
@@ -270,25 +315,32 @@ export default function Page() {
       ['Table', '@astryxdesign/core'],
       ['Card', '@astryxdesign/core'],
     ]);
-    expect(answeredComponentsInSource(source, ownersFrom(parts))).toEqual([
-      'Table',
-    ]);
+    expect(answeredComponentsInSource(source, bare(parts))).toEqual(['Table']);
+  });
+
+  it('writes each name as `<package>/<Name>` for its import when qualified', () => {
+    expect(
+      answeredComponentsInSource(MIXED_SOURCE, {
+        ownersOf: ownersFrom(catalog),
+        qualified: true,
+      }),
+    ).toEqual(MIXED_SELECTORS);
   });
 
   it('drops a name the catalog does not hold', () => {
     expect(
       answeredComponentsInSource(
         MIXED_SOURCE,
-        ownersFrom(new Map([['Card', '@astryxdesign/core']])),
+        bare(new Map([['Card', '@astryxdesign/core']])),
       ),
     ).toEqual(['Card']);
   });
 
   it('is empty without a catalog or without a catalog tag', () => {
-    expect(answeredComponentsInSource(MIXED_SOURCE, () => [])).toEqual([]);
-    expect(
-      answeredComponentsInSource(EMPTY_SOURCE, ownersFrom(catalog)),
-    ).toEqual([]);
+    expect(answeredComponentsInSource(MIXED_SOURCE, bare(new Map()))).toEqual(
+      [],
+    );
+    expect(answeredComponentsInSource(EMPTY_SOURCE, bare(catalog))).toEqual([]);
   });
 });
 
@@ -301,7 +353,7 @@ describe('template.copy components', () => {
         cwd: tmpDir,
       });
       expect(res.type).toBe('template.copy');
-      expect(res.data.components).toEqual(MIXED_NAMES);
+      expect(res.data.components).toEqual(MIXED_SELECTORS);
     },
     SLOW,
   );
@@ -330,7 +382,12 @@ describe('template.copy components', () => {
       expect(components.length).toBeGreaterThan(0);
       expect(new Set(components).size).toBe(components.length);
       // Components every page renders are listed too.
-      expect(components).toEqual(expect.arrayContaining(['Text', 'Heading']));
+      expect(components).toEqual(
+        expect.arrayContaining([
+          '@astryxdesign/core/Text',
+          '@astryxdesign/core/Heading',
+        ]),
+      );
       // The chart library's parts are not Astryx components.
       for (const chartPart of ['XAxis', 'YAxis', 'Tooltip', 'LineChart']) {
         expect(components).not.toContain(chartPart);
@@ -354,7 +411,10 @@ describe('template.copy components from family docs', () => {
         package: '@astryxdesign/core',
       });
       expect(res.data.components).toEqual(
-        expect.arrayContaining(['ResizeHandle', 'Layout']),
+        expect.arrayContaining([
+          '@astryxdesign/core/ResizeHandle',
+          '@astryxdesign/core/Layout',
+        ]),
       );
     },
     SLOW,
@@ -383,6 +443,67 @@ describe('a name more than one package answers', () => {
   );
 });
 
+describe('a Core component an integration replaces', () => {
+  it(
+    'is read from Core, the package its import names',
+    async () => {
+      const res = await template('acme-sidenav', {
+        targetPath: './out',
+        cwd: tmpDir,
+      });
+      expect(res.data.components).toEqual(['@astryxdesign/core/SideNav']);
+      const bare = await runCli(['component', 'SideNav', '--json'], tmpDir);
+      expect(JSON.parse(bare.stdout).package).toBe('@acme/widgets');
+      const read = await runCli(
+        ['component', ...res.data.components, '--json'],
+        tmpDir,
+      );
+      expect(read.status).toBe(0);
+      expect(JSON.parse(read.stdout).package).toBe('@astryxdesign/core');
+    },
+    SLOW,
+  );
+});
+
+describe('a project with no integration', () => {
+  it(
+    'reads bare names, and the printed command reads them all',
+    async () => {
+      const dir = fs.mkdtempSync(
+        path.join(REPO_ROOT, '.astryx-template-components-core-'),
+      );
+      try {
+        fs.writeFileSync(
+          path.join(dir, 'package.json'),
+          JSON.stringify({name: 'core-only'}),
+        );
+        const res = await template('ResizableSidebar', {
+          targetPath: './out',
+          cwd: dir,
+          package: '@astryxdesign/core',
+        });
+        expect(res.data.components).toEqual(
+          expect.arrayContaining(['ResizeHandle', 'Layout', 'Text']),
+        );
+        expect(res.data.components.some(n => n.includes('/'))).toBe(false);
+        const read = await runCli(
+          ['component', ...res.data.components, '--json'],
+          dir,
+        );
+        expect(read.status).toBe(0);
+        expect(
+          JSON.parse(read.stdout).data.results.map(
+            (/** @type {any} */ r) => r.status,
+          ),
+        ).toEqual(res.data.components.map(() => 'found'));
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    SLOW,
+  );
+});
+
 describe('a name only another package documents', () => {
   it(
     'is left out, so the read never opens that package',
@@ -391,7 +512,7 @@ describe('a name only another package documents', () => {
         targetPath: './out',
         cwd: tmpDir,
       });
-      expect(res.data.components).toEqual(['Card']);
+      expect(res.data.components).toEqual(['@astryxdesign/core/Card']);
     },
     SLOW,
   );
@@ -403,7 +524,7 @@ describe('template.show componentsToRead', () => {
     async () => {
       const res = await template('acme-mixed', {cwd: tmpDir});
       expect(res.type).toBe('template.show');
-      expect(res.data.componentsToRead).toEqual(MIXED_NAMES);
+      expect(res.data.componentsToRead).toEqual(MIXED_SELECTORS);
       expect(res.data.components).toEqual(componentsInSource(res.data.source));
     },
     SLOW,
@@ -420,7 +541,7 @@ describe('template text names the components in one call', () => {
       const copied = lines.findIndex(l => l.startsWith('Copied template to '));
       expect(copied).toBeGreaterThanOrEqual(0);
       const match = lines[copied + 1].match(READ_LINE);
-      expect(match?.[2]).toBe(MIXED_NAMES.join(' '));
+      expect(match?.[2]).toBe(MIXED_SELECTORS.join(' '));
       expect(lines[copied + 1]).toMatch(/^[\x20-\x7e]+$/);
     },
     SLOW,
@@ -431,7 +552,7 @@ describe('template text names the components in one call', () => {
     async () => {
       const out = await runCli(['template', 'acme-mixed'], tmpDir);
       expect(out.status).toBe(0);
-      expect(out.stderr.match(READ_LINE)?.[2]).toBe(MIXED_NAMES.join(' '));
+      expect(out.stderr.match(READ_LINE)?.[2]).toBe(MIXED_SELECTORS.join(' '));
       expect(out.stdout).not.toMatch(READ_LINE);
     },
     SLOW,
@@ -453,7 +574,7 @@ describe('template text names the components in one call', () => {
       expect(read.status).toBe(0);
       const {data} = JSON.parse(read.stdout);
       expect(data.results.map((/** @type {any} */ r) => r.status)).toEqual(
-        MIXED_NAMES.map(() => 'found'),
+        MIXED_SELECTORS.map(() => 'found'),
       );
     },
     SLOW,
@@ -480,7 +601,7 @@ describe('template text names the components in one call', () => {
       );
       expect(out.status).toBe(0);
       const {data} = JSON.parse(out.stdout);
-      expect(data.components).toEqual(MIXED_NAMES);
+      expect(data.components).toEqual(MIXED_SELECTORS);
       expect(out.stderr).not.toContain('Read the components');
     },
     SLOW,
