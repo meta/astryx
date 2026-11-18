@@ -6242,7 +6242,13 @@ function checkOne(
           .flatMap(p => C.partReads(p, 'size') ?? [])
           .map((/** @type {{token: string}} */ r) => r.token)
           .find((/** @type {string} */ t) => /^--size-element-/.test(t));
-        const px = token ? lengthPx(String(TOKENS[token] ?? '')) : null;
+        // (From the height the base theme gives it, as the rung scales it:
+        // a base with taller controls steps from its own height, never
+        // Core's.)
+        const px = token
+          ? (lengthPx(String(ctx.base?.light?.[token] ?? '')) ??
+            lengthPx(String(TOKENS[token] ?? '')))
+          : null;
         if (!token || px == null) return null;
         const n = Math.round(px * k * (v === 'more' ? 1.15 : 0.87));
         return setLine(slug, token, `${n}px`, s);
