@@ -34,6 +34,14 @@ export const oceanTheme = defineTheme({
   tokens: {'--color-background-body': '#ffffff'},
 });
 `;
+const CALM = `import {defineTheme} from '@astryxdesign/core/theme';
+import {oceanTheme} from './ocean.mjs';
+export const oceanCalmTheme = defineTheme({
+  name: 'ocean-calm',
+  extends: oceanTheme,
+  tokens: {'--color-background-body': '#eeeeee'},
+});
+`;
 const PNPM = 'pnpm/11.10.0 npm/? node/v24.0.0 linux x64';
 const NPM = 'npm/10.9.0 node/v24.0.0 linux x64 workspaces/false';
 
@@ -48,6 +56,7 @@ beforeEach(() => {
   dir = makeLinkedFixture('astryx-theme-check-runner-', ['@astryxdesign']);
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n');
   fs.writeFileSync(path.join(dir, 'ocean.mjs'), OCEAN);
+  fs.writeFileSync(path.join(dir, 'ocean-calm.mjs'), CALM);
 });
 
 afterEach(() => {
@@ -91,5 +100,29 @@ describe('theme build --check and the package manager that built the theme', () 
     expect(JSON.parse(checked.stdout).data.stale).toEqual([
       {path: 'ocean.js', reason: 'outdated'},
     ]);
+  }, 120_000);
+
+  it('reads a family built with pnpm as up to date when npm checks it', async () => {
+    const family = [
+      'theme',
+      'build',
+      '--family',
+      'ocean.mjs',
+      'ocean-calm.mjs',
+      '--family-key',
+      'ocean-family',
+    ];
+    vi.stubEnv('npm_config_user_agent', PNPM);
+    const built = await runCli(family, dir);
+    expect(built.code, built.stderr).toBe(0);
+    // One `built by` line per member, each naming the pnpm command.
+    const module = fs.readFileSync(path.join(dir, 'ocean-family.js'), 'utf8');
+    expect(
+      module.match(/ theme — built by `pnpm .* theme build`/g),
+    ).toHaveLength(2);
+
+    vi.stubEnv('npm_config_user_agent', NPM);
+    const checked = await runCli(['--json', ...family, '--check'], dir);
+    expect(checked.code, checked.stdout + checked.stderr).toBe(0);
   }, 120_000);
 });

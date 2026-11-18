@@ -845,12 +845,13 @@ export const BUILT_BY_LINE =
  * Normalize generated file content for staleness comparison. It drops the
  * volatile `Command:` line of the `@generated` header (it embeds the
  * invocation, e.g. an explicit --out), and in a built module it hides the
- * command on its one `built by` line (BUILT_BY_LINE), because a theme built
- * with one package manager and checked with another has the same outputs.
- * Everything else — including the rest of the header and all real content —
- * is compared verbatim. Used by `--check`: a differing command must NOT report
- * a file as stale, but any real content drift must. A second `built by` line
- * is content. The `CLI:`/`Core:` provenance lines are deterministic for a
+ * command on its `built by` lines (BUILT_BY_LINE): one per theme, so a theme
+ * module has one and a family module one per member. A theme built with one
+ * package manager and checked with another has the same outputs. Everything
+ * else — including the rest of the header and all real content — is compared
+ * verbatim. Used by `--check`: a differing command must NOT report a file as
+ * stale, but any real content drift must. A second `built by` line for the
+ * same theme is content, and then no command is hidden. The `CLI:`/`Core:` provenance lines are deterministic for a
  * given toolchain, so they compare verbatim like real content. CRLF line
  * endings read as LF.
  * @param {string} content
@@ -865,10 +866,13 @@ export function normalizeThemeBuildForCompare(content) {
       const t = line.replace(/^\s*\*?\s?/, '');
       return !t.startsWith('Command:');
     });
-  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
+  const themes = lines
+    .map(line => BUILT_BY_LINE.exec(line)?.[1])
+    .filter(theme => theme != null);
+  const onePerTheme = new Set(themes).size === themes.length;
   return lines
     .map(line =>
-      builtBy === 1 && BUILT_BY_LINE.test(line)
+      onePerTheme && BUILT_BY_LINE.test(line)
         ? line.replace(BUILT_BY_LINE, '$1<command>$3$4')
         : line,
     )
