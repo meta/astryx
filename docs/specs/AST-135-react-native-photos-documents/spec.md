@@ -107,7 +107,7 @@ Scope notes: these pieces are specified elsewhere.
 - **FR1 — `photos` and `pdf` are opt-in capabilities; image markup is core.**
   - `photos` links PhotoKit on iOS (Photos, PhotosUI, ImageIO, AVFoundation)
     and the MediaStore readers on Android. When the app opts it in, the
-    configuration plugin writes the photo library purpose string on iOS
+    generated native project carries the photo library purpose string on iOS
     (`NSPhotoLibraryUsageDescription`, overridable) and, on Android,
     `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO` (13 and later),
     `READ_MEDIA_VISUAL_USER_SELECTED` (14 and later, for limited access), and
@@ -116,7 +116,7 @@ Scope notes: these pieces are specified elsewhere.
     `isPhotoThumbnailAvailable()`.
   - `pdf` links PDFKit on iOS and uses `PdfRenderer` on Android. It declares
     no permission. Its iOS privacy manifest declares the file-timestamp
-    required-reason API that names its page pictures (FR9). The `./pdf` entry
+    required-reason API, which detects a changed document (FR9). The `./pdf` entry
     exports `PdfView`, `isPdfViewAvailable()`, and `AstryxPdfModule`.
   - `AstryxImageMarkup` is part of the core on iOS and declares nothing. The
     core never links PencilKit: the module loads it at the first markup, so
@@ -134,7 +134,7 @@ Scope notes: these pieces are specified elsewhere.
 
   | Contract                   | Kind                                       | Props                                                                                                               | Commands                                                                         | Events                                                                              | Platforms    |
   | -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------ |
-  | `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `assetId`, `contentMode`                                                                                            | none                                                                             | `onThumbnailLoad`, `onThumbnailError`                                               | iOS, Android |
+  | `AstryxPhotoThumbnailView` | native component (Fabric Native Component) | `assetId`, `resizeMode`                                                                                             | none                                                                             | `onThumbnailLoad`, `onThumbnailError`                                               | iOS, Android |
   | `AstryxPdfView`            | native component (Fabric Native Component) | `source`, `initialPageIndex`, `fit`, `displayMode`, `maxZoom`, `pageGap`, `colorScheme`, `isFindInteractionEnabled` | `goToPage`, `resetZoom`, `find`, `findStep`, `clearFind`, `presentFindNavigator` | `onPdfLoad`, `onPdfPageChange`, `onPdfScaleChange`, `onPdfError`, `onPdfFindResult` | iOS, Android |
   - Every module method is optional and takes at most one request object. A
     method resolves a result object and never rejects.
@@ -212,7 +212,7 @@ onProgress})` writes each asset, in the order given, to a file in the
     `remove(name)`, and the cache's `clear` removes them all.
 - **FR6 — `PhotoThumbnail` draws one asset natively.**
   - Its props are `assetId` (an id `listAssets` answered; `''` draws
-    nothing), `contentMode` (`cover`, the default, fills and crops;
+    nothing), `resizeMode` (`cover`, the default, fills and crops;
     `contain` fits the whole picture), `onLoad({width, height})` with the
     decoded picture's pixels, `onError(failure)`, `fallback`, `style`,
     `testID`, and `accessibilityLabel`.
@@ -226,8 +226,8 @@ onProgress})` writes each asset, in the order given, to a file in the
   - `onError` reports `missing`, `denied` (no photo access), `unreadable`, or
     `not-allowed` (a previewed project). The view never prompts.
 - **FR7 — `PdfView` shows a local document in the system's renderer.**
-  - `source` is a local document, `file://` (Android also `content://`), as
-    `{uri}` or the bare string. `initialPageIndex` (0-based, default 0) is
+  - `source` is `{uri}`, a local document: `file://` (Android also
+    `content://`). `initialPageIndex` (0-based, default 0) is
     applied when the document loads. `fit` is `width` (the default: a page
     fills the view's width) or `page` (a whole page fits), reapplied on a
     size change. `displayMode` is `continuous` (the default: one vertical
@@ -270,10 +270,12 @@ onProgress})` writes each asset, in the order given, to a file in the
 - **FR9 — `AstryxPdfModule` renders a page as a picture file.**
   - `canRenderPage()` is synchronous and says whether the binary renders
     pages. `renderPage(source, {pageIndex, maxPixels, signal})` draws one page
-    of a local document (`file://`; Android also `content://`) off the main
+    (`pageIndex`, 0-based, default 0) of a local document (`source` is
+    `{uri}`: `file://`; Android also `content://`) off the main
     thread as a PNG in the calling runtime's file cache, and answers `{file,
 name, width, height, pageCount}`.
-  - The page's crop box is scaled so its longest side is `maxPixels` pixels,
+  - `maxPixels` is required, a whole number from 1. The page's crop box is
+    scaled so its longest side is `maxPixels` pixels,
     with its aspect, the page's rotation, and white behind transparent
     content. `maxPixels` bounds the picture's decode and memory, never the
     document.
@@ -344,7 +346,9 @@ name, width, height, pageCount}`.
   - `pdf.findNavigator`: true on iOS 16 and later, false on Android.
   - A find, a case-sensitive find, or `presentFindNavigator()` where its row
     is false answers `unsupported` with a message naming what is missing,
-    before anything crosses to the native side. On Android
+    before anything crosses to the native side. While a row is still
+    unknown (`null`), the call goes to the native side, which answers
+    `unsupported` itself where the device lacks the feature. On Android
     `isFindInteractionEnabled` is ignored.
 - **FR13 — Accessibility.**
   - `PhotoThumbnail` is one element with the image role, named by its
@@ -382,7 +386,7 @@ name, width, height, pageCount}`.
 | Contract                   | iOS                                                                                                                                                                                                                                   | Android                                                                                                                                                                                          | Astryx Stage                                                                                                                                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxPhotoLibrary`       | PhotoKit fetches sorted by creation date; `PHPhotoLibrary` authorization for read and write access, limited from iOS 14; `presentLimitedLibraryPicker` from iOS 15; a change observer; asset resources and image requests for export. | `MediaStore` queries with a keyset cursor; the media read permissions, with `READ_MEDIA_VISUAL_USER_SELECTED` as limited access from Android 14; a content observer; the stored file for export. | A built-in library of placeholder photos and one video with fixed ids; the run sets the starting access and the prompt's answer; listing, cursors, export, and change events follow the platform Stage runs as. |
-| `AstryxPhotoThumbnailView` | `PHCachingImageManager`, network allowed.                                                                                                                                                                                             | `ContentResolver.loadThumbnail`.                                                                                                                                                                 | The asset's placeholder tile, `cover` or `contain`, with the load size that platform reports.                                                                                                                   |
+| `AstryxPhotoThumbnailView` | `PHCachingImageManager`, network allowed.                                                                                                                                                                                             | `ContentResolver.loadThumbnail` from API level 29; the system's stored thumbnails below it.                                                                                                      | The asset's placeholder tile, `cover` or `contain`, with the load size that platform reports.                                                                                                                   |
 | `AstryxPdfView`            | PDFKit's `PDFView`; find on a copy of the document off the main thread; `UIFindInteraction` from iOS 16.                                                                                                                              | Pages drawn by `PdfRenderer` in a scrolling, zooming view; `Page.searchText` from API level 35.                                                                                                  | The document's own pages on macOS (FR7 gap elsewhere); `fit`, `displayMode`, `pageGap`, `colorScheme`, `goToPage`, and the events as on a device.                                                               |
 | `AstryxPdfModule`          | PDFKit's page drawing into a bitmap.                                                                                                                                                                                                  | `PdfRenderer`.                                                                                                                                                                                   | Absent (FR9 gap).                                                                                                                                                                                               |
 | `AstryxImageMarkup`        | PencilKit's canvas and tool picker in a full-screen screen.                                                                                                                                                                           | Absent: `supports('markup')` is false (OQ3).                                                                                                                                                     | The refusals and their order are the device's; no drawing (FR10 gap).                                                                                                                                           |
@@ -477,8 +481,8 @@ photo framework, and an app that never shows a document links no PDF code.
 
 A previewed project never reads the person's photo library: every call
 answers `not-allowed` and the thumbnail view draws nothing. A project reaches
-photos the person chooses through the file picker, which copies them into the
-project's own files (`spec:AST-130/FR13`).
+photos the person chooses through the file picker and reads them as picker
+results (FR11, `spec:AST-130/FR13`).
 
 ### DEC-4 — Results hold no size limit of their own
 
