@@ -104,7 +104,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give an overlay action a specific visible label. Tab reaches it while the overlay is hidden, and focus reveals the overlay.',
+          'Give an overlay action a label that names what it does. Tab reaches it while the overlay is hidden, and focus reveals the overlay.',
       },
       {
         guidance: true,
@@ -160,7 +160,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Give overlay actions a specific visible label; Tab reaches them while hidden, focus reveals.',
+          'Label overlay actions by what they do; Tab reaches them while hidden, focus reveals.',
       },
       {
         guidance: true,

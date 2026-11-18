@@ -108,8 +108,8 @@ const styles = stylex.create({
     },
   },
 
-  // CSS-driven reveals hide with opacity alone. Hidden content stays in the
-  // tab order, so Tab can reach an action and focus-within can reveal it.
+  // CSS-driven reveals hide with opacity, not visibility. Hidden content stays
+  // in the tab order, so Tab can reach an action and focus-within can reveal it.
   hoverReveal: {
     opacity: {
       default: 0,
@@ -266,7 +266,7 @@ export function OverlayScrim({
   return (
     <div
       {...mergeProps(
-        themeProps('overlay-scrim', {position, scrim: scrim || undefined}),
+        themeProps('overlay-scrim', {position}),
         stylex.props(
           styles.base,
           positionMap[position],

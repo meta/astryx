@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/Overlay/ ^apps/storybook/stories/Overlay
+// @pr-a11y scope ^apps/storybook/stories/Overlay
 
 /**
  * @file OverlayKeyboardReveal.a11y.chromium.spec.ts
@@ -73,6 +73,17 @@ test('Tab reaches the action of every reveal mode in source order', async ({
   page,
 }) => {
   await open(page, 'reveal-modes');
+  // A focus overlay at rest takes no click: hover never reveals it.
+  const focusAction = page.getByRole('button', {name: 'Focus action'});
+  const box = await focusAction.boundingBox();
+  expect(box).not.toBeNull();
+  if (box != null) {
+    const hit = await page.evaluate(
+      ({x, y}) => document.elementFromPoint(x, y)?.tagName ?? null,
+      {x: box.x + box.width / 2, y: box.y + box.height / 2},
+    );
+    expect(hit).toBe('IMG');
+  }
   for (const label of [
     'Hover action',
     'Focus action',

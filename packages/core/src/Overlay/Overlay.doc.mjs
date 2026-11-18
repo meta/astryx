@@ -27,7 +27,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give an overlay action a specific visible label. With showOn hover or focus, Tab reaches the action while the overlay is hidden, and focus reveals the overlay.',
+          'Give an overlay action a label that names what it does, such as "Quick view". With showOn hover or focus, Tab reaches the action while the overlay is hidden, and focus reveals the overlay.',
       },
       {
         guidance: false,
@@ -37,7 +37,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Do not put information people need to choose the item, such as its title or price, only in a hover overlay. On a touch device it shows only after a tap.',
+          'Do not put information people need to choose the item, such as its title or price, only in a hover or focus overlay. On a touch device a hover overlay shows only after a tap, and a focus overlay does not show.',
       },
     ],
     anatomy: [
@@ -193,7 +193,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-overlay'},
-      {className: 'astryx-overlay-scrim', visualProps: ['position', 'scrim']},
+      {className: 'astryx-overlay-scrim', visualProps: ['position']},
     ],
   },
 };
@@ -207,9 +207,9 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Use for short contextual actions/labels tied to the underlying surface.'},
       {guidance: true, description: 'Keep content compact and legible over the scrim.'},
-      {guidance: true, description: 'Give overlay actions a specific visible label; Tab reaches them while hidden, focus reveals.'},
+      {guidance: true, description: 'Label overlay actions by what they do; Tab reaches them while hidden, focus reveals.'},
       {guidance: false, description: 'Do not use for floating anchored surfaces; use Popover, Tooltip, or Dialog.'},
-      {guidance: false, description: 'Do not put info needed to choose the item (title, price) only in a hover overlay; touch shows it after a tap.'},
+      {guidance: false, description: 'Do not put info needed to choose the item (title, price) only in a hover/focus overlay; touch shows hover after a tap, never focus.'},
     ],
   },
   propDescriptions: {
