@@ -46,7 +46,7 @@ export const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.
  */
 export const TS_SOURCES = /** @type {Readonly<Record<string, readonly string[]>>} */ ({
   '.js': ['.ts', '.tsx'],
-  '.jsx': ['.tsx'],
+  '.jsx': ['.tsx', '.ts'],
   '.mjs': ['.mts'],
   '.cjs': ['.cts'],
 });
@@ -399,7 +399,8 @@ export function matchPath(patterns, spec) {
 export const candidatesOf = match => match.pattern.targets.map(t => t.replace('*', match.capture));
 
 /**
- * The file a candidate path stands for: itself, with an extension, or its
+ * The file a candidate path stands for: itself, the TypeScript source its
+ * JavaScript extension names (TS_SOURCES), itself with an extension, or its
  * folder's index; null when none exists.
  * @param {string} candidate
  * @param {readonly string[]} [extensions] the extensions to try, in order (default: TypeScript's)
