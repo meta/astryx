@@ -35,12 +35,16 @@ surfaces with the same choices and events. The developer gets this from four
 native pieces: the system menu, the action sheet, the presentation host, and
 the modal host, each with a JavaScript wrapper in the platform layer.
 
-This record details the platform layer of `spec:AST-112` for this group. It
-uses the result vocabulary of `spec:AST-112/FR6`, the capability shape of
-`spec:AST-112/FR7`, the additive evolution of `spec:AST-112/FR8`, and the host
-wiring of `spec:AST-112/FR9`. It applies `spec:AST-082/FR11`, `spec:AST-093/FR2`
+This record details the platform layer of `spec:AST-112` for this group and
+follows the shared platform rules of `spec:AST-140`: registration
+(`spec:AST-140/FR1`), missing pieces (`spec:AST-140/FR2`), the result
+vocabulary (`spec:AST-140/FR3`), additive evolution (`spec:AST-140/FR5`),
+threading (`spec:AST-140/FR6`), and coexistence (`spec:AST-140/FR9`). It uses
+the capability shape of `spec:AST-112/FR7` and the host wiring of
+`spec:AST-112/FR9`. It applies `spec:AST-082/FR11`, `spec:AST-093/FR2`
 (native-first sheets and menus), and `spec:AST-093/FR3` (the Apple Human
-Interface Guidelines) to React Native on iOS.
+Interface Guidelines pages Menus, Pull-down buttons, Context menus, Action
+sheets, Sheets, and Modality) to React Native on iOS.
 The menu, action sheet, presentation, and modal hosts belong to the platform's
 core (`spec:AST-112/FR1`) and link in every app.
 
@@ -59,7 +63,8 @@ core (`spec:AST-112/FR1`) and link in every app.
   content in UIKit's detent sheet from anywhere in the tree, stacked in
   request order with other surfaces (DEC-2), and Astryx takes no third-party
   native dependency (`spec:AST-112/DEC-9`). An app may use react-native-screens
-  or a bottom-sheet library beside these components without conflict.
+  or a bottom-sheet library beside these components without conflict
+  (`spec:AST-140/FR9`).
 - **Modal host.** React Native's modal host refuses a second window from the
   same screen; the modal host lifts that limit for drawn sheets. OQ5 asks
   whether the presentation host covers it.
@@ -284,20 +289,20 @@ core (`spec:AST-112/FR1`) and link in every app.
     sends `onRequestClose` to the top window.
   - The system sheets, menus, and action sheets apply Reduce Motion as the
     system does.
-- **FR13 — Threading.** Presentation, detent drags, resistance,
-  scroll-to-expand, menu tracking, and the context menu's raise run on the UI
-  thread, with no JavaScript in any frame. JavaScript gets discrete events
-  only: a choice, an open change, a presentation, a blocked dismissal, a
-  dismissal, and a detent change.
+- **FR13 — Threading.** Under `spec:AST-140/FR6`, presentation, detent
+  drags, resistance, scroll-to-expand, menu tracking, and the context menu's
+  raise run on the UI thread, with no JavaScript in any frame. JavaScript
+  gets discrete events only: a choice, an open change, a presentation, a
+  blocked dismissal, a dismissal, and a detent change.
 - **FR14 — Absent pieces fall back, never fail silently.** A host without
   its native piece answers `isAvailable()` false, and the library draws
-  (`spec:AST-112/FR7`). The system menu component, rendered without its
+  (`spec:AST-140/FR2`). The system menu component, rendered without its
   native view, is a plain view that answers `present()` with
   `onUnavailable({reason: 'no-native-view'})`. A missing action sheet module
   resolves `no-module`. A kind that the host does not present reports
-  `unsupported`. Nothing throws or rejects (`spec:AST-112/FR6`).
+  `unsupported`. Nothing throws or rejects (`spec:AST-140/FR3`).
 - **FR15 — Contract baseline.** Every contract in the group follows
-  `spec:AST-112/FR8` (revision 1; later behaviour is a named feature). No
+  `spec:AST-140/FR5` (revision 1; later behaviour is a named feature). No
   contract in this group lists a named feature.
 - **FR16 — Native code uses public API only.** The group's native code calls
   only the public API of iOS, Android, and React Native. One exception: to
@@ -352,7 +357,7 @@ resolves `{index, reason, message}`; `show` is its positional form.
   menu, and action-sheet hosts in the core) and FR6 to FR9 for this group.
 - Relies on `spec:AST-112` FR3: the core, with the native half of
   every library component, links by default.
-- Relies on `spec:AST-112` FR8: every native contract is at
+- Relies on `spec:AST-140` FR5: every native contract is at
   revision 1, and later behaviour is a named feature that JavaScript checks.
 
 ## Verification
