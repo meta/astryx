@@ -156,6 +156,20 @@ export const isOutsidePullRun = run =>
   run.head_repository?.full_name != null &&
   run.head_repository.full_name !== run.repository?.full_name;
 /**
+ * Whether a pull-request run has not started its jobs yet: a wait for room is
+ * still open, or its `room` job has not finished (or not appeared) before
+ * any wait began. A run whose `room` job was skipped, as a draft's or an
+ * unlabelled fork's is, never waits.
+ * @param {object[]} jobs the run's jobs
+ * @param {object[]} waits the run's wait steps
+ */
+export const notStarted = (jobs, waits) => {
+  if (waits.some(step => step.status !== 'completed')) return true;
+  if (waits.length > 0) return false;
+  const room = jobs.find(job => job.name === 'room');
+  return room == null ? jobs.length === 0 : room.status !== 'completed';
+};
+/**
  * The ceiling one look holds CI to: CI_CEILING while an outside contributor's
  * run waits for room, the looking run included, and OPEN_CEILING otherwise.
  * @param {{outsideWaiting?: boolean}} look
@@ -244,11 +258,7 @@ export async function countLook({
         .flatMap(job => job.steps ?? [])
         .filter(step => step.name === STEP);
       const span = waitSpan(waits);
-      // Not started yet: it waits for room, or has not reached its wait.
-      if (
-        isOutsidePullRun(run) &&
-        (waits.length === 0 || waits.some(step => step.status !== 'completed'))
-      )
+      if (isOutsidePullRun(run) && notStarted(jobs, waits))
         outsideWaiting = true;
       if (waits.some(step => step.status === 'in_progress')) {
         if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});

@@ -227,6 +227,25 @@ describe('the count command', () => {
       );
       expect(look.ceiling, String(status)).toBe(CI_CEILING);
     }
+    // A draft's or unlabelled fork's run, whose `room` job was skipped, never
+    // waits, so it leaves the open ceiling.
+    const skipped = JSON.parse(
+      run(['--repo', 'o/r', '--peak', '30'], {
+        ...outsideRun(null),
+        'repos/o/r/actions/runs/13/jobs': {
+          jobs: [
+            {
+              name: 'room',
+              status: 'completed',
+              conclusion: 'skipped',
+              steps: [],
+            },
+            {name: 'test', status: 'in_progress', steps: []},
+          ],
+        },
+      }).stdout,
+    );
+    expect(skipped.ceiling).toBe(OPEN_CEILING);
     // Once that run has started, the ceiling goes back up.
     const started = JSON.parse(
       run(['--repo', 'o/r', '--peak', '30'], outsideRun('completed')).stdout,

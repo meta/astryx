@@ -1094,6 +1094,29 @@ describe('ci admission', () => {
     }
   });
 
+  it('admits up to the open ceiling while no outside run waits, and holds to the lower one beside a waiting outside run', async () => {
+    // Seven pull-request runs at 12 live jobs and small workflows: 84 + 18 =
+    // 102 other jobs, so a run of 12 makes 114: over ninety, under 120.
+    const load = [...prs(7, 12), ...slims(3)];
+    const open = await admit({active: load, peak: 12, outside: false});
+    expect(open.outputs.fits).toBe('true');
+    expect(open.looks).toBe(1);
+    expect(open.info).toContain(
+      'Room under the CI ceiling: about 102 other jobs + 12 <= 120.',
+    );
+    // The same load beside an outside contributor's run still waiting for
+    // room (one more job) holds this run to ninety, so it waits.
+    const held = await admit({
+      active: [...load, waitingRun(41, {outside: true})],
+      peak: 12,
+      outside: false,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(held.looks).toBeGreaterThan(1);
+    expect(held.info).toContain('Waiting for room: about 103 other jobs + 12.');
+  });
+
   it("admits at once at today's load: 56 live jobs and many pull-request runs waiting", async () => {
     // 2026-11-01 ~01:50Z: 56 jobs ran, a dozen of them the waiting jobs of
     // pull-request runs. The first estimate counted each waiting run at 12 and

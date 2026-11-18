@@ -272,7 +272,7 @@ state it needs.
 **Decider:** `cixzhang`, `2026-11-17 08:01 PT`
 
 The proof ejects and builds every offered component, which is heavy work for
-each pull request while CI room is held to about ninety jobs
+each pull request while CI room is held under its job ceiling
 (`spec:AST-030` DEC-16). It runs in
 `main`'s checks instead, and a failure there is fixed forward; release checks
 keep the full proof, so no release ships an unproven copy.
