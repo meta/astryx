@@ -35,13 +35,6 @@ generated native project, links the native half of Astryx's components by
 default, and links each device feature only when it opts that feature in
 (FR3).
 
-Two apps work with these packages: the Astryx app on iOS and Android, for
-previewing projects and browsing the components, and Astryx Stage, the
-desktop app for macOS, Linux, and Windows, which renders an app built with
-these packages with iOS and Android looks for development (FR12). The
-Preview host that runs a project inside the Astryx app ships in its own host
-package, outside `@astryxdesign/react-native` (FR1).
-
 These packages are the React Native candidate of `spec:AST-082/FR12` for the
 `ios` and `android` platforms. They follow `spec:AST-082`: dependencies under
 FR13, the canary channel under FR15, the one-way read of core under FR16, and
@@ -58,11 +51,9 @@ shared icon names under FR17.
 - The design of each capability's methods beyond the shared rules in FR6 to
   FR9. Each capability documents its own methods, options, and reasons, and
   each group of the platform has its own record (FR7).
-- The Preview host's own contract: its native pieces, its inspector channel,
-  and its overlay window (FR1).
 - The internals of Astryx Stage (FR12), beyond what an app and the
   CLI depend on.
-- The Astryx app's design, features, and distribution.
+- Preview hosts and the Astryx app: `spec:AST-139`.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 
@@ -97,11 +88,11 @@ shared icon names under FR17.
     app's lifecycle (FR11). Its peer dependencies are
     `@astryxdesign/react-native` at the same version and `expo`. It holds no
     component and no platform API.
-  - The Preview host is outside the public set: the native pieces that run a
-    separate React Native project inside a host app, its inspector channel, and
-    its overlay window ship in their own host package, which a host app such as
-    the Astryx app installs. Preview is not a capability an app opts into.
-    Whether the host package is published is OQ7.
+  - Preview is not a package of this set and not a capability an app opts
+    into. A Preview host runs previewed projects (`spec:AST-139`), and
+    `@astryxdesign/react-native` keeps only the project side of Preview in its
+    library layer: what a previewed project may reach, its manifest, and its
+    types.
   - A native piece belongs in `@astryxdesign/react-native` when the alternative
     an app would otherwise need is an open-source library that ships native
     code, so an app stays JavaScript-only and runs in Preview. App-level modules
@@ -112,7 +103,7 @@ shared icon names under FR17.
     diagnostics. Each is specified in its own record (FR7).
 
   FR1 gap: `@astryxdesign/react-native` carries the Expo configuration plugin,
-  the Expo host hooks, and the Preview host.
+  the Expo host hooks, and the native pieces of a Preview host.
 
 - **FR2 — Dependencies point one way.**
   - The library layer calls the platform layer directly. The platform layer
@@ -150,8 +141,8 @@ shared icon names under FR17.
     `@astryxdesign/react-native-expo`, and declares neither as a dependency.
     `@astryxdesign/react-native-expo` reaches the platform only through the
     package's public and internal entries (FR5) and adds no capability.
-  - The Preview host's package depends on `@astryxdesign/react-native`;
-    `@astryxdesign/react-native` imports nothing from it.
+  - A Preview host depends on `@astryxdesign/react-native`;
+    `@astryxdesign/react-native` imports nothing from a host.
   - The package's `./commands` entry (FR5, FR13) runs only in the Astryx CLI.
     An app's runtime never imports it, and `@astryxdesign/cli` never depends
     on the package.
@@ -242,9 +233,9 @@ shared icon names under FR17.
   - Apart from the crypto installer, the package's own code reads no global
     `crypto` and does not depend on `fetch`'s `redirect: 'error'` or
     `redirect: 'manual'` modes.
-  - The Preview host (FR1) calls both installers before a previewed
+  - A Preview host calls both installers before a previewed
     project's code runs, so a project in preview has these globals without
-    importing anything for them. Outside the Preview host, the package
+    importing anything for them. Outside a Preview host, the package
     installs them only when the app calls the installers.
   - `./navigation-legacy` (with its `./navigation-legacy/core`) is the React
     Navigation binding, the one inside the package: a transitional entry that
@@ -256,7 +247,7 @@ shared icon names under FR17.
     absent, older, and current shapes, event emitters, and a Jest setup file
     (`./testing/jest-setup`), the package's only module with side effects. It
     is public and documented.
-  - Internal entries hold the plumbing Astryx's own tools need (the host plumbing that the Expo package and the Preview host use, Astryx Stage's simulation, and the documentation site's examples and coverage data). They have the status `spec:AST-017` FR21 gives Core's
+  - Internal entries hold the plumbing Astryx's own tools need (the host plumbing that the Expo package and a Preview host use, what Astryx Stage reads from a project, and the documentation site's examples and coverage data). They have the status `spec:AST-017` FR21 gives Core's
     `./internal/*`: undocumented for apps, versioned with the package (FR14),
     limited by a package-boundary check, and outside the compatibility
     promise.
@@ -282,8 +273,8 @@ shared icon names under FR17.
     `error`. `no-module` means the platform's native side is absent;
     `not-linked` means the app did not opt the capability's native code in
     (FR3); `unsupported` means the binary predates the method or one of its
-    options; `not-allowed` means the Astryx app's policy refused the
-    capability for the project that called it. A capability may add reasons
+    options; `not-allowed` means the Preview host's policy refused the
+    capability for the previewed project that called it. A capability may add reasons
     of its own, such as `unsupported-option` where a platform cannot honor an
     option.
   - `cancelled` is the one failure that is not an error: the person declined
@@ -388,12 +379,10 @@ shared icon names under FR17.
     the contract and notes where iOS and Android differ.
   - Astryx Stage is a development tool. An app never depends on it at run
     time.
-  - Astryx Stage pairs with a project by the spec hash of the project's
-    native contracts plus a version floor: the package records each native
-    contract's spec hash and the oldest Astryx Stage that implements that
-    contract set. An Astryx Stage below the floor refuses the project by
-    itself and lists the contracts it lacks. The pairing reads no revision
-    counter (FR8).
+  - Each release of the package names the oldest Astryx Stage that
+    implements its native contracts: the project's Astryx Stage version
+    floor. An Astryx Stage below the floor refuses the project by itself and
+    lists the contracts it lacks; one at or above the floor runs it.
 - **FR13 — React Native commands are Astryx CLI commands.**
   `@astryxdesign/react-native` contributes the commands below to the Astryx
   CLI (`@astryxdesign/cli`), and a developer or an agent runs them as
@@ -422,8 +411,8 @@ shared icon names under FR17.
     | `astryx shell`                         | Writes the app's generated `ios/` and `android/` projects from `astryx.shell` in its `package.json`. `--check` compares instead of writing, `--ensure` writes a platform that has no generated files and checks the others, `--entry-only` writes only the generated entry files and touches no native folder, and `--profile <name>` applies a profile of the configuration. `astryx shell save-lock` keeps the iOS pod lock for the next generation.                                                                                                                                                       |
     | `astryx apply`                         | Writes the configuration plugin's declarations into the native projects of an app that keeps its own, with no `astryx.shell`. `--check` compares instead of writing.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
     | `astryx run ios`, `astryx run android` | Puts the app on a simulator, an emulator, or a device. The steps of its plan are: generate or check the native project, check the machine, build, start the dev server for a debug build, install, and launch. `--target <name\|id>` names the simulator, emulator, or connected device, by name or identifier (default: the booted one, else the newest). `--release` builds the release configuration, `--with-dev-server` and `--skip-dev-server` change the dev-server default (together they fail with `ERR_INVALID_OPTION`), `--skip-launch` stops after the install, and `--dry-run` prints the plan. |
-    | `astryx preview`                       | Prints the link with which the Astryx app opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, and `--qr-png <file>` writes the link's QR code.                                                                                                                                                                                                                                                                   |
-    | `astryx preview check`                 | Compares the project's requirements with what the Astryx app provides.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+    | `astryx preview`                       | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, and `--qr-png <file>` writes the link's QR code.                                                                                                                                                                                                                                                                   |
+    | `astryx preview check`                 | Compares the project's requirements with what a Preview host provides.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
     | `astryx preview bundle`                | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link.                                                                                                                                                                                                                                                                                                                                                                                            |
     | `astryx preview serve`                 | Serves the preview bundle (`--bundle <dir>`) read-only from this computer, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
     | `astryx preview share`                 | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -454,7 +443,7 @@ shared icon names under FR17.
     | `shell`   | Are this app's generated native projects what its configuration generates?          | `init` writes agent docs and setup steps, not native projects.                                               | `shell`   | The written or differing paths                        |
     | `apply`   | Do the native projects this app keeps carry the declarations its capabilities need? | `shell` owns generated projects and replaces them whole; `apply` changes files the app owns, in place.       | `apply`   | The changed or differing files                        |
     | `run`     | How do I see this app on a simulator, an emulator, or a device?                     | `build` names the template or playbook for a page; it builds no app.                                         | `run`     | The plan, each step's result, and the launched target |
-    | `preview` | How does the Astryx app open this project?                                          | `template --cdn` writes a web page; no command makes what the Astryx app opens.                              | `preview` | Links, URLs, and host-check items                     |
+    | `preview` | How does a Preview host open this project?                                          | `template --cdn` writes a web page; no command makes what a Preview host opens.                              | `preview` | Links, URLs, and host-check items                     |
     | `stage`   | What does this app render, and how does it behave, without a simulator?             | `experimental render` renders a web page from a page module.                                                 | `stage`   | Captures, step reports, and the accessibility tree    |
 
   - Flags keep the Astryx CLI's names and meanings (`spec:AST-042` FR5).
@@ -495,7 +484,7 @@ shared icon names under FR17.
     | `apply --check` finds files to change                                                                                                                      | `ERR_APPLY_STALE`                                                    |
     | A build or an install step fails; the envelope's `log` member holds the log's path and its last lines                                                      | `ERR_RUN_BUILD_FAILED`                                               |
     | A named dev server does not answer                                                                                                                         | `ERR_DEV_SERVER_UNREACHABLE`                                         |
-    | `preview check` finds a requirement the Astryx app does not provide                                                                                        | `ERR_PREVIEW_HOST_MISSING`                                           |
+    | `preview check` finds a requirement the Preview host does not provide                                                                                      | `ERR_PREVIEW_HOST_MISSING`                                           |
     | `preview share` finds a file that its deny rules refuse                                                                                                    | `ERR_PREVIEW_SHARE_DENIED`                                           |
     | `preview share` uses a carrier that no `--accept-carrier` names; the suggestions name the same run with `--accept-carrier <name>` and each carrier's terms | `ERR_PREVIEW_CARRIER_NOT_ACCEPTED`                                   |
     | An Astryx Stage binary fails its checksum or signature                                                                                                     | `ERR_STAGE_UNTRUSTED`                                                |
@@ -583,8 +572,8 @@ shared icon names under FR17.
 - **FR14 — One React Native release train.** `@astryxdesign/react-native`
   releases on one version; its capabilities are opted in, never versioned
   apart, and its commands (FR13) release with it.
-  `@astryxdesign/react-native-expo` and the Preview host's package release on
-  the same version, from the same tagged commit, under the rules below.
+  `@astryxdesign/react-native-expo` releases on the same version, from the
+  same tagged commit, under the rules below.
   - The package versions on its own, outside the repository's fixed package
     group (`spec:AST-017` FR46): the version in its `package.json` is its own
     next planned release, not core's.
@@ -624,8 +613,9 @@ shared icon names under FR17.
 ## Current-state impact
 
 - Two new packages under `packages/`: `@astryxdesign/react-native` and
-  `@astryxdesign/react-native-expo`, canary-only (FR1, FR14). The Preview
-  host's package is a third, whose publication OQ7 settles.
+  `@astryxdesign/react-native-expo`, canary-only (FR1, FR14). The native
+  pieces of a Preview host leave `@astryxdesign/react-native` for the host
+  (`spec:AST-139`).
 - `@astryxdesign/cli` runs the package's commands (FR13) through the mechanism
   OQ5 settles, and `architecture:cli-surface` gains that mechanism. The CLI
   holds no React Native command code.
@@ -659,14 +649,14 @@ shared icon names under FR17.
   code lives in the platform layer of `@astryxdesign/react-native` (`spec:AST-112` FR4), and
   `@astryxdesign/native` stays the single cross-platform contracts package.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
-  the platform layer, no import of Expo, of `@astryxdesign/react-native-expo`, or of the Preview host's package in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included) other than the optional peers of `./navigation-legacy`, no peer dependency outside Astryx other than React, React Native, and the optional peers of `./navigation-legacy`, and no dependency on these packages from core or the CLI.
+  the platform layer, no import of Expo, of `@astryxdesign/react-native-expo`, or of a Preview host in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included) other than the optional peers of `./navigation-legacy`, no peer dependency outside Astryx other than React, React Native, and the optional peers of `./navigation-legacy`, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                                                                                                                                                                                                                                    | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Package manifest check of names, entries, and dependencies; the canary release's package list; a source check of `@astryxdesign/react-native` for Expo code and Preview host code                                                                                                                                                                               | each package in the public set; each capability entry; `@astryxdesign/react-native-expo`'s peers; the Preview host's package                                                                                                                                                                                                                                                                                                                                  | A package missing from the set, a set package missing from the canary release, a capability without its entry, Expo code or a Preview host piece in `@astryxdesign/react-native`, or an Expo package whose peer is not `@astryxdesign/react-native` at the same version                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| FR2      | Package-boundary, source, and dependency check                                                                                                                                                                                                                                                                                                                  | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies; `@astryxdesign/react-native-expo`; the Preview host's package                                                                                                                                                                                                                                                                     | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included) other than the optional peers of `./navigation-legacy`, or a peer dependency outside Astryx other than React, React Native, and the optional peers of `./navigation-legacy`, or an import of Expo, `@astryxdesign/react-native-expo`, or the Preview host's package in `@astryxdesign/react-native`                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR1      | Package manifest check of names, entries, and dependencies; the canary release's package list; a source check of `@astryxdesign/react-native` for Expo code and Preview host code                                                                                                                                                                               | each package in the public set; each capability entry; `@astryxdesign/react-native-expo`'s peers                                                                                                                                                                                                                                                                                                                                                              | A package missing from the set, a set package missing from the canary release, a capability without its entry, Expo code or a Preview host piece in `@astryxdesign/react-native`, or an Expo package whose peer is not `@astryxdesign/react-native` at the same version                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR2      | Package-boundary, source, and dependency check                                                                                                                                                                                                                                                                                                                  | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies; `@astryxdesign/react-native-expo`                                                                                                                                                                                                                                                                                                 | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included) other than the optional peers of `./navigation-legacy`, or a peer dependency outside Astryx other than React, React Native, and the optional peers of `./navigation-legacy`, or an import of Expo, `@astryxdesign/react-native-expo`, or the Preview host's package in `@astryxdesign/react-native`                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason                                                                                                                                                                            | the native half of each library component; a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list                                                                                                                                                                                                                                                   | A core-only app that lacks a library component's native half, an app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR4      | `npm pack` file list; a sample app's projects generated by `astryx shell` and by Expo's prebuild from configuration with a capability list; a source check of the platform's native calls                                                                                                                                                                       | the package's files; the sample's iOS and Android projects from each generator; a default and an overridden usage description; a call outside public platform API                                                                                                                                                                                                                                                                                             | Native code outside the platform layer, the package manifests declare a permission, the sample needs a manual native edit, the two generators write different declarations, the generated project lacks the core's declarations, it writes a usage description other than the default or the app's override, or a call outside public platform API with no exception named in its record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR5      | `exports` map and public-entry name check; package-boundary check of the internal entries' imports; source check of global reads; unit tests of the installers; a previewed project's runtime                                                                                                                                                                   | `.`, `./storage`, `./network`, `./theme`, `./styles`, `./i18n`, each capability entry, `./navigation-legacy`, `./testing`, `./testing/jest-setup`, the internal entries, `./declarations/*`, the deprecated `./app.plugin.js`, the Expo package's `./app.plugin.js`; a runtime without the secure random generator; a runtime with only one of the two `crypto` functions; a runtime without a global `fetch`; an installer called twice; a previewed project | A private name on `.`, a deep import resolving, an app importing an internal entry, a router or optional capability exported from `.`, another entry importing `./navigation-legacy`, a `./navigation` entry that does not hold the router, a deprecated `./app.plugin.js` that loads without an error naming `@astryxdesign/react-native-expo`, a module with side effects other than the Jest setup, an import other than the Jest setup that installs a global, package code other than the crypto installer that reads the global `crypto`, package code that depends on `fetch`'s redirect modes, a non-secure random fill, a crypto installer that replaces a `crypto` function the runtime provides, an installer that reports nothing or changes anything on a second call, a `fetch` that follows a redirect under `redirect: 'error'` or `'manual'` after its installer ran, or a previewed project that starts without the globals |
@@ -835,16 +825,15 @@ building without its declarations.
 Rejected: the plugin and hooks in the core package behind an optional peer,
 because every app would carry Expo code.
 
-### DEC-12 — The Preview host is a host package, not a capability
+### DEC-12 — Preview belongs to its host, not to an app's capabilities
 
 **Reference:** `spec:AST-112/DEC-12`
 **Decider:** imdreamrunner, 2026-11-17
 
-Running a separate React Native project inside an app is the job of a host,
-such as the Astryx app, not a feature an app chooses. The host's native
-pieces, its inspector channel, and its overlay window live in their own host
-package. The library keeps the project side, because every previewed project
-needs it.
+Running a separate React Native project inside an app is the job of a Preview
+host, not a feature an app chooses, so the host carries its own native pieces
+(`spec:AST-139`). The library keeps the project side, because every previewed
+project needs it.
 
 Rejected: a `preview` capability that an app opts into, because no app other
 than a host needs it, and every app's package would carry its code.
@@ -871,8 +860,8 @@ app would have to know which component needs which capability.
 
 A named feature says which behavior a binary has, so JavaScript asks for the
 behavior it is about to use and an older binary answers with a fallback or a
-loud refusal. Astryx Stage pairs by the contracts' spec hashes and a version
-floor, so it needs no count either.
+loud refusal. Astryx Stage pairs with a project by the version floor the
+package names, so it needs no count either.
 
 Rejected: a revision counter per contract, because a number says that a
 contract changed, not which behavior a binary has.
@@ -897,7 +886,7 @@ library that ships native code is therefore part of the platform, even when no
 library component uses it, and its own record specifies it.
 
 Rejected: a separate extras package for modules no component uses, because an
-app and every Preview host would install a second package of native code.
+app would install a second package of native code.
 
 ## Deprecation and cleanup descriptions
 
@@ -1008,15 +997,6 @@ removal is the declared minor and its `[breaking]` Changeset
   - **The computer install stays the route.** `create` needs both packages
     installed for the computer, and the package's bin keeps `create` as
     the one-off route.
-- **OQ7 — Is the Preview host's package published?** (`human-design`) The
-  Preview host is its own host package (FR1, DEC-12). Options:
-  - **Published with the set.** A third-party host app can run previewed
-    projects the way the Astryx app does, and the host's own code is open to
-    review; the package then carries the compatibility promise of a public
-    package, and its inspector channel becomes public surface.
-  - **Kept for the Astryx app.** The host evolves with the one app that uses
-    it, with no promise to other hosts; a third-party host cannot run
-    previewed projects.
 - **OQ8 — Is the system sign-in session its own opt-in?** (`human-api`) The
   sign-in session is part of the package, and FR1 places it in `web`.
   Options:
