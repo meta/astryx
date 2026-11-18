@@ -43,6 +43,7 @@ import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {isLastPointerTouch} from '../utils/interactionModality';
 import {themeProps} from '../utils/themeProps';
 import {
   colorVars,
@@ -511,23 +512,30 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     }
   }, []);
 
+  // A tap's compatibility mouse events are not hover. They also reach a
+  // trigger that moved under the finger, which saw no pointer of its own.
+  const isTouchHover = useCallback(
+    () => isTouchPointerRef.current || isLastPointerTouch(triggerRef.current),
+    [isTouchPointerRef],
+  );
+
   // Event handlers
   const handleMouseEnter = useCallback(() => {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — including the tap that just opened the
     // tooltip, which would otherwise be double-handled.
-    if (isTouchPointerRef.current) {
+    if (isTouchHover()) {
       return;
     }
     scheduleShow();
-  }, [isTouchPointerRef, scheduleShow]);
+  }, [isTouchHover, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
-      if (isTouchPointerRef.current) {
+      if (isTouchHover()) {
         return;
       }
       // Leaving straight onto the tooltip: the surface's onMouseEnter already
@@ -542,7 +550,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       scheduleHide();
     },
-    [isTouchPointerRef, layerId, scheduleHide],
+    [isTouchHover, layerId, scheduleHide],
   );
 
   // Under `auto`, whether focus counts is decided when it arrives, and a

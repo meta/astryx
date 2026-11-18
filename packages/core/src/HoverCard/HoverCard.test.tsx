@@ -51,6 +51,12 @@ import {useFocusTrap} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Store original matches to restore later
+// A tap leaves the document's last pointer as touch; the next case's mouse
+// events must not read as a tap's compatibility events.
+afterEach(() => {
+  __resetInteractionModalityForTest();
+});
+
 const originalMatches = HTMLElement.prototype.matches;
 
 // Track popover open state per element
@@ -1663,6 +1669,45 @@ describe('HoverCard', () => {
       fireEvent.mouseEnter(element);
       fireEvent.click(element);
     };
+
+    it('opens nothing when a tap elsewhere leaves the trigger under the finger', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+
+      // The finger presses another control, and the layout then puts the
+      // trigger where the finger lifted.
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+      // iOS then sends compatibility mouse events there, and no pointer
+      // events to the trigger.
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.mouseOver(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.mouseMove(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // A mouse that arrives later still hovers.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
 
     it('opens on a tap when the trigger performs no action', async () => {
       const onOpenChange = vi.fn();

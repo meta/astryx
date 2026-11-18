@@ -4,11 +4,12 @@
 
 /**
  * @file interactionModality.ts
- * @input Global pointerdown/keydown events
+ * @input Global pointerdown/pointerover/keydown events
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
  *   and getInteractionModality, which reads how the user last interacted in a
- *   document, and isTextEntrySincePointer, which reads whether every key
- *   since the last pointer press typed into a text-entry field
+ *   document, isTextEntrySincePointer, which reads whether every key since
+ *   the last pointer press typed into a text-entry field, and
+ *   isLastPointerTouch, which reads whether the last pointer was a finger
  * @position Internal document-wide singleton; used where `:focus-visible`
  *   alone is too broad
  */
@@ -45,10 +46,17 @@ type InteractionModalityStore = {
    * field. Undefined in a store that an older bundle made.
    */
   isTextEntrySincePointer?: boolean;
+  /**
+   * The `pointerType` of the last pointer that pressed or arrived over an
+   * element. Undefined in a store that an older bundle made.
+   */
+  lastPointerType?: string;
   isListening: boolean;
   /** Mounted consumers holding a second document's listeners. */
   consumers?: number;
-  onPointerDown: () => void;
+  onPointerDown: (event?: PointerEvent) => void;
+  /** Undefined in a store that an older bundle made. */
+  onPointerOver?: (event: PointerEvent) => void;
   onKeyDown: (event: KeyboardEvent) => void;
 };
 
@@ -93,10 +101,17 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     modality: 'keyboard',
     isTextEntrySincePointer: false,
     isListening: false,
-    onPointerDown: () => {
+    onPointerDown: event => {
+      store.lastPointerType = event?.pointerType ?? store.lastPointerType;
       store.modality = 'pointer';
       store.isTextEntrySincePointer = true;
       setFocusRings(targetDocument, false);
+    },
+    // A mouse or pen announces itself with `pointerover` before its
+    // `mouseover`. A tap's compatibility mouse events follow a touch pointer
+    // and have no mouse pointer of their own.
+    onPointerOver: event => {
+      store.lastPointerType = event.pointerType;
     },
     onKeyDown: event => {
       // Modifier-only presses are not navigation — holding Shift before a
@@ -176,6 +191,12 @@ function setListening(
       capture: true,
       passive: true,
     });
+    if (store.onPointerOver != null) {
+      targetDocument.addEventListener('pointerover', store.onPointerOver, {
+        capture: true,
+        passive: true,
+      });
+    }
   } else {
     targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
       capture: true,
@@ -183,6 +204,11 @@ function setListening(
     targetDocument.removeEventListener('keydown', store.onKeyDown, {
       capture: true,
     });
+    if (store.onPointerOver != null) {
+      targetDocument.removeEventListener('pointerover', store.onPointerOver, {
+        capture: true,
+      });
+    }
   }
 }
 
@@ -382,12 +408,35 @@ export function isTextEntrySincePointer(
   return store.isTextEntrySincePointer ?? store.modality === 'pointer';
 }
 
+/**
+ * Whether the last pointer in `target`'s document, or the page's, was a
+ * finger. A mouse event that arrives then is a tap's compatibility event, not
+ * hover: iOS sends `mouseover`, `mouseenter` and `mousemove` after a tap,
+ * also to an element that moved under the finger, and no `pointerenter`
+ * there. A store that an older bundle made answers `false`.
+ */
+export function isLastPointerTouch(target?: Document | Node | null): boolean {
+  const targetDocument =
+    target == null
+      ? typeof document === 'undefined'
+        ? null
+        : document
+      : target.nodeType === 9
+        ? (target as Document)
+        : target.ownerDocument;
+  if (targetDocument == null) {
+    return false;
+  }
+  return getStore(targetDocument).lastPointerType === 'touch';
+}
+
 /** Test-only: restore the initial state between cases. */
 export function __resetInteractionModalityForTest(): void {
   if (typeof document !== 'undefined') {
     const store = getStore(document);
     store.modality = 'keyboard';
     store.isTextEntrySincePointer = false;
+    store.lastPointerType = undefined;
   }
 }
 
