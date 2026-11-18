@@ -106,7 +106,7 @@ import {
  * @property {string} id
  * @property {string} seed
  * @property {string} [dark] A dark value of its own, which anchors the dark shades.
- * @property {PaletteMode} [only] Set for one mode only: it moves that mode only.
+ * @property {PaletteMode} [only] Set for one mode only (an accent token): the editor keeps the other mode as it was.
  */
 
 /**
@@ -2283,40 +2283,6 @@ export function mapPalette(candidate, dials, fills, context) {
         );
   const categories = mapCategories();
   const statuses = mapStatuses();
-  const keptAtBase = keepWhereBaseReads(
-    tokens,
-    base,
-    modes,
-    isLookOrStatus,
-    context.reader,
-  );
-  // An accent set as a token for one mode moves that mode only: every value
-  // the palette gives keeps the base theme's in the other.
-  const only = dials.find(f => f.id === 'accent')?.only;
-  if (only) {
-    /**
-     * @type {PaletteMode}
-     */
-    const other = only === 'light' ? 'dark' : 'light';
-    // Nothing the palette draws shows in that mode, so nothing is checked
-    // there.
-    for (let i = checks.length - 1; i >= 0; i--) {
-      if (checks[i].mode === other) {
-        checks.splice(i, 1);
-      }
-    }
-    for (const [k, v] of Object.entries(tokens)) {
-      const kept = base?.[other]?.[k];
-      if (kept == null) {
-        delete tokens[k];
-        continue;
-      }
-      tokens[k] = {
-        ...v,
-        [other]: {stop: 0, color: String(kept), family: 'literal'},
-      };
-    }
-  }
   /**
    * The status roles the theme leaves unset, from the palette's families of
    * them (deriveStatusColors), written as its shades; a token set by hand
@@ -2355,6 +2321,13 @@ export function mapPalette(candidate, dials, fills, context) {
     }
     return {roles: derived.roles, why: derived.why};
   }
+  const keptAtBase = keepWhereBaseReads(
+    tokens,
+    base,
+    modes,
+    isLookOrStatus,
+    context.reader,
+  );
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token

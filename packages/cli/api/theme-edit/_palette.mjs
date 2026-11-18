@@ -1814,6 +1814,63 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     plan.fills,
     paletteContext(cwd, slug, data, base, tokenDefaults),
   );
+  const {tokens} = mapping;
+  // An accent set as a token for one mode moves that mode only: the other
+  // mode keeps what the theme's palette gives it without that accent (its
+  // other colors, a warm gray, still drawn), else the base theme's value.
+  const only = fams.find(f => f.id === 'accent')?.only;
+  if (only) {
+    const other = only === 'light' ? 'dark' : 'light';
+    // The palette's checks for that mode are those of the palette without
+    // the accent, which this change does not move.
+    mapping.contrast = mapping.contrast.filter(c => c.mode !== other);
+    const rest = paletteMapping(
+      cwd,
+      slug,
+      {
+        ...data,
+        settings: data.settings.filter(
+          x =>
+            !(
+              x.source === 'token' &&
+              x.thing === '--color-accent' &&
+              !x.on &&
+              !x.when &&
+              !x.state &&
+              x.mode === only
+            ),
+        ),
+      },
+      base,
+      tokenDefaults,
+    );
+    for (const [k, v] of Object.entries(tokens)) {
+      const before = rest?.tokens?.[k]?.[other];
+      if (before) {
+        // (The same shade where the palette's color there is the same; its
+        // color written out where it differs, as the accent moves the
+        // shades it coordinates.)
+        tokens[k] = {
+          ...v,
+          [other]:
+            String(v[other]?.color).toLowerCase() ===
+            String(before.color).toLowerCase()
+              ? v[other]
+              : {stop: 0, color: String(before.color), family: 'literal'},
+        };
+        continue;
+      }
+      const kept = base?.[other]?.[k];
+      if (kept == null) {
+        delete tokens[k];
+        continue;
+      }
+      tokens[k] = {
+        ...v,
+        [other]: {stop: 0, color: String(kept), family: 'literal'},
+      };
+    }
+  }
   return {
     candidate,
     families: fams,
