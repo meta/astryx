@@ -72,6 +72,27 @@ document.addEventListener('click', event => {
   event.preventDefault();
   submit(button.form, button);
 });
+document.addEventListener('keydown', event => {
+  const field = event.target;
+  if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing) return;
+  if (!(field instanceof HTMLInputElement) || !field.form || !typed.test(field.type)) return;
+  const controls = [...field.form.elements];
+  if (controls.some(c => c.type === 'submit' || c.type === 'image')) return;
+  if (controls.filter(c => c instanceof HTMLInputElement && typed.test(c.type)).length !== 1) return;
+  if (elsewhere(field.form, null)) return;
+  event.preventDefault();
+  submit(field.form, null);
+});
+}`;
+
+/**
+ * The move to a place in the page (`#id`) in a frame whose address is not
+ * the document's own, as in a `srcdoc` viewer frame. It runs in the script's
+ * first module, before any of the page's own modules, so its click listeners
+ * see a click after the listeners of the frame that hosts the file and before
+ * the page's.
+ */
+export const VIEWER_MOVES = `{
 // The move to a place is decided after every click listener the page has,
 // on the document or the window, even one it adds later: a capture listener
 // on the window, which runs first, adds a one-time listener for this click
@@ -104,18 +125,26 @@ const moveTo = link => {
 // card's handler that calls stopPropagation) has the browser's own move held
 // at that point, and the file decides once every handler has run: it moves
 // unless the page cancelled the click, by preventDefault, \`returnValue =
-// false\` or an onclick handler that returns false. A cancel made on the
-// window or the document while the click is still on its way down comes from
-// the frame that hosts the file (a viewer that scrolls to the place itself and
-// leaves the address alone), not from the page: it holds the browser's own
-// move, and the file still moves, so a page that routes on its address sees
-// the new place.
+// false\` or an onclick handler that returns false.
+//
+// This runs before any of the page's own modules, so its listeners come after
+// the ones the frame that hosts the file set up and before the page's. A
+// cancel made before the click reaches this script's listener on the window,
+// or before it reaches its marker on the document, comes from the host (a
+// viewer that scrolls to the place itself and leaves the address alone), not
+// from the page: it holds the browser's own move, and the file still moves,
+// so a page that routes on its address sees the new place. A cancel from the
+// page's own listeners, on the window and the document included, keeps the
+// page's way.
+const pastHost = new WeakSet();
+document.addEventListener('click', event => pastHost.add(event), true);
 window.addEventListener('click', event => {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
   if (!link || !movesInFile(event, link)) return;
   const cancel = Event.prototype.preventDefault;
   let cancelled = false;
-  let held = false;
+  let hostHeld = event.defaultPrevented;
+  let stopped = false;
   let decided = false;
   // An onclick handler's \`return false\` cancels without calling
   // preventDefault, so each one on the click's way is read as it returns.
@@ -138,14 +167,14 @@ window.addEventListener('click', event => {
     decided = true;
     window.removeEventListener('click', last);
     restore();
-    if (cancelled || (event.defaultPrevented && !held)) return;
+    if (cancelled || (event.defaultPrevented && !hostHeld && !stopped)) return;
     cancel.call(event);
     moveTo(link);
   };
   const byHost = () =>
-    event.eventPhase === Event.CAPTURING_PHASE && (event.currentTarget === window || event.currentTarget === document);
+    event.eventPhase === Event.CAPTURING_PHASE && event.currentTarget === document && !pastHost.has(event);
   event.preventDefault = function () {
-    if (byHost()) held = true;
+    if (byHost()) hostHeld = true;
     else cancelled = true;
     return cancel.call(this);
   };
@@ -155,15 +184,15 @@ window.addEventListener('click', event => {
       return returnValue.get.call(this);
     },
     set(value) {
-      if (value === false) this.preventDefault();
+      if (!value) this.preventDefault();
     },
   });
   for (const name of ['stopPropagation', 'stopImmediatePropagation']) {
     const stop = Event.prototype[name];
     event[name] = function () {
       stop.call(this);
-      if (decided || held) return;
-      held = true;
+      if (decided || stopped) return;
+      stopped = true;
       cancel.call(event);
       setTimeout(decide);
     };
@@ -190,17 +219,6 @@ window.addEventListener('click', event => {
   };
   window.addEventListener('click', last);
 }, true);
-document.addEventListener('keydown', event => {
-  const field = event.target;
-  if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing) return;
-  if (!(field instanceof HTMLInputElement) || !field.form || !typed.test(field.type)) return;
-  const controls = [...field.form.elements];
-  if (controls.some(c => c.type === 'submit' || c.type === 'image')) return;
-  if (controls.filter(c => c instanceof HTMLInputElement && typed.test(c.type)).length !== 1) return;
-  if (elsewhere(field.form, null)) return;
-  event.preventDefault();
-  submit(field.form, null);
-});
 }`;
 
 /**
@@ -563,7 +581,7 @@ export async function bundleForBrowser({
       }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
       build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
-      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_MOVES}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

@@ -109,32 +109,44 @@ const TYPES = {
   '.css': 'text/css',
 };
 
-/**
- * The steps a reader takes, and what each shows in the app. Each step names
- * the control by its role and accessible name.
- * @type {{do: string, role?: string, name?: string, key?: string, text?: string, shows: Record<string, unknown>}[]}
- */
 // A page that routes on its address, as an app with in-page navigation does:
-// its links name a place, and the page shows the one the address names.
+// its links name a place, and the page shows the one the address names. One
+// link it cancels in its own handler, one it handles itself from a capture
+// listener on the document (it opens its own panel), and one sits in a
+// clickable card that stops the click.
 const ROUTES = `import {useEffect, useState} from 'react';
 import {Heading} from '@astryxdesign/core/Heading';
 
 const titles = {home: 'Home page', members: 'Members page', settings: 'Settings page'};
 export default function Page() {
   const [place, setPlace] = useState('home');
+  const [panel, setPanel] = useState(false);
   useEffect(() => {
     const follow = () => setPlace(window.location.hash.slice(1) || 'home');
+    const own = e => {
+      if (!(e.target instanceof Element) || !e.target.closest('a[href="#help"]')) return;
+      e.preventDefault();
+      setPanel(true);
+    };
     follow();
     window.addEventListener('hashchange', follow);
-    return () => window.removeEventListener('hashchange', follow);
+    document.addEventListener('click', own, true);
+    return () => {
+      window.removeEventListener('hashchange', follow);
+      document.removeEventListener('click', own, true);
+    };
   }, []);
   return (
     <main>
       <nav>
         <a href="#home">Home</a> <a href="#members">Members</a> <a href="#settings">Settings</a>{' '}
-        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a>
+        <a href="#members" onClick={e => e.preventDefault()}>Members, cancelled</a> <a href="#help">Help</a>
       </nav>
+      <div onClick={e => e.stopPropagation()}>
+        <a href="#settings">Settings, in a card</a>
+      </div>
       <Heading level={1}>{titles[place] ?? 'Home page'}</Heading>
+      <p data-probe="panel">{panel ? 'Help panel open' : 'No panel'}</p>
     </main>
   );
 }
@@ -142,8 +154,10 @@ export default function Page() {
 
 // What a viewer may do in the frame it shows a file in: cancel every link to a
 // place in the page on its way down and scroll to the place itself, leaving
-// the frame's address as it is.
-const HOST_SCROLLS = `<script>document.addEventListener('click', function (event) {
+// the frame's address as it is. One does it from the document, one from the
+// window.
+const hostScrolls =
+  target => `<script>${target}.addEventListener('click', function (event) {
   var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
   if (!link) return;
   event.preventDefault();
@@ -151,6 +165,11 @@ const HOST_SCROLLS = `<script>document.addEventListener('click', function (event
   if (place) place.scrollIntoView({block: 'start'});
 }, true);</script>`;
 
+/**
+ * The steps a reader takes, and what each shows in the app. Each step names
+ * the control by its role and accessible name.
+ * @type {{do: string, role?: string, name?: string, key?: string, text?: string, shows: Record<string, unknown>}[]}
+ */
 const STEPS = [
   {
     do: 'click',
@@ -417,7 +436,7 @@ describe.runIf(BROWSER_STEP)(
       }
     }, 300_000);
 
-    it('moves to the place a link names in a viewer frame, also when the viewer cancels the link itself', async () => {
+    it("moves to the place a link names in a viewer frame, also when the viewer cancels the link itself, and keeps the page's own way", async () => {
       const context = await browser.newContext({
         viewport: {width: 1024, height: 900},
       });
@@ -427,7 +446,11 @@ describe.runIf(BROWSER_STEP)(
           : route.abort(),
       );
       try {
-        for (const host of ['', HOST_SCROLLS]) {
+        for (const host of [
+          '',
+          hostScrolls('document'),
+          hostScrolls('window'),
+        ]) {
           const viewer = await context.newPage();
           /** @type {string[]} */
           const errors = [];
@@ -447,25 +470,36 @@ describe.runIf(BROWSER_STEP)(
           const heading = scope.getByRole('heading', {level: 1});
           await heading.getByText('Home page').waitFor();
           const shown = [];
+          const frame = await (await viewer.$('iframe')).contentFrame();
           for (const name of [
             'Members',
             'Settings',
             'Members, cancelled',
+            'Help',
             'Home',
+            'Settings, in a card',
           ]) {
             await scope.getByRole('link', {name, exact: true}).click();
             await new Promise(resolve => setTimeout(resolve, 200));
-            shown.push(await heading.textContent());
+            shown.push(
+              await frame.evaluate(
+                () =>
+                  `${document.querySelector('h1').textContent} | ${document.querySelector('[data-probe="panel"]').textContent} | ${location.hash}`,
+              ),
+            );
           }
-          // A link the page cancels itself stays where it is.
-          expect(
-            shown,
-            host ? 'viewer cancels the link' : 'plain frame',
-          ).toEqual([
-            'Members page',
-            'Settings page',
-            'Settings page',
-            'Home page',
+          // A link the page cancels or handles itself keeps the page where it
+          // is; a link in a card that stops the click still moves.
+          const where = host
+            ? `viewer cancels on the ${host.includes('document.') ? 'document' : 'window'}`
+            : 'plain frame';
+          expect(shown, where).toEqual([
+            'Members page | No panel | #members',
+            'Settings page | No panel | #settings',
+            'Settings page | No panel | #settings',
+            'Settings page | Help panel open | #settings',
+            'Home page | Help panel open | #home',
+            'Settings page | Help panel open | #settings',
           ]);
           expect(errors).toEqual([]);
           await viewer.close();
