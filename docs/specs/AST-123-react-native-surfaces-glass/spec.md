@@ -35,7 +35,8 @@ component props and the theme's native intent, writes one tree for both
 platforms, and the library adapts the look to each OS version.
 
 This record details the platform's system materials in the core of
-`spec:AST-112` (`spec:AST-112/FR1`). It follows `spec:AST-140`, which owns
+`spec:AST-112` (`spec:AST-112/FR1`), its Surfaces and glass group
+(`spec:AST-112/FR7`). It follows `spec:AST-140`, which owns
 the shared platform rules: registration (`spec:AST-140/FR1`), a missing piece
 (`spec:AST-140/FR2`), the result vocabulary (`spec:AST-140/FR3`), additive
 evolution (`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and
@@ -163,8 +164,8 @@ and a token fill.
     its old shape to the new one while the children jump to their new place. A
     move is measured relative to the enclosing glass container, or else the
     enclosing scroll view, or else the window, so the spring follows real
-    moves. A scroll, the first layout, and a morph-only change keep the
-    current shape.
+    moves. A scroll, the first layout, and a morph-only change start no
+    spring.
   - `morphFrom` and `morphTo` are two rectangles with corner radii, in the
     view's own coordinates; `progress` between 0 and 1 blends the glass shape
     between them. A native-driver `Animated` value can drive `progress`, and a
@@ -305,7 +306,8 @@ and a token fill.
     public Android SDK classes on Android. The one exception is React Native's
     record of the props its native driver manages, which the glass view reads so
     a React commit keeps a driven `progress` (FR4); React Native marks that
-    record unstable.
+    record unstable, and where it is missing a commit puts back the JavaScript
+    value.
   - On the wire, `colorScheme` is `unspecified` (follow the OS), `light`, or
     `dark`. `shape: 'capsule'`, like any negative radius, rounds to half the
     shorter side.
@@ -332,7 +334,7 @@ and a token fill.
 ## Current-state impact
 
 - This record details the system materials of the platform's core
-  (`spec:AST-112/FR1`), their fallbacks when absent (`spec:AST-140/FR2`),
+  (`spec:AST-112/FR1`) as its Surfaces and glass group (`spec:AST-112/FR7`), their fallbacks when absent (`spec:AST-140/FR2`),
   the theme mapped onto native appearance (`spec:AST-112/FR9`), and the theme's
   `material` member on React Native (`spec:AST-082/FR10`).
 - Relies on `spec:AST-112` FR3 (amended): Astryx's own native pieces, these
