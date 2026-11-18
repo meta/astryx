@@ -10,7 +10,7 @@
  */
 
 import {KIND_FIELDS} from '../../_adapter.mjs';
-import {defaultVersion} from '../../_catalog-view.mjs';
+import {defaultVersion, shownEntry} from '../../_catalog-view.mjs';
 import {setIconSetCoverage} from '../../_icon-set-coverage.mjs';
 
 /**
@@ -88,16 +88,16 @@ export function item(packages, packageName, itemName, options = {}) {
     }
   }
 
+  if (!catalog) return null;
+  const items = shownEntry(catalog, {
+    installed: pkg != null || !!installedAs,
+    iconSets,
+  }).contributions;
   const lower = itemName.toLowerCase();
   const found =
-    catalog?.contributions.find(c => c.name === itemName) ??
-    catalog?.contributions.find(c => c.name.toLowerCase() === lower);
-  if (!catalog || !found) return null;
-  // An installed package's icon set answers only where icon features are on
-  // (spec:AST-084 FR17).
-  if (found.kind === 'icon-set' && (pkg != null || installedAs) && !iconSets) {
-    return null;
-  }
+    items.find(c => c.name === itemName) ??
+    items.find(c => c.name.toLowerCase() === lower);
+  if (!found) return null;
   const shown = version ?? defaultVersion(catalog);
   /** @type {import('../../discover.type.mjs').DiscoverItemResponse} */
   const response = {

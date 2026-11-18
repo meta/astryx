@@ -542,7 +542,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
             ],
             [
               '`astryx discover`',
-              "A package's sets (`iconSets`) and, for `@scope/name/<set>`, the set's display name, license, icon count, and definitions. A set your sources offer is listed without the opt-in too, marked experimental (`[experimental]` in text, `experimental: true` in JSON); its page says how many of the CLI's icon definitions it maps, of how many (`definitions: N/M` in the text view, the count `experimental icon --list` prints), when the source lists its definitions, and gives the command that installs its package, and `astryx experimental icon use <set>` to pick it; its definitions and `--type icon-set` need the opt-in.",
+              "A package's sets (`iconSets`) and, for `@scope/name/<set>`, the set's display name, license, icon count, and definitions. A set your sources offer is listed where icon features are off too, marked experimental: `[experimental]` in text; in JSON, `experimental: true` on a search match and the set page, and `experimentalFields: ['iconSets']` on a package entry; its page says how many of the CLI's icon definitions it maps, of how many (`definitions: N/M` in the text view, the count `experimental icon --list` prints), when the source lists its definitions, and gives the command that installs its package, and `astryx experimental icon use <set>` to pick it; its definitions and `--type icon-set` need the opt-in.",
             ],
             [
               '`astryx doctor`',
