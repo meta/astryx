@@ -108,7 +108,7 @@ describe('theme build writes the shared-element parts in a later sub-layer', () 
     expect(components).toContain('.astryx-button[data-variant="secondary"]');
     expect(components).not.toContain('astryx-toggle-button');
     // The color-scheme rules stay outside both sub-layers.
-    const scheme = body.indexOf(':root { color-scheme: light dark; }');
+    const scheme = body.indexOf('html[data-theme="light"] { color-scheme: light; }');
     expect(scheme).toBeGreaterThan(-1);
     expect(scheme).toBeLessThan(body.indexOf('@layer components, parts;'));
     // The runtime compiler writes the same two sub-layers for this theme.
