@@ -170,6 +170,14 @@ function tree(dir) {
   );
 }
 
+/**
+ * A theme editor settings file, as the editor saves one.
+ * @param {string} name
+ * @param {string} [mode]
+ */
+const SETTINGS = (name, mode = 'both') =>
+  `${JSON.stringify({name, like: 'neutral', mode, settings: []}, null, 2)}\n`;
+
 /** The theme files a theme folder holds, as entries for an archive. */
 function themeEntries(
   /** @type {string} */ prefix,
@@ -603,7 +611,7 @@ describe('theme add with a shared theme', () => {
       archive,
       tgz({
         ...themeEntries('bundle/app-copy/', 'sunset'),
-        'bundle/editor-theme/sunset.settings.json': '{"base":"neutral"}\n',
+        'bundle/editor-theme/sunset.settings.json': SETTINGS('sunset'),
         'bundle/editor-theme/sunset.theme.ts': 'export {};\n',
         'bundle/editor-theme/tokens/sunset.palette.ts': 'export {};\n',
       }),
@@ -624,7 +632,7 @@ describe('theme add with a shared theme', () => {
         path.join(app, 'themes/sunset/sunset.settings.json'),
         'utf8',
       ),
-    ).toBe('{"base":"neutral"}\n');
+    ).toBe(SETTINGS('sunset'));
     expect(result.data.copy?.written).toEqual(
       expect.arrayContaining(['themes/sunset/sunset.settings.json']),
     );
@@ -636,22 +644,60 @@ describe('theme add with a shared theme', () => {
   it('leaves editor state it did not write in place, and says so', async () => {
     const mine = path.join(app, 'themes/ocean/ocean.settings.json');
     fs.mkdirSync(path.dirname(mine), {recursive: true});
-    fs.writeFileSync(mine, '{"mine":true}\n');
+    fs.writeFileSync(mine, SETTINGS('ocean', 'dark-only'));
     writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
     fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
     fs.writeFileSync(
       path.join(shared, 'b', 'editor', 'ocean.settings.json'),
-      '{"theirs":true}\n',
+      SETTINGS('ocean'),
     );
     const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
     expect(result.data.copy?.editor).toMatchObject({
       files: [],
       notCopied: expect.stringMatching(/already holds editor state/),
     });
-    expect(fs.readFileSync(mine, 'utf8')).toBe('{"mine":true}\n');
+    expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
     await themeRemove('ocean', {cwd: app});
-    expect(fs.readFileSync(mine, 'utf8')).toBe('{"mine":true}\n');
+    expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
   });
+
+  it.each([
+    ['not JSON', 'not json', null, /is not JSON/],
+    [
+      'not editor settings',
+      JSON.stringify({name: 'ocean', settings: 'all of them'}),
+      null,
+      /is not editor settings this CLI reads/,
+    ],
+    [
+      'made with a palette recipe this CLI does not know',
+      null,
+      JSON.stringify({recipe: 'astryx-oklch-v99'}),
+      /palette recipe astryx-oklch-v99, which this CLI \(\S+\) doesn't know; update the CLI/,
+    ],
+  ])(
+    'adds the theme but not editor state %s, and says why',
+    async (_, settings, palette, why) => {
+      writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+      fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+        settings ?? SETTINGS('ocean'),
+      );
+      if (palette)
+        fs.writeFileSync(
+          path.join(shared, 'b', 'editor', 'palette.config.json'),
+          palette,
+        );
+      const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+      expect(result.data.default).toBe('ocean');
+      expect(result.data.copy?.editor).toMatchObject({
+        files: [],
+        notCopied: expect.stringMatching(why),
+      });
+      expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+    },
+  );
 
   it('adds no editor state when the shared theme carries none', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean');

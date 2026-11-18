@@ -15,6 +15,8 @@ import {
   installCommandFor,
 } from '../../foundation/discovery/template-needs.mjs';
 import {copyTree, stageSharedTheme} from './_shared-source.mjs';
+import {PALETTE_RECIPES} from './palette/generate/generator.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 export {isSharedThemeSource} from './_shared-source.mjs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -1862,6 +1864,46 @@ function sharedFileIn(dir, name) {
   }
 }
 
+/** The most a shared theme's editor settings file may hold. */
+const EDITOR_SETTINGS_MAX_BYTES = 1024 * 1024;
+
+/**
+ * Why a shared theme's editor state is not copied, or null. Its files are
+ * read as data and never run: the settings file must parse as the editor's
+ * settings and pass the checks the editor gives a saved file, and a palette
+ * made with a recipe this CLI does not know is named with the CLI it needs.
+ * @param {string} dir the staged editor folder
+ * @param {string} slug
+ * @returns {Promise<string | null>}
+ */
+async function sharedEditorProblem(dir, slug) {
+  const file = path.join(dir, `${slug}.settings.json`);
+  if (fs.statSync(file).size > EDITOR_SETTINGS_MAX_BYTES)
+    return `its ${slug}.settings.json is larger than ${EDITOR_SETTINGS_MAX_BYTES / 1024} KB, more than editor settings hold`;
+  // (Loaded here: the editor's settings module builds on this adapter.)
+  const {settingsJson, settingsProblem} =
+    await import('../theme-edit/_settings.mjs');
+  const data = settingsJson(fs.readFileSync(file, 'utf-8'));
+  if (data === undefined) return `its ${slug}.settings.json is not JSON`;
+  const problem = settingsProblem(data);
+  if (problem)
+    return `its ${slug}.settings.json is not editor settings this CLI reads (${problem})`;
+  const paletteFile = path.join(dir, 'palette.config.json');
+  if (fs.existsSync(paletteFile)) {
+    /** @type {any} */
+    let palette;
+    try {
+      palette = JSON.parse(fs.readFileSync(paletteFile, 'utf-8'));
+    } catch {
+      return 'its palette.config.json is not JSON';
+    }
+    const recipe = palette?.recipe;
+    if (recipe != null && !PALETTE_RECIPES.includes(recipe))
+      return `it was made with the palette recipe ${String(recipe)}, which this CLI (${cliVersion()}) doesn't know; update the CLI, then add the theme again to keep its editor state`;
+  }
+  return null;
+}
+
 /**
  * The editor state files a receipt names, kept only when inside the editor's
  * folder for the theme (the receipt is a file anyone can edit), or null when
@@ -2035,7 +2077,11 @@ export async function addSharedThemeToApp(source, options) {
     let editorNote = null;
     /** @type {'new' | 'replace' | null} */
     let editorPlan = null;
-    if (staged.editor) {
+    const editorRefusal = staged.editor
+      ? await sharedEditorProblem(staged.editor.dir, name)
+      : null;
+    if (staged.editor && editorRefusal) editorNote = editorRefusal;
+    else if (staged.editor) {
       if (!fs.existsSync(editorDir)) editorPlan = 'new';
       else if (
         previousEditor &&
