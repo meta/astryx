@@ -478,11 +478,13 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   platform-only module is absent on the other platform, and the library takes
   the path FR5, FR10 and FR11 name.
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
-  emulator, and devices (`spec:AST-112/FR15`); haptic feel needs
+  emulator, and devices (`spec:AST-112/FR15`, amended); haptic feel needs
   a real device.
 
 ## Current-state impact
 
+- Every `spec:AST-112` clause this record cites is that record's amended
+  text.
 - Relies on `spec:AST-112` FR3 (amended): the core links in every app, and
   every module of this group is core.
 - Relies on `spec:AST-140` FR5: each contract's baseline is its first
