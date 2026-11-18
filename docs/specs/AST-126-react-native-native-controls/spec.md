@@ -35,10 +35,13 @@ own Astryx control. This record owns the native controls that make this
 possible: their JavaScript API, their native contracts, how the library chooses
 between the system control and its own, and how they behave.
 
-The controls are part of the platform layer of `spec:AST-112`. They follow its
-result vocabulary (`spec:AST-112/FR6`), capability shape (`spec:AST-112/FR7`),
-additive evolution (`spec:AST-112/FR8`), its rule that the platform speaks
-Astryx's design language for native controls (`spec:AST-112/FR9`), and Astryx
+The controls are part of the platform layer of `spec:AST-112` and follow the
+shared platform rules of `spec:AST-140`: registration (`spec:AST-140/FR1`),
+the result vocabulary (`spec:AST-140/FR3`), additive evolution
+(`spec:AST-140/FR5`) and threading (`spec:AST-140/FR6`). They follow
+`spec:AST-112`'s capability shape (`spec:AST-112/FR7`), its rule that the
+platform speaks Astryx's design language for native controls
+(`spec:AST-112/FR9`), and Astryx
 Stage, which conforms to these contracts and never defines them
 (`spec:AST-139`). They
 serve the native-first rule of `spec:AST-082/FR11`. In the library
@@ -62,7 +65,7 @@ and React Native as required dependencies (`spec:AST-082/FR13`). Per piece:
   control before a title is cut (FR6).
 - `AstryxDatePicker` (view and module): calendar dates as ISO wall-clock
   strings (DEC-4), Material 3's date range dialog, and results instead of
-  rejections (`spec:AST-112/FR6`).
+  rejections (`spec:AST-140/FR3`).
 - `AstryxPasteControl`: no capability gap; PasteButton draws the system control
   with its own API (OQ1).
 
@@ -165,7 +168,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   - Android draws a Material 3 button: filled, tonal or text by variant, the
     theme's error colour for `destructive`. It draws no icon.
   - `symbolName` (`systemImage` in the contract) is an iOS-only member and
-    says so in its tag (`spec:AST-112/FR8`). On Android, a set `symbolName`
+    says so in its tag (`spec:AST-140/FR1`). On Android, a set `symbolName`
     gives one development warning.
   - The system control decides when a touch is a press. On iOS a touch that
     moves further than the drawn Button's press distance is not a press. Every completed activation calls
@@ -203,7 +206,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   - `startSymbolName`, `fieldStyle`, `fill`, `cornerRadius` and `insetX`
     (`startSystemImage`, `fieldStyle`, `fill`, `cornerRadius`, `insetX` in the
     contract) are iOS-only members and say so in their tags
-    (`spec:AST-112/FR8`). On Android, each one an app sets gives one
+    (`spec:AST-140/FR1`). On Android, each one an app sets gives one
     development warning.
   - `status` colours the box's border, and for `error` the caret. The message
     stays the library's, below the box.
@@ -345,7 +348,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
     control grows (FR6), and the paste control measures itself again when the
     text size changes. The controls' motion is the system's own and follows
     Reduce Motion by itself.
-- **FR13 — Touch and value changes stay on the UI thread.** Each control's
+- **FR13 — Touch and value changes stay on the UI thread.** Under
+  `spec:AST-140/FR6`, each control's
   touch tracking, thumb, selection and text editing run on the UI thread. The
   JavaScript thread hears direct events only: a press, a throttled value, a
   commit, a tap's index, a text change with its count, a focus change, a return,
@@ -357,9 +361,9 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
   calls `onError({reason: 'no-native-view'})` once. Its probe says which, so the
   library draws its own control instead (`spec:AST-112/FR7`). A dialog call on
   a binary without the module resolves `not-linked` or `no-module`
-  (`spec:AST-112/FR3`, `spec:AST-112/FR6`).
+  (`spec:AST-112/FR3`, `spec:AST-140/FR2`).
 - **FR15 — The contracts follow the platform's evolution rules.** Every
-  contract in the group follows `spec:AST-112/FR8`: it is at revision 1, and a
+  contract in the group follows `spec:AST-140/FR5`: it is at revision 1, and a
   later behaviour is a named feature that the JavaScript checks before it uses
   it, keeping the revision-1 behaviour or answering `unsupported` without it.
 - **FR16 — Native code uses public platform API only.** The controls' native
@@ -384,7 +388,7 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 
 The module's requests carry ISO strings, the dialog's words (`''`: Material's
 own), the first day of the week (out of range: the locale's) and an optional
-`rootTag`. Each method resolves one result object under `spec:AST-112/FR8`:
+`rootTag`. Each method resolves one result object under `spec:AST-140/FR3`:
 `status` `ok` with `value` (a range's start) and `end` (a range's end),
 `cancelled` when the person dismisses the dialog, or `error` with a `reason`
 (`unavailable` when no dialog can show) and a `message`. `AstryxDatePicker` maps it to
@@ -417,13 +421,14 @@ FR7's results.
 
 ## Current-state impact
 
-- Details `spec:AST-112` FR6, FR7, FR9 and FR10 for the controls listed here.
+- Details `spec:AST-112` FR7, FR9 and FR10, and `spec:AST-140` FR1 to FR3, FR5
+  and FR6, for the controls listed here.
 - Relies on `spec:AST-112` FR3 (amended): the native half of Astryx's
   components, the controls among them, links by default.
 - Relies on `spec:AST-112` FR5 (amended): `./controls` holds the native
   controls and the gesture views of the library's components.
-- Relies on `spec:AST-112` FR8 (amended): every contract is at revision 1, and
-  later behaviour is a named feature.
+- Relies on `spec:AST-140/FR5`: every contract is at revision 1, and later
+  behaviour is a named feature.
 - This record makes no departure from `spec:AST-043` or `spec:AST-082`; OQ2,
   OQ3, OQ7 and OQ8 ask whether React Native departs from them.
 - No other record changes.
