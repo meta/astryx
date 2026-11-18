@@ -77,7 +77,7 @@ describe('a page or surface color, by mode', () => {
       needsBases(test);
       const cream = await answer('cream background');
       expect(cream.first.slice(0, 1)).toEqual([
-        "--color-background-body '#fef3c7' --mode light",
+        "--color-background-body '#f8f1e3' --mode light",
       ]);
       expect(cream.text).toMatch(/dark mode keeps its own page/);
       expect((await answer('page bg #F2F2F7')).first.slice(0, 1)).toEqual([
