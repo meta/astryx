@@ -201,17 +201,26 @@ function featureHolds(feature) {
 const not = a => (a == null ? null : !a);
 
 /**
+ * Thrown for a query the browser reads as invalid, which never matches: a
+ * media type followed by a condition joined by `or`.
+ */
+const INVALID_QUERY = new SyntaxError('invalid media query');
+
+/**
  * The answer of a media condition (Media Queries level 4): a feature in
  * parentheses, `not` before one, or several joined by `and` or by `or` (not
  * both at one level), each of which can be a condition in parentheses.
  * A feature the window does not judge holds; with `sure` its answer is
  * unknown, stays unknown through `not`, and decides `and` and `or` only when
- * no known answer does. Throws on text it cannot read.
+ * no known answer does. Throws on text it cannot read; with `withoutOr` (the
+ * condition after a media type), throws INVALID_QUERY on `or` at its top
+ * level.
  * @param {string} text
  * @param {boolean} sure
+ * @param {boolean} [withoutOr]
  * @returns {Answer}
  */
-function conditionAnswer(text, sure) {
+function conditionAnswer(text, sure, withoutOr = false) {
   let at = 0;
   const skip = () => {
     while (at < text.length && /\s/.test(text[at])) at += 1;
@@ -230,7 +239,7 @@ function conditionAnswer(text, sure) {
     at += 1;
     skip();
     if (text[at] === '(' || /^not(?![\w-])/i.test(text.slice(at))) {
-      const answer = condition();
+      const answer = condition(false);
       skip();
       if (text[at] !== ')') throw new SyntaxError(text);
       at += 1;
@@ -242,8 +251,8 @@ function conditionAnswer(text, sure) {
     at = end + 1;
     return featureHolds(feature) ?? (sure ? null : true);
   };
-  /** @returns {Answer} */
-  const condition = () => {
+  /** @param {boolean} top @returns {Answer} */
+  const condition = top => {
     if (take('not')) return not(inParens());
     const answers = [inParens()];
     let join = '';
@@ -251,6 +260,7 @@ function conditionAnswer(text, sure) {
       const word = take('and') ? 'and' : take('or') ? 'or' : '';
       if (!word) break;
       if (join && word !== join) throw new SyntaxError(text);
+      if (word === 'or' && top && withoutOr) throw INVALID_QUERY;
       join = word;
       answers.push(inParens());
     }
@@ -259,7 +269,7 @@ function conditionAnswer(text, sure) {
     if (answers.includes(null)) return null;
     return !decided;
   };
-  const answer = condition();
+  const answer = condition(true);
   skip();
   if (at !== text.length) throw new SyntaxError(text);
   return answer;
@@ -286,7 +296,7 @@ function queryAnswer(part, sure) {
     ? false
     : rest == null
       ? true
-      : conditionAnswer(rest, sure);
+      : conditionAnswer(rest, sure, true);
   return modifier?.toLowerCase() === 'not' ? not(answer) : answer;
 }
 
@@ -332,7 +342,8 @@ function queryList(query) {
  * reads it (queryAnswer). A feature the window does not judge holds, as in
  * the chart document (no motion); with `sure`, a query whose answer depends
  * on one never matches, so only what the window answers counts. A query the
- * reader cannot parse falls back to featuresMatch.
+ * browser reads as invalid never matches; one the reader cannot parse falls
+ * back to featuresMatch.
  * @param {string} query
  * @param {{sure?: boolean}} [options]
  * @returns {boolean}
@@ -342,7 +353,8 @@ export function desktopMatches(query, {sure = false} = {}) {
     let answer;
     try {
       answer = queryAnswer(part, sure);
-    } catch {
+    } catch (error) {
+      if (error === INVALID_QUERY) return false;
       return featuresMatch(part, sure);
     }
     return answer === true;

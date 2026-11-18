@@ -111,6 +111,26 @@ describe('desktopMatches', () => {
     ).toBe(false);
   });
 
+  it('never matches a media type followed by a condition joined by `or`', () => {
+    expect(
+      desktopMatches('screen and (max-width: 640px) or (min-width: 1024px)'),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'not screen and (max-width: 640px) or (min-width: 1024px)',
+      ),
+    ).toBe(false);
+    expect(
+      desktopMatches(
+        'screen and (max-width: 640px) or (min-width: 1024px), (min-width: 1024px)',
+      ),
+    ).toBe(true);
+    expect(
+      desktopMatches('screen and ((max-width: 640px) or (min-width: 1024px))'),
+    ).toBe(true);
+    expect(desktopMatches('screen and not (max-width: 640px)')).toBe(true);
+  });
+
   it('reads text it cannot parse as before', () => {
     expect(desktopMatches('(min-width: 1024px) and')).toBe(true);
     expect(desktopMatches('((min-width: 1024px)')).toBe(true);
