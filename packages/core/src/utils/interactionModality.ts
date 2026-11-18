@@ -91,6 +91,28 @@ function setFocusRings(targetDocument: Document, isOn: boolean): void {
   }
 }
 
+/**
+ * Hear the window's blur while the rings are off: only then can focus that
+ * leaves and comes back need them turned on again.
+ */
+function hearWindow(
+  targetDocument: Document,
+  store: InteractionModalityStore,
+): void {
+  if (
+    !store.isListening ||
+    store.isHearingWindow === true ||
+    store.onWindowBlur == null
+  ) {
+    return;
+  }
+  store.isHearingWindow = true;
+  targetDocument.defaultView?.addEventListener('blur', store.onWindowBlur, {
+    capture: true,
+    passive: true,
+  });
+}
+
 const interactionModalityStoreKey = Symbol.for(
   '@astryxdesign/core/interaction-modality/v1',
 );
@@ -117,19 +139,7 @@ function getStore(targetDocument: Document): InteractionModalityStore {
       store.isTextEntrySincePointer = true;
       store.focusAway = null;
       setFocusRings(targetDocument, false);
-      // Rings can only need turning back on once a press turned them off.
-      if (
-        store.isListening &&
-        store.isHearingWindow !== true &&
-        store.onWindowBlur != null
-      ) {
-        store.isHearingWindow = true;
-        targetDocument.defaultView?.addEventListener(
-          'blur',
-          store.onWindowBlur,
-          {capture: true, passive: true},
-        );
-      }
+      hearWindow(targetDocument, store);
     },
     // A mouse or pen announces itself with `pointerover` before its
     // `mouseover`. A tap's compatibility mouse events follow a touch pointer
@@ -261,6 +271,12 @@ function setListening(
         passive: true,
       });
     }
+    // Listening that resumes while a press has the rings off, as when a
+    // consumer releases and holds again in one commit, hears the window too.
+    const root = targetDocument.documentElement as HTMLElement | null;
+    if (root?.style?.getPropertyValue(FOCUS_RING_PROPERTY) === '0') {
+      hearWindow(targetDocument, store);
+    }
   } else {
     targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
       capture: true,
@@ -324,6 +340,14 @@ function trackInteractionModalityIn(targetDocument: Document): () => void {
     store.consumers = (store.consumers ?? 1) - 1;
     if (store.consumers === 0) {
       setListening(targetDocument, store, false);
+      // With no listener left, nothing could turn the rings back on, so drop
+      // the override. A consumer that releases and holds again in one commit
+      // keeps it.
+      queueMicrotask(() => {
+        if ((store.consumers ?? 0) === 0) {
+          setFocusRings(targetDocument, true);
+        }
+      });
     }
   };
 }
