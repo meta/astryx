@@ -88,6 +88,58 @@ describe('template path safety', () => {
     expect(fs.readdirSync(cwd)).toEqual([]);
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'names the same path run from its nearest folder, and that command writes it there',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = path.join(root, 'project');
+      const elsewhere = path.join(root, "someone's folder");
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.mkdirSync(elsewhere, {recursive: true});
+      // A home folder inside the temp folder turns scratch copies off, so a
+      // path outside the project is refused here as it is elsewhere.
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        expect(tempFolders()).toEqual([]);
+        const given = path.join(elsewhere, 'pages', 'blank.tsx');
+        const err = await templateApi('blank', {targetPath: given, cwd}).catch(
+          e => e,
+        );
+        expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+        expect(err.suggestions.map(s => s.reason)).toEqual([
+          'write the page inside the project',
+          'write the page where you named it, from its folder',
+          'print the source and write nothing',
+        ]);
+        expect(err.suggestions[1].name).toBe(
+          `cd '${elsewhere.replace(/'/g, `'\\''`)}' && astryx template blank ./pages/blank.tsx`,
+        );
+        expect(fs.readdirSync(elsewhere)).toEqual([]);
+
+        // The named command, run from that folder, writes the path named.
+        const written = await templateApi('blank', {
+          targetPath: './pages/blank.tsx',
+          cwd: elsewhere,
+        });
+        expect(written.data.fileName).toBe('blank.tsx');
+        expect(fs.existsSync(given)).toBe(true);
+      } finally {
+        process.env.HOME = before;
+      }
+    },
+  );
+
+  it('names no folder to run from when only the disk root exists', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const err = await templateApi('blank', {
+      targetPath: nowhere('deep', 'page.tsx'),
+      cwd,
+    }).catch(e => e);
+    expect(err.suggestions.some(s => s.name.startsWith('cd '))).toBe(false);
+  });
+
   it('keeps the flags as typed in the suggested commands', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
@@ -568,6 +620,34 @@ describe('template path text output', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain(`Copied template to ${scratch}/page.tsx`);
       expect(result.stdout).not.toContain('is inside the project');
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'prints the run-from-its-folder command with the CLI invocation after the change of folder',
+    async () => {
+      const root = fs.realpathSync(tmpDir);
+      const cwd = fs.realpathSync(fs.mkdtempSync(path.join(root, 'cli-')));
+      const elsewhere = path.join(root, 'elsewhere');
+      fs.mkdirSync(elsewhere);
+      const before = process.env.HOME;
+      process.env.HOME = path.join(root, 'home');
+      try {
+        const result = await runCli(
+          ['template', 'blank', path.join(elsewhere, 'dash.tsx')],
+          cwd,
+        );
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(
+          new RegExp(
+            `cd ${elsewhere.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} && \\S.* template blank \\./dash\\.tsx\\s+\\(write the page where you named it, from its folder\\)`,
+          ),
+        );
+        expect(result.stderr).not.toMatch(/&& astryx template/);
+      } finally {
+        process.env.HOME = before;
+      }
     },
     60_000,
   );
