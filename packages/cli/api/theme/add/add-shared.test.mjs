@@ -12,12 +12,12 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {gzipSync} from 'node:zlib';
 import {themeAdd} from './add.mjs';
 import {themeRemove} from '../remove/remove.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
-import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 const runs = vi.hoisted(
@@ -50,8 +50,10 @@ beforeEach(() => {
   runs.length = 0;
   failInstall = false;
   vi.unstubAllGlobals();
-  app = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-add-shared-app-'));
-  shared = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-add-shared-'));
+  // Outside the repository, so no package installed for the repository
+  // counts as installed for the app.
+  app = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-add-shared-app-'));
+  shared = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-add-shared-'));
   marker = path.join(shared, 'theme-code-ran');
   fs.mkdirSync(path.join(app, 'src'));
   fs.writeFileSync(
@@ -368,11 +370,12 @@ describe('theme add with a shared theme', () => {
   it('puts the old copy back when an update cannot be recorded', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean');
     const added = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
-    // A module with changes the CLI did not write stops the record.
-    fs.appendFileSync(path.join(app, added.data.modulePath), '// mine\n');
+    expect(added.data.default).toBe('ocean');
+    // An update whose built module no longer exports the theme cannot be
+    // recorded.
     fs.writeFileSync(
-      path.join(shared, 'ocean', 'ocean.css'),
-      '[data-astryx-theme="ocean"] {color: red}\n',
+      path.join(shared, 'ocean', 'ocean.js'),
+      'export const somethingElse = {};\n',
     );
     const before = tree(app);
     await expect(
@@ -383,7 +386,7 @@ describe('theme add with a shared theme', () => {
 
   it('reports the workspace lockfile an install in a workspace app rewrites', async () => {
     const ws = fs.mkdtempSync(
-      path.join(REPO_ROOT, '.astryx-theme-add-shared-ws-'),
+      path.join(os.tmpdir(), 'astryx-theme-add-shared-ws-'),
     );
     try {
       fs.writeFileSync(
