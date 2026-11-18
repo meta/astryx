@@ -66,7 +66,7 @@ core (`spec:AST-112/FR1`) and link in every app.
   or a bottom-sheet library beside these components without conflict
   (`spec:AST-140/FR9`).
 - **Modal host.** React Native's modal host refuses a second window from the
-  same screen; the modal host lifts that limit for drawn sheets. OQ5 asks
+  same screen; the modal host lifts that limit for drawn sheets. OQ4 asks
   whether the presentation host covers it.
 
 ## Who uses it
@@ -94,8 +94,8 @@ core (`spec:AST-112/FR1`) and link in every app.
   (`spec:AST-141`), outside this record.
 - The window status bar view and the keyboard dock that sheets use
   (`spec:AST-129`).
-- How an app chooses between the system surface and the drawn one per
-  component (OQ4).
+- Each component's `auto` default for `render`; the component's record owns
+  it.
 - Equivalent internal implementations remain valid when they satisfy this contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
@@ -115,6 +115,19 @@ core (`spec:AST-112/FR1`) and link in every app.
   `version()` with `null`. The probes are `isSystemMenuAvailable()`,
   `isSystemMenuPreviewAvailable()`, `isPresentationHostAvailable()`, and
   `nativePresentationHost.supports(kind)`.
+  - `render` (`'auto' | 'system' | 'drawn'`) says who draws the element's
+    pixels. The system menu, the action sheet, and the chrome of a sheet the
+    presentation host presents are `system`: the platform draws them. The
+    library's drawn menus and sheets, a drawn sheet in the modal host included,
+    are `drawn`: Astryx draws them in React. `auto` is each component's own
+    default, per platform where it differs, and the theme's `render.default`
+    (`spec:AST-112`, under `spec:AST-082/FR10`) overrides every `auto`. Where
+    the host is absent, the component draws (FR14).
+  - A drawn menu or sheet on a native glass or material view is still
+    `drawn`; its look is its `surface` (`spec:AST-123`).
+  - FR1 gap: the code spells the axis two ways: the navigators take
+    `render: 'system' | 'drawn'`, and the components take `presentation`
+    with a `'native'` value (such as `'popover' | 'bottom-sheet' | 'native'`).
 - **FR2 — The system menu takes a menu description.** The host's component
   wraps a trigger view and takes `menu`, `trigger`, `isDisabled`, `onSelect`,
   `onOpenChange`, `onUnavailable`, `preview`, `previewColorScheme`, and a
@@ -342,7 +355,7 @@ resolves `{index, reason, message}`; `show` is its positional form.
 - FR5 gap: the presentation host presents no popover; `Popover` draws its
   anchored surface, and an iPad gets no UIPopoverPresentationController.
 - `spec:AST-082/FR11` gap: on Android, menus, sheets, and dialogs are drawn
-  by the library, not presented by the platform (OQ6).
+  by the library, not presented by the platform (OQ5).
 - Supported feature/engine floor: `spec:AST-112` (iOS at React Native's
   minimum, Android API level 24, the New Architecture only).
 - Unsupported behavior: a host whose native piece is absent reports itself
@@ -362,24 +375,24 @@ resolves `{index, reason, message}`; `show` is its positional form.
 
 ## Verification
 
-| Contract | Verification                                                                                | Representative states                                                                                        | Mutation or failure expectation                                                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests of each host's probes through the `./testing` doubles                            | absent, older, and current view and module shapes; `nativeHosts` with a host off                             | A probe answers true without the native piece, or a turned-off host still presents                                                                  |
-| FR2      | Unit tests of the description and its native form                                           | every row type; an unmapped icon; a glyph; a theme's symbol icon and image icon                              | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different images                                    |
-| FR3      | Simulator checks of both triggers; unit tests of the unavailable reasons                    | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card | The trigger also opens the drawn menu, or `present()` fails without `onUnavailable`                                                                 |
-| FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet              | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                 | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                                                |
-| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind          | each kind; a kind the host does not build; `animation` values; an undimmed sheet                             | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches                                             |
-| FR6      | Simulator detent checks; UI-thread frame checks of a drag                                   | `large`, `fit`, and point heights in ascending order; a selected detent; a covered and a retained sheet      | A detent height counts the bottom inset twice, a prop or event carries an index, a borrowed detent is reported, or a drag runs JavaScript per frame |
-| FR7      | Unit tests of the event mapping; Simulator checks                                           | a resisted swipe; a refused escape; a swipe dismissal; dismissal by `isPresented`                            | `onDismissed` fires twice or not at all, or the host unmounts before it                                                                             |
-| FR8      | Simulator checks of sibling, nested, and deep-linked stacks                                 | three sheets; a dialog over a sheet; a replaced flow closing                                                 | UIKit refuses a presentation, or the order differs from the request order                                                                           |
-| FR9      | Simulator checks and a hosted test of a live mode switch; emulator check of Android windows | a mode switch under a full-screen presentation; `statusBarHidden`; a navigation host's style in the content  | The container keeps the old mode, or the status bar ignores the presentation's props                                                                |
-| FR10     | Simulator keyboard checks in each sheet height; unit tests of the presented insets          | a fitted, a partial, and a full-height sheet with a field; a full-screen presentation                        | A field ends behind the keyboard, or the home indicator inset applies twice                                                                         |
-| FR11     | Simulator checks                                                                            | two sibling windows; a window closed under another; absent host                                              | UIKit refuses a sibling window, or a surviving window loses its content                                                                             |
-| FR12     | Simulator accessibility tree checks; device checks with VoiceOver                           | focus in and back; the escape; a sheet over a full-screen route; Reduce Motion                               | Focus stays behind, the escape is lost, or a sheet is missing from the tree                                                                         |
-| FR13     | UI-thread frame checks during drags and menu tracking                                       | a detent drag; a pull-down drag                                                                              | A JavaScript event per frame                                                                                                                        |
-| FR14     | Unit tests through the `./testing` doubles                                                  | each host absent                                                                                             | A throw, a rejection, or a silent no-op                                                                                                             |
-| FR15     | The platform's spec rules check                                                             | a changed contract                                                                                           | A changed contract without a named feature                                                                                                          |
-| FR16     | Source review of the native code against the public headers                                 | a React Native version that renames the modal host's state                                                   | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault                                       |
+| Contract | Verification                                                                                | Representative states                                                                                                                                            | Mutation or failure expectation                                                                                                                     |
+| -------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests of each host's probes through the `./testing` doubles                            | absent, older, and current view and module shapes; `nativeHosts` with a host off; `render` set to `system` and `drawn` and left `auto`; a theme `render.default` | A probe answers true without the native piece, a turned-off host still presents, or `system` shows a drawn surface while the host is available      |
+| FR2      | Unit tests of the description and its native form                                           | every row type; an unmapped icon; a glyph; a theme's symbol icon and image icon                                                                                  | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different images                                    |
+| FR3      | Simulator checks of both triggers; unit tests of the unavailable reasons                    | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card                                                     | The trigger also opens the drawn menu, or `present()` fails without `onUnavailable`                                                                 |
+| FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet              | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                                                                     | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                                                |
+| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind          | each kind; a kind the host does not build; `animation` values; an undimmed sheet                                                                                 | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches                                             |
+| FR6      | Simulator detent checks; UI-thread frame checks of a drag                                   | `large`, `fit`, and point heights in ascending order; a selected detent; a covered and a retained sheet                                                          | A detent height counts the bottom inset twice, a prop or event carries an index, a borrowed detent is reported, or a drag runs JavaScript per frame |
+| FR7      | Unit tests of the event mapping; Simulator checks                                           | a resisted swipe; a refused escape; a swipe dismissal; dismissal by `isPresented`                                                                                | `onDismissed` fires twice or not at all, or the host unmounts before it                                                                             |
+| FR8      | Simulator checks of sibling, nested, and deep-linked stacks                                 | three sheets; a dialog over a sheet; a replaced flow closing                                                                                                     | UIKit refuses a presentation, or the order differs from the request order                                                                           |
+| FR9      | Simulator checks and a hosted test of a live mode switch; emulator check of Android windows | a mode switch under a full-screen presentation; `statusBarHidden`; a navigation host's style in the content                                                      | The container keeps the old mode, or the status bar ignores the presentation's props                                                                |
+| FR10     | Simulator keyboard checks in each sheet height; unit tests of the presented insets          | a fitted, a partial, and a full-height sheet with a field; a full-screen presentation                                                                            | A field ends behind the keyboard, or the home indicator inset applies twice                                                                         |
+| FR11     | Simulator checks                                                                            | two sibling windows; a window closed under another; absent host                                                                                                  | UIKit refuses a sibling window, or a surviving window loses its content                                                                             |
+| FR12     | Simulator accessibility tree checks; device checks with VoiceOver                           | focus in and back; the escape; a sheet over a full-screen route; Reduce Motion                                                                                   | Focus stays behind, the escape is lost, or a sheet is missing from the tree                                                                         |
+| FR13     | UI-thread frame checks during drags and menu tracking                                       | a detent drag; a pull-down drag                                                                                                                                  | A JavaScript event per frame                                                                                                                        |
+| FR14     | Unit tests through the `./testing` doubles                                                  | each host absent                                                                                                                                                 | A throw, a rejection, or a silent no-op                                                                                                             |
+| FR15     | The platform's spec rules check                                                             | a changed contract                                                                                                                                               | A changed contract without a named feature                                                                                                          |
+| FR16     | Source review of the native code against the public headers                                 | a React Native version that renames the modal host's state                                                                                                       | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault                                       |
 
 ## Decision log
 
@@ -447,17 +460,12 @@ draft is lost to one.
 - **OQ3 — Does the iPad action sheet anchor at the control that asked?**
   (`human-api`) Options: add an anchor (the trigger's rect on its surface) to
   the request; or keep the bottom centre of the presenting view.
-- **OQ4 — How does an app choose the system or the drawn surface?**
-  (`human-api`) Components choose per call, and `nativeHosts` turns a host
-  off for the whole tree. Options: one axis with the same values on every
-  component that has a system form; or each component's own choice, as its
-  record defines.
-- **OQ5 — Do the modal host and the over-full-screen kind merge?**
+- **OQ4 — Do the modal host and the over-full-screen kind merge?**
   (`human-design`) Both present a window from the top of the stack: the modal
   host for drawn sheets, the presentation host for dialogs and full-screen
   routes. Options: keep both; or present drawn sheets through the
   presentation host's `overFullScreen` kind and retire the modal host.
-- **OQ6 — Does Android present menus, sheets, and dialogs through system
+- **OQ5 — Does Android present menus, sheets, and dialogs through system
   hosts?** (`human-design`) Android menus are drawn, and Android sheets and
   dialogs are a drawn panel in a React Native `Modal` window. Options: native
   hosts over Material Components (its menu, its bottom sheet, its dialog); or
