@@ -30,8 +30,8 @@ Expo configuration plugin and host hooks (FR11). The Astryx CLI's React Native
 commands create, check, and preview the app (FR13). The app gets Astryx's
 components, themes, and icons, and native capabilities (storage, files,
 camera, media, web content, documents, native controls) through one
-consistent API. The app itself holds no hand-written native code, builds in a
-generated native project, links the native half of Astryx's components by
+consistent API. An app on generated native projects holds no hand-written native code.
+The app links the native half of Astryx's components by
 default, and links each device feature only when it opts that feature in
 (FR3).
 
@@ -49,6 +49,8 @@ shared icon names under FR17.
   record owns where the React Native implementation lives and how its packages
   relate.
 - macOS and Windows as targets for apps built with these packages.
+- Adding Astryx React Native screens to an existing native iOS or Android app
+  (brownfield).
 - The design of each capability's methods beyond the shared rules in FR6 to
   FR9. Each capability documents its own methods, options, and reasons, and
   each group of the platform has its own record (FR7).
@@ -62,7 +64,8 @@ shared icon names under FR17.
 ## Requirements
 
 - **FR1 — One package, plus one for Expo.** The public set is:
-  - `@astryxdesign/react-native`: the one package every app installs. It holds
+  - `@astryxdesign/react-native`: the React Native platform package that
+    `spec:AST-082` DEC-7 names, and the one package every app installs. It holds
     two layers, the per-capability host declarations (FR4), and the React
     Native commands it contributes to the Astryx CLI (FR13). It carries no Expo
     code apart from its deprecated plugin entry (DEP-0032):
@@ -85,9 +88,9 @@ shared icon names under FR17.
       scanning, and code decoding from still images), `media` (audio and
       video playback), `microphone` (audio recording), `pdf` (document view),
       `photos` (the photo library), and `web` (web view and sign-in session).
-  - `@astryxdesign/react-native-expo`: the Expo configuration plugin and the
-    Expo host hooks, the native pieces that join the platform to an Expo
-    app's lifecycle (FR11). Its peer dependencies are
+  - `@astryxdesign/react-native-expo`: an optional wrapper for Expo apps. It
+    holds the Expo configuration plugin and the Expo host hooks, the native
+    pieces that join the platform to an Expo app's lifecycle (FR11). Its peer dependencies are
     `@astryxdesign/react-native` at the same version and `expo`. It holds no
     component and no platform API.
   - Preview is not a package of this set and not a capability an app opts
@@ -139,6 +142,8 @@ shared icon names under FR17.
     as a dependency of the set; it drives the platform's navigation hosts and
     depends on no package that ships native navigation code,
     react-native-screens and react-native-safe-area-context included.
+  - Components animate with React Native's core `Animated`. The package
+    takes no Reanimated dependency; an app may use Reanimated beside it.
   - `@astryxdesign/react-native` imports nothing from Expo or from
     `@astryxdesign/react-native-expo`, and declares neither as a dependency.
     The one exception is its deprecated `./app.plugin.js` (DEP-0032), which
@@ -185,9 +190,11 @@ shared icon names under FR17.
   - An app on generated projects holds no hand-written native code. Its iOS
     and Android projects are generated from the app's configuration: by `astryx shell` (FR13), or by
     Expo's prebuild through `@astryxdesign/react-native-expo`'s configuration
-    plugin (FR11). Both write the same host declarations, from data
-    `@astryxdesign/react-native` provides per capability (`./declarations/*`,
-    FR5). They always write the core's host declarations (on Android, the
+    plugin (FR11). Generated projects are a supported path, and the Expo
+    wrapper is optional. Both write the same host declarations, from
+    build-system-neutral data that `@astryxdesign/react-native` provides per
+    capability (`./declarations/*`, FR5) and that `astryx apply` also writes
+    into an app's own projects. They always write the core's host declarations (on Android, the
     network-state permission), and from the app's list of capabilities they
     write the opt-in (FR3) and the host declarations each listed capability
     needs (permissions, usage descriptions, manifest entries, background
@@ -431,12 +438,12 @@ shared icon names under FR17.
     | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
     | `astryx create <path>`                 | Writes a new app into an empty folder from an app template (`--template <name>`, default `starter`; `--list` lists the templates). With `--install-deps` it also installs the dependencies; otherwise it prints the install command for the app's package manager. `astryx run` generates the native projects when they are missing.                                                                                                                                                                                                                                                                         |
     | `astryx shell`                         | Writes the app's generated `ios/` and `android/` projects from `astryx.shell` in its `package.json`. `--check` compares instead of writing, `--ensure` writes a platform that has no generated files and checks the others, `--entry-only` writes only the generated entry files and touches no native folder, and `--profile <name>` applies a profile of the configuration. `astryx shell save-lock` keeps the iOS pod lock for the next generation.                                                                                                                                                       |
-    | `astryx apply`                         | Writes the configuration plugin's declarations into the native projects of an app that keeps its own, with no `astryx.shell`. `--check` compares instead of writing.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+    | `astryx apply`                         | Writes the capability opt-in (FR3) and the host declarations (FR4) into the native projects of an app that keeps its own, with no `astryx.shell`. `--check` compares instead of writing.                                                                                                                                                                                                                                                                                                                                                                                                                     |
     | `astryx run ios`, `astryx run android` | Puts the app on a simulator, an emulator, or a device. The steps of its plan are: generate or check the native project, check the machine, build, start the dev server for a debug build, install, and launch. `--target <name\|id>` names the simulator, emulator, or connected device, by name or identifier (default: the booted one, else the newest). `--release` builds the release configuration, `--with-dev-server` and `--skip-dev-server` change the dev-server default (together they fail with `ERR_INVALID_OPTION`), `--skip-launch` stops after the install, and `--dry-run` prints the plan. |
     | `astryx preview`                       | Prints the link with which a Preview host opens the project from this computer's dev server, and whether a dev server answers. It never starts one; `--start` starts the dev server and keeps running. `--link-only` probes nothing, `--dev-server-url <url>` names a running dev server, and `--qr-png <file>` writes the link's QR code.                                                                                                                                                                                                                                                                   |
     | `astryx preview check`                 | Compares the project's requirements with what a Preview host provides.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
     | `astryx preview bundle`                | Writes a preview bundle per platform, with its manifest, for any HTTPS host. `--single-file` writes one file per platform, and `--encrypt --public-url <url>` writes it encrypted, with the key only in the link.                                                                                                                                                                                                                                                                                                                                                                                            |
-    | `astryx preview serve`                 | Serves the preview bundle (`--bundle <dir>`) read-only from this computer, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+    | `astryx preview serve`                 | Serves the preview bundle (`--bundle <dir>`) read-only from this computer on `--port <n>`, and writes it first when it is older than the project's sources.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
     | `astryx preview share`                 | Serves the encrypted preview bundle over the internet through a carrier and prints one link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
     | `astryx stage shot`                    | Takes one capture of the app in Astryx Stage.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
     | `astryx stage play <script>`           | Runs a scripted check in Astryx Stage and reports each step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -466,7 +473,8 @@ shared icon names under FR17.
     - the project: `--route <path>`, `--dev-server-url <url>`,
       `--engine <path>`, and `--out <path>`.
 
-    `--mode` and `--theme` mean what they mean on the CLI's theme commands.
+    `--mode light|dark` is the appearance the app renders in, and `--theme`
+    names the theme it renders with.
     `--content-size` is the device's text size setting, not a theme's
     `--text-size`. `--engine` runs a binary that no checksum covers, and
     `stage which` reports that source. No command passes arguments through to
@@ -478,8 +486,10 @@ shared icon names under FR17.
     instead of a fresh render: a capture of the live screen, its accessibility
     tree, or a script of steps (a tap, typed text, a key, a route or deep link,
     the orientation, the appearance, the app state, the network profile, or
-    the animation scale). `--window` and the render options fail together with
-    `ERR_INVALID_OPTION`; a script's steps change a running window's settings.
+    the animation scale). `--window` fails with `ERR_INVALID_OPTION` beside any render option other
+    than `--out`, which names where the result is written, and `--route`,
+    which the window opens first; a script's steps change a running window's
+    settings.
     A window answers only its own user on its own computer.
 
   - Each command is a thin layer over one function that the package's
@@ -624,14 +634,15 @@ shared icon names under FR17.
   apart, and its commands (FR13) release with it.
   `@astryxdesign/react-native-expo` releases on the same version, from the
   same tagged commit, under the rules below.
-  - The package versions on its own, outside the repository's fixed package
-    group (`spec:AST-017` FR46): the version in its `package.json` is its own
-    next planned release, not core's.
+  - While it is canary-only, the package versions on its own, outside the
+    repository's fixed package group (`spec:AST-017` FR46): the version in its
+    `package.json` is its own next planned release, not core's. It joins the
+    release group in a planned minor once a platform is supported
+    (`spec:AST-082/FR15`).
   - A release starts as release candidates, `<version>-rc.<n>`, each cut from
     a tagged commit. A fix after a release candidate ships as the next release
     candidate, and a fix after the release ships as a patch release.
-  - While it is canary-only, the package publishes only on the canary channel, under `spec:AST-082/FR15`: its release candidates and releases, and canaries that carry its own declared version with `-canary.<commit>`. It joins the stable channel in
-    a planned minor once a platform is supported.
+  - While it is canary-only, the package publishes only on the canary channel, under `spec:AST-082/FR15`: its release candidates and releases, and canaries that carry its own declared version with `-canary.<commit>`.
   - Before 1.0, a minor version may change the API. Each release has a
     changelog with migration steps for every rename and removal, and a
     release records the packed tarball with its hash.
@@ -641,11 +652,45 @@ shared icon names under FR17.
     source of truth during development; every change to native behavior is
     checked there and in Astryx Stage.
   - A passing build is not evidence of behavior. A claim about camera,
-    haptic feel, or performance needs a real device.
+    haptic feel, screen-reader behavior, or performance needs a real device.
   - The platform's tests cover each native module in its absent,
     older, and current shapes through `./testing`.
   - API blocks in each package's documentation are generated from source, and
     a check fails when they drift.
+
+- **FR16 — Web parity is the goal.** A React Native component implements a
+  Core component and its core contract (`spec:AST-082/FR3`). Where it falls
+  short of that contract, the gap is a line in that component's own record.
+  This record names no component.
+- **FR17 — Each piece has a place and evidence.**
+  - JavaScript lives in the library layer, and native code in the platform
+    layer: in the core when every app needs it, otherwise in an opt-in
+    capability (FR3).
+  - A piece enters with a ledger entry that names its source requirement, its
+    target, why it belongs in the package, and its done criteria. The group
+    records of FR7 are these entries.
+  - A piece is done when it derives from the shared contracts, passes the
+    conformance tests that every platform runs, and meets FR15's real-device
+    bar.
+- **FR18 — Astryx's gestures join each platform's arbitration.**
+  - The gesture module registers Astryx's recognizers with each platform's
+    arbitration: on iOS, recognizer relationships such as require-to-fail and
+    simultaneous recognition; on Android, touch interception.
+  - It exposes a handle per recognizer, so other recognizers, those of
+    react-native-gesture-handler included, can declare their relationship to
+    it.
+  - It runs natively, independent of the JavaScript runtime.
+  - Gesture behavior and feel follow `spec:AST-094`, `spec:AST-107`, and
+    `spec:AST-108`.
+  - Astryx owns its own recognizers, not every gesture in an app.
+- **FR19 — Accessibility follows the core contract on every native surface.**
+  - Every native host and control exposes its core contract's semantics under
+    VoiceOver and TalkBack: names, roles, states, focus order, and
+    announcements (`spec:AST-082/FR3`, `spec:AST-082/FR12`).
+  - Touch target size and the system text-size setting follow
+    `spec:AST-082/FR11`.
+  - Native transitions and gestures follow the reduced-motion preference.
+  - A screen-reader claim needs a real device (FR15).
 
 ### Platform support
 
@@ -659,6 +704,19 @@ shared icon names under FR17.
   supported (FR11).
 - Browser evidence: none. Native claims are proven on the Simulator, the
   emulator, devices, and Astryx Stage (FR15).
+
+### Platform asks
+
+Astryx asks React Native for the platform pieces below. No requirement of this
+record depends on an ask whose owner has not agreed to it.
+
+| Ask                                         | Owner             | Status        | What it unblocks                                                                 | Astryx's interim                                                  | Exit plan                                                                                                 |
+| ------------------------------------------- | ----------------- | ------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Native gesture arbitration across libraries | React Native core | not discussed | One arbitration that Astryx's recognizers and other libraries' recognizers share | The gesture module's per-recognizer handles (FR18)                | Astryx registers its recognizers through the platform's arbitration and keeps its handles as a thin layer |
+| Haptics                                     | React Native core | not discussed | Feedback moments without a module of Astryx's own                                | The core's haptics capability (FR1, FR9)                          | The capability calls the platform's haptics API; its public API stays                                     |
+| One source of safe-area insets              | React Native core | not discussed | Insets that every library reads the same way                                     | The core's safe-area insets (FR1)                                 | The core reads the platform's insets; its public API stays                                                |
+| Keyboard tracking                           | React Native core | not discussed | Layouts that follow the keyboard frame by frame on the UI thread                 | The keyboard pieces of the layout, text, and keyboard group (FR7) | The group reads the platform's keyboard frames; its public API stays                                      |
+| Push notifications and background work      | React Native core | not discussed | Apps that receive notifications and run work in the background with Astryx alone | None: an app uses a module of its own                             | Astryx adds a capability once the platform API exists                                                     |
 
 ## Current-state impact
 
@@ -687,10 +745,11 @@ shared icon names under FR17.
   and the Astryx Stage cache as write roots, and INV10 admits a file that
   `--out` or `--qr-png` names by an absolute path, as DEC-16 does for
   `experimental render --out`.
-- `@astryxdesign/react-native` and `@astryxdesign/react-native-expo` version
-  on their own, outside the fixed package group of `spec:AST-017` FR46, and
-  the repository's canary release gives them their own declared version
-  (FR14).
+- While canary-only, `@astryxdesign/react-native` and
+  `@astryxdesign/react-native-expo` version on their own, outside the fixed
+  package group of `spec:AST-017` FR46, and the repository's canary release
+  gives them their own declared version; they join the release group once a
+  platform is supported (FR14, `spec:AST-082/FR15`).
 - `spec:AST-017` FR21 extends the status of Core's `./internal/*` to the
   package's internal entries (FR5).
 - The group records `spec:AST-123` to `spec:AST-137` detail FR3's linking and
@@ -723,6 +782,10 @@ shared icon names under FR17.
 | FR13     | CLI contract tests of each React Native command, run as `astryx <command>` and as `astryx-react-native <command>`: JSON envelopes, exit codes, each code in FR13's table, Astryx Stage's checksum and signature refusal, the refusal in a run on another base; a source check for Astryx-owned environment variables; a dependency check of `@astryxdesign/cli` | each command; a long-running command stopped by SIGINT; `create` after a computer install; `create` inside a project that installs Core; a tampered binary; a web project; a project that installs Core and the package                                                                                                                                                                                                                                       | An exit code that depends on `--json` or is neither 0 nor 1, a question asked, output on standard output after a long-running command's result, a tampered binary runs, an Astryx-owned environment variable read, a React Native command in a web project reads as unknown, the two command names disagree on a result, or `@astryxdesign/cli` contains or depends on React Native command code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR14     | Canary and release-candidate dry run                                                                                                                                                                                                                                                                                                                            | a release of the package set                                                                                                                                                                                                                                                                                                                                                                                                                                  | A release without a changelog or the tarball's hash, a capability versioned apart, a package of the set on another version, or a release candidate or canary that carries a version other than the package's own                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR15     | Review of each native change's evidence; documentation drift check                                                                                                                                                                                                                                                                                              | a native behavior change; a renamed API                                                                                                                                                                                                                                                                                                                                                                                                                       | A native claim backed only by a build or by anything other than the Simulator, the emulator, a device, or Astryx Stage, or documentation that no longer matches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| FR16     | Review of each component's record against its core contract                                                                                                                                                                                                                                                                                                     | each React Native component                                                                                                                                                                                                                                                                                                                                                                                                                                   | A component that differs from its core contract with no gap line in its record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR17     | Review of the group records' ledger entries; the shared conformance tests on each platform                                                                                                                                                                                                                                                                      | a new piece; a piece called done                                                                                                                                                                                                                                                                                                                                                                                                                              | A piece with no ledger entry, or one called done without the conformance tests or the real-device evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR18     | Gesture tests on the Simulator, the emulator, and devices, beside a second gesture library                                                                                                                                                                                                                                                                      | an Astryx recognizer beside a react-native-gesture-handler recognizer; a busy JavaScript thread                                                                                                                                                                                                                                                                                                                                                               | A relationship that cannot be declared, an Astryx recognizer that does not follow a declared relationship, or a gesture that waits on JavaScript                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| FR19     | VoiceOver and TalkBack checks on devices; runs at the largest text size and with reduced motion                                                                                                                                                                                                                                                                 | each native host and control                                                                                                                                                                                                                                                                                                                                                                                                                                  | A missing name, role, state, or announcement, a wrong focus order, a target below the platform minimum, text that ignores the text-size setting, or motion that ignores reduced motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Decision log
 
@@ -756,7 +819,7 @@ Rejected: a separate platform package, or one package per capability, because
 the packages could be installed at different versions and each app would
 track several packages that only work together.
 
-### DEC-3 — Apps hold no native code
+### DEC-3 — Apps on generated projects hold no native code
 
 **Reference:** `spec:AST-112/DEC-3`
 **Decider:** imdreamrunner, 2026-11-09
@@ -826,9 +889,11 @@ keeps Astryx Stage matched to them. A missing or divergent path is a defect.
 
 The library and platform layers change together, so they ship in one package
 on one version of its own, released through release candidates. It stays on
-the canary channel until a platform is supported under `spec:AST-082/FR15`.
+the canary channel until a platform is supported under `spec:AST-082/FR15`,
+and then joins the release group.
 
-Rejected: core's version in the repository's fixed package group, because
+Rejected: core's version in the repository's fixed package group while the
+package is canary-only, because
 every core release would move the package without a change in it, and the
 package's pre-1.0 API changes would follow core's minor versions.
 
