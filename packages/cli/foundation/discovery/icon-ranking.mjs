@@ -29,7 +29,8 @@
  * `PaperClip` still finds a `paperclip` icon.
  *
  * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
- * icon carries every word. For the finder's own search answers only, when
+ * icon carries every word. For the finder's own search answers and
+ * search's icons block only, when
  * no reading answers a query of several words, each icon that carries one
  * or more of its words, as typed or split from an export name, is a word
  * match. An icon carries a word when the word, or its
@@ -428,8 +429,8 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * answers, the one without filler words on a tie. With `words`, a query
  * of several words that no reading answers is ranked by the words each
  * icon carries ({@link rankWords}), the words of both readings together:
- * the finder's own search answers ask for that, while callers that look for
- * a near spelling or a fitting definition do not.
+ * the finder's own search answers and search's icons block ask for that,
+ * while callers that look for a near spelling or a fitting definition do not.
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
  * @param {{words?: boolean}} [options]

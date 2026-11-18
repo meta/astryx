@@ -1059,7 +1059,7 @@ export default {
 // packages/cli/test/experimental-isolation.test.mjs --update` in a branch
 // runs them too.
 describe.skipIf(REGENERATING)(
-  'with an icon set installed and configured, search is unchanged',
+  "with an icon set installed and configured, search's results are unchanged",
   () => {
     const queries = [
       'delete',
