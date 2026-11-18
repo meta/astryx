@@ -22,6 +22,7 @@
 import {
   contrastRatio,
   hexToOklch,
+  luminance,
   maxOklchChroma,
   oklchClampedHex,
 } from './color.mjs';
@@ -604,38 +605,27 @@ export const STATUS_ROLES = {
  * accent's reads as the accent at a glance, as two button fills do.
  */
 const APART_FROM_ACCENT = 10;
-/** How far apart, in hue, a status role keeps from the accent. */
-const ROLE_APART = 30;
-/** How far a role's hue may turn to keep apart, so it stays its family. */
-const ROLE_TURN = 40;
 /**
  * The seeds of the status roles a look derives: each role's own hue and
- * lightness (the base theme's color for it) at the accent's strength,
- * turned away from the accent's hue when the two would sit within 30°
- * (at most 40°, so info stays a blue, danger a red). `base` holds each
- * role's base color by dial id (info, success, warning, danger).
+ * lightness (the base theme's color for it) at the accent's strength. A
+ * role keeps its hue whatever the accent: an error stays the base's red,
+ * info its blue. Only its strength follows the look; a role that would
+ * then read as the accent keeps the base theme's colors (deriveStatusColors).
+ * `base` holds each role's base color by dial id (info, success, warning,
+ * danger).
  * @param {Record<string, string>} base
  * @param {string | null | undefined} accent
  * @returns {Record<string, string>}
  */
 export function statusSeeds(base, accent) {
   const scale = strengthScale(accent);
-  const a = accent ? hexToOklch(accent) : null;
   /**
    * @type {Record<string, string>}
    */
   const out = {};
   for (const [id, color] of Object.entries(base)) {
     const {L, C, H} = hexToOklch(color);
-    let hue = H;
-    if (a && a.C >= GRAY_CHROMA) {
-      const gap = ((H - a.H + 540) % 360) - 180;
-      if (Math.abs(gap) < ROLE_APART) {
-        const away = Math.min(ROLE_TURN, ROLE_APART - Math.abs(gap));
-        hue = (H + (gap >= 0 ? away : -away) + 360) % 360;
-      }
-    }
-    out[id] = oklchClampedHex(L, C * scale, hue);
+    out[id] = oklchClampedHex(L, C * scale, H);
   }
   return out;
 }
@@ -788,7 +778,17 @@ export function deriveStatusColors({
       return at(m, s0);
     });
     const muted = each(m => {
-      const stop = near(STATUS_STOPS.muted[m === 'light' ? 0 : 1]);
+      let stop = near(STATUS_STOPS.muted[m === 'light' ? 0 : 1]);
+      // (A light tint is paler than its fill: where the fill already sits
+      // at the tint's stop or paler, a bright warning or one an accent made
+      // pale, the tint takes the next paler stop that is another color.)
+      if (m === 'light') {
+        const paler = sorted.filter(
+          s => s > fill[m].stop && at(m, s).color !== fill[m].color,
+        );
+        if (stop <= fill[m].stop || at(m, stop).color === fill[m].color)
+          stop = paler[0] ?? stop;
+      }
       const solid = at(m, stop);
       return m === 'dark'
         ? {

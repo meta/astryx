@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {lookCollapsed} from './_palette.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -49,28 +50,66 @@ const needsBases = test => {
  * A token's light half in a theme's built CSS.
  * @param {string} slug @param {string} token
  */
-const light = (slug, token) =>
-  new RegExp(`${token}: light-dark\\((#[0-9a-f]{6})`).exec(
-    fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8'),
+const light = (slug, token) => {
+  const css = fs.readFileSync(
+    path.join(cwd, 'themes', slug, `${slug}.css`),
+    'utf8',
+  );
+  // (One color for both modes, or a light-dark() pair's light half.)
+  return new RegExp(`${token}: (?:light-dark\\()?(#[0-9a-f]{6})`).exec(
+    css,
   )?.[1];
+};
+
+/**
+ * The OKLCH hue difference weighted by chroma, ΔH = 2·√(C1·C2)·sin(Δh/2):
+ * a hue angle means little on a pale tint (its 8-bit color moves the
+ * angle by degrees at chroma 0.026), so the difference is read as the
+ * distance the hue moves the color, one bar for every stop.
+ * @param {string} a @param {string} b
+ */
+const hueDifference = (a, b) => {
+  const [x, y] = [hexToOklch(a), hexToOklch(b)];
+  const dh = ((((x.H - y.H + 540) % 360) - 180) * Math.PI) / 180;
+  return 2 * Math.sqrt(x.C * y.C) * Math.abs(Math.sin(dh / 2));
+};
+/**
+ * The most a status color's hue may move: 1° at full chroma (C 0.17, a
+ * ΔH of 0.003) is within it; the 24° an accent once turned the warning
+ * (ΔH 0.054) is ten times over it.
+ */
+const HUE_BAR = 0.005;
 
 const T = 300_000;
 
 describe('status colors the look grows', () => {
-  it(
-    'keeps the warning tint apart from the warning fill in light mode',
-    async test => {
-      needsBases(test);
-      await themeEditNew('w', {cwd, like: 'neutral'});
-      await themeEditSet('w', 'accent', '#0052cc', {cwd});
-      const fill = light('w', '--color-warning');
-      const tint = light('w', '--color-warning-muted');
-      expect(fill).toBeTruthy();
-      expect(tint).toBeTruthy();
-      expect(tint).not.toBe(fill);
-    },
-    T,
-  );
+  for (const [slug, accent] of [
+    ['w', '#0052cc'],
+    // (An amber accent turns the warning fill pale: its tint is paler
+    // still.)
+    ['amber', '#fbbf24'],
+  ])
+    it(
+      `keeps the warning tint apart from the warning fill in light mode, with a ${accent} accent`,
+      async test => {
+        needsBases(test);
+        await themeEditNew(slug, {cwd, like: 'neutral'});
+        await themeEditSet(slug, 'accent', accent, {cwd});
+        const fill = light(slug, '--color-warning');
+        const tint = light(slug, '--color-warning-muted');
+        expect(fill).toBeTruthy();
+        expect(tint).toBeTruthy();
+        expect(tint).not.toBe(fill);
+        // (Both keep the warning's own hue, whatever the accent.)
+        await themeEditNew(`${slug}-plain`, {cwd, like: 'neutral'});
+        const own = String(light(`${slug}-plain`, '--color-warning'));
+        for (const c of [fill, tint])
+          expect(hueDifference(String(c), own), `${c} hue`).toBeLessThan(
+            HUE_BAR,
+          );
+      },
+      T,
+    );
 
   it(
     'names an exact status value the theme sets, apart from the look',

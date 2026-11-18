@@ -160,14 +160,14 @@ describe('derived look colors', () => {
     expect(r.tokens['--color-text-blue']).toBeDefined();
   });
 
-  it('turns a status role away from an accent of its hue, keeping its family', () => {
+  it('keeps each status role at its own hue, whatever the accent', () => {
     const base = {info: '#0074e2', danger: '#c9303a'};
     const near = statusSeeds(base, '#0052cc');
     const far = statusSeeds(base, '#7c3aed');
     const gap = (/** @type {string} */ a, /** @type {string} */ b) =>
       Math.abs(((hexToOklch(a).H - hexToOklch(b).H + 540) % 360) - 180);
-    expect(gap(near.info, '#0052cc')).toBeGreaterThanOrEqual(29);
-    expect(gap(near.info, base.info)).toBeLessThanOrEqual(40);
+    // An accent of the role's own hue moves it no more than one far from it.
+    expect(gap(near.info, base.info)).toBeLessThan(2);
     expect(gap(far.info, base.info)).toBeLessThan(2);
     expect(gap(near.danger, base.danger)).toBeLessThan(2);
   });
