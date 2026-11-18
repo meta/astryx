@@ -17,6 +17,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 
+export {homeRelativePath} from '../agent-docs/folder-scope.mjs';
+
 /**
  * Error thrown by path-safety guards. Carries a stable `code`
  * so callers (CLI handlers) can render a friendly message and
@@ -178,24 +180,6 @@ export function tempFolders() {
     if (!kept.has(forms[1])) kept.set(forms[1], forms[0]);
   }
   return [...kept.values()];
-}
-
-/**
- * The absolute path a home-relative path (`~`, or `~/` and a path in the home
- * folder) names, as a shell expands it; null for any other path. A caller
- * that does not expand `~` passes it as text, and a write would then make a
- * folder named `~` in the current folder.
- *
- * @param {string} value
- * @param {string} [home] the home folder
- * @returns {string | null}
- */
-export function homeRelativePath(value, home = os.homedir()) {
-  if (value === '~') return home;
-  if (value.startsWith('~/') || value.startsWith('~\\')) {
-    return path.join(home, value.slice(2));
-  }
-  return null;
 }
 
 /**
