@@ -17555,11 +17555,112 @@ export function draftAnswer(ctx, env, question) {
     // a shape change with no part named, is a part how cannot name; it is
     // never a whole-theme change.
     // (A status said before "text", "warning text darker", names that
-    // status's text color, never a part.)
-    const unknown =
+    // status's text color, never a part: only for its color, its tone and
+    // its contrast. Its size or weight, "warning text bigger", is a part's:
+    // no part draws only a status's text, so the one that draws a status
+    // message, a field's status line, is offered, never the whole theme.)
+    const statusText =
       !c.parts.length &&
-      !/\b(?:success|warning|info|danger|error)\s+text\b/.test(c.text) &&
-      unknownPart(c.text);
+      /\b(?:success|warning|info|danger|error)\s+text\b/.test(c.text);
+    if (
+      statusText &&
+      c.aspects.some(a => a === 'fontsize' || a === 'weight') &&
+      !c.aspects.some(a => a === 'text' || a === 'contrast')
+    ) {
+      // (The parts that show that status's text, read from the census:
+      // the status surfaces (a banner, a toast) and the parts that set a
+      // text size of their own in a status look (a field's status message,
+      // a badge), each in that look; never an input, whose status is its
+      // edge, nor an icon.)
+      const word = /\b(success|warning|info|danger|error)\s+text\b/.exec(
+        c.text,
+      )?.[1];
+      const looks = word === 'danger' ? ['error', 'danger'] : [String(word)];
+      const grouped = groupsOf(ctx);
+      const surfaces = new Set(grouped['status-surfaces'] ?? []);
+      const inputs = new Set(grouped.inputs ?? []);
+      /** @type {Array<{on: string, when: string}>} */
+      const shows = [];
+      for (const [part, entry] of Object.entries(C.MAP)) {
+        const rec = /** @type {any} */ (entry);
+        if (
+          inputs.has(part) ||
+          part === 'icon' ||
+          /-icon$/.test(part) ||
+          (rec.tags ?? []).every((/** @type {string} */ t) => t === 'svg') ||
+          (!surfaces.has(part) && !rec.own?.['font-size'])
+        )
+          continue;
+        for (const [axis, values] of Object.entries(
+          C.variantValues(part) ?? {},
+        )) {
+          const v = /** @type {string[]} */ (values).find(x =>
+            looks.includes(x),
+          );
+          if (v) {
+            shows.push({on: part, when: `${axis}:${v}`});
+            break;
+          }
+        }
+      }
+      shows.sort(
+        (a, b) => Number(surfaces.has(b.on)) - Number(surfaces.has(a.on)),
+      );
+      const size = c.aspects.includes('fontsize');
+      push({
+        text: `no part draws only a status's text, so the whole theme's text is left as it is${shows.length ? `; the parts that show ${word} text, each in its ${word} look: ${shows.map(x => x.on).join(', ')} (one line each)` : ''}`,
+        // (A part whose text is drawn by elements inside it, a banner's
+        // title and description, takes the token its text reads.)
+        options: shows.slice(0, 4).map(x => {
+          const prop = size ? 'font-size' : 'font-weight';
+          // (Its text parts' tokens: the ones inside it that set the
+          // property, never its own controls or icons.)
+          const rec = C.MAP[one(x.on)];
+          const textInside = rec?.own?.[prop]
+            ? []
+            : (rec?.contains ?? []).filter(
+                (/** @type {string} */ k) =>
+                  C.MAP[k]?.own?.[prop] &&
+                  !(grouped['button-like'] ?? []).includes(k) &&
+                  !/-icon$/.test(k),
+              );
+          const inner = [
+            ...new Set(
+              textInside.flatMap((/** @type {string} */ k) =>
+                Object.keys(C.MAP[k].own[prop].tokens ?? {}),
+              ),
+            ),
+          ].filter(t => t in TOKENS);
+          const held = [...heldTextTokens(one(x.on), prop), ...inner].filter(
+            t =>
+              size
+                ? /^--(?:text-[a-z0-9-]+-size|font-size-[a-z0-9-]+)$/.test(t)
+                : /^--text-[a-z0-9-]+-weight$/.test(t),
+          );
+          if (!held.length)
+            return [
+              size
+                ? set(prop, c.dir === 'less' ? 'smaller' : 'larger', x)
+                : set(prop, c.neg ? 'normal' : 'bold', x),
+            ];
+          // (Each token its text reads, from its own size.)
+          return held.map(tok => {
+            const now = lengthPx(String(resolvedValue(tok) || ''));
+            return size
+              ? set(
+                  tok,
+                  `${Math.round(((now ?? 14) * (c.dir === 'less' ? 0.875 : 1.15) * 1000) / 16) / 1000}rem`,
+                  x,
+                )
+              : set(tok, c.neg ? '400' : '700', x);
+          });
+        }),
+        offer: true,
+        lookup: shows.length ? `${HOW} ${shows[0].on}` : `${HOW} --list parts`,
+      });
+      continue;
+    }
+    const unknown = !statusText && !c.parts.length && unknownPart(c.text);
     if (unknown) {
       push({
         text: `no part is called "${unknown.word}"${unknown.parts.length ? `; the closest parts: ${unknown.parts.join(', ')}` : ''}. Name one of them, or list the parts`,
@@ -22636,7 +22737,9 @@ export function draftAnswer(ctx, env, question) {
             .filter(st => st != null);
           if (steps.length)
             return {
-              text: `the text size${where}: ${heldS.join(', ')} on ${on}, the size tokens its text reads, each from its own size`,
+              // (A typed size is named as typed, "14px", so the answer
+              // says what it read.)
+              text: `the text size${where}: ${heldS.join(', ')} on ${on}, the size tokens its text reads, ${px == null ? 'each from its own size' : `each set to ${px} (${steps[0]?.value})`}`,
               options: [/** @type {Step[]} */ (steps)],
               sequence: steps.length > 1,
             };

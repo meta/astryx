@@ -121,6 +121,43 @@ describe('sides', () => {
 });
 
 describe('plain looks', () => {
+  it("a status's text size or weight is never the whole theme's; its color is the status's", async () => {
+    for (const ask of [
+      'warning text bigger',
+      'danger text smaller',
+      'success text bold',
+    ]) {
+      const rs = await how('q0', ask);
+      // (Nothing is written for the whole theme's text.)
+      expect(
+        writes(rs.filter(r => !/no part draws only/.test(r.text))),
+        ask,
+      ).toEqual([]);
+      expect(
+        rs.some(r => /no part draws only a status's text/.test(r.text)),
+        ask,
+      ).toBe(true);
+    }
+    // (The parts that show the warning's text are offered, each in its
+    // warning look: the banner and a field's status message.)
+    const offered = (await how('q0', 'warning text bigger'))
+      .filter(r => /no part draws only/.test(r.text))
+      .flatMap(r => r.commands);
+    expect(
+      offered.some(l => /--on banner --when status:warning$/.test(l)),
+    ).toBe(true);
+    expect(
+      offered.some(l => /--on field-status --when type:warning$/.test(l)),
+    ).toBe(true);
+    expect(writes(await how('q0', 'warning text darker'))[0]).toMatch(
+      /^set q0 --color-text-warning /,
+    );
+  });
+  it('a typed text size on a part is named as typed, never "not used"', async () => {
+    const rs = await how('q0', 'menus 14px text');
+    expect(rs.some(r => /each set to 14px/.test(r.text))).toBe(true);
+    expect(rs.some(r => /^not used/.test(r.text))).toBe(false);
+  });
   it('a color on a part is its text; a part placed in a screen owns its list; alerts take their hue', async () => {
     for (const ask of ['white on the CTA', 'white on accent buttons']) {
       const w = writes(await how('q0', ask));
