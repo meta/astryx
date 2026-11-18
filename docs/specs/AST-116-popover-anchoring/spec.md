@@ -10,7 +10,8 @@ approved_by: nynexman4464
 approved_at: 2026-11-17
 phase: proposed
 owners: [nynexman4464]
-affects_architecture: [architecture:layer-runtime]
+affects_architecture:
+  [architecture:layer-runtime, architecture:component-import-boundaries]
 affects_families: [family:overlay-dismissal]
 affects_contributing: []
 affects_consumer_docs: [Popover, usePopover, Dialog, DropdownMenu]
@@ -260,6 +261,11 @@ Dialog and DropdownMenu.
   `usePopover`, the element given to `triggerRef` is the trigger and the
   anchor; when `anchor` is set, that element is the anchor instead, and the
   `triggerRef` element keeps only the trigger role.
+- **FR24 — The composition inputs load with `usePopover`.** `anchor`,
+  `onOutsidePress` and `anchorOutOfViewBehavior` have no import or loader of
+  their own. A page that renders a Popover or a menu and sets none of them
+  carries their first-load cost, within the exception
+  `architecture:component-import-boundaries` INV10 states for them (DEC-9).
 
 ### Platform support
 
@@ -308,6 +314,11 @@ Dialog and DropdownMenu.
   use the anchor's center. Its Purpose and positioning-mode prose and its
   browser-close note say "anchor" the same way. INV12's anchor-visibility
   observation drives FR7's hide once FR7 ships (FR7 gap).
+- `architecture:component-import-boundaries`: INV10 names `usePopover`'s
+  `anchor`, `onOutsidePress` and `anchorOutOfViewBehavior` as an exception to
+  its 0.3 KB allowance and states their costs, its INV10 verification row
+  fails a feature over its own allowance, and its DEC-5 gains an amendment
+  line (`spec:AST-116` DEC-9).
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a non-modal participant takes Escape only
   while focus is inside it, or on or inside its anchor or trigger (FR15). A platform close
@@ -361,6 +372,7 @@ the body.
 | FR19       | Menu-to-Dialog suite in jsdom and real Chromium                       | A menu row opens a Dialog; the Dialog closes; nested popovers                                                          | Focus on the body or on the removed row fails                                                                                                                |
 | FR20, FR21 | `focusReturn.test.ts` and a real-browser spec                         | Each candidate missing in turn: a tour opened by code, a remounted filter button, a removed opener, no candidate left  | A candidate skipped out of order, a hidden or closing candidate chosen, focus on the body, or no warning fails                                               |
 | FR22       | Existing Popover, Dialog, DropdownMenu and Popover-family suites      | Every released state except FR22's three named changes                                                                 | Any other changed expectation in an existing suite fails                                                                                                     |
+| FR24       | `pnpm size:pages` with a page of Popover, Button and Text             | The menu reference page and that page, with none of the three inputs set                                               | A first-load gzip delta over an input's INV10 cost fails review                                                                                              |
 | AR1        | Real-browser interaction spec                                         | Focus inside a surface whose anchor scrolls out, with a focusable anchor, a trigger only, neither                      | Focus left in a hidden surface, or moved back when it shows, fails                                                                                           |
 | AR2–AR4    | `Popover.test.tsx` accessibility suite                                | A trigger-less popover with a separate anchor; a fallback without a tab stop; a popover opened by code                 | An ARIA attribute on the anchor, a tab stop left behind, or an unannounced code-opened popover fails                                                         |
 
@@ -465,6 +477,26 @@ naming of `architecture:public-component-api` INV2.
 Rejected: the same inputs on Popover, which grows the component for few
 callers; and a `BasePopover` component, which would share `usePopover`'s job
 (`architecture:public-component-api` INV21).
+
+### DEC-9 — The composition inputs load with `usePopover`, over INV10's allowance
+
+**Reference:** `spec:AST-116/DEC-9`
+**Decider:** `nynexman4464`, `2026-11-18`
+
+`anchor`, `onOutsidePress` and `anchorOutOfViewBehavior` do their work as a
+popover opens: the anchor is bound and placed, the dismissal mode is chosen,
+and the layer's own anchor observation is read. Each costs a page that does
+not set it a few hundred bytes, more than the 0.3 KB that
+`architecture:component-import-boundaries` INV10 allows an unused optional
+feature. The cost is small beside what a caller gains from an option that is
+one line to set, so the inputs stay in `usePopover`, and INV10 names the
+exception and its costs.
+
+Rejected: each input behind its own import (that record's INV7), which makes
+every caller import and pass code for an option; and a loader of their own,
+which adds a second load beside the Popover surface's own (that record's
+INV1) for code that runs as the popover opens, and would leave focus in a
+hidden surface until it arrived (AR1).
 
 ## Open questions
 
