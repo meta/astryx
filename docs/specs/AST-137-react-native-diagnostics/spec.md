@@ -52,19 +52,22 @@ open-source library that ships native code of its own
 shape of `spec:AST-112/FR4` and away from what Preview and Astryx Stage can
 run.
 
-| Module                | What the ecosystem does well                                                                                                                                                                                                                | The gap Astryx fills                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxCrashReports`  | `@sentry/react-native`, Firebase Crashlytics, and Bugsnag catch native crashes and JavaScript errors, symbolicate them, group them, and upload them to a service; `react-native-exception-handler` catches native exceptions on the device. | Each one ships native code, so an app that adds one is no longer JavaScript-only. Each one also sends to its own service or leaves the destination to its own SDK. The gap is a reporter that keeps the system's and the process's own crash records on the device, coexists with any other reporter, and leaves the destination to the app. The alternative needs native code: the module stays. |
-| `AstryxDailyMetrics`  | `react-native-performance` measures marks and timings inside the running app; Firebase Performance and Sentry's performance monitoring measure sessions and upload them.                                                                    | None of them reads the system's own daily payload, which covers every launch and scroll of the day, measured by the system outside the app's code. Reading it needs native code on any route (MetricKit has no JavaScript surface), so the module stays.                                                                                                                                          |
-| `AstryxFrameRecorder` | Detox, Maestro, and Appium read element frames between steps; `react-native-performance` and the system's frame-rate tools report frame timing.                                                                                             | None of them reads a view's on-screen frame at every displayed frame of an animation, the system's own animations included. Reading presentation layers per frame needs native code. It is test tooling, not app API: it ships only in Debug builds and reaches tests through `./testing` (DEC-4, OQ2).                                                                                           |
+- `AstryxCrashReports`: crash SDKs report crashes well, and each one ships
+  native code and sends to its own service. The platform keeps the crash
+  records on the device and leaves the destination to the app (DEC-1, DEC-3).
+- `AstryxDailyMetrics`: the system's own daily measures have no JavaScript
+  surface, so reading them needs native code on any route (DEC-1).
+- `AstryxFrameRecorder`: test tools read element frames between steps, not at
+  every displayed frame of an animation, and per-frame reads need native
+  code. It is test tooling, not app API (DEC-4, OQ2).
 
 ## Who uses it
 
-| Native piece          | Kind                                                   | Astryx components that use it                                                                                                           | What a person sees                                                                                                          |
-| --------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxCrashReports`  | native module (Turbo Native Module)                    | No Astryx component; app API only (`.` entry: `AstryxCrashReports`) (OQ1)                                                               | Nothing by itself. On the launch after a crash, an app can show its own notice or offer to send a report the person allows. |
-| `AstryxDailyMetrics`  | native module (Turbo Native Module)                    | No Astryx component; app API only (`.` entry: `AstryxDailyMetrics`) (OQ1)                                                               | Nothing by itself. An app's diagnostics screen can show the last day's scroll hitches, peak memory, and launch time.        |
-| `AstryxFrameRecorder` | native module (Turbo Native Module), test-only (Debug) | No Astryx component; test API only: the library's behaviour contract cases (`./testing/behaviour`) through `./testing`'s `recordFrames` | Nothing: a person never meets it. A failed check names the frame where a bar or a view moved out of place.                  |
+| Native piece          | Kind                                                   | Astryx components that use it                                                                                   | What a person sees                                                                                                          |
+| --------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxCrashReports`  | native module (Turbo Native Module)                    | No Astryx component; app API only (`.` entry: `AstryxCrashReports`) (OQ1)                                       | Nothing by itself. On the launch after a crash, an app can show its own notice or offer to send a report the person allows. |
+| `AstryxDailyMetrics`  | native module (Turbo Native Module)                    | No Astryx component; app API only (`.` entry: `AstryxDailyMetrics`) (OQ1)                                       | Nothing by itself. An app's diagnostics screen can show the last day's scroll hitches, peak memory, and launch time.        |
+| `AstryxFrameRecorder` | native module (Turbo Native Module), test-only (Debug) | No Astryx component; test API only: the library's behaviour contract cases through `./testing`'s `recordFrames` | Nothing: a person never meets it. A failed check names the frame where a bar or a view moved out of place.                  |
 
 ## Non-goals
 
@@ -93,13 +96,15 @@ run.
 
 - **FR1 — The group is three native modules.** Each is read with
   `TurboModuleRegistry.get`, only by its own wrapper (`spec:AST-112/FR8`), and
-  its wrapper answers `no-module` where the module is absent.
+  its wrapper answers `no-module` where the module is absent, unless the
+  module's own requirement names another answer for that platform (FR6:
+  `os` for daily metrics on Android).
 
-  | Contract              | Kind                                                   | Methods                                                                  | Platforms               |
-  | --------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ | ----------------------- |
-  | `AstryxCrashReports`  | native module (Turbo Native Module)                    | `getConstants` (`version`, `isEnabled`), `list`, `clear`, `crashForTest` | iOS                     |
-  | `AstryxDailyMetrics`  | native module (Turbo Native Module)                    | `getConstants` (`version`), `getLatest`                                  | iOS                     |
-  | `AstryxFrameRecorder` | native module (Turbo Native Module), test-only (Debug) | `getConstants` (`version`, `isRecordingAvailable`), `start`, `stop`      | iOS; Astryx Stage (iOS) |
+  | Contract              | Kind                                                   | Methods                                                       | Platforms                    |
+  | --------------------- | ------------------------------------------------------ | ------------------------------------------------------------- | ---------------------------- |
+  | `AstryxCrashReports`  | native module (Turbo Native Module)                    | `getConstants` (`isEnabled`), `list`, `clear`, `crashForTest` | iOS; Astryx Stage            |
+  | `AstryxDailyMetrics`  | native module (Turbo Native Module)                    | `getConstants`, `getLatest`                                   | iOS; Astryx Stage            |
+  | `AstryxFrameRecorder` | native module (Turbo Native Module), test-only (Debug) | `getConstants` (`isRecordingAvailable`), `start`, `stop`      | iOS; Astryx Stage (iOS look) |
   - `AstryxCrashReports` and `AstryxDailyMetrics` are part of the platform's
     core (`spec:AST-112/FR1`), exported from the `.` entry (OQ1).
   - `AstryxFrameRecorder` is a test-only module. Only Debug builds contain
@@ -108,8 +113,8 @@ run.
     `isFrameRecorderAvailable`), never through `.` (DEC-4, OQ2).
 
 - **FR2 — Results never throw.**
-  - Synchronous members (`isAvailable()`, `version()`,
-    `AstryxCrashReports.isEnabled()`, `isFrameRecorderAvailable()`) read the
+  - Synchronous members (`isAvailable()`, `AstryxCrashReports.isEnabled()`,
+    , `isFrameRecorderAvailable()`) read the
     constants and never throw; they answer `false` or `null` where the module
     or the constant is absent.
   - Every asynchronous call resolves `AstryxResult` and never rejects
@@ -120,7 +125,7 @@ run.
     | --------------------- | --------------------------------------------------------------------------------------------------------------- |
     | `AstryxCrashReports`  | `not-declared` (the app, or for `crashForTest` the test build, did not opt in)                                  |
     | `AstryxDailyMetrics`  | `os` (the operating system delivers no daily measures: Android), `unavailable` (the kept record cannot be read) |
-    | `AstryxFrameRecorder` | `unavailable` (the binary cannot record), `busy`, `not-recording`, `timed-out`                                  |
+    | `AstryxFrameRecorder` | `unavailable` (the binary cannot record), `busy`, `not-recording`                                               |
 
   - A domain outcome is a field of an `ok` result: `list` with no reports
     answers an empty list, and `latest` before any payload answers
@@ -168,6 +173,10 @@ run.
   - `clear(ids?)` removes the named reports, or every report when `ids` is
     absent or empty, and answers how many it removed. A cleared report never
     comes back: the module does not read a past system payload again.
+  - A crash the process records itself (`exception` or `signal`) can arrive
+    again on a later launch as a `metrickit` report. The two stay separate
+    reports; an app that needs one per crash matches them by `time` and
+    `signature`.
   - Reports are kept 14 days, by their `time`, and older ones are removed at
     launch. They live in the app's own container, excluded from the device
     backup. Only the app's own runtime reads or clears them (FR2).
@@ -241,12 +250,15 @@ run.
     system's own animations (a large title's collapse, a push) appear at each
     frame, not where they end.
   - It records once per displayed frame, at the display's full rate while it
-    runs, from the key window. A view that is missing is searched for again
-    only every few frames, so a missing `testID` does not walk the view tree
-    on every frame.
+    runs, from the key window. A requested `testID` that is not on screen
+    does not slow the frames it records.
   - One recording runs at a time (`busy`). A recording stops itself after 60
-    seconds and `stop` answers `timed-out` with what it saw, so a test that
-    never stops cannot keep a display link alive until the next reload.
+    seconds, so a test that never stops cannot keep recording until the next
+    reload. `stop` then answers `ok` with the samples it took and
+    `isTimedOut: true`, and `recordFrames` throws an error that names the
+    step.
+  - FR7 gap: a recording that stopped itself answers `stop` with the reason
+    `timed-out`, not `ok` with `isTimedOut: true`.
   - `isFrameRecorderAvailable()` says whether this binary can record.
 
 - **FR8 — Nothing leaves the device unless the app sends it.**
@@ -270,8 +282,7 @@ run.
   - Installing the crash reporters and the metrics subscriber does no file
     walk on the launch path. Pruning old reports runs on a background queue.
   - `list`, `clear`, and `latest` do their file work off the main thread and
-    off the JavaScript thread; the daily record's reads and writes share one
-    serial queue.
+    off the JavaScript thread, and a read never sees a half-written record.
   - The frame recorder samples on the main thread, because the presentation
     layers live there, and only while it is armed.
   - A module torn down during a reload loses no report: reports and the daily
@@ -279,8 +290,9 @@ run.
 
 - **FR10 — Every contract is at revision 1; later behaviour is a named
   feature.**
-  - Every contract in the group reports revision 1 on every platform that has
-    it. A module added to a platform later starts there at revision 1.
+  - Every contract in the group is at revision 1 on every platform that has
+    it, and a module added to a platform later starts there at revision 1.
+    No contract carries a revision counter (`spec:AST-112/FR8`).
   - A behaviour added after revision 1 is a named feature,
     `<Contract>.<feature>`, that the binary lists in `AstryxPlatformInfo`'s
     `contractFeatures` constant (`spec:AST-130/FR18`). JavaScript checks it
@@ -319,11 +331,11 @@ run.
 
 ### Platform support
 
-| Contract              | iOS                                                                                                                                                   | Android                                                              | Astryx Stage                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `AstryxCrashReports`  | MetricKit crash diagnostics; a chained uncaught-exception handler; `sigaction` on an alternate stack; one JSON file per report in Application Support | No module: `isEnabled()` is false and calls answer `no-module` (OQ3) | Present, no reports, follows the opt-in (FR11)                   |
-| `AstryxDailyMetrics`  | One `MXMetricManager` subscriber per process; one kept record in Application Support                                                                  | No module: `latest()` answers `os`; the feature row reads false      | Present, `metrics: null`, as on the Simulator (FR11)             |
-| `AstryxFrameRecorder` | `CADisplayLink` on the main thread; presentation-layer frames in window points; Debug builds only                                                     | No module: `recordFrames` throws `unsupported-step` (OQ4)            | Frames from Astryx Stage's own frame model, iOS look only (FR11) |
+| Contract              | iOS                                                                                                                                                            | Android                                                              | Astryx Stage                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `AstryxCrashReports`  | MetricKit crash diagnostics; a chained uncaught-exception handler; `sigaction` on an alternate stack; reports in the app's container, out of the device backup | No module: `isEnabled()` is false and calls answer `no-module` (OQ3) | Present, no reports, follows the opt-in (FR11)                   |
+| `AstryxDailyMetrics`  | One `MXMetricManager` subscriber per process; one kept record in the app's container, out of the device backup                                                 | No module: `latest()` answers `os`; the feature row reads false      | Present, `metrics: null`, as on the Simulator (FR11)             |
+| `AstryxFrameRecorder` | `CADisplayLink` on the main thread; presentation-layer frames in window points; Debug builds only                                                              | No module: `recordFrames` throws `unsupported-step` (OQ4)            | Frames from Astryx Stage's own frame model, iOS look only (FR11) |
 
 - Supported feature/engine floor: the platform floor of `spec:AST-112` (iOS at
   React Native's minimum, Android API level 24, the New Architecture only).
@@ -352,21 +364,21 @@ run.
 
 ## Verification
 
-| Contract | Verification                                                                                                  | Representative states                                                                                     | Mutation or failure expectation                                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | The platform's spec rules check; the contracts list; a Release build's module table                           | each module's spec; a Debug and a Release iOS build                                                       | A module read with `getEnforcing` or outside its wrapper, a module missing from the contracts list, or a frame recorder in a Release binary       |
-| FR2      | Unit tests through the `./testing` doubles in absent, older, and current shapes; a Preview runtime            | each synchronous member; each call; a native throw; an undeclared opt-in; a Preview project               | A synchronous member throws, a call rejects or answers a reason outside its set, a Preview project reads a report, or `recordFrames` passes empty |
-| FR3      | Unit tests of the wrapper; XCTest of records, pruning, and ids; Simulator runs with and without the opt-in    | opted out; opted in with no crash; each source; a report 15 days old; `clear` with and without ids        | An opted-out app creates a file, a report is shortened, an old report survives launch, a cleared report returns, or an id leaves the folder       |
-| FR4      | Simulator runs with another reporter installed before and after the platform                                  | a prior exception handler; a prior signal action; a replaced handler; a stack overflow on the main thread | A prior handler is not called, the system report loses the original exception, an abort writes two reports, or `diagnostics` misses a replacement |
-| FR5      | `crashForTest` on a test build for each kind, then the next launch's `list`; the release check on a built app | each kind; no test trigger; a shipped build that declares the trigger                                     | A crash without both gates, no report on the next launch, or a shipped build with the trigger passing the release check                           |
-| FR6      | Unit tests of the wrapper; XCTest of the record and the median; a device after a day of use                   | no payload; two payloads out of order; a payload without one measure; Android; the Simulator              | An older day replaces a newer one, a missing measure reads as zero, Android answers anything but `os`, or another subscriber stops receiving      |
-| FR7      | Behaviour contract cases on the Simulator and in Astryx Stage; unit tests of `recordFrames`                   | a push; a large title's collapse; a missing `testID`; a second `start`; a step that never settles         | A sample at a resting position during an animation, a missing view searched every frame, two recordings at once, or a recording past 60 seconds   |
-| FR8      | Network and process-boundary check of the group's native code; privacy manifest check                         | each module; each required-reason API the group calls                                                     | Any request or inter-process send from the group, a scrubbed or shortened `detail`, or a required-reason API missing from the manifest            |
-| FR9      | Launch timing with many kept reports; thread assertions in the native tests                                   | 14 days of reports at launch; `list` during scrolling; a reload                                           | A file walk on the launch path, file work on the main or JavaScript thread, or a report lost across a reload                                      |
-| FR10     | The platform's spec rules check; unit tests with a binary that lacks a feature; an older Astryx Stage         | each contract's revision; an older Astryx Stage                                                           | A revision other than 1, a feature used without its check, or an older Astryx Stage that runs the project                                         |
-| FR11     | Astryx Stage contract suites against the Simulator results                                                    | each module; the iOS and Android looks; a Preview project                                                 | An Astryx Stage answer differs from the Simulator's and its documentation does not name it                                                        |
-| FR12     | Review of each native change for private API; binary symbol check of a core build                             | a core iOS build                                                                                          | A private API call or a private symbol lookup in the group's native code                                                                          |
-| FR13     | Accessibility inspection of a screen while a recording runs                                                   | a recorded screen with VoiceOver on                                                                       | The recording changes an element's label, value, or order                                                                                         |
+| Contract | Verification                                                                                                  | Representative states                                                                                     | Mutation or failure expectation                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | The platform's spec rules check; the contracts list; a Release build's module table                           | each module's spec; a Debug and a Release iOS build                                                       | A module read with `getEnforcing` or outside its wrapper, a module missing from the contracts list, or a frame recorder in a Release binary                                                           |
+| FR2      | Unit tests through the `./testing` doubles in absent, older, and current shapes; a Preview runtime            | each synchronous member; each call; a native throw; an undeclared opt-in; a Preview project               | A synchronous member throws, a call rejects or answers a reason outside its set, a Preview project reads a report, or `recordFrames` passes empty                                                     |
+| FR3      | Unit tests of the wrapper; XCTest of records, pruning, and ids; Simulator runs with and without the opt-in    | opted out; opted in with no crash; each source; a report 15 days old; `clear` with and without ids        | An opted-out app creates a file, a report is shortened, an old report survives launch, a cleared report returns, or an id leaves the folder                                                           |
+| FR4      | Simulator runs with another reporter installed before and after the platform                                  | a prior exception handler; a prior signal action; a replaced handler; a stack overflow on the main thread | A prior handler is not called, the system report loses the original exception, an abort writes two reports, or `diagnostics` misses a replacement                                                     |
+| FR5      | `crashForTest` on a test build for each kind, then the next launch's `list`; the release check on a built app | each kind; no test trigger; a shipped build that declares the trigger                                     | A crash without both gates, no report on the next launch, or a shipped build with the trigger passing the release check                                                                               |
+| FR6      | Unit tests of the wrapper; XCTest of the record and the median; a device after a day of use                   | no payload; two payloads out of order; a payload without one measure; Android; the Simulator              | An older day replaces a newer one, a missing measure reads as zero, Android answers anything but `os`, or another subscriber stops receiving                                                          |
+| FR7      | Behaviour contract cases on the Simulator and in Astryx Stage; unit tests of `recordFrames`                   | a push; a large title's collapse; a missing `testID`; a second `start`; a step that never settles         | A sample at a resting position during an animation, a missing `testID` that slows the recorded frames, two recordings at once, a recording past 60 seconds, or a self-stopped `stop` that is not `ok` |
+| FR8      | Network and process-boundary check of the group's native code; privacy manifest check                         | each module; each required-reason API the group calls                                                     | Any request or inter-process send from the group, a scrubbed or shortened `detail`, or a required-reason API missing from the manifest                                                                |
+| FR9      | Launch timing with many kept reports; thread assertions in the native tests                                   | 14 days of reports at launch; `list` during scrolling; a reload                                           | A file walk on the launch path, file work on the main or JavaScript thread, or a report lost across a reload                                                                                          |
+| FR10     | The platform's spec rules check; unit tests with a binary that lacks a feature; an older Astryx Stage         | each contract's revision; an older Astryx Stage                                                           | A revision other than 1, a feature used without its check, or an older Astryx Stage that runs the project                                                                                             |
+| FR11     | Astryx Stage contract suites against the Simulator results                                                    | each module; the iOS and Android looks; a Preview project                                                 | An Astryx Stage answer differs from the Simulator's and its documentation does not name it                                                                                                            |
+| FR12     | Review of each native change for private API; binary symbol check of a core build                             | a core iOS build                                                                                          | A private API call or a private symbol lookup in the group's native code                                                                                                                              |
+| FR13     | Accessibility inspection of a screen while a recording runs                                                   | a recorded screen with VoiceOver on                                                                       | The recording changes an element's label, value, or order                                                                                                                                             |
 
 ## Decision log
 
@@ -435,7 +447,8 @@ carry a per-frame reader of its view tree.
   only the library's behaviour contract cases. Options: a test-only module of
   the platform package reached through `./testing`, as FR1 states; or a
   separate test-tools package that an app's dependency set never contains,
-  which also decides whether `./testing/behaviour` stays a public entry.
+  which also decides whether the behaviour contract cases are a public
+  testing entry.
 - **OQ3 — Does Android keep crash reports on the device?** (`human-design`)
   Options: no module on Android, as the platform table states; or a module at
   revision 1 on Android from a chained default uncaught-exception handler and
