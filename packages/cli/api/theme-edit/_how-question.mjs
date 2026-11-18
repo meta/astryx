@@ -645,7 +645,7 @@ function sideColorsIn(text) {
   const written = colorsFound(lower)
     .filter(([at, v, typed]) => typed && lower.slice(at, at + v.length) === v)
     .sort((a, b) => a[0] - b[0]);
-  for (let i = 0; i < written.length; ) {
+  for (let i = 0; i < written.length;) {
     let j = i;
     while (
       j + 1 < written.length &&
@@ -10966,9 +10966,16 @@ export function draftAnswer(ctx, env, question) {
   // the sentence that says the table ("the top bar" a sentence later is
   // the app's).
   for (const c of clauses) {
-    const said = q.toLowerCase().split(/[.!?\n]+/).find(x => x.includes(c.text.trim().toLowerCase()));
-    if (/\bheaders?\b/.test(c.text) && /\b(tables?|rows?|zebra)\b/.test(said ?? c.text))
-      for (const p of c.parts) if (p.on === 'app-shell-header') p.on = 'table-header-cell';
+    const said = q
+      .toLowerCase()
+      .split(/[.!?\n]+/)
+      .find(x => x.includes(c.text.trim().toLowerCase()));
+    if (
+      /\bheaders?\b/.test(c.text) &&
+      /\b(tables?|rows?|zebra)\b/.test(said ?? c.text)
+    )
+      for (const p of c.parts)
+        if (p.on === 'app-shell-header') p.on = 'table-header-cell';
   }
   // A clause that is only a color ("brand blue, #0057ff") belongs to the
   // clause before it; a clause with any other word ("accent #fff") does not.
@@ -21377,7 +21384,11 @@ export function draftAnswer(ctx, env, question) {
         // of four is written.)
         {
           const named = on ? cornersNamed(c.text, on) : null;
-          const square = /\b(square[ds]?|sharp|squared off)\b/.test(c.text);
+          // (A corner ask said in the negative, "no rounding on the bottom
+          // corners", squares those corners: never rounder.)
+          const square =
+            /\b(square[ds]?|sharp|squared off)\b/.test(c.text) ||
+            Boolean(c.neg);
           const sidePx = square
             ? '0'
             : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ?? null);
@@ -21454,6 +21465,59 @@ export function draftAnswer(ctx, env, question) {
             // (A token that resolves to 0 rounds nothing: the round rung.)
             const tokRounds =
               tok != null && parseFloat(String(current(tok))) > 0;
+            // (Rounded over a radius of several corners, "4px 8px 0 0": only
+            // the corners the ask names change, each square one taking the
+            // part's own rounded corner, else the token, else the round rung;
+            // the corners it does not name stay as the theme has them, so it
+            // writes their longhands, never a radius of four.)
+            const ownCorners =
+              rounded &&
+              ownNow != null &&
+              splitTop(String(ownNow), '/').length === 1
+                ? splitTop(String(ownNow).trim(), ' ').map(x => x.trim())
+                : null;
+            if (
+              ownCorners &&
+              ownCorners.length >= 2 &&
+              ownCorners.length <= 4
+            ) {
+              const [a, b = a, cc = a, dd = b] = ownCorners;
+              /** @type {Record<string, string>} */
+              const nowAt = {
+                'start-start': a,
+                'start-end': b,
+                'end-end': cc,
+                'end-start': dd,
+              };
+              const isZero = (/** @type {string} */ x) => parseFloat(x) === 0;
+              const fill =
+                ALL.map(k => nowAt[k]).find(x => !isZero(x)) ??
+                (tokRounds
+                  ? `var(${tok})`
+                  : roundRung != null
+                    ? `${roundRung}px`
+                    : null);
+              const square0 = [
+                'start-start',
+                'start-end',
+                'end-start',
+                'end-end',
+              ].filter(k => named.corners.includes(k) && isZero(nowAt[k]));
+              if (fill != null)
+                return {
+                  text: square0.length
+                    ? `${sideWords(named.corners)} on ${on}: rounded (${fill}, the part's own rounded corner; now ${String(ownNow).trim()}), the other corners as they are`
+                    : `${sideWords(named.corners)} on ${on}: already rounded (now ${String(ownNow).trim()}), nothing to change`,
+                  options: square0.length
+                    ? [
+                        square0.map(k =>
+                          set(`border-${k}-radius`, fill, {...f, ...modeOf(c)}),
+                        ),
+                      ]
+                    : [],
+                  ...(square0.length > 1 ? {sequence: true} : {}),
+                };
+            }
             const each = rounded
               ? (nowOne ??
                 (roundNow
@@ -21474,7 +21538,7 @@ export function draftAnswer(ctx, env, question) {
                         named.corners.includes(k) ? each : '0',
                       ).join(' '),
                       {...f, ...modeOf(c)},
-                ),
+                    ),
                   ]
                 : [
                     ...(rounded
@@ -21500,7 +21564,7 @@ export function draftAnswer(ctx, env, question) {
                 text: `${sideWords(named.corners)} on ${on}: ${rounded ? (roundNow ? `rounded as now (${ownNow == null && tok ? `${tok}, ` : ''}${String(nowRadius).trim()})` : `rounded (${tokRounds ? tok : `the round corners, ${each}`})`) : sidePx === '0' ? 'square' : sidePx}, ${squareRest ? `${sideWords(others)} square` : 'the other corners as they are'}`,
                 options: [steps],
                 sequence: steps.length > 1,
-            };
+              };
           }
         }
         const tall = tallIn(c.text);
