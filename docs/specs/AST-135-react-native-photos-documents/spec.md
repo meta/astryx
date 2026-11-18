@@ -261,14 +261,11 @@ onProgress})` writes each asset, in the order given, to a file in the
 
 ## Current-state impact
 
-- This record details `spec:AST-112`: its FR3 (opt-in capabilities), FR4
-  (the host declarations written for `photos`), and FR7 (the probes and a
+- This record details `spec:AST-112`: its FR1 (`photos` among the core
+  package's opt-in capabilities), FR3 (`photos` stays opt-in), FR4 (the host
+  declarations written for `photos`), FR5 (the `./photos` entry), and FR7 (the probes and a
   view that never prompts); and `spec:AST-140`: its FR3 (the group's closed reasons)
   and FR5 (the revision-1 baseline and named features).
-- It amends `spec:AST-112` FR1, which places the photo library and its
-  thumbnails in the core with no opt-in, and FR5, whose opt-in entries are
-  `./camera`, `./media`, and `./web`: here the photo pieces are the core
-  package's opt-in `photos` capability, with the `./photos` entry.
 - It refines `spec:AST-112/FR7`'s explicit permissions for photo access:
   photo access is read and asked for through `AstryxPhotoLibrary`, whose
   states include `limited` (OQ1).
