@@ -255,14 +255,10 @@ define, so Astryx React Native itself stays the same with or without it.
     channel, its outcome codes have no frozen shape either; from the first
     stable release that ships a code, the code is append-only and keeps its
     meaning (`architecture:cli-surface` INV3).
-  - The `astryx experimental rn` level belongs to no package: each installed
-    package that contributes a group under it (this group, or Preview's in
-    `spec:AST-141` FR12) adds that group, and bare `astryx experimental rn`
-    lists the groups installed packages contribute. With no such package
-    installed, `astryx experimental rn` and its groups do not exist: the CLI
-    reserves no Stage name and answers as it does for any unknown command.
-    The `astryx experimental` group admits the level (`spec:AST-017` FR27,
-    `spec:AST-084` FR0).
+  - The group sits under the `astryx experimental rn` level, which
+    `spec:AST-112/FR13` defines: no package owns the level, and each installed
+    package adds its own group. Where `@astryxdesign/react-native-stage` is
+    not installed, this group does not exist.
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
     - the device: `--platform ios|android`, `--device <name>`,
@@ -370,11 +366,11 @@ define, so Astryx React Native itself stays the same with or without it.
 - `spec:AST-042` FR1 and FR2 extend to the command functions of
   `@astryxdesign/react-native-stage`, the experimental package that
   contributes the `astryx experimental rn stage` group (FR8).
-- `architecture:cli-surface` INV6, which places every command in the CLI's
-  own command folder, gains command groups that installed packages
-  contribute under `astryx experimental rn` (FR8), loaded by the mechanism `spec:AST-112` OQ5 settles for
-  package commands; the CLI carries no Stage command code and reserves no
-  Stage name, and `@astryxdesign/react-native` does not change.
+- The `astryx experimental rn` level, and how the CLI loads the groups
+  installed packages add under it, are `spec:AST-112/FR13`'s, with its own
+  `architecture:cli-surface` impact. This record adds only the stage group
+  (FR8); the CLI carries no Stage command code and reserves no Stage name,
+  and `@astryxdesign/react-native` does not change.
 - `architecture:cli-surface` INV2 and INV9 admit a command that keeps
   running, writes its one result, and closes standard output, for
   `stage open` (FR8).
