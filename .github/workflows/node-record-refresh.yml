@@ -86,7 +86,8 @@ jobs:
             exit 1
           fi
           while IFS=$'\t' read -r job name; do
-            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
+            # Vitest logs contain ANSI escapes. They go to a file, not a terminal.
+            gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/leg.log"
             sed "s/^/${name}\tlog\t/" "$RUNNER_TEMP/leg.log" >> "$RUNNER_TEMP/main-run.log"
           done < "$RUNNER_TEMP/node-legs.tsv"
           echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"

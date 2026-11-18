@@ -93,7 +93,7 @@ describe('the Node record refresh workflow', () => {
     expect(commands.some(line => line.includes('gh run view'))).toBe(false);
     expect(read.run).toContain('actions/runs/$run/jobs?filter=latest');
     expect(read.run).toContain(
-      'gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"',
+      'gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"',
     );
   });
 
