@@ -20,7 +20,8 @@
  * - selected-item and numbered-citation text on the accent tint, with the
  *   theme's own rules for those parts;
  * - status text on its pale status fill (a field status, a banner);
- * - category text (Token, Badge) on its own category fill;
+ * - category text (Token, Badge) on its own category fill, over the page, a
+ *   surface and a card;
  * - code text and the code block's language label on the code background
  *   and, for a code block that paints no background, on the page.
  *
@@ -374,13 +375,20 @@ function rows() {
           ...rule(theme, 'token'),
           ...rule(theme, 'token', `color:${color}`),
         });
-        push({
-          ...base,
-          where: `${color} token`,
-          role: `--color-text-${color}`,
-          text: at(token, `--color-text-${color}`),
-          layers: [at(token, `--color-background-${color}`), body],
-        });
+        // A token or badge sits on the page, a surface or a card; a
+        // translucent category fill reads differently on each.
+        for (const [ground, under] of [
+          ['', []],
+          [' on a surface', [at(page, '--color-background-surface')]],
+          [' on a card', [at(page, '--color-background-card')]],
+        ])
+          push({
+            ...base,
+            where: `${color} token${ground}`,
+            role: `--color-text-${color}`,
+            text: at(token, `--color-text-${color}`),
+            layers: [at(token, `--color-background-${color}`), ...under, body],
+          });
       }
       // Code text: every syntax colour that draws text (not a diff tint or
       // marker), on the code background and, for a code block that paints
