@@ -1,5 +1,19 @@
 # @xds/theme-stone
 
+# 0.7.17
+
+#### Fixes
+
+- Secondary text on muted and coloured cards steps to the nearest neutral stop that meets WCAG AA (4.5:1) on the card's fill, and on the accent tint of a selected row or a numbered citation inside it.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+
+---
+
 # 0.7.16
 
 #### Documentation

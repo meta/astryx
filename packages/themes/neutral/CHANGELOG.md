@@ -1,5 +1,20 @@
 # @xds/theme-neutral
 
+# 0.7.17
+
+#### Fixes
+
+- Secondary text on coloured cards reads in dark mode: those cards step it to the nearest neutral stop that meets WCAG AA (4.5:1) on their fill, and under a hover.
+- Skeleton placeholders show on the light page: `--color-skeleton` takes a darker neutral stop, so the placeholder reads at its pulse peak against the page and every surface.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+
+---
+
 # 0.7.16
 
 #### Documentation
