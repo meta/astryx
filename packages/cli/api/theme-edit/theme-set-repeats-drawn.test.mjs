@@ -137,6 +137,36 @@ describe('a part setting Core already draws', () => {
     });
   }, 240_000);
 
+  it('a look Core draws only when selected is no reason to skip', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'box-shadow', 'var(--shadow-low)', {
+        cwd,
+        on: 'segmented-control-item',
+      })
+    );
+    expect(JSON.stringify(r)).not.toContain(
+      'no change: segmented-control-item',
+    );
+    await themeEditUndo('t', {
+      cwd,
+      thing: 'box-shadow',
+      on: 'segmented-control-item',
+    });
+  }, 240_000);
+
+  it('a status fill kept at vibrancy names its variants', async () => {
+    if (unbuilt) return;
+    await themeEditSet('t', 'accent', '#0b5cff', {cwd});
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'vibrancy', '40', {cwd})
+    );
+    const where = /** @type {string[]} */ (r.data?.missedWhere ?? []);
+    expect(where).not.toContain('badge at rest');
+    await themeEditUndo('t', {cwd, thing: 'vibrancy'});
+    await themeEditUndo('t', {cwd, thing: 'accent'});
+  }, 240_000);
+
   it('the missed line names the variant a miss is in', async () => {
     if (unbuilt) return;
     const r = /** @type {any} */ (

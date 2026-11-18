@@ -647,7 +647,7 @@ function missedLine(d) {
   if (!missed) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists each miss with its line (show --json has every one)`,
+      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${named.length ? ` (${named.slice(0, 6).join(', ')}${named.length > 6 ? `, and ${named.length - 6} more` : ''})` : ''}: each still shows the base theme's own look there. Keep each one, or bring it in line with your changes: show lists the first misses with their lines, and show --json has every one`,
     }),
   ];
 }

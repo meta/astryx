@@ -6366,7 +6366,11 @@ async function changeOnce(
     );
     const rests = Object.entries(at)
       .filter(
-        ([k]) => everyState || !/[:\s]|state|open|pressed|checked/.test(k),
+        ([k]) =>
+          everyState ||
+          // (A look keyed on a state attribute, `selected=selected`, is a
+          // state, never the rest.)
+          !/[:\s]|state|open|pressed|checked|\b([\w-]+)=\1\b/.test(k),
       )
       .map(([, v]) => v);
     if (!rests.length) return null;
@@ -8741,10 +8745,10 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
   const out = [];
   if (opts.count)
     return ordered.map(x => {
-      // (The variant the miss is in, as its lines name it.)
-      const when = x.steps.find(
-        (/** @type {{when?: string}} */ st) => st.when,
-      )?.when;
+      // (The variant the miss is in: its own, or as its lines name it.)
+      const when =
+        x.when ??
+        x.steps.find((/** @type {{when?: string}} */ st) => st.when)?.when;
       return {
         part: x.part,
         ...(x.state ? {state: x.state} : {}),
