@@ -580,7 +580,11 @@ export function lookCollapsed(lines, statusWords = [], exact = []) {
   const statusLines = lines.filter(folded);
   const rest = lines.filter(c => !folded(c));
   lines = rest;
-  const look = lines.filter(c => isLookToken(tokenOf(c))).map(String);
+  // (A look token the theme sets to a value of its own is named, never
+  // counted: it did not move with the look.)
+  const counted = (/** @type {unknown} */ c) =>
+    isLookToken(tokenOf(c)) && !exact.includes(tokenOf(c));
+  const look = lines.filter(counted).map(String);
   const code = look.filter(c => isCodeToken(tokenOf(c))).length;
   const badges = look.filter(
     c => !tokenOf(c).startsWith('--color-data-') && !isCodeToken(tokenOf(c)),
@@ -588,7 +592,7 @@ export function lookCollapsed(lines, statusWords = [], exact = []) {
   const chart = look.length - badges.length - code;
   return {
     lines: [
-      ...lines.filter(c => !isLookToken(tokenOf(c))).map(String),
+      ...lines.filter(c => !counted(c)).map(String),
       ...(badges.length
         ? [
             `category colors (badges, tokens and card tints): ${badges.length} values moved with the look`,
