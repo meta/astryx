@@ -413,6 +413,17 @@ function isYarnClassic({dir}) {
 }
 
 /**
+ * Is the Yarn of the project holding `targetDir` the classic line (1.x)?
+ * The same reading as the dlx choice: the declared version, then the
+ * lockfile header, then a committed config, then the runner.
+ * @param {string} targetDir
+ * @returns {boolean}
+ */
+export function isYarnClassicAt(targetDir) {
+  return isYarnClassic(explainPackageManager(targetDir));
+}
+
+/**
  * The major version in a directory's `packageManager: "yarn@<version>"`.
  * @param {string} dir
  * @returns {number | null}
@@ -573,10 +584,17 @@ export function guessCliInvocation(targetDir) {
   // Who answered this run decides the stem, so every command one run prints
   // reaches the same release, whichever folder a line names.
   const choice = runChoice(process.cwd());
-  if (choice.copy === 'project' && !isCliOneOff() && cliBinResolves(targetDir)) {
+  if (
+    choice.copy === 'project' &&
+    !isCliOneOff() &&
+    cliBinResolves(targetDir)
+  ) {
     return `${getRunPrefix(targetDir)} ${CLI_BIN}`;
   }
-  if (!choice.inProject && (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))) {
+  if (
+    !choice.inProject &&
+    (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))
+  ) {
     return CLI_BIN;
   }
   return `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${cliVersion()}`;

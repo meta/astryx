@@ -29,7 +29,10 @@ import {
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
-import {resolveLocalModule} from '../../foundation/discovery/module-exports.mjs';
+import {
+  moduleExportsName,
+  resolveLocalModule,
+} from '../../foundation/discovery/module-exports.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
@@ -74,6 +77,7 @@ import {
   formatCliCommand,
   quoteCommandArgument,
   decidePackageManagerIn,
+  isYarnClassicAt,
 } from '../../foundation/env/package-manager.mjs';
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -1856,6 +1860,15 @@ export async function addSharedThemeToApp(source, options) {
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
+    if (
+      !moduleExportsName(path.join(stagedDir, `${name}.js`), theme.exportName)
+    ) {
+      throw new AstryxError(
+        `${source} holds the ${name} theme with a built ${name}.js that does not export ${theme.exportName}, which the app imports. Build it again where it was made (theme build), then share the folder with its built files.`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
     const root = path.join(projectDir, LOCAL_THEME_ROOT);
     const target = path.join(root, name);
     const previous = fs.existsSync(target) ? readSharedReceipt(target) : null;
@@ -2083,24 +2096,25 @@ function runPackageManager(projectDir, action, specs) {
       : pm === 'npm'
         ? ['npm', 'uninstall']
         : [pm, 'remove'];
-  const done = spawnSync(
-    verb[0],
-    [...verb.slice(1), ...specs, ...scriptsOff(pm, action, projectDir)],
-    {
-      cwd: projectDir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
-      timeout: PACKAGE_MANAGER_MS,
-    },
-  );
+  const flags = scriptsOff(pm, action, projectDir);
+  const done = spawnSync(verb[0], [...verb.slice(1), ...specs, ...flags], {
+    cwd: projectDir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+    timeout: PACKAGE_MANAGER_MS,
+  });
   const why =
     String(done.stderr || done.error?.message || '')
       .trim()
       .split('\n')
       .slice(-3)
       .join(' ') || `${verb[0]} exited with ${done.status}`;
-  return {ok: done.status === 0, command: [...verb, ...specs].join(' '), why};
+  return {
+    ok: done.status === 0,
+    command: [...verb, ...specs, ...flags].join(' '),
+    why,
+  };
 }
 
 /** How long one package manager run may take, in milliseconds. */
@@ -2120,31 +2134,9 @@ function scriptsOff(pm, action, projectDir) {
     return action === 'remove'
       ? ['--config.ignore-scripts=true']
       : ['--ignore-scripts'];
-  if (pm === 'yarn' && yarnBerry(projectDir)) return ['--mode=skip-build'];
+  if (pm === 'yarn' && !isYarnClassicAt(projectDir))
+    return ['--mode=skip-build'];
   return ['--ignore-scripts'];
-}
-
-/**
- * Whether the project's Yarn is 2 or later: a `packageManager` of
- * `yarn@2` and up, or a `.yarnrc.yml`, in the project or a folder above it
- * up to its workspace root.
- * @param {string} projectDir
- */
-function yarnBerry(projectDir) {
-  const top = findWorkspaceRoot(projectDir);
-  for (let dir = path.resolve(projectDir); ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, '.yarnrc.yml'))) return true;
-    try {
-      const declared = JSON.parse(
-        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
-      ).packageManager;
-      if (typeof declared === 'string' && /^yarn@/.test(declared))
-        return !/^yarn@1\./.test(declared);
-    } catch {
-      // No package.json here.
-    }
-    if (dir === top || path.dirname(dir) === dir) return false;
-  }
 }
 
 /** @param {string} dir */
@@ -2276,7 +2268,7 @@ function installSharedThemeNeeds(needs, projectDir) {
       installed: [],
       ...others,
       installError: `the app's lockfiles disagree on its package manager; install ${specs.join(' ')} with the one it uses`,
-      installRetryCommand: `npm install ${specs.join(' ')}`,
+      installRetryCommand: `npm install ${specs.join(' ')} --ignore-scripts`,
     };
   }
   const run = runPackageManager(projectDir, 'add', specs);

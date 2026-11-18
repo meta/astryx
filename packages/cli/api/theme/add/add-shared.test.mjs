@@ -367,12 +367,8 @@ describe('theme add with a shared theme', () => {
     expect(tree(app)).toEqual(before);
   });
 
-  it('puts the old copy back when an update cannot be recorded', async () => {
+  it('refuses a built module that does not export the theme, before copying', async () => {
     writeTheme(path.join(shared, 'ocean'), 'ocean');
-    const added = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
-    expect(added.data.default).toBe('ocean');
-    // An update whose built module no longer exports the theme cannot be
-    // recorded.
     fs.writeFileSync(
       path.join(shared, 'ocean', 'ocean.js'),
       'export const somethingElse = {};\n',
@@ -380,7 +376,31 @@ describe('theme add with a shared theme', () => {
     const before = tree(app);
     await expect(
       themeAdd(path.join(shared, 'ocean'), {cwd: app}),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/does not export oceanTheme/);
+    expect(tree(app)).toEqual(before);
+  });
+
+  it('puts the old copy back when an update cannot be recorded', async test => {
+    // (A folder it cannot write stops the record; root writes anyway.)
+    if (process.getuid?.() === 0) test.skip();
+    writeTheme(path.join(shared, 'ocean'), 'ocean');
+    const added = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    fs.writeFileSync(
+      path.join(shared, 'ocean', 'ocean.css'),
+      '[data-astryx-theme="ocean"] {color: red}\n',
+    );
+    const module = path.join(app, added.data.modulePath);
+    const before = tree(app);
+    fs.chmodSync(module, 0o444);
+    fs.chmodSync(path.dirname(module), 0o555);
+    try {
+      await expect(
+        themeAdd(path.join(shared, 'ocean'), {cwd: app}),
+      ).rejects.toThrow();
+    } finally {
+      fs.chmodSync(path.dirname(module), 0o755);
+      fs.chmodSync(module, 0o644);
+    }
     expect(tree(app)).toEqual(before);
   });
 
@@ -509,6 +529,38 @@ describe('theme add with a shared theme', () => {
     ]);
   });
 
+  it('reads a Yarn 1 app as Yarn 1 even with a .yarnrc.yml, and a Yarn 2+ app by its lockfile', async () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(app, 'package.json'), 'utf8'),
+    );
+    fs.rmSync(path.join(app, 'package-lock.json'));
+    writeTheme(path.join(shared, 'ocean'), 'ocean', {
+      imports: ['@astryxdesign/theme-neutral/built'],
+    });
+    fs.writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({...pkg, packageManager: 'yarn@1.22.22'}),
+    );
+    fs.writeFileSync(path.join(app, 'yarn.lock'), '# yarn lockfile v1\n');
+    fs.writeFileSync(
+      path.join(app, '.yarnrc.yml'),
+      'nodeLinker: node-modules\n',
+    );
+    await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(runs.at(-1)?.args.at(-1)).toBe('--ignore-scripts');
+    await themeRemove('ocean', {cwd: app});
+
+    fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify(pkg));
+    fs.rmSync(path.join(app, '.yarnrc.yml'));
+    fs.writeFileSync(
+      path.join(app, 'yarn.lock'),
+      '__metadata:\n  version: 8\n',
+    );
+    runs.length = 0;
+    await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(runs.at(-1)?.args.at(-1)).toBe('--mode=skip-build');
+  });
+
   it('installs nothing for a base the app has installed without declaring it', async () => {
     const base = path.join(
       app,
@@ -543,7 +595,7 @@ describe('theme add with a shared theme', () => {
       installed: [],
       installCommand: null,
       installError: 'npm error network unreachable',
-      installRetryCommand: `npm install @astryxdesign/theme-neutral@${CLI_VERSION}`,
+      installRetryCommand: `npm install @astryxdesign/theme-neutral@${CLI_VERSION} --ignore-scripts`,
     });
   });
 
