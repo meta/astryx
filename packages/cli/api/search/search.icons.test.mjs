@@ -43,8 +43,8 @@ const OTHER_QUERIES = [
 ];
 
 /**
- * The fixture set, with an icon tagged `icon`, a plus icon, and four more
- * icons that share the word `shape`.
+ * The fixture set, with an icon tagged `icon`, a plus icon, icons tagged
+ * `card` and `avatar`, and four more icons that share the word `shape`.
  */
 function shapesData() {
   const data = glyphsData();
@@ -54,6 +54,17 @@ function shapesData() {
     words: ['icon', 'picture'],
   });
   data.icons.push({id: 'plus', export: 'PlusIcon', words: ['add', 'new']});
+  // Icons the feature phrases would list without the rule.
+  data.icons.push({
+    id: 'credit-card',
+    export: 'CreditCardIcon',
+    words: ['card', 'payment'],
+  });
+  data.icons.push({
+    id: 'user',
+    export: 'UserIcon',
+    words: ['avatar', 'person'],
+  });
   for (const id of ['circle', 'square', 'triangle', 'star']) {
     data.icons.push({
       id,

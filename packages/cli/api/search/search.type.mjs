@@ -74,9 +74,10 @@
  *   is installed, the search has no `type`, the query asks for an icon (one
  *   word as typed is `icon` or `icons`, an installed set's name, or an icon
  *   export name such as `SearchIcon`, and is not a component or hook name;
- *   an icon word right after `with` names a feature of an answered component
- *   or template, as in `card with an icon`, and asks for none), and an icon
- *   answers it. It never changes `results` or `matchCount`.
+ *   an `icon` or `icons` right after `with`, with only `a`, `an` or `the`
+ *   between, that no `of` or `for` follows names a feature of an answered
+ *   component or template, as in `card with an icon`, and asks for none, while
+ *   `card with an icon of a star` still asks), and an icon answers it. It never changes `results` or `matchCount`.
  * @property {{partial?: {skipped: SearchDomain[], reason: string}}} [meta] -
  *   `partial`, when an open search could not get the Core that components,
  *   hooks, and templates are read from (such as outside a project, offline,
