@@ -44,20 +44,20 @@ and the library's paint rules that choose between them and a drawn fill.
 
 ## Why this exists
 
-| Piece                                         | What the ecosystem already does well                                                                                                                                                                             | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxMaterialView`                          | expo-blur and @react-native-community/blur draw iOS `UIVisualEffectView` blurs, the system materials included, with a tint and an intensity, and each offers an Android blur. Both are mature and simple to use. | Neither draws `UIGlassEffect`. Astryx needs one leaf that draws Liquid Glass on iOS 26 and later and the matching system material below it, follows or pins the theme's colour mode, and has a view probe, so the library picks its fallback before it renders (FR6). One dependency set (`spec:AST-112/FR2`) and Astryx Stage parity complete the case.                                                                                                                                                                      |
-| `AstryxGlassView`, `AstryxGlassContainerView` | expo-glass-effect and @callstack/liquid-glass wrap `UIGlassEffect` and `UIGlassContainerEffect` well: regular and clear glass, a tint, interactive glass, a container with spacing, and an availability check.   | The library's chrome needs more in one view: content inside the glass so a press on a child makes the glass respond, UIKit's materialize and dematerialize, a layout spring that morphs grouped glass when React Native moves it, a shape morph driven by a native-driver `Animated` value (FR3), touches that pass through outside the glass shape, the pre-26 blur with its hairline edge, a registered Android view so one tree runs on both platforms, and Astryx Stage parity. No extra dependency (`spec:AST-112/FR2`). |
-| `AstryxScrollEdgeView`                        | react-native-screens sets the scroll-edge effects of the scroll view under a system header that it presents.                                                                                                     | Astryx draws its own bars (`spec:AST-112/DEC-9`). A drawn bar gets the system's edge effect only when the bar registers as the edge's element container, so the effect follows the bar's own glass, labels, and controls. No router is needed to find the scroll view (DEC-4).                                                                                                                                                                                                                                                |
+| Piece                                         | What the ecosystem already does well                                                                                                                                                                             | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxMaterialView`                          | expo-blur and @react-native-community/blur draw iOS `UIVisualEffectView` blurs, the system materials included, with a tint and an intensity, and each offers an Android blur. Both are mature and simple to use. | Neither draws `UIGlassEffect`. Astryx needs one leaf that draws Liquid Glass on iOS 26 and later and the matching system material below it, follows or pins the theme's colour mode, and has a view probe, so the library picks its fallback before it renders (FR6). One dependency set (`spec:AST-112/FR2`) and Astryx Stage parity complete the case.                                                                                                                                                                               |
+| `AstryxGlassView`, `AstryxGlassContainerView` | expo-glass-effect and @callstack/liquid-glass wrap `UIGlassEffect` and `UIGlassContainerEffect` well: regular and clear glass, a tint, interactive glass, a container with spacing, and an availability check.   | The library's chrome needs more in one view: content inside the glass so a press on a child makes the glass respond, the system's fade-in and fade-out of the glass, a layout spring that morphs grouped glass when React Native moves it, a shape morph driven by a native-driver `Animated` value (FR3), touches that pass through outside the glass shape, the pre-26 blur with its hairline edge, a registered Android view so one tree runs on both platforms, and Astryx Stage parity. No extra dependency (`spec:AST-112/FR2`). |
+| `AstryxScrollEdgeView`                        | react-native-screens sets the scroll-edge effects of the scroll view under a system header that it presents.                                                                                                     | Astryx draws its own bars (`spec:AST-112/DEC-9`). A drawn bar gets the system's edge effect only when the bar registers as the edge's element container, so the effect takes the outline of what the bar contains. No router is needed to find the scroll view (DEC-4).                                                                                                                                                                                                                                                                |
 
 ## Who uses it
 
 | Native piece               | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | What a person sees                                                                                                                                 |
 | -------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AstryxGlassView`          | native component (Fabric Native Component) | Through the library's `GlassSurface`: `TabBar` (and `FloatingTabBar`, which renders a `TabBar`), `Header` (its floating variant included), `FloatingHeader`, `BarButton`, `BarButtonGroup`, `BottomAccessory`, `SearchBar`, `KeyboardAccessoryView`, `IconButton` with `surface="glass"`, `Button`'s glass surface, and `DropdownMenu`'s icon trigger. The router's stack and tab navigators draw `Header` and `TabBar`. Apps: `NativeGlassView` and `GlassSurface` from `.`                             | Glass bars, capsules, and round buttons that brighten and lift under a finger, appear and disappear with UIKit's motion, and spring to a new shape |
-| `AstryxGlassContainerView` | native component (Fabric Native Component) | Through the library's `GlassGroup`: `TabBar` (and `FloatingTabBar`), `FloatingHeader`, `BarButtonGroup`. Apps: `GlassContainerView`, `GlassGroup`, and `MaterialGroup` from `.`                                                                                                                                                                                                                                                                                                                          | A tab bar's pill and the circle beside it, or a header's button group, read as one piece of glass that merges where they meet                      |
+| `AstryxGlassContainerView` | native component (Fabric Native Component) | Through the library's `GlassGroup`: `TabBar` (and `FloatingTabBar`), `FloatingHeader`, `BarButtonGroup`. Apps: `GlassContainerView`, `GlassGroup`, and `MaterialGroup` from `.`                                                                                                                                                                                                                                                                                                                          | Adjacent bar items, such as a row of header buttons, look like one piece of glass that joins where they come close                                 |
 | `AstryxMaterialView`       | native component (Fabric Native Component) | Overlays through the library's overlay backdrop: `AlertDialog`, `Dialog`, `Popover` (and the surfaces drawn through it: `DropdownMenu`, `ContextMenu`, `Selector`'s picker, `TabList`'s menu, `HoverCard`, `TopNav`'s menus), `BottomSheet`, `InlineSheet`. Floating surfaces through `MaterialBackdrop`: `DockedBar`, `Toast`, and `ChatLayoutScrollButton` (in `ChatLayout`). Every `GlassSurface` where glass draws but the glass view is absent. Apps: `MaterialView` and `MaterialSurface` from `.` | A menu, sheet, or dialog in system glass on iOS 26 and later; a frosted docked bar or toast where the app asks for material                        |
-| `AstryxScrollEdgeView`     | native component (Fabric Native Component) | `Header` with `scrollEdge="soft"` or `"hard"` (the bar variants on iOS and the floating variant); the router's stack navigator through its drawn header and header search field. Apps: `NativeScrollEdgeView` from `.`                                                                                                                                                                                                                                                                                   | Rows that soften or fade under the header as they scroll beneath it, as under a system navigation bar                                              |
+| `AstryxScrollEdgeView`     | native component (Fabric Native Component) | `Header`; the router's stack navigator through its drawn header and header search field. Apps: `NativeScrollEdgeView` from `.`                                                                                                                                                                                                                                                                                                                                                                           | Rows that soften or fade under the header as they scroll beneath it, as under a system navigation bar                                              |
 
 ## Non-goals
 
@@ -75,158 +75,157 @@ and the library's paint rules that choose between them and a drawn fill.
 - The system bars that the `navigation` hosts present (`UINavigationBar`,
   `UITabBar`, and their glass). The navigation hosts' record owns them.
 - A simulated backdrop blur on Android (DEC-2).
-- Liquid Glass's system Clear and Tinted appearance setting. It has no public
-  read API, so drawn surfaces keep the app's variant and tint.
+- Following the system's Clear or Tinted Liquid Glass setting. iOS offers no
+  public way to read it; drawn surfaces use the variant and tint the app sets.
 - How Astryx Stage renders glass internally, beyond the parity of FR10.
 
 ## Requirements
 
-- **FR1 — A system material behind content.** `MaterialView` draws a system
-  material as a leaf behind a surface's content:
+- **FR1 — A system material behind content.** `MaterialView` paints a system
+  material behind whatever a surface draws over it:
   - Props: `variant` (`glass`, `glassClear`, or `blur`; default `glass`),
     `intensity` (`ultraThin`, `thin`, `regular`, `thick`, `chrome`; default
     `regular`), `colorScheme` (FR5), `tint`, `interactive` (default false),
-    `cornerRadius` (points, continuous corners, at most half the short side),
-    and every View prop. Every styling prop has a default, so
-    `<MaterialView style={…} />` is a complete call.
-  - On iOS 26 and later, `glass` and `glassClear` draw `UIGlassEffect` (regular
-    or clear style) with the tint and the interactive response. `blur`, and every
-    variant below iOS 26, draws the `UIBlurEffect` system material that
-    `intensity` names (ultra thin to chrome).
+    `cornerRadius` (points, continuous corners, capped at half the shorter side),
+    and the View props. A call that passes only a style draws the default glass.
+  - On iOS 26 and later, `glass` and `glassClear` paint `UIGlassEffect` in its
+    regular or clear style, with the tint and, when `interactive`, the touch
+    response. `blur` on any iOS, and every variant before iOS 26, paints the
+    `UIBlurEffect` system material named by `intensity`.
   - Probes: `isMaterialViewAvailable()` and `MaterialView.supports(variant)`.
-    Both answer true wherever the native view is registered, because every
-    variant draws there (below iOS 26 as a blur).
-  - The deprecated `appearance` prop and `supportsMaterialVariant` stay exported
-    under `spec:AST-112/FR5`; `colorScheme` and `MaterialView.supports` replace
-    them.
-- **FR2 — Glass with its content inside.** `NativeGlassView` is a glass surface
-  whose React children live inside the glass:
+    Both are true wherever the binary registers the view, since every variant
+    paints there (as a blur before iOS 26).
+  - `colorScheme` and `MaterialView.supports` replace the deprecated
+    `appearance` prop and `supportsMaterialVariant`, which stay exported under
+    `spec:AST-112/FR5`.
+- **FR2 — Glass that holds its content.** `NativeGlassView` is a glass surface
+  with its React children inside the glass:
   - Props: `variant` (`regular` or `clear`), `tint`, `interactive` (default
-    false), `cornerRadius` (points, or `'capsule'`: half the short side),
+    false), `cornerRadius` (points, or `'capsule'` for half the shorter side),
     `materialized` (default true), `animatesLayout`, `morphFrom`, `morphTo`,
-    `progress` (FR3), `intensity` (the material below iOS 26), `colorScheme`
-    (FR5), `ref`, and every View and accessibility prop.
-  - On iOS 26 and later the children mount inside a `UIGlassEffect` view, so an
-    interactive glass responds to a press on a Pressable inside it, and the press
-    still reaches the Pressable. Below iOS 26 the glass is the `intensity` system
-    material with a one-pixel hairline edge, behind the children.
-  - `materialized: false` removes the glass and keeps the children. A change on
-    screen animates the effect to or from nothing (UIKit's materialize and
-    dematerialize); a tint change on shown glass cross-fades the same way.
-  - Touches: a touch on a child reaches the child wherever the child is. Where no
-    child is, under `pointerEvents` `auto` the glass is the target inside its
-    shown shape and the touch passes through outside it; under `box-none` the
-    touch always passes through; `none` and `box-only` act as on a View.
-  - Probes: `isNativeGlassViewAvailable()` answers whether the binary registers
-    the view; `isLiquidGlassAvailable()` answers true only on iOS 26 and later
-    with the view registered.
-- **FR3 — Glass motion runs on the UI thread.** No glass motion runs JavaScript
-  per frame:
-  - `animatesLayout`: when a React Native commit moves or resizes the glass on
-    screen (its own frame or an ancestor's), the glass springs from where it was
-    to its new shape, and the children take their new place at once. Positions
-    compare in the nearest glass container's space, else the nearest scroll
-    view's, else the window's, so scrolling is not a move. The first layout and a
-    commit that changes only the morph do not spring.
-  - `morphFrom` and `morphTo` (rects with a corner radius, in the view's own
-    points) with `progress` from 0 to 1: the glass takes the interpolated shape
-    inside the view. `progress` accepts a native-driver `Animated` value through
-    `Animated.createAnimatedComponent(NativeGlassView)`; a later React commit
-    does not put back the JavaScript value while the native driver owns it.
-  - Reduce Motion: no spring; the glass takes its new shape at once.
-- **FR4 — Glass groups merge.** `GlassContainerView` (prop `spacing`, points,
-  default 0) groups the glass inside it: on iOS 26 and later its children mount
-  inside a `UIGlassContainerEffect` view, so glass shapes within `spacing` of
-  each other draw as one material that merges and morphs, as SwiftUI's
-  `GlassEffectContainer` does. Below iOS 26 it is a plain container. It draws
-  nothing of its own, and a touch that hits no child passes through it, so a
-  container wider than its glass never blocks the content under it. Probe:
-  `isGlassContainerViewAvailable()`.
-- **FR5 — Surfaces follow the theme's colour mode.** Each view's `colorScheme`
-  is `light`, `dark`, or `system`. `light` and `dark` pin the material's
-  appearance; `system` lets it follow the OS. The default is the scheme of the
-  nearest `PlatformAppearanceProvider`, else `system`. The library's chrome pins
-  the glass to the Astryx theme's mode, so a dark theme over a light OS draws
-  dark glass. The pre-26 hairline follows the resolved mode. Chrome glass carries
-  the chrome tint (the theme's surface colour at 0.6 alpha) unless a component
-  gives its own tint.
-- **FR6 — The library chooses one paint per surface.** Before it renders, each
-  surface resolves one paint from the system settings, the app's preference, and
-  the view probes:
+    `progress` (FR3), `intensity` (the material before iOS 26), `colorScheme`
+    (FR5), `ref`, and the View and accessibility props.
+  - On iOS 26 and later the children sit in the content of a `UIGlassEffect`
+    view. A press on a Pressable inside interactive glass reaches the Pressable
+    and also lights the glass. Before iOS 26 the surface is the `intensity`
+    system material, outlined by a one-pixel line, under the children.
+  - `materialized: false` hides the glass and leaves the children in place.
+    While the view is on screen, the glass fades in or out with the system's
+    animation, and a new tint blends from the old one.
+  - Touches: a child receives a touch on itself, inside or outside the glass
+    shape. On empty glass, `pointerEvents="auto"` makes the visible glass shape
+    the touch target and lets touches outside that shape through;
+    `pointerEvents="box-none"` lets every such touch through; `none` and
+    `box-only` behave as on a View.
+  - Probes: `isNativeGlassViewAvailable()` tells whether the binary registers
+    the view, and `isLiquidGlassAvailable()` is true only where it does on iOS
+    26 or later.
+- **FR3 — Glass moves without JavaScript per frame.**
+  - With `animatesLayout`, a React Native commit that moves or resizes the glass
+    on screen, through its own frame or a parent's, makes the glass spring from
+    its old shape to the new one while the children jump to their new place. A
+    move is measured relative to the enclosing glass container, or else the
+    enclosing scroll view, or else the window, so a scroll alone never springs
+    the glass. Neither the first layout nor a morph-only change springs.
+  - `morphFrom` and `morphTo` are two rectangles with corner radii, in the
+    view's own coordinates; `progress` between 0 and 1 blends the glass shape
+    between them. A native-driver `Animated` value can drive `progress` (wrap
+    the view with `Animated.createAnimatedComponent`), and a React commit keeps
+    the driven value instead of restoring the JavaScript one.
+  - With Reduce Motion on, the glass takes each new shape without a spring.
+- **FR4 — Neighbouring glass merges.** `GlassContainerView` (prop `spacing`,
+  points, default 0) groups the glass placed inside it. On iOS 26 and later its
+  children sit in a `UIGlassContainerEffect` view, so two glass shapes closer
+  than `spacing` render as one blended piece of glass and blend apart again as
+  they separate. Before iOS 26 it only contains its children. It paints nothing
+  itself, and touches that hit none of its children go to whatever lies beneath
+  it. Probe: `isGlassContainerViewAvailable()`.
+- **FR5 — Surfaces use the app's colour mode.** Each view takes `colorScheme`:
+  `light` or `dark` fixes the material's appearance, and `system` tracks the OS.
+  Without the prop, the view uses the nearest `PlatformAppearanceProvider`'s
+  scheme, or `system` when there is none. The library's own chrome fixes its
+  glass to the Astryx theme's mode, so a dark Astryx theme on a light OS shows
+  dark glass. The pre-26 outline uses the resolved mode. Unless a component
+  passes a tint, chrome glass is tinted with the theme's surface colour at 0.6
+  alpha.
+- **FR6 — The library picks one paint per surface.** Each surface settles on a
+  paint before it renders, from the accessibility settings, the app's
+  preference, and the probes:
 
-  | Surface                                                   | Paints, in order                                                                                                                                                                                                                                                                                                                                  |
-  | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | Chrome (`GlassSurface`, `GlassGroup`)                     | `opaque` under Increase Contrast or Reduce Transparency, or when the caller passes `material="opaque"`; `translucent` where glass does not draw; `glass` (content inside `NativeGlassView`) where the glass view is available; else `native` (`MaterialView` behind the content). Chrome asks for material by default.                            |
-  | Floating surfaces (`MaterialSurface`, `MaterialBackdrop`) | The `surfaceMaterial` preference of `AstryxCapabilitiesProvider` (default `opaque`); `opaque` also under Reduce Transparency or Increase Contrast; `native` where `MaterialView` supports the variant; else `translucent`.                                                                                                                        |
-  | Overlays (menus, popovers, sheets, dialogs)               | `native` (system glass behind the content, transparent fill) only on iOS 26 and later with the platform on and `MaterialView` available; `opaque` everywhere else, under Reduce Transparency, when the app sets `surfaceMaterial="opaque"`, for a drawn menu at the accessibility text sizes, and for a non-modal sheet resting on bottom chrome. |
-  - `translucent` is the surface's own token fill at an alpha per intensity
-    (ultra thin 0.6, thin 0.72, regular 0.82, thick 0.9, chrome 0.94) with a
-    hairline edge. An overlay never paints a hand-made translucent fill.
-  - Grouping (`GlassGroup`, `MaterialGroup`) uses `GlassContainerView` under the
-    `glass` and `native` paints and a plain View otherwise.
-  - `isPlatformEnabled: false` on the app root sends every surface to its drawn
-    paint.
+  | Surface                                                   | Paint chosen                                                                                                                                                                                                                                                                                                                 |
+  | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Chrome (`GlassSurface`, `GlassGroup`)                     | `opaque` with Increase Contrast or Reduce Transparency on, or when the caller asks for it; otherwise `translucent` if glass cannot paint here; otherwise `glass` (children inside `NativeGlassView`) if that view exists, else `native` (`MaterialView` under the children). Chrome requests material unless told otherwise. |
+  | Floating surfaces (`MaterialSurface`, `MaterialBackdrop`) | The app's `surfaceMaterial` preference on `AstryxCapabilitiesProvider` (`opaque` when unset); `opaque` too with Reduce Transparency or Increase Contrast on; otherwise `native` if `MaterialView` supports the variant, else `translucent`.                                                                                  |
+  | Overlays (menus, popovers, sheets, dialogs)               | `native` (system glass under the content, clear fill) only on iOS 26 or later with the platform on and `MaterialView` present; otherwise `opaque`, which also applies with Reduce Transparency on and when the app sets `surfaceMaterial="opaque"`.                                                                          |
+  - `translucent` is the surface's token colour with its alpha scaled by the
+    intensity (0.6, 0.72, 0.82, 0.9, and 0.94 from `ultraThin` to `chrome`) and
+    a one-pixel outline. Overlays have no `translucent` paint.
+  - `GlassGroup` and `MaterialGroup` use `GlassContainerView` for the `glass`
+    and `native` paints and a plain View for the others.
+  - With `isPlatformEnabled: false` on the app root, every surface uses its
+    drawn paint.
 
-- **FR7 — The scroll-edge effect for a drawn bar.** `NativeScrollEdgeView` wraps
-  a bar the app draws over a scroll view's edge (a header, a tab bar, a toolbar):
+- **FR7 — System scroll-edge effects under a drawn bar.**
+  `NativeScrollEdgeView` wraps a bar that the app draws over the edge of a
+  scroll view:
   - Props: `edge` (`top` or `bottom`; default `top`), `effect` (`automatic`,
     `soft`, `hard`, or `hidden`; default `automatic`), `scrollViewNativeID`, and
-    layout, accessibility, and `ref` props. Its children render as usual.
-  - On iOS 26 and later it sets the scroll view's edge effect for `edge` to
-    `effect` (`UIScrollEdgeEffect`) and adds a
-    `UIScrollEdgeElementContainerInteraction` for that scroll view and edge, so
-    the effect covers the bar and follows its own elements as it does under a
-    system bar, whatever the bar holds. Below iOS 26 it is a plain container.
-  - The scroll view is the one whose `nativeID` equals `scrollViewNativeID`
-    (a ScrollView, FlatList, or SectionList takes it as a prop). Without one it
-    is the nearest scroll view beside the bar in the same screen. The view finds
-    it in the native hierarchy and needs no router; the same `nativeID` names a
-    page's scroll view for the navigation hosts too.
-  - The view writes its edge when it attaches (window entry or a new target) and
-    when `edge` or `effect` changes. On unmount, leaving the window, an edge
-    change, or a new target it removes the interaction and restores the effect
-    the scroll view had before, but only while the edge still holds the value
-    this view wrote. Another writer on the same edge, such as a system header,
-    wins when it writes later.
-  - Probes: `isNativeScrollEdgeViewAvailable()` and
-    `supportsScrollEdgeEffects()` (true only on iOS 26 and later with the view
-    registered). The library uses the view wherever it is registered on iOS 26
-    and later with the platform on, whether or not glass draws, so a solid bar
-    under Reduce Transparency keeps the system's edge.
-- **FR8 — Content never disappears with a surface.** Where a view is absent
-  (Android for the iOS-only views, an app built without the platform, Jest, a
-  binary without the view), each component renders its children in a plain View
-  with the same layout, accessibility, and `ref` props, a `cornerRadius` becomes
-  the View's border radius, and the probe answers false so the library paints
-  its fallback (`spec:AST-112/FR7`):
-  - Android: `AstryxGlassView` is registered as a plain view group around its
-    children, so a tree that renders `NativeGlassView` runs unchanged; every
-    glass prop is accepted and has no effect, and it hit-tests as its box.
-    `MaterialView.supports` answers false there, so chrome and floating surfaces
-    paint `translucent` and overlays paint `opaque`. `AstryxGlassContainerView`,
-    `AstryxMaterialView`, and `AstryxScrollEdgeView` are not registered.
-  - Without the scroll-edge view on iOS, `Header` draws its own band behind the
-    bar (the body colour for `hard`, the body colour at 0.82 alpha for `soft`)
-    that fades in over the first 12 points of scroll on the native driver. On
-    Android `Header` draws no scroll edge.
-  - Below iOS 26 the glass views draw the system blur material (FR1, FR2), and
-    the container and scroll-edge views are plain containers.
+    the layout, accessibility, and `ref` props. Its children render normally.
+  - On iOS 26 and later the view sets the edge effect of the scroll view's
+    `edge` to `effect` (`UIScrollEdgeEffect`) and registers itself as that
+    edge's element container (`UIScrollEdgeElementContainerInteraction`). The
+    effect then spans the whole bar and shapes itself around the bar's controls
+    and text, as it does for a system bar. Before iOS 26 the view only contains
+    its children.
+  - Target: the scroll view whose `nativeID` matches `scrollViewNativeID`
+    (ScrollView, FlatList, and SectionList accept a `nativeID`), or else the
+    closest scroll view next to the bar on the same screen. The view resolves it
+    from the native view tree, with or without a router, and the navigation
+    hosts resolve a page's scroll view from the same `nativeID`.
+  - The view applies its effect when it attaches to a scroll view and whenever
+    `edge` or `effect` changes. When it detaches (unmount, window exit, a new
+    edge, or a new target) it removes its registration and puts back the
+    scroll view's earlier effect, unless something else changed that edge after
+    it. A later write by another party, such as a system header, takes
+    precedence.
+  - Probes: `isNativeScrollEdgeViewAvailable()`, and
+    `supportsScrollEdgeEffects()`, true only where the view exists on iOS 26 or
+    later. The library applies the view wherever it exists on iOS 26 or later
+    with the platform on, independent of the glass paint, so a solid bar under
+    Reduce Transparency still gets the system edge.
+- **FR8 — A missing surface keeps its content.** When a view is not there
+  (the iOS-only views on Android, an app without the platform, Jest, a binary
+  that lacks the view), its component renders the children in a plain View
+  with the same layout, accessibility, and `ref` props, turns `cornerRadius`
+  into a border radius, and its probe returns false so the library falls back
+  (`spec:AST-112/FR7`):
+  - Android registers `AstryxGlassView` as an ordinary view group, so a tree
+    that uses `NativeGlassView` runs as is; the glass props are accepted and do
+    nothing, and touches hit its full box. `MaterialView.supports` is false on
+    Android, so chrome and floating surfaces use `translucent` and overlays use
+    `opaque`. Android registers none of the other three views.
+  - Where the scroll-edge view is missing, the library draws its own fallback
+    edge or none.
+  - Before iOS 26 the two glass views paint the system blur material (FR1,
+    FR2), and the container and scroll-edge views only contain their children.
 - **FR9 — Accessibility.**
-  - The surfaces are decoration. Each view forwards every accessibility prop and
-    its `ref` to the rendered view, native or plain, and adds no element of its
-    own; VoiceOver and TalkBack read the content inside. The scroll-edge view's
-    element proxy for UIKit is hidden from accessibility and takes no touches.
-  - Reduce Transparency and Increase Contrast: chrome and floating surfaces paint
-    `opaque`, the solid theme surface with an edge whose weight follows the
-    reason (FR6). Overlays paint `opaque` under Reduce Transparency and keep
-    glass under Increase Contrast with the hairline edge iOS draws around its
-    glass in that setting. The library reads both settings live from
-    `AstryxAccessibilitySettings` and repaints when they change.
-  - Show Borders gives an interactive drawn surface the outline the system draws
-    on glass under that setting.
-  - Reduce Motion stops the glass layout spring (FR3). At the accessibility text
-    sizes, drawn menus and the `Selector`'s picker keep an opaque fill, so large
-    text never reads through glass onto the content behind it.
+  - Surfaces are decorative. Each view passes every accessibility prop and its
+    `ref` to whichever view it renders, native or plain, and contributes no
+    accessibility element itself, so VoiceOver and TalkBack reach the content
+    inside. The scroll-edge view's helper element for UIKit is hidden from
+    assistive technologies and ignores touches.
+  - With Reduce Transparency or Increase Contrast on, chrome and floating
+    surfaces switch to `opaque`: the solid theme surface and an outline whose
+    weight depends on which setting caused it (FR6). Overlays switch to
+    `opaque` for Reduce Transparency; for Increase Contrast they keep glass and
+    add the outline iOS gives glass in that setting. The library reads both
+    settings from `AstryxAccessibilitySettings` and repaints when either
+    changes.
+  - With Show Borders on, an interactive drawn surface shows the outline iOS
+    draws on glass in that setting.
+  - Reduce Motion removes the layout spring (FR3). At accessibility text sizes,
+    drawn menus and the `Selector` picker use an opaque fill, so large text is
+    never shown through glass over other content.
 - **FR10 — The native contract.**
 
   | Contract                   | Kind                                       | Props                                                                                                                                                            | Commands | Events | Platforms    |
@@ -244,8 +243,8 @@ and the library's paint rules that choose between them and a drawn fill.
     that record unstable, and without it a commit puts back the JavaScript value.
   - On the wire, `colorScheme` is `unspecified` (follow the trait collection),
     `light`, or `dark`; on `AstryxMaterialView` it wins over `appearance`, which
-    carries the pinned mode. `shape: 'capsule'` or a negative radius is half the
-    short side.
+    carries the pinned mode. `shape: 'capsule'`, like any negative radius,
+    rounds to half the shorter side.
   - Every contract in the group is at revision 1. A behaviour added after
     revision 1 is a named feature (`<Contract>.<feature>`) that the binary lists
     and the JavaScript checks with `hasContractFeature` before it uses it.
@@ -263,12 +262,12 @@ and the library's paint rules that choose between them and a drawn fill.
 
 ### Platform support
 
-| Contract                   | iOS                                                                                                                                                                             | Android                                                                                               | Astryx Stage                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxGlassView`          | iOS 26 and later: `UIVisualEffectView` with `UIGlassEffect`, children in its content view, UIKit's materialize and spring. Earlier: `UIBlurEffect` system material and hairline | A plain view group around the children; glass props have no effect; the library paints the tonal fill | iOS profiles: simulated Liquid Glass with the iOS behaviour; pre-26 look: blur and hairline. Android profiles: plain view |
-| `AstryxGlassContainerView` | iOS 26 and later: `UIGlassContainerEffect`. Earlier: plain container                                                                                                            | Not registered; the library renders a plain View                                                      | Merges neighbouring glass into one outline within `spacing`                                                               |
-| `AstryxMaterialView`       | iOS 26 and later: `UIGlassEffect` for `glass` and `glassClear`. `blur` and earlier iOS: `UIBlurEffect` system materials                                                         | Not registered; the library paints the translucent token fill                                         | The same material per variant and OS look                                                                                 |
-| `AstryxScrollEdgeView`     | iOS 26 and later: `UIScrollEdgeEffect` style and `UIScrollEdgeElementContainerInteraction`. Earlier: plain container                                                            | Not registered; no scroll-edge effect                                                                 | Soft and hard bands over the target scroll view; nothing on Android profiles                                              |
+| Contract                   | iOS                                                                                                                                                                                            | Android                                                                                               | Astryx Stage                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxGlassView`          | iOS 26 and later: `UIVisualEffectView` with `UIGlassEffect`, children in its content view, the system's glass fade and the layout spring. Earlier: `UIBlurEffect` system material and hairline | A plain view group around the children; glass props have no effect; the library paints the tonal fill | iOS profiles: simulated Liquid Glass with the iOS behaviour; pre-26 look: blur and hairline. Android profiles: plain view |
+| `AstryxGlassContainerView` | iOS 26 and later: `UIGlassContainerEffect`. Earlier: plain container                                                                                                                           | Not registered; the library renders a plain View                                                      | Merges neighbouring glass into one outline within `spacing`                                                               |
+| `AstryxMaterialView`       | iOS 26 and later: `UIGlassEffect` for `glass` and `glassClear`. `blur` and earlier iOS: `UIBlurEffect` system materials                                                                        | Not registered; the library paints the translucent token fill                                         | The same material per variant and OS look                                                                                 |
+| `AstryxScrollEdgeView`     | iOS 26 and later: `UIScrollEdgeEffect` style and `UIScrollEdgeElementContainerInteraction`. Earlier: plain container                                                                           | Not registered; no scroll-edge effect                                                                 | Soft and hard bands over the target scroll view; nothing on Android profiles                                              |
 
 - Supported feature/engine floor: the floor of `spec:AST-112`. Liquid Glass,
   glass grouping, and scroll-edge effects need iOS 26 and later; the system blur
@@ -314,8 +313,8 @@ and the library's paint rules that choose between them and a drawn fill.
 
 Liquid Glass responds to touches on its own descendants and morphs with its
 neighbours only when the content is inside the effect view. `NativeGlassView`
-mounts its children there, so a glass button brightens under the finger and a
-tab bar's pill merges with the circle beside it. `MaterialView` stays the leaf
+mounts its children there: a glass button then lights up when pressed, and
+nearby glass items join into one shape. `MaterialView` stays the leaf
 material for surfaces that only need a backdrop, such as overlays and docked
 bars.
 
@@ -327,12 +326,13 @@ never responds to a press and cannot morph.
 **Reference:** `spec:AST-123/DEC-2`
 **Decider:** imdreamrunner, 2026-11-17
 
-Android has no system backdrop material, and Material 3 uses tonal surfaces.
+Android offers no system material that blurs what lies behind a view, and its
+design language favours solid tinted surfaces.
 `AstryxGlassView` is a plain view on Android so one tree runs on both platforms,
 and the library paints the token fill at the intensity's alpha.
 
-Rejected: a `RenderEffect` blur, because it blurs a view's own content, not what
-lies behind it.
+Rejected: blurring with `RenderEffect`, because it applies to the view's own
+pixels rather than to the content behind the view.
 
 ### DEC-3 — Accessibility settings choose the library's solid paint
 
