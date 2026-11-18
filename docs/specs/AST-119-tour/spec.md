@@ -93,15 +93,17 @@ happens between pages.
   `hasScrollIntoView` (default `true`) set to `false` leaves scrolling to the
   app for every step.
 - **FR8 — The app decides about a missing anchor.** When a step shows and its
-  anchor resolves to nothing, Tour follows `missingAnchorBehavior`:
-  `'skipStep'` (the default: move on in the direction of travel, to the
-  next step after Next and the previous step after Back, with a development
-  warning; a skipped last step ends the tour as `'complete'`, and a skipped
-  first step on Back keeps the step that was showing; a step the app sets
-  itself, or that FR3 promotes, skips forward), `'endTour'` (end as
-  `'complete'`) or `'center'` (show the step centered). The step a skip lands
-  on is reported through `onActiveIdChange`. Tour sets no timer and does not
-  wait.
+  anchor resolves to nothing, Tour follows `missingAnchorBehavior`: `'center'`
+  (the default: show the step centered, with no highlight; the callout moves
+  to the anchor when a later read resolves it, `spec:AST-116` FR3),
+  `'skipStep'` (move on in the direction of travel, to the next step after
+  Next and the previous step after Back; a skipped last step ends the tour as
+  `'complete'`, and a skipped first step on Back keeps the step that was
+  showing; a step the app sets itself, or that FR3 promotes, skips forward) or
+  `'endTour'` (end as `'complete'`). The step a skip lands on is reported
+  through `onActiveIdChange`. Every step that starts without its anchor is
+  reported once through `onMissingAnchor(id)` and warns in development. Tour
+  sets no timer and does not wait.
 - **FR9 — A step can prepare its anchor.** A step's optional `showAction`
   runs before Tour resolves the anchor, and Tour waits for the promise it
   returns, for example while the app opens a panel. Until it settles, no
@@ -215,7 +217,7 @@ description, and no `aria-modal` under a backdrop.
 | FR1–FR3   | core `Tour.test.tsx` steps suite             | Three steps; the middle one left out; the active step removed; the last step removed                                                                                                                                   | A count or Back/Next that includes a left-out step, or a removed active step left showing, fails                                                                                                                                                                                                                                                   |
 | FR4, FR5  | core `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from an anchor's click                                                                                                                                   | A step change not reported, a missing or wrong end reason, or an internal step override fails                                                                                                                                                                                                                                                      |
 | FR6, FR7  | core `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                                                                                                                            | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails                                                                                                                                                                                                                                                           |
-| FR8, FR9  | core `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default, after Next, after Back and on a step the app sets; a pending and a rejected preparation                                                        | A timer, a callout shown before preparation settles, a skip against the direction of travel, or a missing anchor with no report fails                                                                                                                                                                                                              |
+| FR8, FR9  | core `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default, after Next, after Back and on a step the app sets; the anchor resolving after a centered step; a pending and a rejected preparation            | A timer, a callout shown before preparation settles, a skip against the direction of travel, a centered step that stays centered once its anchor resolves, or a missing anchor with no `onMissingAnchor` report fails                                                                                                                              |
 | FR10      | Real-browser spec                            | The anchor scrolled out and removed while its step shows, then back in view                                                                                                                                            | A callout over unrelated content, an end, or a callout still hidden after the anchor returns fails                                                                                                                                                                                                                                                 |
 | FR11–FR13 | core `Tour.test.tsx` callout suite           | First, middle and last steps; Skip and count on and off; a locale; `nextLabel`, `doneLabel` and `skipLabel`; a step with and without a backdrop                                                                        | A built-in title or body text, Back on the first step, an untranslated label, a label prop that loses to the catalog, a missing ring, or a ring or dimming exposed to assistive technology fails                                                                                                                                                   |
 | FR14–FR17 | core `Tour.test.tsx` and a real-browser spec | With and without a backdrop: Tab from the callout and the anchor; Escape in and out; each focus origin at a step change; the announcement at each step change; the tour ending with focus in the callout and elsewhere | Without a backdrop: focus held in the callout, focus taken from the person, or `aria-modal`. With a backdrop: Tab leaving the callout, focus left outside it, or no `aria-modal`. Either: a missing, repeated or assertive step announcement, focus on the body or moved from elsewhere at the end, or a callout with no name or description fails |
@@ -253,7 +255,9 @@ array already does.
 
 Only the app knows whether a missing anchor will appear, so Tour follows the
 app's `missingAnchorBehavior` (FR8) or waits for the app's own preparation (FR9). An anchor that exists but is
-off screen scrolls into view.
+off screen scrolls into view. The default, `'center'`, never drops a step:
+with no timer, a skip cannot tell a control the person lacks from one that
+renders late.
 
 Rejected: waiting a fixed time for an anchor to appear.
 
@@ -274,7 +278,8 @@ Rejected: an intro-modal step type inside Tour, which duplicates Dialog.
 **Decider:** `nynexman4464`, `2026-11-18`, pending owner review
 
 Tour takes `steps`, `activeId`, `onActiveIdChange`, `onEnd`,
-`missingAnchorBehavior`, `hasScrollIntoView`, `hasStepCount`, `hasSkipButton`,
+`missingAnchorBehavior`, `onMissingAnchor`, `hasScrollIntoView`,
+`hasStepCount`, `hasSkipButton`,
 `hasBackdrop` (as the lab Tour names it), `nextLabel`, `doneLabel` and
 `skipLabel`; a step has `id`, `anchor`, `title`, `body`, `placement` and
 `showAction`. A callback mirrors the prop it reports, a choice of response is a
@@ -285,8 +290,8 @@ always shows, so no input hides it. A control's words are a flat optional
 control and the step count stay catalog-only, as the previous and next
 controls of Pagination and Stepper do.
 
-Rejected: `activeStepId`, `beforeShowAction`, `hasSkip`, a missing-anchor
-callback, a per-step scroll override, a `labels` object (the shape
+Rejected: `activeStepId`, `beforeShowAction`, `hasSkip`, a per-step scroll
+override, a `labels` object (the shape
 `architecture:internationalization` INV3a gives a non-React factory), and
 label props for Back and the close control.
 
