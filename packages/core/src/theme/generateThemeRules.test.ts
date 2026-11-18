@@ -2296,7 +2296,7 @@ describe('a media surface that flips with the page', () => {
       '--color-on-light': ['#111111', '#111111'],
     });
     expect(css).toContain(
-      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+      ':where(:scope[data-theme="dark"]) [data-astryx-media-dark-page="light"]',
     );
     expect(css).toMatch(
       /@media \(prefers-color-scheme: dark\) \{\n {2}[^{]*\[data-astryx-media-dark-page="light"\]/,

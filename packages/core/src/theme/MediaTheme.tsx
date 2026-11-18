@@ -112,12 +112,9 @@ export function MediaTheme({
       {...(resolved === 'off' ? null : {[dataAttr('media')]: resolved})}
       {...(resolved === 'off' ? null : darkPage)}
       {...stylex.props(styles.root, resolved !== 'off' && styles.active)}>
-      {darkPage == null ? (
-        children
-      ) : (
-        // Surfaces nested inside take their own sides.
-        <MediaDarkPage side={null}>{children}</MediaDarkPage>
-      )}
+      {/* Surfaces nested inside take their own sides. Always rendered, so
+          the children keep their place in the tree when the side clears. */}
+      <MediaDarkPage side={null}>{children}</MediaDarkPage>
     </div>
   );
 }

@@ -73,7 +73,14 @@ describe('color-mode blocks', () => {
     );
     expect(out).not.toContain('@scope ([data-astryx-media');
     // The mode rules are component rules, after the block's own rule.
-    expect(out).not.toMatch(/^\s*:where\(/m);
+    // (A flipped surface's dark-page token rules start with the page's
+    // conditions; they are not mode rules.)
+    expect(
+      out
+        .split('\n')
+        .filter(line => !line.includes('media-dark-page'))
+        .join('\n'),
+    ).not.toMatch(/^\s*:where\(/m);
     expect(out.indexOf('background-color: blue')).toBeGreaterThan(
       out.indexOf('background-color: red'),
     );

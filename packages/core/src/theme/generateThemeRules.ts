@@ -108,8 +108,10 @@ function mediaSelector(surface: MediaSurface): string {
     ].map(condition => `${condition} ${mediaDarkPageIs(other)}`);
     return `${own}:where(:not(${flipped.join(', ')}))`;
   }
+  // The page's conditions add no specificity, as a root color-mode block's
+  // do: the copy weighs what the surface's own side selector weighs.
   return darkPageConditions(page === 'dark-page-preference')
-    .map(condition => `${condition} ${mediaDarkPageIs(side)}`)
+    .map(condition => `:where(${condition}) ${mediaDarkPageIs(side)}`)
     .join(', ');
 }
 
