@@ -8,7 +8,7 @@ archive_reason: null
 superseded_by: null
 approved_by: nynexman4464
 approved_at: 2026-11-18
-phase: proposed
+phase: accepted
 owners: [nynexman4464]
 affects_architecture: [architecture:layer-runtime]
 affects_families: [family:overlay-dismissal]
@@ -171,12 +171,14 @@ Dialog and DropdownMenu.
 - **FR18 — There is no off switch.** No input turns focus return off or names
   a value that skips it. A caller that wants a specific element focuses it in
   its hide notification; FR17 then leaves it there.
-- **FR19 — A child that takes over inherits the chain.** The overlays' shared
+- **FR19 — A child that takes focus inherits the chain.** The overlays' shared
   focus return records which layer opened which. A layer that closes while a
-  layer it opened is
-  opening or open moves no focus. The child's chain continues with the
-  parent's candidates, so a Dialog opened from a menu row returns focus to the
-  menu's trigger when it closes.
+  layer it opened holds focus, or is opening and takes focus as it opens,
+  moves no focus. The child's chain continues with the parent's candidates,
+  so a Dialog opened from a menu row returns focus to the menu's trigger when
+  it closes. A layer whose open child holds no focus and takes none, such as
+  a typeahead's result list or a popover that focus has left, returns focus
+  itself (FR17, FR20).
 - **FR20 — The fallback chain.** Focus goes to the first candidate that is in
   the document, rendered, not disabled, not inert, able to take focus (a
   temporary tab stop is added to an element that cannot) and not inside a
@@ -347,7 +349,7 @@ AR4 gap: a dialog popover opened from code is not announced.
 | FR9        | `PopoverAnchor.test.tsx` and a real-browser interaction spec          | A press on another control whose handler sets `anchorRef.current` and calls `show()`; the same with the anchor unchanged; an outside press that calls nothing; a press on the separate anchor; a press on the trigger; `show()` from a press-down handler and from a click handler | A reported `onHide`, an open-state change, a remount, a focus move, or a frame with the surface closed fails; an outside press that calls nothing and leaves the popover open fails |
 | FR12–FR16  | `useFocusTrap.test.tsx`, `Popover.test.tsx` and a real-browser spec   | Modal and non-modal; Tab at each edge and from the anchor; Tab from outside; role `none`; Escape in and out; the sheet                                                                                                                                                             | A non-modal popover that holds Tab, a modal one that leaks it (FR14's role-neutral popups excepted), `aria-modal` on a non-modal one, or a modal sheet fails                        |
 | FR17, FR18 | `focusReturn.test.ts` and the Popover, Dialog and DropdownMenu suites | Focus inside at close; on the body; moved outside before close; moved by the hide notification                                                                                                                                                                                     | Focus moved from outside the layer, or left on the body, fails                                                                                                                      |
-| FR19       | Menu-to-Dialog suite in jsdom and real Chromium                       | A menu row opens a Dialog; the Dialog closes; nested popovers                                                                                                                                                                                                                      | Focus on the body or on the removed row fails                                                                                                                                       |
+| FR19       | Menu-to-Dialog suite in jsdom and real Chromium                       | A menu row opens a Dialog; the Dialog closes; nested popovers; a layer that closes over an open child that never took focus, and over one that focus has left                                                                                                                      | Focus on the body or on the removed row fails                                                                                                                                       |
 | FR20, FR21 | `focusReturn.test.ts` and a real-browser spec                         | Each candidate missing in turn: a tour opened by code, a remounted filter button, a removed opener, no candidate left                                                                                                                                                              | A candidate skipped out of order, a hidden or closing candidate chosen, focus on the body, or no warning fails                                                                      |
 | FR22       | Existing Popover, Dialog, DropdownMenu and Popover-family suites      | Every released state except FR22's three named changes                                                                                                                                                                                                                             | Any other changed expectation in an existing suite fails                                                                                                                            |
 | AR1        | Real-browser interaction spec                                         | Focus inside a surface whose anchor leaves the document, or is set to `display: none`, with a trigger and with none                                                                                                                                                                | Focus left in a hidden surface, or moved back when it shows, fails                                                                                                                  |
