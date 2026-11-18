@@ -230,6 +230,25 @@ const V2_SHARED_FROM = 1.3;
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
 
+/**
+ * The share of its chroma a v2 gray family keeps at a lightness: all of it
+ * up to GRAY_FADE_FROM, then less, linearly, to GRAY_FADE_LEAST at
+ * GRAY_FADE_TO and above, as gray scales fade their tint toward white (a
+ * slate's palest grays keep about a sixth of its color).
+ * @param {number} lightness OKLab lightness
+ */
+function grayFade(lightness) {
+  const t = clamp(
+    (lightness - GRAY_FADE_FROM) / (GRAY_FADE_TO - GRAY_FADE_FROM),
+    0,
+    1,
+  );
+  return 1 - (1 - GRAY_FADE_LEAST) * t;
+}
+const GRAY_FADE_FROM = 0.7;
+const GRAY_FADE_TO = 0.97;
+const GRAY_FADE_LEAST = 0.28;
+
 /** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
 const MOST_VIVID_CHROMA = coordinatedChroma(0.32, PALETTE_RECIPE_V2);
 
@@ -307,6 +326,11 @@ function generateCandidate(
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
   const maxChroma = maxOklchChroma(adjustedHue, lightness);
+  // v2: a gray family's color fades toward white the way a gray scale's
+  // does, so its pale stops (a page, a card on it) carry only a faint tint
+  // of its hue; its darker stops keep their color.
+  if (recipe === PALETTE_RECIPE_V2 && !coordinateWithOtherFamilies)
+    chroma *= grayFade(lightness);
   // v2, on the pale side of a ramp (above its middle): the narrower a
   // stop's gamut is for the most vivid seed at the default vibrancy (a pale
   // tint), the more every request shares that gamut in proportion (the most

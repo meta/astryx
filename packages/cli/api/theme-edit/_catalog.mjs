@@ -96,10 +96,13 @@ export const SAMPLE_PAGE = h(
       'VStack',
       {gap: 1},
       h('Heading', {level: 1, type: 'display-2'}, 'Plan the week ahead'),
+      // A link in running text, as an app writes one: its color is read on
+      // the page.
       h(
         'Text',
         {type: 'supporting'},
-        'Everything your team is working on, in one place.',
+        'Everything your team is working on, in one place. ',
+        h('Link', {href: '#'}, 'See the plan'),
       ),
     ),
     h('Heading', {level: 2}, 'My tasks'),
@@ -131,6 +134,13 @@ export const SAMPLE_PAGE = h(
             h('Heading', {level: 3}, 'New task'),
             h('Badge', {variant: 'info', label: 'Draft'}),
             h('Badge', {variant: 'neutral', label: 'Personal'}),
+          ),
+          // A link in a card's text: its color is read on the card.
+          h(
+            'Text',
+            {type: 'body'},
+            'Shared with your team. ',
+            h('Link', {href: '#'}, 'Change who sees it'),
           ),
           h('TextInput', {label: 'Title', value: 'Prepare launch notes'}),
           h('Switch', {label: 'Notify my team', value: true}),
@@ -515,6 +525,14 @@ export function pageSource({
     'function modes(tree, open) { if (!theme || MODE !== "system") { const one = html(tree, MODE, open); return one == null ? null : {one}; } const light = html(tree, "light", open); const dark = html(tree, "dark", open); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
+  // How the sheet groups the parts drawn into its sections, written into
+  // the page from the functions below (what reads the sheet's sections
+  // reads the same).
+  lines.push(
+    String(openGroupOf),
+    String(sheetGroups),
+    String(sheetSectionClass),
+  );
   lines.push(`const SECTION = ${JSON.stringify(section ?? '')};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
   lines.push(`const SHEET_CSS = ${JSON.stringify(SHEET_CSS)};`);
@@ -540,12 +558,15 @@ export default function Page() {
   // a layer's marker and no such control (a context menu's area, which a
   // right click opens), is shown open too, with the overlays, so a look's
   // menus and lists show in the pictures.
+  // On one family's own page its parts drawn open follow the family, named
+  // for it; on the whole sheet they join the overlays.
+  const OPEN_GROUP = openGroupOf(SECTION);
   const opensPopup = html => html.includes('<template></template>') || (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
   for (const it of rendered) {
     const m = it.markup;
     if (!it.openable || !opensPopup(m.one ?? m.light)) continue;
     const open = modes(it.openTree ?? it.tree, 'ifOpen');
-    if (open) done.push({...it, group: 'overlays', label: it.label || 'open', markup: open, opened: true});
+    if (open) done.push({...it, group: OPEN_GROUP, label: it.label || 'open', markup: open, opened: true});
   }
   // A control of the sample page drawn in each state a person puts it in:
   // the render's stylesheet applies a state's rules to what is marked with
@@ -589,20 +610,8 @@ export default function Page() {
         : null,
     ];
   } else {
-    const groups = [];
-    // In the overlays section the small overlays drawn open beside their
-    // triggers (a tooltip, a menu, a list) come first; a panel over the
-    // whole page (a dialog, a drawer) after them.
-    const small = it => it.opened || (it.open && it.anchored);
-    const ordered = [...drawn.filter(small), ...drawn.filter(it => !small(it))];
-    for (const it of ordered) {
-      let g = groups.find(x => x.name === (it.group ?? ''));
-      if (!g) { g = {name: it.group ?? '', cells: []}; groups.push(g); }
-      let c = g.cells.find(x => x.name === it.name);
-      if (!c) { c = {name: it.name, list: []}; g.cells.push(c); }
-      if (!c.list.some(x => x.label === it.label)) c.list.push(it);
-    }
-    body = groups.map(g => h('section', {key: g.name, className: (g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group') + ' cs-family-' + g.name},
+    const groups = sheetGroups(drawn, OPEN_GROUP);
+    body = groups.map(g => h('section', {key: g.name, className: sheetSectionClass(g.name, OPEN_GROUP)},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
       h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell', style: {'--cs-examples': c.list.length}},
         h('div', {className: 'cs-name'}, c.name),
@@ -626,6 +635,68 @@ export default function Page() {
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * The section a sheet puts the parts it draws open in: on one family's own
+ * page, that family's open section; on the whole sheet, the overlays.
+ * Written into the page as well (pageSource).
+ * @param {string} section the family the page is of, or ''
+ */
+export function openGroupOf(section) {
+  return section && section !== 'overlays' ? section + ', open' : 'overlays';
+}
+
+/**
+ * The sections of a sheet, in order, with their cells, from the parts it
+ * draws: by each part's group, in the order of the parts. In the overlays
+ * section the small overlays drawn open beside their triggers (a tooltip,
+ * a menu, a list) come first, a panel over the whole page (a dialog, a
+ * drawer) after them; on a family's page its parts drawn open follow it.
+ * Written into the page as well (pageSource).
+ * @param {Array<{name: string, group?: string, label?: string, opened?: boolean, open?: unknown, anchored?: boolean}>} drawn
+ * @param {string} openGroup the section of the parts drawn open
+ * @returns {Array<{name: string, cells: Array<{name: string, list: any[]}>}>}
+ */
+export function sheetGroups(drawn, openGroup) {
+  /** @type {Array<{name: string, cells: Array<{name: string, list: any[]}>}>} */
+  const groups = [];
+  const small = (/** @type {any} */ it) =>
+    it.opened || (it.open && it.anchored);
+  const ordered =
+    openGroup === 'overlays'
+      ? [...drawn.filter(small), ...drawn.filter(it => !small(it))]
+      : [...drawn.filter(it => !it.opened), ...drawn.filter(it => it.opened)];
+  for (const it of ordered) {
+    let g = groups.find((/** @type {any} */ x) => x.name === (it.group ?? ''));
+    if (!g) {
+      g = {name: it.group ?? '', cells: []};
+      groups.push(g);
+    }
+    let c = g.cells.find((/** @type {any} */ x) => x.name === it.name);
+    if (!c) {
+      c = {name: it.name, list: []};
+      g.cells.push(c);
+    }
+    if (!c.list.some((/** @type {any} */ x) => x.label === it.label))
+      c.list.push(it);
+  }
+  return groups;
+}
+
+/**
+ * A sheet section's class: its family's, by which the full sheet is cut
+ * into a page for each family (familyPages). Written into the page as well
+ * (pageSource).
+ * @param {string} name
+ * @param {string} openGroup
+ */
+export function sheetSectionClass(name, openGroup) {
+  return (
+    (name === openGroup ? 'cs-group cs-open-group' : 'cs-group') +
+    ' cs-family-' +
+    name.replace(/[^a-z0-9]+/g, '-')
+  );
+}
+
 /** The light and dark switches, and the contact sheet grid. */
 export const SHEET_CSS = [
   'body{margin:0}',
@@ -641,7 +712,9 @@ export const SHEET_CSS = [
   '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
   // A cell is as tall as what it holds, so every variant is drawn whole.
-  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:hidden}',
+  // A focus ring drawn outside a part at the cell's edge shows whole: the
+  // cell clips only past a ring's reach.
+  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:clip;overflow-clip-margin:8px}',
   '.cs-pages .cs-cell{max-height:none}',
   // A panel that fills the window (a drawer, a bottom sheet, a lightbox)
   // takes an equal share of that height for each of its examples, so every
@@ -656,10 +729,15 @@ export const SHEET_CSS = [
   // A part that needs a row's width (a table, code, an app shell) takes the
   // whole row of the grid, so its text is never cut or wrapped mid-word.
   '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
-  // A picture is one moment: a part that loops an animation (a skeleton's
-  // shimmer, a pulsing dot) is drawn at rest, never at a frame where it is
-  // faint or gone.
-  '.cs-page *,.cs-page *::before,.cs-page *::after{animation:none!important}',
+  // A part that needs a row's width draws each variant on a row of its own,
+  // and an app shell at a height that shows its frame, not a window's.
+  '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell)>.cs-row>.cs-item{flex-basis:100%}',
+  '.cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
+  // A frame that draws nothing of its own (an aspect ratio) shows its box.
+  '.cs-item .astryx-aspect-ratio{outline:1px dashed #8888}',
+  // A part as tall as its container (a vertical divider) is drawn at a
+  // height, never at none.
+  '.cs-item:has([role="separator"][aria-orientation="vertical"]) [data-astryx-theme]{display:flex;height:64px}',
   // Overlays shown open in place: a layer the page would open with script
   // (its root alone: a hidden helper popover inside it stays hidden), and a
   // panel over the page (a drawer, a bottom sheet, a lightbox) at the size
@@ -682,7 +760,7 @@ export const SHEET_CSS = [
   // The states section: one row per control, one column per state.
   '.cs-states-grid{display:grid;gap:10px;padding:14px}',
   '.cs-states-row{display:grid;grid-template-columns:160px repeat(4,minmax(0,1fr));gap:14px;align-items:center}',
-  '.cs-states-cell{min-width:0;overflow:hidden;padding:4px}',
+  '.cs-states-cell{min-width:0;overflow:clip;overflow-clip-margin:8px;padding:6px}',
   // A panel wider than its cell (a narrow screen's navigation drawer) is
   // drawn from its start, never cut at the start.
   '.cs-cell dialog > *{max-width:100%!important}',

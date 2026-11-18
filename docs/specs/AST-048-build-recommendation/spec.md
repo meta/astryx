@@ -154,16 +154,23 @@ own ranking and output, and template owners own what each template is.
   directory that declares a workspace, by a `pnpm-workspace.yaml` or a
   package.json `workspaces` field; outside a workspace it is the directory of
   the nearest package.json, and with no package.json the project declares
-  nothing. `missingPackages` MUST list each needed package (FR14) that the
-  project does not declare, once, and is empty when none is missing.
+  nothing. Outside a project, in a hosted run, each package that the
+  `package.json` of the root serving the run lists in `dependencies` or
+  `optionalDependencies` counts as declared too (`spec:AST-081` FR3).
+  `missingPackages` MUST list each needed package (FR14) that the project does
+  not declare, once, and is empty when none is missing.
 - **FR16 — Astryx packages count like any other.** An Astryx package MUST count
   under FR14 and FR15 like any other package: a source that imports one the
   project does not declare lists it in `missingPackages`, and in the install
   command when there is one (FR17). No package is exempt by name.
 - **FR17 — One install command, in the project's package manager.** When
-  `missingPackages` is not empty and the package manager is not ambiguous
-  (FR19), `installCommand` MUST be one command that installs every missing
-  package with the project's package manager; otherwise it is null. The nearest
+  `missingPackages` is not empty, the package manager is not ambiguous (FR19),
+  and a package.json holds the target directory, `installCommand` MUST be one
+  command that installs every missing package with the project's package
+  manager; otherwise it is null. In a target directory that no package.json
+  holds, an install would make the directory a project (`spec:AST-081` FR3), so
+  `notes` names the missing packages for the project that uses the source
+  instead. The nearest
   directory, from the target directory up to the workspace root, that has a
   package.json `packageManager` field or a lockfile decides the package manager.
   The field names it. Without the field, the lockfiles name the package manager
@@ -206,8 +213,10 @@ own ranking and output, and template owners own what each template is.
   fields, with the values the receipt carries when that template is scaffolded
   into the directory where build ran, from the source its scaffold command (FR5)
   writes. `notes` holds one line for each thing the project lacks: the missing
-  packages with their install command or the reason there is none (FR19), and a
-  missing StyleX compiler (FR20); the receipt's `notes` is empty when the
+  packages with their install command, or in its place the install guidance a
+  loaded integration gives (`spec:AST-039` FR16), the reason there is none
+  (FR19), or the project that installs them (FR17), and a missing StyleX
+  compiler (FR20); the receipt's `notes` is empty when the
   project lacks nothing. One exception keeps build's response additive (FR22):
   on build's start and alternatives, `notes` is present only when it holds a
   line. Text shows each template's readiness beside it, as FR12 and

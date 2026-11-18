@@ -27,15 +27,21 @@ export const COMPONENT_PACKAGES = ['core', 'lab', 'charts', 'richtext', 'vega'];
 
 /**
  * A change to one of these paths can change every copy, so it proves every
- * target: the StyleX build, the proof itself, and a component package's
- * manifest (its exports route the copy's imports). The swizzle copy and the
- * CLI modules it reads count too ({@link swizzleModules}).
+ * target: the proof itself, and a component package's manifest (its exports
+ * route the copy's imports). The StyleX build's source ({@link BUILD_SOURCE}),
+ * the swizzle copy and the CLI modules it reads count too
+ * ({@link swizzleModules}).
  */
 const TOOLCHAIN = [
-  /^packages\/build\/src\//,
   /^packages\/cli\/test\/swizzle-proof\//,
   /^packages\/(?:core|lab|charts|richtext|vega)\/package\.json$/,
 ];
+
+/**
+ * The StyleX build's source. Its tests and fixtures ({@link NOT_SHIPPED}) are
+ * no part of what a copy builds with.
+ */
+const BUILD_SOURCE = /^packages\/build\/src\//;
 
 /** A dependency whose change can change every copy's build. */
 const TOOLCHAIN_DEPENDENCY =
@@ -78,6 +84,7 @@ export function toolchainChange(changed, base) {
   const swizzle = swizzleModules();
   return changed.find(file => {
     if (swizzle.has(file) || TOOLCHAIN.some(re => re.test(file))) return true;
+    if (BUILD_SOURCE.test(file)) return !NOT_SHIPPED.test(file);
     if (file !== 'pnpm-lock.yaml' && file !== 'package.json') return false;
     try {
       const head = process.env.SWIZZLE_PROOF_HEAD;

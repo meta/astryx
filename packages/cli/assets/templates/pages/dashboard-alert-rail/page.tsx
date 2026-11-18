@@ -1314,7 +1314,9 @@ function UptimeRow({entry}: {entry: ServiceUptime}) {
             label={STATUS_LABEL[entry.status]}
             isPulsing={entry.status === 'critical'}
           />
-          <Heading level={4}>{entry.service}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {entry.service}
+          </Heading>
         </HStack>
         <Text type="supporting" color="secondary">
           {entry.uptime.toFixed(2)}% uptime
@@ -1500,7 +1502,7 @@ export default function ServiceHealthMonitorPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}

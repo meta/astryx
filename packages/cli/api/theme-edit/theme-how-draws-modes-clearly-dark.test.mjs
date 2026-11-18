@@ -56,7 +56,10 @@ describe('dark surfaces and light borders by mode', () => {
       test.skip();
     }
     expect(await first('cards #0f1011; main text #f7f8f8')).toEqual([
-      "background-color '#0f1011' --on card --mode dark",
+      "background-color '#0f1011' --on card --when variant:default --mode dark",
+      "background-color '#0f1011' --on card --when variant:transparent --mode dark",
+      "background-color '#0f1011' --on card --when variant:muted --mode dark",
+
       "--color-text-primary '#f7f8f8' --mode dark",
     ]);
     expect(await first('dark cards')).toEqual([

@@ -322,10 +322,12 @@ describe('asks it used to drop', () => {
       const {first} = await answer(
         'uppercase letter-spaced side nav section headings',
       );
+      // (Its uppercase, said with it, runs in turn.)
       expect(first).toEqual([
         expect.stringMatching(
           /^set n letter-spacing \S+ --on side-nav-heading$/,
         ),
+        'set n text-transform uppercase --on side-nav-heading',
       ]);
     },
     T,

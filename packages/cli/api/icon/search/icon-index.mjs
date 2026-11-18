@@ -22,22 +22,24 @@ import {
   requireIconTerm,
 } from '../_options.mjs';
 import {DEFAULT_ICON_LIMIT} from '../icon.mjs';
-import {rankIconSets} from './search.mjs';
+import {projectLooks, rankIconSets} from './search.mjs';
 
 /**
- * The part of a set the ranking reads, as plain JSON. Paths into the folder
- * the set was read from are left out, so an index reads the same wherever it
- * was made.
+ * The part of a set the ranking reads, as plain JSON, with the look the
+ * folder's project draws it in. Paths into the folder the set was read from
+ * are left out, so an index reads the same wherever it was made.
  * @param {Awaited<ReturnType<typeof loadIconSets>>['sets'][number]} set
+ * @param {string | undefined} look
  * @returns {import('../icon.type.mjs').IconIndexSet}
  */
-function portableSet(set) {
+function portableSet(set, look) {
   return JSON.parse(
     JSON.stringify({
       name: set.name,
       package: set.package,
       data: set.data,
       definitions: (set.definitions ?? []).map(each => ({doc: each.doc})),
+      ...(look ? {look} : {}),
     }),
   );
 }
@@ -63,12 +65,15 @@ export async function exportIconIndex(options = {}) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  const {sets, withdrawn} = await loadIconSets(cwd);
+  const {sets, withdrawn, choice} = await loadIconSets(cwd);
+  const looks = projectLooks(choice);
   /** @param {{package: string}} each */
   const kept = each => owner == null || each.package === owner;
   return {
     version: cliVersion(),
-    sets: sets.filter(kept).map(portableSet),
+    sets: sets
+      .filter(kept)
+      .map(set => portableSet(set, looks[`${set.package}/${set.name}`])),
     withdrawn: withdrawn
       .filter(kept)
       .map(({name, package: pkg, reason}) => ({name, package: pkg, reason})),
@@ -135,5 +140,10 @@ export async function rankIconIndex(query, indexes, options = {}) {
   const ranked = /** @type {Parameters<typeof rankIconSets>[0]} */ (
     /** @type {unknown} */ (sets)
   );
-  return rankIconSets(ranked, withdrawn, term, {set, limit});
+  /** @type {Record<string, string>} */
+  const looks = {};
+  for (const each of sets) {
+    if (each.look) looks[`${each.package}/${each.name}`] = each.look;
+  }
+  return rankIconSets(ranked, withdrawn, term, {set, limit, looks});
 }

@@ -22,7 +22,11 @@ import {
   pkgOf,
   templateLookupIds,
 } from '../../foundation/discovery/template-adapter.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {
+  docPackageManager,
+  quoteCommandArgument,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {orderByAffinity} from '../../foundation/text/suggest-order.mjs';
@@ -113,6 +117,20 @@ function eachAlone(mode, name, targetPath, packageFilter) {
  * @returns {Promise<{type: string, data: unknown}>}
  */
 export async function template(name, options = {}) {
+  // Doc `{@pm}` steps in a description render for the project the call
+  // names, as search's do.
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => templateRead(name, options),
+  );
+}
+
+/**
+ * The template call itself, inside its project's package-manager scope.
+ * @param {string | undefined} name
+ * @param {Parameters<typeof template>[1]} options
+ */
+async function templateRead(name, options = {}) {
   const {
     list = false,
     skeleton = false,

@@ -1081,7 +1081,10 @@ export default function ProjectStatusPage() {
       height="fill"
       header={<ProgramHeader phase={phase} onPhaseChange={setPhase} />}
       content={
-        <LayoutContent padding={0} xstyle={pageStyles.contentBottomPad}>
+        <LayoutContent
+          role="main"
+          padding={0}
+          xstyle={pageStyles.contentBottomPad}>
           <Section padding={6} dividers={['bottom']}>
             <VStack gap={6} xstyle={pageStyles.contentColumn}>
               <SectionHeading

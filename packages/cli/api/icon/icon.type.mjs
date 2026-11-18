@@ -45,9 +45,21 @@
  */
 
 /**
- * One ranked icon match.
+ * One ranked icon match. When the project picks a look and the match's set
+ * is in its list, `module`, `export`, and `import` draw that look; `look`
+ * is present when the icon does not have it.
  * @experimental May change or be removed in a patch release.
- * @typedef {IconRecord & {reason: string, score: number}} IconMatchEntry
+ * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}}} IconMatchEntry
+ */
+
+/**
+ * One Astryx icon definition that matches a query when no icon set is
+ * installed.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconSearchDefinition
+ * @property {string} name - The definition's name.
+ * @property {boolean} builtIn - Core draws it by name with no icon set.
+ * @property {string} description - What the definition means.
  */
 
 /**
@@ -59,6 +71,9 @@
  * @property {string} data.query
  * @property {number} data.matchCount - Every match, before `limit`.
  * @property {IconMatchEntry[]} data.matches - The ranked matches, at most `limit`.
+ * @property {string} [data.reason] - Present when no icon set is installed: why nothing matches.
+ * @property {IconSearchDefinition[]} [data.definitions] - Present when no icon set is installed: the Astryx icon definitions that match, built-in ones first, at most `limit`.
+ * @property {string} [data.next] - Present when no icon set is installed: how to get one.
  */
 
 /**
@@ -119,7 +134,7 @@
  * @property {string[]} data.order - The project's list as `<package>/<set>`: the main set, then each backup that resolves; empty when no main set is selected.
  * @property {string | null} data.variant - The look the project's icons draw, as `experimental.iconVariant` names it; null when it names none.
  * @property {Array<{iconSet: string, status: 'selected' | 'ambiguous' | 'missing' | 'withdrawn', reason: string}>} data.backups - Each backup the list names, and whether it resolves.
- * @property {string} [data.next] - Present when two or more sets are installed and none is the main set: the command that chooses the order.
+ * @property {string} [data.next] - Present when two or more sets are installed and none is the main set: the command that chooses the order; or when no set is installed: how to get one.
  * @property {IconSetEntry[]} data.sets - Installed sets in list order: the main set, its backups, then the rest.
  * @property {IconWithdrawnEntry[]} data.withdrawn - Sets found but withdrawn.
  */
@@ -399,6 +414,7 @@
  * @property {string} package - The integration package that ships the set.
  * @property {import('../../authoring/doctypes/icon-set/type').IconSetData} data - The set's data file.
  * @property {Array<{doc: Record<string, unknown>}>} definitions - The set's own icon definitions.
+ * @property {string} [look] - The look the folder's project draws the set in (`experimental.iconVariant`), when the set is in its list.
  */
 
 /**

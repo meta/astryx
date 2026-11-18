@@ -75,7 +75,10 @@ describe('a state of an element in a part', () => {
       'make the current page of the pagination blue',
     ]) {
       const rs = await how('p1', ask);
-      const lines = writes(rs);
+      // (Beside it, the readable-text line the fill's own check adds.)
+      const lines = writes(
+        rs.filter(r => !/^readable text on that fill/.test(r.text)),
+      );
       expect(lines, ask).toEqual([
         "set p1 background-color '#2563eb' --on button --state current",
       ]);

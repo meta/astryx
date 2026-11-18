@@ -16,6 +16,7 @@ import {
   moduleExportOrigin,
   moduleExportOrigins,
   moduleExportSource,
+  moduleExportVerdict,
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
@@ -531,6 +532,76 @@ describe('moduleExportOrigins', () => {
     expect(moduleExportOrigins(index).get('renamed')).toEqual({
       file: path.join(dir, 'values.ts'),
       name: 'a',
+    });
+  });
+});
+
+describe('a re-export of the package itself', () => {
+  /**
+   * A package that imports itself by name, as Node allows a package that
+   * declares `exports`.
+   * @param {Record<string, unknown>} [fields] package.json fields
+   */
+  function writeSelfReferencing(fields = {}) {
+    fs.mkdirSync(path.join(dir, 'icons'));
+    fs.mkdirSync(path.join(dir, 'set'));
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: '@acme/icons',
+        exports: {'.': './index.js', './*Icon': './icons/*Icon.js'},
+        ...fields,
+      }),
+    );
+    write('icons/StarIcon.js', 'export default function StarIcon() {}\n');
+    write(
+      'index.js',
+      "export {default as StarIcon} from './icons/StarIcon.js';\nexport * from './set/set.js';\n",
+    );
+    return write(
+      'set/set.js',
+      [
+        "export {StarIcon as Star} from '@acme/icons';",
+        "export {default as Deep} from '@acme/icons/StarIcon';",
+        "export {Missing} from '@acme/icons';",
+        "export {default as Hidden} from '@acme/icons/private';",
+        "export {Other} from '@acme/other';",
+        '',
+      ].join('\n'),
+    );
+  }
+
+  it('reads the package entry and its subpaths through its own exports', () => {
+    const set = writeSelfReferencing();
+    expect(moduleExportVerdict(set, 'Star')).toEqual({verdict: 'exports'});
+    expect(moduleExportVerdict(set, 'Deep')).toEqual({verdict: 'exports'});
+    expect(moduleExportVerdict(set, 'Missing')).toEqual({verdict: 'lacks'});
+    expect(moduleExportOrigin(set, 'Deep')).toEqual({
+      file: path.join(dir, 'icons', 'StarIcon.js'),
+      name: 'default',
+    });
+  });
+
+  it('names a subpath its exports do not map and another package', () => {
+    const set = writeSelfReferencing();
+    expect(moduleExportVerdict(set, 'Hidden')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Hidden from "@acme/icons/private", which resolves to no file this check can read.',
+    });
+    expect(moduleExportVerdict(set, 'Other')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Other from "@acme/other", another package this check does not read.',
+    });
+  });
+
+  it('reads its own name as another package without an exports map, as Node does', () => {
+    const set = writeSelfReferencing({exports: undefined, main: 'index.js'});
+    expect(moduleExportVerdict(set, 'Star')).toEqual({
+      verdict: 'unknown',
+      reason:
+        'set.js re-exports Star from "@acme/icons", another package this check does not read.',
     });
   });
 });

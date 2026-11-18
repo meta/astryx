@@ -132,9 +132,12 @@ describe('how possessive owner several words', () => {
     async test => {
       needsBases(test);
       const r = await answer('make the card green and the accent darker');
-      expect(r.first[0]).toBe("background-color '#16a34a' --on card");
-      expect(r.first.slice(1).join('\n')).toMatch(/^accent /);
-      expect(r.first.filter(c => /--on card/.test(c))).toHaveLength(1);
+      // (The neutral cards take the fill; the colored ones keep theirs.)
+      expect(r.first[0]).toBe(
+        "background-color '#16a34a' --on card --when variant:default",
+      );
+      expect(r.first.filter(c => /^accent /.test(c)).length).toBeGreaterThan(0);
+      expect(r.first.filter(c => /--on card/.test(c))).toHaveLength(3);
     },
     T,
   );

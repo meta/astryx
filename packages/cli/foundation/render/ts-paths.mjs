@@ -2,7 +2,8 @@
 
 /**
  * @file A project's `compilerOptions.paths` (tsconfig.json or jsconfig.json),
- * read and matched by TypeScript's rules, for `astryx experimental render`.
+ * read and matched by TypeScript's rules, for `astryx experimental render`,
+ * `theme build`, and Doctor.
  * The config of a file is the nearest tsconfig.json (else jsconfig.json) in
  * its folder or above, read through its `extends`; a config that does not
  * include the file lends the referenced project that does, as a
@@ -14,7 +15,9 @@
  * resolve from `baseUrl`, else from the folder of the config that writes
  * `paths`.
  *
- * @position foundation/render — used by page-worker.mjs and embedded-imports.mjs
+ * @position foundation/render — used by page-worker.mjs, embedded-imports.mjs,
+ *   the theme build's module loader (api/theme/build/build.mjs), and Doctor's
+ *   icon-imports scan (api/doctor/_adapter.mjs)
  */
 
 import * as fs from 'node:fs';
@@ -421,4 +424,26 @@ export function resolvePath(patterns, spec) {
     if (file) return file;
   }
   return null;
+}
+
+/**
+ * Whether the project that holds `from` maps a bare specifier to its own
+ * code, by TypeScript's rules for the config it reads for `from` (through
+ * `extends`): a `compilerOptions.paths` key matches it (`@app/*` maps
+ * `@app/c`), or its `baseUrl` holds the file (`lib/c`). Such an import is a
+ * path alias, never a package.
+ * @param {string} specifier
+ * @param {string | null} from the importing module, absolute
+ * @returns {boolean}
+ */
+export function projectMapsImport(specifier, from) {
+  if (!from) return false;
+  const found = configFor(from);
+  if (!found) return false;
+  const configDir = path.dirname(found.file);
+  if (matchPath(patternsOf(found.config, configDir), specifier)) return true;
+  const {baseUrl} = found.config.options;
+  if (typeof baseUrl !== 'string' || /^\.{1,2}(\/|$)|^\//.test(specifier)) return false;
+  const base = configPath(baseUrl, found.config.baseUrlDir, configDir);
+  return existingFile(path.join(base, specifier)) !== null;
 }

@@ -876,6 +876,9 @@ const CASES = [
       ])
         fs.rmSync(dir, {recursive: true, force: true});
     },
+    jsonFieldAllowlist: [
+      'missedParts — a small count the missed line says as "on N parts", next to the parts it names',
+    ],
   },
   {
     name: 'experimental theme editor set',

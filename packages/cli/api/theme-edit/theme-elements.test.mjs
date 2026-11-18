@@ -153,7 +153,8 @@ describe('several states at once', () => {
     expect(
       (await top('make the checked and disabled checkbox gray', 's')).commands,
     ).toEqual([
-      "set s background-color '#9e9e9e' --on checkbox-indicator --state checked+disabled --only",
+      // (A gray on a surface: the theme's gray step and its mirror.)
+      "set s background-color 'light-dark(#9e9e9e, #525252)' --on checkbox-indicator --state checked+disabled --only",
     ]);
   }, 240_000);
 });

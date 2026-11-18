@@ -8,6 +8,7 @@ import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {isFilePathArg} from '../../../foundation/fs/path-safety.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -246,7 +247,7 @@ export function registerTemplate(program) {
             const toRow = t => ({
               id: t.id,
               name: markNotReady(t.name, t.isReady),
-              description: firstSentence(t.description ?? ''),
+              description: docText(firstSentence(t.description ?? '')),
               package:
                 t.package && t.package !== '@astryxdesign/core'
                   ? t.package
@@ -284,7 +285,7 @@ export function registerTemplate(program) {
             emit(
               record({package: result.package}),
               text(
-                `# ${markNotReady(tName, isReady)}${description ? ' — ' + description : ''}\n` +
+                `# ${markNotReady(tName, isReady)}${description ? ' — ' + docText(description) : ''}\n` +
                   `# Components: ${components.join(', ')}`,
               ),
               code(skeleton),
