@@ -17,8 +17,9 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 /**
  * Build the discover.detail response for one package. The project's installed
  * copy describes itself; any other version is described by its source. For a
- * package the project does not have, `install` is the package-manager command
- * that adds it — printed, never run.
+ * package the project does not have, `install` says how to add it (the
+ * project's integration install guidance, else the package-manager command)
+ * — printed, never run.
  *
  * @param {import('../_adapter.mjs').InstalledPackage[]} packages
  * @param {string} name package name, e.g. `@scope/name`

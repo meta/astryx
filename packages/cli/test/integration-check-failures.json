@@ -64,6 +64,7 @@
     "invalid_doc_graph",
     "invalid_doc_reference",
     "invalid_icon_set",
+    "invalid_install_guidance",
     "invalid_manifest",
     "invalid_package_json",
     "invalid_package_spec",

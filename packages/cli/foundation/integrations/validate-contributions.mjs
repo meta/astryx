@@ -119,6 +119,9 @@ export const INVALID_AGENT_DOCS = 'invalid_agent_docs';
 /** Stable issue code for a `cliCommand` that was ignored as invalid. */
 export const INVALID_CLI_COMMAND = 'invalid_cli_command';
 
+/** Stable issue code for an `installGuidance` that was ignored as invalid. */
+export const INVALID_INSTALL_GUIDANCE = 'invalid_install_guidance';
+
 /** Stable issue code for a package whose provider ID is already claimed. */
 export const DUPLICATE_PROVIDER = 'duplicate_provider';
 
@@ -2254,6 +2257,14 @@ async function allLoadedIntegrationIssues(loaded) {
       issueWarning(
         INVALID_CLI_COMMAND,
         `${loaded.__cliCommandError}. The command is ignored; printed commands use the package-manager prefix.`,
+      ),
+    );
+  }
+  if (loaded.__installGuidanceError) {
+    issues.push(
+      issueWarning(
+        INVALID_INSTALL_GUIDANCE,
+        `${loaded.__installGuidanceError}. The guidance is ignored; printed install steps use the package manager's command.`,
       ),
     );
   }

@@ -1033,9 +1033,9 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
- * The fix line for a project with no installed theme: the install command in
- * the project's package manager, or `npm install` with a note when its
- * lockfiles disagree.
+ * The fix line for a project with no installed theme: the install guidance
+ * its integrations give, else the install command in the project's package
+ * manager, or `npm install` with a note when its lockfiles disagree.
  * @param {string} cwd
  * @param {string} run the CLI invocation stem
  * @returns {string}
@@ -1744,7 +1744,8 @@ export async function checkAppThemes(cwd) {
                 '; ',
               )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
             fix: [
-              install?.installCommand ??
+              install?.installGuidance ??
+                install?.installCommand ??
                 install?.noCommandReason ??
                 `Install ${packages.join(', ')}.`,
               ...refresh,

@@ -978,8 +978,8 @@ function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
     ...(data.missingPackages.length > 0
       ? [
           text(
-            data.installCommand
-              ? `The fork imports packages this app lacks. Install them first: ${data.installCommand}`
+            (data.installGuidance ?? data.installCommand)
+              ? `The fork imports packages this app lacks. Install them first: ${data.installGuidance ?? data.installCommand}`
               : `The fork imports packages this app lacks: ${data.missingPackages.join(', ')}. Install them first.`,
           ),
         ]
