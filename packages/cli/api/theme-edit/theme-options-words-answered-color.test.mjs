@@ -207,7 +207,7 @@ describe('a color on a part whose color comes from its color prop', () => {
     async () => {
       fs.writeFileSync(file(), fresh);
       const r = await cli([...ED, 'set', 't', 'color', '12px', '--on', 'link']);
-      expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+      expect(r.code).toBe('ERR_THEME_BAD_VALUE');
       expect(names(r).join('\n')).not.toContain('12px');
     },
     T,

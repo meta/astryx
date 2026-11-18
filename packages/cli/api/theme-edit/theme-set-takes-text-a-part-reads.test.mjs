@@ -270,9 +270,30 @@ describe('a part name with a piece after it', () => {
       const hover = await set(['color', 'red', '--on', 'link-hover']);
       expect(hover.error).not.toMatch(/drawn inside/);
       expect(lines(hover)).toEqual(['set t color red --on link --state hover']);
+      // (A state a part takes is its state, even where the census lists it
+      // with its values.)
+      for (const [on, part, state] of [
+        ['tab-selected', 'tab', 'selected'],
+        ['switch-checked', 'switch', 'checked'],
+      ])
+        expect(lines(await set(['color', 'red', '--on', on])), on).toEqual([
+          `set t color red --on ${part} --state ${state}`,
+        ]);
       const panel = await set(['color', 'red', '--on', 'tab-panel']);
       expect(panel.error).not.toMatch(/drawn inside tab\b/);
       expect(lines(panel)).not.toContain('set t color red --on tab');
+    },
+    T,
+  );
+});
+
+describe('a value of the wrong kind on a text part', () => {
+  it(
+    'is refused as no color, never as a color that would not show',
+    async () => {
+      const r = await set(['color', '12px', '--on', 'heading']);
+      expect(r.error).toMatch(/takes a color; "12px" is not one/);
+      expect(r.error).not.toMatch(/never shows/);
     },
     T,
   );

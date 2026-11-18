@@ -5,8 +5,9 @@
  * word in a clause wins over one carried from before; a carried part
  * reaches only the clause right after the one that named it (or every item
  * of a list its part leads, until another part is said); a look out of
- * reach, with no theme word or dial, is named, never written theme-wide or
- * on a part said further back; a mode pair stays on one part. The table
+ * reach is never written on a part said further back: one with a
+ * whole-theme meaning goes to the whole theme, any other is named; a mode
+ * pair stays on one part. The table
  * holds the rows each rule is read from; the long asks that once wrote on
  * the wrong part are run in the files beside this one, four quarters of
  * one table (long-ask-binding-rows), so each file stays fast.
