@@ -16,7 +16,9 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
+import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -104,11 +106,14 @@ describe('render(): page to one HTML file', () => {
     expect(result.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
   });
 
-  it('is one static file: no external references, no running script', () => {
+  it("is one file: no external references, and no script but the embedded source and the page's own", () => {
     expect(html).not.toMatch(/<link\b/i);
     expect(html).not.toMatch(/\ssrc="(?!data:)/);
-    const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map(m => m[1]);
-    expect(scripts).toEqual([' type="application/x-astryx-source"']);
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
+    expect(renderedMarkupOf(html)).not.toMatch(/<script\b/i);
+    expect(html.split('<script type="application/x-astryx-source">')).toHaveLength(2);
+    // The page's script follows the note after the embedded source.
+    expect(html).toMatch(/ -->\n<script>[^<]/);
   });
 
   it('keeps text safe and the page title from its heading', () => {
@@ -1757,7 +1762,7 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.type).toBe('render.page');
     put('fwd/.gitignore', 'page.html\n');
     expect(await codeOf(() => render('page.tsx', {cwd}))).toBe('ERR_FILE_EXISTS');
-  }, 60_000);
+  }, 120_000);
 
   it('refuses a received file that lists one path twice', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
@@ -2008,7 +2013,12 @@ describe('render --reverse: a received file may carry only what a render embeds'
     put('cfg/page.tsx', "import pkg from './package.json';\nexport default function Page() { return <p>v{pkg.version}</p>; }\n");
     const r = /** @type {any} */ (await render('cfg/page.tsx', {cwd: dir}));
     expect(r.data.files).toEqual(['page.tsx']);
-    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
+    expect(r.data.notCarried).toEqual(['package.json']);
+    expect(r.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "package.json is not carried: it is a tool's configuration, which --reverse never writes. The page shows what it reads from it, but --reverse cannot give it back. Move the values the page reads into a file of its own, such as page-data.json, to carry them.",
+    });
     expect(fs.readFileSync(path.join(dir, 'cfg/page.html'), 'utf8')).toContain('v1.2.3');
     // Given back, the page says what it imports that the file did not carry.
     const back = /** @type {any} */ (await render('cfg/page.html', {cwd: dir, reverse: true}));
@@ -2085,6 +2095,28 @@ describe('astryx experimental render (CLI)', () => {
     const r = await runCli(['experimental', '--help'], dir);
     expect(r.stdout).toMatch(/render[^\n]*\[experimental\]/);
   });
+
+  it('names at most 10 restored files in text and keeps every file in JSON', async () => {
+    const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
+    const sheets = Array.from({length: 12}, (_, i) => `styles/s${String(i + 1).padStart(2, '0')}.css`);
+    const page = {
+      path: 'page.tsx',
+      text: `${sheets.map(s => `import './${s}';`).join('\n')}\nexport default () => null;\n`,
+    };
+    const files = [page, ...sheets.map(s => ({path: s, text: 'p{}\n'}))];
+    put(
+      'many-files.html',
+      `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', files.map(f => ({path: f.path, bytes: Buffer.from(f.text)})))}</body>`,
+    );
+    const text = await runCli(['experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-text/page.tsx'], dir);
+    expect(text.status).toBe(0);
+    const line = text.stdout.split('\n').find(l => /^\s*files\b/.test(l)) ?? '';
+    expect(line).toContain('styles/s09.css');
+    expect(line).not.toContain('styles/s10.css');
+    expect(line).toContain('... and 3 more in many-text/styles/');
+    const json = await runCli(['--json', 'experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-json/page.tsx'], dir);
+    expect(JSON.parse(json.stdout).data.files).toHaveLength(13);
+  }, 60_000);
 });
 
 describe('render(): refusals', () => {
@@ -2099,6 +2131,90 @@ describe('render(): refusals', () => {
     put(name, source);
     expect(await codeOf(() => render(name, {cwd: dir}))).toBe(code);
   }, 30_000);
+
+  it("gives the run folder's integration line only for a page in the run folder's package", async () => {
+    put('acme-app/package.json', '{"name":"acme-app","private":true}');
+    put('acme-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('acme-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    put('guided.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    recordDeclaredSettings(dir, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let own;
+      try {
+        await render('guided.tsx', {cwd: dir});
+      } catch (e) {
+        own = e;
+      }
+      expect(own?.suggestions?.[0]?.name).toBe('acme add not-real-a-xyz');
+      /** @type {any} */
+      let other;
+      try {
+        await render('acme-app/page.tsx', {cwd: dir});
+      } catch (e) {
+        other = e;
+      }
+      expect(other?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(other?.suggestions ?? []).toEqual([]);
+      expect(other?.message).toBe(
+        'The page imports not-real-a-xyz, which is not installed. Install it in acme-app, the package that holds this page: from there, run pnpm add not-real-a-xyz',
+      );
+    } finally {
+      recordDeclaredSettings(dir, []);
+    }
+  }, 60_000);
+
+  it("suggests one install line for every missing package, in the project's package manager", async () => {
+    put('pnpm-app/package.json', '{"name":"pnpm-app","private":true}');
+    put('pnpm-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('pnpm-app/page.tsx', "import a from 'not-real-a-xyz';\nimport b from 'not-real-b-xyz';\nexport default () => <p>{String(a)}{String(b)}</p>;\n");
+    put('npm-app/package.json', '{"name":"npm-app","private":true}');
+    put('npm-app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any[]} */
+    const errors = [];
+    // Rendered from the page's own package, the line runs as printed.
+    for (const [page, cwd] of [
+      ['page.tsx', path.join(dir, 'pnpm-app')],
+      ['page.tsx', path.join(dir, 'npm-app')],
+      // Rendered from the package above, the same line would add the packages
+      // there, so the message names the page's package instead.
+      ['pnpm-app/page.tsx', dir],
+    ]) {
+      try {
+        await render(page, {cwd});
+      } catch (e) {
+        errors.push(e);
+      }
+    }
+    expect(errors.map(e => [e.code, e.message, e.suggestions?.[0]?.name ?? null])).toEqual([
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed', 'pnpm add not-real-a-xyz not-real-b-xyz'],
+      ['ERR_RENDER_MISSING_DEPENDENCY', 'The page imports not-real-a-xyz, which is not installed', 'npm install not-real-a-xyz'],
+      [
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        'The page imports not-real-a-xyz and not-real-b-xyz, which are not installed. Install them in pnpm-app, the package that holds this page: from there, run pnpm add not-real-a-xyz not-real-b-xyz',
+        null,
+      ],
+    ]);
+  }, 60_000);
+
+  it('gives no install line when the project\'s lockfiles disagree, naming their folder from where the render runs', async () => {
+    put('two-locks/package.json', '{"name":"two-locks","private":true}');
+    put('two-locks/package-lock.json', '{}\n');
+    put('two-locks/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('two-locks/src/app/page.tsx', "import a from 'not-real-a-xyz';\nexport default () => <p>{String(a)}</p>;\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('src/app/page.tsx', {cwd: path.join(dir, 'two-locks')});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(error.message).toBe(
+      'The page imports not-real-a-xyz, which is not installed. Install missing dependencies: not-real-a-xyz. No install command: . has pnpm-lock.yaml and package-lock.json, and nothing there says which package manager to use.',
+    );
+    expect(error.suggestions ?? []).toEqual([]);
+  }, 60_000);
 
   it('names the file and the line a compile error points at', async () => {
     put('broken/Card.tsx', 'export function Card() { return <div>; }\n');
@@ -2387,6 +2503,238 @@ describe('render(): a page outside a project', () => {
     expect(siteHtml).toContain('Page: page.tsx\n');
   }, 60_000);
 
+  it('names an imported *.config.json it does not carry in the warnings, the note and notCarried', () => {
+    const tree = path.join(away, 'config-named');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['chart.config.json']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-carried',
+      message:
+        "chart.config.json is not carried: its name reads as a tool's configuration, which --reverse never writes. The page shows it, but --reverse cannot give it back. If it holds the page's data, rename it, such as chart-data.json, to carry it. If a tool reads it, move the values the page reads into a file of its own, such as page-data.json.",
+    });
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-embedded');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Sales in USD');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (--reverse cannot give them back)\n');
+    expect(note).not.toContain('come back exactly');
+    expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
+  }, 60_000);
+
+  it('names every file it leaves out in the note and notCarried, whatever the reason', () => {
+    const tree = path.join(away, 'left-out');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'rows.test.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(path.join(tree, 'fake.png'), 'console.log(1)\n');
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {rows} from './rows.test';\nimport cfg from './chart.config.json';\nexport default function Page() {\n  return <main><h1>{cfg.title}</h1><p>{rows.join(' ')}</p><img src=\"fake.png\" alt=\"\" /></main>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect([...run.json.data.notCarried].sort()).toEqual(['chart.config.json', 'fake.png', 'rows.test.ts']);
+    const codes = run.json.data.warnings.map((/** @type {any} */ w) => w.code);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-carried')).toHaveLength(1);
+    expect(codes.filter((/** @type {string} */ c) => c === 'not-embedded')).toHaveLength(2);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    const line = note.split('\n').find(l => l.trim().startsWith('Not carried:'));
+    expect(line?.trim().replace(/^Not carried: | \(--reverse cannot give them back\)$/g, '').split(', ').sort()).toEqual([
+      'chart.config.json',
+      'fake.png',
+      'rows.test.ts',
+    ]);
+    expect(note).not.toContain('come back exactly');
+  }, 60_000);
+
+  it('lists notCarried in the text output, as the reverse view lists missing', () => {
+    const tree = path.join(away, 'config-named-text');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(run.status).toBe(0);
+    expect(run.stdout).toMatch(/notCarried\W+chart\.config\.json/);
+    fs.renameSync(path.join(tree, 'chart.config.json'), path.join(tree, 'chart-data.json'));
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
+    const renamed = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    expect(renamed.status).toBe(0);
+    expect(renamed.stdout).not.toContain('notCarried');
+  }, 60_000);
+
+  it('names a module the page imports from outside the folder it carries from', () => {
+    const tree = path.join(away, 'outside-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    // The module it imports from there, and the one that module imports.
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../lib/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+    });
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html).toContain('North South');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (--reverse cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+    // Rendered from the folder that holds both, the module is carried.
+    const whole = runBin(tree, ['experimental', 'render', 'page/page.tsx', '--out', 'whole.html']);
+    expect(whole.status).toBe(0);
+    expect(whole.json.data).not.toHaveProperty('notCarried');
+    expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
+  }, 60_000);
+
+  it('in a project, tells the reader to move a file from outside the project inside it', () => {
+    const tree = path.join(away, 'outside-project');
+    fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'app/package.json'), JSON.stringify({name: 'app', private: true}));
+    fs.writeFileSync(path.join(tree, 'shared/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'app/src/page.tsx'),
+      "import {rows} from '../../shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'app/src'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../../shared/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.",
+    });
+  }, 60_000);
+
+  it('names a module the page imports through a path alias from outside the folder it carries from', () => {
+    const tree = path.join(away, 'outside-alias');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'shared/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/tsconfig.json'),
+      JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@shared/*': ['../shared/*']}}}),
+    );
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '@shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.notCarried).toEqual(['../shared/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../shared/rows.ts is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.",
+    });
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html).toContain('North South');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: ../shared/rows.ts (--reverse cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+  }, 60_000);
+
+  it('carries a JSON file and a stylesheet from above the page folder, and names an image from there as not carried', () => {
+    const tree = path.join(away, 'above-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'data'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'data/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'data/site.css'), '.rows { color: teal; }\n');
+    fs.writeFileSync(path.join(tree, 'data/dot.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nimport '../data/site.css';\nexport default function Page() {\n  return <p className=\"rows\">{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page/page.tsx', 'data/rows.json', 'data/site.css']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings).toEqual([]);
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html.slice(0, html.indexOf('-->'))).not.toContain('Not carried');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, output: 'page-restored/page/page.tsx'});
+    expect(back.json.data).not.toHaveProperty('missing');
+
+    // An image the page shows from there is not carried (only the page's
+    // folder's images are), so it is named.
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nexport default function Page() {\n  return <p><img src=\"../data/dot.png\" alt=\"\" />{rows.join(' ')}</p>;\n}\n",
+    );
+    const shown = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx', '--out', 'shown.html']);
+    expect(shown.status).toBe(0);
+    expect(shown.json.data.files).toEqual(['page/page.tsx', 'data/rows.json']);
+    expect(shown.json.data.notCarried).toEqual(['data/dot.png']);
+    expect(shown.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['not-embedded']);
+  }, 60_000);
+
+  it('names a Sass stylesheet the page imports as not carried', () => {
+    const tree = path.join(away, 'sass-import');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.scss'), '$c: teal;\np { color: $c; }\n');
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import './site.scss';\nexport default function Page() {\n  return <p>Sales</p>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.scss']);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['site.scss']});
+  }, 60_000);
+
+  it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
+    const tree = path.join(away, 'config-renamed');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'chart-data.json'), JSON.stringify({title: 'Sales', unit: 'USD'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'chart-data.json']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('not-carried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).not.toContain('Not carried');
+    expect(html).toContain('so the page can come back exactly.');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, files: expect.arrayContaining(['page-restored/page.tsx', 'page-restored/chart-data.json'])});
+    expect(back.json.data).not.toHaveProperty('missing');
+  }, 60_000);
+
   it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {
     const tree = path.join(away, 'dots');
     fs.mkdirSync(path.join(tree, '..x'), {recursive: true});
@@ -2463,8 +2811,8 @@ describe('render(): a page outside a project', () => {
 const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
 const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
 const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
-const inside = textOf(await renderPage(entry, {served: null}));
-const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+const inside = textOf(await renderPage(entry, {served: null, markupOnly: true}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}, markupOnly: true}));
 console.log(JSON.stringify({inside, outside}));
 `;
     const {NODE_PATH: _, ...env} = process.env;
@@ -2508,6 +2856,76 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
+  it('names every package the page and its own modules need in one refusal, with no install line outside a project', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    // No package.json holds this folder, so an install would make it a
+    // project: the message names the packages for the project that uses the
+    // page, with no install line.
+    expect(run.json.error).toBe(
+      'The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+    expect(run.json.suggestions ?? []).toEqual([]);
+  }, 60_000);
+
+  it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
+    fs.writeFileSync(
+      path.join(away, 'used-deps.tsx'),
+      "import {Metadata} from 'not-real-next-xyz';\nimport {unused} from 'not-real-unused-xyz';\nimport {size} from './used-deps-shapes';\nimport logo from 'not-real-brand-xyz/logo.png';\nimport mark from 'not-real-mark-xyz/mark.svg';\nexport const metadata: Metadata = {title: 'x'};\nexport default () => <img src={logo} data-mark={mark} width={size} alt=\"\" />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'used-deps-shapes.ts'),
+      "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+  }, 60_000);
+
+  it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
+    fs.writeFileSync(
+      path.join(away, 'js-deps.jsx'),
+      "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+  }, 60_000);
+
+  it('counts a re-export of a package whose type the module also imports without `import type`', () => {
+    fs.writeFileSync(
+      path.join(away, 're-export-deps.tsx'),
+      "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed. Install it in the project that uses this page.');
+  }, 60_000);
+
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe(
+      'The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
+    );
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {
@@ -2541,7 +2959,7 @@ export default function Page() {
     const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
     expect(warnings).toHaveLength(1);
     expect(warnings[0].message).toBe(
-      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
     );
   }, 60_000);
 
@@ -2701,7 +3119,7 @@ export default function Page() {
 `,
     );
     await render('charts-gradient.tsx', {cwd: dir});
-    const [container] = containersIn(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8'));
+    const [container] = containersIn(renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8')) ?? '');
     for (const {width, html: part} of container) {
       expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-chart0-at-${width}"`));
       expect(part).toContain(`fill="url(#fade-chart0-at-${width})"`);
@@ -2961,7 +3379,7 @@ export default function Page() {
 `,
     );
     await render('charts-effect-provider.tsx', {cwd: dir});
-    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    const html = renderedMarkupOf(fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8')) ?? '';
     expect(html).toContain('Unit: items');
     expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
     expect(html).toMatch(/a (items|km)/);

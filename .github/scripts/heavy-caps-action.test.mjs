@@ -11,6 +11,7 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const action = yaml.parse(
@@ -476,10 +477,11 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       'test-build',
     ]);
     for (const [id, job] of heavyJobs) {
-      const caps = job.steps.findIndex(isCaps);
-      expect(job.steps[caps - 1].uses, id).toMatch(/^actions\/checkout@/);
+      const steps = withoutCheckoutRetries(job.steps);
+      const caps = steps.findIndex(isCaps);
+      expect(steps[caps - 1].uses, id).toMatch(/^actions\/checkout@/);
       // A sparse checkout brings the release-critical label check's scripts.
-      const sparse = job.steps[caps - 1].with?.['sparse-checkout'];
+      const sparse = steps[caps - 1].with?.['sparse-checkout'];
       if (sparse)
         expect(String(sparse).split('\n'), id).toEqual(
           expect.arrayContaining(['.github/scripts/lib']),
@@ -490,12 +492,12 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
         contents: 'read',
         'pull-requests': 'read',
       });
-      expect(job.steps[caps + 1], id).toMatchObject({
+      expect(steps[caps + 1], id).toMatchObject({
         name: 'Heavy suite runs',
         run: 'true',
       });
-      expect(job.steps[caps + 1].if, id).toBe(job.steps[caps].if);
-      expect(job.steps[caps].if, id).toBe(job.steps[caps - 1].if);
+      expect(steps[caps + 1].if, id).toBe(steps[caps].if);
+      expect(steps[caps].if, id).toBe(steps[caps - 1].if);
     }
   });
 });

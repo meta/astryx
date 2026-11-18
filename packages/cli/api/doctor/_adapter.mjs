@@ -60,6 +60,7 @@ import {
   rendersElement,
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -236,7 +237,8 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
- * @param {{stylesheets?: boolean}} [options] - also list `.css` files
+ * @param {{stylesheets?: boolean, pages?: boolean}} [options] - also list
+ *   `.css` files, and `.html` pages
  */
 export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
@@ -262,7 +264,10 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
         entry.isFile() &&
         file !== generatedModule &&
         (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
-          (options.stylesheets === true && path.extname(entry.name) === '.css'))
+          (options.stylesheets === true &&
+            path.extname(entry.name) === '.css') ||
+          (options.pages === true &&
+            /^\.html?$/u.test(path.extname(entry.name))))
       ) {
         files.push(file);
       }
@@ -472,6 +477,48 @@ export function doctorRendersElement(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The names of a stylesheet's at-rules, lowercased, read with postcss so
+ * comments are ignored (`@stylex;` is `stylex`); empty for CSS that does not
+ * parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetAtRules(css) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  try {
+    postcss()
+      .parse(css)
+      .walkAtRules(rule => {
+        names.add(rule.name.toLowerCase());
+      });
+  } catch {
+    // Not valid CSS: no rules.
+  }
+  return names;
+}
+
+/**
+ * The project folder of a path `doctor --built` checks: the nearest folder
+ * at or above it that holds a package.json, or null.
+ * @param {string} target
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function builtProjectRoot(target, cwd) {
+  let dir = path.resolve(cwd, target);
+  try {
+    if (!fs.statSync(dir).isDirectory()) dir = path.dirname(dir);
+  } catch {
+    dir = path.resolve(cwd);
+  }
+  for (let at = dir; ; at = path.dirname(at)) {
+    if (fs.existsSync(path.join(at, 'package.json'))) return at;
+    if (path.dirname(at) === at) return null;
+  }
 }
 
 /**
@@ -1023,25 +1070,20 @@ export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
  * @returns {string[]}
  */
 export function builtIntegrationPackages(target, cwd) {
-  let dir = path.resolve(cwd, target);
-  try {
-    if (!fs.statSync(dir).isDirectory()) dir = path.dirname(dir);
-  } catch {
-    dir = path.resolve(cwd);
-  }
-  for (let at = dir; ; at = path.dirname(at)) {
-    if (fs.existsSync(path.join(at, 'package.json'))) {
-      return [
-        ...new Set(scanAutolinkCandidates(at).map(candidate => candidate.spec)),
-      ];
-    }
-    if (path.dirname(at) === at) return [];
-  }
+  const root = builtProjectRoot(target, cwd);
+  return root
+    ? [
+        ...new Set(
+          scanAutolinkCandidates(root).map(candidate => candidate.spec),
+        ),
+      ]
+    : [];
 }
 
 /**
  * The install line for the font families a known package loads (an open
- * font the editor's table names), in the project's package manager, and
+ * font the editor's table names), as the project's integration install
+ * guidance gives it, else in the project's package manager, and
  * whether it loads every family given. A family no known package loads (a
  * self-hosted face) gets none: its package name would be a guess.
  * @param {string} projectDir

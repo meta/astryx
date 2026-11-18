@@ -233,7 +233,10 @@ export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
         style,
       )}>
       {parts.map(({key, reactKey}) => (
-        <kbd key={reactKey} aria-hidden="true" {...stylex.props(styles.kbd)}>
+        <kbd
+          key={reactKey}
+          aria-hidden="true"
+          {...mergeProps(themeProps('kbd-key'), stylex.props(styles.kbd))}>
           {getKeyDisplay(key, isMac, t)}
         </kbd>
       ))}

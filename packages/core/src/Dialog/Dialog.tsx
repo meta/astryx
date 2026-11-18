@@ -85,6 +85,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -858,7 +859,11 @@ export function Dialog({
         styles.innerCorners,
         containerCornerStyles.publish,
       )}>
-      <DialogContext value={dialogContextValue}>{children}</DialogContext>
+      <DialogContext value={dialogContextValue}>
+        <LayoutContainerContext value="dialog">
+          {children}
+        </LayoutContainerContext>
+      </DialogContext>
     </div>
   );
 

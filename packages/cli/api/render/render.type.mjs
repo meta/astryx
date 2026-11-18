@@ -22,7 +22,7 @@
  * author meant.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -52,6 +52,9 @@
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
+ * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so --reverse cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
+ * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
+ * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
 
 /**

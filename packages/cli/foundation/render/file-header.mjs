@@ -41,6 +41,7 @@ const MAX_LISTED = 24;
  * @property {string} page - The page's path from its project's root; outside a project, its path among the files it carries.
  * @property {string} restored - Where --reverse writes the page by default, from the rendered file's folder.
  * @property {string[]} files - The embedded files, page first.
+ * @property {string[]} [notCarried] - Files the page uses that the file does not carry.
  * @property {Record<string, string>} packages - The packages the page rendered with, by name: their versions.
  * @property {string[]} install - What a render outside a project must install first, as name@version.
  * @property {string} [title] - The title given with --title.
@@ -64,15 +65,23 @@ export function headerNote(facts) {
   const title = quotable ? ` --title ${shellArg(/** @type {string} */ (facts.title))}` : '';
   const lines = [
     `Rendered by Astryx: astryx experimental render, @astryxdesign/cli ${facts.cli ?? '(version unknown)'}, render format ${facts.format}.`,
-    'This is one static file. It runs no script and loads nothing from the network.',
-    'It also carries the source of the page, so the page can come back exactly.',
+    "This is one file. The page's own script, at the end of the file, draws the page when it",
+    'opens, so its buttons and other controls work. The render adds no network request.',
+    facts.notCarried?.length
+      ? 'It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.'
+      : 'It also carries the source of the page, so the page can come back exactly.',
     '',
     `Page: ${facts.page}`,
     `Carried files (${facts.files.length}): ${shown}${more}`,
+    ...(facts.notCarried?.length
+      ? [
+          `Not carried: ${facts.notCarried.slice(0, MAX_LISTED).join(', ')}${facts.notCarried.length > MAX_LISTED ? `, and ${facts.notCarried.length - MAX_LISTED} more` : ''} (--reverse cannot give them back)`,
+        ]
+      : []),
     ...(versions.length > 0 ? [`Rendered with: ${versions.join(', ')}`] : []),
     '',
     'To change the page, change its source and render it again. Do not edit this HTML:',
-    'the carried source does not get the edits you make here.',
+    "the carried source does not get the edits you make here, and the page's script draws over them.",
     'Run these commands in the folder that holds this file:',
     `  1. Get the source back. This writes ${facts.restored} and the files it imports`,
     `     (into ${facts.restored.split('/')[0]}-2/ and so on when that folder exists; the output names it):`,
@@ -102,8 +111,8 @@ export function headerNote(facts) {
     'Later CLI versions read this file too.',
     'If someone edits this HTML after the render, step 1 still gives back the page as rendered,',
     'and it lists the text that changed, so you can make the same change in the source.',
-    'The source is in the script block at the end of this file. Keep it: without it,',
-    'step 1 can rebuild only the text and the layout from the markup.',
+    "The source is in the JSON script block near the end of this file, before the page's script.",
+    'Keep it: without it, step 1 can rebuild only the text and the layout from the markup.',
   ];
   return `<!--\n${lines.map(line => (line ? `  ${commentSafe(line)}` : '')).join('\n')}\n-->`.replace(/<(?=\/?script)/gi, '&lt;');
 }

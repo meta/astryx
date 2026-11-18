@@ -118,7 +118,7 @@ export function liveJobs(jobs) {
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 21 + widenOf(jobs)),
+  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 47 : legWidth(jobs) === 'tight' ? 19 : 19 + widenOf(jobs)),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 20),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,

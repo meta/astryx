@@ -154,8 +154,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   copy fields of the `theme.add` response as the `theme.eject` response, with
   the descriptor in its file list, followed by `missingPackages`, the packages
   the copy imports that the app does not declare, and `installCommand`, the
-  command that installs them, which is null when none are missing or the
-  package manager is not known. From any folder of the project (the nearest
+  command that installs them, which is null when none are missing, when the
+  package manager is not known, or when no package.json holds the folder
+  (`spec:AST-048` FR17). From any folder of the project (the nearest
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
@@ -280,7 +281,13 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      this cannot be shown, as when the stylesheet imports a font service URL
      that does not name it);
   10. no two added themes write different rules outside their own theme scope
-      for the same selector, because every added stylesheet loads at once.
+      for the same selector, because every added stylesheet loads at once;
+  11. every setting of an added local theme shows as written, as its build
+      check reports it (`theme build --check`, `settingIssues`): a setting
+      another rule of the theme layer beats where it reaches is a warning,
+      never a failure, naming the theme, the setting with its line, and its
+      fix; the check passes only when every local theme's build check ran,
+      and names a local theme whose check did not run (info).
 
   Each failure names the exact command that fixes it.
 
@@ -411,7 +418,7 @@ unchanged.
 | FR7, FR8 | Integration verify and real provider-to-consumer tests                                              | multi-theme package; single-theme package; missing export; font stylesheet missing from the tarball; stale build; a missing `.css.d.ts` stub only; a missing `.d.ts`; partial export set; a local theme sharing a package theme's slug; local themes in a project with no `src` folder; a module that loads its own styles; a theme whose name differs from its slug | A theme without a resolvable built module is imported, verify passes a stale complete pair, an unresolved export, or a module that adds more than its own stylesheet imports and a re-export of the built module, verify fails a partial export set whose exports resolve or a module that only loads its own styles, a shared slug imports the package theme without `--package`, the copying `theme add` resolves a local theme, or local themes are looked for outside `src/themes` |
 | FR9      | Generated module tests                                                                              | package and local themes                                                                                                                                                                                                                                                                                                                                             | The module imports source                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR10     | List tests                                                                                          | added, default, bundled, package, local                                                                                                                                                                                                                                                                                                                              | A listed theme lacks its app fields                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| FR11     | Doctor tests, one planted fault per check                                                           | each of the ten faults; a correct app                                                                                                                                                                                                                                                                                                                                | A check passes on its fault, or passes without positive evidence                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR11     | Doctor tests, one planted fault per check                                                           | each of the eleven faults (the eleventh a warning, never a failure); a local theme whose build check did not run (info, never a pass); a correct app                                                                                                                                                                                                                 | A check passes on its fault, or passes without positive evidence                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR11     | Provider wiring tests over a fixture integration that names its provider                            | a provider the app renders; one it only imports; a same-named component from another module; several themes, with and without an imported stylesheet; `theme list` text and JSON                                                                                                                                                                                     | A theme counts as wired without the app rendering its package's provider, `theme-management` offers `theme add` for a provider-wired theme, or `theme list` omits `wiredBy`                                                                                                                                                                                                                                                                                                            |
 | FR12     | Lifecycle tests against the latest stable CLI, migration tests on a project it made, and docs tests | plain `theme add`; the cleanup build; a copy made by the latest stable `theme add`; the upgrade codemod run twice; no theme module                                                                                                                                                                                                                                   | Before the cleanup, plain `theme add` stops copying, changes its exit status, stdout, or `theme.add` fields, omits the deprecation id, or warns more than once; after it, plain `theme add` copies; a theme command or doctor fails on an unmigrated copy; the codemod changes more than the descriptor or changes anything on its second run; a copy is moved or deleted; or doctor fails a project with no theme module                                                              |
 | FR13     | Docs and agent-docs tests                                                                           | theme guide, integration guide, agent block, init next steps                                                                                                                                                                                                                                                                                                         | A surface teaches copying as the way to use a theme, or names a different import command than the current lifecycle stage                                                                                                                                                                                                                                                                                                                                                              |
@@ -601,6 +608,20 @@ Rejected: requiring the exported module to be the built module itself, which
 makes such a package choose between passing verify and keeping its consumers'
 imports working; and accepting any module that exports the theme, which lets
 verify pass a module that no longer matches its source.
+
+### DEC-11 — A setting that does not show is a warning, never a refusal
+
+**Reference:** `spec:AST-050/DEC-11`
+**Decider:** maintainers under `josephfarina`'s delegation, `2026-11-17`
+
+FR11's eleventh check reports each setting of an added local theme the
+browser does not show as written (`theme build` reads it from the rules Core
+generates) as a warning with its fix, never a failure: such a theme still
+builds and renders, so the check never fails an app, and a saved theme with
+such a setting still opens. The check passes only when every local theme's
+build check ran.
+
+Rejected: failing doctor on such a setting, which fails a working setup.
 
 ## Open questions
 
