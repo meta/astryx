@@ -21,6 +21,7 @@ verified_by:
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
     packages/cli/api/search/search.icons.test.mjs,
+    packages/cli/foundation/agent-docs/agent-docs.test.mjs,
   ]
 ---
 
@@ -127,6 +128,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   added by the package that ships that set, that says how to find its icons
   with `astryx experimental icon <words>`; search never returns that
   section.
+  Where icon features are on, the agent docs block that `astryx init` and
+  `astryx upgrade` write carries one more line, right under its runner line:
+  "Need an icon? Run `astryx experimental icon <what it means>` and paste the
+  import it prints, instead of copying one from a template or other code."
+  Where they are off, the block has no such line.
 
   With no such package loaded and no `experimental.iconSet`, help (apart from
   the marked `experimental` group line), `astryx manifest` (apart from that group: its command, and its
