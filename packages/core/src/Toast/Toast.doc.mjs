@@ -56,7 +56,7 @@ export const docs = {
       name: 'isExiting',
       type: 'boolean',
       description:
-        'Whether the toast is leaving: it plays its exit motion and its auto-hide timer stops. The toast viewport sets it while a toast leaves; set it only when you render Toast yourself.',
+        'Whether the toast is leaving: it plays its exit motion and stops responding to swipes. The toast viewport sets it while a toast leaves; set it only when you render Toast yourself.',
       default: 'false',
     },
     {
