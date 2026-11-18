@@ -150,7 +150,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: "The motion tokens are CSS custom properties, so plain CSS reads them with `var()`; for the Web Animations API, read a token's value with `getComputedStyle(element).getPropertyValue('--duration-medium')` first. Time an animation with a `--duration-*` token and ease it with an `--ease-*` token, so it follows the theme's motion. Under Reduce Motion, keep the change but drop the travel: nothing moves, scales or clips. With a mouse or trackpad the change happens at once; under a finger it cross-fades, opacity only, in 200 ms or less.",
+          text: "The motion tokens are CSS custom properties, so plain CSS reads them with `var()`; for the Web Animations API, read a token's value with `getComputedStyle(element).getPropertyValue('--duration-medium')` first. Time an animation with a `--duration-*` token and ease it with an `--ease-*` token, so it follows the theme's motion. Under Reduce Motion, keep the change but drop the travel: nothing moves, scales or clips. With a mouse or trackpad the change happens at once; under a finger it cross-fades, opacity only, in 200 ms or less. This CSS follows each person's Reduce Motion setting. A theme's `reducedMotion: 'always'` reduces Astryx's own motion, but your CSS cannot see it, so your own animations follow only the person's setting.",
         },
         {
           type: 'code',
