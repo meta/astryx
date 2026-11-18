@@ -203,11 +203,16 @@ define, so Astryx React Native itself stays the same with or without it.
     version, and reports each contract's named features in the one feature
     list the package's binaries use. How it publishes the declaration is OQ3.
   - Stage derives what a project needs from the installed version of
-    `@astryxdesign/react-native` and that version's published feature list
-    (`spec:AST-140/FR5`), whichever command or window starts Stage, not only
-    through the CLI. How Stage records what each package version needs is
-    Stage's own format; no Astryx record declares anything for Stage, and no
-    Astryx release names a minimum Stage version.
+    `@astryxdesign/react-native` and the feature list of each contract that
+    version uses (`spec:AST-140` FR5), whichever command or window starts
+    Stage, not only through the CLI. It reads those lists from the installed
+    package where the package ships its contract descriptions (`spec:AST-140`
+    OQ1), and otherwise from its own record of that package version. How
+    Stage keeps that record is Stage's own format; no Astryx record declares
+    anything for Stage, and no Astryx release names a minimum Stage version.
+  - A package version whose lists Stage can neither read nor find in its own
+    record is refused before any of the project's JavaScript runs, and the
+    refusal names the package version.
   - Before any of the project's JavaScript runs, Stage refuses a project whose
     package's feature list names a contract that Stage does not implement or
     does not know. The refusal lists each one. It never renders with a silent
@@ -249,7 +254,8 @@ define, so Astryx React Native itself stays the same with or without it.
     meaning (`architecture:cli-surface` INV3).
   - Where `@astryxdesign/react-native-stage` is not installed, the group is hidden
     from help and still recognized: a run writes nothing and exits 1 with
-    `ERR_BASE_COMMAND`. The `astryx experimental` group admits it
+    `ERR_DEP_MISSING`, whose suggestion is the package's install command. The
+    `astryx experimental` group admits it
     (`spec:AST-017` FR27, `spec:AST-084` FR0).
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
@@ -295,8 +301,8 @@ define, so Astryx React Native itself stays the same with or without it.
     `--out` names by an absolute path is written there, never replacing a
     file the command did not write (`architecture:cli-surface` DEC-16).
   - The group answers: what does this app render, and
-    how does it behave, without a simulator? `experimental render` renders a
-    web page from a page module, so it does not answer, and `astryx rn run`
+    how does it behave, without a simulator? `experimental export` writes a
+    page as one HTML file, so it does not answer, and `astryx rn run`
     puts the app on a simulator, an emulator, or a device and returns no
     picture, accessibility tree, or step report, so an option on it cannot
     answer either (`spec:AST-042` FR4). Its function is
@@ -304,17 +310,19 @@ define, so Astryx React Native itself stays the same with or without it.
     step reports, and the accessibility tree.
   - Its outcomes beyond a wrong or missing argument or option:
 
-    | Outcome                                                                                                            | Code                         |
-    | ------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-    | No Stage binary is installed; the suggestion is `astryx experimental rn stage install`                             | `ERR_DEP_MISSING`            |
-    | The Stage download fails                                                                                           | `ERR_FETCH_FAILED`           |
-    | A Stage binary fails its checksum or signature                                                                     | `ERR_STAGE_UNTRUSTED`        |
-    | `--window` names no open Stage window                                                                              | `ERR_STAGE_NO_WINDOW`        |
-    | A script step fails; the report names the step                                                                     | `ERR_STAGE_STEP_FAILED`      |
-    | The app throws or fails to start in Stage                                                                          | `ERR_STAGE_JS_ERROR`         |
-    | Stage cannot set up the project                                                                                    | `ERR_STAGE_PROJECT_SETUP`    |
-    | The project's package needs a contract this Stage does not implement or does not know; the envelope lists each one | `ERR_STAGE_CONTRACTS`        |
-    | A named dev server does not answer                                                                                 | `ERR_DEV_SERVER_UNREACHABLE` |
+    | Outcome                                                                                                                           | Code                         |
+    | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+    | `@astryxdesign/react-native-stage` is not installed; the suggestion is its install command                                        | `ERR_DEP_MISSING`            |
+    | No Stage binary is installed; the suggestion is `astryx experimental rn stage install`                                            | `ERR_DEP_MISSING`            |
+    | The Stage download fails                                                                                                          | `ERR_FETCH_FAILED`           |
+    | A Stage binary fails its checksum or signature                                                                                    | `ERR_STAGE_UNTRUSTED`        |
+    | `--window` names no open Stage window                                                                                             | `ERR_STAGE_NO_WINDOW`        |
+    | A script step fails; the report names the step                                                                                    | `ERR_STAGE_STEP_FAILED`      |
+    | The app throws or fails to start in Stage                                                                                         | `ERR_STAGE_JS_ERROR`         |
+    | Stage cannot set up the project                                                                                                   | `ERR_STAGE_PROJECT_SETUP`    |
+    | The project's package needs a contract this Stage does not implement or does not know; the envelope lists each one                | `ERR_STAGE_CONTRACTS`        |
+    | The project's package version has feature lists Stage can neither read nor find in its own record; the envelope names the version | `ERR_STAGE_CONTRACTS`        |
+    | A named dev server does not answer                                                                                                | `ERR_DEV_SERVER_UNREACHABLE` |
 
 ### Evidence
 
@@ -348,17 +356,28 @@ define, so Astryx React Native itself stays the same with or without it.
   `architecture:cli-surface`, which FR8 cites.
 - `spec:AST-042` FR1 and FR2 extend to the command functions of
   `@astryxdesign/react-native-stage`, the experimental package that
-  contributes the `astryx experimental rn stage` group (FR8); neither
-  `@astryxdesign/cli` nor `@astryxdesign/react-native` changes.
+  contributes the `astryx experimental rn stage` group (FR8).
+- `architecture:cli-surface` INV6, which places every command in the CLI's
+  own command folder, gains a command group that an installed package
+  contributes, loaded by the mechanism `spec:AST-112` OQ5 settles for
+  package commands; the CLI carries no Stage command code, and
+  `@astryxdesign/react-native` does not change.
+- `architecture:cli-surface` INV2 and INV9 admit a command that keeps
+  running, writes its one result, and closes standard output, for
+  `stage open` (FR8).
 - `architecture:cli-surface` INV10 and `spec:AST-081` FR7 gain the Stage
   cache as a per-user write root, and INV10 admits a file that `--out` names
-  by an absolute path, as DEC-16 does for `experimental render --out`.
+  by an absolute path, as DEC-16 does for `experimental export --out`.
 - `architecture:cli-surface` INV3 gains an exception: while the
   `astryx experimental rn stage` group is experimental and
   `@astryxdesign/react-native-stage` is on
-  the canary channel, its outcome codes may change or be removed (FR8).
-- `spec:AST-114` FR6 to FR8 cover `astryx experimental rn stage` on a base
-  that does not provide it (FR8).
+  the canary channel, its outcome codes may change or be removed (FR8). The
+  codes of FR8's table are registered by this record: `ERR_STAGE_UNTRUSTED`,
+  `ERR_STAGE_NO_WINDOW`, `ERR_STAGE_STEP_FAILED`, `ERR_STAGE_JS_ERROR`,
+  `ERR_STAGE_PROJECT_SETUP`, `ERR_STAGE_CONTRACTS`, and
+  `ERR_DEV_SERVER_UNREACHABLE` are new, and `ERR_DEP_MISSING`,
+  `ERR_FETCH_FAILED`, and `ERR_INVALID_OPTION` keep the meanings the CLI
+  gives them.
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
   contracts; this record states how Stage shows them (FR6) and how Stage
   pairs with them (FR7).
