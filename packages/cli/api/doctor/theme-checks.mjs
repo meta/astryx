@@ -526,7 +526,7 @@ function jsxStylesheetHrefs(source) {
   } catch {
     return [];
   }
-  /** @param {any} attribute */
+  /** @param {any} attribute @returns {string | null} */
   const text = attribute => {
     const v = attribute?.value;
     if (v?.type === 'StringLiteral') return v.value;
