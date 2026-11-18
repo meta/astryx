@@ -267,7 +267,7 @@ cd astryx/apps/example-nextjs
           lang: 'bash',
           label: 'Terminal',
           code: `{@command component}          # list all components
-{@command component Button}   # props, usage, theming for Button
+{@command component Button}   # import, usage and props for Button (--detail full adds theming)
 {@command docs}               # list all doc topics
 {@command template --list}    # available page templates
 {@command docs tokens}        # spacing, color, radius reference`,

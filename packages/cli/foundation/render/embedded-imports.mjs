@@ -2,7 +2,7 @@
 
 /**
  * @file Which embedded files the page itself reaches, for `astryx
- * experimental render --reverse`. A received file is untrusted, so its list
+ * experimental export --reverse`. A received file is untrusted, so its list
  * of files is not: a file is written only when the embedded page reaches it
  * through its own imports (static, re-exports, `import()` and `require()` of
  * a string), followed module by module through the embedded tree. Relative
