@@ -4,8 +4,8 @@
 
 /**
  * @file Avatar.tsx
- * @input Uses React, HTMLAttributes, ReactNode, useState, useRef; useTooltip
- *   (Tooltip hook) for the optional name-on-hover tooltip; useComponentTranslator (i18n)
+ * @input Uses React, HTMLAttributes, ReactNode, and TooltipAttachment for the
+ *   optional name-on-hover tooltip; useComponentTranslator (i18n)
  * @output Exports Avatar component, AvatarProps, AvatarSize types
  * @position Core implementation; consumed by index.ts
  *
@@ -22,6 +22,7 @@
 import {
   isValidElement,
   useCallback,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -46,7 +47,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {themeProps} from '../utils/themeProps';
 import {firstCharacter} from '../utils/characters';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {TooltipAttachment} from '../Tooltip/useTooltip';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -682,26 +683,14 @@ export function Avatar({
   // describing it too would double-announce the same name (OQ-4).
   const isCustomTooltip = typeof tooltip === 'string';
 
-  // Own the name tooltip via the Tooltip hook (the Button pattern), which
-  // returns `describedBy` as a value we choose whether to apply — the only way
-  // to satisfy the per-case aria-describedby rule (default name: none; custom
-  // string: describe) without editing Tooltip. `focusTrigger: 'auto'` shows the
-  // tooltip on keyboard focus once the root is focusable (natively for the
-  // interactive <a>/<button>, or via an explicit tab stop on the static div).
-  const tooltipHook = useTooltip({
-    placement: 'above',
-    isEnabled: showTooltip,
-  });
-  // The tooltip ref attaches to whichever root element renders (static or
-  // interactive), so the tooltip works for link/button avatars too. The root
-  // ref itself is assembled below, once the element swap is resolved.
+  const tooltipId = useId();
+  const tooltipTriggerRef = useRef<HTMLElement | null>(null);
   const describedByProp =
     showTooltip && isCustomTooltip
       ? {
           'aria-describedby':
-            [props['aria-describedby'], tooltipHook.describedBy]
-              .filter(Boolean)
-              .join(' ') || undefined,
+            [props['aria-describedby'], tooltipId].filter(Boolean).join(' ') ||
+            undefined,
         }
       : null;
 
@@ -792,11 +781,7 @@ export function Avatar({
       t,
     ],
   );
-  const rootRef = useMergedRefs(
-    ref,
-    showTooltip ? tooltipHook.ref : undefined,
-    nameRef,
-  );
+  const rootRef = useMergedRefs(ref, tooltipTriggerRef, nameRef);
 
   // The inner visuals are identical across the static and interactive variants.
   const visualContent = (
@@ -952,12 +937,18 @@ export function Avatar({
 
   // Always return the same structure so the avatar keeps its position in the
   // React tree regardless of the tooltip flag — toggling it must not remount
-  // the avatar subtree (and lose image-load state). The tooltip is a sibling
-  // (no wrapper DOM); the hook's ref is already on the root via `rootRef`.
+  // the avatar subtree (and lose image-load state). Tooltip behavior attaches
+  // from a sibling without adding a wrapper DOM node.
   return (
     <>
       {avatarElement}
-      {showTooltip ? tooltipHook.renderTooltip(trimmedTooltip) : null}
+      {showTooltip ? (
+        <TooltipAttachment
+          content={trimmedTooltip}
+          id={tooltipId}
+          triggerRef={tooltipTriggerRef}
+        />
+      ) : null}
     </>
   );
 }
