@@ -83,8 +83,9 @@ own, which ends a JavaScript-only app.
 - Generating codes, and decoding codes from anything but an image file.
 - A drawn cover over a sensitive screen on iOS, and any guarantee against a
   second device that photographs the screen.
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app
+  (`spec:AST-141`) are separate products; they conform to this record's
+  contracts.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
