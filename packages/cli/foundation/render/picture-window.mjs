@@ -204,7 +204,7 @@ const not = a => (a == null ? null : !a);
  * Thrown for a query the browser reads as invalid, which never matches: a
  * media type followed by a condition with `or` at its top level (after a
  * feature, a group, or `not` and a group), whatever the type and its `not`;
- * or `not`, `and` or `or` written straight against `(`.
+ * or `and` or `or` written straight against `(`.
  */
 const INVALID_QUERY = new SyntaxError('invalid media query');
 
@@ -232,10 +232,32 @@ function conditionAnswer(text, sure, withoutOr = false) {
     skip();
     const found = new RegExp(`^${word}(?![\\w-])`, 'i').exec(text.slice(at));
     if (!found) return false;
-    // CSS reads `not(` as a function, never as the keyword.
-    if (text[at + found[0].length] === '(') throw INVALID_QUERY;
+    // CSS reads `not(` as a function, never as the keyword: `and(` and `or(`
+    // make the query invalid, and `not(…)` is an unknown group (operand).
+    if (text[at + found[0].length] === '(') {
+      if (word === 'not') return false;
+      throw INVALID_QUERY;
+    }
     at += found[0].length;
     return true;
+  };
+  /**
+   * One operand: a group in parentheses, or `not(…)`, which the browser
+   * reads as a group it cannot answer (unknown, even without `sure`).
+   * @returns {Answer}
+   */
+  const operand = () => {
+    skip();
+    if (!/^not\(/i.test(text.slice(at))) return inParens();
+    let depth = 0;
+    for (at += 3; at < text.length; at += 1) {
+      if (text[at] === '(') depth += 1;
+      if (text[at] === ')' && --depth === 0) {
+        at += 1;
+        return null;
+      }
+    }
+    throw new SyntaxError(text);
   };
   /** @returns {Answer} */
   const inParens = () => {
@@ -265,7 +287,7 @@ function conditionAnswer(text, sure, withoutOr = false) {
       at = rest;
       return answer;
     }
-    const answers = [inParens()];
+    const answers = [operand()];
     let join = '';
     for (;;) {
       const word = take('and') ? 'and' : take('or') ? 'or' : '';
@@ -273,7 +295,7 @@ function conditionAnswer(text, sure, withoutOr = false) {
       if (word === 'or' && top && withoutOr) throw INVALID_QUERY;
       if (join && word !== join) throw new SyntaxError(text);
       join = word;
-      answers.push(inParens());
+      answers.push(operand());
     }
     const decided = join === 'or' ? true : false;
     if (answers.includes(decided)) return decided;

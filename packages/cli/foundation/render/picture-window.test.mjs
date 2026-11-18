@@ -155,7 +155,7 @@ describe('desktopMatches', () => {
     expect(desktopMatches('not print and (max-width: 640px)')).toBe(true);
   });
 
-  it('never matches `not`, `and` or `or` written straight against `(`', () => {
+  it('never matches `and` or `or` written straight against `(`, and reads `not(…)` as an unknown group', () => {
     expect(desktopMatches('not(min-width: 2000px)')).toBe(false);
     expect(desktopMatches('(not(min-width: 2000px))')).toBe(false);
     expect(desktopMatches('screen and not(min-width: 2000px)')).toBe(false);
@@ -168,6 +168,15 @@ describe('desktopMatches', () => {
     expect(
       desktopMatches('(max-width: 640px) or(min-width: 1024px), screen'),
     ).toBe(true);
+    expect(desktopMatches('not(min-width: 768px) or (min-width: 1024px)')).toBe(
+      true,
+    );
+    expect(
+      desktopMatches('(min-width: 1024px) or (not(min-width: 768px))'),
+    ).toBe(true);
+    expect(
+      desktopMatches('(min-width: 1024px) and not(min-width: 768px)'),
+    ).toBe(false);
   });
 
   it('reads text it cannot parse as before', () => {
