@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {FOLDER_JUNK} from '../../foundation/fs/empty-folder.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -105,7 +106,10 @@ export async function stageSharedTheme(arg, cwd) {
     /** @type {{dir: string, folder: string} | {dir: null, folder: string, notCopied: string} | null} */
     let editor = null;
     if (editors.length === 1) {
-      copyTree(editors[0], path.join(stage, 'editor', slug));
+      // (System files, `.DS_Store`, are never part of the editor's state.)
+      copyTree(editors[0], path.join(stage, 'editor', slug), name =>
+        FOLDER_JUNK.has(name),
+      );
       editor = {
         dir: path.join(stage, 'editor', slug),
         folder: shown(editors[0], from),
@@ -390,13 +394,14 @@ function walkFolders(from, visit) {
  * Copy a theme folder's plain files and folders; links are left out.
  * @param {string} from
  * @param {string} to
+ * @param {(name: string) => boolean} [skip] file names left out
  */
-export function copyTree(from, to) {
+export function copyTree(from, to, skip = (/** @type {string} */ _) => false) {
   fs.mkdirSync(to, {recursive: true});
   for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
-    if (entry.isDirectory()) copyTree(src, dest);
-    else if (entry.isFile()) fs.copyFileSync(src, dest);
+    if (entry.isDirectory()) copyTree(src, dest, skip);
+    else if (entry.isFile() && !skip(entry.name)) fs.copyFileSync(src, dest);
   }
 }

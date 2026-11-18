@@ -1922,7 +1922,9 @@ function sharedEditorFiles(receipt, editorDir) {
   return Object.fromEntries(
     Object.entries(receipt.editor.files).filter(
       ([name, hash]) =>
-        typeof hash === 'string' && sharedFileIn(editorDir, name) != null,
+        typeof hash === 'string' &&
+        !FOLDER_JUNK.has(path.basename(name)) &&
+        sharedFileIn(editorDir, name) != null,
     ),
   );
 }
