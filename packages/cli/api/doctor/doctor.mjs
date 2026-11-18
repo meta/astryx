@@ -201,10 +201,13 @@ import {
  *   is on; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, imports: Array<{line: number, module: string, export: string, why: 'unlisted'|'earlier'|'unresolved', set: string|null, definitions: string[], replacement: {set: string, module: string, export: string}|null}>}>|null} [iconImports]
- * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
  *   Each file in the project's own source with icon imports that do not
  *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
+ * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ *   The props the project's own source gives Core components that they do
+ *   not take, with how many props it read, or why it checked none; null when
+ *   the project reads no Core or the scan failed.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.

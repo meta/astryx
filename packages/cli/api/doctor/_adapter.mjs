@@ -54,7 +54,7 @@ import {
 } from '../../foundation/discovery/project-typescript.mjs';
 import {nameWords, orderByAffinity} from '../../foundation/text/suggest-order.mjs';
 import {COMPONENT_BATCH_SELECTOR_LIMIT, component as componentAnswer} from '../component/component.mjs';
-import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
+import {compilerOptionsFor, projectMapsImport} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
   splitSpecifier,
@@ -370,20 +370,32 @@ const NOT_PAGE_CODE =
  * it on to the element it renders, and neither is a prop JSX gives every
  * component. A component with no docs, one TypeScript cannot read, a generic
  * one, and a module that compiles its JSX with another runtime are not
- * judged. Test, story and fixture files are not read. `skipped` says why
- * nothing was judged: no TypeScript, a project on another JSX runtime, more
- * source files than doctor reads, or types or augmentations it could not
- * read.
+ * judged. Test, story and fixture files are not read. Each page is judged
+ * with the config TypeScript reads for it. `skipped` says why nothing was
+ * checked: no TypeScript, a config that compiles JSX with another runtime, or
+ * more source files than doctor reads, whatever the pages hold; or, for a
+ * prop the docs leave out, types or augmentations it could not read.
  * @param {string} projectDir
  * @returns {Promise<{found: UnknownCoreProp[], uses: number, skipped: string | null}>}
  */
 export async function findUnknownCoreProps(projectDir) {
+  const notChecked = (/** @type {string} */ reason) => ({found: [], uses: 0, skipped: `${reason}, so the props were not checked.`});
+  const files = listProjectSourceFiles(projectDir, '');
+  // A declaration beyond the files doctor reads could add a prop to every
+  // component.
+  if (files.length >= SOURCE_FILE_LIMIT) return notChecked('the project has more source files than doctor reads');
+  const compiler = resolveProjectTypeScript([projectDir]);
+  if (compiler === null) {
+    return {found: [], uses: 0, skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`};
+  }
+  if (compiler.ts === null) {
+    return {found: [], uses: 0, skipped: unusableTypeScriptReason(compiler.version, 'the props were not checked')};
+  }
   const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
-  /** @type {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string}>} */
+  /** @type {Array<import('../../foundation/discovery/core-props.mjs').CorePropUse & {file: string, path: string}>} */
   const uses = [];
   /** @type {string[]} */
   const jsxDeclarations = [];
-  const files = listProjectSourceFiles(projectDir, '');
   for (const file of files) {
     let text;
     try {
@@ -391,10 +403,23 @@ export async function findUnknownCoreProps(projectDir) {
     } catch {
       continue;
     }
-    if (/\.[cm]?ts$/.test(file) && JSX_DECLARATION.test(text)) jsxDeclarations.push(file);
+    if (/\.[cm]?tsx?$/.test(file) && JSX_DECLARATION.test(text)) jsxDeclarations.push(file);
     if (NOT_PAGE_CODE.test(relative(file)) || !text.includes('@astryxdesign/core') || OTHER_JSX_RUNTIME.test(text)) continue;
-    for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file)});
+    for (const use of scanCoreProps(text) ?? []) uses.push({...use, file: relative(file), path: file});
   }
+  // Each page is read with the config TypeScript reads for it; pages that
+  // share a config share one read.
+  /** @type {Map<string, {file: string, options: Record<string, unknown>}>} */
+  const configs = new Map();
+  /** @type {Map<string, string>} */
+  const configOf = new Map();
+  for (const file of new Set(uses.map(use => use.path))) {
+    const config = compilerOptionsFor(file) ?? {file: '', options: {}};
+    configs.set(config.file, config);
+    configOf.set(file, config.file);
+  }
+  const runtime = [...configs.values()].map(config => config.options.jsxImportSource).find(source => typeof source === 'string' && source !== 'react');
+  if (typeof runtime === 'string') return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
   // One batch read of the props Core's docs list, as `astryx component
   // <Name> --props` prints them; a component they do not describe is not
   // judged.
@@ -413,31 +438,31 @@ export async function findUnknownCoreProps(projectDir) {
     const props = documented.get(use.component);
     return props != null && !props.includes(use.prop);
   });
-  if (candidates.length === 0) return {found: [], uses: uses.length, skipped: null};
-  // A declaration beyond the files doctor reads could add a prop to every
-  // component.
-  if (files.length >= SOURCE_FILE_LIMIT) {
-    return {found: [], uses: uses.length, skipped: 'the project has more source files than doctor reads, so the props were not checked.'};
+  /** @type {UnknownCoreProp[]} */
+  const found = [];
+  for (const [configFile, config] of configs) {
+    const here = candidates.filter(use => configOf.get(use.path) === configFile);
+    if (here.length === 0) continue;
+    const augmentations = projectAugmentations(projectDir, here[0].path);
+    if (!augmentations.complete) return notChecked("the files that may add to Core's types could not all be read");
+    /** @type {Map<string, Set<string>>} */
+    const asked = new Map();
+    for (const use of here) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
+    const types = readCorePropTypes({
+      ts: compiler.ts,
+      projectDir,
+      configDir: configFile ? path.dirname(configFile) : projectDir,
+      options: config.options,
+      augmentations: [...augmentations.files, ...jsxDeclarations],
+      props: asked,
+    });
+    if (types.unread) return notChecked(types.unread);
+    for (const use of here) {
+      if (types.attributes.has(use.prop) || types.takes.get(use.component)?.get(use.prop) !== false) continue;
+      const {path: _file, ...report} = use;
+      found.push({...report, suggestion: closestProp(use.prop, documented.get(use.component) ?? [])});
+    }
   }
-  const compiler = resolveProjectTypeScript([projectDir]);
-  if (compiler === null) {
-    return {found: [], uses: uses.length, skipped: `TypeScript is not installed in this project, so the props were not checked. ${TYPESCRIPT_FIX}`};
-  }
-  if (compiler.ts === null) {
-    return {found: [], uses: uses.length, skipped: unusableTypeScriptReason(compiler.version, 'the props were not checked')};
-  }
-  const augmentations = projectAugmentations(projectDir);
-  if (!augmentations.complete) {
-    return {found: [], uses: uses.length, skipped: "the files that may add to Core's types could not all be read, so the props were not checked."};
-  }
-  /** @type {Map<string, Set<string>>} */
-  const asked = new Map();
-  for (const use of candidates) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
-  const types = readCorePropTypes({ts: compiler.ts, projectDir, augmentations: [...augmentations.files, ...jsxDeclarations], props: asked});
-  if (types.unread) return {found: [], uses: uses.length, skipped: `${types.unread}, so the props were not checked.`};
-  const found = candidates
-    .filter(use => !types.attributes.has(use.prop) && types.takes.get(use.component)?.get(use.prop) === false)
-    .map(use => ({...use, suggestion: closestProp(use.prop, documented.get(use.component) ?? [])}));
   found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
   return {found, uses: uses.length, skipped: null};
 }

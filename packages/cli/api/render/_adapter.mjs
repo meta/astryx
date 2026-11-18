@@ -52,7 +52,7 @@ import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {component} from '../component/component.mjs';
-import {projectAugmentations, propAugmentationPoint} from '../../foundation/discovery/core-augmentation-points.mjs';
+import {projectAugmentations, propWideningInterfaces} from '../../foundation/discovery/core-augmentation-points.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -466,17 +466,19 @@ const CLOSED_UNION = /^\s*'[^']*'(?:\s*\|\s*'[^']*')*\s*$/;
  * component draws its default look, and nothing else says so. The union
  * comes from Core's own docs for the component in the page's Core, the props
  * `astryx component <Name> --package @astryxdesign/core` reads, so an
- * integration that replaces the component does not change it. Where Core
- * lets a theme widen the prop by declaration merging (`interface
- * ButtonVariantMap`), the keys the page's project adds to that interface are
- * values the prop has too; when the project cannot be read in full, such a
- * prop is not checked. A component or prop with no doc entry, and a prop whose
- * type is not a closed union, are not checked.
+ * integration that replaces the component does not change it. Where the
+ * prop's type takes the keys of an interface a theme can widen by declaration
+ * merging (`interface ButtonVariantMap`, `interface TextColorMap` for Link's
+ * `color`), the keys the page's project adds to it are values the prop has
+ * too; when the project cannot be read in full, or the prop's type cannot be
+ * followed, such a prop is not checked. A component or prop with no doc
+ * entry, and a prop whose type is not a closed union, are not checked.
  * @param {{component: string, prop: string, value: string, file: string, line: number}[]} values
- * @param {string} dir the page's folder, whose Core the docs come from
+ * @param {string} page the page file; its folder's Core gives the docs
  * @returns {Promise<import('../../foundation/render/render-page.mjs').RenderWarning[]>}
  */
-async function propValueWarnings(values, dir) {
+async function propValueWarnings(values, page) {
+  const dir = path.dirname(page);
   /** @type {Map<string, any[] | null>} */
   const docs = new Map();
   /** @type {import('../../foundation/render/render-page.mjs').RenderWarning[]} */
@@ -500,11 +502,16 @@ async function propValueWarnings(values, dir) {
     const prop = docs.get(v.component)?.find(p => p?.name === v.prop);
     if (typeof prop?.type !== 'string' || !CLOSED_UNION.test(prop.type)) continue;
     const allowed = [...prop.type.matchAll(/'([^']*)'/g)].map(m => m[1]);
-    const point = propAugmentationPoint(coreDir, v.component, v.prop);
-    if (point) {
-      added ??= projectAugmentations(findPackageRoot(dir) ?? dir);
+    if (allowed.includes(v.value)) continue;
+    // The project read can walk a large tree; only a value the docs lack needs it.
+    const widening = await propWideningInterfaces(coreDir, v.component, v.prop);
+    if (widening === null) continue;
+    if (widening.size > 0) {
+      added ??= projectAugmentations(findPackageRoot(dir) ?? dir, page);
       if (!added.complete) continue;
-      for (const key of added.keys.get(point.interfaceName) ?? []) if (!allowed.includes(key)) allowed.push(key);
+      for (const name of widening) {
+        for (const key of added.keys.get(name) ?? []) if (!allowed.includes(key)) allowed.push(key);
+      }
     }
     if (allowed.includes(v.value)) continue;
     const key = `${v.file}:${v.line}:${v.component}:${v.prop}:${v.value}`;
@@ -549,7 +556,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
   } catch (e) {
     throw asAstryxError(e);
   }
-  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], path.dirname(input))));
+  page.warnings.push(...(await propValueWarnings(page.propValues ?? [], input)));
   for (const {name, dir} of page.fromSet) {
     let version = null;
     try {

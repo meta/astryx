@@ -149,17 +149,39 @@ describe('doctor core-props', () => {
         'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
       });
       expect(config?.status).toBe('info');
-      expect(config?.message).toMatch(/^Not checked: The project compiles JSX with `@emotion\/react`/);
+      expect(config?.message).toMatch(/^Not checked: the project compiles JSX with `@emotion\/react`/);
     },
     SLOW,
   );
 
   it(
-    'says it did not run without TypeScript',
+    "reads the type packages the page's config names, and declarations in .tsx modules",
     async () => {
-      const check = await propsCheck({'src/App.tsx': app('TabList', '<TabList selectedID="a" />')}, {typescript: false});
-      expect(check?.status).toBe('info');
-      expect(check?.message).toMatch(/^Not checked: TypeScript is not installed in this project, so the props were not checked\./);
+      // A css prop declared for every component by a type package the config lists.
+      const typed = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', types: ['css-prop']}}),
+        'node_modules/@types/css-prop/package.json': JSON.stringify({name: '@types/css-prop', types: 'index.d.ts'}),
+        'node_modules/@types/css-prop/index.d.ts': "import 'react';\ndeclare module 'react' {\n  interface Attributes {\n    css?: unknown;\n  }\n}\n",
+        'src/App.tsx': app('Button', '<Button label="Go" css={{}} />'),
+      });
+      expect(typed?.status).toBe('pass');
+      const tsx = await propsCheck({
+        'src/css.tsx': "import 'react';\ndeclare module 'react' {\n  interface Attributes {\n    css?: unknown;\n  }\n}\nexport {};\n",
+        'src/App.tsx': app('Button', '<Button label="Go" css={{}} />'),
+      });
+      expect(tsx?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'says it did not run without TypeScript, whatever props the pages give',
+    async () => {
+      for (const line of ['<TabList selectedID="a" />', '<TabList value="a" onChange={() => {}} />']) {
+        const check = await propsCheck({'src/App.tsx': app('TabList', line)}, {typescript: false});
+        expect(check?.status).toBe('info');
+        expect(check?.message).toMatch(/^Not checked: TypeScript is not installed in this project, so the props were not checked\./);
+      }
     },
     SLOW,
   );

@@ -3,11 +3,12 @@
 /**
  * @file Which props Core's own types let a component take, read with the
  *   project's TypeScript.
- * @input The project's TypeScript compiler, the project folder, the files
- *   that augment Core, and the props to judge for each Core component.
+ * @input The project's TypeScript compiler, the project folder, the pages'
+ *   compiler options, the files that augment Core or React's JSX, and the
+ *   props to judge for each Core component.
  * @output For each component TypeScript can read, whether its props type
- *   takes each prop; the names of the HTML, SVG, DOM and ARIA attributes
- *   React's types know; or why the types could not be read.
+ *   takes each prop; the prop names React's types give HTML and SVG elements
+ *   and every component; or why the types could not be read.
  * @position Read by `astryx doctor` (api/doctor/_adapter.mjs) for the props a
  *   page gives Core components that Core's docs do not list.
  */
@@ -94,22 +95,6 @@ function queryText(components, modules) {
 const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
 
 /**
- * The JSX runtime other than React's that the project's TypeScript config
- * names (`jsxImportSource`), or null.
- * @param {any} ts
- * @param {string} projectDir
- * @returns {string | null}
- */
-function jsxRuntime(ts, projectDir) {
-  const config = ts.findConfigFile(projectDir, ts.sys.fileExists, 'tsconfig.json');
-  if (!config) return null;
-  const read = ts.readConfigFile(config, ts.sys.readFile);
-  if (read.error) return null;
-  const source = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(config)).options.jsxImportSource;
-  return typeof source === 'string' && source !== 'react' ? source : null;
-}
-
-/**
  * Whether a component is generic: its props may come from a type argument the
  * page gives it, which no fixed props type holds.
  * @param {any} ts
@@ -136,31 +121,29 @@ function isGeneric(ts, checker, type) {
  * Read Core's own published types with the project's TypeScript, as the
  * project's pages see them: Core and React resolved from the project folder,
  * each component from the Core subpath that exports it, with the files that
- * augment Core's modules or React's JSX read too. Nothing is written: the
- * module that names the types exists only in memory. A component whose type
- * TypeScript cannot read, or that is generic, is left out of `takes`. A
- * project whose TypeScript config compiles JSX with another runtime
- * (`jsxImportSource`), which can give every component props of its own, is
- * not read.
+ * augment Core's modules or React's JSX read too, and the type packages the
+ * pages' config names (`types` and `typeRoots`; every package under the
+ * type roots when it names none, as TypeScript reads them). Nothing is
+ * written: the module that names the types exists only in memory. A
+ * component whose type TypeScript cannot read, or that is generic, is left
+ * out of `takes`.
  * @param {object} input
  * @param {any} input.ts the project's TypeScript compiler
  * @param {string} input.projectDir
+ * @param {string} input.configDir the folder of the pages' config, which the
+ *   default type roots are found from
+ * @param {Record<string, unknown>} input.options the pages' compiler options,
+ *   as their config writes them, with `typeRoots` absolute
  * @param {string[]} input.augmentations files that augment Core or React's JSX
  * @param {Map<string, Set<string>>} input.props for each component, the props to judge
  * @returns {CorePropTypes}
  */
-export function readCorePropTypes({ts, projectDir, augmentations, props}) {
-  const runtime = jsxRuntime(ts, projectDir);
-  if (runtime) {
-    return {
-      takes: new Map(),
-      attributes: new Set(),
-      unread: `The project compiles JSX with \`${runtime}\`, which can give every component props of its own`,
-    };
-  }
+export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props}) {
   const components = [...props.keys()];
   const file = path.join(projectDir, '__astryx_core_props__.ts');
   const text = queryText(components, subpathsByComponent(projectDir));
+  const strings = (/** @type {unknown} */ list) =>
+    Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : undefined;
   const options = {
     strict: true,
     noEmit: true,
@@ -168,10 +151,14 @@ export function readCorePropTypes({ts, projectDir, augmentations, props}) {
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ES2022,
-    types: [],
+    types: strings(configOptions.types),
+    typeRoots: strings(configOptions.typeRoots),
   };
   const host = ts.createCompilerHost(options, true);
   const {getSourceFile, fileExists, readFile} = host;
+  // The default type roots are the `node_modules/@types` folders above the
+  // config, as TypeScript finds them for the project.
+  host.getCurrentDirectory = () => configDir;
   /**
    * @param {string} name
    * @param {any} language

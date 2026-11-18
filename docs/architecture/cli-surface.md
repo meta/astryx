@@ -376,22 +376,24 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   or one of its subpaths, except `key`, `ref`, `children`, the styling props
   and `data-` and `aria-` attributes. A prop that Core's docs for the
   component do not list is a candidate. The `core-props` check reads Core's
-  own published types with the project's own TypeScript, as the project's
-  pages see them, together with the files of the project and of its installed
-  theme and integration packages that augment Core's modules, and the
-  project's own modules that widen React's JSX. It warns on a candidate only
-  when TypeScript says the component's props do not take it. It never warns
-  on a prop name that React's types give an HTML or SVG element, which a
-  component can pass on to the element it renders, or on a prop that JSX
-  gives every component. It does not judge a component that Core's docs do
-  not describe, one whose type TypeScript cannot read, a generic one, or one
-  from outside Core, and it does not judge a module that compiles its JSX
-  with another runtime. When the project has no TypeScript that it can use,
-  compiles JSX with another runtime, has more source files than `doctor`
-  reads, or when the types or the files that augment Core cannot all be read,
-  the check does not run and says why. The warning names each prop's file,
-  line and component, and the documented prop that has the same words when
-  there is one. It never fails `doctor`.
+  own published types with the project's own TypeScript, as the page's
+  config has TypeScript read them: with the type packages that config names,
+  the files of the project and of its installed theme and integration
+  packages that augment Core's modules, and the project's own modules that
+  widen React's JSX. It warns on a candidate only when TypeScript says the
+  component's props do not take it. It never warns on a prop name that
+  React's types give an HTML or SVG element, which a component can pass on
+  to the element it renders, or on a prop that JSX gives every component. It
+  does not judge a component that Core's docs do not describe, one whose type
+  TypeScript cannot read, a generic one, or one from outside Core, and it
+  does not judge a module that compiles its JSX with another runtime. When
+  the project has no TypeScript that it can use, has a config that compiles
+  JSX with another runtime, or has more source files than `doctor` reads,
+  the check does not run and says why, whatever props the pages give. When
+  there is a candidate and the types or the files that augment Core cannot
+  all be read, it reports no prop and says why. The warning names each
+  prop's file, line and component, and the documented prop that has the same
+  words when there is one. It never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or
@@ -798,11 +800,12 @@ non-interactive guarantee.
   `unknown-prop-value` warning of `astryx experimental render`: each string a
   page writes for a Core component's prop whose type is a closed set of
   strings, checked against Core's docs for that component in the page's own
-  Core. Where Core lets a theme widen the prop by declaration merging (the
-  interfaces theme build reads from the same module), the keys the project's
-  own TypeScript files and its installed theme and integration packages'
-  declaration files add are values the prop has; a project that cannot be
-  read in full leaves such a prop unchecked.
+  Core. Where the prop's type in Core's source takes the keys of an interface
+  a theme can widen by declaration merging (the module theme build also
+  resolves its augmentations with), the keys the project's own TypeScript
+  files and its installed theme and integration packages' declaration files
+  add are values the prop has; a project that cannot be read in full leaves
+  such a prop unchecked.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
@@ -1172,7 +1175,7 @@ not resolve without an index file); writing an index file beside each scaffold
 | INV36     | `api/gap-report/gap-report.test.mjs`, `clients/cli/commands/gap-report.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | A run without `--to` reaches an `issuesUrl` the handlers did not choose, `--to` runs a handler or files on GitHub without `--confirm-public`, an unknown `--to` sends anything, or the destinations list or its line telling the agent to ask the person is missing while a destination exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV37     | `api/integration/validate-integration.test.mjs`, `api/integration/validate-integration-fixes.test.mjs`, `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                              | A top-level source with no doc passes `--strict` (a dotted template id such as `landing.page` included), or a test, spec or story file or a subfolder helper is flagged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | INV39     | `api/doctor/doctor.test.mjs`, `api/doctor/built-checks.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                           | An app with no import of or link to Core's `astryx.css` passes `core-stylesheets`, output that uses Astryx without Core's component styles passes `built-astryx-styles`, or an app that compiles Core from source is warned by either.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| INV41     | `foundation/discovery/core-props.test.mjs`, `api/doctor/core-props.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                               | A prop a Core component takes, an HTML or ARIA attribute, a prop Core's types take that its docs leave out, a generic component's prop, another component's prop, or a test file's prop is reported; a prop a Core component does not take is not; or the check runs without TypeScript.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| INV41     | `foundation/discovery/core-props.test.mjs`, `api/doctor/core-props.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                               | A prop a Core component takes, an HTML or ARIA attribute, a prop Core's types take that its docs leave out, a prop JSX gives every component (from the project's own modules or a type package its config names), a generic component's prop, another component's prop, or a test file's prop is reported; a prop a Core component does not take is not; or the check runs without TypeScript or on another JSX runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Open questions
 
