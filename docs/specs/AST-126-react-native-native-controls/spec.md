@@ -89,8 +89,8 @@ edit through React Native's `TextInput` and do not use `AstryxNativeTextField`.
 - The contract of any one component (Button, Slider, TextInput,
   SegmentedControl, the date family, PasteButton). Each component's own record
   owns it; this record owns its native presentation.
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - `Stepper`. The presentation seam knows it, but it has no native piece and no
   platform contract here.
 - The contracts of the native-driver gesture views that ship in the same
