@@ -802,6 +802,77 @@ describe('Outline navigate callbacks', () => {
     window.location.hash = '';
   });
 
+  it('ends the first navigation at once when a second one starts', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('link', {name: 'API'}));
+    // The first navigation ends before the second scroll settles.
+    expect(onNavigateStart.mock.calls).toEqual([['install'], ['api']]);
+    expect(onNavigateEnd.mock.calls).toEqual([['install']]);
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onNavigateEnd.mock.calls).toEqual([['install'], ['api']]);
+
+    cleanup();
+  });
+
+  it('does not fire onNavigateEnd after the Outline unmounts mid-scroll', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const cleanup = mountHeadings();
+    const onNavigateEnd = vi.fn();
+
+    const {unmount} = render(
+      <Outline items={items} onNavigateEnd={onNavigateEnd} />,
+    );
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    unmount();
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+      vi.advanceTimersByTime(5000);
+    });
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it('does nothing for Space on a link whose target is missing', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '';
+    const onNavigateStart = vi.fn();
+    const onNavigateEnd = vi.fn();
+
+    render(
+      <Outline
+        items={items}
+        onNavigateStart={onNavigateStart}
+        onNavigateEnd={onNavigateEnd}
+      />,
+    );
+    screen.getByRole('link', {name: 'Installation'}).focus();
+    await user.keyboard('[Space]');
+
+    expect(onNavigateStart).not.toHaveBeenCalled();
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('');
+  });
+
   it('does not fire callbacks for a modified (Cmd) click', async () => {
     const user = userEvent.setup();
     const cleanup = mountHeadings();

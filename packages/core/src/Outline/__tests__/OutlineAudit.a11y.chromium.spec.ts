@@ -559,6 +559,49 @@ cases.push({
   },
 });
 
+cases.push({
+  key: 'long-labels-light-ltr',
+  group: 'long-labels',
+  story: 'core-outline--long-labels',
+  theme: 'neutral',
+  mode: 'light',
+  direction: 'ltr',
+  viewport: DESKTOP,
+  motion: 'still',
+  pointer: 'fine',
+  count: 3,
+  current: 'Installing the package in a monorepo with several build targets',
+  run: async (page, check, frame) => {
+    // A label longer than the column is cut with an ellipsis and stays on one
+    // line, and the column does not grow.
+    const labels = await page.evaluate(nav => {
+      const root = document.querySelector(nav);
+      return [...(root?.querySelectorAll('a') ?? [])].map(link => {
+        const label = link.querySelector('span') ?? link;
+        return {
+          text: link.textContent ?? '',
+          clipped: label.scrollWidth > label.clientWidth,
+          oneLine:
+            label.getBoundingClientRect().height <=
+            parseFloat(getComputedStyle(label).lineHeight) * 1.5,
+          fits:
+            link.getBoundingClientRect().right <=
+            (root?.getBoundingClientRect().right ?? 0) + 0.5,
+        };
+      });
+    }, NAV);
+    for (const label of labels) {
+      check(label.oneLine, `${label.text} wraps`);
+      check(label.fits, `${label.text} overflows the column`);
+    }
+    check(
+      labels.filter(label => label.clipped).length === 2,
+      `clipped labels ${JSON.stringify(labels.map(label => label.clipped))}`,
+    );
+    await frame('long-labels', {labels});
+  },
+});
+
 for (const direction of ['ltr', 'rtl'] as const) {
   cases.push({
     key: `keyboard-narrow-light-${direction}`,
