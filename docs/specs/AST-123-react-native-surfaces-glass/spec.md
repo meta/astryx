@@ -44,11 +44,20 @@ and the library's paint rules that choose between them and a drawn fill.
 
 ## Why this exists
 
-| Piece                                         | What the ecosystem already does well                                                                                                                                                                             | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxMaterialView`                          | expo-blur and @react-native-community/blur draw iOS `UIVisualEffectView` blurs, the system materials included, with a tint and an intensity, and each offers an Android blur. Both are mature and simple to use. | Neither draws `UIGlassEffect`. Astryx needs one leaf that draws Liquid Glass on iOS 26 and later and the matching system material below it, follows or pins the theme's colour mode, and has a view probe, so the library picks its fallback before it renders (FR6). One dependency set (`spec:AST-112/FR2`) and the same behaviour in Astryx Stage complete the case.                                                                                                                                                                               |
-| `AstryxGlassView`, `AstryxGlassContainerView` | expo-glass-effect and @callstack/liquid-glass wrap `UIGlassEffect` and `UIGlassContainerEffect` well: regular and clear glass, a tint, interactive glass, a container with spacing, and an availability check.   | The library's chrome needs more in one view: content inside the glass so a press on a child makes the glass respond, the system's fade-in and fade-out of the glass, a layout spring that morphs grouped glass when React Native moves it, a shape morph driven by a native-driver `Animated` value (FR3), touches that pass through outside the glass shape, the pre-26 blur with its hairline edge, a registered Android view so one tree runs on both platforms, and the same behaviour in Astryx Stage. No extra dependency (`spec:AST-112/FR2`). |
-| `AstryxScrollEdgeView`                        | react-native-screens sets the scroll-edge effects of the scroll view under a system header that it presents.                                                                                                     | Astryx draws its own bars (`spec:AST-112/DEC-9`). A drawn bar gets the system's edge effect only when the bar registers as the edge's element container, so the effect takes the outline of what the bar contains. No router is needed to find the scroll view (DEC-4).                                                                                                                                                                                                                                                                               |
+- `AstryxMaterialView`: the library needs one leaf that paints Liquid Glass on
+  iOS 26 and later and the matching system blur before it, in the theme's
+  colour mode, with a probe that lets the library choose its fallback before it
+  renders (FR1, FR6).
+- `AstryxGlassView`: the library's chrome needs its content inside the glass, so
+  a press lights the glass, plus the system's glass fade, layout springs, and
+  shape morphs without JavaScript per frame, in one view that also runs on
+  Android (FR2, FR3, DEC-1, DEC-5).
+- `AstryxGlassContainerView`: neighbouring glass in the library's bars joins
+  into one shape only inside a glass container (FR4). Whether it and
+  `AstryxMaterialView` stay separate from `AstryxGlassView` is OQ1.
+- `AstryxScrollEdgeView`: a bar the app draws gets the system's scroll-edge
+  effect only when the bar registers with that edge, and the library's bars
+  are drawn (`spec:AST-112/DEC-9`, FR7, DEC-4).
 
 ## Who uses it
 
@@ -96,9 +105,6 @@ and the library's paint rules that choose between them and a drawn fill.
   - Probes: `isMaterialViewAvailable()` and `MaterialView.supports(variant)`.
     Both are true wherever the binary registers the view, since every variant
     paints there (as a blur before iOS 26).
-  - `colorScheme` and `MaterialView.supports` replace the deprecated
-    `appearance` prop and `supportsMaterialVariant`, which stay exported under
-    `spec:AST-112/FR5`.
 - **FR2 — Glass that holds its content.** `NativeGlassView` is a glass surface
   with its React children inside the glass:
   - Props: `variant` (`regular` or `clear`), `tint`, `interactive` (default
@@ -150,14 +156,22 @@ and the library's paint rules that choose between them and a drawn fill.
   passes a tint, chrome glass is tinted with the theme's surface colour at 0.6
   alpha.
 - **FR6 — The library picks one paint per surface.** Each surface settles on a
-  paint before it renders, from the accessibility settings, the app's
-  preference, and the probes:
+  paint before it renders, from the theme's `material` member, the
+  accessibility settings, the app's preference, and the probes:
 
-  | Surface                                                   | Paint chosen                                                                                                                                                                                                                                                                                                                 |
-  | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | Chrome (`GlassSurface`, `GlassGroup`)                     | `opaque` with Increase Contrast or Reduce Transparency on, or when the caller asks for it; otherwise `translucent` if glass cannot paint here; otherwise `glass` (children inside `NativeGlassView`) if that view exists, else `native` (`MaterialView` under the children). Chrome requests material unless told otherwise. |
-  | Floating surfaces (`MaterialSurface`, `MaterialBackdrop`) | The app's `surfaceMaterial` preference on `AstryxCapabilitiesProvider` (`opaque` when unset); `opaque` too with Reduce Transparency or Increase Contrast on; otherwise `native` if `MaterialView` supports the variant, else `translucent`.                                                                                  |
-  | Overlays (menus, popovers, sheets, dialogs)               | `native` (system glass under the content, clear fill) only on iOS 26 or later with the platform on and `MaterialView` present; otherwise `opaque`, which also applies with Reduce Transparency on and when the app sets `surfaceMaterial="opaque"`.                                                                          |
+  - The theme's resolved `material` member (`spec:AST-082/FR10`, the durable
+    member or an `ios` entry's) comes first. `opaque` paints every surface
+    `opaque`. `translucent`, an iOS glass value, or no member leaves the table
+    below in force.
+  - `surfaceMaterial` on `AstryxCapabilitiesProvider` is the app's preference
+    for floating surfaces: `opaque` (the default), `translucent`, or
+    `material`. It never overrides a theme whose `material` is `opaque`.
+
+  | Surface                                                   | Paint chosen                                                                                                                                                                                                                                                                                                                        |
+  | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Chrome (`GlassSurface`, `GlassGroup`)                     | `opaque` with Increase Contrast or Reduce Transparency on, or when the caller asks for it; otherwise `translucent` if glass cannot paint here; otherwise `glass` (children inside `NativeGlassView`) if that view exists, else `native` (`MaterialView` under the children). Chrome requests material unless told otherwise.        |
+  | Floating surfaces (`MaterialSurface`, `MaterialBackdrop`) | `opaque` when `surfaceMaterial` is `opaque` or Reduce Transparency or Increase Contrast is on; `translucent` when `surfaceMaterial` is `translucent`; otherwise `native` if `MaterialView` supports the variant, else `translucent`.                                                                                                |
+  | Overlays (menus, popovers, sheets, dialogs)               | `native` (system glass under the content, clear fill) only on iOS 26 or later with the platform on and `MaterialView` present; otherwise `opaque`. `opaque` also applies with Reduce Transparency on, when the app sets `surfaceMaterial="opaque"`, and to drawn menus and the `Selector` picker at accessibility text sizes (FR9). |
   - `translucent` is the surface's token colour with its alpha scaled by the
     intensity (0.6, 0.72, 0.82, 0.9, and 0.94 from `ultraThin` to `chrome`) and
     a one-pixel outline. Overlays have no `translucent` paint.
@@ -233,26 +247,20 @@ and the library's paint rules that choose between them and a drawn fill.
   | -------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ | ------------ |
   | `AstryxGlassView`          | native component (Fabric Native Component) | `variant`, `glassTint`, `interactive`, `cornerRadius`, `shape`, `materialized`, `animatesLayout`, `morphFrom`, `morphTo`, `progress`, `intensity`, `colorScheme` | —        | —      | iOS, Android |
   | `AstryxGlassContainerView` | native component (Fabric Native Component) | `spacing`                                                                                                                                                        | —        | —      | iOS          |
-  | `AstryxMaterialView`       | native component (Fabric Native Component) | `variant`, `intensity`, `appearance`, `colorScheme`, `glassTint`, `interactive`, `cornerRadius`                                                                  | —        | —      | iOS          |
+  | `AstryxMaterialView`       | native component (Fabric Native Component) | `variant`, `intensity`, `colorScheme`, `glassTint`, `interactive`, `cornerRadius`                                                                                | —        | —      | iOS          |
   | `AstryxScrollEdgeView`     | native component (Fabric Native Component) | `edge`, `effect`, `scrollViewNativeID`                                                                                                                           | —        | —      | iOS          |
-  - Every contract is in the platform's always-present core (`spec:AST-112/FR1`)
-    and links with no opt-in.
+  - Every contract is in the platform's always-present core and links by
+    default (`spec:AST-112/FR1`, `spec:AST-112/FR3`).
   - The native code uses public platform API only: public UIKit on iOS and
     public Android SDK classes on Android. The one exception is React Native's
     record of the props its native driver manages, which the glass view reads so
     a React commit does not reset a driven `progress` (FR3); React Native marks
     that record unstable, and without it a commit puts back the JavaScript value.
-  - On the wire, `colorScheme` is `unspecified` (follow the trait collection),
-    `light`, or `dark`; on `AstryxMaterialView` it wins over `appearance`, which
-    carries the pinned mode. `shape: 'capsule'`, like any negative radius,
-    rounds to half the shorter side.
-  - Every contract in the group is at revision 1. A behaviour added after
-    revision 1 is a named feature (`<Contract>.<feature>`) that the binary lists
-    and the JavaScript checks with `hasContractFeature` before it uses it.
-    Without the feature the JavaScript keeps the revision-1 behaviour or answers
-    `unsupported`, and says so once; it never takes a silent weaker path.
-  - The package names the oldest Astryx Stage that supports its contract set.
-    An older Stage refuses the project and lists the contracts it lacks.
+  - On the wire, `colorScheme` is `unspecified` (follow the OS), `light`, or
+    `dark`. `shape: 'capsule'`, like any negative radius, rounds to half the
+    shorter side.
+  - The contracts evolve under `spec:AST-112/FR8`, and Astryx Stage pairs with
+    them under `spec:AST-112/FR12`.
   - Astryx Stage shows each contract with the behaviour of FR1 to FR8 in its iOS
     looks (simulated Liquid Glass with grouping, materialize, layout spring,
     morph, and the press response; the system blur on the pre-26 look; the soft
@@ -273,35 +281,38 @@ and the library's paint rules that choose between them and a drawn fill.
   materials cover earlier iOS; Android draws no backdrop material.
 - Unsupported behavior: an absent view renders its children in a plain View and
   its probe answers false, and the library draws its fallback paint (FR6, FR8);
-  a feature a binary does not list keeps the revision-1 behaviour or answers
-  `unsupported` (FR10).
+  a binary that lacks a named feature behaves as `spec:AST-112/FR8` states.
 - Browser evidence: none. Claims are proven on the iOS Simulator (iOS 26 and
   earlier), the Android emulator, devices, and Astryx Stage
   (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
-- None beyond `spec:AST-112`. This record details the system materials of the
-  core (`spec:AST-112/FR1`), their view probes and fallbacks
-  (`spec:AST-112/FR7`), the theme mapped onto native appearance
-  (`spec:AST-112/FR9`), and what Astryx Stage shows for them (`spec:AST-112/FR12`).
-- The four contracts are core and link by default, as `spec:AST-112/FR1`
-  states; the record changes no capability's opt-in.
+- This record details the system materials of the platform's core
+  (`spec:AST-112/FR1`), their view probes and fallbacks (`spec:AST-112/FR7`),
+  the theme mapped onto native appearance (`spec:AST-112/FR9`), and the theme's
+  `material` member on React Native (`spec:AST-082/FR10`).
+- Relies on `spec:AST-112` FR3 (amended): Astryx's own native pieces, these
+  four contracts included, link by default.
+- Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and add
+  behaviour as named features the binary reports.
+- Relies on `spec:AST-112` FR12 (amended): Astryx Stage refuses a project below
+  its version floor and lists the contracts it lacks.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                     | Representative states                                                                                                        | Mutation or failure expectation                                                                                                                                                                     |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests through the `./testing` doubles (view registered and absent); iOS Simulator captures on iOS 26 and an earlier iOS                                                     | each variant and intensity; a corner radius; a tint; interactive glass                                                       | A variant draws the wrong effect for the OS, a probe answers true where the view is absent, or a styling prop has no default                                                                        |
-| FR2      | Unit tests of the prop mapping and probes; Simulator checks of the press, materialize, and hit testing                                                                           | a capsule; `materialized` toggled on screen; a press on a child; a touch outside the shape under `auto` and under `box-none` | A press inside the glass does not reach the child or the glass, a dematerialize drops the children, or a touch outside the shape is taken                                                           |
-| FR3      | UI-thread frame checks on the Simulator (no JavaScript per frame during the spring and the morph); Astryx Stage contract checks of the spring and the morph                      | a moved and a resized glass in a container; a scroll; a native-driver `progress`; Reduce Motion                              | A frame needs JavaScript, a scroll springs the glass, a React commit resets a driven `progress`, or Reduce Motion still springs                                                                     |
-| FR4      | Simulator captures; Astryx Stage contract checks in the iOS 26 and pre-26 looks                                                                                                  | two glass shapes inside and outside `spacing`; a touch between them                                                          | Shapes inside `spacing` do not merge, or the container takes a touch that hit no child                                                                                                              |
-| FR5      | Unit tests of the wire value; Simulator captures in light and dark                                                                                                               | `light`, `dark`, `system`; a dark theme over a light OS                                                                      | The glass follows the OS while the theme pins a mode, or `system` pins a mode                                                                                                                       |
-| FR6      | Unit tests of each paint hook with the doubles and accessibility settings                                                                                                        | each row of the table; each system setting; `surfaceMaterial` set and unset; the platform off                                | A surface paints glass under Reduce Transparency, an overlay paints a translucent fill, or a missing view paints `glass`                                                                            |
-| FR7      | Simulator checks with a named and an unnamed scroll view; Astryx Stage contract checks of each effect                                                                            | `top` and `bottom`; each effect; unmount; a second writer on the same edge                                                   | The effect misses the bar, the view restores over another writer's later value, or the edge keeps its value after unmount                                                                           |
-| FR8      | Unit tests through the `./testing` doubles in their absent, older, and current shapes; Android emulator captures; Astryx Stage in an Android look                                | each view absent; Android; iOS below 26                                                                                      | Children disappear, a layout or accessibility prop is dropped, or a probe answers true on Android for an iOS-only view                                                                              |
-| FR9      | Unit tests of prop and `ref` forwarding in both renders; VoiceOver and TalkBack on the Simulator and emulator; settings toggled live                                             | each accessibility prop; Reduce Transparency, Increase Contrast, Show Borders, Reduce Motion; an accessibility text size     | The surface adds an element, an accessibility prop is dropped, or a setting change does not repaint                                                                                                 |
-| FR10     | The platform's spec rules check; the named-feature check; a review of the native sources' API use; Astryx Stage contract checks and its refusal of a project it does not support | each contract's props; a binary without a named feature; an older Stage                                                      | A contract changes without a named feature, the JavaScript uses an unlisted feature silently, an older Stage runs the project, or native code calls a non-public API other than the named exception |
+| Contract | Verification                                                                                                                                                | Representative states                                                                                                                                               | Mutation or failure expectation                                                                                                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests through the `./testing` doubles (view registered and absent); iOS Simulator captures on iOS 26 and an earlier iOS                                | each variant and intensity; a corner radius; a tint; interactive glass                                                                                              | A variant draws the wrong effect for the OS, a probe answers true where the view is absent, or a styling prop has no default                                                                   |
+| FR2      | Unit tests of the prop mapping and probes; Simulator checks of the press, materialize, and hit testing                                                      | a capsule; `materialized` toggled on screen; a press on a child; a touch outside the shape under `auto` and under `box-none`                                        | A press inside the glass does not reach the child or the glass, a dematerialize drops the children, or a touch outside the shape is taken                                                      |
+| FR3      | UI-thread frame checks on the Simulator (no JavaScript per frame during the spring and the morph); Astryx Stage contract checks of the spring and the morph | a moved and a resized glass in a container; a scroll; a native-driver `progress`; Reduce Motion                                                                     | A frame needs JavaScript, a scroll springs the glass, a React commit resets a driven `progress`, or Reduce Motion still springs                                                                |
+| FR4      | Simulator captures; Astryx Stage contract checks in the iOS 26 and pre-26 looks                                                                             | two glass shapes inside and outside `spacing`; a touch between them                                                                                                 | Shapes inside `spacing` do not merge, or the container takes a touch that hit no child                                                                                                         |
+| FR5      | Unit tests of the wire value; Simulator captures in light and dark                                                                                          | `light`, `dark`, `system`; a dark theme over a light OS                                                                                                             | The glass follows the OS while the theme pins a mode, or `system` pins a mode                                                                                                                  |
+| FR6      | Unit tests of each paint hook with the doubles and accessibility settings                                                                                   | each row of the table; each system setting; `surfaceMaterial` unset and each value; a theme with `material: 'opaque'`; the platform off; an accessibility text size | A surface paints glass under Reduce Transparency, an overlay paints a translucent fill, or a missing view paints `glass`, or a surface paints glass under a theme whose `material` is `opaque` |
+| FR7      | Simulator checks with a named and an unnamed scroll view; Astryx Stage contract checks of each effect                                                       | `top` and `bottom`; each effect; unmount; a second writer on the same edge                                                                                          | The effect misses the bar, the view restores over another writer's later value, or the edge keeps its value after unmount                                                                      |
+| FR8      | Unit tests through the `./testing` doubles in their absent, older, and current shapes; Android emulator captures; Astryx Stage in an Android look           | each view absent; Android; iOS below 26                                                                                                                             | Children disappear, a layout or accessibility prop is dropped, or a probe answers true on Android for an iOS-only view                                                                         |
+| FR9      | Unit tests of prop and `ref` forwarding in both renders; VoiceOver and TalkBack on the Simulator and emulator; settings toggled live                        | each accessibility prop; Reduce Transparency, Increase Contrast, Show Borders, Reduce Motion; an accessibility text size                                            | The surface adds an element, an accessibility prop is dropped, or a setting change does not repaint                                                                                            |
+| FR10     | The platform's spec rules check; a review of the native sources' API use; the `spec:AST-112/FR8` and `spec:AST-112/FR12` checks over this group's contracts | each contract's props; a native source that calls a non-public API                                                                                                  | A contract lists a prop outside the table, or native code calls a non-public API other than the named exception                                                                                |
 
 ## Decision log
 
@@ -338,10 +349,12 @@ pixels rather than to the content behind the view.
 **Reference:** `spec:AST-123/DEC-3`
 **Decider:** imdreamrunner, 2026-11-17
 
-Under Reduce Transparency and Increase Contrast the library paints its own
-opaque surface with an edge instead of relying on UIKit's opaque glass. The
-surface then reads the same on iOS, Android, and Astryx Stage, and its edge
-follows the theme.
+Under Reduce Transparency and Increase Contrast, chrome and floating surfaces
+take the library's own opaque surface with an edge instead of UIKit's opaque
+glass, so they read the same on iOS, Android, and Astryx Stage and the edge
+follows the theme. Overlays, which iOS draws in glass, keep the system glass
+and its outline under Increase Contrast and go opaque under Reduce
+Transparency (FR9).
 
 ### DEC-4 — The scroll-edge view finds its scroll view natively
 
@@ -377,7 +390,7 @@ JavaScript thread drops frames.
   library wrapper over it.
 - **OQ2 — Does `MaterialGroup` stay public?** (`human-api`) No Astryx component
   renders it; `GlassGroup` groups every library surface. Options: keep it as app
-  API; or deprecate it in favour of `GlassGroup`.
+  API; or remove it and keep `GlassGroup` only.
 - **OQ3 — Does Android draw a system blur where the OS has one?**
   (`human-design`) Android 12 and later blur the window behind a dialog.
   Options: overlays use it where available; or Android keeps the tonal fill
