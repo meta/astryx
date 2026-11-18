@@ -45,11 +45,13 @@ registerEnglishFallback(english);
 
 // Each slot keeps its released block offset from the header. The title is
 // centred on the medium close action. The close action bleeds by spacing-2.
-// The row takes no negative margin, so a painted row (a title bar) starts
-// where the header's padding ends and contains its title. The most negative
-// offset goes to the LayoutHeader instead, whose block padding gives way by
-// it (never below zero). Each slot takes its own offset less that, which is
-// never negative, so every slot sits where it did.
+// The most negative offset is the header's reach. The LayoutHeader's block
+// padding gives way by the reach, never below zero. Where the padding is
+// smaller than the reach (padding below spacing-2), the row takes the rest
+// as a negative margin, as on release, so a small-padding header keeps its
+// size. Where the padding covers the reach, the row takes no margin: a
+// painted row (a title bar) contains its title, and its padding sets its
+// height. Each slot takes its own offset less the reach, never negative.
 const TITLE_OFFSET = '--_drawer-header-title-offset';
 const END_OFFSET = '--_drawer-header-end-offset';
 const ROW_OFFSET = `min(var(${TITLE_OFFSET}), var(${END_OFFSET}), 0px)`;
@@ -60,6 +62,8 @@ const styles = stylex.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-3'],
+    marginBlockStart: `min(0px, calc(var(--container-padding-block-start, 0px) - var(--_layout-header-block-bleed, 0px)))`,
+    marginBlockEnd: `min(0px, calc(var(--container-padding-block-end, 0px) - var(--_layout-header-block-bleed, 0px)))`,
   },
   // On the LayoutHeader: the offsets, and the reach its padding gives way by.
   frame: {

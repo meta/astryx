@@ -72,10 +72,10 @@ const styles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
   },
-  // A header whose own content reaches past its top and bottom edges (a
-  // dialog title centred on its close button) names that reach in a private
-  // variable; the block padding gives way by it, never below zero, so the
-  // content's painted box starts where the padding ends.
+  // Content can reach past the header's top and bottom edges: a dialog
+  // title is centred on its close button. Such content names its reach in a
+  // private variable. The block padding gives way by that reach, never
+  // below zero.
   blockBleed: {
     paddingBlockStart: `max(0px, calc(var(--container-padding-block-start) - var(${BLOCK_BLEED}, 0px)))`,
     paddingBlockEnd: `max(0px, calc(var(--container-padding-block-end) - var(${BLOCK_BLEED}, 0px)))`,
