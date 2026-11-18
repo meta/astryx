@@ -6362,6 +6362,7 @@ async function changeOnce(
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
+        ...(r.widened?.length ? {widened: r.widened} : {}),
         leftOut: [],
         notes: [
           ...(r.unchanged
@@ -7955,6 +7956,7 @@ async function changeOnce(
       styled,
       kept,
       lifted: r.lifted,
+      ...(r.widened?.length ? {widened: r.widened} : {}),
       problems: r.problems,
       // What this change made unreadable or unseen, with each fix: text
       // and borders measured against the settings before it, and the
