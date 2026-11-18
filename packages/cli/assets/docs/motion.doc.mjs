@@ -164,6 +164,10 @@ const styles = stylex.create({
 .panel[data-hidden] {
   transform: translateY(16px);
   opacity: 0;
+  /* Leaving eases on the exit tokens. */
+  transition:
+    transform var(--duration-exit) var(--ease-exit),
+    opacity var(--duration-exit) var(--ease-exit);
 }
 
 @media (prefers-reduced-motion: reduce) {
