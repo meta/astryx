@@ -110,8 +110,10 @@ import {
 } from '../../assets/codemods/integration-discovery.mjs';
 import {validateLoadedIntegration} from '../integrations/validate-contributions.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
+import {INSTALLED_ICON_SET_DOC} from '../discovery/name-roots.mjs';
 
-import {recordDeclaredCliCommands} from '../env/cli-command.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 import {
   hostedRun,
   recordResolvedIntegrations,
@@ -651,9 +653,10 @@ export class Project {
     }
     // A hosted run returns each package it resolved (cli-surface INV30).
     recordResolvedIntegrations(loadedIntegrations);
-    // The picker (getCliInvocation) is synchronous, so the commands these
-    // integrations declare are recorded here, where they become known.
-    recordDeclaredCliCommands(projectDir, loadedIntegrations);
+    // The picker (getCliInvocation) and the install-command printers are
+    // synchronous, so the commands and install guidance these integrations
+    // declare are recorded here, where they become known.
+    recordDeclaredSettings(projectDir, loadedIntegrations);
 
     // The debug recorder resolves its settings synchronously, long before any
     // command gets here, so this is where a project's `debug` block gets a
@@ -847,9 +850,10 @@ export class Project {
       return;
     }
     try {
-      // An experimental root is checked only in a project that opts in
+      // An experimental root is checked only where icon features are on
       // (spec:AST-017 FR27); the package's own checks read it either way.
-      const checked = this.#config.experimental?.iconSet
+      const iconFeatures = iconFeatureGate(this).on;
+      const checked = iconFeatures
         ? integration
         : {...integration, iconSets: undefined};
       // A function of the files the checks read, which the kept gather
@@ -860,7 +864,7 @@ export class Project {
           this.#cwd,
           integration.__packageDir ?? null,
           integration.name ?? null,
-          Boolean(this.#config.experimental?.iconSet),
+          iconFeatures,
         ],
         () => validateLoadedIntegration(checked),
         ISSUES_CODEC,
@@ -1117,22 +1121,24 @@ export class Project {
    * whose module does not resolve from the project is withdrawn without one.
    *
    * Icon sets are experimental (spec:AST-017 FR27): every surface but
-   * `astryx experimental icon` reads them only in a project that sets
-   * `experimental.iconSet`. Without it this answers no sets and records no
-   * issue, unless `experimental` asks for the installed sets anyway.
+   * `astryx experimental icon` reads them only where the icon feature gate
+   * (foundation/integrations/icon-features.mjs) is on. Where it is off this
+   * answers no sets and records no issue, unless `experimental` asks for the
+   * installed sets anyway.
    *
    * @param {{experimental?: boolean}} [options] `experimental`: read the
-   *   installed sets without the opt-in, for `astryx experimental icon`
+   *   installed sets with the gate off, for `astryx experimental icon`
    * @returns {Promise<{sets: import('../discovery/icon-set-discovery.mjs').DiscoveredIconSet[], withdrawn: import('../discovery/icon-set-discovery.mjs').WithdrawnIconSet[], choice: import('../discovery/icon-set-discovery.mjs').IconSetChoice}>}
    */
   async iconSets({experimental = false} = {}) {
-    if (!experimental && !this.#config.experimental?.iconSet) {
+    if (!experimental && !iconFeatureGate(this).on) {
       return {
         sets: [],
         withdrawn: [],
         choice: {
           status: /** @type {const} */ ('none'),
-          reason: 'astryx.config sets no experimental.iconSet.',
+          reason:
+            'No icon-set package is installed and astryx.config sets no experimental.iconSet.',
         },
       };
     }
@@ -1300,10 +1306,20 @@ export class Project {
         }
       }
 
-      // With the opt-in (`iconSets()` reads no set without it), each installed
+      // Where icon features are on (`iconSets()` reads no set otherwise), each installed
       // icon set's own icon definitions join Astryx's under the
       // `icon-definitions` namespace, marked with their package.
-      const {sets} = await this.iconSets();
+      const {sets, choice} = await this.iconSets();
+      // The project's set adds one section to `icons`, in the name of the
+      // package that ships it: how to find an icon from that set.
+      if (choice.set) {
+        catalog.add({
+          name: 'installed-icon-set',
+          package: choice.set.package,
+          path: INSTALLED_ICON_SET_DOC,
+          extendsTopic: 'icons',
+        });
+      }
       for (const set of sets) {
         if (set.definitions.length === 0) continue;
         const at = this.#loadedIntegrations.findIndex(
@@ -1484,7 +1500,7 @@ export class Project {
           this.#loadedIntegrations.map(
             integration => integration.__packageDir ?? integration.name ?? null,
           ),
-          Boolean(this.#config.experimental?.iconSet),
+          iconFeatureGate(this).on,
           this.#unloadedDependencies(),
           before,
         ],

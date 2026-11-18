@@ -23,7 +23,12 @@ import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
-import {projectInstallStep} from '../_adapter.mjs';
+import {
+  STARTER_THEME,
+  inspectAgentDocs,
+  projectInstallStep,
+  resolveAgentPaths,
+} from '../_adapter.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
@@ -42,8 +47,6 @@ import {logger} from '../../logger.mjs';
 const VALID_FEATURES = ['agents', 'theme', 'template'];
 const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 
-const THEME_PACKAGE = '@astryxdesign/theme-neutral';
-
 /**
  * Build the "Next steps" lines printed at the end of `astryx init`.
  *
@@ -52,11 +55,11 @@ const THEME_PACKAGE = '@astryxdesign/theme-neutral';
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
- * @param {string} [cwd] the project folder; its package manager names the theme install command
+ * @param {string} [cwd] the project folder; its integrations' install guidance, else its package manager, names the theme install step
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {
-  const install = projectInstallStep([THEME_PACKAGE], cwd);
+  const install = projectInstallStep([STARTER_THEME.package], cwd);
   return [
     '',
     '  Next steps:',
@@ -68,13 +71,32 @@ export function getNextSteps(invocation, cwd = process.cwd()) {
     '    4. Add and wire a theme:',
     `       ${install.line}`,
     ...(install.note ? [`       (${install.note})`] : []),
-    `       ${invocation} theme add neutral`,
+    `       ${invocation} theme add ${STARTER_THEME.slug}`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',
     `       Extend an imported theme to customize it. Run \`${invocation} theme eject <slug>\` only to fork source.`,
     `       To make or change a theme: the experimental theme editor, \`${invocation} experimental theme editor new <name> --like neutral\` (then editor set / editor how).`,
     `    5. ${invocation} --help for all commands`,
+    '',
+  ];
+}
+
+/**
+ * The lines printed instead of "Next steps" when the project's agent files
+ * already held the Astryx block: the app is set up, so it needs the commands
+ * to build with, not the install steps.
+ *
+ * @param {string} invocation install-aware CLI invocation stem
+ * @returns {string[]} ordered list of human-facing lines
+ */
+export function getWorkflowSteps(invocation) {
+  return [
+    '',
+    '  Astryx is already set up here. To build UI:',
+    `    ${invocation} build "<what you're building>"   the template to start a page from`,
+    `    ${invocation} search <query>                    find components, docs, and templates`,
+    `  Setting up a new app instead: ${invocation} docs getting-started`,
     '',
   ];
 }
@@ -148,6 +170,17 @@ async function applyAgents(cwd, options, invocation, data) {
     if (!paths) assertAgentDocsTarget(targetDir);
     const renderedBlock = await renderAgentDocsBlock(root);
     const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
+    // Read-only, before the write: whether the project's agent docs were
+    // already current, so default mode can tell a set-up app from a new one.
+    // The files this run writes: the named ones, the preset's, or (with
+    // neither) every agent doc found at the root.
+    const preset = !paths && options.agent ? resolveAgentPaths(root, options.agent) : null;
+    data.agentDocsStatus = inspectAgentDocs(
+      paths ? targetDir : root,
+      undefined,
+      renderedBlock,
+      {paths: paths ?? (preset ? [...preset.inject, ...preset.create] : undefined)},
+    ).status;
     /** @type {string[]} */
     const skipped = [];
     const files = installAgentDocs(targetDir, {
@@ -193,6 +226,9 @@ async function applyAgents(cwd, options, invocation, data) {
     // PathSafetyError carries a precise, user-actionable message — surface it
     // (and flag exit 1) instead of the generic "could not install" warning so
     // misconfigured --agent-docs-path values aren't silently swallowed.
+    // Nothing was written, so the status read before the write says nothing
+    // about this run.
+    data.agentDocsStatus = null;
     if (err instanceof PathSafetyError) {
       logger.error(`Error: ${err.message}`);
       data.docsError = {kind: 'path-safety', message: err.message};
@@ -359,6 +395,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
       features,
       docsWritten: [],
       docsChanges: [],
+      agentDocsStatus: null,
       docsError: null,
       theme: false,
       themeTemplate: null,
@@ -382,12 +419,14 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
   // steps would set up a project the folder does not have, so they are left
   // out (spec AST-081 FR3).
   const outside = isOutsideProject(cwd);
+
   /** @type {import('../init.type.mjs').InitRunData} */
   const data = {
     mode: 'default',
     features: ['agents'],
     docsWritten: [],
     docsChanges: [],
+    agentDocsStatus: null,
     docsError: null,
     theme: false,
     themeTemplate: null,
@@ -397,6 +436,10 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     nextSteps: !outside,
   };
   await applyAgents(cwd, options, invocation, data);
+  // A project whose agent docs were all current before this run is set up:
+  // the install steps would only repeat setup.
+  const setUp = !outside && data.agentDocsStatus === 'current';
+  data.nextSteps = !outside && !setUp;
   logger.log('');
   logger.log(
     `  Tip: \`${invocation} init --all\` also points you to the theme and page-building workflows.`,
@@ -405,6 +448,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     logger.log('');
     return {type: 'init.run', data};
   }
-  for (const line of getNextSteps(invocation, cwd)) logger.log(line);
+  const steps = setUp ? getWorkflowSteps(invocation) : getNextSteps(invocation, cwd);
+  for (const line of steps) logger.log(line);
   return {type: 'init.run', data};
 }

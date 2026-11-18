@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {getNextSteps} from '../../../api/init/init.mjs';
+import {recordDeclaredSettings} from '../../../foundation/env/cli-command.mjs';
 
 /** @type {string[]} */
 const made = [];
@@ -97,5 +98,33 @@ describe('init Next steps when the lockfiles disagree', () => {
     fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app","packageManager":"pnpm@10.0.0"}');
     const text = getNextSteps('pnpm exec astryx', dir).join('\n');
     expect(text).toContain('pnpm add @astryxdesign/theme-neutral\n');
+  });
+});
+
+describe('init in an app that is already set up', () => {
+  it('names the build and search commands, not the install steps', async () => {
+    const {getWorkflowSteps} = await import('../../../api/init/init.mjs');
+    const text = getWorkflowSteps('pnpm exec astryx').join('\n');
+    expect(text).toContain('Astryx is already set up here');
+    expect(text).toContain('pnpm exec astryx build "<what you\'re building>"');
+    expect(text).toContain('pnpm exec astryx search <query>');
+    expect(text).toContain('pnpm exec astryx docs getting-started');
+    expect(text).not.toContain('Next steps');
+    expect(text).not.toContain('theme-neutral');
+  });
+});
+
+describe('init Next steps when an integration gives install guidance', () => {
+  it('prints the guidance instead of a package-manager command', () => {
+    const dir = project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n"});
+    recordDeclaredSettings(dir, [
+      {name: '@acme/ui', installGuidance: 'Add {packages} to package.json, commit, then run the relock script'},
+    ]);
+    const text = getNextSteps('pnpm exec astryx', dir).join('\n');
+    expect(text).toContain(
+      'Add @astryxdesign/theme-neutral to package.json, commit, then run the relock script\n',
+    );
+    expect(text).not.toContain('pnpm add');
+    expect(text).not.toContain('disagree');
   });
 });

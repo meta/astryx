@@ -41,6 +41,9 @@ import {compareText} from '../text/compare-text.mjs';
 
 const SET_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
+/** The name every icon export has (the icon export contract): `<Name>Icon`. */
+export const ICON_EXPORT_NAME_RE = /^[A-Z][A-Za-z0-9]*Icon$/u;
+
 /** A license or notice file a set ships beside its data (FR15). */
 export const NOTICE_FILE_RE = /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/iu;
 

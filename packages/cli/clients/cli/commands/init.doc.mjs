@@ -21,7 +21,7 @@ export const doc = {
     'has (CLAUDE.md, else .claude/CLAUDE.md; when CLAUDE.md exists, a block in ' +
     '.claude/CLAUDE.md is removed, unless the project ignores CLAUDE.md, in which case a .claude/CLAUDE.md the ' +
     'project commits keeps a copy), and a one-line import of AGENTS.md to GEMINI.md ' +
-    'unless GEMINI.md already imports it. It then prints getting-started steps. Agent ' +
+    'unless GEMINI.md already imports it. It then prints getting-started steps; when every Astryx block in the agent files was already current, the app is set up, and it prints the build and search commands instead (an outdated block is still refreshed, and the steps print). Agent ' +
     'docs go to the project root: the nearest folder at or above this one whose ' +
     'package.json declares an @astryxdesign package, else the nearest with any ' +
     'package.json, else this folder. The search stops at a repository root and never ' +

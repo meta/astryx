@@ -30,7 +30,7 @@ export const doc = {
     'counts as a project, even with a package.json; a folder below it with a package.json does. ' +
     'The managed block is Astryx-owned: it is written, refreshed, and removed whatever ignore rules ' +
     'or generated markers say, and the text around it is never changed. It then ' +
-    "prints getting-started guidance; `features` / `all` print only the chosen features' " +
+    "prints getting-started guidance (the build and search commands instead when every agent-docs block was already current, since the app is set up; an outdated block is still refreshed); `features` / `all` print only the chosen features' " +
     'guidance instead (the theme feature also writes the annotated theme template). ' +
     'With `removeAgents` it removes the managed agent-docs block, at the project root and in `ctx.cwd`, instead of installing. ' +
     'Outside a project it writes the same files but prints no getting-started steps and no step that adds a theme to an app, since those set up a project the folder does not have. ' +
@@ -100,7 +100,7 @@ export const doc = {
     {
       type: 'init.run',
       description:
-        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project).',
+        'The install receipt: the `mode` (`default` | `features`), the features run, agent-doc files written, `agentDocsStatus` (the agent docs before the write: `missing` | `stale` | `current`; null when agent docs were not installed or the write failed), what changed in each (`docsChanges`: `{path, change, from, to}`, change `created` | `updated` | `unchanged` | `removed`, from and to the Astryx versions the block names, path relative to the project root), any soft docsError, the theme-template outcome (`created` | `skipped` | `failed`) plus its path, the page-template outcome (`workflow` | `created` | `skipped`) plus its path, and whether the next-steps were emitted (never outside a project, and not when `agentDocsStatus` was `current`: a set-up app gets the build and search commands instead).',
     },
     {
       type: 'init.remove',

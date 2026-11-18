@@ -29,8 +29,16 @@ import {
 import {recordAgentTextWritten} from '../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
+export {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
+
+// What the run leaf reads before it writes agent docs: the state of the files
+// it is about to write.
+export {
+  inspectAgentDocs,
+  resolveAgentPaths,
+} from '../../foundation/agent-docs/agent-docs.mjs';
 
 /**
  * Write or refresh the computer-level agent text, or remove it, and record
@@ -61,9 +69,9 @@ export function applyComputerAgentText({remove}) {
 }
 
 /**
- * The install step to print for `packages` in the project at `cwd`: its
- * package manager's command, or `npm install` with a note when its lockfiles
- * disagree.
+ * The install step to print for `packages` in the project at `cwd`: the
+ * install guidance its integrations give, else its package manager's command,
+ * or `npm install` with a note when its lockfiles disagree.
  * @param {string[]} packages
  * @param {string} cwd
  * @returns {{line: string, note: string | null}}

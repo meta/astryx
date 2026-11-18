@@ -476,7 +476,9 @@ one removal merged ahead of the decision to allow it.
   names; persistence uses a feature- and schema-versioned experimental namespace;
   build tooling uses experimental exports/configuration; and docs use marked
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
-  data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
+  data, and behavior unchanged. For icon sets, installing a package that declares
+  `experimental.iconSets` is an opt-in, as setting `experimental.iconSet` is
+  (`spec:AST-084/DEC-13`). Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
   One named exception: stable theme help and docs, one theme line of the agent
   docs block, one line of `init`'s next steps (beside, never instead of, its

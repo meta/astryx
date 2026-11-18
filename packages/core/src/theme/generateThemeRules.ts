@@ -51,6 +51,7 @@ import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
+import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 
 /**
  * Theme @scope selectors.
@@ -1477,12 +1478,23 @@ function generateComponentRules(
             `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
             wrap,
           );
+          // A system root under no forced mode draws in the page's scheme.
+          // The root Theme names it on <html> when the page draws in one;
+          // while none is named, the reader's preference decides. Under a
+          // forced mode a system root follows the reader's preference.
+          const system = `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+          const forcedAround = `:is([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
+          const preference = (rule: string) =>
+            wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`);
+          const unforcedSystem = `${inside(`${system}:not(${forcedAround} *)`)}${outsideSurfaces}`;
+          modeEmit(`${unforcedSystem}:where(${rootSchemeIs(name)} *)`, wrap);
           modeEmit(
-            `${inside(
-              `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
-            )}${outsideSurfaces}`,
-            rule =>
-              wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
+            `${unforcedSystem}:where(${ROOT_SCHEME_UNNAMED} *)`,
+            preference,
+          );
+          modeEmit(
+            `${inside(`${forcedAround} ${system}`)}${outsideSurfaces}`,
+            preference,
           );
           modeEmit(
             `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`,

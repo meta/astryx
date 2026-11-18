@@ -20,6 +20,7 @@ import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -197,7 +198,10 @@ function componentDetailBlocks(
                 markNotReady(showcase.displayName, showcase.isReady),
               ),
             },
-            {fields: ['displayName', 'description']},
+            {
+              fields: ['displayName', 'description'],
+              format: {description: docText},
+            },
           ),
         );
       }
@@ -209,7 +213,7 @@ function componentDetailBlocks(
               ...block,
               name: owned(block, markNotReady(block.name, block.isReady)),
             })),
-            {fields: ['name', 'description']},
+            {fields: ['name', 'description'], format: {description: docText}},
           ),
         );
       }
