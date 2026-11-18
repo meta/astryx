@@ -35,9 +35,10 @@ app.
 
 This record details the gesture and drag pieces of the platform layer that
 `spec:AST-112` defines: it applies the result vocabulary (`spec:AST-112/FR6`),
-the capability shape (`spec:AST-112/FR7`), additive evolution of native
-interfaces (`spec:AST-112/FR8`), and Astryx Stage as the contract developers
-build against (`spec:AST-112/FR12`) to eight native components.
+the capability shape (`spec:AST-112/FR7`), and additive evolution of native
+interfaces (`spec:AST-112/FR8`) to eight native components, and covers them in
+Astryx Stage, which conforms to these contracts and never defines them
+(`spec:AST-112/FR12`).
 
 ## Why this exists
 
