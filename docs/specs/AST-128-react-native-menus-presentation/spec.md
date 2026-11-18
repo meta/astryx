@@ -37,9 +37,8 @@ the modal host, each with a JavaScript wrapper in the platform layer.
 
 This record details the platform layer of `spec:AST-112` for this group. It
 uses the result vocabulary of `spec:AST-112/FR6`, the capability shape of
-`spec:AST-112/FR7`, the additive evolution of `spec:AST-112/FR8`, the host
-wiring of `spec:AST-112/FR9`, and the Astryx Stage contract of
-`spec:AST-112/FR12`. It applies `spec:AST-082/FR11`, `spec:AST-093/FR2`
+`spec:AST-112/FR7`, the additive evolution of `spec:AST-112/FR8`, and the host
+wiring of `spec:AST-112/FR9`. It applies `spec:AST-082/FR11`, `spec:AST-093/FR2`
 (native-first sheets and menus), and `spec:AST-093/FR3` (the Apple Human
 Interface Guidelines) to React Native on iOS.
 The menu, action sheet, presentation, and modal hosts belong to the platform's
@@ -58,8 +57,9 @@ core (`spec:AST-112/FR1`) and link in every app.
   platform builds on it.
 - **Presentation host.** No dependency-free piece presents a component's
   content in UIKit's detent sheet from anywhere in the tree, stacked in
-  request order with other surfaces (DEC-2), and the package takes no
-  third-party navigation dependency (`spec:AST-112/DEC-9`).
+  request order with other surfaces (DEC-2), and Astryx takes no third-party
+  native dependency (`spec:AST-112/DEC-9`). An app may use react-native-screens
+  or a bottom-sheet library beside these components without conflict.
 - **Modal host.** React Native's modal host refuses a second window from the
   same screen; the modal host lifts that limit for drawn sheets. OQ5 asks
   whether the presentation host covers it.
@@ -83,6 +83,8 @@ core (`spec:AST-112/FR1`) and link in every app.
 - The library's drawn menus, sheets, and dialogs on Android and as fallbacks.
 - The router's route options and navigation state (`spec:AST-112/DEC-9`); this
   record owns the presentation the router asks for.
+- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
+  they conform to this record's contracts.
 - `AstryxOverlayWindowHost`, which is part of the Astryx app's Preview host
   (`spec:AST-139`), outside this record.
 - The window status bar view and the keyboard dock that sheets use
@@ -146,8 +148,7 @@ core (`spec:AST-112/FR1`) and link in every app.
   - For `trigger: 'longPress'`, `preview` replaces the raised view with a card
     drawn in `previewColorScheme`. The card keeps a 16-point margin on each
     side of the window and uses at most 60 percent of its height. A tap on the
-    card closes the menu. A project that runs in the Astryx app's preview host
-    shows no card.
+    card closes the menu.
   - Inside an enabled touch shield (`spec:AST-112/FR1`), the trigger opens no
     menu.
 - **FR4 — The action sheet gives one answer.** `nativeActionSheet.show(sheet)`
@@ -296,9 +297,8 @@ core (`spec:AST-112/FR1`) and link in every app.
   resolves `no-module`. A kind that the host does not present reports
   `unsupported`. Nothing throws or rejects (`spec:AST-112/FR6`).
 - **FR15 — Contract baseline.** Every contract in the group follows
-  `spec:AST-112/FR8` (revision 1; later behaviour is a named feature) and
-  `spec:AST-112/FR12` (the Astryx Stage version floor). No contract in this
-  group lists a named feature.
+  `spec:AST-112/FR8` (revision 1; later behaviour is a named feature). No
+  contract in this group lists a named feature.
 - **FR16 — Native code uses public API only.** The group's native code calls
   only the public API of iOS, Android, and React Native. One exception: to
   keep FR11's guarantee that no modal window stays on screen after the
@@ -325,12 +325,12 @@ resolves `{index, reason, message}`; `show` is its positional form.
 
 ### Platform support
 
-| Contract                 | iOS                                                                                                                                      | Android                                                                                                                | Astryx Stage                                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxSystemMenu`       | UIMenu on a UIButton (`showsMenuAsPrimaryAction`) and UIContextMenuInteraction; `present()` from iOS 17.4; row element sizes from iOS 16 | Not registered: the library draws a Material 3 menu, anchored or in a bottom sheet                                     | A UIMenu look-alike: pull-down, context menu with the lifted area and dimmed backdrop, the preview card; the Android profile draws |
-| `AstryxActionSheet`      | UIAlertController in the action sheet style; a popover on iPad                                                                           | No module: an `AlertDialog` or a drawn bottom sheet of buttons                                                         | A UIAlertController look-alike; the Android profile has no module                                                                  |
-| `AstryxPresentationHost` | UISheetPresentationController detents (custom heights from iOS 16), page, form, full-screen and over-full-screen presentations           | Not registered: the library's drawn sheet in a React Native `Modal` window; full-screen routes in a full-screen window | Sheets with their detents, drags, swipe dismissal and the presentation's status bar                                                |
-| `AstryxModalHost`        | React Native's modal host, presenting from the top of the stack                                                                          | Not registered: React Native's `Modal`, whose Dialog windows stack                                                     | Sibling windows in presentation order, `onShow`, `onDismiss`, the escape's `onRequestClose`                                        |
+| Contract                 | iOS                                                                                                                                      | Android                                                                                                                |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `AstryxSystemMenu`       | UIMenu on a UIButton (`showsMenuAsPrimaryAction`) and UIContextMenuInteraction; `present()` from iOS 17.4; row element sizes from iOS 16 | Not registered: the library draws a Material 3 menu, anchored or in a bottom sheet                                     |
+| `AstryxActionSheet`      | UIAlertController in the action sheet style; a popover on iPad                                                                           | No module: an `AlertDialog` or a drawn bottom sheet of buttons                                                         |
+| `AstryxPresentationHost` | UISheetPresentationController detents (custom heights from iOS 16), page, form, full-screen and over-full-screen presentations           | Not registered: the library's drawn sheet in a React Native `Modal` window; full-screen routes in a full-screen window |
+| `AstryxModalHost`        | React Native's modal host, presenting from the top of the stack                                                                          | Not registered: React Native's `Modal`, whose Dialog windows stack                                                     |
 
 - FR5 gap: the presentation host presents no system alert; `AlertDialog`
   draws its alert in the over-full-screen window.
@@ -338,49 +338,43 @@ resolves `{index, reason, message}`; `show` is its positional form.
   anchored surface, and an iPad gets no UIPopoverPresentationController.
 - `spec:AST-082/FR11` gap: on Android, menus, sheets, and dialogs are drawn
   by the library, not presented by the platform (OQ6).
-- FR3 gap: in Astryx Stage the context menu does not play the lift
-  animation, a held finger cannot slide onto a row, and `medium` row elements
-  draw as a list.
 - Supported feature/engine floor: `spec:AST-112` (iOS at React Native's
   minimum, Android API level 24, the New Architecture only).
 - Unsupported behavior: a host whose native piece is absent reports itself
   unavailable and the library draws; a missing module resolves `no-module`; a
   kind the host does not build answers `unsupported` (FR14).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
-  emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
+  emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
 - None beyond `spec:AST-112`. This record details its FR1 (the presentation,
-  menu, and action-sheet hosts in the core), FR6 to FR9, and FR12 for this
-  group.
+  menu, and action-sheet hosts in the core) and FR6 to FR9 for this group.
 - Relies on `spec:AST-112` FR3: the core, with the native half of
   every library component, links by default.
 - Relies on `spec:AST-112` FR8: every native contract is at
   revision 1, and later behaviour is a named feature that JavaScript checks.
-- Relies on `spec:AST-112` FR12: Astryx Stage refuses a project
-  below its version floor and lists the missing contracts.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                | Representative states                                                                                                           | Mutation or failure expectation                                                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit tests of each host's probes through the `./testing` doubles                                                                            | absent, older, and current view and module shapes; `nativeHosts` with a host off                                                | A probe answers true without the native piece, or a turned-off host still presents                                                                  |
-| FR2      | Unit tests of the description and its native form                                                                                           | every row type; an unmapped icon; a glyph; a theme's symbol icon and image icon                                                 | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different images                                    |
-| FR3      | Simulator checks of both triggers; Astryx Stage contract checks; unit tests of the unavailable reasons                                      | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card; a preview project | The trigger also opens the drawn menu, `present()` fails without `onUnavailable`, or a preview project shows a card                                 |
-| FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet                                                              | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                                    | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                                                |
-| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind; Astryx Stage contract checks                            | each kind; a kind the host does not build; `animation` values; an undimmed sheet                                                | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches                                             |
-| FR6      | Simulator detent checks; Astryx Stage contract checks; UI-thread frame checks of a drag                                                     | `large`, `fit`, and point heights in ascending order; a selected detent; a covered and a retained sheet                         | A detent height counts the bottom inset twice, a prop or event carries an index, a borrowed detent is reported, or a drag runs JavaScript per frame |
-| FR7      | Unit tests of the event mapping; Simulator checks                                                                                           | a resisted swipe; a refused escape; a swipe dismissal; dismissal by `isPresented`                                               | `onDismissed` fires twice or not at all, or the host unmounts before it                                                                             |
-| FR8      | Simulator checks of sibling, nested, and deep-linked stacks                                                                                 | three sheets; a dialog over a sheet; a replaced flow closing                                                                    | UIKit refuses a presentation, or the order differs from the request order                                                                           |
-| FR9      | Simulator checks and a hosted test of a live mode switch; Astryx Stage contract checks of the status bar; emulator check of Android windows | a mode switch under a full-screen presentation; `statusBarHidden`; a navigation host's style in the content                     | The container keeps the old mode, or the status bar ignores the presentation's props                                                                |
-| FR10     | Simulator keyboard checks in each sheet height; unit tests of the presented insets                                                          | a fitted, a partial, and a full-height sheet with a field; a full-screen presentation                                           | A field ends behind the keyboard, or the home indicator inset applies twice                                                                         |
-| FR11     | Astryx Stage contract checks; Simulator checks                                                                                              | two sibling windows; a window closed under another; absent host                                                                 | UIKit refuses a sibling window, or a surviving window loses its content                                                                             |
-| FR12     | Simulator accessibility tree checks; device checks with VoiceOver                                                                           | focus in and back; the escape; a sheet over a full-screen route; Reduce Motion                                                  | Focus stays behind, the escape is lost, or a sheet is missing from the tree                                                                         |
-| FR13     | UI-thread frame checks during drags and menu tracking                                                                                       | a detent drag; a pull-down drag                                                                                                 | A JavaScript event per frame                                                                                                                        |
-| FR14     | Unit tests through the `./testing` doubles                                                                                                  | each host absent                                                                                                                | A throw, a rejection, or a silent no-op                                                                                                             |
-| FR15     | The platform's spec rules check; Astryx Stage version floor check                                                                           | a changed contract; an older Stage                                                                                              | A changed contract without a named feature, or an older Stage that runs the project                                                                 |
-| FR16     | Source review of the native code against the public headers                                                                                 | a React Native version that renames the modal host's state                                                                      | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault                                       |
+| Contract | Verification                                                                                | Representative states                                                                                        | Mutation or failure expectation                                                                                                                     |
+| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit tests of each host's probes through the `./testing` doubles                            | absent, older, and current view and module shapes; `nativeHosts` with a host off                             | A probe answers true without the native piece, or a turned-off host still presents                                                                  |
+| FR2      | Unit tests of the description and its native form                                           | every row type; an unmapped icon; a glyph; a theme's symbol icon and image icon                              | A row loses a field, an unmapped icon draws an image, or a row and an `Icon` with one name show different images                                    |
+| FR3      | Simulator checks of both triggers; unit tests of the unavailable reasons                    | touch-down and drag-release; a long press; `present()` before iOS 17.4; an update while open; a preview card | The trigger also opens the drawn menu, or `present()` fails without `onUnavailable`                                                                 |
+| FR4      | Unit tests through the `./testing` module double; Simulator check over a sheet              | a choice; Cancel; a second sheet; no window; absent module; an older module with `show` only                 | A result rejects, Cancel reads as an error, or a second sheet does not answer `busy`                                                                |
+| FR5      | Unit tests of the kind mapping and `supports(kind)`; Simulator checks of each kind          | each kind; a kind the host does not build; `animation` values; an undimmed sheet                             | An unbuilt kind presents something or reports nothing, or a full-screen kind lets the page take touches                                             |
+| FR6      | Simulator detent checks; UI-thread frame checks of a drag                                   | `large`, `fit`, and point heights in ascending order; a selected detent; a covered and a retained sheet      | A detent height counts the bottom inset twice, a prop or event carries an index, a borrowed detent is reported, or a drag runs JavaScript per frame |
+| FR7      | Unit tests of the event mapping; Simulator checks                                           | a resisted swipe; a refused escape; a swipe dismissal; dismissal by `isPresented`                            | `onDismissed` fires twice or not at all, or the host unmounts before it                                                                             |
+| FR8      | Simulator checks of sibling, nested, and deep-linked stacks                                 | three sheets; a dialog over a sheet; a replaced flow closing                                                 | UIKit refuses a presentation, or the order differs from the request order                                                                           |
+| FR9      | Simulator checks and a hosted test of a live mode switch; emulator check of Android windows | a mode switch under a full-screen presentation; `statusBarHidden`; a navigation host's style in the content  | The container keeps the old mode, or the status bar ignores the presentation's props                                                                |
+| FR10     | Simulator keyboard checks in each sheet height; unit tests of the presented insets          | a fitted, a partial, and a full-height sheet with a field; a full-screen presentation                        | A field ends behind the keyboard, or the home indicator inset applies twice                                                                         |
+| FR11     | Simulator checks                                                                            | two sibling windows; a window closed under another; absent host                                              | UIKit refuses a sibling window, or a surviving window loses its content                                                                             |
+| FR12     | Simulator accessibility tree checks; device checks with VoiceOver                           | focus in and back; the escape; a sheet over a full-screen route; Reduce Motion                               | Focus stays behind, the escape is lost, or a sheet is missing from the tree                                                                         |
+| FR13     | UI-thread frame checks during drags and menu tracking                                       | a detent drag; a pull-down drag                                                                              | A JavaScript event per frame                                                                                                                        |
+| FR14     | Unit tests through the `./testing` doubles                                                  | each host absent                                                                                             | A throw, a rejection, or a silent no-op                                                                                                             |
+| FR15     | The platform's spec rules check                                                             | a changed contract                                                                                           | A changed contract without a named feature                                                                                                          |
+| FR16     | Source review of the native code against the public headers                                 | a React Native version that renames the modal host's state                                                   | A call outside public API other than the named exception, or a hook that guesses instead of reporting a fault                                       |
 
 ## Decision log
 
@@ -439,7 +433,7 @@ draft is lost to one.
 - **OQ1 — Does the action sheet build on React Native's `ActionSheetIOS`?**
   (`human-design`) Options: keep the platform's module, which reports `busy`,
   `no-window`, and the calling surface; or wrap `ActionSheetIOS` in the same
-  result shape, which Astryx Stage answers the same way.
+  result shape.
 - **OQ2 — What does a request carry for a system alert and a popover?**
   (`human-api`) The FR5 gaps need a request shape. Options: an alert with a
   title, a message, and buttons, and a popover with an anchor (the trigger's
