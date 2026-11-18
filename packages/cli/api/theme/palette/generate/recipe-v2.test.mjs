@@ -7,6 +7,7 @@
  * follow the vibrancy and the seed's own chroma.
  */
 
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
@@ -185,6 +186,48 @@ describe('palette recipes', () => {
     expect(hexToOklch(v2[85]).C).toBeGreaterThan(seed);
     // The middle of the ramp is still v2's (and so v1's).
     for (const stop of [30, 50, 70]) expect(v3[stop]).toBe(v2[stop]);
+  });
+
+  it('v1 and v2 draw byte for byte what they first shipped with, across seeds, vibrancies and kinds', () => {
+    // Digests of every family's ramps over this grid, as the release that
+    // first shipped v2 drew them: a recipe never changes once released.
+    const SHIPPED = {
+      'astryx-oklch-v1':
+        'd645a0206c23f9960d286f016e69f3c0f97158ac0173c43c57d5b8b7f5c00c07',
+      'astryx-oklch-v2':
+        '9efea037c72aa3a2b41307f2ab707c72446aee42241b4b47ae840982505c9697',
+    };
+    const seeds = [
+      '#5f7891',
+      '#2563eb',
+      '#66662e',
+      '#c2603d',
+      '#16a34a',
+      '#777777',
+      '#d62830',
+      '#ffce2f',
+      '#7c3aed',
+      '#0d9488',
+    ];
+    for (const [recipe, want] of Object.entries(SHIPPED)) {
+      const h = createHash('sha256');
+      for (const seed of seeds)
+        for (const vibrancy of [0, 50, 100])
+          for (const kind of [undefined, 'neutral'])
+            h.update(
+              JSON.stringify(
+                generatePaletteSet({
+                  recipe,
+                  vibrancy,
+                  families: [
+                    {id: 'f', seed, ...(kind ? {kind} : {})},
+                    {id: 'g', seed: '#0074e2'},
+                  ],
+                }).families,
+              ),
+            );
+      expect(h.digest('hex'), recipe).toBe(want);
+    }
   });
 
   it('v2 draws exactly what it first shipped with', () => {
