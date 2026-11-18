@@ -436,9 +436,9 @@ depends only on runtimes it can maintain.
 
 ## Current-state impact
 
-- **DEC-7 gap:** until those successors are named, FR5, FR6, FR9, FR10, FR15,
-  FR16 and FR19 still assign their roles to `@astryxdesign/native`, and the
-  canary keeps publishing.
+- **DEC-7 gap:** FR5, FR6, FR9, FR10, FR15, FR16 and FR19 assign their roles to
+  `@astryxdesign/native`, which DEC-7 deprecates, and the canary still
+  publishes.
 - **FR3 gap:** the contracts live in `packages/native` (`@astryxdesign/native`);
   Core's and React Native's published types do not build them in.
 - `architecture:public-component-api` gains the shared base props, the web base
@@ -592,19 +592,17 @@ The React Native candidate's native code lives in the platform layer of
 contracts package.
 
 Amended 2026-11-18 (**Decider:** `cixzhang`, `2026-11-18 13:23 PT`): the
-contracts move from `@astryxdesign/native` to the private workspace package
-`@astryxdesign/contracts` (`packages/contracts`), which is never published.
-Core's and React Native's published types build the contract types in at build
-time, and the generated Swift and Kotlin are committed, with a CI drift check.
-No published package depends on the contracts package, and web pages gain 0
-bytes. `@astryxdesign/native` is deprecated. Its remaining roles in FR5, FR6,
-FR9, FR10, FR15, FR16 and FR19 (the native contracts' bindings,
+contracts no longer live in `@astryxdesign/native`. Every public prop has one
+definition, which every surface's contract builds in. A consumer installs
+nothing extra for it, web pages gain 0 bytes, and no published package depends
+on where it lives. `@astryxdesign/native` is deprecated. Its remaining roles in
+FR5, FR6, FR9, FR10, FR15, FR16 and FR19 (the native contracts' bindings,
 `defineNativeTheme`, the wire) move to successors that their own changes name.
-Core still imports no native package at run time (FR16).
+Core never imports or depends on `@astryxdesign/native` (FR14).
 
 Rejected: native types and implementations inside `@astryxdesign/core`, because
 every web consumer would carry them and core's API would grow with each platform.
-Rejected: publishing `@astryxdesign/contracts` as its own package, which adds a
+Rejected: publishing the contracts as their own package, which adds a
 compatibility promise, a release slot, and one more install for every app.
 
 ### DEC-8 — The portable entry is an entry of `@astryxdesign/core`
@@ -737,9 +735,9 @@ would need the same words again.
 **Decider:** `cixzhang`, `2026-11-18 13:35 PT`
 
 A new prop becomes a permanent part of every contract that carries it, so the
-owner holds new props to a high bar. Every public prop lives in the contracts
-package (DEC-7), where it is managed centrally and judged against every surface
-before it ships. When a better default behavior meets a need, the component
+owner holds new props to a high bar. Every public prop has one definition
+(DEC-7), where it is managed centrally and judged against every surface before
+it ships. When a better default behavior meets a need, the component
 changes its default and adds no prop.
 
 Rejected: props defined in each package and reconciled later.
