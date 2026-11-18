@@ -503,6 +503,18 @@ export function derivedStatusWords(data) {
 }
 
 /**
+ * The tokens a theme sets to a value of its own for the whole theme: the
+ * change names each, apart from the colors that move with the look.
+ * @param {{settings: Setting[]}} data
+ * @returns {string[]}
+ */
+export function exactTokens(data) {
+  return data.settings
+    .filter(x => x?.source === 'token' && !x.on && !x.when && !x.state)
+    .map(x => x.thing);
+}
+
+/**
  * Whether a token is one the look derives: a category color (Badge, Token,
  * Card tint) or a chart color.
  * @param {string} token
@@ -518,14 +530,17 @@ export const isLookToken = token =>
  * change, and one line per value would bury the rest.
  * @param {unknown[]} lines - `token (mode): before -> after` lines.
  * @param {string[]} [statusWords] - The status words whose colors the look derives (derivedStatusWords): theirs are counted too.
+ * @param {string[]} [exact] - Tokens the theme sets to a value of its own (exactTokens): each is named, never counted, as it did not move with the look.
  */
-export function lookCollapsed(lines, statusWords = []) {
+export function lookCollapsed(lines, statusWords = [], exact = []) {
   const tokenOf = (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0];
   const status = new RegExp(
     `^--color-(?:(?:on|text|icon|border)-)?(?:${statusWords.join('|') || '(?!)'})(?:-muted)?$`,
   );
-  const statusLines = lines.filter(c => status.test(tokenOf(c)));
-  const rest = lines.filter(c => !status.test(tokenOf(c)));
+  const folded = (/** @type {unknown} */ c) =>
+    status.test(tokenOf(c)) && !exact.includes(tokenOf(c));
+  const statusLines = lines.filter(folded);
+  const rest = lines.filter(c => !folded(c));
   lines = rest;
   const look = lines.filter(c => isLookToken(tokenOf(c))).map(String);
   const badges = look.filter(c => !tokenOf(c).startsWith('--color-data-'));
