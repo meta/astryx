@@ -14,6 +14,7 @@ import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {lookCollapsed} from './_palette.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
+import {parseColor, ratio} from './_color.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -80,14 +81,24 @@ const hueDifference = (a, b) => {
  */
 const HUE_BAR = 0.005;
 
+/** @param {string} a @param {string} b */
+const contrast = (a, b) =>
+  ratio(
+    /** @type {[number, number, number]} */ (parseColor(a)),
+    /** @type {[number, number, number]} */ (parseColor(b)),
+  );
+
 const T = 300_000;
 
 describe('status colors the look grows', () => {
   for (const [slug, accent] of [
     ['w', '#0052cc'],
-    // (An amber accent turns the warning fill pale: its tint is paler
-    // still.)
+    // (An amber or yellow accent sits by the warning's own fill: the fill
+    // moves apart from it and stays a visible fill, its tint paler.)
     ['amber', '#fbbf24'],
+    ['y1', '#ffce2f'],
+    ['y2', '#f5c518'],
+    ['y3', '#ffe082'],
   ])
     it(
       `keeps the warning tint apart from the warning fill in light mode, with a ${accent} accent`,
@@ -100,6 +111,13 @@ describe('status colors the look grows', () => {
         expect(fill).toBeTruthy();
         expect(tint).toBeTruthy();
         expect(tint).not.toBe(fill);
+        // (The fill stands out from the light page as the base theme's
+        // own warning does, never a near-white.)
+        const page = String(light(slug, '--color-background-body'));
+        expect(
+          contrast(String(fill), page),
+          `${fill} on ${page}`,
+        ).toBeGreaterThanOrEqual(1.2);
         // (Both keep the warning's own hue, whatever the accent.)
         await themeEditNew(`${slug}-plain`, {cwd, like: 'neutral'});
         const own = String(light(`${slug}-plain`, '--color-warning'));
