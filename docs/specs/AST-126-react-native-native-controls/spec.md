@@ -96,7 +96,7 @@ edit through React Native's `TextInput` directly.
 ## Requirements
 
 - **FR1 — The controls link by default and stay internal.** The native
-  controls and the gesture views are part of the default set of
+  controls and the gesture views of `spec:AST-124` are part of the default set of
   `spec:AST-112/FR3`. They are internal implementation behind the library's
   components (`spec:AST-112/FR5`): `./controls` exports the components, and
   the native views stay behind them. Each
@@ -116,8 +116,8 @@ edit through React Native's `TextInput` directly.
     components.
   - The date family keeps `spec:AST-043`'s `presentation` as its own value:
     its `native` value maps to `render: 'system'` and `adaptive-native` to
-    `render: 'auto'` (OQ3). It resolves as `spec:AST-043` says, apart from the
-    theme's `render.default`.
+    `render: 'auto'` (OQ3). It resolves only as `spec:AST-043` FR1 to FR3
+    say; the theme's `render.default` applies to the six components above.
   - A host exists when the probe of FR1 answers true and the OS has an
     equivalent: Button and TextInput on iOS and Android; Slider,
     SegmentedControl and the date view on iOS; the date dialogs on Android.
@@ -448,8 +448,8 @@ FR7's results.
 **Decider:** imdreamrunner, 2026-11-17
 
 An app writes one component and gets the system control or the Astryx control
-from the same props, chosen by the component's `render`, whose every `auto`
-the theme's `render.default` overrides.
+from the same props, chosen by the component's `render`, whose `auto` on the
+six components of FR2 the theme's `render.default` overrides.
 Wherever the system has the control it is the default, and the app or its
 theme can ask for the Astryx control instead. The native controls stay
 internal behind the components (`spec:AST-112/FR5`).
