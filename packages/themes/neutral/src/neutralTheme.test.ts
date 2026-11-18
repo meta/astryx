@@ -647,6 +647,9 @@ describe('neutral progress fill', () => {
     expect(neutralTheme.components?.['progress-bar']?.base).toMatchObject({
       '--color-background-muted': 'var(--color-border-emphasized)',
     });
+    expect(neutralTheme.tokens['--color-border-emphasized']).toBe(
+      lightDark(light[85], dark[35]),
+    );
   });
 
   it.each(['neutral', 'disabled'])('maps a %s fill', variant => {

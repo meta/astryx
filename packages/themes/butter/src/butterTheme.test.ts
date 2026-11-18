@@ -186,6 +186,13 @@ describe('butter progress fills', () => {
   // 3:1 on it.
   const {green, neutral, red, yellow} = butterModePalettes;
   const track = {light: neutral.light[85], dark: neutral.dark[40]};
+
+  it('draws the progress track on those stops', () => {
+    expect(butterTheme.components?.['progress-bar-track']?.base).toMatchObject({
+      backgroundColor: `light-dark(${track.light}, ${track.dark})`,
+    });
+  });
+
   const fills = {
     success: {light: green.light[25], dark: green.dark[70]},
     warning: {light: yellow.light[30], dark: yellow.dark[75]},

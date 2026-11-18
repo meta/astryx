@@ -118,6 +118,12 @@ describe('stone strong status contrast', () => {
   it('keeps every progress fill at 3:1 on the skeleton track', () => {
     const fill = stoneTheme.components!['progress-bar-fill'];
     const {blue, green, neutral, red, yellow} = stoneModePalettes;
+    expect(stoneTheme.components!['progress-bar-track'].base).toMatchObject({
+      backgroundColor: 'var(--color-skeleton)',
+    });
+    expect(stoneTheme.tokens['--color-skeleton']).toBe(
+      `light-dark(${neutral.light[85]}, ${neutral.dark[40]})`,
+    );
     // Accent uses the blue family; each status fill takes the theme's status
     // role.
     expect(fill['variant:accent']).toMatchObject({
