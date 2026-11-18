@@ -72,6 +72,16 @@ for (const theme of THEMES) {
           });
           return 0.2126 * r + 0.7152 * g + 0.0722 * b;
         };
+        // The page's canvas colour, which shows through where no ancestor
+        // paints: a probe painted with the Canvas system colour reads it.
+        const canvasColor = (): number[] => {
+          const probe = document.createElement('div');
+          probe.style.backgroundColor = 'Canvas';
+          document.body.append(probe);
+          const color = parse(getComputedStyle(probe).backgroundColor);
+          probe.remove();
+          return color;
+        };
         // What is painted behind an element: its ancestors' backgrounds,
         // composited down to the canvas.
         const behind = (element: Element): number[] => {
@@ -89,7 +99,7 @@ for (const theme of THEMES) {
               }
             }
           }
-          let base = [255, 255, 255, 1];
+          let base = canvasColor();
           for (const layer of layers.reverse()) {
             base = [...over(layer, base), 1];
           }
