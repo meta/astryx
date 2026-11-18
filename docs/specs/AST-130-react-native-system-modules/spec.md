@@ -46,7 +46,7 @@ links them. The shared platform rules are
 
 ## Why this exists
 
-The package takes no runtime dependency outside React and React Native
+The package depends on React and React Native alone at run time
 (`spec:AST-112/FR2`); apps may use third-party libraries, haptics libraries
 included, beside these modules without conflict (`spec:AST-140/FR9`). Each module exists for one
 concrete gap; where the gap is small, OQ1 keeps the scope open.
@@ -55,100 +55,73 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   frame of every launch. A choice that JavaScript applies arrives a frame late,
   so the window and the status bar change after the app appears.
 - `AstryxAccessibilitySettings`: one snapshot that is ready for the first
-  frame, a change event for every key, and the iOS settings that React
-  Native's accessibility API does not read.
+  frame, a change event for every key, and the iOS settings beyond those
+  React Native's accessibility API reads.
 - `AstryxHaptics`: a small gap. The theme maps moments to feedback kinds, and
   Android plays the view feedback its API level has (OQ1).
-- `AstryxClipboard`: no capability gap. The module gives the result
-  vocabulary with no extra dependency (OQ1).
+- `AstryxClipboard`: the pasteboard with the result vocabulary, from the
+  package's own native code (OQ1).
 - `AstryxPlatformInfo`: the binary's own contract facts (linked capabilities
   and named features), which only the binary can report.
 - `AstryxPermissions`: a small gap. A closed set of permissions tied to the
-  capabilities, with `not-declared` where the system would end the app (OQ1).
-- `AstryxBack`: React Native's activity takes every back press, so Android's
-  back-to-home animation never plays at the root without this gate.
+  camera and photo capabilities, with `not-declared` where the system would
+  end the app (OQ1).
+- `AstryxBack`: React Native's activity takes every back press; this gate
+  hands the root press to the system, so Android plays its back-to-home
+  animation.
 - `AstryxLaunch`: the library ends Android's launch hold at its first content
   with no app code, and the router reads the launch link synchronously.
 - `AstryxFilePicker`: a small gap. One call over photos and files with the
   result vocabulary (OQ1).
-- `AstryxStorage`: a small gap. One string store with the result vocabulary
-  and no extra dependency (OQ1).
+- `AstryxStorage`: a small gap. One string store with the result vocabulary,
+  from the package's own native code, where the router keeps its state (OQ1).
 
 ## Who uses it
 
-| Native piece                  | Kind                                            | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                    | What a person sees                                                                                                                       |
-| ----------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAppearance`            | native module (Turbo Native Module)             | `AstryxProvider`, the theme provider every Astryx component renders under, which applies the app's light or dark override through it; app API (`.` entry)                                                                                                                                                                                                                                                                                        | The app opens in the saved light or dark appearance, with no flash of the system's.                                                      |
-| `AstryxAccessibilitySettings` | native module (Turbo Native Module)             | `AstryxProvider` and every component styled with `createStyles` (`./styles` entry); through the library's system-settings hook also `BottomSheet`, `Popover`, `Overlay`, `HoverCard`, `ContextMenu`, `Switch`, `SegmentedControl`, `ProgressBar`, `Carousel`, `TabBar`, `TopNav`, `Header`, `Toolbar`, `Table`, `Item`, `Markdown`, `SearchField`, `BarButton`, `Button` and the glass and material surfaces; app API `useAccessibilitySettings` | Drawn bars, sheets and menus turn opaque under Reduce Transparency, show borders under Show Borders, and cross-fade under Reduce Motion. |
-| `AstryxHaptics`               | native module (Turbo Native Module)             | Through the library's moment table (`useHaptics`): `Button`, `Switch`, `Slider`, `SegmentedControl`, `Selector`, `TabList`, `ToggleButton`, `Toast`, `BottomSheet`, `InlineSheet`, `ContextMenu`, `ReorderableList`, `Item` swipe actions, `Calendar`'s picker field, `DonutChart` and the charts                                                                                                                                                | A tick on a selection change, a click on a toggle, a bump at a slider's end, a threshold tick in a swipe.                                |
-| `AstryxClipboard`             | native module (Turbo Native Module)             | `PasteButton` (reads on the person's press); `CodeBlock`, `Chat` message actions and `Timestamp` through the library's copy hook (`useCopy`)                                                                                                                                                                                                                                                                                                     | A copy button shows its check glyph and announces "Copied"; a paste fills the field.                                                     |
-| `AstryxPlatformInfo`          | native module (Turbo Native Module)             | Its named-feature probes: every component that renders an `Icon` (where icon images load), the system menu of `ContextMenu`, `DropdownMenu` and `Selector`, the native presentation host of `BottomSheet` and modal windows, `Item` (native swipe-row support), the router's stack navigator (modal presentation kinds, header search field, stack host), and the zoom pager gesture; app API                                                    | Nothing directly: each component picks the native path the binary has, or its drawn fallback.                                            |
-| `AstryxPermissions`           | native module (Turbo Native Module)             | No library component. `CameraView` (`./camera` entry) reads it; app API `useCameraPermission`                                                                                                                                                                                                                                                                                                                                                    | The system prompt appears only when the app asks, never when a view mounts.                                                              |
-| `AstryxBack`                  | native module (Turbo Native Module)             | Through the library's back handling: `AppShell`, `SearchField`, the router's stack navigator (back, modals, header search field), and the dismissible layers `BottomSheet`, `Drawer`, `Popover`, `HoverCard`, `ContextMenu`, `DropdownMenu`, `Selector`, `SplitView`, `TabMenu`, `TopNav` menus                                                                                                                                                  | Back closes the open sheet or menu first; at the root, Android plays its back-to-home animation.                                         |
-| `AstryxLaunch`                | native module (Turbo Native Module)             | The router (its root's first state and its first focused screen's layout) and `AstryxPerformance.markFirstFrame`                                                                                                                                                                                                                                                                                                                                 | On Android the launch screen stays until the first screen is drawn, and a cold deep link opens on its own screen.                        |
-| `AstryxFilePicker`            | native module (Turbo Native Module)             | `FileInput` through the library's file picker hook (`useFilePicker`); app API `AstryxFilePicker`                                                                                                                                                                                                                                                                                                                                                 | Choosing a file opens the system's photo or document picker; backing out changes nothing.                                                |
-| `AstryxStorage`               | native module (Turbo Native Module)             | The router's state persistence (its default store) and the app update check's "Not now"; app API (`./storage` entry)                                                                                                                                                                                                                                                                                                                             | After a cold start the app opens on the screen it showed last; a dismissed update stays dismissed.                                       |
-| React Native `Linking`        | React Native core API (no Astryx native module) | Every `href` the library renders, through its link helper and host services: `Link`, `Button`, `Chip`, `ClickableCard`, `Item`, `Avatar`, `Breadcrumbs`, `Citation`, `ContextMenu` and `DropdownMenu` items, `Markdown` links, `SideNav`, `NavMenu` and `Tab`; the router's external links; the `camera` template's "open Settings"                                                                                                              | A tapped link opens in the system's browser or the app that owns it; a blocked camera permission opens the app's Settings.               |
-| React Native `Share`          | React Native core API (no Astryx native module) | The library's host services (`useHostServices().share`), which the `create` templates' share actions use (assistant, camera, gallery, maps, text feed)                                                                                                                                                                                                                                                                                           | The system share sheet opens with the item's text or link.                                                                               |
+| Native piece                  | Kind                                | Astryx components that use it                                                                                                                                                                                                                                                                                                                                                                                                                    | What a person sees                                                                                                                       |
+| ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAppearance`            | native module (Turbo Native Module) | `AstryxProvider`, the theme provider every Astryx component renders under, which applies the app's light or dark override through it; app API (`.` entry)                                                                                                                                                                                                                                                                                        | The app opens in the saved light or dark appearance, with no flash of the system's.                                                      |
+| `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `AstryxProvider` and every component styled with `createStyles` (`./styles` entry); through the library's system-settings hook also `BottomSheet`, `Popover`, `Overlay`, `HoverCard`, `ContextMenu`, `Switch`, `SegmentedControl`, `ProgressBar`, `Carousel`, `TabBar`, `TopNav`, `Header`, `Toolbar`, `Table`, `Item`, `Markdown`, `SearchField`, `BarButton`, `Button` and the glass and material surfaces; app API `useAccessibilitySettings` | Drawn bars, sheets and menus turn opaque under Reduce Transparency, show borders under Show Borders, and cross-fade under Reduce Motion. |
+| `AstryxHaptics`               | native module (Turbo Native Module) | Through the library's moment table (`useHaptics`): `Button`, `Switch`, `Slider`, `SegmentedControl`, `Selector`, `TabList`, `ToggleButton`, `Toast`, `BottomSheet`, `InlineSheet`, `ContextMenu`, `ReorderableList`, `Item` swipe actions, `Calendar`'s picker field, `DonutChart` and the charts                                                                                                                                                | A tick on a selection change, a click on a toggle, a bump at a slider's end, a threshold tick in a swipe.                                |
+| `AstryxClipboard`             | native module (Turbo Native Module) | `PasteButton` (reads on the person's press); `CodeBlock`, `Chat` message actions and `Timestamp` through the library's copy hook (`useCopy`)                                                                                                                                                                                                                                                                                                     | A copy button shows its check glyph and announces "Copied"; a paste fills the field.                                                     |
+| `AstryxPlatformInfo`          | native module (Turbo Native Module) | Its named-feature probes: every component that renders an `Icon` (where icon images load), the system menu of `ContextMenu`, `DropdownMenu` and `Selector`, the native presentation host of `BottomSheet` and modal windows, `Item` (native swipe-row support), the router's stack navigator (modal presentation kinds, header search field, stack host), and the zoom pager gesture; app API                                                    | Nothing directly: each component picks the native path the binary has, or its drawn fallback.                                            |
+| `AstryxPermissions`           | native module (Turbo Native Module) | `CameraView` (`./camera` entry) reads camera access through it; app API `useCameraPermission`                                                                                                                                                                                                                                                                                                                                                    | The system prompt appears only when the app asks.                                                                                        |
+| `AstryxBack`                  | native module (Turbo Native Module) | Through the library's back handling: `AppShell`, `SearchField`, the router's stack navigator (back, modals, header search field), and the dismissible layers `BottomSheet`, `Drawer`, `Popover`, `HoverCard`, `ContextMenu`, `DropdownMenu`, `Selector`, `SplitView`, `TabMenu`, `TopNav` menus                                                                                                                                                  | Back closes the open sheet or menu first; at the root, Android plays its back-to-home animation.                                         |
+| `AstryxLaunch`                | native module (Turbo Native Module) | The router (its root's first state and its first focused screen's layout) and `AstryxPerformance.markFirstFrame`                                                                                                                                                                                                                                                                                                                                 | On Android the launch screen stays until the first screen is drawn, and a cold deep link opens on its own screen.                        |
+| `AstryxFilePicker`            | native module (Turbo Native Module) | `FileInput` through the library's file picker hook (`useFilePicker`); app API `AstryxFilePicker`                                                                                                                                                                                                                                                                                                                                                 | Choosing a file opens the system's photo or document picker; backing out changes nothing.                                                |
+| `AstryxStorage`               | native module (Turbo Native Module) | The router's state persistence (its default store); app API (`./storage` entry)                                                                                                                                                                                                                                                                                                                                                                  | After a cold start the app opens on the screen it showed last.                                                                           |
+| React Native `Linking`        | React Native core API               | Every `href` the library renders, through its link helper and host services: `Link`, `Button`, `Chip`, `ClickableCard`, `Item`, `Avatar`, `Breadcrumbs`, `Citation`, `ContextMenu` and `DropdownMenu` items, `Markdown` links, `SideNav`, `NavMenu` and `Tab`; the router's external links; the `camera` template's "open Settings"                                                                                                              | A tapped link opens in the system's browser or the app that owns it; a blocked camera permission opens the app's Settings.               |
+| React Native `Share`          | React Native core API               | The library's host services (`useHostServices().share`), which the `create` templates' share actions use (assistant, camera, gallery, maps, text feed)                                                                                                                                                                                                                                                                                           | The system share sheet opens with the item's text or link.                                                                               |
 
 ## Non-goals
 
-- The data and security modules (files, secure storage) and their records.
-- Capabilities that no Astryx component uses. They are outside the core
-  package.
-- Client identity, crash reports, daily metrics, the frame recorder, and
-  image markup. They are outside the core package; each has its own record.
-- Camera capture. The `camera` capability owns it, the camera source of a
-  picker included.
-- A native module of the package's own for opening links, opening Settings,
-  or sharing. Astryx components and `create` templates use React Native's own
-  `Linking` and `Share` for them (see "Who uses it"), so these stay part of what
-  the core relies on and need no Astryx native code.
-- Keep-awake and orientation lock. No Astryx component or `create` template
-  uses them, so they are outside the core package.
-- The theme's tokens and how they change between light and dark. This record
-  owns the appearance model of FR4, and OQ3 asks how theme colours resolve
-  when the appearance flips.
-- Haptic intensities per moment. The theme's haptic tokens own them
-  (`spec:AST-112/FR9`).
-- Each component's use of these modules beyond what "Who uses it" names; the
-  component's own record owns it.
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
-  are separate products; they conform to this record's contracts.
-- Equivalent internal implementations remain valid when they satisfy this
-  contract.
-- Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. In that case, state who depends on it and why an equivalent
-  implementation would not satisfy the contract.
+None.
 
 ## Requirements
 
 - **FR1 — The group is ten core native modules.** Every app links them
   (`spec:AST-112/FR1`). Each module is read with `TurboModuleRegistry.get`,
   only by its own wrapper (`spec:AST-140/FR1`, FR2), and its wrapper answers
-  `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` have
-  no public object: the library is their one caller.
+  `no-module` where the module is absent. `AstryxBack` and `AstryxLaunch` are
+  internal: the library is their one caller.
   - The native appearance step (FR4), the back gate (FR10) and the launch hold
     (FR11) act in the package's generated native shell. In an app whose shell
-    lacks them, the saved appearance applies only once JavaScript sets it,
-    after the first frame; every back press goes to React Native; and there is
-    no launch hold.
+    lacks them, the saved appearance applies once JavaScript sets it, after
+    the first frame; every back press goes to React Native; and the app shows
+    as soon as its window is ready.
 
-  | Contract                      | Kind                                | Methods                                                                                                       | Platforms    |
-  | ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxAppearance`            | native module (Turbo Native Module) | `getConstants` (`initialOverride`), `setOverride`, `getRunOverride`                                           | iOS, Android |
-  | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `getConstants` (`initialSettings`), `getSettings`, `onSettingsChange` (event)                                 | iOS          |
-  | `AstryxHaptics`               | native module (Turbo Native Module) | `getConstants`, `isSupported`, `play`, `prepare`                                                              | iOS, Android |
-  | `AstryxClipboard`             | native module (Turbo Native Module) | `getConstants`, `isSupported`, `write`, `getString`, `detectPatterns`                                         | iOS, Android |
-  | `AstryxPlatformInfo`          | native module (Turbo Native Module) | `getConstants` (`app`, `capabilities`, `contractFeatures`, `launch`), `getInfo`, `getMemory`, `getBundleSize` | iOS, Android |
-  | `AstryxPermissions`           | native module (Turbo Native Module) | `getConstants`, `get`, `request`                                                                              | iOS, Android |
-  | `AstryxBack`                  | native module (Turbo Native Module) | `getConstants`, `setRootBackEnabled`                                                                          | Android      |
-  | `AstryxFilePicker`            | native module (Turbo Native Module) | `getConstants`, `getSources`, `pick`                                                                          | iOS, Android |
-  | `AstryxStorage`               | native module (Turbo Native Module) | `getConstants`, `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`, `getInfo`                          | iOS, Android |
-  | `AstryxLaunch`                | native module (Turbo Native Module) | `getConstants`, `firstContent`, `initialURL`                                                                  | Android      |
+  | Contract                      | Kind                                | Methods                                                                              | Platforms    |
+  | ----------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------ | ------------ |
+  | `AstryxAppearance`            | native module (Turbo Native Module) | `getConstants` (`initialOverride`), `setOverride`, `getRunOverride`                  | iOS, Android |
+  | `AstryxAccessibilitySettings` | native module (Turbo Native Module) | `getConstants` (`initialSettings`), `getSettings`, `onSettingsChange` (event)        | iOS          |
+  | `AstryxHaptics`               | native module (Turbo Native Module) | `getConstants`, `isSupported`, `play`, `prepare`                                     | iOS, Android |
+  | `AstryxClipboard`             | native module (Turbo Native Module) | `getConstants`, `isSupported`, `write`, `getString`, `detectPatterns`                | iOS, Android |
+  | `AstryxPlatformInfo`          | native module (Turbo Native Module) | `getConstants` (`app`, `capabilities`, `contractFeatures`, `launch`), `getInfo`      | iOS, Android |
+  | `AstryxPermissions`           | native module (Turbo Native Module) | `getConstants`, `get`, `request`                                                     | iOS, Android |
+  | `AstryxBack`                  | native module (Turbo Native Module) | `getConstants`, `setRootBackEnabled`                                                 | Android      |
+  | `AstryxFilePicker`            | native module (Turbo Native Module) | `getConstants`, `getSources`, `pick`                                                 | iOS, Android |
+  | `AstryxStorage`               | native module (Turbo Native Module) | `getConstants`, `getItem`, `setItem`, `removeItem`, `getAllKeys`, `clear`, `getInfo` | iOS, Android |
+  | `AstryxLaunch`                | native module (Turbo Native Module) | `getConstants`, `firstContent`, `initialURL`                                         | Android      |
 
 - **FR2 — Constants are synchronous; everything else is a result.**
   - What the system knows at launch is a launch value, read once and then
@@ -158,33 +131,31 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     process start. Synchronous members (`isAvailable()`,
     `getOverride()`, `getRunOverride()`, `current()`, `app`,
     `capabilities`, `contractFeatures`, `launch`, and `AstryxLaunch`'s
-    `initialURL()`) never
-    throw; they
-    answer `null`, `'system'`, or all-false where the module or the constant is
-    absent.
-  - Every asynchronous call resolves `AstryxResult` and never rejects
-    (`spec:AST-140/FR3`). Each module adds only these reasons to the common
-    ones:
+    `initialURL()`) always return: they answer `null`, `'system'`, or
+    all-false where the module or the constant is absent.
+  - Every asynchronous call resolves an `AstryxResult`, failures included
+    (`spec:AST-140/FR3`). Each module adds these reasons to the common ones:
 
     | Module                        | Module reasons                                                                   |
     | ----------------------------- | -------------------------------------------------------------------------------- |
     | `AstryxAppearance`            | `invalid` (not `light`, `dark` or `system`)                                      |
     | `AstryxAccessibilitySettings` | `unavailable` (the module is torn down during a reload)                          |
     | `AstryxClipboard`             | `unavailable` (no pasteboard on this device)                                     |
-    | `AstryxPlatformInfo`          | `unavailable` (the system did not answer a measure)                              |
+    | `AstryxPlatformInfo`          | `unavailable` (the system did not answer a read)                                 |
     | `AstryxPermissions`           | `unknown-permission`, `busy`, `no-activity` (Android), `not-declared`            |
     | `AstryxFilePicker`            | `unsupported-source`, `no-window`, `busy`; `cancelled` when the person backs out |
     | `AstryxStorage`               | `invalid-key`, `invalid-value`, `invalid-json`, `no-space`, `io`, `no-namespace` |
 
-  - `AstryxHaptics.play` and `prepare` return nothing: they play or do nothing,
-    and `isAvailable()` says which. `setRootBackEnabled` and `firstContent`
-    return nothing either; they are hints that the native side may ignore.
+  - `AstryxHaptics.play` and `prepare` return no value: they play where the
+    device can, and `isAvailable()` says whether it can. `setRootBackEnabled`
+    and `firstContent` return no value either; they are hints the native side
+    follows where it can.
 
 - **FR3 — Change events start with the first subscriber and stop after the
   last.**
-  - `AstryxAccessibilitySettings.subscribe` calls the listener with each real change, never with the current value, and
-    return the unsubscribe function. A native event that repeats an unchanged
-    value is not delivered.
+  - `AstryxAccessibilitySettings.subscribe` calls the listener with each real
+    change and returns the unsubscribe function. The listener hears changed
+    values only; `current()` answers the value in force.
   - A module follows native changes only while at least one listener is
     subscribed. After the last unsubscribe it stops; until the next subscribe,
     a read answers the last value it followed, and the next first subscriber
@@ -225,13 +196,13 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     the session's over the preference, and the preference over the system's
     appearance. The theme provider resolves the scopes in one place and gives
     every component and the app one resolved read of the appearance in force.
-  - FR4 gap: the theme provider follows React Native's colour scheme and does
-    not call `AstryxAppearance`; an app calls `setOverride` itself and writes
+  - FR4 gap: the theme provider follows React Native's colour scheme alone;
+    an app calls `setOverride` itself and writes
     the precedence across the saved choice, the run's override, a screen's
     option and the system's scheme.
   - `setOverride(value, {persist: false})` (feature `persist-false`) applies the
-    choice for this run only and saves nothing. `getOverride()` and the next
-    launch keep the saved choice. A saving `setOverride` ends the run-only
+    choice for this run only; the saved choice stays as it was, and
+    `getOverride()` and the next launch keep it. A saving `setOverride` ends the run-only
     override, so `setOverride(getOverride())` restores the saved choice and
     `getRunOverride()` then answers `null`.
   - `getRunOverride()` (feature `run-override`) answers the run's own override
@@ -244,9 +215,10 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     as a run-only override at cold launch only: when the first activity is
     created on Android, and when the app's first window scene connects on iOS,
     before the first
-    frame (feature `launch-link`). Nothing is saved. A link that arrives later
-    (a new intent, or a scene URL) never changes the appearance; navigation
-    from it uses the screen's own `appearance` option (`spec:AST-125/FR7`).
+    frame (feature `launch-link`). The saved choice stays as it was. A link
+    that arrives later (a new intent, or a scene URL) navigates, and the
+    screen it opens sets its look through its own `appearance` option
+    (`spec:AST-125/FR7`).
   - FR4 gap: a link that arrives while the app runs applies its appearance as
     a run-only override too.
 
@@ -262,10 +234,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     is false, `getSettings()` answers `no-module`, and the snapshot comes from
     React Native's `AccessibilityInfo`: Reduce Motion everywhere, high text
     contrast as `isIncreaseContrast` on Android, and the iOS settings it reads.
-    Keys `AccessibilityInfo` cannot read stay false.
-  - The snapshot has no key for Liquid Glass's Clear or Tinted look, because the
-    system gives apps no way to read that setting. Native glass follows it;
-    drawn chrome does not.
+    Every other key reads false.
+  - Native glass follows the system's Clear or Tinted Liquid Glass look
+    itself; drawn chrome follows the seven keys of the snapshot.
 
 - **FR6 — `AstryxHaptics` plays the platform's feedback kinds.**
   - `play(kind)` plays one of UIKit's nine kinds: `selection`, `impactLight`,
@@ -276,8 +247,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   - Android plays a chain of `HapticFeedbackConstants` names, in order of
     preference, on the root view of the activity in front: the first name the
     device's API level knows. Each kind has a default chain; `play(kind, {android})` passes another.
-  - `isAvailable()` is false where the module is absent or `isSupported()` is
-    false (no haptic hardware, or no window). `play` and `prepare` do nothing
+  - `isAvailable()` is true where the module is present and `isSupported()`
+    is true (haptic hardware and a window); `play` and `prepare` play feedback
     then.
   - The library maps its moments (select, toggle, edge, threshold arm and
     disarm, commit and others) to kinds through the theme's haptic tokens, each
@@ -290,11 +261,12 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   - `getString()` answers `{value}`, with `null` for an empty or non-text
     pasteboard. A read shows the system's paste notice on iOS 16 and later and
     Android 12 and later, so the library reads only on the person's action
-    (`PasteButton`); copy buttons never read.
+    (`PasteButton`), and copy buttons only write.
   - `detectPatterns(['webURL' | 'webSearch' | 'number'])` answers whether the
-    pasteboard probably holds each pattern, without reading the content and
-    without a paste notice. The answer omits every pattern the platform cannot
-    test: Android tests only for a web URL, and only from Android 12.
+    pasteboard probably holds each pattern. It reads only the pasteboard's
+    metadata, so the system shows its paste notice for reads alone. The answer
+    carries the patterns the platform tests: all three on iOS, and a web URL
+    on Android 12 and later.
   - `isAvailable()` is false where the module is absent or `isSupported()` is
     false; calls then answer `no-module` or `unavailable`.
 
@@ -312,16 +284,12 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     self-checks of the platform internals the package relies on (`compat`).
     `supports(name)` reads a feature row from the last answer and is `null`
     while it is unknown.
-  - `memory()` answers the process's memory in bytes, counted the way each
-    platform counts it (iOS `phys_footprint`, Android total PSS); the iOS and
-    Android numbers do not compare. `bundleSize()` answers the installed app's size on disk, read
-    off the main thread.
 
 - **FR9 — `AstryxPermissions` reads and asks explicitly.**
-  - `get(name)` never prompts. `request(name)` shows the system prompt only for
-    `undetermined` (and Android `denied`), then answers the state; otherwise it
-    answers the current state at once. Mounting a view never prompts
-    (`spec:AST-112/FR7`).
+  - `get(name)` reads the state silently. `request(name)` shows the system
+    prompt for `undetermined` (and Android `denied`), then answers the state;
+    otherwise it answers the current state at once. The prompt comes only from
+    `request` (`spec:AST-112/FR7`).
   - `name` is a closed set (`camera`). The states are `granted`,
     `undetermined`, `denied` (refused; the app may ask again) and `blocked`
     (the person can change it in Settings only: iOS `denied` or `restricted`,
@@ -329,8 +297,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   - `hasHardware` says whether the device has the hardware: false on the iOS
     Simulator and an emulator without a camera; `null` where the platform does
     not say.
-  - A permission the app did not declare answers `not-declared` and shows no
-    prompt. The generated native project declares it when the app opts the
+  - A permission the app has not declared answers `not-declared` at once. The generated native project declares it when the app opts the
     capability in (`spec:AST-112/FR4`).
   - Where the module is absent, Android answers through React Native's
     `PermissionsAndroid` (which reads `undetermined` until a `request` in this
@@ -345,30 +312,29 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     back-to-home animation (Android 16 predictive back).
   - Until the library reports for the first time, and after its runtime stops,
     back presses go to React Native unchanged.
-  - iOS has no module: back is native there.
+  - On iOS back is native, so the module is Android-only.
 
 - **FR11 — `AstryxLaunch` hands Android's cold launch to the first content.**
   - The shell activity keeps the system's launch window (the splash screen on
     API 31 and later, the window background before) until the library calls
     `firstContent()`, so no blank frame appears between the launch window and
-    the first screen. When no call arrives within 2.5 seconds, it shows the app
-    anyway.
+    the first screen. After 2.5 seconds without a call, it shows the app.
   - The library calls it once per runtime: from the router's first focused
     screen's first content layout, or from `AstryxPerformance.markFirstFrame`,
-    whichever comes first. Later calls do nothing.
+    whichever comes first; that first call ends the hold.
   - `initialURL()` answers the launch link synchronously (what
     `Linking.getInitialURL()` answers), or `null` when the app launched
     without one. The router builds its first state from it, so a cold deep
-    link draws its own screen first. Where the platform cannot answer
-    synchronously (iOS, an absent module), the
-    router reads `Linking.getInitialURL()`.
-  - iOS has no module: its launch screen stays until the first frame.
+    link draws its own screen first. On iOS, and where the module is absent,
+    the router reads `Linking.getInitialURL()`.
+  - On iOS the launch screen stays until the first frame, so the module is
+    Android-only.
 
 - **FR12 — `AstryxFilePicker` presents the system's pickers.**
   - `sources()` lists what the device offers, in menu order: `photos` and
-    `files`. It is empty where the module is absent. Camera capture is the
-    `camera` capability's (`./camera` entry), never a source of the core
-    picker, so the core needs no camera permission or usage string.
+    `files`. It is empty where the module is absent. Camera capture belongs to
+    the `camera` capability (`./camera` entry); the core picker's two sources
+    work without a camera permission or usage string.
   - `pick({source, isMultiple?, limit?, media?, accept?}, events?)` presents one picker
     over the calling surface and resolves `{ok: true, files}` with at least
     one file, `cancelled` when the person backs out, or a reason: a source the
@@ -376,8 +342,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     platform's message, and a second picker while one is open answers `busy`.
     Each file has `uri`, `name`, `size` (`-1` when the provider does not say)
     and `type`.
-  - iOS: `photos` is `PHPickerViewController` (out of process, so no photo
-    library permission) and `files` is `UIDocumentPickerViewController`. Each picked file is copied into the
+  - iOS: `photos` is `PHPickerViewController` (out of process, so it works
+    without photo library permission) and `files` is `UIDocumentPickerViewController`. Each picked file is copied into the
     app's cache location (FR14) and returned as a `file://` URL; the photo
     picker closes before it loads and copies, and `events.onLoading()` (no
     argument) is called once when that loading step starts.
@@ -400,13 +366,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     `getJSON` and `setJSON` parse and serialize (`invalid-json`). `info()`
     answers the namespace, the key count, the bytes the store takes on disk,
     and the free space (`null` when the platform does not say).
-  - Every call works in the calling runtime's namespace, decided natively and
-    never by JavaScript; `info()` names it.
+  - Every call works in the calling runtime's namespace. Native code decides
+    the namespace, and `info()` names it.
   - Values are kept across launches in storage the system keeps for the app.
-    The package sets no size limit; only the device's free space limits a
-    value.
-  - The router's state persistence uses it as its default store, and the app
-    update check keeps its "Not now" in the app's namespace.
+    The device's free space bounds a value's size.
+  - The router's state persistence uses it as its default store.
 
 - **FR14 — The core package owns the app's cache location.**
   - The core package owns one cache location for the app. Pieces that produce
@@ -414,16 +378,15 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     (FR12), which `FileInput` uses, and the `camera` capability's camera view.
   - The system may reclaim the location under storage pressure. A caller that
     needs a file to last copies it elsewhere.
-  - Deleting files in the location is outside the core package.
 
 - **FR15 — Threads and lifecycle.** The threading rules of
   `spec:AST-140/FR6` apply; for this group:
   - Constants are read on the JavaScript thread once per module, at the first
     call that needs them. Asynchronous calls do their native work off the
-    JavaScript thread, and a measure that walks files (`bundleSize()`) runs off
-    the main thread.
-  - The appearance override and the root back gate act on the UI thread at
-    once; neither waits for a JavaScript round trip per frame.
+    JavaScript thread.
+  - The appearance override and the root back gate act natively on the UI
+    thread at once, so each frame follows them without a JavaScript round
+    trip.
   - Native events reach JavaScript on the JavaScript thread, once per real
     change.
   - A call made while its module is torn down during a reload answers
@@ -437,33 +400,28 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     and Reduce Motion with `prefersCrossFadeTransitions` replaces motion with
     cross-fades within the limits of `spec:AST-108`. The theme's style helper
     gives every key to component styles.
-  - Haptic feedback is never the only signal: each moment goes with a visual
-    change, and a copy also announces "Copied" through the status
-    announcements of `spec:AST-086`.
-  - These modules expose nothing to VoiceOver or TalkBack themselves; they have
-    no view.
+  - Every haptic moment goes with a visual change, and a copy also announces
+    "Copied" through the status announcements of `spec:AST-086`.
 
 - **FR17 — The group's named features.**
-  - Each contract's baseline is its first release's shape
-    (`spec:AST-140/FR5`). The group's
-    named features are `AstryxAppearance.persist-false`,
+  - Contracts grow by named features (`spec:AST-140/FR5`). The group's named
+    features are `AstryxAppearance.persist-false`,
     `AstryxAppearance.run-override` and `AstryxAppearance.launch-link`, and
     `AstryxPlatformInfo`'s `contractFeatures` constant is the list a binary
-    reports; the list itself adds no behaviour.
-  - Without a feature: `setOverride` with `persist: false` answers
-    `unsupported` and saves nothing, `getRunOverride()` answers `null` (such a
-    binary has no run-only override), and the launch link does nothing. A
-    missing feature is reported once with a development warning.
+    reports.
+  - In a binary without a feature: `setOverride` with `persist: false`
+    answers `unsupported` and the saved choice stays; `getRunOverride()`
+    answers `null`; and the app opens in the saved appearance whatever the
+    launch link says. A missing feature is reported once with a development
+    warning.
 
-- **FR18 — Public platform API only, and no web engine in the core.**
-  - The native code of every module in the group uses public platform API
-    only; the group needs no exception.
-  - The core reaches neither WebKit (iOS) nor androidx.webkit (Android).
-    Clearing web view data has no Astryx call and is outside the core package;
-    an app that needs it uses its host platform's implementation
-    (`spec:AST-112/FR20`). The web view's own data rules are `spec:AST-131`'s.
-  - FR18 gap: on iOS the core's storage module links WebKit to remove web
-    view data.
+- **FR18 — The group's native code uses public platform API.**
+  - The native code of every module in the group uses public platform API.
+  - Each module links the system frameworks the platform support table names
+    for it. The web engine and the web view's data belong to the `web`
+    capability (`spec:AST-131`).
+  - FR18 gap: on iOS the core's storage module also links WebKit, to remove
+    web view data.
 
 ### Platform support
 
@@ -473,7 +431,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 | `AstryxAccessibilitySettings` | UIKit accessibility status and notifications; the Accessibility framework for 26.1 and later keys | No module; `AccessibilityInfo` fallback (FR5)                                                |
 | `AstryxHaptics`               | `UIFeedbackGenerator` subclasses, prepared and cached                                             | `HapticFeedbackConstants` on the activity's root view, by API level                          |
 | `AstryxClipboard`             | `UIPasteboard`, with pattern detection                                                            | `ClipboardManager`; the clip description's URL confidence on Android 12 and later            |
-| `AstryxPlatformInfo`          | Bundle info, `sysctl` process start, `ActivePrewarm`, `task_vm_info`                              | `PackageInfo`, `Process.getStartElapsedRealtime()`, `Debug.MemoryInfo`, APK sizes            |
+| `AstryxPlatformInfo`          | Bundle info, `sysctl` process start, `ActivePrewarm`                                              | `PackageInfo`, `Process.getStartElapsedRealtime()`                                           |
 | `AstryxPermissions`           | `AVCaptureDevice` authorization                                                                   | Runtime permission with its "don't ask again" state; `PermissionsAndroid` without the module |
 | `AstryxFilePicker`            | `PHPickerViewController`, `UIDocumentPickerViewController`                                        | Photo Picker, Storage Access Framework                                                       |
 | `AstryxStorage`               | Application Support                                                                               | The app's internal files directory                                                           |
@@ -501,9 +459,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   text.
 - Relies on `spec:AST-112` FR3 (amended): the core links in every app, and
   every module of this group is core.
-- Relies on `spec:AST-140` FR5: each contract's baseline is its first
-  release's shape, and later
-  behaviour is a named feature that the platform info module reports.
+- Relies on `spec:AST-140` FR5: contracts grow by named features, which the
+  platform info module reports.
 - Relies on `spec:AST-112` DEC-15 (amended): native code uses public platform
   API only.
 - Relies on `spec:AST-112` FR20 (amended): the package covers the native code
@@ -514,10 +471,8 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   package's app API, since no Astryx component uses them.
 - Camera capture, the camera source of a picker included, is the `camera`
   capability's (`spec:AST-112/FR7`; FR12).
-- The core links no web engine, and clearing web view data has no Astryx call
-  (FR18).
-- Departs from `spec:AST-112/FR7` ("never a silent no-op") for the calls that
-  return nothing (FR2); OQ2 asks whether the exception stands.
+- Details an exception to `spec:AST-112/FR7` for the hint calls that return
+  no value (FR2); OQ2 asks whether the exception stands.
 - Details `spec:AST-112` FR7 (each module's probes) and FR9 (the haptic moment mapping), and `spec:AST-140/FR3`
   (each module's results).
 
@@ -532,17 +487,17 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 | FR5      | Unit tests of the snapshot and the fallback; Simulator runs per setting                                                                                                                    | each key on and off; Android; module absent                                                                                                           | A key missing, an unchanged snapshot delivered, or the first frame drawn before the snapshot                                    |
 | FR6      | Unit tests of the moment table and the Android chain; a device check of feel                                                                                                               | each kind; an API level without the preferred constant; no hardware; a theme token `'none'`                                                           | A kind plays the wrong constant, plays where unavailable, or a silenced token plays                                             |
 | FR7      | Unit tests; Simulator and emulator copy and paste                                                                                                                                          | write; empty read; non-text read; pattern detection on Android 11 and 12                                                                              | A copy button reads, a detection reads the content, or an unknown key is answered                                               |
-| FR8      | Unit tests; Simulator and emulator reads                                                                                                                                                   | constants; `get()`; memory and size                                                                                                                   | A constant throws, or a measure answers in another unit                                                                         |
+| FR8      | Unit tests; Simulator and emulator reads                                                                                                                                                   | constants; `get()`                                                                                                                                    | A constant throws, or `get()` answers a feature row the binary does not report                                                  |
 | FR9      | Unit tests; Simulator and emulator prompts                                                                                                                                                 | each state; undeclared permission; a busy prompt; module absent on each platform                                                                      | A mount prompts, a `blocked` permission prompts, or an undeclared permission crashes                                            |
 | FR10     | Unit tests of the back gate; emulator runs on Android 16                                                                                                                                   | an open sheet; a navigator that can go back; the root; before the first call                                                                          | The back-to-home animation does not play at the root, or a press with a consumer reaches the system                             |
 | FR11     | Unit tests of the once-per-runtime report and the synchronous link; emulator cold launches                                                                                                 | a launch with and without a link; a launch that never reports                                                                                         | An empty root frame shows before the first content, the hold never ends, or a cold deep link draws another screen first         |
 | FR12     | Unit tests through the `./testing` doubles; Simulator and emulator picks                                                                                                                   | each source; multiple; cancel; a source the device does not offer; a second pick while one is open                                                    | A cancel reads as an error, an empty `ok` list, a camera source in the core picker, or two pickers at once                      |
 | FR13     | Unit tests through the `./testing` doubles; Simulator and emulator runs                                                                                                                    | two runtimes; a full disk                                                                                                                             | One runtime reads another runtime's data, or a full disk answers anything but `no-space`                                        |
-| FR14     | Unit tests of each piece that produces files; Simulator and emulator runs                                                                                                                  | a picked photo; a camera photo; storage pressure                                                                                                      | A file written outside the cache location, a URI that is not a `file://` URI, or a core piece that deletes files there          |
+| FR14     | Unit tests of each piece that produces files; Simulator and emulator runs                                                                                                                  | a picked photo; a camera photo; storage pressure                                                                                                      | A file written outside the cache location, or a URI that is not a `file://` URI                                                 |
 | FR15     | UI-thread frame checks during an appearance change; reload tests                                                                                                                           | appearance change while scrolling; a reload with subscribers                                                                                          | JavaScript runs per frame for the change, or a subscription survives a reload                                                   |
 | FR16     | Simulator runs per accessibility setting; announcement tests                                                                                                                               | Reduce Transparency; Show Borders; Reduce Motion; a copy                                                                                              | Drawn chrome ignores a setting, or a copy confirms with haptics alone                                                           |
 | FR17     | The platform's spec rules check; unit tests with a binary that lacks each feature                                                                                                          | each named feature present and absent                                                                                                                 | A behaviour runs without its feature, a missing feature answers anything but the baseline path or `unsupported`, or no warning  |
-| FR18     | Binary symbol and linked-framework check of a core-only build; review of each native change for private API                                                                                | a core-only iOS and Android build                                                                                                                     | WebKit or androidx.webkit linked into a core-only build, or a private API call in the group's native code                       |
+| FR18     | Binary symbol and linked-framework check of a core-only build; review of each native change for private API                                                                                | a core-only iOS and Android build                                                                                                                     | A framework outside the platform support table linked by the group's native code, or a private API call in it                   |
 
 ## Decision log
 
@@ -559,9 +514,6 @@ save nothing. The preference, session and screen scopes form one model whose
 precedence the library owns, so an app reads one resolved appearance instead
 of combining the inputs itself.
 
-Rejected: applying the choice from JavaScript at start, because the first
-frame cannot follow it.
-
 ### DEC-2 — Accessibility settings are one snapshot with a fallback
 
 **Reference:** `spec:AST-130/DEC-2`
@@ -570,7 +522,7 @@ frame cannot follow it.
 Drawn chrome needs every setting that native glass and system bars follow, in
 the first frame, so the module publishes them together as constants and one
 event. Where the module is absent, React Native's `AccessibilityInfo` answers
-the keys it can, so the library never needs two code paths.
+the keys it can, so the library has one code path.
 
 ### DEC-3 — Android's root back press belongs to the system unless JavaScript can use it
 
@@ -582,9 +534,6 @@ The library knows whether anything can consume it, so it publishes that fact
 and the activity follows; the system then plays its own back-to-home
 animation at the root.
 
-Rejected: a JavaScript handler that exits the app, because the system's
-animation cannot play from it.
-
 ### DEC-4 — The library ends the Android launch hold
 
 **Reference:** `spec:AST-130/DEC-4`
@@ -595,9 +544,6 @@ window with no app code, and a time bound keeps a broken launch visible. The
 launch link is read synchronously so the router's first state is the linked
 screen.
 
-Rejected: an app-called hide, because every app would need the step and a
-missed call holds the splash.
-
 ### DEC-5 — Thin modules stay dependency-free wrappers
 
 **Reference:** `spec:AST-130/DEC-5`
@@ -606,7 +552,7 @@ missed call holds the splash.
 Haptics, the clipboard, permissions, the file pickers and storage are small
 wrappers
 where the ecosystem has good libraries. They stay Astryx modules because the
-package takes no runtime dependency outside React and React Native
+package depends on React and React Native alone at run time
 (`spec:AST-112/FR2`), and because each needs the result vocabulary. DEC-5 holds until OQ1 is
 answered.
 
@@ -621,7 +567,7 @@ answered.
 - **OQ2 — Do the calls that return nothing keep doing nothing where they
   cannot act?** (`human-api`) `AstryxHaptics.play` and `prepare`, and the
   back and launch hints, do nothing where the module is absent or
-  unsupported, which `spec:AST-112/FR7` forbids as a silent no-op. Options:
+  unsupported, which `spec:AST-112/FR7` counts as a silent no-op. Options:
   `spec:AST-112/FR7` names them as an exception, with `isAvailable()` saying
   when they do nothing; or each gains a result that answers why it did not
   act.
