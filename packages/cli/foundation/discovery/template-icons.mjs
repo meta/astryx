@@ -43,8 +43,10 @@
  * a key bound only by a namespace import, a type-only import, a re-export, an
  * import from an Astryx package or from a set in the project's list, or by no
  * import at all, is kept with the reason. A side-effect
- * import binds nothing. Without a project icon set the source is unchanged
- * and the report says why.
+ * import binds nothing. A placeholder import from @astryxdesign/template-icons
+ * always becomes the library import that draws it (template-placeholders.mjs).
+ * Without a project icon set the source is otherwise unchanged and the report
+ * says why.
  *
  * @input Template source, its declared icons, the installed sets, and the
  *   project's choice
@@ -67,6 +69,7 @@ import {
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
 import {compareText} from '../text/compare-text.mjs';
+import {fillTemplatePlaceholders} from './template-placeholders.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('./icon-set-discovery.mjs').IconSetChoice} IconSetChoice */
@@ -847,12 +850,18 @@ export const NO_ICON_SETS = Object.freeze({
  * @param {Record<string, string>} [declared] the template's `icons`: the
  *   icon definition each imported icon draws, by its imported name
  * @returns {{source: string, icons: TemplateIconsReport | undefined}} `icons`
- *   is undefined, and the source unchanged, when no set is given and none is
+ *   is undefined, and the source unchanged but for placeholder imports, when no set is given and none is
  *   configured, as for every project where icon features are off, whose
  *   state carries no sets: icon sets are experimental (spec:AST-017 FR27), so a
  *   project that does not use them gets exactly the output it always has.
  */
 export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
+  // A placeholder import (`DeleteIcon` from @astryxdesign/template-icons)
+  // becomes the library icon that draws it, with or without a project set,
+  // and then maps like any declared icon.
+  const filled = fillTemplatePlaceholders(source);
+  source = filled.source;
+  declared = {...filled.declared, ...declared};
   if (sets.length === 0 && choice.configured == null) {
     return {source, icons: undefined};
   }
