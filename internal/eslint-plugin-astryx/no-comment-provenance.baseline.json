@@ -128,7 +128,7 @@
     "INV10",
     "spec:AST-086"
   ],
-  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
+  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182"],
   "packages/core/src/Chat/ChatComposerInput.tsx": ["FR1", "spec:AST-056"],
   "packages/core/src/Chat/ChatLayout.tsx": ["#2573", "#2573"],
   "packages/core/src/Chat/ChatLayoutScrollButton.tsx": [
