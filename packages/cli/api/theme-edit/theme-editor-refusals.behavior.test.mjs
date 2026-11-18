@@ -130,9 +130,9 @@ const CASES = [
     [...E, 'set', 't', 'display', 'flexx', '--on', 'card'],
   ],
   [
-    'a part in another case',
+    'a misspelt part',
     'ERR_THEME_UNKNOWN_PART',
-    [...E, 'set', 't', 'corners', 'pill', '--on', 'Button'],
+    [...E, 'set', 't', 'corners', 'pill', '--on', 'buton'],
   ],
   [
     'an unknown thing',

@@ -254,7 +254,8 @@ describe('--only with a part in other letters or misspelt', () => {
   it(
     'leads with the command on the part, --only kept, and it works',
     async () => {
-      for (const on of ['Text-Input', 'text-inptu']) {
+      // (Other letters, `Text-Input`, are read as the part by set itself.)
+      for (const on of ['text-inptu']) {
         const r = await cli([
           ...ED,
           'set',
