@@ -8,7 +8,8 @@
  *   that would activate it: a press that starts on an interactive element
  *   inside the card (an InfoTip, a button, a link) paints no press on the
  *   card for a finger; a press on the card's own surface still paints. A
- *   mouse press keeps its `:active` paint (checked in a real browser)
+ *   mouse's and a pen's press follow the same rule
+ *   (__tests__/nestedControlPress.test.tsx)
  * @position Testing; validates useClickableContainer's pointerdown callback
  *   through ClickableCard
  */

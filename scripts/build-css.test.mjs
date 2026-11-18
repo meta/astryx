@@ -114,9 +114,11 @@ function specificity(selector) {
 function stateRule(css, {property, token, state, media}) {
   const lines = css.split('\n');
   // The token as the fallback of another variable is one component's own
-  // paint, not the shared overlay this guard orders.
+  // paint, not the shared overlay this guard orders. The shared overlay's own
+  // press reads it as the fallback of `--_nested-press-paint`, which a
+  // container sets for a press on a nested control.
   const asFallback = new RegExp(
-    `var\\(--[\\w-]+,\\s*var\\(--color-overlay-${token}\\)`,
+    `var\\(--(?!_nested-press-paint,)[\\w-]+,\\s*var\\(--color-overlay-${token}\\)`,
   );
   return lines.find(line => {
     const inHoverMedia = line.includes('@media (hover: hover)');

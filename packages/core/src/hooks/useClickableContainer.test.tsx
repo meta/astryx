@@ -282,12 +282,21 @@ describe('onPointerDown', () => {
     expect(cancelPress).toHaveBeenCalledWith(screen.getByTestId('container'));
   });
 
-  it('leaves a mouse or pen press to its own paint on a container that owns no control’s box', () => {
+  it('turns off the container’s press paint for a mouse or pen press that starts on a nested control, until the press ends', () => {
     render(<Harness />);
     const nested = screen.getByRole('button', {name: 'Nested'});
-    fireEvent.pointerDown(nested, {pointerType: 'mouse'});
-    fireEvent.pointerDown(nested, {pointerType: 'pen'});
-    expect(cancelPress).not.toHaveBeenCalled();
+    const container = screen.getByTestId('container');
+    for (const pointerType of ['mouse', 'pen']) {
+      fireEvent.pointerDown(nested, {pointerType, button: 0});
+      expect(container.style.getPropertyValue('--_nested-press-paint')).toBe(
+        'var(--_nested-press-rest)',
+      );
+      expect(cancelPress).toHaveBeenCalledWith(container);
+      fireEvent.pointerUp(nested, {pointerType, button: 0});
+      expect(container.style.getPropertyValue('--_nested-press-paint')).toBe(
+        '',
+      );
+    }
   });
 
   it('cancels a mouse or pen press on a nested control of a container that owns a control’s box, and leaves one on the surface alone', () => {
