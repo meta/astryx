@@ -11,7 +11,7 @@
  * @position CLI presentation adapter for project and integration health.
  */
 
-import {runChecks} from '../../../api/doctor/doctor.mjs';
+import {builtTarget, runChecks} from '../../../api/doctor/doctor.mjs';
 import {
   integrationComponentConflicts,
   integrationDocConflicts,
@@ -38,7 +38,10 @@ import {doc as integrationDocConflictsFn} from '../../../api/integration/integra
 import {NO_RESULT_SET} from '../../../foundation/debug/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {templateMeaningsLine} from '../../../foundation/text/template-meanings-line.mjs';
 
@@ -312,6 +315,16 @@ function printIntegrationValidation(data, seen) {
             `[info] Imports not checked: ${data.publicImports.unchecked.length}:`,
           ),
           records(data.publicImports.unchecked, {
+            fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.shippedImports && data.shippedImports.unchecked.length > 0
+      ? [
+          text(
+            `[info] Relative imports whose packing was not checked: ${data.shippedImports.unchecked.length}:`,
+          ),
+          records(data.shippedImports.unchecked, {
             fields: ['file', 'specifier', 'reason'],
           }),
         ]
@@ -861,6 +874,34 @@ function unknownWord(invoked) {
 }
 
 /**
+ * The refusal of paths given to `doctor` as words: a path is checked with
+ * `--built`, which takes one. One path without `--built` is that path with
+ * it; several paths are the folder that holds them all.
+ * @param {string | undefined} built the `--built` value, if any
+ * @param {string[]} paths every path given, the `--built` value first
+ * @param {string} target the path `--built` checks for them
+ * @returns {never}
+ */
+function pathWords(built, paths, target) {
+  const run = `astryx doctor --built ${quoteCommandArgument(target)}`;
+  if (built == null && paths.length === 1)
+    return cliError(
+      `doctor takes no path: ${paths[0]} is checked with --built`,
+      {
+        suggestions: [{name: run, reason: 'check that path'}],
+        code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+      },
+    );
+  return cliError(
+    `--built takes one path, and doctor was given ${paths.length}: ${paths.join(', ')}`,
+    {
+      suggestions: [{name: run, reason: 'the folder that holds them all'}],
+      code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+    },
+  );
+}
+
+/**
  * Report an unknown subcommand, in text as in JSON, with the ones the group has.
  * @param {import('commander').Command} group
  * @param {string} label the group's full name
@@ -888,6 +929,15 @@ export function registerDoctor(program) {
     // `doctor integrations` is a mistyped subcommand, not a project check.
     action: async (options, invoked) => {
       const word = unknownWord(invoked);
+      // Paths, not a subcommand: `doctor .` or `doctor --built a b`.
+      const paths = [
+        ...(options.built == null ? [] : [String(options.built)]),
+        ...(invoked?.args ?? [])
+          .map(String)
+          .filter((/** @type {string} */ w) => !w.startsWith('-')),
+      ];
+      const target = word == null ? null : builtTarget(paths);
+      if (target != null) return pathWords(options.built, paths, target);
       if (word != null) return unknownSubcommand(doctorCmd, 'doctor', word);
       return runProjectDoctor(program, options);
     },

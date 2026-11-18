@@ -2,21 +2,28 @@
 
 # Stops pull-request runs for a head that is no longer the pull request's head
 # (spec:AST-030 FR16). A re-run takes a concurrency group of its own, so a new
-# push does not cancel it, and a re-run of an old head would otherwise build
-# for a commit nobody merges. ci.yml runs it in `room`, in the three required
-# joins, and in the `superseded-runs` job:
+# push does not cancel it, and a re-run of an older head would otherwise build
+# for a commit nobody merges. ci.yml runs it in three ways:
 #
-# - It reads the pull request's current head once.
-# - `superseded` is 'true' when this run's own head is not the current head.
-#   `room` and the joins read only that, with a read-only token: `room` stops
-#   the run before it waits, and each join fails with the reason as it
-#   reports, so a required context never passes for a superseded head.
-# - With `cancel: true` (the `superseded-runs` job, which alone holds
-#   `actions: write`), it also cancels each unfinished run of this workflow
-#   for this pull request whose head is not the current head. The run for the
-#   current head so cancels a re-run of an older head that is still in
-#   flight, and a run for an older head cancels itself.
-# - A fork's token is read-only, so a fork's run cancels nothing.
+# - `rule: head` (the three required joins, as they report): it reads the pull
+#   request's head once, and `superseded` is 'true' when this run's head is
+#   not that head. A required context so never passes for a superseded head.
+# - `rule: newest-run` (`room`, before it waits): the newest run wins. The run
+#   is superseded only when the newest CI run of its pull request, by run id,
+#   is for another head. A re-run keeps its run's id and creation time, so a
+#   re-run of an older head never outranks a newer push. When the head reads
+#   other than this run's head but no newer run exists, it looks again a
+#   bounded number of times, and then goes on: a head read alone never makes
+#   a run stop itself.
+# - `cancel: true` (the `superseded-runs` job, which alone holds
+#   `actions: write`, at the start of the run): it applies `newest-run`. A
+#   superseded run cancels itself. Any other run cancels each unfinished run
+#   of its pull request that was created before it, for another head. It
+#   never cancels a newer run, nor a run for its own head.
+# - It matches only this workflow's pull-request runs for this pull request:
+#   never another pull request's, the base branch's or another workflow's.
+# - A fork's token is read-only, so a fork's run cancels nothing, and `room`
+#   logs that it skips the sweep.
 # - It never fails: a failed lookup starts the run, and a failed cancel is
 #   logged.
 
@@ -24,14 +31,18 @@ name: Superseded runs
 description: Cancels pull-request runs whose head is no longer the pull request's head.
 
 inputs:
+  rule:
+    description: "'head' compares this run's head with the pull request's head; 'newest-run' asks whether a newer run of the pull request is for another head."
+    required: false
+    default: 'head'
   cancel:
-    description: "'true' cancels this pull request's unfinished runs for a superseded head."
+    description: "'true' applies 'newest-run' and cancels this pull request's older unfinished runs for another head, or this run when it is superseded."
     required: false
     default: 'false'
 
 outputs:
   superseded:
-    description: "'true' when this run's head is no longer the pull request's head."
+    description: "'true' when this run is superseded: under 'head', its head is not the pull request's head; under 'newest-run' or 'cancel', the newest run of the pull request is for another head."
     value: ${{ steps.sweep.outputs.superseded }}
 
 runs:
@@ -40,6 +51,7 @@ runs:
     - id: sweep
       uses: actions/github-script@v9
       env:
+        RULE: ${{ inputs.rule }}
         CANCEL: ${{ inputs.cancel }}
       with:
         retries: 3
@@ -48,33 +60,51 @@ runs:
           core.setOutput('superseded', 'false');
           if (context.eventName !== 'pull_request' || pr == null) return;
           const {owner, repo} = context.repo;
+          const head = pr.head.sha;
+          const sweep = process.env.CANCEL === 'true';
+          const newestRun = sweep || process.env.RULE === 'newest-run';
+          const fork = pr.head.repo?.full_name !== `${owner}/${repo}`;
+          // GitHub can create a push's run, and update the pull request's head, some
+          // seconds after the push. Three more looks ten seconds apart cover that
+          // delay and hold the run at most thirty seconds before it goes on.
+          const LOOKS_AGAIN = 3;
+          const LOOK_AGAIN_MS = 10_000;
 
-          let current;
-          try {
-            current = (await github.rest.pulls.get({owner, repo, pull_number: pr.number})).data.head.sha;
-          } catch (error) {
-            core.warning(`Could not read the pull request's head, so the run starts: ${error.message}`);
+          const readHead = async () =>
+            (await github.rest.pulls.get({owner, repo, pull_number: pr.number})).data.head.sha;
+
+          if (!newestRun) {
+            let current;
+            try {
+              current = await readHead();
+            } catch (error) {
+              core.warning(`Could not read the pull request's head, so the run starts: ${error.message}`);
+              return;
+            }
+            if (head !== current) {
+              core.setOutput('superseded', 'true');
+              core.notice(`This run's head ${head} is no longer the pull request's head ${current}.`, {title: 'Superseded head'});
+            }
             return;
           }
-          if (pr.head.sha !== current) {
-            core.setOutput('superseded', 'true');
-            core.notice(`This run's head ${pr.head.sha} is no longer the pull request's head ${current}.`, {title: 'Superseded head'});
-          }
-          if (process.env.CANCEL !== 'true') return;
-          if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
-            core.info("A fork's token is read-only, so this run cancels no run.");
-            return;
+          if (fork) {
+            core.info("A fork's token is read-only, so this run skips the superseded-runs sweep and cancels no run.");
+            if (sweep) return;
           }
 
           // The workflow file this run comes from, as a listed run names it.
           const workflowPath = process.env.GITHUB_WORKFLOW_REF.split('@')[0].slice(`${owner}/${repo}/`.length);
           const workflowFile = workflowPath.split('/').pop();
-          let runs;
-          try {
-            // This workflow's unfinished runs for the branch are its newest,
-            // so the first page holds them.
-            runs = (
-              await github.rest.actions.listWorkflowRuns({
+          // A fork's run names no pull request, so its runs are found by its branch.
+          const ofThisPullRequest = run =>
+            run.event === 'pull_request' &&
+            run.path === workflowPath &&
+            run.head_repository?.full_name === pr.head.repo?.full_name &&
+            run.head_branch === pr.head.ref &&
+            (fork || run.pull_requests.some(p => p.number === pr.number));
+          const listRuns = async () =>
+            (
+              await github.paginate(github.rest.actions.listWorkflowRuns, {
                 owner,
                 repo,
                 workflow_id: workflowFile,
@@ -82,21 +112,42 @@ runs:
                 branch: pr.head.ref,
                 per_page: 100,
               })
-            ).data.workflow_runs;
+            ).filter(ofThisPullRequest);
+
+          // Run ids grow in the order GitHub creates runs, and a re-run keeps its
+          // run's id. Creation times count only whole seconds, so two quick pushes can
+          // share one.
+          let runs;
+          let superseded = false;
+          try {
+            for (let look = 0; ; look++) {
+              runs = await listRuns();
+              const newest = runs.reduce((a, b) => (b.id > a.id ? b : a), {id: context.runId, head_sha: head});
+              if (newest.head_sha !== head) {
+                superseded = true;
+                core.notice(`Run ${newest.id} for head ${newest.head_sha} is newer than this run for head ${head}.`, {title: 'Superseded head'});
+                break;
+              }
+              const current = await readHead();
+              if (current === head) break;
+              if (look === LOOKS_AGAIN) {
+                core.notice(
+                  `The pull request's head reads ${current}, but no newer run exists for it, so this run for ${head} goes on. The required checks read the head again as they report.`,
+                );
+                break;
+              }
+              await new Promise(resolve => setTimeout(resolve, LOOK_AGAIN_MS));
+            }
           } catch (error) {
-            core.warning(`Could not list this pull request's runs: ${error.message}`);
+            core.warning(`Could not read this pull request's runs, so the run starts: ${error.message}`);
             return;
           }
-          const stale = runs.filter(
-            run =>
-              run.status !== 'completed' &&
-              run.path === workflowPath &&
-              run.head_repository?.full_name === `${owner}/${repo}` &&
-              run.pull_requests.some(p => p.number === pr.number) &&
-              run.head_sha !== current,
-          );
-          // This run last, so it cancels the others before it stops.
-          stale.sort((a, b) => (a.id === context.runId) - (b.id === context.runId));
+          if (superseded) core.setOutput('superseded', 'true');
+          if (!sweep) return;
+
+          const stale = superseded
+            ? [{id: context.runId, run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT), head_sha: head}]
+            : runs.filter(run => run.status !== 'completed' && run.id < context.runId && run.head_sha !== head);
           for (const run of stale) {
             try {
               await github.rest.actions.cancelWorkflowRun({owner, repo, run_id: run.id});

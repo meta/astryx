@@ -2881,9 +2881,9 @@ describe('final pass 5', () => {
       // A look that changes nothing in the app comes first; adding the
       // preview to the app comes last, as an option.
       expect(before.data.see).toMatch(
-        /^look without changing your app: open or screenshot themes\/see\/preview\.html .*--png .*; to see it inside your app, astryx experimental theme preview add/,
+        /^look without changing your app: astryx experimental theme editor show see --png writes themes\/see\/preview\.png .*; or open themes\/see\/preview\.html .*; to see it inside your app, astryx experimental theme preview add/,
       );
-      expect(before.data.see).toContain('themes/see/sheet.html');
+      expect(before.data.see).toContain('themes/see/sheet-overlays.png');
       const r = await themeEditPreviewAdd(undefined, {
         cwd,
         theme: 'see',

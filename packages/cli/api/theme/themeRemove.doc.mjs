@@ -33,7 +33,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. While other themes are added, the default is not removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes. When the only added theme is removed, the module file goes too: themes is empty, default is an empty string, and change.moduleRemoved is true (change.themeModes is true when that module exported themeModes).',
+        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. While other themes are added, the default is not removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes. When the only added theme is removed, the module file goes too: themes is empty, default is an empty string, and change.moduleRemoved is true (change.themeModes is true when that module exported themeModes). When the one provider an installed package names as the one that wires its themes takes the theme (its manifest themeProvider names themeProp), data.appProvider says how to undo that wiring: wire, the text sentence, and line, the provider opening JSX the app passes the module theme to (as theme add documents it).',
     },
   ],
   throws: [

@@ -28,6 +28,7 @@
  */
 
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import * as p from './term-log.mjs';
 import {findConfigPath} from '../../foundation/config/project.mjs';
@@ -49,6 +50,59 @@ export const DEFAULT_CODE_EXTENSIONS = [
   '.cjs',
 ];
 const PARSEABLE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs'];
+
+/**
+ * The grammar a source file is written in, from its name. TypeScript allows
+ * JSX only in a `.tsx` file, so a `.ts` file can hold a type assertion
+ * (`<Item>value`) that the TSX grammar reads as JSX. A declaration file holds
+ * declarations without values (`export const limit: number;`), which code may
+ * not. A declaration file is named as TypeScript names one: it ends in
+ * `.d.ts`, `.d.mts` or `.d.cts`, or it is a `.ts` file whose name holds `.d.`
+ * (an arbitrary-extension declaration file, such as `styles.d.css.ts`).
+ * @param {string} filePath
+ * @returns {'tsx' | 'ts' | 'dts' | 'babel'}
+ */
+export function grammarOf(filePath) {
+  const name = path.basename(filePath);
+  if (
+    /\.d\.[cm]ts$/.test(name) ||
+    (name.endsWith('.ts') && name.includes('.d.'))
+  )
+    return 'dts';
+  const ext = path.extname(filePath);
+  if (ext === '.tsx') return 'tsx';
+  if (ext === '.ts' || ext === '.mts' || ext === '.cts') return 'ts';
+  return 'babel';
+}
+
+/** @type {{parse: (source: string) => unknown} | undefined} */
+let declarationParser;
+
+/**
+ * The parser jscodeshift binds for a grammar: its own `tsx`, `ts` or
+ * `babel`, or, for a declaration file, its `ts` parser's Babel and options
+ * with the TypeScript plugin in declaration mode.
+ * @param {'tsx' | 'ts' | 'dts' | 'babel'} grammar
+ * @returns {string | {parse: (source: string) => unknown}}
+ */
+function parserFor(grammar) {
+  if (grammar !== 'dts') return grammar;
+  if (declarationParser) return declarationParser;
+  const require = createRequire(import.meta.url);
+  const fromJscodeshift = createRequire(
+    require.resolve('jscodeshift/package.json'),
+  );
+  const babel = fromJscodeshift('@babel/parser');
+  const tsOptions = fromJscodeshift('./parser/tsOptions.js');
+  const options = {
+    ...tsOptions,
+    plugins: tsOptions.plugins.map((/** @type {unknown} */ plugin) =>
+      plugin === 'typescript' ? ['typescript', {dts: true}] : plugin,
+    ),
+  };
+  declarationParser = {parse: source => babel.parse(source, options)};
+  return declarationParser;
+}
 
 /**
  * @typedef {{file: string, codemod: string, reason: string, declaration: string, generated: boolean, command?: string}} ProtectedFile
@@ -227,7 +281,7 @@ export function makeLog(silent) {
  * Apply a config codemod to the consumer's astryx.config.* file.
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
- * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: import('../../authoring/codemod/type').JscodeshiftFactory, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
+ * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: typeof import('jscodeshift').default, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
  * @returns {import('../../authoring/codemod/type').CodemodRunResult}
  */
 export function runConfigCodemod(
@@ -267,8 +321,7 @@ export function runConfigCodemod(
     const source =
       contents?.get(configPath) ?? fs.readFileSync(configPath, 'utf-8');
     const ext = path.extname(configPath);
-    const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-    const j = jscodeshift.withParser(parser);
+    const j = jscodeshift.withParser(parserFor(grammarOf(configPath)));
     const api = {jscodeshift: j, stats: () => {}, report: () => {}};
     let result = codemod.transform({source, path: configPath}, api);
 
@@ -346,7 +399,7 @@ export function runConfigCodemod(
  */
 
 /**
- * Whether a file parses as its codemod's transform would parse it, by parser
+ * Whether a file parses as its codemod's transform would parse it, by grammar
  * and file, while its text is the same: each file is parsed once for every
  * codemod that skips it.
  * @type {Map<string, {source: string, parses: boolean}>}
@@ -421,11 +474,11 @@ function spelledTexts(source, filePath) {
  * @param {CoreCodemod} codemod
  * @param {string} source
  * @param {string} filePath
- * @param {string} parser
- * @param {any} j jscodeshift bound to the file's parser
+ * @param {string} grammar the file's grammar, from {@link grammarOf}
+ * @param {any} j jscodeshift bound to the file's grammar
  * @returns {boolean}
  */
-function cannotChange(codemod, source, filePath, parser, j) {
+function cannotChange(codemod, source, filePath, grammar, j) {
   const {mentions} = codemod;
   if (!Array.isArray(mentions) || mentions.length === 0) return false;
   if (mentions.some(word => source.includes(word))) return false;
@@ -441,7 +494,7 @@ function cannotChange(codemod, source, filePath, parser, j) {
   ) {
     return false;
   }
-  const key = `${parser}\0${filePath}`;
+  const key = `${grammar}\0${filePath}`;
   let known = parsedOnce.get(key);
   if (known?.source !== source) {
     let parses = true;
@@ -461,7 +514,7 @@ function cannotChange(codemod, source, filePath, parser, j) {
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
  * @param {string[]} files
- * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: import('../../authoring/codemod/type').JscodeshiftFactory, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
+ * @param {{apply: boolean, log: import('../../authoring/codemod/type').CliLog, jscodeshift: typeof import('jscodeshift').default, root?: string, protection: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, contents?: Map<string, string>}} ctx
  * @returns {import('../../authoring/codemod/type').CodemodRunResult}
  */
 export function runCodeCodemod(
@@ -487,16 +540,16 @@ export function runCodeCodemod(
   const declinedCandidates = [];
   /** @type {Array<{filePath: string, relativePath: string, result: string}>} */
   const candidates = [];
-  // One jscodeshift per parser for all the files: binding a parser builds a
+  // One jscodeshift per grammar for all the files: binding a parser builds a
   // new copy of jscodeshift's helpers, and the copies are all alike.
   /** @type {Map<string, any>} */
   const bound = new Map();
-  /** @param {string} parser */
-  const boundTo = parser => {
-    let j = bound.get(parser);
+  /** @param {'tsx' | 'ts' | 'dts' | 'babel'} grammar */
+  const boundTo = grammar => {
+    let j = bound.get(grammar);
     if (j == null) {
-      j = jscodeshift.withParser(parser);
-      bound.set(parser, j);
+      j = jscodeshift.withParser(parserFor(grammar));
+      bound.set(grammar, j);
     }
     return j;
   };
@@ -511,13 +564,13 @@ export function runCodeCodemod(
     try {
       const source =
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
-      const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-      const j = boundTo(parser);
+      const grammar = grammarOf(filePath);
+      const j = boundTo(grammar);
       // Only source files: a stylesheet can happen to parse as JavaScript
       // (`a.b` then `{ color: white; }`), yet its transform still changes it.
       if (
         PARSEABLE_EXTENSIONS.includes(ext) &&
-        cannotChange(codemod, source, filePath, parser, j)
+        cannotChange(codemod, source, filePath, grammar, j)
       ) {
         continue;
       }

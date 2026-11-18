@@ -18,6 +18,7 @@ import {
   OFFICIAL_LIST_FILE,
   officialDeclarations,
   officialList,
+  savedCatalog,
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
@@ -835,5 +836,113 @@ describe('addCommand with the official list', () => {
     expect(command('@astryxdesign/theme-matcha', '0.7.1')).toMatch(
       / @astryxdesign\/theme-matcha@0\.7\.1$/,
     );
+  });
+
+  it('saves one version exactly in a project that pins its Core, and a range as the range', () => {
+    // A lockfile names npm, whichever package manager runs the tests.
+    const pinned = fs.mkdtempSync(path.join(cacheDir, 'pinned-'));
+    fs.writeFileSync(
+      path.join(pinned, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(pinned, 'package-lock.json'), '{}');
+    const command = addCommand(project({cwd: pinned}), {official: list});
+    expect(command('@astryxdesign/theme-gothic')).toBe(
+      'npm install -E @astryxdesign/theme-gothic@0.6.8',
+    );
+    expect(command('@astryxdesign/theme-matcha', '0.7.1')).toBe(
+      'npm install -E @astryxdesign/theme-matcha@0.7.1',
+    );
+    expect(command('@astryxdesign/theme-matcha')).toBe(
+      'npm install "@astryxdesign/theme-matcha@^0.6.8"',
+    );
+    expect(command('@acme/ui')).toBe('npm install @acme/ui');
+    // The pin is about Astryx's release: another package keeps the package
+    // manager's own way of saving it.
+    expect(command('@acme/widgets', '1.2.3')).toBe(
+      'npm install @acme/widgets@1.2.3',
+    );
+
+    const ranged = fs.mkdtempSync(path.join(cacheDir, 'ranged-'));
+    fs.writeFileSync(
+      path.join(ranged, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '^0.6.8'}}),
+    );
+    fs.writeFileSync(path.join(ranged, 'package-lock.json'), '{}');
+    expect(
+      addCommand(project({cwd: ranged}), {official: list})(
+        '@astryxdesign/theme-gothic',
+      ),
+    ).toBe('npm install @astryxdesign/theme-gothic@0.6.8');
+  });
+});
+
+describe('savedCatalog', () => {
+  it('reads the saved copies of the full catalogs without calling a source', async () => {
+    const source = vi.fn(async () =>
+      catalog('Acme', [
+        pkg('@acme/charts', {
+          contributions: [{kind: 'component', name: 'BarChart'}],
+        }),
+      ]),
+    );
+    const proj = project({
+      integrations: [{name: '@x/one', __discover: source}],
+    });
+    await callSources(proj, {}, {cacheDir, official: NO_OFFICIAL});
+    // A one-package request saves a copy of its own, which is not the list.
+    await callSources(
+      proj,
+      {package: '@acme/charts'},
+      {cacheDir, official: NO_OFFICIAL},
+    );
+    source.mockClear();
+
+    const packages = savedCatalog(proj, {cacheDir, official: NO_OFFICIAL});
+    expect(source).not.toHaveBeenCalled();
+    expect(packages?.map(p => [p.package, p.source])).toEqual([
+      ['@acme/charts', 'Acme'],
+    ]);
+    expect(packages?.[0].contributions).toEqual([
+      {kind: 'component', name: 'BarChart'},
+    ]);
+  });
+
+  it('adds the official packages no source covers, as discover does', async () => {
+    const source = vi.fn(async () =>
+      catalog('Acme', [pkg('@acme/charts'), pkg('@astryxdesign/theme-a')]),
+    );
+    const proj = project({
+      integrations: [{name: '@x/one', __discover: source}],
+    });
+    await callSources(proj, {}, {cacheDir, official: NO_OFFICIAL});
+    const list = {
+      packages: [
+        official('@astryxdesign/theme-a'),
+        official('@astryxdesign/theme-b'),
+      ],
+    };
+    expect(
+      savedCatalog(proj, {cacheDir, official: list})?.map(p => [
+        p.package,
+        p.source,
+      ]),
+    ).toEqual([
+      ['@acme/charts', 'Acme'],
+      ['@astryxdesign/theme-a', 'Acme'],
+      ['@astryxdesign/theme-b', 'Astryx'],
+    ]);
+  });
+
+  it('is null when no source has a saved copy, or the project has no source', () => {
+    const source = vi.fn(async () => catalog('Acme', []));
+    expect(
+      savedCatalog(
+        project({integrations: [{name: '@x/one', __discover: source}]}),
+        {cacheDir},
+      ),
+    ).toBeNull();
+    expect(savedCatalog(project({}), {cacheDir})).toBeNull();
+    expect(source).not.toHaveBeenCalled();
   });
 });

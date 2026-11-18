@@ -75,3 +75,57 @@ export function refuseIgnoredPairs(given, pairs) {
 /** @param {unknown} value whether an option was passed at all */
 export const passed = value =>
   value !== undefined && value !== null && value !== false && value !== '';
+
+/** `<set>/<id>` or `<package>/<set>/<id>`: no spaces, and an id after a slash. */
+export const REFERENCE_RE = /^[^\s/][^\s]*\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+/**
+ * Refuse an icon query that is not a string.
+ * @param {unknown} query
+ */
+export function checkIconQueryType(query) {
+  if (query != null && typeof query !== 'string') {
+    throw new AstryxError(
+      `Invalid icon query: ${String(query)}`,
+      [],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+}
+
+/**
+ * Refuse an empty icon search.
+ * @param {string} term the trimmed query
+ */
+export function requireIconTerm(term) {
+  if (!term) {
+    throw new AstryxError(
+      'An icon query is required',
+      [
+        {
+          name: 'astryx experimental icon delete',
+          reason: 'find icons by meaning',
+        },
+        {
+          name: 'astryx experimental icon --list',
+          reason: 'list the installed sets',
+        },
+      ],
+      ERROR_CODES.ERR_MISSING_ARGUMENT,
+    );
+  }
+}
+
+/**
+ * Refuse a limit that is not a positive integer.
+ * @param {unknown} limit
+ */
+export function checkIconLimit(limit) {
+  if (limit != null && (!Number.isInteger(limit) || Number(limit) <= 0)) {
+    throw new AstryxError(
+      `Invalid limit "${limit}". Must be a positive integer.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+}

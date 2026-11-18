@@ -701,6 +701,72 @@ describe('retained focused column', () => {
   });
 });
 
+describe('column range changes', () => {
+  it('builds only the cells of columns that enter the window', async () => {
+    const viewport = controlledViewport();
+    const built: string[] = [];
+    // Each body cell runs every plugin's cell transform when it is built.
+    const recorder: TablePlugin<Item> = {
+      rowModel: 'flat',
+      transformBodyCell: (props, column) => {
+        built.push(column.key);
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(200);
+    const before = mountedKeys(container);
+    built.length = 0;
+    // One more column enters at the inline end.
+    await viewport.scrollTo(300);
+    const after = mountedKeys(container);
+    const entering = after.filter(key => !before.includes(key));
+    expect(entering.length).toBeGreaterThan(0);
+    expect(after.length).toBeGreaterThan(entering.length);
+    expect([...new Set(built)].sort()).toEqual([...entering].sort());
+    expect(built).toHaveLength(entering.length * ROW_COUNT);
+  });
+});
+
+describe('pinning a mounted column', () => {
+  function pinnedState(container: HTMLElement, key: string) {
+    const header = container.querySelector(
+      `thead [data-column-key="${key}"]`,
+    ) as HTMLElement;
+    const index = header.getAttribute('aria-colindex');
+    const body = Array.from(
+      container.querySelectorAll(`tbody td[aria-colindex="${index}"]`),
+    );
+    return {
+      header: header.hasAttribute('data-astryx-table-pinned'),
+      body: body.map(cell => cell.hasAttribute('data-astryx-table-pinned')),
+    };
+  }
+
+  it('pins and unpins the header and body cells of a mounted column together', async () => {
+    controlledViewport();
+    const {container, rerender} = render(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
+    rerender(<Fixture startKeys={['c0', 'c1']} />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: true,
+      body: Array(ROW_COUNT).fill(true),
+    });
+    rerender(<Fixture />);
+    await settle();
+    expect(pinnedState(container, 'c1')).toEqual({
+      header: false,
+      body: Array(ROW_COUNT).fill(false),
+    });
+  });
+});
+
 describe('first-visible-column anchor', () => {
   // 2050px into a run of 100px columns: c20 is first visible, half shown.
   async function mountAt(

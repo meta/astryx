@@ -32,14 +32,14 @@ vi.mock('./_preview.mjs', async importOriginal => {
   ).stubRenders(real);
   return {
     ...stubbed,
-    screenshot: async (
+    screenshots: async (
       /** @type {any} */ _project,
-      /** @type {string} */ _html,
-      /** @type {string} */ png,
-    ) => {
-      fs.writeFileSync(png, 'png');
-      return {ok: true};
-    },
+      /** @type {Array<{png: string}>} */ jobs,
+    ) =>
+      jobs.map(({png}) => {
+        fs.writeFileSync(png, 'png');
+        return {ok: true};
+      }),
   };
 });
 
@@ -130,7 +130,7 @@ describe('preview app --theme and links in the theme folder', () => {
         ).toBeUndefined();
         expect(r.data.notes).toContainEqual(
           expect.stringMatching(
-            /^left out themes\/t\/sheet-mockup\.png: a link, which the editor never reads through/,
+            /^left out themes\/t\/sheet-mockup\.png: a link, which the copy does not follow/,
           ),
         );
       } finally {

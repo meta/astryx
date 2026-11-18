@@ -3,6 +3,7 @@
 /** @file `astryx theme remove` — stop importing one app theme. */
 
 import {removeThemeFromApp} from '../_adapter.mjs';
+import {withAppProvider} from '../_app-provider.mjs';
 
 /**
  * Remove one added theme and regenerate the app module, or remove the module
@@ -12,5 +13,7 @@ import {removeThemeFromApp} from '../_adapter.mjs';
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}
  */
 export function themeRemove(slug, options = {}) {
-  return removeThemeFromApp(slug, options);
+  return removeThemeFromApp(slug, options).then(result =>
+    withAppProvider(result, options.cwd ?? process.cwd()),
+  );
 }

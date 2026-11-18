@@ -22,6 +22,7 @@ export const doc = {
       name: 'slug',
       param: 'slug',
       required: false,
+      names: 'theme',
     },
   ],
   options: [
@@ -52,6 +53,7 @@ export const doc = {
     },
   ],
   outsideProject: 'own',
+  requires: ['themes.appModule'],
   exitCodes: [
     {
       code: 0,

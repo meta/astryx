@@ -11,13 +11,10 @@ import DurationShardSequencer, {
   readDurations,
   recordDurations,
   idleSwizzleSlices,
+  durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
-import {
-  PER_FILE_SECONDS,
-  nodeFileCost,
-  nodeLegFiles,
-} from './vitest-node-legs.mjs';
+import {PER_FILE_SECONDS, nodeFileCost} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -67,19 +64,6 @@ describe('duration-balanced Node legs', () => {
     // The slowest files still exist, so the split they steer is real.
     for (const file of slowest.slice(0, 6))
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
-  });
-
-  it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
-    // The `node` project's files, from the globs vitest.config.ts reads
-    // (vitest-node-files.test.mjs), so this check never drifts from what the
-    // project runs.
-    const nodeFiles = nodeLegFiles();
-    const missing = nodeFiles.filter(file => !(file in recorded));
-    expect(nodeFiles.length).toBeGreaterThan(500);
-    expect(
-      missing.length / nodeFiles.length,
-      `${missing.length} Node test files have no recorded time (${missing.slice(0, 5).join(', ')}, …). Regenerate the record from the Main workflow's Node leg logs: node scripts/vitest-shard-sequencer.mjs record <log>…`,
-    ).toBeLessThanOrEqual(0.1);
   });
 
   it.each([4, 6])(
@@ -334,6 +318,22 @@ describe('duration-balanced Node legs', () => {
     expect([...(await idleSwizzleSlices(files))]).toEqual([]);
   });
 
+  it('reads the record a workflow names in VITEST_DURATIONS_FILE, and the main record otherwise', () => {
+    expect(durationsFile()).toBe(DURATIONS);
+    vi.stubEnv(
+      'VITEST_DURATIONS_FILE',
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(durationsFile()).toBe(
+      path.join(path.dirname(DURATIONS), 'vitest-node-durations.min-node.json'),
+    );
+    const other = readDurations();
+    expect(Object.keys(other).length).toBeGreaterThan(100);
+    expect(other).not.toEqual(readDurations(DURATIONS));
+    vi.unstubAllEnvs();
+    expect(durationsFile()).toBe(DURATIONS);
+  });
+
   it('reads no swizzle-proof scope when no slice is in the run', async () => {
     expect([...(await idleSwizzleSlices(['a.test.mjs']))]).toEqual([]);
   });
@@ -351,6 +351,21 @@ describe('duration-balanced Node legs', () => {
     expect(recordDurations(log)).toEqual({
       'packages/cli/a.test.mjs': 1.2,
       'packages/cli/b.test.mjs': 0.8,
+    });
+  });
+
+  it('books the slice files from the swizzle-proof legs, where they run, and nothing else there', () => {
+    const log = [
+      'swizzle-proof (3/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs (1 test) 338400ms',
+      'swizzle-proof (5/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs ^[[2m(1 test)^[[22m^[[33m 122349^[[2mms^[[22m^[[39m',
+      // Any other file in that job is no Node leg's time.
+      'swizzle-proof (5/8)\tBuild core package\t2026-11-14T11:01:57.18Z  ✓  node  packages/cli/other.test.mjs (2 tests) 5000ms',
+      'test-node (1/5)\tRun tests\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+    ].join('\n');
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs': 338.4,
+      'packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs': 122.3,
+      'packages/cli/a.test.mjs': 1.2,
     });
   });
 

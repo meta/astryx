@@ -38,7 +38,8 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
-import {pickMediaMode} from '../hooks/useAutoMediaMode';
+import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
+import {pickInvertedSide} from '../hooks/mediaSide';
 import {parseColor} from '../utils/color';
 import type {
   ToastType,
@@ -434,7 +435,7 @@ export function ToastSurface({
   );
   const fromTokens =
     surface !== null && surface.a >= 1
-      ? pickMediaMode(
+      ? pickInvertedSide(
           surface,
           null,
           parseColor(tokens['--color-on-dark'] ?? ''),
@@ -447,6 +448,12 @@ export function ToastSurface({
       : isError || mode === 'light'
         ? 'dark'
         : 'light';
+  // Once painted, the card's text takes the side that reads best on it.
+  const measuredMediaMode = useSurfaceMediaMode(
+    rootRef,
+    true,
+    pickInvertedSide,
+  );
 
   return (
     <div
@@ -469,7 +476,7 @@ export function ToastSurface({
           isExiting && styles.exiting,
         ),
       )}>
-      <MediaTheme mode="auto" fallback={fallbackMediaMode}>
+      <MediaTheme mode={measuredMediaMode ?? fallbackMediaMode}>
         {renderContent ? (
           renderContent({
             body,

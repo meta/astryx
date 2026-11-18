@@ -68,7 +68,8 @@ permissions: {}
 # classifier) and skips its work, reporting success, when nothing in its scope
 # changed; anything undecidable runs everything. The one scope job,
 # swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
-# start only when the change proves a target.
+# start only when the change proves a target, and on a pull request only with
+# the `ci:run-swizzle` label: the proof runs on main (spec:AST-110/DEC-3).
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -107,9 +108,10 @@ permissions: {}
 # (spec:AST-030 FR23, DEC-17).
 # A pull request's newer push cancels its older run. A re-run takes a group of
 # its own, so re-running an older head never cancels the run for the pull
-# request's current head. The superseded-runs job cancels the other way: each
-# run cancels this pull request's unfinished runs for a head that is no longer
-# its head, and `room` stops a run whose own head is superseded.
+# request's current head. The superseded-runs job cancels the other way, at
+# the start of each run: the newest run wins, so a run cancels this pull
+# request's older unfinished runs for another head, and `room` stops a run
+# that a newer run for another head supersedes.
 concurrency:
   group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' && 'webkit-weekly') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
@@ -119,9 +121,10 @@ jobs:
   # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
   # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
-  # of the run unless it already fit. Every job here but build-storybook and
-  # ci-full needs admission, directly or through the jobs it needs, so a
-  # waiting run holds only its one waiting job and a build that found room.
+  # of the run unless it already fit. Every job here but build-storybook,
+  # ci-full and superseded-runs needs admission, directly or through the jobs
+  # it needs, so a waiting run holds only its one waiting job, a build that
+  # found room, and the superseded-runs sweep while it runs.
   # Like every other job both skip for a draft or an unlabelled fork, which run
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,
@@ -167,7 +170,9 @@ jobs:
         with:
           # scripts/lib brings the scripts/ files beside it too: the Node leg
           # planner, the modules it imports and the recorded Node times;
-          # .github/scripts/lib holds the glob matcher it shares.
+          # .github/scripts/lib holds the glob matcher it shares, and brings
+          # the .github/scripts files the release-critical label check reads
+          # (run-labels.cjs and review-signal-decision.cjs).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
@@ -176,17 +181,19 @@ jobs:
           path: .ci-admission
           persist-credentials: false
 
-      # A run for a head that is no longer the pull request's head (a re-run
-      # of an older head) stops before it takes room, and the required
-      # contexts fail with the reason, never pass. superseded-runs cancels it.
+      # A run that a newer run for another head supersedes (a re-run of an
+      # older head) stops before it takes room, and the required contexts
+      # fail with the reason, never pass. superseded-runs cancels it.
       - name: Check the pull request's head
         id: head
         uses: ./.ci-admission/.github/actions/superseded-runs
+        with:
+          rule: newest-run
 
       - name: Stop for a superseded head
         if: steps.head.outputs.superseded == 'true'
         run: |
-          echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports the checks."
+          echo "::error title=Superseded head::A newer run of this pull request is for another head, so this run stops. The newest run reports the checks."
           exit 1
 
       # The one Node leg count (scripts/vitest-node-legs.mjs): test-node's
@@ -200,8 +207,7 @@ jobs:
         continue-on-error: true
         working-directory: .ci-admission
         run: |
-          node scripts/vitest-node-legs.mjs plan --github-output \
-            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+          node scripts/vitest-node-legs.mjs plan --github-output
 
       # Another run's admission reads from this step's name how many jobs this
       # run adds at full width (count.mjs).
@@ -216,11 +222,11 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}
 
@@ -239,9 +245,11 @@ jobs:
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
     runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
+    # pull-requests: read reads who applied a release-critical label.
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       full: ${{ steps.rest.outputs.full }}
       # How many legs of each widening matrix run at once (ci-admission).
@@ -257,7 +265,12 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 8
         with:
-          sparse-checkout: .github/actions/ci-admission
+          # .github/scripts/lib brings the .github/scripts files beside it, the
+          # ones the release-critical label check reads (run-labels.cjs and
+          # review-signal-decision.cjs).
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
           path: .ci-admission
           persist-credentials: false
 
@@ -276,11 +289,11 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8, "ci:run-swizzle": 8}'
           # A dispatch runs neither widening matrix.
           leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}
 
@@ -323,18 +336,19 @@ jobs:
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
           exit 1
 
-  # Cancels this pull request's unfinished runs for a head that is no longer
-  # its head, this run included (.github/actions/superseded-runs). A re-run
-  # takes a concurrency group of its own, so a new push does not cancel it:
-  # the run for the new head does it here. It is the one job with
+  # Cancels this pull request's older unfinished runs for another head, or
+  # this run when a newer run for another head supersedes it
+  # (.github/actions/superseded-runs). A re-run takes a concurrency group of
+  # its own, so a new push does not cancel it: the run for the new head does
+  # it here. It starts with the run, before the run waits for room, so a run
+  # that waits or that CI turns away still frees the room the older runs
+  # hold; their results can pass no required check. It is the one job with
   # `actions: write` for this, and it runs only for a pull request from this
-  # repository, since a fork's token is read-only. It starts once admission
-  # found room for the run, or once `room` stopped this run for a superseded
-  # head, so it takes room like every other job. No job needs it, and no
+  # repository, since a fork's token is read-only. `peak` counts it, and a
+  # waiting run's count holds it while it runs. No job needs it, and no
   # required context reads it, so its own failure fails nothing else.
   superseded-runs:
-    needs: [room, admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (needs.admission.result == 'success' || needs.room.outputs.superseded == 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     continue-on-error: true
@@ -1061,6 +1075,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
@@ -1191,19 +1211,21 @@ jobs:
               .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). Vitest walks the module graph once, for the list; a
+            # second `--changed` walk would cost each leg as long again.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/ui-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/ui-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -1231,12 +1253,12 @@ jobs:
       # (its `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
       # As many legs as the recorded Node times need for each leg to finish
-      # inside the job limit, at most eight (room's Node leg plan,
+      # inside the job limit, at most twelve (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
-      # at its first step.
+      # before any setup.
       matrix:
-        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
+        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1245,6 +1267,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # A Node suite that does not fit its legs fails every leg with room's
       # reason, before any setup, so the run cannot pass on legs that would
       # outrun their job limit.
@@ -1357,12 +1385,14 @@ jobs:
             # share of guards.
             # The lists go through files so a failing lister fails the step.
             # Every leg splits the same list, so a leg that cannot list the
-            # tests fails rather than split a different one.
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
             .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
@@ -1370,9 +1400,11 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       # A test file this change touches that now runs far past its recorded
-      # time fails here, naming both times, so the pull request that slows it
-      # updates the record before a later pull request's leg runs over its
-      # job limit. Files the change does not touch are not checked.
+      # time, or has none, gets a notice naming both times. It never fails the
+      # leg: after each full unit run of main, a job regenerates the record
+      # from that run's Node legs when an entry is missing or has drifted
+      # (node-record-refresh.yml). Files the change does not touch are not
+      # checked.
       - name: Check the recorded times of the test files this change touches
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
@@ -1460,6 +1492,44 @@ jobs:
           ASTRYX_RENDER_CHART_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
 
+      # template-phone-fit.browser.test.mjs builds every ready page template
+      # into one Vite app and shows each in Chromium's phone emulation at
+      # 390 px, with touch and with a mouse; it fails on horizontal overflow.
+      # It needs the build package's Vite plugin, built here. The Node legs
+      # skip it; with ASTRYX_TEMPLATE_PHONE_FIT_BROWSER set, a missing browser
+      # fails it.
+      - name: Template phone fit browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_PHONE_FIT_BROWSER: '1'
+        run: |
+          pnpm -F @astryxdesign/build build
+          pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
+
+      # render-interaction-parity.browser.test.mjs builds one page into a Vite
+      # app and renders it to one file, then takes the same clicks, keys and
+      # typing in both in Chromium, the file inside a sandboxed frame under a
+      # strict content security policy, and compares what shows after each
+      # step. It needs the build package's Vite plugin, built in the step
+      # before. The Node legs skip it; with ASTRYX_RENDER_PARITY_BROWSER set,
+      # a missing browser fails it.
+      - name: Render interaction parity browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_PARITY_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/render-interaction-parity.browser.test.mjs --maxWorkers=1
+
+      # template-noscript-first-paint.browser.test.mjs renders the page
+      # templates people share as a file to static HTML and checks their
+      # first paint with script off at a phone's and a desktop's width. The
+      # Node legs skip it; with ASTRYX_TEMPLATE_NOSCRIPT_BROWSER set, a
+      # missing browser fails it.
+      - name: Template no-script first paint browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_NOSCRIPT_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/template-noscript-first-paint.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -1485,15 +1555,19 @@ jobs:
           fi
           exit "$rc"
 
-  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
-  # each, beside the Node legs rather than inside them. When a change reaches
-  # every copy, its slices take about 2,300 s of test time, more than the Node
-  # legs hold under their limit with the rest of the suite. This job reads the
-  # proof's scope first, with Node alone and nothing installed; the legs start
-  # only when the change proves a target, as each slice decides. `test`
-  # requires this job, and the legs whenever the scope is not `none`.
+  # The swizzle proof (spec:AST-110 FR7) runs on main: Main's Node legs prove
+  # the targets each validated main commit affects, and the release re-check
+  # proves every target before a cut (spec:AST-110/DEC-3). A pull request runs
+  # it only with the `ci:run-swizzle` label (run-labels), for a change to the
+  # swizzle tooling; it then runs in legs of its own, one slice each, beside
+  # the Node legs rather than inside them. When a change reaches every copy,
+  # its slices take about 2,300 s of test time, more than the Node legs hold
+  # under their limit with the rest of the suite. This job reads the proof's
+  # scope first, with Node alone and nothing installed; the legs start only
+  # when the change proves a target, as each slice decides. `test` requires
+  # this job, and the legs whenever the scope is not `none`.
   swizzle-proof-scope:
-    needs: [admission, heavy-ci]
+    needs: [admission, heavy-ci, run-labels]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1517,17 +1591,23 @@ jobs:
 
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: (github.event_name != 'pull_request' || needs.run-labels.outputs.swizzle == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
 
-      # A docsite-only or spec-only change runs no Node test, so no slice.
+      # A pull request without the ci:run-swizzle label proves no target here:
+      # main proves them. A docsite-only or spec-only change runs no Node
+      # test, so no slice.
       - name: Decide the proof's scope
         id: proof
         env:
+          OPTED_OUT: ${{ github.event_name == 'pull_request' && needs.run-labels.outputs.swizzle != 'true' }}
           SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
         run: |
-          if [ "$SPECIALIZED" = true ]; then
+          if [ "$OPTED_OUT" = true ]; then
+            echo "The swizzle proof runs on main: Main's Node legs prove the targets each main commit affects, and the release re-check proves every target. A pull request that changes the swizzle tooling runs it here with the ci:run-swizzle label."
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          elif [ "$SPECIALIZED" = true ]; then
             echo "Specialized PR lane: the swizzle proof proves no target"
             echo 'mode=none' >> "$GITHUB_OUTPUT"
           else
@@ -1540,10 +1620,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # All eight legs at once when admission found room for them, else two
-      # at a time, as the Node legs (admission's `leg-widths`).
-      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
-      # One leg per swizzle-proof.<n>.test.mjs file.
+      # One leg per swizzle-proof.<n>.test.mjs file. The ci:run-swizzle label
+      # adds all eight legs to the run's admission (label-legs), so they start
+      # together.
       matrix:
         slice: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
@@ -1561,7 +1640,63 @@ jobs:
       - name: Build core package
         run: pnpm -F @astryxdesign/core build
 
+      # The shard watchdog (scripts/vitest-shard-watchdog.mjs) fires a minute
+      # before the job's 15-minute limit, as in test-node, so a slow slice
+      # fails and names its file instead of being cancelled. It also writes
+      # the slice's seconds for the recorded-time check below.
       - name: Run this slice of the swizzle proof
+        id: slice
+        env:
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
+          pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
+
+      # As in test-node: a slice file this change touches that now runs far
+      # past its recorded time gets a notice naming both times.
+      - name: Check the recorded time of this slice
+        if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
+
+  # Every release proves every swizzle target (spec:AST-110 FR7, DEC-3): the
+  # release-check of the commit a release is cut from runs the full swizzle
+  # proof, Chromium included, one slice per leg, and release-check requires
+  # every leg. A pull request runs the proof only with ci:run-swizzle
+  # (swizzle-proof, above), and Main's Node legs prove the targets each main
+  # commit affects; this is the one run that proves them all before a cut.
+  release-swizzle-proof:
+    name: release-swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+    strategy:
+      fail-fast: false
+      # One leg per swizzle-proof.<n>.test.mjs file, as swizzle-proof.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    # Every target and its Chromium render: longer than a pull request's slice.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Install Chromium for the swizzle proof
+        run: npx playwright install chromium
+
+      - name: Prove every swizzle target in this slice
+        env:
+          SWIZZLE_PROOF_ALL: '1'
+          SWIZZLE_PROOF_BROWSER: '1'
         run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
@@ -1721,6 +1856,7 @@ jobs:
         pr-interaction,
         pr-interaction-webkit,
         pr-component-a11y-contracts,
+        a11y-dependent-audits-plan,
         pr-a11y-dependent-audits,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
@@ -1807,13 +1943,15 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
-      # join still runs: it requires the release bump's own validation.
+      # join still runs: it requires the release bump's own validation. So
+      # does a change only to the recorded Node test times: the Node leg
+      # plan's check, which fails test-node, is the check that gates it.
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -1833,6 +1971,8 @@ jobs:
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
           PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
           PR_A11Y_DEPENDENT_AUDITS_RESULT: ${{ needs.pr-a11y-dependent-audits.result }}
+          A11Y_DEPENDENT_AUDITS_PLAN_RESULT: ${{ needs.a11y-dependent-audits-plan.result }}
+          A11Y_DEPENDENT_AUDITS_COUNT: ${{ needs.a11y-dependent-audits-plan.outputs.count }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -1859,6 +1999,7 @@ jobs:
       visual: ${{ steps.decide.outputs.visual }}
       a11y: ${{ steps.decide.outputs.a11y }}
       rtl: ${{ steps.decide.outputs.rtl }}
+      swizzle: ${{ steps.decide.outputs.swizzle }}
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
@@ -3506,7 +3647,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
@@ -3845,7 +3990,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
@@ -5867,30 +6016,33 @@ jobs:
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
-  # A leg without a share runs on a slim runner and only says so. The `test`
-  # join reads the legs' result, so a failing audit blocks the merge.
+  # A plan that owes no audit starts no leg. A plan that did not succeed
+  # starts one leg on a slim runner, which fails with an error that says to
+  # re-run. The `test` join reads the legs' result, so a failing audit blocks
+  # the merge.
   pr-a11y-dependent-audits:
     name: Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})
     needs:
       [room, admission, heavy-ci, a11y-dependent-audits-plan, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && (needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0'))) }}
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
     # A first run plans at most three legs; a later run at the same head may
     # plan up to six to run every owed audit. The matrix starts only the
-    # planned legs; without a plan it starts all six, which then stop.
+    # planned legs; a plan that owes no audit starts none (the condition above),
+    # and a plan that did not succeed starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}
+        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}
     permissions:
       contents: read
     steps:
       - name: Require the dependent-audit plan
         if: needs.a11y-dependent-audits-plan.result != 'success'
         run: |
-          echo "The dependent-audit plan did not succeed (${{ needs.a11y-dependent-audits-plan.result }}), so the audits to run are unknown."
+          echo "::error title=Dependent-audit plan did not run::The dependent-audit plan ended ${{ needs.a11y-dependent-audits-plan.result }}, so the audits this change owes are unknown. Re-run all jobs."
           exit 1
 
       - name: Decide this leg
@@ -6015,6 +6167,7 @@ jobs:
         a11y-contracts,
         pr-a11y-audit,
         pr-rtl,
+        release-swizzle-proof,
       ]
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' }}
     runs-on: ubuntu-slim
@@ -6032,7 +6185,7 @@ jobs:
         with:
           script: |
             const needs = JSON.parse(process.env.RELEASE_NEEDS);
-            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl']) {
+            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl', 'release-swizzle-proof']) {
               if (needs[name]?.result !== 'success') {
                 throw new Error(`Required release job ${name} did not succeed: ${needs[name]?.result}`);
               }

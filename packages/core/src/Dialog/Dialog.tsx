@@ -217,6 +217,10 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],

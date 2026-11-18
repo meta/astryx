@@ -52,6 +52,8 @@
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
+ * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
+ * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
 
 /**

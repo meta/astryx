@@ -12,6 +12,7 @@ import {rtlStyles} from '@astryxdesign/core/utils';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
@@ -19,6 +20,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -287,6 +289,7 @@ function getFileExtension(name: string): string {
 }
 
 export default function FileExplorerPage() {
+  const showToast = useToast();
   const [selectedPath, setSelectedPath] = useState<string[]>([
     'applications',
     'chrome-apps',
@@ -392,7 +395,13 @@ export default function FileExplorerPage() {
           centerContent={
             <SegmentedControl
               value="column"
-              onChange={() => {}}
+              onChange={view =>
+                // Demo only: this page shows the column view; replace this toast with the view switch.
+                showToast({
+                  body: `Demo: the ${view} view would show here`,
+                  uniqueID: `view-${view}`,
+                })
+              }
               label="View mode">
               <SegmentedControlItem
                 value="grid"
@@ -427,37 +436,73 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
                 label="Group"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: grouping options would open here',
+                    uniqueID: 'group',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={ShareIcon} size="sm" />}
                 label="Share"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that shares the selection.
+                  showToast({
+                    body: 'Demo: sharing would start here',
+                    uniqueID: 'share',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={TagIcon} size="sm" />}
                 label="Tags"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: tags for the selection would open here',
+                    uniqueID: 'tags',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
                 label="More"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: more actions would open here',
+                    uniqueID: 'more',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
                 label="Search"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: search in this folder would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
             </>
           }
         />
       }
       content={
-        <LayoutContent padding={0} isScrollable={false}>
+        <LayoutContent role="main" padding={0} isScrollable={false}>
+          <VisuallyHidden as="h1">Files</VisuallyHidden>
           <HStack height="100%" isScrollable>
             {columns.map((col, colIndex) => {
               const showDivider =
