@@ -8,7 +8,7 @@
 
 - A part word in a clause wins over a part carried from before.
 - A part said in one clause reaches a clause that names none of its own only when that clause comes right after it. A part a list is led by reaches all of the list's items, until another part is said. A part carried once is carried no further.
-- A look out of that reach, with no theme word and no dial of its own, is named in its own words, never written on a part said further back or on the whole theme.
+- A look out of that reach is never written on a part said further back: a look with a whole-theme meaning (a dial's or a theme token's) goes to the whole theme, and any other look is named in its own words.
 - A mode pair stays on one part: "borders #d5dbe1 in light mode and #30313d in dark mode" in an inputs list writes both halves on the inputs.
 - A bare color said of a part that paints no fill of its own (a tab, a side nav item at rest), in an ask that speaks of that part's text elsewhere, is its text color: "tabs 14px text, …, other tabs #666666".
 - "#f7f8f8 text on #1c1d1f" after a part keeps the text on that part, in its state.
@@ -28,6 +28,6 @@
 
 - In `astryx experimental theme editor how`, a fill given as a theme color ("selected tab accent", `var(--color-accent)`) now gets the same readable-text step as a typed color, measured as that color is in each mode. Its text takes the theme color's own text color (`var(--color-on-accent)`) where that reads, so it follows when the theme changes the color. The answer that runs a whole ask in order carries that step right after the fill.
 
-- Every line a refusal of `astryx experimental theme editor set` offers keeps the scope typed: a `--state` or `--when` on the same part, and a `--mode`, go into the line whenever set takes it with them. A hovered link's color (`color '#00438a' --on link --state hover`) is now offered as `--color-text-accent '#00438a' --on link --state hover`, so following it changes the hovered link only, not every link at rest. A line set would refuse with a flag (a `--mode` on what is not a color) is still offered as the one that works.
+- Every line a refusal of `astryx experimental theme editor set` offers keeps the scope typed: a `--state` or `--when` on the same part, and a `--mode`, go into the line whenever set takes it with them. A hovered link's color (`color '#00438a' --on link --state hover`) is written into `--color-text-accent` on the hovered link itself, so it changes the hovered link only, not every link at rest. A line set would refuse with a flag (a `--mode` on what is not a color) is still offered as the one that works.
 
 @josephfarina
