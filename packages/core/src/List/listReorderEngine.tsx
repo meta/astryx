@@ -517,6 +517,8 @@ interface DragSession {
   readonly rows: ReadonlyArray<HTMLElement>;
   /** Their layout tops at the begin, for the commit's rebase. */
   readonly tops: ReadonlyArray<number>;
+  /** Each row's handle top inside the row at the begin (see `handleInset`). */
+  readonly insets: ReadonlyArray<number>;
   readonly geometry: ReorderGeometry;
   readonly dragged: number;
   /** The dragged row's span, where the insertion line runs. */
@@ -583,6 +585,7 @@ interface PendingDrop {
   readonly list: HTMLElement;
   readonly rows: ReadonlyArray<HTMLElement>;
   readonly tops: ReadonlyArray<number>;
+  readonly insets: ReadonlyArray<number>;
   readonly dragged: number;
   /** Where the preview was at the drop: the dragged row glides from there. */
   readonly droppedTop: number;
@@ -1179,6 +1182,17 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /** This list's handle in `row`, if it has one: a nested list's are its own. */
+  /**
+   * The row's handle top inside the row, or 0 without a handle. It reads
+   * layout; a transform on the row moves both boxes alike.
+   */
+  private handleInset(row: HTMLElement): number {
+    const handle = this.handleIn(row);
+    return handle == null
+      ? 0
+      : handle.getBoundingClientRect().top - row.getBoundingClientRect().top;
+  }
+
   private handleIn(row: HTMLElement): Element | null {
     for (const handle of reorderHandlesIn(row)) {
       if (this.keys.has(handle)) {
@@ -1419,6 +1433,7 @@ export class ListReorderController implements ListReorderSession {
     }
     const at = motionNow();
     const tops = rows.map(element => layoutTop(element, list));
+    const insets = rows.map(element => this.handleInset(element));
     const heights = rows.map(element => element.offsetHeight);
     const lineSpan = lineSpanOf(row, list);
     const previewSpan = previewSpanOf(row, list);
@@ -1480,6 +1495,7 @@ export class ListReorderController implements ListReorderSession {
       list,
       rows,
       tops,
+      insets,
       geometry,
       dragged,
       lineSpan,
@@ -1803,6 +1819,7 @@ export class ListReorderController implements ListReorderSession {
       list,
       rows,
       tops: session.tops,
+      insets: session.insets,
       dragged,
       droppedTop,
       velocity,
@@ -2049,8 +2066,13 @@ export class ListReorderController implements ListReorderSession {
       }
       // The dragged row glides from where its preview was dropped, the rows
       // it passed from their old places.
+      // A row whose own layout changed with its place (ListInput's first
+      // record carries the column labels) glides by its handle's travel, so
+      // its content starts where it was shown.
       const from =
-        index === pending.dragged ? pending.droppedTop : pending.tops[index];
+        (index === pending.dragged ? pending.droppedTop : pending.tops[index]) +
+        pending.insets[index] -
+        this.handleInset(element);
       return {
         element,
         index,
@@ -2414,7 +2436,8 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
   const announce = useAnnounce();
   const t = useComponentTranslator();
   // UIKit's motion under a finger (one touch model on every touch device);
-  // with a mouse, rows take their places at once.
+  // with a mouse, a cancelled drag and reorder mode's moves put the rows in
+  // place at once.
   const isTouch = useTouchPresentation().isTouch;
   // Syncs the reorder session, which lives outside React, with this render's
   // options, strings and presentation.

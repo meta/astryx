@@ -123,8 +123,8 @@ function stubPrimaryPointer(coarse: boolean) {
 }
 
 /**
- * jsdom lays nothing out: 44 px rows from 300 px down the viewport. Each read
- * of a row's layout top calls `onRead`.
+ * jsdom lays nothing out: 44 px rows from 300 px down the viewport, each
+ * handle at its row's top. Each read of a row's layout top calls `onRead`.
  */
 function layOut(list: HTMLElement, onRead?: () => void) {
   const place = (row: Element) => Array.from(list.children).indexOf(row);
@@ -148,6 +148,11 @@ function layOut(list: HTMLElement, onRead?: () => void) {
         width: 300,
         height: 44,
       });
+    for (const handle of Array.from(
+      row.querySelectorAll<HTMLElement>('[data-astryx-list-reorder]'),
+    )) {
+      handle.getBoundingClientRect = () => row.getBoundingClientRect();
+    }
   }
 }
 
