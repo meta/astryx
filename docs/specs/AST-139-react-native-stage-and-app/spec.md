@@ -24,6 +24,8 @@ affects_consumer_docs: []
 
 Astryx Stage is an experimental feature: its commands, flags, results and
 behaviour may change or be removed in any release, and nothing in Astryx React Native depends on it.
+From the first stable release that ships an outcome code, that code is
+append-only (FR8).
 
 **Astryx Stage** is a desktop app for developers and their agents, beside the
 React Native packages of `spec:AST-112`. It runs the real JavaScript of an app
@@ -329,13 +331,15 @@ define, so Astryx React Native itself stays the same with or without it.
 - Browser evidence: none. Stage claims are checked against the Simulator and
   the emulator.
 - Compatibility: experimental (DEC-6). No release promises Stage's commands,
-  flags, reports, outcome codes, or behavior, and an app's build and run
-  never depend on them.
+  flags, reports, or behavior, and an app's build and run never depend on
+  them; from the first stable release that ships an outcome code, that code
+  is append-only (FR8).
 
 ## Current-state impact
 
-- `spec:AST-112` names this record for Astryx Stage and the
-  `astryx experimental rn stage …` commands, and `spec:AST-141` for Preview.
+- `spec:AST-112` names this record for Astryx Stage, and `spec:AST-141` for
+  Preview, in its Non-goals; its FR13 gains a pointer to this record for the
+  `astryx experimental rn stage …` commands (FR8).
 - `architecture:cli-surface` INV10 and `spec:AST-081` FR7 gain the Stage
   cache as a per-user write root, and INV10 admits a file that `--out` names
   by an absolute path, as DEC-16 does for `experimental render --out`.
