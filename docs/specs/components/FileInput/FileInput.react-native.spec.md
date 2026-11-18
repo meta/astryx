@@ -28,10 +28,10 @@ system_specs: [spec:AST-082]
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public contract         | The core component's props, meanings, and defaults. `value` and `onChange` hold `FileInputFile` records where web holds the browser's `File`: `name`, `type`, `size`, and `uri`; photos and videos add `width`, `height`, `creationDate`, and `duration`, a video adds `posterUri`, and a grid pick adds `assetId`. Two additions (DEC-3): `maxDuration` and `onPickFailure({source, reason})`.                                                                                                                                                                             |
 | Behavior                | `accept` decides the sources a person can pick from. When it allows images or videos, the photo library is a source: an Astryx photo grid over the core package's photo library and photo thumbnail pieces when the app opts in to the `photos` capability, else the system photo picker, which needs no permission (DEC-2). Files come through the native file picker; the camera through the camera view. Photos and videos are written to the app's cache without location metadata, images upright, and every pick passes the core component's rules before `onChange`. |
-| End-user impact         | A person picks photos and videos in the order they tap them, sees what they picked again when they reopen the grid, sees which photos a limited app can see and how to change that, and is asked for photo access only when they first open the library. VoiceOver and TalkBack read each photo's kind, date, and selection state.                                                                                                                                                                                                                                          |
+| End-user impact         | A person picks photos and videos from the grid in the order they tap them, sees what they picked again when they reopen the grid, sees which photos a limited app can see and how to change that, and is asked for photo access only when they first open the library. VoiceOver and TalkBack read each photo's kind, date, and selection state.                                                                                                                                                                                                                            |
 | Builder impact          | The same FileInput code picks photos on React Native with no third-party library. An app reads and uploads each picked file through its `uri` and deletes the files it no longer needs. An app that opts in to the `photos` capability gets the Astryx photo grid and declares photo-library access; an app that does not declares no permission and still picks photos, through the system picker.                                                                                                                                                                         |
 | Compatibility/readiness | Not yet released; additive. Draft.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Review checks           | Reject a photo source `accept` does not allow, a prompt before the person opens the library, files in an order other than the person's, a selection beyond `maxFiles`, a written file with location metadata, an unpicked item's id, thumbnail, or file reaching the app, or a grid that mounts every cell of the library.                                                                                                                                                                                                                                                  |
+| Review checks           | Reject a photo source `accept` does not allow, a prompt before the person opens the library, grid picks in an order other than the person's, a selection beyond `maxFiles`, a written file with location metadata, an unpicked item's id, thumbnail, or file reaching the app, or a grid that mounts every cell of the library.                                                                                                                                                                                                                                             |
 | Governing rules         | The core `FileInput` component's props and rules; `family:input-fields`; `spec:AST-082` FR11 (the platform's own control where it meets the contract); `spec:AST-135` FR1–FR8 (the photo pieces); `spec:AST-130` FR9, FR12, and FR14 (permissions, the file picker, the app cache location); `spec:AST-132` FR9 (the camera view); DEC-1, DEC-2, and DEC-3 below.                                                                                                                                                                                                           |
 
 This table is a review projection; the body below is authoritative.
@@ -160,7 +160,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **ORD1 — Photo source form.** No `photos` capability or an absent
   piece (system picker, FR8); then access: `undetermined` (prompt), `denied` or
   `restricted` (FR7), `limited` (FR6), `full` (grid).
-- **ORD2 — Pick to value.** Selection, in the person's order; then download
+- **ORD2 — Pick to value.** Selection (from the grid, in the person's order;
+  from the system photo picker, in the order `pick()` returns, FR8); then download
   and write (FR9, FR10); then the core component's `accept`, `maxSize`, and `maxFiles` rules
   and `maxDuration`; then `onChange`.
 
@@ -257,7 +258,7 @@ shape.
 **Reference:** `component:react-native/FileInput/DEC-2`
 **Decider:** imdreamrunner, 2026-11-17
 
-The system photo picker path falls short of this contract in three places,
+The system photo picker path falls short of this contract in four places,
 which is why the Astryx grid exists, as `spec:AST-082` FR11 allows a custom
 control only where the platform's own control falls short:
 
@@ -270,6 +271,9 @@ control only where the platform's own control falls short:
 - FR10's download progress and Cancel: the iOS picker reports an iCloud
   item's progress, but `pick()` reports only that loading started
   (`spec:AST-130` FR12).
+- FR5's selection order: the iOS picker (iOS 15 and later) and Android's
+  Photo Picker can return items in the order picked, but `pick()` names no
+  order (`spec:AST-130` FR12), so FR8 keeps the order `pick()` returns.
 
 An app that opts in to `photos` gets the grid. Where the grid cannot run (an
 app without `photos` or without the photo pieces), and from FR6's Manage and
@@ -287,7 +291,8 @@ The core component has no equivalent of either. Its limit props are
 `maxSize` and `maxFiles`, and it reports rejected files only through its own
 error status, with no callback. `maxDuration` follows the `max*` naming of
 those limits: a video's length is a constraint the Astryx grid applies before a
-pick (FR4), and the system-picker path checks it after the write (FR8). `onPickFailure` reports what
+pick (FR4), and the system-picker path checks it after the write (FR8). The
+web's file input cannot read a video's length before a pick. `onPickFailure` reports what
 has no web counterpart: refused photo or camera access, a source the device
 does not offer, and an iCloud item that fails to download. Rejections by the
 core component's rules still reach only the error status, as on web.
