@@ -794,7 +794,7 @@ non-interactive guarantee.
   verification.
 - `foundation/discovery/theme-discovery.mjs` and `api/theme` — typed integration
   theme descriptor discovery, package-aware selection, source copy, and build.
-- `api/render` and `foundation/render` — `astryx experimental render`, which
+- `api/render` and `foundation/render` — `astryx experimental export`, which
   writes a page as one HTML file that records the files it could not carry,
   and `--reverse`, which gives the page back. Its `missing` lists every file
   the restored page imports that it lacks, and every file the rendered file

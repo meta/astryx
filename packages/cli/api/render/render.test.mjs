@@ -2622,10 +2622,10 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.notCarried).toEqual(['../lib/rows/index.ts']);
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
   }, 60_000);
@@ -2638,10 +2638,10 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page.tsx'),
       "import site from './site.config';\nexport default function Page() {\n  return <h1>{site.title}</h1>;\n}\n",
     );
-    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.notCarried).toEqual(['site.config.json']);
-    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['site.config']});
   }, 60_000);
@@ -2656,10 +2656,10 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.json', '../lib/rows.ts']);
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     // The import names rows.ts, the file it resolves to first; rows.json is
     // named by itself.
@@ -2676,10 +2676,10 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.ts', '../lib/rows/index.ts']);
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows/index.ts']);
   }, 60_000);
@@ -2694,10 +2694,10 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {Rows} from '../lib/rows';\nexport default function Page() {\n  return <main><Rows /></main>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.png', '../lib/rows.tsx']);
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.png']);
   }, 60_000);
@@ -2751,7 +2751,7 @@ describe('render(): a page outside a project', () => {
     expect(note).not.toContain('come back exactly');
     // --reverse cannot resolve the alias, but the file records what the
     // render left out, so it names the module as missing.
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['../shared/rows.ts']});
   }, 60_000);
