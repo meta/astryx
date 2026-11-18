@@ -1073,6 +1073,9 @@ export function cornersNamed(text, part = null) {
         `\\b${SIDES}\\s+(?:side|edge|end)s?\\b`,
         `\\bthe\\s+${SIDES}\\s+of\\b`,
         `\\b(?:and|&|or)\\s+(?:the\\s+)?${SIDES}\\b(?=\\s+(?:side|edge|corners?)\\b)`,
+        // (A side joined to one said with "on" or "at": "rounded on top and
+        // bottom", "on the left and right".)
+        `(?<=\\b(?:on|at|along|across|to)\\s+(?:the\\s+)?(?:very\\s+)?(?:top|bottom|left|right)\\s*(?:,|&|and|or)\\s*(?:(?:on|at)\\s+)?(?:the\\s+)?)${SIDES}\\b`,
         ...(bare ? [`\\b${SIDES}\\b`] : []),
       ].join('|'),
       'g',
@@ -3636,7 +3639,9 @@ function clausesOf(q, partWords, words = null) {
       )
       .split(
         // A font stack ("Georgia, serif") is one value, not two asks.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
+        // Two sides of a corner ask joined by "and" ("rounded on top and
+        // bottom") are one ask, as a corner except is.
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?!\s+(?:borders?|edges?|padding|margins?)\b))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
