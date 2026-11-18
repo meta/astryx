@@ -233,7 +233,7 @@ describe('the workflow', () => {
     expect(workflow.on).toMatchObject({
       pull_request_review: {types: ['submitted']},
       issue_comment: {types: ['created']},
-      workflow_run: {workflows: ['CI'], types: ['completed']},
+      workflow_run: {workflows: ['CI', 'Review signal'], types: ['completed']},
       schedule: [{cron: '11,26,41,56 * * * *'}],
     });
     expect(workflow.permissions).toEqual({});
@@ -409,6 +409,47 @@ describe('the workflow', () => {
     );
     vi.useRealTimers();
     expect(calls.reRunWorkflow).toEqual([18]);
+  });
+
+  it("starts a fork head after a review, on Review signal's end: the review event's own token is read-only for a fork", async () => {
+    vi.useFakeTimers();
+    let looks = 0;
+    const {calls} = await pass(
+      'workflow_run',
+      {
+        workflow_run: {
+          name: 'Review signal',
+          event: 'pull_request_review',
+          pull_requests: [],
+          head_branch: 'fix',
+          head_sha: 'h9',
+          head_repository: {owner: {login: 'someone'}},
+        },
+      },
+      {
+        pulls: [forkPull(9, 'h9')],
+        runs: [forkRun(19, 'h9')],
+        jobs: {19: deferredJobs},
+        // Review clear writes the gate after Review signal ends.
+        statuses: {h9: () => ((looks += 1) >= 2 ? passed : pending)},
+      },
+    );
+    vi.useRealTimers();
+    expect(calls.reRunWorkflow).toEqual([19]);
+  });
+
+  it("looks after a CI run and after a review's Review signal run, and no other workflow run", () => {
+    const condition = workflow.jobs.start.if;
+    expect(condition).toContain(
+      "github.event.workflow_run.name == 'CI' && github.event.workflow_run.event == 'pull_request'",
+    );
+    expect(condition).toContain(
+      "github.event.workflow_run.name == 'Review signal' && github.event.workflow_run.event == 'pull_request_review'",
+    );
+    // A fork's run lists no pull request, so its head names its group.
+    expect(workflow.concurrency.group).toContain(
+      "format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch)",
+    );
   });
 
   it('gives a later head whose gates pass its own review-pass run', async () => {
