@@ -13,16 +13,8 @@ export const docs = {
   examples: [
     {
       label: 'Typed rows, one page at a time',
-      code: `interface Walk extends Record<string, unknown> {
-  id: string;
-  name: string;
-  km: number;
-}
-
-const columns: TableColumn<Walk>[] = [
-  {key: 'name', header: 'Name'},
-  {key: 'km', header: 'Distance (km)'},
-];
+      code: `interface Walk extends Record<string, unknown> { id: string; name: string; km: number }
+const columns: TableColumn<Walk>[] = [{key: 'name', header: 'Name'}, {key: 'km', header: 'Km'}];
 
 const pageSize = 20;
 const [page, setPage] = useState(1);

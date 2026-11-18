@@ -14,18 +14,28 @@ export const docs = {
   },
   examples: [
     {
-      label: 'Sort the rows yourself from the sort state',
+      label: 'Let useTableSortableState sort the rows',
       code: `interface User extends Record<string, unknown> {
   id: string;
   name: string;
   age: number;
 }
-
 const columns: TableColumn<User>[] = [
   {key: 'name', header: 'Name', sortable: true},
   {key: 'age', header: 'Age', sortable: true},
 ];
+// <User> keeps the sort keys as string, so useTableSortable<User> accepts sortConfig.
+const {sortedData, sortConfig} = useTableSortableState<User>({
+  data: users,
+  defaultSort: [{sortKey: 'name', direction: 'ascending'}],
+});
+const sortPlugin = useTableSortable<User>(sortConfig);
 
+<Table data={sortedData} columns={columns} idKey="id" plugins={{sort: sortPlugin}} />;`,
+    },
+    {
+      label: 'Sort the rows yourself from the sort state',
+      code: `// User and columns as in the example above.
 const [sort, setSort] = useState<TableSortState>([{sortKey: 'name', direction: 'ascending'}]);
 // Pass the row type: TypeScript cannot infer it from the config.
 const sortPlugin = useTableSortable<User>({sort, onSortChange: setSort});
@@ -43,17 +53,6 @@ const sortedUsers = useMemo(() => {
 }, [users, sort]);
 
 <Table data={sortedUsers} columns={columns} idKey="id" plugins={{sort: sortPlugin}} />;`,
-    },
-    {
-      label: 'Let useTableSortableState sort the rows',
-      code: `// <User> keeps the sort keys as string, so useTableSortable<User> accepts sortConfig.
-const {sortedData, sortConfig} = useTableSortableState<User>({
-  data: users,
-  defaultSort: [{sortKey: 'name', direction: 'ascending'}],
-});
-const sortPlugin = useTableSortable<User>(sortConfig);
-
-<Table data={sortedData} columns={columns} idKey="id" plugins={{sort: sortPlugin}} />;`,
     },
   ],
   props: [
