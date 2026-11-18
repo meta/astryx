@@ -4,14 +4,17 @@
  * @file a11y-contract-shard-workflow.test.mjs
  * @input .github/workflows/a11y-contract-shard.yml and the release-check's
  *   a11y-contracts-shard job in .github/workflows/ci.yml
- * @output Proof that one contract leg runs at a commit on main exactly as the
- *   release-check runs it, refuses other inputs, and keeps its results
+ * @output Proof that the contract leg holding one spec runs at a commit on
+ *   main as the release-check runs it, counts the spec's cases, fails by name
+ *   when the spec did not run, refuses other inputs, and keeps its results
  * @position Node coverage for the single-leg dispatch used to bisect a
  *   contract failure on CI runners
  */
 
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -28,13 +31,15 @@ const releaseLeg = ci.jobs['a11y-contracts-shard'];
 const releaseStep = releaseLeg.steps.find(
   item => item.name === 'Run accessibility spec-test contracts',
 );
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+const SPEC = 'MoreMenuAudit.a11y.chromium.spec.ts';
 
 describe('the single contract-leg dispatch', () => {
   it('runs only on a dispatch, with read-only access', () => {
     expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
     expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual([
       'expected-head',
-      'a11y-shard',
+      'spec',
       'repeat',
     ]);
     expect(workflow.permissions).toEqual({});
@@ -76,20 +81,26 @@ describe('the single contract-leg dispatch', () => {
   });
 
   it.each([
-    ['a'.repeat(40), '5', '1', 0],
-    ['0123456789abcdef0123456789abcdef01234567', '1', '10', 0],
-    ['abc123', '5', '1', 1],
-    ['a'.repeat(40) + '; echo x', '5', '1', 1],
-    ['a'.repeat(40), '7', '1', 1],
-    ['a'.repeat(40), '0', '1', 1],
-    ['a'.repeat(40), '5', '11', 1],
-    ['a'.repeat(40), '5', '-1', 1],
+    ['a'.repeat(40), SPEC, '1', 0],
+    [
+      '0123456789abcdef0123456789abcdef01234567',
+      'Link.a11y.chromium.spec.ts',
+      '10',
+      0,
+    ],
+    ['abc123', SPEC, '1', 1],
+    ['a'.repeat(40) + '; echo x', SPEC, '1', 1],
+    ['a'.repeat(40), 'MoreMenuAudit.ts', '1', 1],
+    ['a'.repeat(40), '../x.spec.ts', '1', 1],
+    ['a'.repeat(40), `${SPEC}; echo x`, '1', 1],
+    ['a'.repeat(40), SPEC, '11', 1],
+    ['a'.repeat(40), SPEC, '-1', 1],
   ])(
-    'checks the inputs (expected-head=%s, a11y-shard=%s, repeat=%s → exit %i)',
-    (sha, shard, repeat, status) => {
+    'checks the inputs (expected-head=%s, spec=%s, repeat=%s → exit %i)',
+    (sha, spec, repeat, status) => {
       const result = spawnSync('bash', ['-c', step('Check the inputs').run], {
         encoding: 'utf8',
-        env: {...process.env, SHA: sha, SHARD: shard, REPEAT: repeat},
+        env: {...process.env, SHA: sha, SPEC: spec, REPEAT: repeat},
       });
       expect(result.status, result.stdout + result.stderr).toBe(status);
     },
@@ -116,8 +127,8 @@ describe('the single contract-leg dispatch', () => {
     // 4-core-ubuntu (ci-free-runners.test.mjs).
     expect(job['runs-on']).toBe('ubuntu-latest');
     expect(releaseLeg['runs-on']).toContain("'4-core-ubuntu'");
-    expect(run.run).toContain(
-      'node .github/scripts/a11y-contract-shard.mjs --shard "$SHARD/6" > contract-tests.txt',
+    expect(step('Find the leg that holds the spec').run).toContain(
+      'node .github/scripts/a11y-contract-shard.mjs --shard "$leg/6" > "leg-$leg.txt"',
     );
     expect(releaseStep.run).toContain(
       'node .github/scripts/a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}" > contract-tests.txt',
@@ -131,7 +142,10 @@ describe('the single contract-leg dispatch', () => {
     expect(run.run).not.toContain('--repeat-each');
     expect(run.run).toContain('for pass in $(seq 1 "$REPEAT"); do');
     expect(run.run).toContain(
-      `${release} --output "test-results/pass-$pass" || status=1`,
+      `${release} --output "test-results/pass-$pass" --reporter=list,json || status=1`,
+    );
+    expect(run.run).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json"',
     );
     expect(run.run).toContain('mv "$folder" "audit-evidence/pass-$pass/"');
     expect(run.run).toMatch(/exit "\$status"\s*$/);
@@ -177,13 +191,195 @@ describe('the single contract-leg dispatch', () => {
     expect(minutes(10)).toBeLessThanOrEqual(360);
   });
 
+  /** Runs the leg-finding step with a fake `node` that lists each leg. */
+  function findLegs(legs) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-legs-'));
+    try {
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'node'),
+        `#!/bin/bash\nleg=\${3%%/*}\ncase "$leg" in\n${Object.entries(legs)
+          .map(
+            ([leg, lines]) =>
+              `  ${leg}) printf '%s\\n' ${lines.map(line => `'${line}'`).join(' ')};;`,
+          )
+          .join(
+            '\n',
+          )}\n  *) printf 'packages/core/src/Other/__tests__/Other.a11y.chromium.spec.ts\\n';;\nesac\n`,
+        {mode: 0o755},
+      );
+      const output = path.join(dir, 'output');
+      const result = spawnSync(
+        'bash',
+        ['-c', step('Find the leg that holds the spec').run],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            SPEC,
+            SHA: 'a'.repeat(40),
+            GITHUB_OUTPUT: output,
+          },
+        },
+      );
+      const read = file =>
+        fs.existsSync(path.join(dir, file))
+          ? fs.readFileSync(path.join(dir, file), 'utf8')
+          : '';
+      return {
+        status: result.status,
+        log: result.stdout + result.stderr,
+        list: read('contract-tests.txt'),
+        output: read('output'),
+      };
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+
+  const more = `packages/core/src/MoreMenu/__tests__/${SPEC}`;
+
+  it("finds the spec's leg in the commit's own split, not by a fixed number", () => {
+    const one = findLegs({
+      5: [more, 'packages/core/src/Link/__tests__/Link.a11y.chromium.spec.ts'],
+    });
+    expect(one.status, one.log).toBe(0);
+    expect(one.list).toBe(
+      `${more}\npackages/core/src/Link/__tests__/Link.a11y.chromium.spec.ts\n`,
+    );
+    expect(one.output).toBe('legs=5\n');
+    // A spec cut across two legs runs with both.
+    const cut = findLegs({
+      3: [
+        `${more}:10`,
+        'packages/core/src/A/__tests__/A.a11y.chromium.spec.ts',
+      ],
+      4: [`${more}:746`],
+    });
+    expect(cut.output).toBe('legs=3 4\n');
+    expect(cut.list.split('\n').filter(Boolean)).toHaveLength(3);
+  });
+
+  it('fails by name when no leg lists the spec', () => {
+    const none = findLegs({});
+    expect(none.status).toBe(1);
+    expect(none.log).toContain(
+      `::error::${SPEC} did not run: no contract leg lists it at ${'a'.repeat(40)}.`,
+    );
+  });
+
+  /** Runs the count step over pass reports; returns its log and failure. */
+  async function count(reports) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-count-'));
+    const cwd = process.cwd();
+    try {
+      if (reports) {
+        fs.mkdirSync(path.join(dir, 'pass-results'));
+        reports.forEach((report, i) =>
+          fs.writeFileSync(
+            path.join(dir, 'pass-results', `pass-${i + 1}.json`),
+            JSON.stringify(report),
+          ),
+        );
+      }
+      process.chdir(dir);
+      process.env.SPEC = SPEC;
+      const info = [];
+      let failed = null;
+      const summary = {
+        addHeading: () => summary,
+        addList: () => summary,
+        write: async () => {},
+      };
+      await new AsyncFunction(
+        'core',
+        'require',
+        step("Count the spec's cases").with.script,
+      )(
+        {
+          info: line => info.push(line),
+          setFailed: message => (failed = message),
+          summary,
+        },
+        createRequire(import.meta.url),
+      );
+      return {info, failed};
+    } finally {
+      process.chdir(cwd);
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+  /** A Playwright JSON report with one spec's cases, by status. */
+  const report = cases => ({
+    suites: [
+      {
+        title: SPEC,
+        file: `packages/core/src/MoreMenu/__tests__/${SPEC}`,
+        suites: [
+          {
+            title: 'audit',
+            specs: Object.entries(cases).map(([title, status]) => ({
+              title,
+              file: `packages/core/src/MoreMenu/__tests__/${SPEC}`,
+              tests: [{status}],
+            })),
+          },
+        ],
+      },
+      {
+        title: 'Link.a11y.chromium.spec.ts',
+        specs: [
+          {
+            title: 'other',
+            file: 'packages/core/src/Link/__tests__/Link.a11y.chromium.spec.ts',
+            tests: [{status: 'unexpected'}],
+          },
+        ],
+      },
+    ],
+  });
+
+  it("counts each case of the spec over the passes, and only the spec's", async () => {
+    const step3 = await count([
+      report({default: 'expected', sheet: 'unexpected'}),
+      report({default: 'expected', sheet: 'expected'}),
+      report({default: 'flaky', sheet: 'skipped'}),
+    ]);
+    expect(step3.failed).toBeNull();
+    expect(step3.info).toEqual([
+      `${SPEC} › default: passed 3, failed 0, skipped 0`,
+      `${SPEC} › sheet: passed 1, failed 1, skipped 1`,
+    ]);
+  });
+
+  it('fails by name when the spec ran zero times: every case skipped, or no report', async () => {
+    const skipped = await count([
+      report({default: 'skipped', sheet: 'skipped'}),
+    ]);
+    expect(skipped.failed).toBe(
+      `${SPEC} did not run: every case was skipped or absent in 1 passes.`,
+    );
+    const absent = await count([report({})]);
+    expect(absent.failed).toContain(`${SPEC} did not run`);
+    const none = await count(null);
+    expect(none.failed).toBe(
+      `${SPEC} did not run: no pass wrote a report in 0 passes.`,
+    );
+    expect(step("Count the spec's cases").if).toBe(
+      "always() && steps.contracts.outcome != 'skipped'",
+    );
+  });
+
   it("keeps the leg's Playwright results, passing or failing", () => {
     const keep = step("Keep the leg's Playwright results");
     expect(keep.if).toBe("always() && steps.contracts.outcome != 'skipped'");
     expect(keep.uses).toMatch(/^actions\/upload-artifact@/);
     expect(keep.with).toEqual({
-      name: 'a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}',
-      path: 'test-results/\naudit-evidence/\n',
+      name: 'a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.spec }}-${{ github.run_attempt }}',
+      path: 'test-results/\naudit-evidence/\npass-results/\ncontract-tests.txt\n',
       'retention-days': 14,
       'if-no-files-found': 'ignore',
     });
