@@ -3,7 +3,7 @@
 'use client';
 
 import {useCallback, use} from 'react';
-import {createRoot} from 'react-dom/client';
+import type {Root} from 'react-dom/client';
 import {dataAttr} from '../naming';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
@@ -24,7 +24,7 @@ import {sharedSequence} from '../utils/sharedRealm';
 // root, so a second React keeps its own.
 const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
   context: null as ToastContextValue | null,
-  root: null as ReturnType<typeof createRoot> | null,
+  root: null as Root | null,
 }));
 
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
@@ -92,15 +92,31 @@ function getFallbackContext(): ToastContextValue {
 
   // Toasts wait in the queue until the fallback viewport's context connects.
   const queue = createToastQueue();
-  fallback.root = createRoot(container);
-  // This root sits inside the app, so a <Theme> in toast content is nested:
-  // it themes its own subtree and leaves the app's <html> sync alone.
-  fallback.root.render(
-    <ThemeNestingContext value={true}>
-      <ToastViewport>
-        <ToastQueueConnector queue={queue} />
-      </ToastViewport>
-    </ThemeNestingContext>,
+  // react-dom/client loads only here, on the first toast with no
+  // LayerProvider. A static import would load it for every import of the
+  // package, also where a toast never shows (a server, a test run).
+  import('react-dom/client').then(
+    ({createRoot}) => {
+      fallback.root = createRoot(container);
+      // This root sits inside the app, so a <Theme> in toast content is
+      // nested: it themes its own subtree and leaves the app's <html> sync
+      // alone.
+      fallback.root.render(
+        <ThemeNestingContext value={true}>
+          <ToastViewport>
+            <ToastQueueConnector queue={queue} />
+          </ToastViewport>
+        </ThemeNestingContext>,
+      );
+    },
+    () => {
+      warnOnce(
+        'toast-fallback-viewport-load',
+        'useToast',
+        'The fallback toast viewport did not load, so its toasts do not show. ' +
+          'Wrap your app with <LayerProvider>.',
+      );
+    },
   );
 
   fallback.context = queue.context;
