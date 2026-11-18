@@ -323,8 +323,8 @@ export interface ComponentPlaygroundConfig {
    *  for a component whose layout changes at phone width (AppShell's mobile
    *  layout: its menu button in the top bar, its drawer). The theme editor's
    *  part census renders it as one more item, so a theme reaches the parts
-   *  only that layout draws. Values are primitives or ElementDescriptors, as
-   *  in `defaults`.
+   *  only that layout draws. Values are primitives, plain config objects or
+   *  ElementDescriptors, as in `defaults`.
    *
    *  @example
    *  ```

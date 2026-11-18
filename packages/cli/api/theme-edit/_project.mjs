@@ -79,7 +79,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 8;
+const DOCS_VERSION = 9;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
