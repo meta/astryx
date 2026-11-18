@@ -2,8 +2,9 @@
 
 /**
  * @file The `template` subject's adapter for icon mapping (AST-084 FR9),
- * which reads the project's icon sets through the `Project` seam, and for the
- * not-found hint that names another lookup command.
+ * which reads the project's icon sets through the `Project` seam, for the
+ * project's component list, and for the not-found hint that names another
+ * lookup command.
  *
  * @position api/template — adapter read by the template dispatcher
  */
@@ -33,6 +34,89 @@ export async function loadTemplateIconSets(cwd) {
         reason: `The project could not be read, so no icon set applies: ${error instanceof Error ? error.message : String(error)}`,
       },
     };
+  }
+}
+
+/**
+ * How `astryx component` reads the project's components. `ownersOf` names
+ * the packages whose doc `astryx component <name>` reads for a name, Core's
+ * and each configured integration's, or none when it answers no such
+ * component. In a project with no integration, a name `astryx component
+ * --list` lists answers from the same kept list that command reads; any other
+ * name, such as a part a family doc documents, and every name in a project
+ * with an integration, is looked up as `astryx component <name>` looks it
+ * up, once. `qualified` is true in a project with an integration: there a
+ * bare name may read another package's component (a replacement, or a second
+ * package with that name), so each name is read as `<package>/<Name>`. A
+ * project whose components cannot be read answers no name, so no component
+ * is named.
+ * @param {string} cwd
+ * @returns {Promise<{ownersOf: (name: string) => readonly string[], qualified: boolean}>}
+ */
+export async function loadComponentLookup(cwd) {
+  const none = {ownersOf: () => [], qualified: false};
+  try {
+    const [adapter, {componentList}, {discoverExternalPackages}] =
+      await Promise.all([
+        import('../component/_adapter.mjs'),
+        import('../component/list/list.mjs'),
+        import('../../foundation/fs/paths.mjs'),
+      ]);
+    const coreDir = adapter.coreContentDir(cwd);
+    const [list, integrations] = await Promise.all([
+      componentList(coreDir, {
+        cwd,
+        detail: 'brief',
+        zh: false,
+        dense: false,
+        lang: null,
+      }),
+      adapter.loadIntegrationsSafely(cwd),
+    ]);
+    /** @type {Map<string, string[]>} */
+    const owners = new Map();
+    for (const entries of Object.values(list.data.components)) {
+      for (const entry of /** @type {Array<{name: string, package: string}>} */ (
+        entries
+      )) {
+        const known = owners.get(entry.name);
+        if (!known) owners.set(entry.name, [entry.package]);
+        else if (!known.includes(entry.package)) known.push(entry.package);
+      }
+    }
+    /** @type {ReturnType<typeof discoverExternalPackages> | undefined} */
+    let externals;
+    // With an integration, a name the list holds once may still have a
+    // second owner the list hides behind a replacement, so every name is
+    // looked up whole.
+    const listed = integrations.length === 0;
+    /** @type {Map<string, string[]>} */
+    const looked = new Map();
+    /** @param {string} name */
+    const ownersOf = name => {
+      const known = (listed ? owners : looked).get(name);
+      if (known) return known;
+      /** @type {string[]} */
+      let found;
+      try {
+        found = adapter
+          .resolveOwners(coreDir, name, integrations)
+          .map(owner => owner.package);
+        if (found.length === 0) {
+          externals ??= discoverExternalPackages(cwd);
+          found = externals
+            .filter(ext => adapter.resolveLegacyExternalDoc(ext, name) != null)
+            .map(ext => ext.name);
+        }
+      } catch {
+        found = [];
+      }
+      (listed ? owners : looked).set(name, found);
+      return found;
+    };
+    return {ownersOf, qualified: !listed};
+  } catch {
+    return none;
   }
 }
 

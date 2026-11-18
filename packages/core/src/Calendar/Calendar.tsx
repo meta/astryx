@@ -1418,19 +1418,25 @@ function DayCell({
       {/* Range background */}
       {state.isInRange && (
         <div
-          {...stylex.props(
-            dayCellStyles.rangeBg,
-            dayCellTheme.rangeBg,
-            rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
-            rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
-            state.isRangeStart && dayCellStyles.rangeInsetStart,
-            state.isRangeStart &&
-              rangeRounding.roundEnd &&
-              dayCellStyles.rangeInsetEnd,
-            state.isRangeEnd && dayCellStyles.rangeInsetEnd,
-            state.isRangeStart &&
-              rangeRounding.roundStart &&
-              dayCellStyles.rangeInsetStart,
+          {...mergeProps(
+            themeProps('calendar-range', {
+              start: state.isRangeStart ? 'start' : null,
+              end: state.isRangeEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.rangeBg,
+              dayCellTheme.rangeBg,
+              rangeRounding.roundStart && dayCellStyles.rangeBgRadiusStart,
+              rangeRounding.roundEnd && dayCellStyles.rangeBgRadiusEnd,
+              state.isRangeStart && dayCellStyles.rangeInsetStart,
+              state.isRangeStart &&
+                rangeRounding.roundEnd &&
+                dayCellStyles.rangeInsetEnd,
+              state.isRangeEnd && dayCellStyles.rangeInsetEnd,
+              state.isRangeStart &&
+                rangeRounding.roundStart &&
+                dayCellStyles.rangeInsetStart,
+            ),
           )}
         />
       )}
@@ -1438,13 +1444,19 @@ function DayCell({
       {/* Preview range background */}
       {state.isInPreview && (
         <div
-          {...stylex.props(
-            dayCellStyles.previewBg,
-            dayCellTheme.previewBg,
-            previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
-            previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
-            state.isPreviewStart && dayCellStyles.previewStart,
-            state.isPreviewEnd && dayCellStyles.previewEnd,
+          {...mergeProps(
+            themeProps('calendar-range-preview', {
+              start: state.isPreviewStart ? 'start' : null,
+              end: state.isPreviewEnd ? 'end' : null,
+            }),
+            stylex.props(
+              dayCellStyles.previewBg,
+              dayCellTheme.previewBg,
+              previewRounding.roundStart && dayCellStyles.previewBgRadiusStart,
+              previewRounding.roundEnd && dayCellStyles.previewBgRadiusEnd,
+              state.isPreviewStart && dayCellStyles.previewStart,
+              state.isPreviewEnd && dayCellStyles.previewEnd,
+            ),
           )}
         />
       )}

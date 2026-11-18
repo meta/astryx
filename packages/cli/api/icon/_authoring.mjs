@@ -1429,13 +1429,16 @@ async function refreshIconSet(
         generated,
         next,
         rewritten,
-        // The icons the library no longer exports leave the module too; a
-        // renamed icon keeps its export. An icon moved to the new default
+        // The icons the library no longer exports leave the module too, in
+        // every look they drew; a renamed icon keeps its export. An icon moved to the new default
         // look keeps its export, which now names that look. An export moved
         // to the root is written again with the root import. Every other
         // export stays as it is, because the data file still lists it.
         [
-          ...gone.map(icon => icon.export),
+          ...gone.flatMap(icon => [
+            icon.export,
+            ...(icon.variants ?? []).map(variant => variant.export),
+          ]),
           ...repicked,
           ...[...rootMoves.keys()].filter(name => rewrittenNames.has(name)),
         ],

@@ -16,9 +16,11 @@
  */
 
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {onceComputed, oncePerListing} from '../fs/listing-cache.mjs';
-import {readStore} from '../doc-compiler/stored-docs.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {inputsUnchanged} from './stored-self-audit.mjs';
 
 /** Where the stored component list is written at `prepack`. */
@@ -65,7 +67,7 @@ export function storedComponentList(coreDir) {
     ) {
       return null;
     }
-    return inputsUnchanged(coreDir, entry.inputs, CORE_FOLDER_SKIP)
+    return keptInputsCheck(coreDir, entry.inputs)
       ? {groups: entry.groups, imports: entry.imports}
       : null;
   });
@@ -83,6 +85,36 @@ export function checkedComponentList(coreDir) {
     /** @type {StoredComponentList | null | undefined} */ (
       onceComputed(storeKey(coreDir))
     ) ?? null
+  );
+}
+
+/** The code that makes the kept check. */
+const CHECK_CODE = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(new URL('./stored-self-audit.mjs', import.meta.url)),
+];
+
+/**
+ * Whether every input the stored list recorded is in its recorded state
+ * under `coreDir` (stored-self-audit.mjs inputsUnchanged), kept while every
+ * file and folder the check read keeps its stamp, so a warm run does not
+ * read Core's files again to check them.
+ * @param {string} coreDir
+ * @param {Record<string, string>} inputs
+ * @returns {boolean}
+ */
+function keptInputsCheck(coreDir, inputs) {
+  return keptTreeSummary(
+    {
+      kind: 'stored-component-list-check',
+      roots: [],
+      code: CHECK_CODE,
+      key: [path.resolve(coreDir), storedKey(JSON.stringify(inputs))],
+      recorded: true,
+      // A stored verdict that is not one is checked again.
+      accept: value => typeof value === 'boolean',
+    },
+    () => inputsUnchanged(coreDir, inputs, CORE_FOLDER_SKIP),
   );
 }
 

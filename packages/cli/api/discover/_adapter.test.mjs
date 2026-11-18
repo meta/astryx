@@ -18,6 +18,7 @@ import {
   OFFICIAL_LIST_FILE,
   officialDeclarations,
   officialList,
+  savedCatalog,
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
@@ -873,5 +874,75 @@ describe('addCommand with the official list', () => {
         '@astryxdesign/theme-gothic',
       ),
     ).toBe('npm install @astryxdesign/theme-gothic@0.6.8');
+  });
+});
+
+describe('savedCatalog', () => {
+  it('reads the saved copies of the full catalogs without calling a source', async () => {
+    const source = vi.fn(async () =>
+      catalog('Acme', [
+        pkg('@acme/charts', {
+          contributions: [{kind: 'component', name: 'BarChart'}],
+        }),
+      ]),
+    );
+    const proj = project({
+      integrations: [{name: '@x/one', __discover: source}],
+    });
+    await callSources(proj, {}, {cacheDir, official: NO_OFFICIAL});
+    // A one-package request saves a copy of its own, which is not the list.
+    await callSources(
+      proj,
+      {package: '@acme/charts'},
+      {cacheDir, official: NO_OFFICIAL},
+    );
+    source.mockClear();
+
+    const packages = savedCatalog(proj, {cacheDir, official: NO_OFFICIAL});
+    expect(source).not.toHaveBeenCalled();
+    expect(packages?.map(p => [p.package, p.source])).toEqual([
+      ['@acme/charts', 'Acme'],
+    ]);
+    expect(packages?.[0].contributions).toEqual([
+      {kind: 'component', name: 'BarChart'},
+    ]);
+  });
+
+  it('adds the official packages no source covers, as discover does', async () => {
+    const source = vi.fn(async () =>
+      catalog('Acme', [pkg('@acme/charts'), pkg('@astryxdesign/theme-a')]),
+    );
+    const proj = project({
+      integrations: [{name: '@x/one', __discover: source}],
+    });
+    await callSources(proj, {}, {cacheDir, official: NO_OFFICIAL});
+    const list = {
+      packages: [
+        official('@astryxdesign/theme-a'),
+        official('@astryxdesign/theme-b'),
+      ],
+    };
+    expect(
+      savedCatalog(proj, {cacheDir, official: list})?.map(p => [
+        p.package,
+        p.source,
+      ]),
+    ).toEqual([
+      ['@acme/charts', 'Acme'],
+      ['@astryxdesign/theme-a', 'Acme'],
+      ['@astryxdesign/theme-b', 'Astryx'],
+    ]);
+  });
+
+  it('is null when no source has a saved copy, or the project has no source', () => {
+    const source = vi.fn(async () => catalog('Acme', []));
+    expect(
+      savedCatalog(
+        project({integrations: [{name: '@x/one', __discover: source}]}),
+        {cacheDir},
+      ),
+    ).toBeNull();
+    expect(savedCatalog(project({}), {cacheDir})).toBeNull();
+    expect(source).not.toHaveBeenCalled();
   });
 });

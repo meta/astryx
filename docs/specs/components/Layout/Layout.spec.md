@@ -40,15 +40,15 @@ system_specs: [spec:AST-038]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Five ReactNode slots (`header`, `start`, `content`, `end`, `footer`), `children` as content shorthand, `height`, `padding`, `contentWidth`, `defaultHasDividers`. |
-| Behavior                | Layout arranges caller content in five named slots, fills or grows with its container, and sets the inset and content width its region components use.            |
-| End-user impact         | People see headers, side panels, content, and footers in stable positions that mirror in right-to-left, with content aligned to one readable width.               |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                      |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. No implementation gap is open (Current-state impact).                                  |
-| Review checks           | Reject a target added to arbitrary slot content, an inherited parent Layout padding, a content scrollbar moved off the open edge, or overridable `data-height`.   |
-| Governing rules         | `family:layout-regions` FR1–FR12; `architecture:container-padding`; `architecture:component-theming-surface`; `architecture:public-component-api` INV5–INV8.      |
+| Area                    | Contract                                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | Five ReactNode slots (`header`, `start`, `content`, `end`, `footer`), `children` as content shorthand, `height`, `padding`, `contentWidth`, `defaultHasDividers`.                   |
+| Behavior                | Layout arranges caller content in five named slots, fills or grows with its container, and sets the inset and content width its region components use.                              |
+| End-user impact         | People see headers, side panels, content, and footers in stable positions that mirror in right-to-left, with content aligned to one readable width.                                 |
+| Builder impact          | A theme styles one container's header or footer through the `container` state their roots reflect (DEC-2).                                                                          |
+| Compatibility/readiness | Additive: Card, Dialog, and BottomSheet name themselves to the Layout inside them (DEC-2); no prop, default, or style change. No implementation gap is open (Current-state impact). |
+| Review checks           | Reject a target added to arbitrary slot content, an inherited parent Layout padding, a content scrollbar moved off the open edge, or overridable `data-height`.                     |
+| Governing rules         | `family:layout-regions` FR1–FR12; `architecture:container-padding`; `architecture:component-theming-surface`; `architecture:public-component-api` INV5–INV8.                        |
 
 This table is a review projection; the body below is authoritative.
 
@@ -64,8 +64,8 @@ Consumer syntax and examples belong in `Layout.doc.mjs`.
 
 - Released default preserved: `yes` — `height="fill"`, no padding override,
   no content width, divider defaults inherited.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: additive; the header and footer reflect the container
+  they sit in (DEC-2). No prop, default, or style change.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -86,6 +86,10 @@ closed start or end slot gives the same FR6 composition as an omitted one
 - The Layout container, its `layout` target, and the five slot positions.
 - Height, the Layout-edge inset, content width, and the header and footer
   divider default that its region components read.
+- The container context, `LayoutContainerContext`, and the
+  `LayoutContainerScope` client island Card provides it through: Card,
+  Dialog, and BottomSheet name themselves through it, and LayoutHeader and
+  LayoutFooter reflect the name as `container` (DEC-2).
 - The aggregate consumer document and theming map for the `layout`,
   `layout-header`, `layout-panel`, `layout-content`, and `layout-footer`
   targets.
@@ -230,6 +234,32 @@ AppShell is the page shell. Layout is the general layout primitive for arranging
 the `header`, `start`, `content`, `end`, and `footer` slots within a page or
 bounded container. Container-padding participation by Section, Table, Toolbar,
 and Divider does not make those components Layout-owned anatomy.
+
+### DEC-2 — Containers name themselves to the Layout inside them
+
+**Reference:** `component:Layout/DEC-2`
+
+Card, Dialog, and BottomSheet provide `LayoutContainerContext`, a
+layer-scoped context in `Layout/LayoutContainerContext.ts`, with `card`,
+`dialog`, or `bottom-sheet`. LayoutHeader and LayoutFooter read it and
+reflect it as `data-container`, so a theme styles one container's header or
+footer without another's (`component:LayoutHeader` DEC-1,
+`component:LayoutFooter` DEC-1). The context is layer-scoped, so a menu or
+popover opened from inside a container starts with none.
+
+Card provides it through `LayoutContainerScope`
+(`Layout/LayoutContainerScope.tsx`), a client island that renders the
+provider and adds no element. Card is a server-safe component with no client
+directive, and a context provider is client-only, so Card renders the island
+instead of the provider (`component:Card` PR1). Dialog and BottomSheet are
+client components and provide the context directly.
+
+A separate context is needed because the container is not Layout's to know:
+Layout renders the same inside a card, a dialog, or a page, and only the
+container knows what it is. `LayoutDividerContext` cannot carry it: Layout
+provides that context itself, from its own divider default, so it shadows any
+value a container sets above it. `LayoutSlotsContext` and `LayoutAreaContext`
+are also provided by Layout, for slot and area facts.
 
 ## Open questions
 

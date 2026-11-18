@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {readFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 
@@ -9,6 +12,7 @@ import {
   colorDistance,
   paint,
   probeColor,
+  renderProbeTheme,
   unionValues,
 } from './probe-theme.mjs';
 import {PROBE_TOKENS} from './probe-axes.mjs';
@@ -160,5 +164,56 @@ describe('paint', () => {
       color => colorDistance(color, fixedText) < 60,
     );
     expect(collisions).toEqual([]);
+  });
+});
+
+describe('the generated probe theme merges', () => {
+  /** @param {string[]} keys */
+  const render = keys =>
+    renderProbeTheme(
+      buildProbeComponents(
+        keys.map(key => ({key, component: 'X', props: [], states: ['open']})),
+        {},
+      ),
+    );
+
+  it('names no counts in its header, so a new target changes no shared line', () => {
+    expect(render(['alpha', 'omega'])).not.toMatch(/\d+ targets|\d+ selectors/);
+  });
+
+  it('sorts its targets whatever order the docs give them in', () => {
+    expect(render(['omega', 'alpha'])).toBe(render(['alpha', 'omega']));
+  });
+
+  it('merges two branches that add targets to different components, with no conflict', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'probe-merge-'));
+    try {
+      const base = ['banner', 'card', 'pagination', 'tabs'];
+      const files = {
+        base: render(base),
+        ours: render([...base, 'calendar-range']),
+        theirs: render([...base, 'pagination-item']),
+      };
+      for (const [name, text] of Object.entries(files)) {
+        writeFileSync(join(dir, name), text);
+      }
+      // `git merge-file` exits with the number of conflicts.
+      const merged = execFileSync(
+        'git',
+        [
+          'merge-file',
+          '-p',
+          join(dir, 'ours'),
+          join(dir, 'base'),
+          join(dir, 'theirs'),
+        ],
+        {encoding: 'utf8'},
+      );
+      expect(merged).toBe(
+        render([...base, 'calendar-range', 'pagination-item']),
+      );
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

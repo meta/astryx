@@ -28,6 +28,30 @@ export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
 }`;
 
 /**
+ * The script run before the picture: it waits until the page stops
+ * changing, so a part drawn over animation frames (a responsive chart's
+ * lines) is drawn whole. Quiet means no change to the document for
+ * QUIET_MS; it waits QUIET_MOST_MS at most.
+ */
+export const AWAIT_QUIET = `new Promise(resolve => {
+  const QUIET_MS = 300;
+  const QUIET_MOST_MS = 4000;
+  let timer = setTimeout(done, QUIET_MS);
+  const most = setTimeout(done, QUIET_MOST_MS);
+  const watch = new MutationObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(done, QUIET_MS);
+  });
+  watch.observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
+  function done() {
+    watch.disconnect();
+    clearTimeout(timer);
+    clearTimeout(most);
+    resolve(true);
+  }
+})`;
+
+/**
  * How a picture script hands back a batch: each line it prints for a job
  * starts with the job's place in the batch and a tab; a job's picture is
  * whole once it prints this word.

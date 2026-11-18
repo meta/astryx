@@ -17,7 +17,7 @@ import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
+import {hasRecordedProject, recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
@@ -55,9 +55,8 @@ import {
   addBaseHelpText,
   baseHelpSettings,
   checkRun,
-  commandAvailable,
-  helpBase,
   runResolution,
+  servedSubcommands,
 } from './lib/base-gate.mjs';
 import {commandPath} from './lib/command-path.mjs';
 import {scanRootArgs} from './lib/root-args.mjs';
@@ -122,7 +121,8 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon use',
   'experimental icon new-set',
   'experimental icon new-definition',
-  'experimental render',
+  'experimental export',
+  'experimental import',
   // The groups answer --json with their own help, as the root does.
   'experimental theme',
   'experimental theme editor',
@@ -283,7 +283,7 @@ export async function loadProjectForHelp(argv = process.argv.slice(2), program) 
     if (hasRecordedProject(cwd)) return;
     if (!mayHaveIntegrations(cwd)) {
       // What loading this project would record: no declared command.
-      recordDeclaredCliCommands(cwd, []);
+      recordDeclaredSettings(cwd, []);
       return;
     }
     const {Project} = await import('../../foundation/config/project.mjs');
@@ -695,7 +695,7 @@ export async function createProgram({argv} = {}) {
       describeOption(new Option('--detail <level>'), [
         'Detail level for component, hook, and docs tree reads (e.g. docs cli/commands/build)',
         {commands: ['theme build'], text: ', and for theme build reports'},
-        '. Lists default to brief',
+        '. Lists default to brief, and a component read to compact',
         {
           commands: ['theme build'],
           text: '; theme build prints one line per built theme unless full, which adds the install example and font recipe',
@@ -817,6 +817,9 @@ export async function createProgram({argv} = {}) {
     if (actionCommand === program) return;
     const fullName = commandPath(actionCommand);
     if (JSON_SUPPORTED.has(fullName)) return;
+    // A renamed command's old name answers with the moved error's envelope.
+    const {RENAMED_PATHS} = await import('./lib/renamed-commands.mjs');
+    if (RENAMED_PATHS.has(fullName)) return;
     process.__xdsJsonHandled = true;
     // A group given a word it does not have reports an unknown subcommand and
     // lists the ones it has, in JSON as in text, even when a flag follows it.
@@ -826,9 +829,7 @@ export async function createProgram({argv} = {}) {
       // The suggestions name only what the run's base serves, so its
       // integrations load first.
       await loadProjectOnce();
-      const names = actionCommand.commands
-        .filter(child => commandAvailable(child, helpBase()))
-        .map(child => child.name());
+      const names = servedSubcommands(actionCommand).map(child => child.name());
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.
@@ -899,7 +900,7 @@ export async function createProgram({argv} = {}) {
       if (hasRecordedProject(cwd)) return;
       if (!mayHaveIntegrations(cwd)) {
         // What loading this project would record: no declared command.
-        recordDeclaredCliCommands(cwd, []);
+        recordDeclaredSettings(cwd, []);
         return;
       }
       const {Project} = await import('../../foundation/config/project.mjs');
@@ -925,11 +926,13 @@ export async function createProgram({argv} = {}) {
    * repository root — see isAstryxPromptInReach), remind the user/agent that
    * setup is missing.
    *
-   * `preAction` decides the line; `postAction` prints it after a command that
-   * succeeds, at most once a day per project, recorded in the per-user state
-   * as the daily hint is, and never under CI. An agent that leaves `init` to
-   * its person then sees it once, not before every command. Doctor reports
-   * the missing setup in its own check every time.
+   * `preAction` prints the line on stderr before the command's own output, at
+   * most once a day per project, recorded in the per-user state as the daily
+   * hint is, and never under CI. An agent that leaves `init` to its person
+   * then sees it once, not before every command. It comes first because
+   * agents often keep only the start of a long answer (`2>&1 | head`), and a
+   * line at the end is then lost for the whole day. Doctor reports the
+   * missing setup in its own check every time.
    *
    * Suppressed in --json: that is machine output with a strict clean stdout+stderr
    * contract (json-shim.test: "error envelopes have empty stderr"), and --json
@@ -940,29 +943,19 @@ export async function createProgram({argv} = {}) {
    * or one that neither installs nor declares Astryx), and inside the CLI's own
    * source checkout when it runs from there.
    */
-  /** @type {{root: string, line: string} | null} */
-  let setupReminder = null;
   /**
-   * Keep the reminder for `root` until the command ends.
+   * Print the reminder for `root` now, before the command's own output, at
+   * most once a day for that project: its first line is the reminder itself
+   * (`2>&1 | head -1` shows it), and one blank line follows it.
    * @param {string} root
    * @param {string} line
    */
   const remindSetup = (root, line) => {
-    setupReminder = {root, line};
+    if (isCi(process.env)) return;
+    if (takeNotice(`${SETUP_REMINDER_KEY}${root}`)) console.error(`${line.trim()}\n`);
   };
-  program.hook('postAction', () => {
-    try {
-      const reminder = setupReminder;
-      setupReminder = null;
-      if (reminder == null || process.exitCode || isCi(process.env)) return;
-      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
-    } catch {
-      // Never let the nudge break a command.
-    }
-  });
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
-      setupReminder = null;
       if (program.opts().json) return; // machine mode — keep --json output clean
       if (SETUP_NUDGE_EXEMPT.has(actionCommand.name())) return;
       const cwd = process.cwd();

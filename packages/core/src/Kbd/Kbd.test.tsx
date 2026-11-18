@@ -206,7 +206,7 @@ describe('Kbd', () => {
     }
   });
 
-  it('puts the kbd theme target on the shortcut only, not on a key badge', () => {
+  it('puts the kbd target on the shortcut and kbd-key on each key badge', () => {
     render(<Kbd keys="mod+shift+k" />);
     const shortcut = screen.getByRole('img');
     expect(shortcut).toHaveClass('astryx-kbd');
@@ -215,7 +215,7 @@ describe('Kbd', () => {
     badges.forEach(badge =>
       expect(
         Array.from(badge.classList).filter(name => name.startsWith('astryx-')),
-      ).toEqual([]),
+      ).toEqual(['astryx-kbd-key']),
     );
   });
 

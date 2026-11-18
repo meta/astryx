@@ -41,8 +41,19 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {placeSkillFiles, renderProjectSkill} from '../../foundation/agent-docs/skill-places.mjs';
+import {managedFileState} from '../../foundation/agent-docs/managed-skill-file.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {readProjectPlaces} from '../../foundation/agent-docs/skill-place-files.mjs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
+import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
+import {
+  resolveIconModule,
+  splitSpecifier,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
@@ -54,6 +65,7 @@ import {
   rendersElement,
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
@@ -230,7 +242,8 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
- * @param {{stylesheets?: boolean}} [options] - also list `.css` files
+ * @param {{stylesheets?: boolean, pages?: boolean}} [options] - also list
+ *   `.css` files, and `.html` pages
  */
 export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
@@ -256,7 +269,10 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
         entry.isFile() &&
         file !== generatedModule &&
         (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
-          (options.stylesheets === true && path.extname(entry.name) === '.css'))
+          (options.stylesheets === true &&
+            path.extname(entry.name) === '.css') ||
+          (options.pages === true &&
+            /^\.html?$/u.test(path.extname(entry.name))))
       ) {
         files.push(file);
       }
@@ -297,6 +313,77 @@ export function findIconPlaceholders(projectDir) {
       local: uses[0].local,
       meanings: meanings.length > 0 ? meanings : null,
       uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => compareText(a.file, b.file));
+}
+
+/**
+ * Each file in the project's own source with icon imports that do not match
+ * the project's icon sets (see `iconImportFindings`): an icon from a set that
+ * is not in the list, or from a set later in the list than one that draws the
+ * same meaning, and an icon-named import of an npm package that does not
+ * resolve, that no path alias (`compilerOptions.paths` or `baseUrl`) maps, and
+ * that the project's package.json does not declare. A file reads only as
+ * a syntax tree. Read without executing app code.
+ * @param {string} projectDir
+ * @param {{sets: import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet[], choice: import('../../foundation/discovery/icon-set-discovery.mjs').IconSetChoice}} iconSets
+ * @returns {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>}
+ */
+export function findIconImports(projectDir, iconSets) {
+  const pkg = readPackageJson(path.join(projectDir, 'package.json')) ?? {};
+  const declared = new Set(
+    [
+      'dependencies',
+      'devDependencies',
+      'peerDependencies',
+      'optionalDependencies',
+    ]
+      .flatMap(field => Object.keys(pkg[field] ?? {}))
+      .concat(typeof pkg.name === 'string' ? [pkg.name] : []),
+  );
+  // Only a file that names a set's module, a wrapped library, or an
+  // icon-named export is parsed.
+  const needles = [
+    ...new Set(
+      iconSets.sets.flatMap(set => [
+        set.data.module,
+        ...set.data.icons.flatMap(icon => (icon.module ? [icon.module] : [])),
+        ...(set.data.source ? [set.data.source.package] : []),
+      ]),
+    ),
+  ];
+  /** @type {Map<any, Map<string, string>>} */
+  const wrappedRead = new Map();
+  /** @type {Array<{file: string, imports: import('../../foundation/discovery/icon-imports.mjs').IconImportFinding[]}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (
+      !/Icon\b/u.test(source) &&
+      !needles.some(each => source.includes(each))
+    ) {
+      continue;
+    }
+    const fromDir = path.dirname(file);
+    const imports = iconImportFindings(
+      source,
+      iconSets,
+      module =>
+        !declared.has(splitSpecifier(module).name) &&
+        resolveIconModule(module, fromDir) === null &&
+        !projectMapsImport(module, file),
+      wrappedRead,
+    );
+    if (!imports || imports.length === 0) continue;
+    found.push({
+      file: path.relative(projectDir, file).split(path.sep).join('/'),
+      imports,
     });
   }
   return found.sort((a, b) => compareText(a.file, b.file));
@@ -395,6 +482,48 @@ export function doctorRendersElement(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The names of a stylesheet's at-rules, lowercased, read with postcss so
+ * comments are ignored (`@stylex;` is `stylex`); empty for CSS that does not
+ * parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetAtRules(css) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  try {
+    postcss()
+      .parse(css)
+      .walkAtRules(rule => {
+        names.add(rule.name.toLowerCase());
+      });
+  } catch {
+    // Not valid CSS: no rules.
+  }
+  return names;
+}
+
+/**
+ * The project folder of a path `doctor --built` checks: the nearest folder
+ * at or above it that holds a package.json, or null.
+ * @param {string} target
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function builtProjectRoot(target, cwd) {
+  let dir = path.resolve(cwd, target);
+  try {
+    if (!fs.statSync(dir).isDirectory()) dir = path.dirname(dir);
+  } catch {
+    dir = path.resolve(cwd);
+  }
+  for (let at = dir; ; at = path.dirname(at)) {
+    if (fs.existsSync(path.join(at, 'package.json'))) return at;
+    if (path.dirname(at) === at) return null;
+  }
 }
 
 /**
@@ -946,25 +1075,20 @@ export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
  * @returns {string[]}
  */
 export function builtIntegrationPackages(target, cwd) {
-  let dir = path.resolve(cwd, target);
-  try {
-    if (!fs.statSync(dir).isDirectory()) dir = path.dirname(dir);
-  } catch {
-    dir = path.resolve(cwd);
-  }
-  for (let at = dir; ; at = path.dirname(at)) {
-    if (fs.existsSync(path.join(at, 'package.json'))) {
-      return [
-        ...new Set(scanAutolinkCandidates(at).map(candidate => candidate.spec)),
-      ];
-    }
-    if (path.dirname(at) === at) return [];
-  }
+  const root = builtProjectRoot(target, cwd);
+  return root
+    ? [
+        ...new Set(
+          scanAutolinkCandidates(root).map(candidate => candidate.spec),
+        ),
+      ]
+    : [];
 }
 
 /**
  * The install line for the font families a known package loads (an open
- * font the editor's table names), in the project's package manager, and
+ * font the editor's table names), as the project's integration install
+ * guidance gives it, else in the project's package manager, and
  * whether it loads every family given. A family no known package loads (a
  * self-hosted face) gets none: its package name would be a guess.
  * @param {string} projectDir
@@ -987,4 +1111,28 @@ export async function fontPackagesInstallLine(projectDir, families) {
     line: packages.length ? installLine(projectDir, packages) : null,
     coversAll: known.every(Boolean),
   };
+}
+
+/**
+ * The project's skill files and each one's state against this release's
+ * project skill, when the project's astryx.config `skills.to` saves no
+ * `agents-md` place; null otherwise (the block is the project's place).
+ * @param {string} cwd
+ * @returns {Promise<Array<{file: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}> | null>}
+ */
+export async function savedProjectSkillFiles(cwd) {
+  const root = resolveAgentDocsRoot(cwd);
+  if (root == null) return null;
+  const places = await readProjectPlaces(root);
+  if (places.some(place => place.kind === 'agents-md')) return null;
+  let text = '';
+  try {
+    text = renderProjectSkill(await renderAgentDocsBlock(root));
+  } catch {
+    // The agent-docs check reports a block that cannot render; every Astryx
+    // file then reads as from another release.
+  }
+  return places.flatMap(place =>
+    placeSkillFiles(place, root).map(file => ({file, state: managedFileState(file, text)})),
+  );
 }

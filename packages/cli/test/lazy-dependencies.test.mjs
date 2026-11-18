@@ -6,7 +6,7 @@
  *   loads on first use, and the public API entry point
  * @output Each gives the same module for `require` as for `import`, the
  *   API's exports keep their names and shapes, and importing the API loads
- *   none of those dependencies
+ *   none of those dependencies, nor esbuild
  */
 
 import {spawnSync} from 'node:child_process';
@@ -172,5 +172,7 @@ describe('lazy dependencies', () => {
     const {afterApi, afterUse} = JSON.parse(result.stdout);
     expect(afterUse).toContain('postcss');
     for (const pkg of LAZY_PACKAGES) expect(afterApi).not.toContain(pkg);
+    // esbuild loads only in a render's page worker, never in this process.
+    expect(afterApi).not.toContain('esbuild');
   }, 60_000);
 });

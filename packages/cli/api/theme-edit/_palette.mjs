@@ -225,24 +225,6 @@ function sweepTemps(dir) {
 }
 
 /**
- * Remove `dir` when it is empty; with `deep`, the empty folders under it
- * first. A folder with a file in it stays.
- * @param {string} dir
- * @param {{deep?: boolean}} [opts]
- */
-export function removeEmptyFolder(dir, opts = {}) {
-  if (!fs.existsSync(dir)) return;
-  if (opts.deep)
-    for (const e of fs.readdirSync(dir, {withFileTypes: true}))
-      if (e.isDirectory()) removeEmptyFolder(path.join(dir, e.name), opts);
-  try {
-    fs.rmdirSync(dir);
-  } catch {
-    // Not empty, or gone already.
-  }
-}
-
-/**
  * Whether a file name is one of the editor's own temp files: a whole-file
  * write's `.<name>.astryx-<pid>-<random>.tmp`, a build's `.<name>.tmp-<id>`,
  * or a picture's `.<picture>.part-<pid>.png`. A command stopped part way can
