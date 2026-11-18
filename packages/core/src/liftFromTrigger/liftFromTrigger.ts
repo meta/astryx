@@ -37,6 +37,7 @@ import {resolveMotion} from '../motion/resolveMotion';
 import type {SpringDescription} from '../motion/spring';
 import {
   liftFromTriggerRect,
+  surfaceAnchorRect,
   type LiftFromTriggerScaleRule,
   type LiftFromTriggerViewport,
 } from './liftFromTriggerGeometry';
@@ -733,12 +734,13 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     doc.body.append(layer);
     const anchor = doc.createElement('span');
     anchor.setAttribute(`${attribute}-anchor`, '');
+    const anchorRect = surfaceAnchorRect(lifted, viewport);
     Object.assign(anchor.style, {
       position: 'absolute',
-      left: `${lifted.x}px`,
-      top: `${lifted.y}px`,
-      width: `${lifted.width}px`,
-      height: `${lifted.height}px`,
+      left: `${anchorRect.x}px`,
+      top: `${anchorRect.y}px`,
+      width: `${anchorRect.width}px`,
+      height: `${anchorRect.height}px`,
       pointerEvents: 'none',
     });
     layer.append(anchor);

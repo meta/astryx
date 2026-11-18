@@ -407,7 +407,7 @@ test('a held card lifts itself to UIKit’s size about its center over the theme
   );
 });
 
-test('a card near the bottom gets its menu above, and stays inside the layer runtime’s gutter', async ({
+test('a card near the bottom lifts where it is and gets its menu above', async ({
   page,
 }) => {
   const story = await openLiftStory(page, (box, viewport) => ({
@@ -420,16 +420,14 @@ test('a card near the bottom gets its menu above, and stays inside the layer run
   if (preview == null || menu == null) {
     throw new Error(JSON.stringify(lift));
   }
-  const viewport = page.viewportSize();
-  const detail = JSON.stringify({lift, viewport});
-  expect(preview.y + preview.height, detail).toBeCloseTo(
-    (viewport?.height ?? NaN) - GUTTER,
-    0,
-  );
+  const detail = JSON.stringify({lift, viewport: page.viewportSize()});
+  // The card never moves: it grows about the center it had at rest.
+  expect(preview.x + preview.width / 2, detail).toBeCloseTo(story.center.x, 0);
+  expect(preview.y + preview.height / 2, detail).toBeCloseTo(story.center.y, 0);
   expect(menu.y + menu.height, detail).toBeCloseTo(preview.y - menuGap, 0);
 });
 
-test('a card at the left edge lifts 16 px in, and its menu is flush with it', async ({
+test('a card at the left edge lifts where it is, and its menu keeps the gutter', async ({
   page,
 }) => {
   const story = await openLiftStory(page, box => ({dx: 4 - box.x, dy: 0}));
@@ -439,7 +437,9 @@ test('a card at the left edge lifts 16 px in, and its menu is flush with it', as
     throw new Error(JSON.stringify(lift));
   }
   const detail = JSON.stringify(lift);
-  expect(preview.x, detail).toBeCloseTo(GUTTER, 0);
+  // The card never moves, so at the edge it grows past the gutter.
+  expect(preview.x + preview.width / 2, detail).toBeCloseTo(story.center.x, 0);
+  expect(preview.x, detail).toBeLessThan(GUTTER);
   expect(menu.x, detail).toBeCloseTo(GUTTER, 0);
 });
 
@@ -463,8 +463,45 @@ test('in a right-to-left page a card at the left edge keeps its menu flush with 
     throw new Error(JSON.stringify(lift));
   }
   const detail = JSON.stringify(lift);
-  expect(preview.x, detail).toBeCloseTo(GUTTER, 0);
+  expect(preview.x + preview.width / 2, detail).toBeCloseTo(center.x, 0);
   expect(menu.x, detail).toBeCloseTo(GUTTER, 0);
+});
+
+test('with room on neither side, the menu still never covers the lifted card, and the card stays where it is', async ({
+  page,
+}) => {
+  // A short viewport: the menu fits neither above nor below a card in its
+  // middle.
+  await page.setViewportSize({width: 402, height: 360});
+  const story = await openLiftStory(page, (box, viewport) => ({
+    dx: 0,
+    dy: viewport.height / 2 - (box.y + box.height / 2),
+  }));
+  const lift = await liftAndSettle(page, story);
+  const {preview, menu} = lift;
+  if (preview == null || menu == null) {
+    throw new Error(JSON.stringify(lift));
+  }
+  const natural = await page.evaluate(
+    () => document.querySelector('[role="menu"]')?.scrollHeight ?? 0,
+  );
+  const viewport = page.viewportSize();
+  const height = viewport?.height ?? NaN;
+  const detail = JSON.stringify({lift, natural, viewport});
+  // The case holds: the whole menu fits on neither side.
+  expect(natural, detail).toBeGreaterThan(preview.y - menuGap - GUTTER);
+  expect(natural, detail).toBeGreaterThan(
+    height - GUTTER - (preview.y + preview.height + menuGap),
+  );
+  const overlapX =
+    Math.min(preview.x + preview.width, menu.x + menu.width) -
+    Math.max(preview.x, menu.x);
+  const overlapY =
+    Math.min(preview.y + preview.height, menu.y + menu.height) -
+    Math.max(preview.y, menu.y);
+  expect(overlapX <= 0.5 || overlapY <= 0.5, detail).toBe(true);
+  expect(preview.x + preview.width / 2, detail).toBeCloseTo(story.center.x, 0);
+  expect(preview.y + preview.height / 2, detail).toBeCloseTo(story.center.y, 0);
 });
 
 test('the menu shows above the lifted card and takes the finger: its rows are on top', async ({

@@ -4,11 +4,12 @@
  * @file liftFromTriggerGeometry.ts
  * @input A source's box, the viewport and the layer runtime's gutter, and
  *   the caller's scale rule and gap
- * @output liftFromTriggerScale, liftFromTriggerRect and surfacePlacement: a
- *   lifted source's growth, its place inside the gutter, and a surface's side
+ * @output liftFromTriggerScale, liftFromTriggerRect, surfaceAnchorRect and
+ *   surfacePlacement: a lifted source's growth, its rect where it is, the box
+ *   a surface is placed against, and a surface's side
  * @position The geometry of the lift presentation (liftFromTrigger.ts);
  *   internal to core. A source grows about its center by the caller's rule,
- *   as UIKit's preview platter does, then moves inside the gutter
+ *   as UIKit's preview platter does, and never moves
  *
  * SYNC: When modified, update /packages/core/src/liftFromTrigger/liftFromTriggerGeometry.test.ts
  */
@@ -87,15 +88,14 @@ export function liftFromTriggerScale(
 }
 
 /**
- * The lifted source's rect: `source` scaled by `liftFromTriggerScale` about its center,
- * then moved inside the viewport's gutter if it crosses it.
+ * The lifted source's rect: `source` scaled by `liftFromTriggerScale` about
+ * its center. The source never moves: at an edge it grows across the gutter.
  */
 export function liftFromTriggerRect(
   source: MorphRect,
   viewport: LiftFromTriggerViewport,
   rule: LiftFromTriggerScaleRule,
 ): MorphRect {
-  const {gutter} = viewport;
   const scale = liftFromTriggerScale(
     source.width,
     source.height,
@@ -104,19 +104,38 @@ export function liftFromTriggerRect(
   );
   const width = source.width * scale;
   const height = source.height * scale;
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(Math.max(value, min), Math.max(min, max));
-  const top = gutter.top;
-  const bottom = viewport.height - gutter.bottom;
   return {
-    x: clamp(
-      source.x + source.width / 2 - width / 2,
-      gutter.inline,
-      viewport.width - gutter.inline - width,
-    ),
-    y: clamp(source.y + source.height / 2 - height / 2, top, bottom - height),
+    x: source.x + source.width / 2 - width / 2,
+    y: source.y + source.height / 2 - height / 2,
     width,
     height,
+  };
+}
+
+/**
+ * The box a surface is placed against: the lifted source's rect, its inline
+ * extent kept inside the gutter. The source never moves, so at an edge it can
+ * grow past the gutter. A surface aligned with this box keeps the gutter, and
+ * it still clears the source on the block axis.
+ */
+export function surfaceAnchorRect(
+  lifted: MorphRect,
+  viewport: LiftFromTriggerViewport,
+): MorphRect {
+  const {inline} = viewport.gutter;
+  const startClip = Math.max(0, inline - lifted.x);
+  const endClip = Math.max(
+    0,
+    lifted.x + lifted.width - (viewport.width - inline),
+  );
+  if (startClip === 0 && endClip === 0) {
+    return lifted;
+  }
+  return {
+    x: startClip > 0 ? inline : lifted.x,
+    y: lifted.y,
+    width: Math.max(0, lifted.width - startClip - endClip),
+    height: lifted.height,
   };
 }
 
@@ -125,7 +144,7 @@ export function liftFromTriggerRect(
  * between it, `gap` and the bottom gutter. Else it goes above, when it fits
  * under the top gutter. With room on neither side it answers `none`. It
  * centers on the source, or sits flush with the source's edge when the source
- * is held against a side of the viewport.
+ * reaches the gutter at a side of the viewport.
  */
 export function surfacePlacement(
   lifted: MorphRect,

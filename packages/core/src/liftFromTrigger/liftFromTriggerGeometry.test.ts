@@ -4,8 +4,9 @@
  * @file liftFromTriggerGeometry.test.ts
  * @input vitest, the lift geometry
  * @output Checks how far a source grows: the cap, the points on its larger
- *   side and the viewport's width. It also checks where it lands inside the
- *   gutter, and a surface's side in either direction
+ *   side and the viewport's width. It also checks that a lifted source never
+ *   moves, at an edge too, the box a surface is placed against, and a
+ *   surface's side in either direction
  * @position Unit tests of packages/core/src/liftFromTrigger/liftFromTriggerGeometry.ts; a
  *   surface's own numbers (UIKit's, for ContextMenu) are tested with it
  */
@@ -14,6 +15,7 @@ import {describe, expect, it} from 'vitest';
 import {
   liftFromTriggerRect,
   liftFromTriggerScale,
+  surfaceAnchorRect,
   surfacePlacement,
   type LiftFromTriggerViewport,
 } from './liftFromTriggerGeometry';
@@ -68,40 +70,70 @@ describe('liftFromTriggerRect', () => {
     expect(lifted.width).toBeCloseTo(226, 10);
   });
 
-  it('moves inside the gutter on every edge', () => {
-    expect(
-      liftFromTriggerRect({x: 4, y: 400, width: 60, height: 60}, VIEWPORT, RULE)
-        .x,
-    ).toBe(16);
-    const right = liftFromTriggerRect(
+  it('never moves: a source at any edge grows about its own center, across the gutter if it must', () => {
+    const sources = [
+      {x: 4, y: 400, width: 60, height: 60},
       {x: 340, y: 400, width: 60, height: 60},
-      VIEWPORT,
-      RULE,
-    );
-    expect(right.x + right.width).toBeCloseTo(386, 10);
-    expect(
-      liftFromTriggerRect(
-        {x: 100, y: 60, width: 60, height: 60},
-        VIEWPORT,
-        RULE,
-      ).y,
-    ).toBe(82);
-    const bottom = liftFromTriggerRect(
+      {x: 100, y: 60, width: 60, height: 60},
       {x: 100, y: 800, width: 60, height: 60},
-      VIEWPORT,
-      RULE,
-    );
-    expect(bottom.y + bottom.height).toBeCloseTo(820, 10);
+    ];
+    for (const source of sources) {
+      const lifted = liftFromTriggerRect(source, VIEWPORT, RULE);
+      const detail = JSON.stringify({source, lifted});
+      expect(lifted.x + lifted.width / 2, detail).toBeCloseTo(
+        source.x + source.width / 2,
+        10,
+      );
+      expect(lifted.y + lifted.height / 2, detail).toBeCloseTo(
+        source.y + source.height / 2,
+        10,
+      );
+      expect(lifted.width, detail).toBeCloseTo(69, 10);
+    }
+    // The left source grows past the inline gutter rather than moving in.
+    expect(liftFromTriggerRect(sources[0], VIEWPORT, RULE).x).toBeLessThan(16);
   });
 
-  it('keeps a source taller than the room between the gutters inside both', () => {
+  it('shrinks a source taller than the room between the gutters about its center, without moving it', () => {
     const tall = liftFromTriggerRect(
       {x: 51, y: 0, width: 300, height: 900},
       VIEWPORT,
       RULE,
     );
-    expect(tall.y).toBeCloseTo(82, 10);
-    expect(tall.y + tall.height).toBeCloseTo(820, 10);
+    expect(tall.height).toBeCloseTo(874 - 82 - 54, 10);
+    expect(tall.y + tall.height / 2).toBeCloseTo(450, 10);
+  });
+});
+
+describe('surfaceAnchorRect', () => {
+  it('keeps a lifted source that grew past the gutter inside it on the inline axis only', () => {
+    const lifted = liftFromTriggerRect(
+      {x: 4, y: 400, width: 60, height: 60},
+      VIEWPORT,
+      RULE,
+    );
+    const box = surfaceAnchorRect(lifted, VIEWPORT);
+    expect(box.x).toBe(16);
+    expect(box.x + box.width).toBeCloseTo(lifted.x + lifted.width, 10);
+    expect(box.y).toBe(lifted.y);
+    expect(box.height).toBe(lifted.height);
+    const right = liftFromTriggerRect(
+      {x: 340, y: 400, width: 60, height: 60},
+      VIEWPORT,
+      RULE,
+    );
+    const rightBox = surfaceAnchorRect(right, VIEWPORT);
+    expect(rightBox.x).toBeCloseTo(right.x, 10);
+    expect(rightBox.x + rightBox.width).toBe(402 - 16);
+  });
+
+  it('is the lifted rect itself inside the gutter', () => {
+    const lifted = liftFromTriggerRect(
+      {x: 101, y: 400, width: 200, height: 120},
+      VIEWPORT,
+      RULE,
+    );
+    expect(surfaceAnchorRect(lifted, VIEWPORT)).toEqual(lifted);
   });
 });
 

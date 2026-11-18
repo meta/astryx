@@ -539,6 +539,10 @@ export function ContextMenu({
     // Mounted at the first open and kept (see the file header).
     lazyMount: true,
     keepsMountAfterShow: true,
+    // A lifted menu never settles over the lifted trigger, which stays where
+    // it is: with room on neither side it goes beside it, or caps itself on
+    // the roomier side.
+    keepsAnchorClear: liftPlacement != null,
     onHide: useCallback(() => {
       outsidePress.stop();
       endTouchOpen();
