@@ -3863,6 +3863,99 @@ describe('BottomSheet', () => {
         subscribe.mockRestore();
       });
 
+      it('keeps the field\u2019s resting place when a reveal runs after a long task mid-ride, though WebKit keeps the ridden rects from before the task', async () => {
+        const guide = getKeyboardLayoutGuide(window);
+        const {body, content, input, report, drawnTop} = renderIOSSheet();
+        act(() => input.focus());
+        report(500);
+        const {start} = guide.transition;
+        expect(body.scrollTop).toBe(248);
+        const sheet = body.parentElement as HTMLElement;
+        // The body and the content share the sheet as their offset parent,
+        // with the content at the body's top.
+        for (const element of [body, content]) {
+          Object.defineProperties(element, {
+            offsetParent: {configurable: true, get: () => sheet},
+            offsetTop: {configurable: true, get: () => 0},
+          });
+        }
+        // WebKit draws the ride on its compositor. The ridden content's rects
+        // keep the translate of the content's last style resolution, the frame
+        // after the report. Its computed translate follows the ride.
+        const drawn = (time: number) => animatorFor(content).get('y', time);
+        const frozen = drawn(start + 36);
+        vi.spyOn(content, 'getBoundingClientRect').mockImplementation(() =>
+          rect({
+            top: 100 - body.scrollTop + frozen,
+            bottom: 900 - body.scrollTop + frozen,
+          }),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({
+            top: 660 - body.scrollTop + frozen,
+            bottom: 700 - body.scrollTop + frozen,
+          }),
+        );
+        const contentStyles = new WeakSet<CSSStyleDeclaration>();
+        const computedStyle = window.getComputedStyle.bind(window);
+        vi.spyOn(window, 'getComputedStyle').mockImplementation(
+          (element, pseudo) => {
+            const style = computedStyle(element, pseudo);
+            if (element === content) {
+              contentStyles.add(style);
+            }
+            return style;
+          },
+        );
+        const translate = Object.getOwnPropertyDescriptor(
+          CSSStyleDeclaration.prototype,
+          'translate',
+        );
+        vi.spyOn(
+          CSSStyleDeclaration.prototype,
+          'translate',
+          'get',
+        ).mockImplementation(function (this: CSSStyleDeclaration): string {
+          return contentStyles.has(this)
+            ? `0px ${drawn(performance.now())}px`
+            : String(translate?.get?.call(this) ?? '');
+        });
+        // A long task holds the page until 286 ms into the slide. A reveal the
+        // sheet's observers scheduled before it runs then.
+        const now = vi.spyOn(performance, 'now').mockReturnValue(start + 286);
+        act(() => input.setAttribute('data-long-task', ''));
+        await nextFrame();
+        now.mockRestore();
+        expect(body.scrollTop).toBe(248);
+        await afterTheShow();
+        expect(drawnTop()).toBe(-248);
+      });
+
+      it('moves nothing at rest when the content sits a fraction of a pixel off the whole-pixel offsets', async () => {
+        const {body, content, input, report} = renderIOSSheet();
+        act(() => input.focus());
+        report(500);
+        await afterTheShow();
+        expect(body.scrollTop).toBe(248);
+        const sheet = body.parentElement as HTMLElement;
+        // The content sits 25.5 px below the body's top. Its offset rounds to
+        // 26 px.
+        Object.defineProperties(body, {
+          offsetParent: {configurable: true, get: () => sheet},
+          offsetTop: {configurable: true, get: () => 0},
+        });
+        Object.defineProperties(content, {
+          offsetParent: {configurable: true, get: () => sheet},
+          offsetTop: {configurable: true, get: () => 26},
+        });
+        vi.spyOn(content, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 125.5 - body.scrollTop, bottom: 925.5 - body.scrollTop}),
+        );
+        act(() => input.setAttribute('data-content-change', ''));
+        await nextFrame();
+        expect(body.scrollTop).toBe(248);
+      });
+
       it('rides once the touch runtime loads, for a sheet that opened before it', async () => {
         __resetTouchRuntimeForTest();
         try {

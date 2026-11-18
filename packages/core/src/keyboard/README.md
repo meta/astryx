@@ -135,7 +135,9 @@ that times motion with it. Everything here is internal to
   guide publishes the keyboard's own motion (Gboard's slides in Chrome on
   Android, UIKit's keyboard spring in Safari on iOS), the sheet rides it
   (FR8). A reveal during the show scrolls the body at once, and the content
-  box rides the show's curve from where it was drawn. In Chrome, the same
+  box rides the show's curve from where it was drawn. It reads the ride's
+  offset from the content box's own rect, as WebKit can keep a composited
+  box's rects from its last style resolution. In Chrome, the same
   commit first sets the content box so the field sits 4 px above the
   keyboard's top (DEC-6). Through the hide the inset stays and the content box
   rides down to where the body's scroll rests. At rest the inset drops, the scroll is put

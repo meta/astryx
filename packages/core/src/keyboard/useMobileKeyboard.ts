@@ -142,6 +142,24 @@ function isVisualViewportRecovered(): boolean {
   return getKeyboardHeight(window) <= 0.5;
 }
 
+// Where the layout puts `child`'s top in the viewport, with no transform, for
+// a child of the scroller `body`. Offsets ignore transforms and the body's
+// scroll, and round to whole pixels. Null when the two share no offset parent.
+function layoutTopIn(body: HTMLElement, child: HTMLElement): number | null {
+  const parent = child.offsetParent;
+  if (parent == null) {
+    return null;
+  }
+  const bodyTop = body.getBoundingClientRect().top;
+  if (parent === body) {
+    return bodyTop + body.clientTop + child.offsetTop - body.scrollTop;
+  }
+  if (parent === body.offsetParent) {
+    return bodyTop + child.offsetTop - body.offsetTop - body.scrollTop;
+  }
+  return null;
+}
+
 /**
  * Keeps a focused field in `targetRef`'s element above the on-screen
  * keyboard (see README.md). A sheet passes its panel, and the hook reserves
@@ -275,10 +293,25 @@ export function useMobileKeyboard(
       };
       // How far a ride has moved the content from where its layout puts it, as
       // the page draws it now. The reveal reads a control's rect in the same
-      // frame.
+      // frame. WebKit can keep a composited element's rects from its last style
+      // resolution while its computed translate follows the ride. So the
+      // offset comes from the content's own rect, which moves with the
+      // control's. Without a shared offset parent, the computed translate
+      // stands in.
       const rideOffset = () => {
         const content = body.firstElementChild;
-        return content instanceof HTMLElement ? drawnOffsetOf(content) : 0;
+        if (!(content instanceof HTMLElement)) {
+          return 0;
+        }
+        const drawn = drawnOffsetOf(content);
+        const layoutTop = layoutTopIn(body, content);
+        if (layoutTop == null) {
+          return drawn;
+        }
+        // Offsets round to whole pixels. Rects within a pixel of the computed
+        // translate are current, so the exact translate stands.
+        const fromRect = content.getBoundingClientRect().top - layoutTop;
+        return Math.abs(fromRect - drawn) < 1 ? drawn : fromRect;
       };
       // The keyboard's show the guide plays on its slide right now, if any. At
       // a report, a show whose slide has ended counts too. A busy page can read
