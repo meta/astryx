@@ -278,6 +278,7 @@ export const docs = {
         visualProps: ['size', 'status'],
         states: ['disabled', 'readonly'],
       },
+      {className: 'astryx-number-input-stepper', states: ['direction']},
     ],
     derived: [
       // `padding` in any spelling — the shorthand, `paddingBlock`, or a lone
@@ -602,6 +603,7 @@ export const docsZh = {
         visualProps: ['size', 'status'],
         states: ['disabled', 'readonly'],
       },
+      {className: 'astryx-number-input-stepper', states: ['direction']},
     ],
     derived: [
       // 任何写法的 `padding`（简写、`paddingBlock`，或单独的
