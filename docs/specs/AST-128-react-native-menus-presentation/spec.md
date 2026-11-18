@@ -120,9 +120,10 @@ core (`spec:AST-112/FR1`) and link in every app.
     presentation host presents are `system`: the platform draws them. The
     library's drawn menus and sheets, a drawn sheet in the modal host included,
     are `drawn`: Astryx draws them in React. `auto` is each component's own
-    default, per platform where it differs, and the theme's `render.default`
-    (`spec:AST-112`, under `spec:AST-082/FR10`) overrides every `auto`. Where
-    the host is absent, the component draws (FR14).
+    default, per platform where it differs (`spec:AST-112/FR21`). The theme's
+    `render.default` overrides every `auto`; `spec:AST-112` adds it to the
+    `defineNativeTheme` configuration of `spec:AST-082/FR10`. Where the host
+    is absent, the component draws (FR14).
   - A drawn menu or sheet on a native glass or material view is still
     `drawn`; its look is its `surface` (`spec:AST-123`).
   - FR1 gap: the code spells the axis two ways: the navigators take
@@ -370,6 +371,8 @@ resolves `{index, reason, message}`; `show` is its positional form.
   menu, and action-sheet hosts in the core) and FR6 to FR9 for this group.
 - Relies on `spec:AST-112` FR3: the core, with the native half of
   every library component, links by default.
+- Relies on `spec:AST-082` FR10 gaining `render.default`, as `spec:AST-112`
+  amends it (`spec:AST-112/FR21`).
 - Relies on `spec:AST-140` FR5: every native contract is at
   revision 1, and later behaviour is a named feature that JavaScript checks.
 
