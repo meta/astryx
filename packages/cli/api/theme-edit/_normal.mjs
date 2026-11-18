@@ -1972,3 +1972,92 @@ export function typoNear(typed, word) {
     }) <= limit
   );
 }
+
+/**
+ * Tone words a color said by itself may carry beside its hue ("a deep dark
+ * plum", "near-black", "warm brown-black", "chocolate brown").
+ */
+const TONE_WORDS = new Set([
+  'a',
+  'an',
+  'deep',
+  'dark',
+  'darker',
+  'light',
+  'lighter',
+  'pale',
+  'soft',
+  'warm',
+  'cool',
+  'dusty',
+  'muted',
+  'rich',
+  'very',
+  'near',
+  'almost',
+  'off',
+  'bright',
+  'chocolate',
+  'charcoal',
+  'inky',
+  'midnight',
+  'smoky',
+  'black',
+  'white',
+  'gray',
+  'grey',
+  'ivory',
+  'cream',
+  'beige',
+]);
+
+/**
+ * A hue said for one mode's page, or for everything, as the page it
+ * means: "dark mode should be a deep dark plum" and "light mode is pale
+ * blush" are that mode's page ("page … in dark mode"), whose answer takes
+ * the color at the page's own lightness there; "dark mode goes near-black
+ * with a purple tint" is the tint's hue; "blush pink everything" is the
+ * page. Never a theme of one mode, or an accent. Only a color said by
+ * itself is read so: a phrase with a part, role or token word ("a red
+ * accent", "blue links", "the buttons blue", "red for errors") is left as
+ * said. The rest of the clause keeps the mode ("cream with blue buttons":
+ * the buttons are the light mode's too).
+ * @param {string} question
+ * @param {(word: string) => boolean} isHue
+ * @returns {string}
+ */
+export function colorsSaidForPages(question, isHue) {
+  /** @param {string} words */
+  const wordsOf = words =>
+    words
+      .toLowerCase()
+      .split(/[\s-]+/)
+      .filter(Boolean);
+  /** A color by itself: every word a hue or a tone word, one a hue. @param {string} words */
+  const colorAlone = words =>
+    wordsOf(words).some(w => isHue(w)) &&
+    wordsOf(words).every(w => isHue(w) || TONE_WORDS.has(w));
+  return question
+    .replace(
+      /\b(dark|light)[- ]mode\s+(?:is|goes|should\s+(?:be|go)|becomes|turns|gets)\s+((?:(?!with\b|and\b|but\b)[a-z-]+\s*?){1,4}?)(?:\s+with\s+(?:a\s+)?([a-z]+)\s+tint(?:ed)?)?(?:\s+(with|and|but)\b|(?=\s*[,.;!]|\s*$))/gi,
+      (m, mode, phrase, tint, joined) => {
+        const color = String(tint ?? phrase).trim();
+        // (With a tint, the tint gives the hue; the rest is tone words.)
+        const said = tint
+          ? colorAlone(String(tint)) &&
+            wordsOf(String(phrase)).every(w => isHue(w) || TONE_WORDS.has(w))
+          : colorAlone(String(phrase));
+        if (!said) return m;
+        const page = `page ${color} in ${mode} mode`;
+        if (!joined) return page;
+        const kept = `in ${mode} mode`;
+        return /^with$/i.test(joined)
+          ? `${page}, and ${kept} with`
+          : `${page}, ${joined} ${kept}`;
+      },
+    )
+    .replace(
+      /\b((?:[a-z]+\s+)?[a-z]+(?:\s+[a-z]+)?)\s+everything\b/gi,
+      (m, color) => (colorAlone(String(color)) ? `${color} page` : m),
+    );
+}

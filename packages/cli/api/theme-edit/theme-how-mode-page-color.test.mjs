@@ -1,0 +1,199 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file A hue said for one mode's page ("dark mode should be a deep dark plum",
+ * "light mode is pale blush", "dark mode goes near-black with a purple
+ * tint") is that mode's page in the color's hue at the page's own
+ * lightness there, so the grounds follow it; never a theme of one mode or
+ * an accent. A mid tone named for a mode's background (chocolate brown)
+ * takes that lightness too, its hue kept. "<color> everything" is the
+ * page. Asks that read right before stay as they were.
+ */
+
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {colorsSaidForPages} from './_normal.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../test-utils/linked-fixture.mjs';
+import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
+
+/** @type {string} */
+let cwd;
+/** Why a bundled theme could not be installed here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
+  cwd = makeLinkedFixture('astryx-theme-mode-page-color-', FIXTURE_PACKAGES);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  if (!unbuilt) await themeEditNew('c', {cwd, like: 'neutral'});
+}, 600_000);
+
+afterAll(() => removeLinkedFixture(cwd));
+
+/** @param {import('vitest').TestContext} test */
+const needsBases = test => {
+  if (unbuilt) {
+    console.warn(`skipped: ${unbuilt}`);
+    test.skip();
+  }
+};
+
+/**
+ * The set lines the first answer writes, without the command's prefix.
+ * @param {string} q
+ * @returns {Promise<string[]>}
+ */
+const first = async q => {
+  const {data} = await themeEditHow(q, {cwd, theme: 'c'});
+  return /** @type {string[]} */ (data.results?.[0]?.commands ?? [])
+    .flatMap(x => String(x).split(' && '))
+    .map(x => x.replace(/^.* editor /, '').replace(/^set c /, ''));
+};
+
+/**
+ * The page color a line set writes for a mode.
+ * @param {string[]} lines @param {'light' | 'dark'} mode
+ */
+const pageIn = (lines, mode) =>
+  new RegExp(`^--color-background-body '(#[0-9a-f]{6})' --mode ${mode}$`).exec(
+    lines.find(l => l.includes(`--mode ${mode}`)) ?? '',
+  )?.[1] ?? null;
+
+/** @param {string} a @param {string} b */
+const hueGap = (a, b) =>
+  Math.abs(((hexToOklch(a).H - hexToOklch(b).H + 540) % 360) - 180);
+
+const T = 300_000;
+
+describe('a color said for one mode is its page', () => {
+  it(
+    'a deep dark plum dark mode: the dark page, light mode kept, never dark-only',
+    async test => {
+      needsBases(test);
+      const lines = await first('dark mode should be a deep dark plum');
+      expect(lines.join('\n')).not.toMatch(/\bmode dark-only\b|--color-accent/);
+      const dark = /** @type {string} */ (pageIn(lines, 'dark'));
+      expect(hueGap(dark, '#7e22ce')).toBeLessThan(15);
+      expect(hexToOklch(dark).L).toBeLessThan(0.3);
+      expect(pageIn(lines, 'light')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'pale blush light, near-black with a purple tint dark: both pages, in their hues',
+    async test => {
+      needsBases(test);
+      const lines = await first(
+        'light mode is pale blush, dark mode goes near-black with a purple tint',
+      );
+      const light = /** @type {string} */ (pageIn(lines, 'light'));
+      const dark = /** @type {string} */ (pageIn(lines, 'dark'));
+      expect(hueGap(light, '#f4c2c2')).toBeLessThan(20);
+      expect(hexToOklch(light).L).toBeGreaterThan(0.9);
+      expect(hueGap(dark, '#7c3aed')).toBeLessThan(20);
+      expect(hexToOklch(dark).L).toBeLessThan(0.3);
+    },
+    T,
+  );
+
+  it(
+    'blush pink everything with raspberry accents, dark plum dark mode: the pages and the accent',
+    async test => {
+      needsBases(test);
+      const lines = await first(
+        'soft blush pink everything with deep raspberry accents. dark mode should go dark plum with pink highlights',
+      );
+      const light = /** @type {string} */ (pageIn(lines, 'light'));
+      expect(hexToOklch(light).L).toBeGreaterThan(0.9);
+      expect(hexToOklch(light).C).toBeGreaterThan(0.005);
+      expect(lines.some(l => /^accent '#/.test(l))).toBe(true);
+      // (The plum said for dark mode is its page, written after the blush.)
+      const darks = lines
+        .filter(l => /^--color-background-body .* --mode dark$/.test(l))
+        .map(l => /'(#[0-9a-f]{6})'/.exec(l)?.[1] ?? '');
+      expect(hueGap(darks[darks.length - 1], '#7e22ce')).toBeLessThan(15);
+    },
+    T,
+  );
+
+  it(
+    'a deep navy-indigo dark mode, and a chocolate brown one at the dark page lightness with its hue',
+    async test => {
+      needsBases(test);
+      const navy = pageIn(
+        await first('dark mode goes deep navy-indigo'),
+        'dark',
+      );
+      expect(navy).not.toBeNull();
+      expect(hexToOklch(String(navy)).L).toBeLessThan(0.3);
+      const brown = pageIn(
+        await first(
+          'cream/beige background, dark mode should be chocolate brown',
+        ),
+        'dark',
+      );
+      expect(hexToOklch(String(brown)).L).toBeLessThan(0.3);
+      expect(hueGap(String(brown), '#92400e')).toBeLessThan(15);
+    },
+    T,
+  );
+
+  it('reads only a color said by itself as the page, and keeps the mode on the rest of the clause', () => {
+    const isHue = (/** @type {string} */ w) =>
+      /^(?:red|blue|gray|grey|purple|plum|cream|navy|pink|blush|black|brown)$/.test(
+        w,
+      );
+    for (const ask of [
+      'dark mode gets a red accent',
+      'light mode gets blue links',
+      'dark mode should be red for errors',
+      'light mode gets a gray border',
+      'dark mode turns the buttons blue',
+      'use the same blue for everything',
+      'blue on everything',
+      'navy across everything',
+    ])
+      expect(colorsSaidForPages(ask, isHue), ask).toBe(ask);
+    expect(
+      colorsSaidForPages('light mode should be cream with blue buttons', isHue),
+    ).toBe('page cream in light mode, and in light mode with blue buttons');
+    expect(
+      colorsSaidForPages(
+        'dark mode should be dark gray with a purple tint and white text',
+        isHue,
+      ),
+    ).toBe('page purple in dark mode, and in dark mode white text');
+    expect(colorsSaidForPages('soft blush pink everything', isHue)).toBe(
+      'soft blush pink page',
+    );
+  });
+
+  it(
+    'keeps what read right: a beige page, a warm off-white and brown-black, a navy-blue background',
+    async test => {
+      needsBases(test);
+      expect(pageIn(await first('beige page'), 'light')).toBe('#f5f5dc');
+      const warm = await first(
+        'warm off-white page. dark mode is warm brown-black',
+      );
+      expect(pageIn(warm, 'light')).toBe('#faf8f3');
+      expect(pageIn(warm, 'dark')).not.toBeNull();
+      const navy = await first(
+        'dark near-black dashboard, background navy-blue',
+      );
+      expect(pageIn(navy, 'light')).not.toBeNull();
+      expect(pageIn(navy, 'dark')).not.toBeNull();
+    },
+    T,
+  );
+});
