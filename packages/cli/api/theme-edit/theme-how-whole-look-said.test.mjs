@@ -8,7 +8,7 @@
  * dark theme, as "a dark theme" is; a page said dark is still the page.
  * A look named for the whole theme and said bare ("cozy warm vibe") takes
  * the words a setting reads and names the rest; a look named for
- * something how cannot see ("whatsapp theme") asks for its colors as hex,
+ * something how cannot see ("a whatsapp-like theme") asks for its colors as hex,
  * never guessing them.
  *
  * @position api/theme-edit — tests
@@ -98,9 +98,14 @@ describe('a look named for the whole theme, said bare', () => {
     expect(a.text).not.toMatch(/"warm"/);
   }, 240_000);
 
-  it('"whatsapp theme" asks for its colors and writes nothing', async ctx => {
+  it('"a whatsapp-like theme" asks for its colors and writes nothing', async ctx => {
     if (unbuilt) return ctx.skip();
-    const a = await answer('whatsapp theme');
+    // (Only a look said as like a thing names a brand: "whatsapp theme"
+    // alone, as "a calm theme", is a word no setting reads.)
+    expect((await answer('whatsapp theme')).text).toMatch(
+      /not taken: "whatsapp"/,
+    );
+    const a = await answer('a whatsapp-like theme');
     expect(a.text).toMatch(
       /how does not know what "whatsapp" looks like and never guesses a brand's colors: give them as hex/,
     );
