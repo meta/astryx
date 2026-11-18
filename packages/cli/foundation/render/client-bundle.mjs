@@ -445,10 +445,20 @@ function locatedFile(file) {
  * every address as it wrote it, so a link, a text, a comparison or the URL
  * API reads the page's own address.
  * @param {[string, string][]} entries each carried address with its data: URI
+ * @param {Array<[string, number] | [string, number, number]>} [reads] each
+ *   carried address the first paint shows, with the number of its mark, and
+ *   for one that a `srcset` lists, its candidate's place there: its data is
+ *   read from `from`, the values the first paint carries, so the file holds
+ *   it once
+ * @param {string} [from] the script's name for those values
  * @returns {string} a statement that runs before the page's script
  */
-export function imageSinks(entries) {
-  return scriptSafe(`${SINKS}(new Map(${JSON.stringify(entries)}));`);
+export function imageSinks(entries, reads = [], from = '') {
+  const carried =
+    reads.length === 0
+      ? `new Map(${JSON.stringify(entries)})`
+      : `new Map([...${JSON.stringify(entries)}, ...${JSON.stringify(reads)}.map(([u, i, k]) => [u, k === undefined ? ${from}[i] : parse(${from}[i] ?? '')[k]?.url]).filter(e => e[1])])`;
+  return scriptSafe(`${SINKS}(parse => ${carried});`);
 }
 
 /**
@@ -456,15 +466,19 @@ export function imageSinks(entries) {
  * since the file carries every byte.
  * @param {Function} fn
  */
-const compact = fn =>
+export const compactSource = fn =>
   String(fn)
     .replace(/\/\*\*[^]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
     .replace(/\n\s*/g, '\n')
     .replace(/\n+/g, '\n');
 
-/** The installer, with the srcset reader and the image rule it uses, as one expression. */
-const SINKS = `(carried => (${compact(installImageSinks)})(carried, ${compact(parseSrcset)}, ${compact(formatSrcset)}, ${compact(showsImage)}))`;
+/**
+ * The installer, with the srcset reader and the image rule it uses, as one
+ * expression. It takes a function that builds the carried map with that
+ * reader.
+ */
+const SINKS = `(build => ((parse, format, shows) => (${compactSource(installImageSinks)})(build(parse), parse, format, shows))(${compactSource(parseSrcset)}, ${compactSource(formatSrcset)}, ${compactSource(showsImage)}))`;
 
 /**
  * Put the carried data where the browser takes an image's address; see
