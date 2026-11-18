@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx doctor`'s font check no longer asks you to confirm a font service stylesheet (such as a Google Fonts `@import`) that names its families. A family the stylesheet does not name now fails with no proven loader, and the fix names the package that loads it (`@fontsource/jetbrains-mono`).
+[fix] `astryx doctor`'s font check no longer asks you to confirm a font service stylesheet (such as a Google Fonts `@import`) that names its families. A family the stylesheet does not name is a warning that names it, and the fix names the package that loads it when one does (`@fontsource/jetbrains-mono`).
 
 - `astryx experimental theme editor set … corners`: whole-theme corners name the parts the theme gives corners of their own (a border radius or corners set on a dialog, the menus) as kept, with the undo lines that hand them back to the dial.
 

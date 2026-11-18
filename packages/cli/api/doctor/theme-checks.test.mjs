@@ -1973,7 +1973,7 @@ describe('app-theme doctor checks', () => {
     }
   });
 
-  it('check 9 fails for a family the font service URL does not name, which nothing loads', async () => {
+  it('check 9 warns, naming it, for a family the font service URL does not name', async () => {
     const {dir} = await fixture([
       {
         slug: 'ocean',
@@ -1984,8 +1984,9 @@ describe('app-theme doctor checks', () => {
     ]);
 
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
-      status: 'fail',
-      message: 'Named font families have no proven loader (ocean: Ocean Sans).',
+      status: 'warn',
+      message:
+        'The font service stylesheet each theme imports does not name ocean: Ocean Sans.',
     });
   });
 
@@ -2001,14 +2002,13 @@ describe('app-theme doctor checks', () => {
 
     const result = check(await checkAppThemes(dir), 'theme-fonts');
     expect(result).toMatchObject({
-      status: 'fail',
+      status: 'warn',
       message:
-        'Named font families have no proven loader (ocean: JetBrains Mono).',
+        'The font service stylesheet each theme imports does not name ocean: JetBrains Mono.',
     });
     expect(result.fix).toMatch(
-      /^Install the packages that load them \(.*@fontsource\/jetbrains-mono\)/,
+      /install the packages that load them \(.*@fontsource\/jetbrains-mono\)/,
     );
-    expect(result.fix).not.toMatch(/font service/);
   });
 
   it('check 9 follows a local font import, a relative file or a package stylesheet, and proves its families', async () => {
