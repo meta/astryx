@@ -2511,7 +2511,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page.tsx'),
       "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
     );
-    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
     expect(run.json.data.notCarried).toEqual(['chart.config.json']);
@@ -2527,7 +2527,7 @@ describe('render(): a page outside a project', () => {
     expect(note).toContain('Carried files (1): page.tsx\n  Not carried: chart.config.json (--reverse cannot give them back)\n');
     expect(note).not.toContain('come back exactly');
     expect(note).toContain('It also carries the source of the page, except the files named under "Not carried" below; --reverse gives back the rest.');
-    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['chart.config.json']});
   }, 60_000);
@@ -2542,7 +2542,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page.tsx'),
       "import {rows} from './rows.test';\nimport cfg from './chart.config.json';\nexport default function Page() {\n  return <main><h1>{cfg.title}</h1><p>{rows.join(' ')}</p><img src=\"fake.png\" alt=\"\" /></main>;\n}\n",
     );
-    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
     expect([...run.json.data.notCarried].sort()).toEqual(['chart.config.json', 'fake.png', 'rows.test.ts']);
@@ -2566,12 +2566,12 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(tree, 'chart.config.json'), JSON.stringify({title: 'Sales'}));
     fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart.config.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
     const {NODE_PATH: _, ...env} = process.env;
-    const run = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    const run = spawnSync(process.execPath, [BIN, 'experimental', 'export', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
     expect(run.status).toBe(0);
     expect(run.stdout).toMatch(/notCarried\W+chart\.config\.json/);
     fs.renameSync(path.join(tree, 'chart.config.json'), path.join(tree, 'chart-data.json'));
     fs.writeFileSync(path.join(tree, 'page.tsx'), "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title}</h1>;\n}\n");
-    const renamed = spawnSync(process.execPath, [BIN, 'experimental', 'render', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
+    const renamed = spawnSync(process.execPath, [BIN, 'experimental', 'export', 'page.tsx'], {cwd: tree, env, encoding: 'utf8', timeout: 60_000});
     expect(renamed.status).toBe(0);
     expect(renamed.stdout).not.toContain('notCarried');
   }, 60_000);
@@ -2586,7 +2586,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
     // The module it imports from there, and the one that module imports.
@@ -2601,11 +2601,11 @@ describe('render(): a page outside a project', () => {
     const note = html.slice(0, html.indexOf('-->'));
     expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (--reverse cannot give them back)');
     expect(note).not.toContain('come back exactly');
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
     // Rendered from the folder that holds both, the module is carried.
-    const whole = runBin(tree, ['experimental', 'render', 'page/page.tsx', '--out', 'whole.html']);
+    const whole = runBin(tree, ['experimental', 'export', 'page/page.tsx', '--out', 'whole.html']);
     expect(whole.status).toBe(0);
     expect(whole.json.data).not.toHaveProperty('notCarried');
     expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
@@ -2621,7 +2621,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'app/src/page.tsx'),
       "import {rows} from '../../shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'app/src'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'app/src'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.notCarried).toEqual(['../../shared/rows.ts']);
     expect(run.json.data.warnings).toContainEqual({
@@ -2644,7 +2644,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '@shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
     expect(run.json.data.notCarried).toEqual(['../shared/rows.ts']);
@@ -2671,14 +2671,14 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import rows from '../data/rows.json';\nimport '../data/site.css';\nexport default function Page() {\n  return <p className=\"rows\">{rows.join(' ')}</p>;\n}\n",
     );
-    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page/page.tsx', 'data/rows.json', 'data/site.css']);
     expect(run.json.data).not.toHaveProperty('notCarried');
     expect(run.json.data.warnings).toEqual([]);
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html.slice(0, html.indexOf('-->'))).not.toContain('Not carried');
-    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: true, output: 'page-restored/page/page.tsx'});
     expect(back.json.data).not.toHaveProperty('missing');
@@ -2689,7 +2689,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page/page.tsx'),
       "import rows from '../data/rows.json';\nexport default function Page() {\n  return <p><img src=\"../data/dot.png\" alt=\"\" />{rows.join(' ')}</p>;\n}\n",
     );
-    const shown = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx', '--out', 'shown.html']);
+    const shown = runBin(path.join(tree, 'page'), ['experimental', 'export', 'page.tsx', '--out', 'shown.html']);
     expect(shown.status).toBe(0);
     expect(shown.json.data.files).toEqual(['page/page.tsx', 'data/rows.json']);
     expect(shown.json.data.notCarried).toEqual(['data/dot.png']);
@@ -2701,7 +2701,7 @@ describe('render(): a page outside a project', () => {
     fs.mkdirSync(tree, {recursive: true});
     fs.writeFileSync(path.join(tree, 'site.scss'), '$c: teal;\np { color: $c; }\n');
     fs.writeFileSync(path.join(tree, 'page.tsx'), "import './site.scss';\nexport default function Page() {\n  return <p>Sales</p>;\n}\n");
-    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.notCarried).toEqual(['site.scss']);
     expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
@@ -2709,7 +2709,7 @@ describe('render(): a page outside a project', () => {
     const note = html.slice(0, html.indexOf('-->'));
     expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
     expect(note).not.toContain('come back exactly');
-    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.json.data).toMatchObject({exact: false, missing: ['site.scss']});
   }, 60_000);
 
@@ -2721,7 +2721,7 @@ describe('render(): a page outside a project', () => {
       path.join(tree, 'page.tsx'),
       "import cfg from './chart-data.json';\nexport default function Page() {\n  return <h1>{cfg.title} in {cfg.unit}</h1>;\n}\n",
     );
-    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx', 'chart-data.json']);
     expect(run.json.data).not.toHaveProperty('notCarried');
@@ -2729,7 +2729,7 @@ describe('render(): a page outside a project', () => {
     const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
     expect(html).not.toContain('Not carried');
     expect(html).toContain('so the page can come back exactly.');
-    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({exact: true, files: expect.arrayContaining(['page-restored/page.tsx', 'page-restored/chart-data.json'])});
     expect(back.json.data).not.toHaveProperty('missing');
