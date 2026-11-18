@@ -114,8 +114,7 @@ run.
 
 - **FR2 — Results never throw.**
   - Synchronous members (`isAvailable()`, `AstryxCrashReports.isEnabled()`,
-    , `isFrameRecorderAvailable()`) read the
-    constants and never throw; they answer `false` or `null` where the module
+    `isFrameRecorderAvailable()`) read the constants and never throw; they answer `false` or `null` where the module
     or the constant is absent.
   - Every asynchronous call resolves `AstryxResult` and never rejects
     (`spec:AST-112/FR6`). Each module adds only these reasons to the common
