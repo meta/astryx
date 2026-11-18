@@ -86,6 +86,22 @@ export default function Page() {
 }
 `;
 
+/**
+ * A source that renders a Core export Core does not document, under a name
+ * an integration documents.
+ */
+const CORE_SIZE_SOURCE = `import {Card} from '@astryxdesign/core/Card';
+import {SizeProvider} from '@astryxdesign/core/SizeContext';
+
+export default function Page() {
+  return (
+    <SizeProvider size="sm">
+      <Card />
+    </SizeProvider>
+  );
+}
+`;
+
 /** A source that renders nothing `astryx component` answers. */
 const EMPTY_SOURCE = `import {Tooltip} from 'recharts';
 
@@ -127,6 +143,7 @@ function makeConsumer(templates) {
       exports: {
         './AcmeBadge': './src/AcmeBadge.tsx',
         './Button': './src/Button.tsx',
+        './SizeProvider': './src/SizeProvider.tsx',
       },
     }),
   );
@@ -165,6 +182,22 @@ function makeConsumer(templates) {
       props: [],
     })};\n`,
   );
+  // A component Core does not document, under a name a Core module exports.
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'SizeProvider.tsx'),
+    'export function SizeProvider() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'src', 'SizeProvider.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'component',
+      name: 'SizeProvider',
+      displayName: 'Acme Size Provider',
+      import: '@acme/widgets/SizeProvider',
+      usage: {description: 'Sets the size below it.'},
+      props: [],
+    })};\n`,
+  );
   for (const [id, source] of Object.entries(templates)) {
     fs.writeFileSync(
       path.join(pkgDir, 'templates', `${id}.doc.mjs`),
@@ -181,6 +214,7 @@ beforeEach(() => {
     'acme-mixed': MIXED_SOURCE,
     'acme-empty': EMPTY_SOURCE,
     'acme-button': BUTTON_SOURCE,
+    'acme-core-size': CORE_SIZE_SOURCE,
   });
   process.chdir(tmpDir);
 });
@@ -344,6 +378,20 @@ describe('a name more than one package answers', () => {
       );
       expect(read.status).toBe(0);
       expect(JSON.parse(read.stdout).package).toBe('@astryxdesign/core');
+    },
+    SLOW,
+  );
+});
+
+describe('a name only another package documents', () => {
+  it(
+    'is left out, so the read never opens that package',
+    async () => {
+      const res = await template('acme-core-size', {
+        targetPath: './out',
+        cwd: tmpDir,
+      });
+      expect(res.data.components).toEqual(['Card']);
     },
     SLOW,
   );
