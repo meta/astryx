@@ -76,6 +76,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  ASPECT_SETTINGS,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -1091,6 +1092,42 @@ documentTypoWords([...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)]);
 documentTypoWords(systemFontFamilies());
 
 /** The theme-wide dial or token for a CSS property typed with no part. */
+/**
+ * The whole-theme tokens the aspect a CSS property belongs to names
+ * (ASPECT_SETTINGS), of the kind the value is (a color, a length, a
+ * number), which Core defines.
+ * @param {any} ctx
+ * @param {string} prop
+ * @param {string} value
+ * @returns {string[]}
+ */
+function aspectTokensFor(ctx, prop, value) {
+  const v = String(value).trim();
+  const kind = parseColor(v)
+    ? 'color'
+    : /^-?\d*\.?\d+(?:px|rem|em)$/i.test(v)
+      ? 'size'
+      : /^-?\d*\.?\d+$/.test(v)
+        ? 'number'
+        : null;
+  if (!kind) return [];
+  const TOKENS = ctx.project.core.tokenDefaults ?? {};
+  return [
+    ...new Set(
+      Object.values(ASPECT_SETTINGS)
+        .filter(list => list.includes(prop))
+        .flat()
+        .filter(
+          t =>
+            t.startsWith('--') &&
+            !t.endsWith('*') &&
+            Object.hasOwn(TOKENS, t) &&
+            ctx.C?.typeOf?.(t) === kind,
+        ),
+    ),
+  ];
+}
+
 const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
   'border-radius': 'corners',
   'font-size': 'text-size',
@@ -7790,6 +7827,14 @@ function checkOne(
                     `${P} set ${slug} ${token} ${quoteCommandArgument(v)}${m ? ` --mode ${m}` : ''}`;
                   return mode ? [line(mode), line('')] : [line('')];
                 })()
+              : []),
+            // (Else the whole-theme token the property's aspect names, of
+            // the kind the value is: `border-width 2px` is --border-width,
+            // `font-weight 300` --text-body-weight.)
+            ...(v && !WHOLE_THEME_EQUIVALENT[prop]
+              ? aspectTokensFor(ctx, prop, v).map(
+                  t => `${P} set ${slug} ${t} ${quoteCommandArgument(v)}`,
+                )
               : []),
             `${HOW} ${quoteCommandArgument(prop)}`,
           ],

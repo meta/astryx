@@ -714,6 +714,33 @@ export const FEELS = (() => {
   return out;
 })();
 
+/**
+ * The settings each aspect names (dials, CSS properties and whole-theme
+ * tokens; `*` matches a prefix): what a reset of the aspect clears, and
+ * the whole-theme token a property said with no part is offered as.
+ */
+export const ASPECT_SETTINGS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    corners: ['corners', 'border-radius', '--radius-*'],
+    spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
+    family: ['font', 'font-family', '--font-family-*'],
+    background: ['background', 'background-color'],
+    text: ['color', '--color-text-*'],
+    shadow: ['box-shadow', 'surfaces', '--shadow-*'],
+    border: [
+      'border',
+      'border-width',
+      'border-color',
+      '--border-width',
+      '--color-border',
+    ],
+    weight: ['headings', 'font-weight', '--text-body-weight'],
+    fontsize: ['text-size', 'type', 'font-size'],
+    leading: ['leading', 'line-height', '--text-body-leading'],
+    tracking: ['letter-spacing'],
+  }),
+);
+
 /** CSS properties grouped by the aspect of a part they change. */
 export const GROUPS = wordTable(
   /** @type {Record<string, string[]>} */ ({

@@ -38,6 +38,7 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
+  ASPECT_SETTINGS,
   FEELS,
   LIKE,
   wordTable,
@@ -4548,29 +4549,6 @@ function withoutFunctions(text) {
   }
   return out;
 }
-
-/** The settings each aspect names, for a reset; `*` matches a prefix. */
-const RESET_THINGS = wordTable(
-  /** @type {Record<string, string[]>} */ ({
-    corners: ['corners', 'border-radius', '--radius-*'],
-    spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
-    family: ['font', 'font-family', '--font-family-*'],
-    background: ['background', 'background-color'],
-    text: ['color', '--color-text-*'],
-    shadow: ['box-shadow', 'surfaces', '--shadow-*'],
-    border: [
-      'border',
-      'border-width',
-      'border-color',
-      '--border-width',
-      '--color-border',
-    ],
-    weight: ['headings', 'font-weight', '--text-body-weight'],
-    fontsize: ['text-size', 'type', 'font-size'],
-    leading: ['line-height', '--text-body-leading'],
-    tracking: ['letter-spacing'],
-  }),
-);
 
 /** Words for a color the theme generates: the word, its dial, its token. */
 const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
@@ -19040,7 +19018,7 @@ export function draftAnswer(ctx, env, question) {
       return null;
     const role = ROLE_DIALS.find(([re]) => re.test(c.text));
     const things = [
-      ...c.aspects.flatMap(a => RESET_THINGS[a] ?? []),
+      ...c.aspects.flatMap(a => ASPECT_SETTINGS[a] ?? []),
       ...(role ? [role[1], role[2]] : []),
     ];
     const on = c.parts[0]?.on;
