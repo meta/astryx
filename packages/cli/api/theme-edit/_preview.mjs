@@ -74,6 +74,7 @@ import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
 import {LOW_CONTRAST_PREFIX} from '../../foundation/render/drawn-contrast.mjs';
+import {PART_BOXES_PREFIX} from '../../foundation/render/part-boxes.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -2143,7 +2144,7 @@ export async function screenshot(
 }
 
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], boxes?: Record<string, Array<[number, number]>>, cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
 /** The time a batch adds to its browser's bound for each page after the first. */
@@ -2163,8 +2164,9 @@ const PAGE_BOUND_MS = 20_000;
  * took the picture, each with whether its part keeping its width draws it
  * whole; absent when that browser's script measured nothing.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string, mode: 'light' | 'dark'}>} jobs
- *   absolute paths
+ * @param {Array<{html: string, png: string, mode: 'light' | 'dark', boxes?: string[]}>} jobs
+ *   absolute paths; `boxes`: parts whose drawn sizes the picture measures
+ *   (its result's `boxes`)
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
  * @returns {Promise<PictureResult[]>}
@@ -2272,6 +2274,7 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
         ],
         ...measuredCutShort(out),
         ...measuredLowContrast(out),
+        ...measuredBoxes(out),
       });
     }
     if (results.length === jobs.length) return results;
@@ -2310,6 +2313,92 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
         },
   );
   return results;
+}
+
+/**
+ * How much each part's drawn size changes from one page to another (the
+ * sheet before a change and after it): both pictured in one browser run,
+ * each part's boxes measured, and the largest growth of a box at the same
+ * place in the page taken, in px. A part not drawn on both pages is
+ * counted as not drawn. The pictures themselves are not kept.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} before absolute path of the page before
+ * @param {string} after absolute path of the page after
+ * @param {string[]} parts
+ * @param {'light' | 'dark'} mode
+ * @returns {Promise<{changes: Array<{part: string, width: number, height: number, drawn: number}>} | {problem: string}>}
+ */
+export async function partSizeChanges(project, before, after, parts, mode) {
+  const pngs = [before, after].map(h => h.replace(/\.html$/, '.png'));
+  /** @type {PictureResult[]} */
+  let shots;
+  try {
+    shots = await screenshots(project, [
+      {html: before, png: pngs[0], mode, boxes: parts},
+      {html: after, png: pngs[1], mode, boxes: parts},
+    ]);
+  } finally {
+    for (const p of pngs) fs.rmSync(p, {force: true});
+  }
+  const [a, b] = shots;
+  if (!a?.ok || !b?.ok)
+    return {
+      problem:
+        (a && !a.ok ? a.reason : b && !b.ok ? b.reason : null) ??
+        'no picture was taken',
+    };
+  return {changes: boxChanges(parts, a.boxes ?? {}, b.boxes ?? {})};
+}
+
+/**
+ * How much each part's drawn boxes grow from one measurement to another:
+ * the largest growth in width and in height of a box at the same place in
+ * the page, in px, to a hundredth (0 when none grows; a box that shrinks
+ * does not count), and how many boxes both measurements draw.
+ * @param {string[]} parts
+ * @param {Record<string, Array<[number, number]>>} was
+ * @param {Record<string, Array<[number, number]>>} now
+ * @returns {Array<{part: string, width: number, height: number, drawn: number}>}
+ */
+export function boxChanges(parts, was, now) {
+  const round = (/** @type {number} */ n) => Math.round(n * 100) / 100;
+  return parts.map(part => {
+    const a = was[part] ?? [];
+    const b = now[part] ?? [];
+    const drawn = Math.min(a.length, b.length);
+    let width = 0;
+    let height = 0;
+    for (let i = 0; i < drawn; i++) {
+      width = Math.max(width, b[i][0] - a[i][0]);
+      height = Math.max(height, b[i][1] - a[i][1]);
+    }
+    return {part, width: round(width), height: round(height), drawn};
+  });
+}
+
+/**
+ * What a change of size says about the parts it measured: how much each
+ * part that grows grows, else that they keep their size; null when none
+ * of them is drawn.
+ * @param {Array<{part: string, width: number, height: number, drawn: number}>} changes
+ * @param {string} cause what grew them ("the added border")
+ * @returns {string | null}
+ */
+export function sizeChangeNote(changes, cause) {
+  const drawn = changes.filter(x => x.drawn);
+  if (!drawn.length) return null;
+  const grows = drawn.filter(x => x.width > 0 || x.height > 0);
+  if (!grows.length)
+    return `${drawn.map(x => x.part).join(', ')} keeps its size with ${cause} (measured on the sheet, at rest and in each state it draws)`;
+  return grows
+    .map(
+      x =>
+        `${x.part} grows by ${[
+          ...(x.height > 0 ? [`${x.height}px in height`] : []),
+          ...(x.width > 0 ? [`${x.width}px in width`] : []),
+        ].join(' and ')} (${cause}; measured on the sheet)`,
+    )
+    .join('; ');
 }
 
 /** The generic families any font of a common kind stands in for. */
@@ -2413,6 +2502,36 @@ function measuredLowContrast(stdout) {
         /^#[0-9a-f]{6}$/.test(String(x.bg)),
     ),
   };
+}
+
+/**
+ * The part sizes a picture script measured, from the line it prints after
+ * `PART_BOXES_PREFIX`; nothing when it printed none that reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{boxes?: Record<string, Array<[number, number]>>}}
+ */
+function measuredBoxes(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(PART_BOXES_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(PART_BOXES_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!found || typeof found !== 'object' || Array.isArray(found)) return {};
+  /** @type {Record<string, Array<[number, number]>>} */
+  const boxes = {};
+  for (const [part, list] of Object.entries(found))
+    if (Array.isArray(list))
+      boxes[part] = list.filter(
+        (/** @type {unknown} */ b) =>
+          Array.isArray(b) &&
+          b.length === 2 &&
+          b.every(n => typeof n === 'number'),
+      );
+  return {boxes};
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */
