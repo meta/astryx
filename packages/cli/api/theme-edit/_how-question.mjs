@@ -8958,7 +8958,12 @@ export function draftAnswer(ctx, env, question) {
         !c.parts.some(
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
         ) &&
-        !(FAMILIES[c.parts[0].on] ?? []).includes(holder)
+        !(FAMILIES[c.parts[0].on] ?? []).includes(holder) &&
+        // (Only a part the head holds: "cards tinted blue with a navy
+        // header" names the app's header, which no card holds.)
+        [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(x =>
+          (C.MAP[holder].contains ?? []).includes(x),
+        )
       ) {
         c.container = holder;
         c.placeStrict = {holder, part: c.parts[0].on};
