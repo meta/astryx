@@ -83,12 +83,16 @@ it('on a page with both kinds of sheet menu, opens the caller-content sheet whil
     fireEvent.click(screen.getByRole('button', {name: /Project actions/}));
   });
   await settleLoads();
+  // Only the ContextMenu sheet is open: the DropdownMenu sheet is not shown
+  // with its heading alone.
+  expect(document.querySelectorAll('dialog[open]')).toHaveLength(1);
   expect(screen.queryByRole('button', {name: 'Edit project'})).toBeNull();
   await act(async () => {
     modules.release();
     await import('./MenuBottomSheetActionList');
   });
   await settleLoads();
+  expect(document.querySelectorAll('dialog[open]')).toHaveLength(2);
   expect(screen.getByRole('button', {name: 'Edit project'})).toBeVisible();
   expect(screen.getByRole('button', {name: 'Archive'})).toBeVisible();
 });

@@ -21,7 +21,7 @@
  * module loader again (a loader that retries then loads it; a browser does not
  * fetch a native module again once its import failed).
  *
- * Neither wrapper renders on the server or in the render that hydrates server
+ * No wrapper renders on the server or in the render that hydrates server
  * HTML (spec:AST-013 FR9): a lazy component that has not loaded yet would
  * leave server markup incomplete and abort hydration. The closed sheet has no
  * visible markup, so it first renders right after hydration.
