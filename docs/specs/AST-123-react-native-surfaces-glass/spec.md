@@ -31,8 +31,8 @@ effect where content scrolls under a bar. On Android they paint the theme's
 tonal fill. In every case the content stays on screen, the surface follows the
 app's light or dark mode, Reduce Transparency gives a solid surface, and
 Increase Contrast a solid or outlined one. The developer picks the look with
-component props and the theme's native intent, never with a glass component,
-writes one tree for both platforms, and never checks the OS version.
+component props and the theme's native intent, writes one tree for both
+platforms, and the library adapts the look to each OS version.
 
 This record details the platform's system materials in the core of
 `spec:AST-112` (`spec:AST-112/FR1`). It follows `spec:AST-140`, which owns
@@ -58,10 +58,10 @@ and a token fill.
   shape morphs without JavaScript per frame, in one view that also runs on
   Android (FR3, FR4, DEC-1, DEC-5).
 - `AstryxGlassContainerView`: neighbouring glass in the library's bars joins
-  into one shape only inside a glass container (FR5). Whether it and
+  into one shape inside a glass container (FR5). Whether it and
   `AstryxMaterialView` stay separate from `AstryxGlassView` is OQ1.
 - `AstryxScrollEdgeView`: a bar built in React gets the system's scroll-edge
-  effect only when the bar registers with that edge, and the library builds
+  effect by registering with that edge, and the library builds
   its own bars in React (`spec:AST-112/DEC-9`, FR8, DEC-4).
 
 ## Who uses it
@@ -75,61 +75,39 @@ and a token fill.
 
 ## Non-goals
 
-- The contract of each component that paints a surface (its size, colours,
-  layout, and states). Each component's own record and `spec:AST-082/FR3` own
-  it; this record owns the native surfaces and the paint rules they share.
-- Equivalent internal implementations remain valid when they satisfy this
-  contract.
-- Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. In that case, state who depends on it and why an equivalent
-  implementation would not satisfy the contract.
-- Surfaces the system presents through the presentation and menu hosts (a
-  system sheet, alert, action sheet, or menu): their material is the system's,
-  and the menus and presentation record owns them. This record covers the
-  overlays the library builds.
-- The system bars that the `navigation` hosts present (`UINavigationBar`,
-  `UITabBar`, and their glass). The navigation hosts' record owns them.
-- A simulated backdrop blur on Android (DEC-2).
-- Following the system's Clear or Tinted Liquid Glass setting. iOS offers no
-  public way to read it; library surfaces use the variant and tint the app sets.
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app
-  (`spec:AST-141`) are separate products; they conform to this record's
-  contracts.
+None.
 
 ## Requirements
 
-- **FR1 — Glass and material are a look, not a component.** An app chooses the
-  look; it never renders a glass or material component:
+- **FR1 — Glass and material are a look.** An app chooses the look through
+  component props and theme intent, and the native views that render it stay
+  internal behind the library's components:
   - Component props: every library surface in this record takes `surface`.
     The bars, bar buttons, tab accessory, and search field default to `glass`
     (chrome glass); the overlays the library builds and floating surfaces
     default to `material` and follow FR7. `IconButton` and `Button` default to
-    `plain`, where they keep the paint their own record gives them and use
-    none of the native components, and draw glass with `surface="glass"`. On
-    a bar, an overlay, or a floating surface, `surface="plain"` drops the look
-    and the scroll edge (FR7, FR8).
+    `plain`, where they keep the paint their own record gives them, and draw
+    glass with `surface="glass"`. On a bar, an overlay, or a floating surface,
+    `surface="plain"` paints with tokens and leaves out the scroll edge (FR7,
+    FR8).
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
     or in a `platforms.ios` or `platforms.android` entry (`spec:AST-082/FR10`),
     sets the look for every surface (FR7).
-  - Rendering: `render` and `surface` are as `spec:AST-112/FR21` states. A
-    `plain` surface uses none of the native components; FR7 gives a `plain`
-    bar, overlay, or floating surface its token paint.
+  - Rendering: `spec:AST-112/FR21` defines `render` and `surface`. A `plain`
+    surface paints with tokens, as FR7 gives a `plain` bar, overlay, or
+    floating surface.
   - The library's own surfaces here (bars, bar buttons, glass buttons, the
-    overlays it builds, and floating surfaces) are `drawn`, with
-    `surface="glass"` or `surface="material"` for the look. The native
-    components in this record render that look under the drawn element, so the
-    element stays `drawn`; on Android the look paints as FR9 states. Where one
+    overlays it builds, and floating surfaces) are `drawn`, and the native
+    components in this record render their `glass` or `material` look under
+    the drawn element; on Android the look paints as FR9 states. Where one
     of these components has a `system` form (a host-presented bar, a system
     menu or sheet), the navigation hosts' or the menus and presentation record
     owns that form.
   - `AstryxGlassView`, `AstryxGlassContainerView`, `AstryxMaterialView`, and
     `AstryxScrollEdgeView` are internal platform components that render the
     look: system glass and materials on iOS, the library's token fill or a
-    Material surface on Android. `.` exports no glass or material component, layout helper, or
-    probe.
+    Material surface on Android. `.` exports the components that use them;
+    the native views, their layout helpers, and their probes stay internal.
   - FR1 gap: `.` exports GlassSurface, GlassGroup, GlassContainerView,
     NativeGlassView, MaterialView, MaterialSurface, MaterialGroup,
     MaterialBackdrop and NativeScrollEdgeView (and their helpers) as public
@@ -169,7 +147,7 @@ and a token fill.
     the touch target and lets touches outside that shape through;
     `pointerEvents="box-none"` lets every such touch through; `none` and
     `box-only` behave as on a View.
-  - The library renders Liquid Glass only where the binary registers the view
+  - The library renders Liquid Glass where the binary registers the view
     on iOS 26 or later.
 - **FR4 — Glass moves without JavaScript per frame.** The motion runs on the
   UI thread (`spec:AST-140/FR6`):
@@ -177,8 +155,9 @@ and a token fill.
     on screen, through its own frame or a parent's, makes the glass spring from
     its old shape to the new one while the children jump to their new place. A
     move is measured relative to the enclosing glass container, or else the
-    enclosing scroll view, or else the window, so a scroll alone never springs
-    the glass. Neither the first layout nor a morph-only change springs.
+    enclosing scroll view, or else the window, so the spring follows real
+    moves. A scroll, the first layout, and a morph-only change keep the
+    current shape.
   - `morphFrom` and `morphTo` are two rectangles with corner radii, in the
     view's own coordinates; `progress` between 0 and 1 blends the glass shape
     between them. A native-driver `Animated` value can drive `progress`, and a
@@ -189,9 +168,8 @@ and a token fill.
   points, default 0) groups the glass placed inside it. On iOS 26 and later its
   children sit in a `UIGlassContainerEffect` view, so two glass shapes closer
   than `spacing` render as one blended piece of glass and blend apart again as
-  they separate. Before iOS 26 it only contains its children. It paints nothing
-  itself, and touches that hit none of its children go to whatever lies beneath
-  it.
+  they separate. Before iOS 26 it contains its children. It is transparent
+  itself, and a touch outside its children passes to whatever lies beneath it.
 - **FR6 — Surfaces use the app's colour mode.** The native views take
   `colorScheme`: `light` or `dark` fixes the material's appearance, and
   `unspecified` tracks the OS. Unless the library fixes a mode, a surface uses
@@ -220,7 +198,7 @@ and a token fill.
     for floating surfaces: `opaque`, `translucent`, or `material`; when the app
     does not set it, floating surfaces take `opaque` unless the theme asks for
     the system material. Overlays read it only when the app sets it
-    explicitly. It never overrides a theme whose `material` is `opaque`.
+    explicitly. A theme whose `material` is `opaque` takes precedence over it.
   - `opaque` is the solid theme surface with an outline at the theme's border
     width. The outline uses the secondary text colour under Increase Contrast,
     the emphasized border colour under Reduce Transparency, and the regular
@@ -234,11 +212,11 @@ and a token fill.
   | Overlays the library builds (menus, popovers, sheets, dialogs)                 | `native` (system glass under the content, clear fill) on iOS 26 or later when the overlay's `surface` is not `plain` and `AstryxMaterialView` is present, whether or not the app sets `surfaceMaterial`; otherwise `opaque`. `opaque` also applies with Reduce Transparency on, when the app explicitly sets `surfaceMaterial="opaque"`, and to the menus and `Selector` picker the library builds at accessibility text sizes (FR10). |
   - `translucent` is the surface's token colour with its alpha scaled by the
     intensity (0.6, 0.72, 0.82, 0.9, and 0.94 from `ultraThin` to `chrome`) and
-    a one-pixel outline. Overlays have no `translucent` paint.
+    a one-pixel outline. Overlays paint `native` or `opaque`.
   - Grouped chrome uses `AstryxGlassContainerView` for the `glass` and
     `native` paints and a plain View for the others.
   - `surface="plain"` on a bar, an overlay, or a floating surface sends it to
-    the token paints and uses none of the native components. Overlays paint
+    the token paints. Overlays paint
     `opaque`. Chrome and floating surfaces
     paint `opaque` when Reduce Transparency, Increase Contrast, a theme
     `material: 'opaque'`, their props, or (floating surfaces) `surfaceMaterial`
@@ -257,7 +235,7 @@ and a token fill.
     `edge` to `effect` (`UIScrollEdgeEffect`) and registers itself as that
     edge's element container (`UIScrollEdgeElementContainerInteraction`). The
     effect then spans the whole bar and shapes itself around the bar's controls
-    and text, as it does for a system bar. Before iOS 26 the view only contains
+    and text, as it does for a system bar. Before iOS 26 the view contains
     its children.
   - Target: the scroll view whose `nativeID` matches `scrollViewNativeID`
     (ScrollView, FlatList, and SectionList accept a `nativeID`), or else the
@@ -281,19 +259,19 @@ and a token fill.
   border radius, and paints its fallback (`spec:AST-140/FR2`):
   - Android registers `AstryxGlassView` as an ordinary view group, so a tree
     that renders it runs as is; the glass props are accepted and do nothing,
-    and touches hit its full box. Android has no material view: where FR7
-    would choose `glass` or `native`, chrome and floating surfaces use
-    `translucent` instead, and overlays use `opaque`. Android registers none of the other three views.
-  - Where the scroll-edge view is missing, the library draws its own fallback
-    edge or none.
+    and touches hit its full box. Where FR7 would choose `glass` or `native`,
+    Android paints chrome and floating surfaces `translucent` and overlays
+    `opaque`. Android registers the glass view alone of the four.
+  - Where the scroll-edge view is missing, the bar keeps its own paint at the
+    edge.
   - Before iOS 26 the two glass views paint the system blur material (FR2,
-    FR3), and the container and scroll-edge views only contain their children.
+    FR3), and the container and scroll-edge views contain their children.
 - **FR10 — Accessibility.**
   - Surfaces are decorative. A surface passes the component's accessibility
-    props to whichever view renders it, native or plain, and contributes no
-    accessibility element itself, so VoiceOver and TalkBack reach the content
-    inside. The scroll-edge view's helper element for UIKit is hidden from
-    assistive technologies and ignores touches.
+    props to whichever view renders it, native or plain, and VoiceOver and
+    TalkBack reach the content inside it directly. The scroll-edge view's
+    helper element for UIKit is hidden from assistive technologies and lets
+    touches through.
   - With Reduce Transparency or Increase Contrast on, chrome and floating
     surfaces switch to `opaque`, with the outline colour FR7 gives each
     setting. Overlays switch to `opaque` for Reduce Transparency; for Increase
@@ -303,8 +281,8 @@ and a token fill.
   - With Show Borders on, an interactive surface in a `translucent` or
     `opaque` paint shows the outline iOS draws on glass in that setting.
   - Reduce Motion removes the layout spring (FR4). At accessibility text sizes,
-    menus and the `Selector` picker the library builds use an opaque fill, so large text is
-    never shown through glass over other content.
+    menus and the `Selector` picker the library builds use an opaque fill, so
+    large text always sits on a solid surface.
 - **FR11 — The native contract.**
 
   | Contract                   | Kind                                       | Props                                                                                                                                                            | Commands | Events | Platforms    |
@@ -319,12 +297,12 @@ and a token fill.
   - The native code uses public platform API only: public UIKit on iOS and
     public Android SDK classes on Android. The one exception is React Native's
     record of the props its native driver manages, which the glass view reads so
-    a React commit does not reset a driven `progress` (FR4); React Native marks
-    that record unstable, and without it a commit puts back the JavaScript value.
+    a React commit keeps a driven `progress` (FR4); React Native marks that
+    record unstable.
   - On the wire, `colorScheme` is `unspecified` (follow the OS), `light`, or
     `dark`. `shape: 'capsule'`, like any negative radius, rounds to half the
     shorter side.
-  - The contracts evolve under `spec:AST-140/FR5`.
+  - The contracts grow by named features (`spec:AST-140/FR5`).
 
 ### Platform support
 
@@ -337,7 +315,7 @@ and a token fill.
 
 - Supported feature/engine floor: the floor of `spec:AST-112`. Liquid Glass,
   glass grouping, and scroll-edge effects need iOS 26 and later; the system blur
-  materials cover earlier iOS; Android draws no backdrop material.
+  materials cover earlier iOS; Android paints the token fills.
 - Unsupported behavior: where a native view is absent, the library renders the
   content in a plain View and paints its fallback (FR7, FR9);
   a binary that lacks a named feature behaves as `spec:AST-140/FR5` states.
@@ -355,8 +333,8 @@ and a token fill.
 - Relies on `spec:AST-082` FR10 gaining `render.default` and `spec:AST-082`
   DEC-2 taking `surface` and `render` as presentation choices, as
   `spec:AST-112` amends them (`spec:AST-112/FR21`).
-- Relies on `spec:AST-140` FR5: each contract's baseline is its first
-  release's shape, and later behaviour is a named feature the binary reports.
+- Relies on `spec:AST-140` FR5: contracts grow by named features the binary
+  reports.
 
 ## Verification
 
@@ -388,21 +366,14 @@ nearby glass items join into one shape. `AstryxMaterialView` stays the leaf
 material for surfaces that only need a backdrop, such as overlays and
 toasts.
 
-Rejected: a backdrop leaf behind the content for chrome, because the glass then
-never responds to a press and cannot morph.
-
-### DEC-2 — Android paints the theme's fill, not a simulated glass
+### DEC-2 — Android paints the theme's fill
 
 **Reference:** `spec:AST-123/DEC-2`
 **Decider:** imdreamrunner, 2026-11-17
 
-Android offers no system material that blurs what lies behind a view, and its
-design language favours solid tinted surfaces.
-`AstryxGlassView` is a plain view on Android so one tree runs on both platforms,
-and the library paints the token fill at the intensity's alpha.
-
-Rejected: blurring with `RenderEffect`, because it applies to the view's own
-pixels rather than to the content behind the view.
+Android's design language favours solid tinted surfaces, so the library
+paints the token fill at the intensity's alpha. `AstryxGlassView` is a plain
+view on Android so one tree runs on both platforms.
 
 ### DEC-3 — Accessibility settings choose the library's solid paint
 
@@ -410,9 +381,8 @@ pixels rather than to the content behind the view.
 **Decider:** imdreamrunner, 2026-11-17
 
 Under Reduce Transparency and Increase Contrast, chrome and floating surfaces
-take the library's own opaque surface with an edge instead of UIKit's opaque
-glass, so they read the same on iOS and Android and the edge follows the
-theme. Overlays, which iOS draws in glass, keep the system glass
+take the library's own opaque surface with an edge, so they read the same on
+iOS and Android and the edge follows the theme. Overlays, which iOS draws in glass, keep the system glass
 and its outline under Increase Contrast and go opaque under Reduce
 Transparency (FR10).
 
@@ -427,9 +397,6 @@ Astryx router.
 It restores only the value it wrote, so it coexists with a system header on the
 same scroll view.
 
-Rejected: a scroll-view ref passed from the router, because a bar outside the
-router would get no edge effect.
-
 ### DEC-5 — Glass motion runs on the UI thread
 
 **Reference:** `spec:AST-123/DEC-5`
@@ -439,10 +406,7 @@ The layout spring starts natively from the mounting transaction that moved the
 glass, and the morph's `progress` takes a native-driver `Animated` value. Glass
 then moves at the display's frame rate while the JavaScript thread is busy.
 
-Rejected: shape props sent from JavaScript on every frame, because a busy
-JavaScript thread drops frames.
-
-### DEC-6 — Glass is a look the app asks for, not a component it renders
+### DEC-6 — Glass is a look the app asks for; its native views are internal
 
 **Reference:** `spec:AST-123/DEC-6`
 **Decider:** imdreamrunner, 2026-11-17
@@ -450,11 +414,10 @@ JavaScript thread drops frames.
 An app states the look through component props and the theme's native intent.
 The library then decides per platform, OS version, and accessibility setting
 whether system glass, a system material, a translucent token fill, or a solid
-surface renders it, and the native components stay free to change. The surface
-stays `drawn` in every case (`spec:AST-112/FR21`).
-
-Rejected: public glass and material components, because an app would hard-code
-one platform's effect and bypass the theme and accessibility rules.
+surface renders it. The native views stay internal behind the components, so
+every surface follows the theme and the accessibility rules on each platform
+and the native views stay free to change. The surface stays `drawn` in every
+case (`spec:AST-112/FR21`).
 
 ## Open questions
 
