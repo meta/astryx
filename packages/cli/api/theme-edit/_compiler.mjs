@@ -634,11 +634,24 @@ export function makeCompiler(project, parts) {
       info?.targets.find(x => x.className === `astryx-${target}`) ??
       info?.targets[0];
     const fromDocs = t?.values ?? {};
+    // (A doc that lists the part with no values for a prop, a shared
+    // indicator's doc, leaves them to another doc that lists the same part
+    // with them: CheckboxInput names its box's sizes.)
+    /** @param {string} p */
+    const elsewhere = p =>
+      Object.values(project.components ?? {})
+        .flatMap((/** @type {any} */ c) => c.targets ?? [])
+        .find(
+          (/** @type {any} */ x) =>
+            x.className === `astryx-${target}` && x.values?.[p]?.length,
+        )?.values[p];
     const seen = MAP[target]?.attrs ?? {};
     /** @type {Record<string, string[]>} */
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
-      out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+      out[p] = fromDocs[p]?.length
+        ? fromDocs[p]
+        : (elsewhere(p) ?? seen[p] ?? []);
     // A state Core marks with more than one value (a checkbox's checked and
     // indeterminate looks) is a condition --when names by value.
     for (const st of TARGET.get(target)?.states ?? [])

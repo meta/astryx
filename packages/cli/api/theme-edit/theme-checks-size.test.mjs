@@ -56,49 +56,68 @@ const lines = async (q, theme) => {
 };
 
 describe('the size of checkboxes and radios', () => {
-  it('steps the square a part sets itself, never spacing', async ctx => {
+  it('steps each size from its own value, never spacing', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('c', {cwd, like: 'neutral'});
+    // (The part data draws the md box only: sm is named, never given md's
+    // size.)
     expect(await lines('smaller checkboxes', 'c')).toEqual([
-      'set c width 20px --on checkbox-indicator --only',
-      'set c height 20px --on checkbox-indicator --only',
+      'set c width 20px --on checkbox-indicator --when size:md --only',
+      'set c height 20px --on checkbox-indicator --when size:md --only',
     ]);
+    const {data} = await themeEditHow('smaller checkboxes', {cwd, theme: 'c'});
+    expect(data.results[0].text).toMatch(/sm: no size the editor knows/);
     expect(await lines('bigger radio buttons', 'c')).toEqual([
-      'set c width 28px --on radio-indicator --only',
-      'set c height 28px --on radio-indicator --only',
+      'set c width 28px --on radio-indicator --when size:md --only',
+      'set c height 28px --on radio-indicator --when size:md --only',
     ]);
     expect(await lines('smaller checks', 'c')).toEqual([
-      'set c width 20px --on checks',
-      'set c height 20px --on checks',
+      'set c width 20px --on checks --when size:md',
+      'set c height 20px --on checks --when size:md',
     ]);
   });
 
-  it('gives a size typed to both sides, and steps from the theme’s own size', async ctx => {
+  it('steps from the theme\u2019s latest size, the part or its group', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('n', {cwd, like: 'neutral'});
     expect(await lines('13px checkboxes', 'n')).toEqual([
       'set n width 13px --on checkbox-indicator --only',
       'set n height 13px --on checkbox-indicator --only',
     ]);
+    await themeEditSet('n', 'width', '20px', {
+      cwd,
+      on: 'checkbox-indicator',
+      only: true,
+    });
+    await themeEditSet('n', 'height', '20px', {
+      cwd,
+      on: 'checkbox-indicator',
+      only: true,
+    });
     await themeEditSet('n', 'width', '13px', {cwd, on: 'checks'});
     await themeEditSet('n', 'height', '13px', {cwd, on: 'checks'});
-    // (The theme's 13px on the group, not Core's 24px.)
+    // (The group's 13px, set later, covers the part's 20px; every size.)
     expect(await lines('bigger checkboxes', 'n')).toEqual([
-      'set n width 17px --on checkbox-indicator --only',
-      'set n height 17px --on checkbox-indicator --only',
+      'set n width 17px --on checkbox-indicator --when size:sm --only',
+      'set n height 17px --on checkbox-indicator --when size:sm --only',
+      'set n width 17px --on checkbox-indicator --when size:md --only',
+      'set n height 17px --on checkbox-indicator --when size:md --only',
     ]);
-  });
-
-  it('refuses spacing on them with the size to use', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('s', {cwd, like: 'neutral'});
+    // The refusal names the theme's size, not Core's.
     const r = await refusal(() =>
-      themeEditSet('s', 'spacing', 'less', {cwd, on: 'checks'}),
+      themeEditSet('n', 'spacing', 'less', {cwd, on: 'checks'}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.message).toMatch(
-      /checks sets its own width and height \(24px by 24px\)/,
-    );
+    expect(r.message).toMatch(/\(13px by 13px\)/);
+    expect(r.message).not.toMatch(/share/);
     expect(r.run.some(x => /how "smaller checks"$/.test(x))).toBe(true);
+  });
+
+  it('leaves the switch, whose track Core lays out with its thumb', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('w', {cwd, like: 'neutral'});
+    expect(await lines('bigger switches', 'w')).not.toContainEqual(
+      expect.stringMatching(/ (width|height) \d+px --on switch/),
+    );
   });
 });
