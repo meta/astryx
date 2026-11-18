@@ -654,9 +654,14 @@ function DropdownMenuBottomSheet({
   const openSubmenus = resolveSubmenuPath(items, submenuPath);
   const currentSubmenu = openSubmenus.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
-  // A sub-menu whose row left `items` closes back to the deepest level that
-  // still resolves.
+  // A sub-menu whose row left `items`, or has no rows left, closes back to the
+  // deepest level that still resolves. Its key goes too, so the row coming
+  // back does not reopen it.
   const submenuDepth = openSubmenus.length;
+  if (submenuDepth < submenuPath.length) {
+    setSubmenuPath(submenuPath.slice(0, submenuDepth));
+    setSubmenuTitles(submenuTitles.slice(0, submenuDepth));
+  }
   const submenuKey = submenuPath
     .slice(0, submenuDepth)
     .map(key => key.id ?? `#${key.index}`)
@@ -1998,7 +2003,7 @@ interface SubmenuKey {
 
 /**
  * The open sub-menus' rows in the current `items`, outermost first. It stops
- * at the first key that no longer names a row with `items`.
+ * at the first key that no longer names a row with rows of its own.
  */
 function resolveSubmenuPath(
   items: ReadonlyArray<DropdownMenuOption>,
@@ -2010,7 +2015,7 @@ function resolveSubmenuPath(
     const rows = rowsOf(level);
     const row =
       key.id != null ? rows.find(item => item.id === key.id) : rows[key.index];
-    if (row?.items == null) {
+    if (row?.items == null || row.items.length === 0) {
       break;
     }
     resolved.push(row);

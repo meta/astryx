@@ -856,6 +856,79 @@ describe('DropdownMenu', () => {
     expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
   });
 
+  it('keeps an open sub-menu of the sheet closed when its removed row comes back', async () => {
+    const user = userEvent.setup();
+    let setHasMore: (value: boolean) => void = () => {};
+    function Returning() {
+      const [hasMore, setHasMoreState] = useState(true);
+      setHasMore = setHasMoreState;
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            ...(hasMore ? [{label: 'More', items: [{label: 'Inner'}]}] : []),
+          ]}
+        />
+      );
+    }
+    render(<Returning />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    expect(
+      await screen.findByRole('button', {name: 'Inner'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(false));
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    act(() => setHasMore(true));
+
+    expect(
+      await screen.findByRole('button', {name: 'More'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Inner'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
+  it('closes an open sub-menu of the sheet back to its parent when its last row leaves', async () => {
+    const user = userEvent.setup();
+    function Emptying() {
+      const [inner, setInner] = useState(['Clear this menu']);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: inner.map(label => ({
+                label,
+                hasCloseOnSelect: false,
+                onClick: () => setInner([]),
+              })),
+            },
+          ]}
+        />
+      );
+    }
+    render(<Emptying />);
+
+    await user.click(screen.getByRole('button', {name: /Options/}));
+    await user.click(await screen.findByRole('button', {name: 'More'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Clear this menu'}),
+    );
+
+    expect(
+      await screen.findByRole('button', {name: 'First'}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Back'})).toBeNull();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
