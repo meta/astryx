@@ -176,8 +176,9 @@ const styles = stylex.create({
 }
 
 @media (prefers-reduced-motion: reduce) and (pointer: coarse) {
-  /* Under a finger, a short cross-fade instead. */
-  .panel {
+  /* Under a finger, a short cross-fade instead, both ways. */
+  .panel,
+  .panel[data-hidden] {
     transition: opacity 200ms linear;
   }
 }`,
