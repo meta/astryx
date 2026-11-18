@@ -109,6 +109,20 @@ test.describe('a sheet row that takes focus when the sheet opens', () => {
     expect(await outlineWidth(row)).toBe(0);
   });
 
+  test('after a mouse press, Tab shows the ring again', async ({
+    page,
+    browserName,
+  }) => {
+    await mount(page, STORY);
+    await page.getByRole('button', {name: 'Open actions'}).click();
+    await expect(page.getByRole('button', {name: 'Copy link'})).toBeFocused();
+    // Safari moves focus to a button with Option+Tab.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    const next = page.getByRole('button', {name: 'Share'});
+    await expect(next).toBeFocused();
+    await expect.poll(async () => outlineWidth(next)).toBeGreaterThan(0);
+  });
+
   test('opened with the keyboard, the row rings', async ({
     page,
     browserName,

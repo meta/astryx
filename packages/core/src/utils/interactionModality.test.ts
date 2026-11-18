@@ -125,14 +125,20 @@ describe('interactionModality', () => {
     pageDocument.dispatchEvent(new Event('pointerdown'));
     expect(ring(pageDocument)).toBe('0');
     expect(ring(secondDocument)).toBe('');
-    // Typing into a text field a pointer focused keeps the rings off.
+    // Option+Tab moves focus in Safari, so it shows the rings again.
+    pageDocument.dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'Tab', altKey: true}),
+    );
+    expect(ring(pageDocument)).toBe('');
+    expect(tracker.getInteractionModality(pageDocument)).toBe('keyboard');
+    // Any key that makes the modality keyboard shows them, typing included.
+    pageDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(pageDocument)).toBe('0');
     const field = pageDocument.createElement('input');
     pageDocument.body.append(field);
     field.dispatchEvent(
       new KeyboardEvent('keydown', {key: 'a', bubbles: true, composed: true}),
     );
-    expect(ring(pageDocument)).toBe('0');
-    pageDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
     expect(ring(pageDocument)).toBe('');
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(ring(secondDocument)).toBe('0');

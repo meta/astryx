@@ -59,7 +59,7 @@ const FOCUS_RING_PROPERTY =
 
 /**
  * Turn the shared focus rings off after a pointer press, and back on (by
- * dropping the override) after a navigation key.
+ * dropping the override) when a key makes the modality keyboard again.
  */
 function setFocusRings(targetDocument: Document, isOn: boolean): void {
   const root = targetDocument.documentElement as HTMLElement | null;
@@ -100,16 +100,18 @@ function getStore(targetDocument: Document): InteractionModalityStore {
     },
     onKeyDown: event => {
       // Modifier-only presses are not navigation — holding Shift before a
-      // click must not turn that click into "keyboard".
-      if (event.metaKey || event.altKey || event.ctrlKey) {
+      // click must not turn that click into "keyboard". Tab is navigation
+      // whatever is held: Safari moves focus with Option+Tab.
+      if (
+        (event.metaKey || event.altKey || event.ctrlKey) &&
+        event.key !== 'Tab'
+      ) {
         return;
       }
       store.modality = 'keyboard';
+      setFocusRings(targetDocument, true);
       if (!isTextEntryKey(event)) {
         store.isTextEntrySincePointer = false;
-        // Typing into a field a pointer focused keeps the rings hidden; a
-        // navigation key shows them again.
-        setFocusRings(targetDocument, true);
       }
     },
   };
