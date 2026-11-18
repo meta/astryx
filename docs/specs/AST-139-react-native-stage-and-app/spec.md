@@ -47,12 +47,12 @@ same native requirements, and get the same limits on what they may reach.
 
 ## Why this exists
 
-| Tool                                              | What it does well                                                                                | The gap Astryx Stage and the Astryx app fill                                                                                                                                                                                                                                         |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| iOS Simulator and Android emulator                | The real system frameworks; the source of truth for native behavior (`spec:AST-112/FR15`).       | The Simulator needs a Mac, the emulator a virtual machine, and each needs a native build per change. Neither gives an agent a picture, the accessibility tree, and a step report as data in one command. Stage runs headless on macOS, Linux, and Windows and answers in a report.   |
-| Expo Go and development builds                    | Open a project on a phone from a QR code; a development build carries the app's own native code. | Expo Go cannot load the platform's native code (`spec:AST-112/FR11`), and a development build is one more native build per app. The Astryx app already carries the whole platform, so a project that uses only Astryx's native pieces opens on a phone with no build at all.         |
-| Storybook and web previews (React Native for Web) | Fast, browser-based review of components and screens.                                            | A web preview renders web components, not the native contracts: no system bars, sheets, menus, gestures, keyboard, or native accessibility tree. Stage runs the React Native renderer against the platform's own contracts, with the device's layout engine and the platform's look. |
-| A hand-made gallery app per design system         | Shows components on a phone.                                                                     | The Astryx app is that gallery for every Astryx component, kept with the library, and the same binary hosts a developer's own project.                                                                                                                                               |
+| Tool                                              | What it does well                                                                                | The gap Astryx Stage and the Astryx app fill                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| iOS Simulator and Android emulator                | The real system frameworks; the source of truth for native behavior (`spec:AST-112/FR15`).       | The Simulator needs a Mac, the emulator a virtual machine, and each needs a native build per change. Neither gives an agent a picture, the accessibility tree, and a step report as data in one command. Stage runs headless on macOS, Linux, and Windows and answers in a report.                               |
+| Expo Go and development builds                    | Open a project on a phone from a QR code; a development build carries the app's own native code. | Expo Go cannot load the platform's native code (`spec:AST-112/FR11`), and a development build is one more native build per app. The Astryx app already carries the whole platform, so a project that uses only Astryx's native pieces opens on a phone with no build at all.                                     |
+| Storybook and web previews (React Native for Web) | Fast, browser-based review of components and screens.                                            | A web preview renders web components, not the native contracts: no system bars, sheets, menus, gestures, keyboard, or native accessibility tree. Stage runs the app's own code against the platform's native contracts and shows the platform's bars, sheets, menus, gestures, keyboard, and accessibility tree. |
+| A hand-made gallery app per design system         | Shows components on a phone.                                                                     | The Astryx app is that gallery for every Astryx component, kept with the library, and the same binary hosts a developer's own project.                                                                                                                                                                           |
 
 ## Who uses it
 
@@ -67,8 +67,9 @@ same native requirements, and get the same limits on what they may reach.
 
 ## Non-goals
 
-- The internals of Astryx Stage: how it runs JavaScript, lays out, and draws.
-  Only what an app, the CLI, and a person observe is in this record.
+- How Astryx Stage and the Astryx app are implemented, built, and packaged.
+  Only what an app, the CLI, a developer, and a person observe is in this
+  record.
 - Each native contract's simulation in Stage. Each platform group record
   (`spec:AST-123` to `spec:AST-137`) states its contracts' behavior in Stage.
 - The commands' names, flags, error codes, and output envelopes. They belong
@@ -93,8 +94,8 @@ same native requirements, and get the same limits on what they may reach.
 
 - **FR1 — Stage runs the app's own JavaScript and renders it without a
   device.** Stage runs the same JavaScript bundle the app runs on a device,
-  with the React Native renderer, and lays it out with React Native's own
-  layout rules. It renders with an iOS or an Android look. It runs on macOS,
+  and its screens take the layout they take on a device. It renders with an
+  iOS or an Android look. It runs on macOS,
   Linux, and Windows. It is a development tool: no app depends on it at run
   time (`spec:AST-112/FR12`).
 
@@ -152,7 +153,7 @@ same native requirements, and get the same limits on what they may reach.
   the pinned Stage, and says which Stage the commands use and where it comes
   from (`spec:AST-112/FR13`). The project pins the Stage version its commands
   use; the install verifies each binary, and a binary that fails the check
-  never runs. A developer may name another Stage binary for engine work, and
+  never runs. A developer may name another Stage binary, and
   the commands report that source.
 
 ### The Astryx app
@@ -177,8 +178,8 @@ same native requirements, and get the same limits on what they may reach.
   the person types counts as their choice. A project the app lists as opened
   before asks again. A link cannot carry a confirmation.
 - **FR11 — A Preview project runs apart from the app.**
-  - The project runs in its own JavaScript runtime inside the app, with the
-    platform's native pieces that the app carries.
+  - The project runs inside the app, separate from the app's own code, with
+    the platform capabilities that the app has.
   - It never reaches the app's own identity, stored data, or sign-in.
   - A capability that the host's policy refuses for a project answers
     `not-allowed` (`spec:AST-112/FR6`); it is never a silent no-op.
@@ -186,12 +187,12 @@ same native requirements, and get the same limits on what they may reach.
     so a project meets the same limits in Stage and on a phone.
 - **FR12 — The host checks a project before its code runs.**
   - A project declares what it requires from the host. Before the project's
-    main module runs, the host compares that with the native pieces and
-    versions it carries; a project that needs one the host lacks is refused
+    main module runs, the host compares that with the native components,
+    modules, and versions it has; a project that needs one the host lacks is refused
     with a screen that names what is missing. `astryx preview check` answers
     the same question on the developer's computer (`spec:AST-112/FR13`).
   - The host runs source bundles only. A precompiled bytecode bundle is
-    refused before it runs, because it is tied to one engine build.
+    refused before it runs.
 - **FR13 — An encrypted hosted bundle keeps its key on the phone.** For an
   encrypted bundle, the key travels only in the part of the link after `#`,
   which is never sent to the server. The app verifies the integrity of every
@@ -205,13 +206,12 @@ same native requirements, and get the same limits on what they may reach.
   answer, and a retry where a retry can help. The app lists the projects a
   person opened, except encrypted ones; removing one also removes the data
   that project stored on the device.
-- **FR15 — Preview is part of the Astryx app.** The native pieces that run a
-  separate project inside the app are part of the Astryx app.
-  `@astryxdesign/react-native` keeps only the project side of Preview: what a
-  previewed project may reach, its manifest, and its types
-  (`spec:AST-112/FR1`). A project carries no Preview code of its own: the app
-  prepares the project's runtime before the project's code runs
-  (`spec:AST-112/FR5`).
+- **FR15 — Preview is part of the Astryx app.** Opening and running a
+  project is a feature of the Astryx app. `@astryxdesign/react-native` keeps
+  only the project side of Preview: what a previewed project may reach, its
+  manifest, and its types (`spec:AST-112/FR1`). A project carries no Preview
+  code of its own: the app sets up what the project needs before the
+  project's code runs (`spec:AST-112/FR5`).
 
 ### Evidence
 
@@ -239,8 +239,8 @@ same native requirements, and get the same limits on what they may reach.
 - `spec:AST-112` Non-goals keep Stage's internals and the Astryx app's design
   out of that record; this record owns the observable behavior of both apps
   and of Preview.
-- `spec:AST-112/FR1` and `spec:AST-112/DEC-12`: the native pieces that run
-  a Preview project are part of the Astryx app (FR15), and
+- `spec:AST-112/FR1` and `spec:AST-112/DEC-12`: Preview is a feature of the
+  Astryx app (FR15), and
   `@astryxdesign/react-native` keeps the project side.
 - `spec:AST-112/FR13`'s remote runs follow the answer to OQ8, and its
   `astryx stage install` follows OQ6 for where binaries come from, with
@@ -278,7 +278,7 @@ same native requirements, and get the same limits on what they may reach.
 **Decider:** imdreamrunner, 2026-11-17
 
 Developers and agents need to see what the app does on iOS and Android without
-a device. Stage runs the app's own bundle with the React Native renderer and
+a device. Stage runs the app's own bundle and
 implements the same native contracts as the platform layer, so the screen,
 the accessibility tree, and the behavior come from the app's real code.
 
@@ -312,8 +312,8 @@ on a poster or a web page would then run on the phone.
 **Reference:** `spec:AST-139/DEC-4`
 **Decider:** imdreamrunner, 2026-11-17
 
-A project opened from a link is code the app did not ship. It runs in its own
-runtime and gets `not-allowed` for anything the host's policy refuses, so
+A project opened from a link is code the app did not ship. It runs apart from
+the app's own code and gets `not-allowed` for anything the host's policy refuses, so
 opening a project cannot read or act as the app. The finer rules for storage,
 network, and permissions are OQ4.
 
@@ -331,8 +331,7 @@ headless mode on each.
 **Reference:** `spec:AST-139/DEC-6`
 **Decider:** imdreamrunner, 2026-11-17
 
-Running a project from a link is what the Astryx app does, so the native
-pieces that run it are the app's. `@astryxdesign/react-native` keeps only
+Opening and running a project from a link is a feature of the Astryx app. `@astryxdesign/react-native` keeps only
 what every previewed project needs: the rules of what it may reach, its
 manifest, and its types.
 
@@ -352,11 +351,11 @@ manifest, and its types.
     (`spec:AST-112/FR5`), that Stage loads and Preview may load. Works on every
     desktop with no native build; the simulation can drift from the real
     native code, and a Preview simulation is not the real behavior on a phone.
-  - **A native extension for Stage.** The library ships a desktop build of its
-    native side against a versioned binary interface that Stage loads. Closest
-    to the real behavior; each library builds and signs per desktop operating
-    system and architecture, Stage gains a binary interface to keep stable,
-    and loading third-party native code in a Preview project is a new trust
+  - **A native extension for Stage.** The library ships a desktop version of
+    its native side that Stage loads. Closest to the real behavior; each
+    library ships and signs one per desktop operating system and
+    architecture, Stage gains an extension interface to keep stable, and
+    loading third-party native code in a Preview project is a new trust
     question.
   - **A declared contract with data only.** The library declares its contract
     and static answers or pictures for Stage to show. No code runs; it covers
