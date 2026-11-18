@@ -62,9 +62,10 @@ it build its own:
 - **Android back.** Predictive back gives way to Astryx's back consumers
   (sheets, menus, search fields) and to the router's guard before the gesture
   starts.
-- **Router protocol.** In-app UI that shows routes, such as a development
-  inspector or a route list, reads one serialisable snapshot and opens paths
-  through the app's own linking. Whether it belongs in this group is OQ2.
+- **Router protocol.** The app's own code (deep links, state restoration, and
+  in-app UI such as a route list or a development inspector) reads the
+  router's routes as one snapshot and opens paths through the app's own
+  linking. Whether it belongs in this group is OQ2.
 
 Astryx takes no third-party native navigation dependency, and Astryx components
 work beside react-native-screens, react-native-gesture-handler or another
@@ -124,15 +125,16 @@ no navigation host.
     work with the native hosts and the gesture layer. An app may navigate with
     another router instead, such as Expo Router: Astryx components work inside
     that router's screens, and its navigation and chrome stay its own (DEC-6).
-- **FR2 — The AstryxRouter protocol.** One serialisable view of a root's
-  routes for in-app UI that shows and opens routes.
+- **FR2 — The AstryxRouter protocol.** One view of a root's routes for the
+  app's own callers: deep links, state restoration, and in-app UI that shows
+  and opens routes.
   - The default root is the outermost root that mounted first and is still
     mounted. `getRouterState()` returns the default
     root's snapshot, or `undefined` while no root is mounted. `subscribeRouterState(listener)` calls the listener with
     each new snapshot, after each committed navigation change, and returns an unsubscribe
     function. `useRouterState()` is the hook form: inside a root, that root's;
     elsewhere, the default root's.
-  - A snapshot holds `features` (FR14), `seq` (one more per published change of its
+  - A snapshot holds `seq` (one more per published change of its
     root), `routes` (depth first: `key`, `name`, JSON-safe `params`, `path`,
     `presentation`, `focused`, `navigator`, `depth`, `parentKey`),
     `focusedKey`, `focusedPath`, `canGoBack` and `hasLinking`. It is
@@ -145,7 +147,6 @@ no navigation host.
   - The same four functions exist per root on the root's handle and on
     `createNavigationRef()`. In-app UI reads a root's routes by calling this
     protocol.
-  - The protocol grows by named features (FR14).
 - **FR3 — The stack host.** A native stack container whose children are
   `AstryxStackScreen`s.
   - `canPop` (no active prevent-remove guard), `swipeEnabled` (`canPop` and the
@@ -370,11 +371,6 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     `AstryxStackScreen`. On a binary without `pop-start`, a `popStart` listener
     hears no native pop and the router warns once, in development and in
     release builds.
-  - `AstryxRouter` ships with the router and grows by named features too,
-    `AstryxRouter.<feature>`: FR2 states its baseline, and each snapshot's
-    `features` lists the named features the router implements, so a reader
-    such as a development inspector checks a feature before it reads what the
-    feature adds.
 - **FR15 — Public platform API, with two named exceptions.** The hosts follow
   `spec:AST-112/FR4` and use the public API of UIKit, the Android SDK, AndroidX
   and Material Components. The group's exceptions are on Android, each with a
@@ -447,7 +443,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 | Contract | Verification                                                                                                                                                                                             | Representative states                                                                                  | Mutation or failure expectation                                                                                  |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                 | a push during a transition; a reset; a native pop of two routes                                        | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
-| FR2      | Unit tests of the snapshot, its `features` list, and each declared consumer's reads                                                                                                                      | no root; nested roots; a URL the config fails on; an unchanged commit                                  | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
+| FR2      | Unit tests of the snapshot and each declared consumer's reads                                                                                                                                            | no root; nested roots; a URL the config fails on; an unchanged commit                                  | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
 | FR3      | Simulator and emulator checks of each event                                                                                                                                                              | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop                      | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
 | FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                         | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back                        | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
 | FR5      | Simulator and emulator captures per option                                                                                                                                                               | each bar item kind; menus; header slots; large title collapse; scroll edge effects                     | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
@@ -459,7 +455,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 | FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                                              | Any JavaScript work per frame during these motions                                                               |
 | FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; drawn tabs                                                                               | A blank screen, a silent fallback, or an error that does not name the capability                                 |
 | FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                                           | The escape pops while `canPop` is false, or a badge is not read                                                  |
-| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `features` lists what it implements                            | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A named feature used without the check, or one the record does not list                                          |
+| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes                                                                                                   | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A named feature used without the check, or one the record does not list                                          |
 | FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                                             | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
 
 ## Decision log
