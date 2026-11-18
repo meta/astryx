@@ -72,6 +72,7 @@ import {
   printedEntry,
   readSavedStates,
   keyOf,
+  sameSettingKey,
   loadTheme,
   maskedSettings,
   modesOf,
@@ -6351,6 +6352,7 @@ async function changeOnce(
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
+        ...(r.widened?.length ? {widened: r.widened} : {}),
         leftOut: [],
         notes: [
           ...(r.unchanged
@@ -6567,6 +6569,9 @@ async function changeOnce(
   // A damaged entry the theme was read past as the one this set changes
   // (a headings entry whose axis names no half) is replaced by it too,
   // never left to refuse every later command.
+  // The same setting with or without `--only` is replaced too, so
+  // `--only` takes the look off the rest of the group and a set without it
+  // spreads it again.
   if (sub === 'set') {
     const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
     const replaced = (
@@ -6574,6 +6579,7 @@ async function changeOnce(
       /** @type {number} */ i,
     ) =>
       (keyOf(x) === k && i !== last) ||
+      (x !== s && keyOf(x) !== k && sameSettingKey(x) === sameSettingKey(s)) ||
       (x !== s &&
         keyOf(x) !== k &&
         skips(x, s) &&
@@ -7862,6 +7868,7 @@ async function changeOnce(
       styled,
       kept,
       lifted: r.lifted,
+      ...(r.widened?.length ? {widened: r.widened} : {}),
       problems: r.problems,
       // What this change made unreadable or unseen, with each fix: text
       // and borders measured against the settings before it, and the
@@ -10508,6 +10515,7 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
+      ...(committed.widened?.length ? {widened: committed.widened} : {}),
       changedTokens: lookCollapsed(
         committed.changed,
         derivedStatusWords(prev),

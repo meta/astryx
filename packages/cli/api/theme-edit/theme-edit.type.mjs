@@ -86,6 +86,14 @@
 
 /**
  * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditWidened
+ * @property {string} setting - The saved setting, as `show` lists it.
+ * @property {string[]} parts - The parts it now also reaches.
+ * @property {string | null} keep - The command that keeps it on its own part, or null for a setting named on a group.
+ */
+
+/**
+ * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeData
  * @property {string} theme
  * @property {'set' | 'undo'} action
@@ -106,6 +114,7 @@
  * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
  * @property {Array<{family: string, run: string[]}>} [fontNotLoaded] - The open fonts this set names whose package is not installed, each with the command that installs it; the previews and the app draw the next font in the stack until then. Left out when every one loads. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
+ * @property {ThemeEditWidened[]} [widened] - Saved settings this change made reach parts their record did not hold (an editor that widens a group, a group that grows), each with the parts it now also reaches and `keep`, the command that keeps it on its own part (null for a setting named on a group, which follows the group's members). Present only when there are some; each is named once, then the record holds the new reach. The text output names them in the status line.
  * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
  * @property {ThemeEditProblem[]} [leftProblems] - Problems the theme had that this change moved but left failing (a fill made darker, still not dark enough), each with what it was and the command that fixes it; left out when none. The text output says them under the new problems.
  * @property {number} [missed] - How many misses the theme's own changes left (show --json lists each, with the line that reaches it); the text output counts them near its top.
@@ -196,7 +205,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], changedPartTokens?: string[], problems: string[], newProblems: ThemeEditProblem[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], changedPartTokens?: string[], problems: string[], newProblems: ThemeEditProblem[], widened?: ThemeEditWidened[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
  */
 
 /**
