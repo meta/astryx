@@ -261,6 +261,16 @@ function over(color, alpha, under) {
 }
 
 /** @param {string} a @param {string} b */
+/**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ * @param {number} ratio
+ * @returns {number}
+ */
+export function ratioDown(ratio) {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
+}
+
 function contrast(a, b) {
   const x = luminance(a);
   const y = luminance(b);
@@ -421,7 +431,7 @@ export function deriveLookColors({
             token: `--color-background-${h}`,
             mode: m,
             stop: s0,
-            ratio: Math.floor(worst * 100 + 1e-9) / 100,
+            ratio: ratioDown(worst),
             needs: TEXT,
           });
           return at(id, m, s0);

@@ -22,6 +22,7 @@ import {
   tintStops,
 } from './derive-look.mjs';
 import {generatePaletteSet, perceptualDelta} from './generator.mjs';
+import {ratioDown} from './derive-look.mjs';
 import {hexToOklch} from './color.mjs';
 
 const THEMES = path.resolve(
@@ -238,5 +239,13 @@ describe('derived look colors', () => {
     expect(tintStops('#000080')[0]).toBeLessThan(tintStops('#0052cc')[0]);
     expect(tintStops('#a7c7e7')[0]).toBeGreaterThan(tintStops('#0052cc')[0]);
     expect(tintStops(null)).toEqual(tintStops('#808080'));
+  });
+});
+
+describe('an unreadable tint\'s ratio', () => {
+  it('is cut down, never rounded up to the bar', () => {
+    expect(ratioDown(4.497)).toBe(4.49);
+    expect(ratioDown(4.497)).toBeLessThan(4.5);
+    expect(ratioDown(4.5)).toBe(4.5);
   });
 });
