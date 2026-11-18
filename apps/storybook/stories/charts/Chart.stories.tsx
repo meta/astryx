@@ -2,15 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {Chart, ChartAxis, ChartGrid, bar, line} from '@astryxdesign/charts';
-
-const monthlyData = [
-  {month: 'Jan', revenue: 42, trend: 38},
-  {month: 'Feb', revenue: 58, trend: 46},
-  {month: 'Mar', revenue: 51, trend: 49},
-  {month: 'Apr', revenue: 74, trend: 61},
-  {month: 'May', revenue: 68, trend: 65},
-  {month: 'Jun', revenue: 86, trend: 72},
-];
+import {monthlyData} from './_data';
 
 const largeData = Array.from({length: 51}, (_, index) => ({
   month: `Period ${index + 1}`,

@@ -53,8 +53,8 @@ export const docs = {
     targets: [
       {className: 'astryx-layout', visualProps: ['height']},
       {className: 'astryx-layout-content'},
-      {className: 'astryx-layout-footer'},
-      {className: 'astryx-layout-header'},
+      {className: 'astryx-layout-footer', visualProps: ['container']},
+      {className: 'astryx-layout-header', visualProps: ['container']},
       {className: 'astryx-layout-panel'},
     ],
   },

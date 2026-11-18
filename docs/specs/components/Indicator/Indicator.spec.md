@@ -39,7 +39,7 @@ system_specs: []
 | Public contract         | None changes. `@astryxdesign/core/Indicator` exports the three built-in indicators (`CheckboxIndicator`, `CheckIndicator`, `RadioIndicator`), the shared indicator props and types, the default registry, and name-based resolution.                                       |
 | Behavior                | Hosts draw a decorative control visual by name (`check`, `checkbox`, `radio`). A theme's `indicators` entry for that name replaces it in every host that resolves indicators by name; otherwise the built-in renders. Every indicator is hidden from assistive technology. |
 | End-user impact         | People see one consistent mark for a chosen option, a checkbox, or a radio across the components that resolve indicators by name, and screen-reader users hear the host control's semantics, never a duplicate.                                                            |
-| Builder impact          | None.                                                                                                                                                                                                                                                                      |
+| Builder impact          | A theme can replace the spinner picture and the tree disclosure mark through the `spinner` and `tree-disclosure` indicators (FR7).                                                                                                                                         |
 | Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Three hosts render the built-ins directly instead of resolving by name; listed under Current-state impact.                                                                                                       |
 | Review checks           | Reject an indicator that is exposed to assistive technology, a theme override that a host resolving by name ignores, a falsy `children` that suppresses the built-in mark, or a role or tab stop on an indicator.                                                          |
 | Governing rules         | `architecture:component-theming-surface`; `architecture:public-component-api` INV5; `architecture:theme-authoring-contract`.                                                                                                                                               |
@@ -58,7 +58,8 @@ decorative prop contract, and RadioIndicator. Consumer usage lives in
 
 - Released default preserved: `yes`; with no theme override, `check`,
   `checkbox`, and `radio` resolve to the built-ins
-- Compatibility class: records shipped behavior; no public prop, default,
+- Compatibility class: additive; the `spinner` and `tree-disclosure` names
+  and their `activity` and `disclosure` families (FR7). No prop, default,
   export, or DOM change
 - Controlled/uncontrolled behavior: not applicable; hosts supply `state`
 - Migration decision: none
@@ -69,6 +70,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
+- `Indicator/themeIndicators.ts` and the `useThemeIndicator` hook, which
+  read a theme's own indicator without the built-ins (DEC-1).
 - The core indicator names and the default registry that maps them to the
   built-ins.
 - Theme replacement by name and the shared indicator prop contract.
@@ -88,12 +91,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept             | Closed values or states                                | Meaning                                           | Availability by variant/orientation/state | Default  | Owner                 | Stability | Invalid-value behavior                                              |
-| ------------------- | ------------------------------------------------------ | ------------------------------------------------- | ----------------------------------------- | -------- | --------------------- | --------- | ------------------------------------------------------------------- |
-| Indicator name      | `check`, `checkbox`, `radio`, plus augmented names     | Which visual a host draws.                        | Always.                                   | —        | `component:Indicator` | Stable    | An augmented name no theme supplies resolves to nothing.            |
-| State               | `unchecked`, `checked`, and `indeterminate` (checkbox) | The host's selection state.                       | Per indicator family.                     | required | `component:Indicator` | Stable    | TypeScript rejects values outside the family.                       |
-| Size                | `sm`, `md`                                             | Indicator box size.                               | Always.                                   | `md`     | `component:Indicator` | Stable    | TypeScript rejects other values.                                    |
-| Replacement content | renderable `children`                                  | Content drawn instead of the built-in state mark. | Always.                                   | none     | `component:Indicator` | Stable    | Nullish, boolean, and empty-string children keep the built-in mark. |
+| Concept             | Closed values or states                                                          | Meaning                                           | Availability by variant/orientation/state | Default  | Owner                 | Stability | Invalid-value behavior                                              |
+| ------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- | -------- | --------------------- | --------- | ------------------------------------------------------------------- |
+| Indicator name      | `check`, `checkbox`, `radio`, `spinner`, `tree-disclosure`, plus augmented names | Which visual a host draws.                        | Always.                                   | —        | `component:Indicator` | Stable    | An augmented name no theme supplies resolves to nothing.            |
+| State               | `unchecked`, `checked`, and `indeterminate` (checkbox)                           | The host's selection state.                       | Per indicator family.                     | required | `component:Indicator` | Stable    | TypeScript rejects values outside the family.                       |
+| Size                | `sm`, `md`                                                                       | Indicator box size.                               | Always.                                   | `md`     | `component:Indicator` | Stable    | TypeScript rejects other values.                                    |
+| Replacement content | renderable `children`                                                            | Content drawn instead of the built-in state mark. | Always.                                   | none     | `component:Indicator` | Stable    | Nullish, boolean, and empty-string children keep the built-in mark. |
 
 ## Behavioral and layout contract
 
@@ -105,6 +108,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR4 | Renderable `children` replace the built-in state mark inside the indicator; nullish, boolean, and empty-string children keep it, and `0` counts as content.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Current tests                                           |
 | FR5 | RadioIndicator renders one circular span (20 or 24 CSS px) whose border and fill follow the state: an emphasized border on the surface when unchecked, an accent fill when checked with an on-accent dot (8 or 10 CSS px) inside. Disabled halves the opacity and mutes the border (and the fill when unchecked). Under a hover-capable pointer, hovering the host's `indicatorScope` tints it. The dot stays visible under forced colors. Transitions are instant under reduced motion. The circle and the dot are drawn at a 50% radius, never with the `--radius-full` pill token: the circle marks a radio, so a theme that squares its pills keeps round radios, and a theme that wants square radios overrides this component. | Current source and tests                                |
 | FR6 | RadioIndicator's root carries `astryx-radio-indicator` with `data-size`, `data-checked`, and `data-disabled`; the dot carries `astryx-radio-indicator-dot` with `data-size`. No alias target is emitted. Caller props, `ref`, `className`, `style`, and `xstyle` reach the root.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `architecture:component-theming-surface`; current tests |
+| FR7 | `spinner` (family `activity`, state `busy`) and `tree-disclosure` (family `disclosure`, states `collapsed` and `expanded`) are indicator names in `IndicatorMap` that Core reads but does not ship: they are not part of `CoreIndicatorName` and have no built-in in the default registry. A theme's entry for each replaces the picture Spinner and TreeList draw (`component:Spinner`, `component:TreeList`); with no entry, those hosts draw their own.                                                                                                                                                                                                                                                                           | Current source and `themeIndicatorSeams.test.tsx`       |
 
 ### Allowed variation
 
@@ -176,7 +180,24 @@ their own records.
 
 ## Decision log
 
-No component-local decision.
+### DEC-1 — A host with its own picture reads only the theme's indicator
+
+**Reference:** `component:Indicator/DEC-1`
+**Decider:** `josephfarina`, `2026-11-16`
+
+Spinner and TreeList draw their own picture unless the theme supplies a
+`spinner` or `tree-disclosure` indicator (FR7). They read that entry with the
+`useThemeIndicator` client hook in `Indicator/useThemeIndicator.ts`. It finds
+the theme as `useIndicator` does, the nearest `<Theme>` or else the root theme
+(`architecture:theme-application` INV3), and reads the theme's indicators
+through `getThemeIndicators` in `Indicator/themeIndicators.ts`, the one theme
+lookup the default registry also reads. So a themed spinner and chevron draw
+the same everywhere, separate React roots and the fallback toast viewport
+included. The hook never reads the default registry, which imports the three
+built-in indicators so a core name always resolves: a host that reads through
+it would carry those indicators though it never draws them. The theme lookup
+it does carry is a named entry under `architecture:component-import-boundaries`
+INV10.
 
 ## Open questions
 
