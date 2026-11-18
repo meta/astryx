@@ -115,6 +115,14 @@ const TARGETS = [
       'nested Theme/MediaTheme scope above a native modal with nonzero geometry',
   },
   {
+    component: 'ChartTooltip',
+    story: 'charts-chrome-tooltip--default',
+    guards:
+      'hovering a month through the chart pointer layer opens the grouped ' +
+      "tooltip with that month's heading and every series value, and " +
+      'leaving the plot closes it',
+  },
+  {
     component: 'ChartTheming',
     story: 'lab-charttheming-colorpicker--end-user-choices',
     guards:

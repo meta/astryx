@@ -1167,9 +1167,10 @@ export function baseWeightNotes(ctx, data) {
  * @param {any} before
  * @param {any} after
  * @param {any} [base] the base theme, whose own values a write that repeats them does not change
+ * @param {(target: string, prop: string) => string | null} [drawn] the value Core itself writes for a part's property, as written (a token reference: `var(--radius-full)`), when it is the same at rest and in every state; a write of that same value repeats it and is not listed
  * @returns {string[]}
  */
-export function styledChanges(before, after, base) {
+export function styledChanges(before, after, base, drawn) {
   /** @type {string[]} */
   const out = [];
   /** A value as CSS reads it, for comparing. @param {any} v */
@@ -1243,6 +1244,16 @@ export function styledChanges(before, after, base) {
           continue;
         }
         if (repeatsBase(x[prop], y[prop], shown)) continue;
+        // (A part's plain rule that writes what Core draws there already.)
+        if (
+          key === 'base' &&
+          x[prop] === undefined &&
+          shown === undefined &&
+          typeof y[prop] !== 'object' &&
+          drawn &&
+          repeatsBase(undefined, y[prop], drawn(target, cssName(prop)))
+        )
+          continue;
         out.push(
           `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );

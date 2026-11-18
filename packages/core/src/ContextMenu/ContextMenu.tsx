@@ -62,6 +62,7 @@ import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {
   MenuBottomSheet,
   MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
   preloadMenuBottomSheetActionList,
 } from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
@@ -907,6 +908,9 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
 
   return (
     <>
@@ -941,12 +945,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <MenuBottomSheet
+        <SheetForContent
           isOpen={isOpen}
           onOpenChange={updateOpenState}
           label={sheetLabel}>
           {renderedBottomSheetContent}
-        </MenuBottomSheet>
+        </SheetForContent>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

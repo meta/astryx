@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  276 targets, 901 selectors (generated from the docs)
+//   components  290 targets, 930 selectors (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -40,6 +40,22 @@ export const probeTheme = defineTheme({
         color: 'hsl(134.7 72% 12%)',
         borderColor: 'hsl(68.3 94% 25%)',
         outlineColor: 'hsl(39.0 81% 25%)',
+      },
+    },
+    'alert-dialog-description': {
+      base: {
+        backgroundColor: 'hsl(138.0 72% 58%)',
+        color: 'hsl(116.1 87% 12%)',
+        borderColor: 'hsl(90.3 72% 25%)',
+        outlineColor: 'hsl(292.8 75% 25%)',
+      },
+    },
+    'alert-dialog-title': {
+      base: {
+        backgroundColor: 'hsl(317.0 75% 61%)',
+        color: 'hsl(126.4 71% 12%)',
+        borderColor: 'hsl(4.5 76% 25%)',
+        outlineColor: 'hsl(204.9 87% 25%)',
       },
     },
     'app-shell': {
@@ -534,6 +550,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(200.6 79% 25%)',
       },
     },
+    'banner-close': {
+      base: {
+        backgroundColor: 'hsl(278.5 87% 53%)',
+        color: 'hsl(263.0 79% 12%)',
+        borderColor: 'hsl(193.7 74% 25%)',
+        outlineColor: 'hsl(87.6 86% 25%)',
+      },
+    },
     'banner-content': {
       base: {
         backgroundColor: 'hsl(329.6 75% 50%)',
@@ -676,6 +700,14 @@ export const probeTheme = defineTheme({
         color: 'hsl(15.5 76% 12%)',
         borderColor: 'hsl(119.5 71% 25%)',
         outlineColor: 'hsl(245.4 84% 25%)',
+      },
+    },
+    'bottom-sheet-handle': {
+      base: {
+        backgroundColor: 'hsl(311.1 91% 53%)',
+        color: 'hsl(120.7 79% 12%)',
+        borderColor: 'hsl(190.7 79% 25%)',
+        outlineColor: 'hsl(24.4 87% 25%)',
       },
     },
     'breadcrumb-item': {
@@ -898,6 +930,46 @@ export const probeTheme = defineTheme({
         color: 'hsl(96.4 77% 12%)',
         borderColor: 'hsl(192.4 85% 25%)',
         outlineColor: 'hsl(319.5 79% 25%)',
+      },
+    },
+    'calendar-range': {
+      base: {
+        backgroundColor: 'hsl(217.6 89% 46%)',
+        color: 'hsl(36.8 70% 12%)',
+        borderColor: 'hsl(174.2 92% 25%)',
+        outlineColor: 'hsl(346.9 84% 25%)',
+      },
+      start: {
+        backgroundColor: 'hsl(238.9 77% 48%)',
+        color: 'hsl(128.8 85% 12%)',
+        borderColor: 'hsl(282.5 90% 25%)',
+        outlineColor: 'hsl(128.1 86% 25%)',
+      },
+      end: {
+        backgroundColor: 'hsl(345.8 94% 60%)',
+        color: 'hsl(120.5 75% 12%)',
+        borderColor: 'hsl(83.1 81% 25%)',
+        outlineColor: 'hsl(58.2 90% 25%)',
+      },
+    },
+    'calendar-range-preview': {
+      base: {
+        backgroundColor: 'hsl(25.4 86% 46%)',
+        color: 'hsl(150.6 90% 12%)',
+        borderColor: 'hsl(359.1 86% 25%)',
+        outlineColor: 'hsl(359.2 91% 25%)',
+      },
+      start: {
+        backgroundColor: 'hsl(10.3 87% 48%)',
+        color: 'hsl(123.7 86% 12%)',
+        borderColor: 'hsl(333.4 77% 25%)',
+        outlineColor: 'hsl(97.5 72% 25%)',
+      },
+      end: {
+        backgroundColor: 'hsl(228.1 79% 61%)',
+        color: 'hsl(50.3 86% 12%)',
+        borderColor: 'hsl(202.7 70% 25%)',
+        outlineColor: 'hsl(1.4 70% 25%)',
       },
     },
     card: {
@@ -2904,6 +2976,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(300.7 87% 25%)',
       },
     },
+    'kbd-key': {
+      base: {
+        backgroundColor: 'hsl(4.5 86% 53%)',
+        color: 'hsl(18.3 90% 12%)',
+        borderColor: 'hsl(134.9 79% 25%)',
+        outlineColor: 'hsl(321.1 84% 25%)',
+      },
+    },
     layout: {
       base: {
         backgroundColor: 'hsl(283.6 73% 59%)',
@@ -3258,6 +3338,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(200.1 91% 25%)',
       },
     },
+    'mobile-nav-drawer': {
+      base: {
+        backgroundColor: 'hsl(188.1 70% 54%)',
+        color: 'hsl(3.2 72% 12%)',
+        borderColor: 'hsl(172.8 71% 25%)',
+        outlineColor: 'hsl(156.2 92% 25%)',
+      },
+    },
     'more-menu': {
       base: {
         backgroundColor: 'hsl(306.9 92% 47%)',
@@ -3480,6 +3568,20 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(228.8 89% 25%)',
       },
     },
+    'number-input-stepper': {
+      base: {
+        backgroundColor: 'hsl(212.4 86% 59%)',
+        color: 'hsl(224.0 84% 12%)',
+        borderColor: 'hsl(331.9 74% 25%)',
+        outlineColor: 'hsl(314.4 76% 25%)',
+      },
+      direction: {
+        backgroundColor: 'hsl(6.5 86% 45%)',
+        color: 'hsl(202.3 79% 12%)',
+        borderColor: 'hsl(328.3 89% 25%)',
+        outlineColor: 'hsl(277.3 79% 25%)',
+      },
+    },
     outline: {
       base: {
         backgroundColor: 'hsl(129.5 92% 45%)',
@@ -3634,6 +3736,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(287.8 79% 25%)',
       },
     },
+    'pagination-ellipsis': {
+      base: {
+        backgroundColor: 'hsl(68.1 70% 62%)',
+        color: 'hsl(85.2 83% 12%)',
+        borderColor: 'hsl(196.7 74% 25%)',
+        outlineColor: 'hsl(176.6 70% 25%)',
+      },
+    },
     'pagination-input-label': {
       base: {
         backgroundColor: 'hsl(258.3 85% 64%)',
@@ -3672,6 +3782,76 @@ export const probeTheme = defineTheme({
         color: 'hsl(191.8 86% 12%)',
         borderColor: 'hsl(143.1 75% 25%)',
         outlineColor: 'hsl(55.0 92% 25%)',
+      },
+    },
+    'pagination-item': {
+      base: {
+        backgroundColor: 'hsl(119.6 83% 52%)',
+        color: 'hsl(315.1 88% 12%)',
+        borderColor: 'hsl(174.3 91% 25%)',
+        outlineColor: 'hsl(175.8 76% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(242.6 83% 58%)',
+        color: 'hsl(107.2 85% 12%)',
+        borderColor: 'hsl(5.5 92% 25%)',
+        outlineColor: 'hsl(181.6 72% 25%)',
+      },
+    },
+    'pagination-list': {
+      base: {
+        backgroundColor: 'hsl(186.1 92% 53%)',
+        color: 'hsl(92.5 73% 12%)',
+        borderColor: 'hsl(341.4 84% 25%)',
+        outlineColor: 'hsl(332.3 87% 25%)',
+      },
+      'size:sm': {
+        backgroundColor: 'hsl(153.8 89% 45%)',
+        color: 'hsl(51.0 94% 12%)',
+        borderColor: 'hsl(168.0 73% 25%)',
+        outlineColor: 'hsl(174.3 83% 25%)',
+      },
+      'size:md': {
+        backgroundColor: 'hsl(327.8 90% 45%)',
+        color: 'hsl(122.6 92% 12%)',
+        borderColor: 'hsl(71.3 88% 25%)',
+        outlineColor: 'hsl(257.9 75% 25%)',
+      },
+      'variant:pages': {
+        backgroundColor: 'hsl(255.1 94% 51%)',
+        color: 'hsl(54.2 78% 12%)',
+        borderColor: 'hsl(178.1 85% 25%)',
+        outlineColor: 'hsl(315.3 76% 25%)',
+      },
+      'variant:count': {
+        backgroundColor: 'hsl(182.3 84% 47%)',
+        color: 'hsl(323.0 75% 12%)',
+        borderColor: 'hsl(176.9 80% 25%)',
+        outlineColor: 'hsl(263.4 76% 25%)',
+      },
+      'variant:compact': {
+        backgroundColor: 'hsl(158.6 71% 63%)',
+        color: 'hsl(87.2 92% 12%)',
+        borderColor: 'hsl(213.1 90% 25%)',
+        outlineColor: 'hsl(303.6 70% 25%)',
+      },
+      'variant:dots': {
+        backgroundColor: 'hsl(116.0 70% 60%)',
+        color: 'hsl(268.8 86% 12%)',
+        borderColor: 'hsl(314.3 89% 25%)',
+        outlineColor: 'hsl(146.3 74% 25%)',
+      },
+      'variant:input': {
+        backgroundColor: 'hsl(255.8 73% 63%)',
+        color: 'hsl(203.1 79% 12%)',
+        borderColor: 'hsl(261.0 84% 25%)',
+        outlineColor: 'hsl(2.7 76% 25%)',
+      },
+      'variant:none': {
+        backgroundColor: 'hsl(222.7 83% 45%)',
+        color: 'hsl(357.8 86% 12%)',
+        borderColor: 'hsl(255.6 90% 25%)',
+        outlineColor: 'hsl(331.7 83% 25%)',
       },
     },
     popover: {
@@ -5513,6 +5693,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(322.1 78% 25%)',
       },
     },
+    'toast-close': {
+      base: {
+        backgroundColor: 'hsl(350.1 87% 56%)',
+        color: 'hsl(159.1 94% 12%)',
+        borderColor: 'hsl(157.1 76% 25%)',
+        outlineColor: 'hsl(13.3 70% 25%)',
+      },
+    },
     'toggle-button': {
       base: {
         backgroundColor: 'hsl(327.9 83% 51%)',
@@ -5549,6 +5737,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(197.7 74% 12%)',
         borderColor: 'hsl(35.9 75% 25%)',
         outlineColor: 'hsl(326.7 92% 25%)',
+      },
+      grouped: {
+        backgroundColor: 'hsl(32.8 74% 63%)',
+        color: 'hsl(243.1 82% 12%)',
+        borderColor: 'hsl(207.7 86% 25%)',
+        outlineColor: 'hsl(317.8 89% 25%)',
       },
     },
     'toggle-button-group': {
@@ -5991,6 +6185,14 @@ export const probeTheme = defineTheme({
         color: 'hsl(135.9 84% 12%)',
         borderColor: 'hsl(134.7 93% 25%)',
         outlineColor: 'hsl(243.3 77% 25%)',
+      },
+    },
+    'typeahead-popup': {
+      base: {
+        backgroundColor: 'hsl(190.1 70% 61%)',
+        color: 'hsl(213.0 91% 12%)',
+        borderColor: 'hsl(57.2 80% 25%)',
+        outlineColor: 'hsl(170.2 79% 25%)',
       },
     },
   },
