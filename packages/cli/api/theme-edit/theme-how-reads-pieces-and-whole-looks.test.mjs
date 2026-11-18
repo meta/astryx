@@ -10,7 +10,8 @@
  * never a reset; the default is the variant the part has when none is
  * given. A part's own piece taken away is not drawn; a whole part taken
  * away is the app's call. A display heading sizes from its display token; display headings are
- * every display look.
+ * every display look, named in the answer, and a clause that takes the
+ * part from them takes every one.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -535,6 +536,30 @@ describe('a display heading', () => {
         'set t font-weight 800 --on heading --when type:display-2',
         'set t font-weight 800 --on heading --when type:display-3',
       ]);
+    },
+    T,
+  );
+
+  it(
+    'names the looks it covers, and a clause that takes the part takes them all',
+    async () => {
+      const each = (/** @type {string} */ thing) =>
+        [1, 2, 3].map(n => `${thing} --on heading --when type:display-${n}`);
+      const blue = await answer('bold display headings, make them blue');
+      expect(first(blue)).toEqual([
+        ...each("set t font-weight 700"),
+        ...each("set t color '#2563eb'"),
+      ]);
+      expect(JSON.stringify(blue.results)).toMatch(
+        /display headings: display-1, display-2, display-3/,
+      );
+      const listed = first(
+        await answer('display headings: heavier, tighter letter spacing'),
+      );
+      for (const n of [1, 2, 3])
+        expect(listed.join('\n')).toMatch(
+          new RegExp(`letter-spacing \\S+ --on heading --when type:display-${n}\\b`),
+        );
     },
     T,
   );

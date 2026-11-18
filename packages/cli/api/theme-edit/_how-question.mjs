@@ -101,6 +101,7 @@ import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 import {render as renderStep} from './_how-commands.mjs';
 import {coversProperty} from '../../foundation/runtime/css-tree.mjs';
+import {numberedLookValues} from './_part-pieces.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
@@ -8235,38 +8236,25 @@ export function draftAnswer(ctx, env, question) {
   // ("display headings": a numbered look of a part said in the plural is
   // every look of that numbered family the part draws, display-1 to
   // display-3: the values its prop takes, as its component's doc types
-  // them, and any more Core's data saw it drawn in. Each is its own clause,
-  // so the answer runs them all in order; said once, it is the first.)
-  clauses.splice(
-    0,
-    clauses.length,
-    ...clauses.flatMap(c => {
-      const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
-      const m = p && /^([\w-]+):(.+)-\d+$/.exec(p.when ?? '');
-      if (!p || !m) return [c];
-      const typed = partComponentDocs(ctx, p.on).flatMap(d =>
-        [
-          ...String(d.doc.props?.[m[1]]?.type ?? '').matchAll(
-            /'([\w-]+)'/g,
-          ),
-        ].map(x => x[1]),
-      );
-      const values = [
-        ...new Set([
-          ...typed,
-          .../** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
-        ]),
-      ]
-        .filter(v => v.startsWith(`${m[2]}-`) && /-\d+$/.test(v))
-        .sort();
-      return values.length > 1
-        ? values.map(v => ({
-            ...c,
-            parts: c.parts.map(x => (x === p ? {...x, when: `${m[1]}:${v}`} : x)),
-          }))
-        : [c];
-    }),
-  );
+  // them, and any more Core's data saw it drawn in. The clause names each,
+  // so a clause that takes its part, "make them blue", takes them all; the
+  // answer says which.)
+  /** @type {string[]} */
+  const pluralSaid = [];
+  for (const c of clauses) {
+    const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
+    const m = p && /^([\w-]+):(.+)-\d+$/.exec(p.when ?? '');
+    if (!p || !m) continue;
+    const values = numberedLookValues(
+      m[2],
+      partComponentDocs(ctx, p.on).map(d => String(d.doc.props?.[m[1]]?.type ?? '')).join(' | '),
+      /** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
+    );
+    if (values.length < 2) continue;
+    c.parts = c.parts.flatMap(x => (x === p ? values.map(v => ({...x, when: `${m[1]}:${v}`})) : [x]));
+    const said = new RegExp(`\\b${m[2]}[\\s-]+[a-z]+s\\b`).exec(c.text.toLowerCase())?.[0];
+    pluralSaid.push(`${said ?? `${m[2]} ${p.on}s`}: ${values.join(', ')}`);
+  }
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
   for (const c of clauses) ownAspects.set(c, [...c.aspects]);
@@ -31836,6 +31824,7 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
+  for (const t of new Set(pluralSaid)) result.push({text: t, options: []});
   // (The other reading of states said together, said last.)
   result.push(...otherReadings);
   // A panel's look written for every one (a card's) reaches the panels an
