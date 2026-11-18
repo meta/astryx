@@ -6,7 +6,7 @@
 
 import {Command} from 'commander';
 import {describe, it, expect} from 'vitest';
-import {defineCommand} from './define-command.mjs';
+import {defineCommand, servedOptionDescription} from './define-command.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {doc as searchCommand} from '../commands/search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -28,6 +28,43 @@ describe('defineCommand', () => {
       '--limit <n>',
       '--verbose',
     ]);
+  });
+
+  it("builds an option's text from its pointers and drops a pointer not served", () => {
+    const program = new Command('astryx');
+    const cmd = defineCommand(
+      program,
+      {
+        name: 'pick',
+        displayName: 'astryx pick',
+        summary: 'Pick one',
+        fn: 'pick',
+        options: [
+          {
+            flag: '--list',
+            description: 'List: <name>',
+            pointers: [{commands: ['pick --deep'], text: ', --deep'}, ' are refused'],
+          },
+          {
+            flag: '--from <pkg>',
+            param: 'options.from',
+            pointers: [{commands: ['pick x --from core'], text: ' Use core.'}],
+          },
+        ],
+      },
+      {
+        fn: {
+          type: 'function',
+          name: 'pick',
+          params: [{name: 'options.from', type: 'string', description: 'One package.'}],
+        },
+      },
+    );
+    const [list, from] = cmd.options;
+    expect(list.description).toBe('List: <name>, --deep are refused');
+    expect(from.description).toBe('One package. Use core.');
+    expect(servedOptionDescription(list, () => false)).toBe('List: <name> are refused');
+    expect(servedOptionDescription(from, () => false)).toBe('One package.');
   });
 
   it('nests a subcommand token under a group parent', () => {

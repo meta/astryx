@@ -19,6 +19,7 @@ import {
   TITLE,
   coverage,
   driftedEntries,
+  incompleteLegs,
   openOrRefresh,
   prBody,
   refreshReasons,
@@ -40,6 +41,10 @@ const nodeFiles = nodeLegFiles();
 /** One file's line in a Main run's log, from leg `(i % 6) + 1`, as `gh run view --log` prints it. */
 const legLine = (file, i, seconds) =>
   `test-node (${(i % 6) + 1})\tRun pnpm test:node --shard=${(i % 6) + 1}/6\t2026-01-01T00:00:00.0000000Z  ^[[32m✓^[[39m ^[[30m^[[43m node ^[[49m^[[39m ${file} ^[[2m(^[[22m^[[2m3 tests^[[22m^[[2m)^[[22m^[[33m ${seconds}s^[[39m`;
+
+/** One file's line in a leg's own job log, as the jobs logs endpoint returns it. */
+const rawLine = (file, seconds) =>
+  `2026-01-01T00:00:00.0000000Z  \x1b[32m✓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${file} \x1b[2m(\x1b[22m\x1b[2m3 tests\x1b[22m\x1b[2m)\x1b[22m\x1b[33m ${seconds}s\x1b[39m`;
 
 describe('the Node record refresh workflow', () => {
   it('runs when a Main run completes, with a six-hour backstop and by hand, never on a pull request or push', () => {
@@ -80,7 +85,53 @@ describe('the Node record refresh workflow', () => {
     expect(read.run).toContain(
       '--workflow deploy.yml --branch main --event workflow_dispatch --status success --limit 1',
     );
-    expect(read.run).toContain('--log > "$RUNNER_TEMP/main-run.log"');
+    // Each leg's complete job log, never `gh run view --log`, which stops
+    // reading a job's log at its first line over 64 KiB.
+    const commands = read.run
+      .split('\n')
+      .filter(line => !line.trim().startsWith('#'));
+    expect(commands.some(line => line.includes('gh run view'))).toBe(false);
+    expect(read.run).toContain('actions/runs/$run/jobs?filter=latest');
+    expect(read.run).toContain(
+      'gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs"',
+    );
+  });
+
+  it("gives every line of a leg's own log its leg's name, long lines included", () => {
+    const read = step("Read the Node leg logs of main's full unit run");
+    const prefix = read.run
+      .split('\n')
+      .find(line => line.trim().startsWith('sed '))
+      .trim();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-'));
+    try {
+      const files = nodeFiles.slice(0, 4);
+      const raw = [
+        rawLine(files[0], 1.5),
+        `2026-01-01T00:00:00.0000000Z ${'x'.repeat(65_600)}`,
+        ...files.slice(1).map(file => rawLine(file, 2.5)),
+        `2026-01-01T00:00:00.0000000Z  Test Files  ${files.length} passed (${files.length})`,
+      ].join('\n');
+      fs.writeFileSync(path.join(dir, 'leg.log'), `${raw}\n`);
+      const out = execFileSync(
+        'bash',
+        [
+          '-c',
+          `name='test-node (3)'; RUNNER_TEMP=. ; ${prefix.replace('>> "$RUNNER_TEMP/main-run.log"', '')}`,
+        ],
+        {cwd: dir, encoding: 'utf8', maxBuffer: 1 << 24},
+      );
+      expect(
+        out
+          .split('\n')
+          .filter(Boolean)
+          .every(line => line.startsWith('test-node (3)\tlog\t')),
+      ).toBe(true);
+      expect(incompleteLegs(out)).toEqual([]);
+      expect(driftedEntries(out, {}).length).toBe(0);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('grants write access to its one job only, and only for contents and pull requests', () => {
@@ -410,5 +461,102 @@ describe('pull requests never fail on a missing or low recorded time', () => {
         'utf8',
       ),
     ).not.toContain('nodeLegFiles');
+  });
+});
+
+describe("a leg's log that misses test files", () => {
+  const files = nodeFiles.slice(0, 5);
+  const leg = (name, timed, counted) =>
+    [
+      ...files.slice(0, timed).map(file => `${name}\tlog\t${rawLine(file, 2)}`),
+      ...(counted == null
+        ? []
+        : [
+            `${name}\tlog\t2026-01-01T00:00:00.0000000Z  Test Files  ${counted - 1} passed | 1 skipped (${counted})`,
+          ]),
+    ].join('\n');
+
+  it('passes a leg that times every file its summary counts', () => {
+    expect(incompleteLegs(leg('test-node (1)', 5, 5))).toEqual([]);
+  });
+
+  it('names a leg that read fewer files than its summary, or has no summary', () => {
+    const log = [
+      leg('test-node (1)', 5, 5),
+      leg('test-node (2)', 3, 5),
+      leg('test-node (10)', 2, null),
+    ].join('\n');
+    expect(incompleteLegs(log)).toEqual([
+      {job: 'test-node (2)', read: 3, counted: 5},
+      {job: 'test-node (10)', read: 2, counted: null},
+    ]);
+  });
+
+  it('counts skipped and todo files as the summary does', () => {
+    const name = 'test-node (5)';
+    const log = [
+      `${name}\tlog\t${rawLine(files[0], 2)}`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  \x1b[33m↓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${files[1]} \x1b[2m(\x1b[22m\x1b[2m3 tests\x1b[22m\x1b[2m | \x1b[22m\x1b[33m3 skipped\x1b[39m\x1b[2m)\x1b[22m`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  \x1b[33m↓\x1b[39m \x1b[30m\x1b[43m node \x1b[49m\x1b[39m ${files[2]} \x1b[2m(\x1b[22m\x1b[2m1 test\x1b[22m\x1b[2m | \x1b[22m\x1b[35m1 todo\x1b[39m\x1b[2m)\x1b[22m`,
+      `${name}\tlog\t2026-01-01T00:00:00.0000000Z  Test Files  1 passed | 2 skipped (3)`,
+    ].join('\n');
+    expect(incompleteLegs(log)).toEqual([]);
+  });
+
+  it('fails the check and writes no reasons, so no record is written', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-'));
+    try {
+      const logFile = path.join(dir, 'main-run.log');
+      const reasonsFile = path.join(dir, 'reasons.json');
+      fs.writeFileSync(logFile, leg('test-node (4)', 3, 5));
+      let status = 0;
+      let stderr = '';
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'check',
+            '--log',
+            logFile,
+            '--reasons',
+            reasonsFile,
+          ],
+          {cwd: ROOT, stdio: 'pipe', encoding: 'utf8'},
+        );
+      } catch (error) {
+        status = error.status;
+        stderr = String(error.stderr);
+      }
+      expect(status).toBe(1);
+      expect(stderr).toContain('test-node (4): 3 files read, 5 counted');
+      // A leg that crashed before its summary fails too, by name.
+      fs.writeFileSync(logFile, leg('test-node (6)', 4, null));
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'check',
+            '--log',
+            logFile,
+            '--reasons',
+            reasonsFile,
+          ],
+          {cwd: ROOT, stdio: 'pipe', encoding: 'utf8'},
+        );
+        status = 0;
+      } catch (error) {
+        status = error.status;
+        stderr = String(error.stderr);
+      }
+      expect(status).toBe(1);
+      expect(stderr).toContain(
+        'test-node (6): 4 files read, no Test Files summary',
+      );
+      expect(fs.existsSync(reasonsFile)).toBe(false);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

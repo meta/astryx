@@ -162,9 +162,9 @@ export const docs = {
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon displayed before the label text. See `astryx docs icons` for valid semantic names.',
+        'Icon displayed before the label text; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelTooltip',
@@ -355,8 +355,8 @@ export const docsZh = {
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
-      description: '显示在标签文本前面的图标。',
+      type: 'ReactNode | IconType',
+      description: '显示在标签文本前面的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'labelTooltip',
@@ -481,7 +481,7 @@ export const docsDense = {
       'Status indicator w/ type + message; colored message box, sets aria-invalid on error.',
     onFocus: 'Fired when switch receives focus.',
     onBlur: 'Fired when switch loses focus.',
-    labelIcon: 'Icon before label text.',
+    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     labelTooltip: 'Tooltip text in info icon at label end.',
     labelPosition: 'Which side label appears; "start" places before switch.',
     labelSpacing:

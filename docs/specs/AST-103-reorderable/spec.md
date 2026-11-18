@@ -434,33 +434,9 @@ a theme draws it once, in its own style, for every surface that drags. A
 theme replaces it for the handle alone through the `list-reorder-handle`
 component icon slot, which falls back to `drag` at the `sm` size. The slot's
 size changes only the icon: the handle's box, target and ring stay the same
-(`architecture:icon-resolution-and-component-slots` INV8). A complete
-`IconRegistry` may omit `drag` until 0.8.0, which requires it (`DEP-0018`,
-`architecture:icon-resolution-and-component-slots` INV10 and `CLN-0030`).
+(`architecture:icon-resolution-and-component-slots` INV8).
 
 Rejected: three lines drawn as a pseudo-element, which no theme can replace.
-
-## Deprecation and cleanup records
-
-### DEP-0018 — Deprecate complete `IconRegistry` types that omit `drag`
-
-| Field            | Value                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| id               | `DEP-0018`                                                                                                    |
-| cleanup          | `CLN-0030`                                                                                                    |
-| package          | `@astryxdesign/core`                                                                                          |
-| surface          | The public `IconRegistry` type accepting a complete registry that omits `drag`                                |
-| old contract     | A complete registry typed as `IconRegistry` may omit `drag`; the omitted entry resolves the default artwork   |
-| replacement      | Add a `drag` entry in the registry's own style; `IconRegistry` already accepts it                             |
-| direct authority | FR5, DEC-7, and `architecture:icon-resolution-and-component-slots` INV10. Owners: `cixzhang`, `imdreamrunner` |
-| warning          | Consumer docs and the release notes name `DEP-0018`. No runtime warning (`spec:AST-017` FR29)                 |
-| migration        | Non-mechanical: draw `drag` artwork in the registry's style                                                   |
-| codemod          | None: icon artwork is bespoke to each theme and cannot be synthesized                                         |
-| downstream       | The default registry, every bundled theme, and every CLI theme template supply `drag`                         |
-| transition       | no prior transition                                                                                           |
-| state            | `deprecated`                                                                                                  |
-| open decision    | None beyond listing `CLN-0030` in the minor plan                                                              |
-| target plan      | `CLN-0030` (`architecture:icon-resolution-and-component-slots`) in 0.8.0                                      |
 
 ## Open questions
 

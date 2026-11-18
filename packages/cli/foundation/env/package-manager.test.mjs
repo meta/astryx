@@ -18,7 +18,7 @@ import {
   quoteCommandArgument,
   commandInFolder,
 } from './package-manager.mjs';
-import {recordDeclaredCliCommands, runWithCliDoor} from './cli-command.mjs';
+import {recordDeclaredSettings, runWithCliDoor} from './cli-command.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 import {usePnpApi} from '../../test-utils/pnp-fixtures.mjs';
 
@@ -648,13 +648,13 @@ describe('the picker: declared cliCommand, then the door, then the guess', () =>
 
   it('guesses when nothing is declared', () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, [{name: '@acme/a'}]);
+    recordDeclaredSettings(dir, [{name: '@acme/a'}]);
     expect(getCliInvocation(dir)).toBe('pnpm exec astryx');
   });
 
   it("uses an integration's cliCommand over the guess", () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, [
+    recordDeclaredSettings(dir, [
       {name: '@acme/a', cliCommand: 'acme astryx'},
       {name: '@acme/b', cliCommand: 'acme astryx'},
     ]);
@@ -667,7 +667,7 @@ describe('the picker: declared cliCommand, then the door, then the guess', () =>
 
   it('falls back to the guess when integrations declare different commands', () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, [
+    recordDeclaredSettings(dir, [
       {name: '@acme/a', cliCommand: 'acme astryx'},
       {name: '@acme/b', cliCommand: 'other astryx'},
     ]);
@@ -676,9 +676,7 @@ describe('the picker: declared cliCommand, then the door, then the guess', () =>
 
   it("puts a declared command ahead of a host's door", () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     expect(runWithCliDoor('astryx', () => getCliInvocation(dir))).toBe(
       'acme astryx',
     );
@@ -686,7 +684,7 @@ describe('the picker: declared cliCommand, then the door, then the guess', () =>
 
   it("uses a host's door when nothing is declared", () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, []);
+    recordDeclaredSettings(dir, []);
     expect(runWithCliDoor('astryx', () => getCliInvocation(dir))).toBe(
       'astryx',
     );
@@ -694,7 +692,7 @@ describe('the picker: declared cliCommand, then the door, then the guess', () =>
 
   it('guesses on a conflict even when a host set a door', () => {
     const dir = pnpmProject();
-    recordDeclaredCliCommands(dir, [
+    recordDeclaredSettings(dir, [
       {name: '@acme/a', cliCommand: 'acme astryx'},
       {name: '@acme/b', cliCommand: 'other astryx'},
     ]);

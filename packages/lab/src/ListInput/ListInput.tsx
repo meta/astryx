@@ -48,6 +48,7 @@ import {
   useListReorderScope,
 } from '@astryxdesign/core/internal/reorder';
 import type {Reorderable} from '@astryxdesign/core';
+import {reorderHandle} from '@astryxdesign/core/internal/reorderHandle.stylex';
 import {SizeProvider} from '@astryxdesign/core/SizeContext';
 import type {ColumnWidth} from '@astryxdesign/core/Table';
 import {useTheme} from '@astryxdesign/core/theme';
@@ -193,14 +194,13 @@ interface PendingMutationMotion<T> {
   matchesValue: (nextValue: T[]) => boolean;
 }
 
-// Core List's reorder handle is its grip alone, a 1rem box. A record has no
-// inset, so the handle stays clear of the record's end by its target's reach:
-// at least 4 px, or a finger's reach under a coarse pointer. SYNC: the GRIP,
-// TARGET_REACH, TOUCH_REACH and HANG of core List's handle.
-const GRIP = '1rem';
-const TARGET_REACH = `max(4px, (24px - ${GRIP}) / 2)`;
+// Core List's reorder handle is its grip alone. A record has no inset, so the
+// handle stays clear of the record's end by its target's reach, or a finger's
+// reach under a coarse pointer.
+const GRIP = reorderHandle.grip;
+const TARGET_REACH = reorderHandle.targetReach;
 const HANDLE_ROOM = `calc(${GRIP} + ${TARGET_REACH})`;
-const TOUCH_HANDLE_ROOM = `calc(${GRIP} + (44px - ${GRIP}) / 2)`;
+const TOUCH_HANDLE_ROOM = `calc(${GRIP} + ${reorderHandle.touchReach})`;
 // A handle that hangs before a record sits its grip and its target's reach
 // outside it, so the target stops at the record's first field. The target
 // reaches past that. The group takes the room, as much of it as its

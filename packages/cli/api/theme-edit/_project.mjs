@@ -36,6 +36,7 @@ import {
   oncePerListing,
   withListingCache,
 } from '../../foundation/fs/listing-cache.mjs';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -64,6 +65,7 @@ import {
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {string} description - What the doc says the component is.
  * @property {unknown} defaults - Playground defaults, or null.
+ * @property {Record<string, unknown> | null} [mobile] - The props of its render at a phone viewport, merged over the defaults (`playground.mobile`: AppShell's mobile layout), or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
@@ -78,7 +80,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 8;
+const DOCS_VERSION = 9;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -118,11 +120,23 @@ function nodeModulesRoot(dir) {
 }
 
 /**
- * The install line for packages, in the project's package manager.
+ * The step that adds packages to the app: the install guidance its
+ * integrations give, else {@link packageManagerAddLine}.
  * @param {string} cwd
  * @param {string[]} packages
  */
 export function installLine(cwd, packages) {
+  return (
+    installGuidanceFor(packages, cwd) ?? packageManagerAddLine(cwd, packages)
+  );
+}
+
+/**
+ * The command that adds packages, in the project's package manager.
+ * @param {string} cwd
+ * @param {string[]} packages
+ */
+export function packageManagerAddLine(cwd, packages) {
   const pm = detectPackageManager(cwd);
   return `${pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} add`} ${packages.join(' ')}`;
 }
@@ -235,6 +249,12 @@ async function readComponents(coreDir) {
         category: typeof doc.category === 'string' ? doc.category : '',
         description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,
+        mobile:
+          pg?.mobile &&
+          typeof pg.mobile === 'object' &&
+          !Array.isArray(pg.mobile)
+            ? pg.mobile
+            : null,
         wrapper:
           typeof pg?.wrapper?.component === 'string'
             ? {

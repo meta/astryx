@@ -10,6 +10,7 @@
  */
 
 import {
+  astryxDefinitionCoverage,
   astryxIconDefinitions,
   ICON_USE_ORDER_COMMAND,
   noIconSetNext,
@@ -69,10 +70,7 @@ export async function iconList({cwd}) {
               total: builtIn.length,
               missing: builtIn.filter(name => !mapped.has(name)),
             },
-            astryx: {
-              mapped: astryx.filter(doc => mapped.has(doc.name)).length,
-              total: astryx.length,
-            },
+            astryx: astryxDefinitionCoverage(mapped),
             own: set.definitions.map(each => each.doc.name),
           },
           project: set === choice.set,

@@ -64,6 +64,7 @@ import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {reorderHandle} from '../internal/reorderHandle.stylex';
 import {styles as revealStyles} from '../hooks/containerReveal.stylex';
 import {
   registerEnglishFallback,
@@ -90,29 +91,14 @@ registerEnglishFallback(english);
 
 /** The grip a handle draws when the theme maps nothing to its slot. */
 const REORDER_GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
-/**
- * The handle's target with a fine pointer, px: an invisible square round the
- * grip, at least the WCAG 2.5.8 minimum. A finger's 44 px target is a
- * coarse-only hit layer, clamped so it never takes from a neighbour
- * (utils/hitArea.ts). SYNC: utils/hitArea.ts MIN_TOUCH_TARGET.
- */
-const TARGET_SIZE = 24;
-const TOUCH_TARGET_SIZE = 44;
-/** The target's least reach past the grip, px, so the ring clears it. */
-const TARGET_MIN_REACH = 4;
-/**
- * The grip's box. A theme's slot size changes only the icon, which stays
- * centred on the box. The handle's box, target, ring and distance from the
- * row's edge stay the same.
- *
- * SYNC: Lab's ListInput and TransferList restate GRIP, TARGET_REACH,
- * TOUCH_REACH and HANG for the room they keep for the handle.
- */
-const GRIP = '1rem';
-/** How far a fine pointer's target reaches past the grip on each side. */
-const TARGET_REACH = `max(${TARGET_MIN_REACH}px, (${TARGET_SIZE}px - ${GRIP}) / 2)`;
-/** How far a finger's target reaches past the grip on each side. */
-const TOUCH_REACH = `calc((${TOUCH_TARGET_SIZE}px - ${GRIP}) / 2)`;
+// The grip's box, and how far its target reaches past it, for a fine pointer
+// (at least the WCAG 2.5.8 minimum) and for a finger. A finger's target is a
+// coarse-only hit layer, clamped so it never takes from a neighbour
+// (utils/hitArea.ts). A theme's slot size changes only the icon, which stays
+// centred on the box.
+const GRIP = reorderHandle.grip;
+const TARGET_REACH = reorderHandle.targetReach;
+const TOUCH_REACH = reorderHandle.touchReach;
 /**
  * The handle stays clear of the row's inline end by its target's reach, less
  * the row's own inset. So a list that clips never cuts its target or ring.

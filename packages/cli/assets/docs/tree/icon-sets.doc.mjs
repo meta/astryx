@@ -32,7 +32,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Icon sets are experimental: the `astryx experimental icon` commands, the `experimental.iconSet` key in astryx.config, the `experimental.iconSets` key in an integration manifest, the data file, icon definitions, and the output and JSON of all of them can change, or go away, in any patch release without a deprecation period. A project that installs no icon-set package and does not set `experimental.iconSet` sees no change in any stable command, apart from: the marked `experimental` group in help and in `astryx manifest` (its command, and its `responseTypes` and `jsonSupported` entries); the marked experimental entries in the CLI reference listings; and a search for \"experimental\", which also finds the stable `stability` field of the field reference. Installing a package that ships icon sets turns icon features on, with or without `experimental.iconSet`: discover, doctor, `astryx doctor integration validate <package>`, and the icons topic ({@link generic:icons}) read the installed sets. Copied templates follow a set only once `experimental.iconSet` names it. `astryx search` never returns icons or these docs; to find an icon by meaning, use `astryx experimental icon <words>`.',
+          text: 'Icon sets are experimental: the `astryx experimental icon` commands, the `experimental.iconSet` key in astryx.config, the `experimental.iconSets` key in an integration manifest, the data file, icon definitions, and the output and JSON of all of them can change, or go away, in any patch release without a deprecation period. A project that installs no icon-set package and does not set `experimental.iconSet` sees no change in any stable command, apart from: the marked `experimental` group in help and in `astryx manifest` (its command, and its `responseTypes` and `jsonSupported` entries); the marked experimental entries in the CLI reference listings; a search for \"experimental\", which also finds the stable `stability` field of the field reference; and `astryx discover`, which lists the icon sets your sources offer that you could add, so you can compare them before you pick one. Installing a package that ships icon sets turns icon features on, with or without `experimental.iconSet`: discover, doctor, `astryx doctor integration validate <package>`, and the icons topic ({@link generic:icons}) read the installed sets. Copied templates follow a set only once `experimental.iconSet` names it. `astryx search` never returns these docs. Where icon features are on, a search that asks for an icon (`trash icon`, `SearchIcon`) also lists up to three installed icons in its own `icons` block after its results; its `results` and `matchCount` never hold an icon, and a search with `--type` lists none. To see every icon that matches, use `astryx experimental icon <words>`.',
         },
       ],
     },
@@ -514,7 +514,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
       content: [
         {
           type: 'prose',
-          text: 'Every place the CLI reads or reports icon sets, all experimental. Outside `astryx experimental icon`, each appears only in a project that installs an icon-set package or sets `experimental.iconSet`; `astryx search` never returns icons:',
+          text: 'Every place the CLI reads or reports icon sets, all experimental. Outside `astryx experimental icon`, each appears only in a project that installs an icon-set package or sets `experimental.iconSet`, and `astryx search` shows icons only in their own block after its results:',
         },
         {
           type: 'table',
@@ -522,7 +522,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
           rows: [
             [
               '`experimental.iconSet` in astryx.config',
-              "The project's main icon set, by set name or as `<package>/<set>`, or a list: the main set first, then backup sets in order. Templates follow icon sets only when it is set. Discover and doctor read them when it is set or when an icon-set package is installed. `astryx experimental icon` ranks the main set's icons first, and without it treats the only installed set as the project's. `astryx experimental icon use <main> --backup <set>` writes it.",
+              "The project's main icon set, by set name or as `<package>/<set>`, or a list: the main set first, then backup sets in order. Templates follow icon sets only when it is set. Discover and doctor read installed sets when it is set or when an icon-set package is installed; discover lists the sets your sources offer either way. `astryx experimental icon` ranks the main set's icons first, and without it treats the only installed set as the project's. `astryx experimental icon use <main> --backup <set>` writes it.",
             ],
             [
               '`experimental.iconVariant` in astryx.config',
@@ -537,8 +537,12 @@ export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
               "The icon definition each imported icon draws (`{TrashIcon: 'delete'}`): a named import by the name it imports, a default import by its local name. `astryx template`, shown or copied, then writes the icons from the first set in the list that has each meaning and reports `icons` (status, set, order, variant, mapped, placeholder, kept, sets): every key is mapped, a placeholder when no set has its meaning, or kept with why (a namespace or type-only import, a re-export, an Astryx import or one from a set in the list, an import from the library a set in the list wraps, no import at all, or an icon that draws no definition and has no match). `integration check` notes a key the template's source never imports (`template_icon_not_imported`), never failing, and notes an imported icon the package's templates do not declare (`template_icon_undeclared`), which fails `--strict --next`.",
             ],
             [
+              '`astryx search`',
+              "A search with no `--type` that asks for an icon (a word `icon` or `icons`, an installed set's name, or an export name such as `SearchIcon`) lists up to three installed icons in an `icons` block after its results, ranked as `astryx experimental icon <words>` ranks them, each with its import line and the command that reads it. An `icon` or `icons` right after `with`, with only `a`, `an` or `the` between, that no `of` or `for` follows names a feature of a component or template the search answers, so `card with an icon` lists no icons and `card with an icon of a star` does. The results and their count never hold an icon, and a search with `--type` lists none.",
+            ],
+            [
               '`astryx discover`',
-              "A package's sets (`iconSets`) and, for `@scope/name/<set>`, the set's display name, license, icon count, and definitions; `--type icon-set` keeps only sets.",
+              "A package's sets (`iconSets`) and, for `@scope/name/<set>`, the set's display name, license, icon count, and definitions. A set your sources offer is listed where icon features are off too, marked experimental: `[experimental]` in text; in JSON, `experimental: true` on a search match and the set page, and `experimentalFields: ['iconSets']` on a package entry; its page says how many of the CLI's icon definitions it maps, of how many (`definitions: N/M` in the text view, the count `experimental icon --list` prints), when the source lists its definitions, and gives the command that installs its package, and `astryx experimental icon use <set>` to pick it; its definitions and `--type icon-set` need the opt-in.",
             ],
             [
               '`astryx doctor`',
