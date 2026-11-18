@@ -985,6 +985,61 @@ test.describe('a single row’s minimum width', () => {
     expect(during).toBe(6);
     expect(after).toBe(6);
   });
+  test('a list that measures in the last frame of a scale-in, at 0.9995, publishes the width it has unscaled', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const read = await page.evaluate(async () => {
+      const frame = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-frame"]',
+      );
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-wide"]',
+      );
+      const list = row?.querySelector<HTMLElement>('.astryx-overflow-list');
+      if (frame == null || row == null || list == null) {
+        throw new Error('missing story parts');
+      }
+      const settle = async () =>
+        new Promise(resolve => {
+          setTimeout(resolve, 300);
+        });
+      frame.style.transform = 'none';
+      row.style.width = '';
+      await settle();
+      const unscaled = Number.parseFloat(getComputedStyle(list).width);
+      // The row resizes in the scale-in's last frame, so the list measures
+      // under it. A transform alone fires no resize.
+      frame.style.transform = 'scale(0.9995)';
+      row.style.width = '699px';
+      await settle();
+      const during = {
+        width: Number.parseFloat(getComputedStyle(list).width),
+        count: list.children.length,
+      };
+      frame.style.transform = 'none';
+      await settle();
+      return {unscaled, during, after: list.children.length};
+    });
+    test.info().annotations.push({
+      type: 'scale-in-0.9995',
+      description: JSON.stringify(read),
+    });
+    // A width measured under the scale and not converted runs short by the
+    // scale's fraction (about 0.2 px here), and the list folds once a resize
+    // rounds past it. Firefox's layout units leave a few hundredths.
+    expect(Math.abs(read.during.width - read.unscaled)).toBeLessThanOrEqual(
+      0.05,
+    );
+    expect(read.during.count).toBe(6);
+    expect(read.after).toBe(6);
+  });
 
   test('a list capped with calc() holds one fold across frames', async ({
     page,

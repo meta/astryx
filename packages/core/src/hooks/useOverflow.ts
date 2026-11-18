@@ -159,12 +159,14 @@ function inlineScale(element: HTMLElement): number {
         px(style.paddingRight) +
         px(style.borderLeftWidth) +
         px(style.borderRightWidth));
-  if (!(layout > 0)) {
+  // The computed width is serialized to a thousandth of a pixel, so a
+  // difference within that is no scale. Any larger one counts, however close
+  // to 1 the ratio is: the last frames of a layer scaling in still shorten
+  // the list's measured items.
+  if (!(layout > 0) || Math.abs(onScreen - layout) <= 0.0005) {
     return 1;
   }
-  const scale = onScreen / layout;
-  // Within rounding of 1 the box is at its layout size.
-  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+  return onScreen / layout;
 }
 
 /** The bounds of a single-row set, from sub-pixel widths. */
