@@ -130,9 +130,8 @@ Astryx Stage simulation (`spec:AST-112/FR2`, `spec:AST-082/FR13`).
     | `AstryxFiles`          | `invalid-name`, `invalid-data`, `invalid-url`, `invalid-uri`, `invalid-option`, `missing-file`, `no-space`, `no-window`, `busy`, `http`, `redirect`, `timeout`, `network`, `io`, `no-namespace`, `unavailable`; `cancelled`               |
 
   - Synchronous members (`isAvailable()`, `supports(feature)`,
-    `AstryxSecureStorage.capabilities()`, `AstryxClientIdentity.isSimulator()`,
-    `AstryxClientIdentity.hasSystemIdentities()`) read the module's constants
-    once and never throw. They answer `false` or `null` where the module or the
+    `AstryxSecureStorage.capabilities()`, `AstryxClientIdentity.isSimulator()`)
+    read the module's constants once and never throw. They answer `false` or `null` where the module or the
     constant is absent.
   - A domain outcome is data on an `ok` result, never a failure: a missing key
     reads `{ok: true, value: null}`, a missing identity `{ok: true, info:
@@ -182,7 +181,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
   - With no secure hardware the call answers `no-secure-hardware`, unless
     `allowSoftware` is true; then the key is a software key and
     `isHardwareBacked` is false.
-  - `createCsr(label, {subject, altNames?})` answers an RFC 2986 certificate
+  - `createCsr(label, subject, {altNames?})` answers an RFC 2986 certificate
     signing request in PEM, signed with ECDSA and SHA-256 by the label's
     key. Subject fields are `CN`, `O`, `OU`, `C`, `L`, `ST`, `serialNumber`, `UID`, `DC`,
     `emailAddress` or a dotted OID, in order; alternative names are `email`,
@@ -223,8 +222,8 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     suffix by the public suffix list (`*.co.uk` and `*` answer
     `invalid-host`).
   - The app's own runtime presents identities only when the app declares it
-    in its configuration (default: off), which the configuration plugin writes
-    (`spec:AST-112/FR4`); without it, `bindToHosts` answers `not-presentable`.
+    in its configuration (default: off), which the generator of its native
+    project writes (`spec:AST-112/FR3`, FR4); without it, `bindToHosts` answers `not-presentable`.
     JavaScript and Preview projects cannot change the declaration.
 
 - **FR7 — Presentation follows the runtime's own requests and the redirect
@@ -241,7 +240,7 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
 
 - **FR8 — On Android, an app can use a system certificate (feature
   `system-identity`).**
-  - `adoptSystemIdentity(label, {hosts, alias?})` adopts a certificate from
+  - `adoptSystemIdentity(label, hosts, {alias?})` adopts a certificate from
     Android's system store (one an administrator or the person installed)
     under `label`, bound to exact `hosts`. The system's picker and consent
     dialog name the hosts; an `alias` this runtime adopted before and that is
@@ -251,8 +250,9 @@ null}`, and a missing cache file `{ok: true, data: null, uri: null}`.
     a key identity has the label, and `no-activity` with no screen to show the
     picker on. The adopted certificate is bound and presented as FR6 and FR7
     say, and `getInfo` marks it as a system certificate.
-  - iOS gives apps no system certificate store: `hasSystemIdentities()` and
-    `supports('systemIdentity')` answer false, and the call answers
+  - Android binaries list the feature, so `supports('systemIdentity')`
+    answers true there. iOS gives apps no system certificate store:
+    `supports('systemIdentity')` answers false, and the call answers
     `no-system-identities`.
 
 - **FR9 — `AstryxFiles` keeps files in the runtime's cache.**
