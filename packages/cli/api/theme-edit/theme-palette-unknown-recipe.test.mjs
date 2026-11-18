@@ -79,7 +79,12 @@ describe('a palette recipe this CLI does not know', () => {
         expect(e.message).toContain(`this CLI (${cliVersion()})`);
         expect(e.message).toMatch(/update the CLI/);
         expect(e.message).not.toMatch(/by hand/);
-        expect(JSON.stringify(e)).toContain('astryx upgrade');
+        // The way to a newer CLI is the project's own install of it, never
+        // `astryx upgrade`, which migrates code and installs nothing.
+        expect(JSON.stringify(e)).not.toContain('astryx upgrade');
+        expect(JSON.stringify(e.suggestions ?? e)).toMatch(
+          /(npm install|pnpm add|yarn add|bun add) @astryxdesign\/cli@latest/,
+        );
         expect(fs.readFileSync(config).equals(before)).toBe(true);
       }
     },
