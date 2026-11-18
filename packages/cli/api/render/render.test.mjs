@@ -289,6 +289,14 @@ describe('render(): a page that uses nothing from Astryx', () => {
     expect(exported('none/page.tsx')).toBe(false);
   });
 
+  it('refuses a React page whose own stylesheets import nothing from Astryx', async () => {
+    put('owncss/index.css', "@import './App.css';\nbody { margin: 0; }\n");
+    put('owncss/App.css', '.app { padding: 8px; }\n');
+    put('owncss/page.tsx', "import './index.css';\nexport default function Page() {\n  return <p className=\"app\">Plain</p>;\n}\n");
+    expect(await codeOf(() => render('owncss/page.tsx', {cwd: dir}))).toBe('ERR_RENDER_NOT_ASTRYX');
+    expect(exported('owncss/page.tsx')).toBe(false);
+  });
+
   it('refuses a page alone in an Astryx package\'s folder: the page itself does not count', async () => {
     put('kitalone/package.json', JSON.stringify({name: '@astryxdesign/rl3-kit-alone', private: true}));
     put('kitalone/page.tsx', 'export default function Page() {\n  return <p>Alone</p>;\n}\n');
