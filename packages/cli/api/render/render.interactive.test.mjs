@@ -443,6 +443,54 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
+  it("keeps a theme's rules for a part Core draws only after a click, and the part shows them", async () => {
+    // Core names a part's class at run time (`banner-icon` becomes
+    // `astryx-banner-icon`), so the script holds only the part's name.
+    put(
+      'src/notice.css',
+      '.astryx-banner-icon{outline-style:dotted}.astryx-never-a-part{outline-style:dashed}\n',
+    );
+    put(
+      'src/notice.tsx',
+      `import {useState} from 'react';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import './notice.css';
+
+export default function Notice() {
+  const [shown, setShown] = useState(false);
+  return (
+    <main>
+      <Button label="Show notice" onClick={() => setShown(true)} />
+      {shown && <Banner status="warning" title="Saved for later" />}
+    </main>
+  );
+}
+`,
+    );
+    await render('src/notice.tsx', {cwd: dir, out: 'notice.html'});
+    const file = read('notice.html');
+    expect(renderedMarkupOf(file)).not.toContain('astryx-banner-icon');
+    expect(file).toContain('.astryx-banner-icon{outline-style:dotted}');
+    expect(file).not.toContain('.astryx-never-a-part');
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const settle = () =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    await settle();
+    const doc = dom.window.document;
+    /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
+    await settle();
+    const icon = doc.querySelector(`#${ROOT_ID} .astryx-banner-icon`);
+    expect(icon).not.toBeNull();
+    expect(
+      dom.window.getComputedStyle(/** @type {Element} */ (icon)).outlineStyle,
+    ).toBe('dotted');
+    dom.window.close();
+  }, 120_000);
+
   it("keeps the first paint when the page's script throws", async () => {
     put(
       'src/throws.tsx',
