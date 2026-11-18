@@ -280,10 +280,22 @@ describe('status roles follow the look', () => {
         ).toBeGreaterThanOrEqual(5);
       }
     }
-    // Info stays a blue, turned away from the blue accent.
-    const info = hexToOklch(halves('corp', '--color-info')[0]);
-    expect(info.H).toBeGreaterThan(200);
-    expect(info.H).toBeLessThan(270);
+    // Info keeps its own hue in each mode, whatever the accent: an accent
+    // of its own hue (blue) and one far from it (pink) give it the same
+    // hue; it stands apart from the blue accent by its shade.
+    await themeEditNew('corp-pink', {cwd, like: 'neutral'});
+    await themeEditSet('corp-pink', 'accent', '#ff1493', {cwd});
+    for (const [i, mode] of /** @type {const} */ ([
+      'light',
+      'dark',
+    ]).entries()) {
+      const near = hexToOklch(halves('corp', '--color-info')[i]);
+      const far = hexToOklch(halves('corp-pink', '--color-info')[i]);
+      expect(
+        Math.abs(((near.H - far.H + 540) % 360) - 180),
+        `${mode} info hue`,
+      ).toBeLessThan(2);
+    }
     const source = fs.readFileSync(
       path.join(cwd, 'themes', 'corp', 'corp.settings.ts'),
       'utf8',
