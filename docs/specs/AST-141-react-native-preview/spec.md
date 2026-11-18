@@ -248,13 +248,9 @@ project away from the app's own identity and data.
   `--json`, prints plain text otherwise, exits 0 or 1 the same in text and
   JSON, and its outcomes differ by `code`.
 
-  The `astryx experimental rn` level belongs to no package: each installed
-  package that contributes a group under it (Stage's, or Preview's) adds that
-  group, and bare `astryx experimental rn` lists the groups installed packages
-  contribute. With no such package installed, `astryx experimental rn` and its
-  groups do not exist: the CLI reserves no name and answers as it does for any
-  unknown command. The `astryx experimental` group admits the level
-  (`spec:AST-017` FR27, `spec:AST-084` FR0).
+  The group sits at the `astryx experimental rn` level that
+  `spec:AST-112/FR13` states: `@astryxdesign/react-native-preview` adds it
+  where it is installed, and without it the group does not exist.
 
   | Command                                 | Its one job                                                                                                                                                                                                                                                                                                                                                                                       |
   | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
