@@ -4730,6 +4730,9 @@ export function draftAnswer(ctx, env, question) {
       ', dark by default',
     )
     .replace(/\b(?:easy|easier|comfortable)\s+to\s+read\b/gi, 'larger text')
+    // ("bold headings without being loud": a feel to stay clear of, its own
+    // clause, never a "without" that undoes the ask before it.)
+    .replace(/[,;]?\s*\bwithout\s+(?:being|looking|feeling)\s+/gi, ', not ')
     // ("off-white", "ink blue", "grass green", "safety orange", "slate
     // blue-gray": a color named in two words is one name in the table.)
     .replace(/\boff[- ]white\b/gi, 'offwhite')
@@ -28772,11 +28775,12 @@ export function draftAnswer(ctx, env, question) {
         .map(st => String(st.thing)),
     );
     for (const w of new Set(qWords)) {
-      // ("too playful", "less minimal", "not playful": the feel is what
-      // the ask moves away from, never a move toward it.)
+      // ("too playful", "less minimal", "not playful", "I don't want it
+      // busy", "without being loud": the feel is what the ask moves away
+      // from, never a move toward it.)
       if (
         new RegExp(
-          String.raw`\b(?:too|less|not|no|never|overly|so|un)[\s-]+(?:\w+\s+)?${w}\b`,
+          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing)[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
         ).test(q.toLowerCase())
       )
         continue;

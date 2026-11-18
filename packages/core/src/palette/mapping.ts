@@ -182,6 +182,7 @@ export interface PaletteMapping {
     vision: 'red-weak' | 'green-weak';
     mode: PaletteMode;
     colors: [string, string];
+    page?: string;
   }>;
   /** The code colors that keep the base theme's because none of their family's stops reads on the code background and the page. */
   code: string[];
@@ -2055,9 +2056,20 @@ export function mapPalette(
       }
       const changed = (w: string): boolean =>
         `--color-${w}` in tokens || exactOf(`--color-${w}`, m) != null;
+      const pageOf = parseColor(
+        String(
+          tokens['--color-background-body']?.[m]?.color ??
+            t.colorIn(
+              String(base?.[m]?.['--color-background-body'] ?? ''),
+              m,
+            ) ??
+            (m === 'light' ? '#ffffff' : '#000000'),
+        ),
+      );
+      const page = pageOf ? hex(pageOf) : m === 'light' ? '#ffffff' : '#000000';
       for (const c of cvdClashes(fills)) {
         if (changed(c.a) || changed(c.b)) {
-          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]]});
+          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]], page});
         }
       }
     }
