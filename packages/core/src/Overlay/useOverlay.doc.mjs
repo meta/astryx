@@ -114,7 +114,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Put information people need to choose the item, such as its title or price, only in a hover overlay; on a touch device it shows only after a tap.',
+          'Put information people need to choose the item, such as its title or price, only in a hover or focus overlay; on a touch device a hover overlay shows only after a tap, and a focus overlay does not show.',
       },
     ],
   },
@@ -169,7 +169,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Put info needed to choose the item (title, price) only in a hover overlay; touch shows it after a tap.',
+          'Put info needed to choose the item (title, price) only in a hover/focus overlay; touch shows hover after a tap, never focus.',
       },
     ],
   },
