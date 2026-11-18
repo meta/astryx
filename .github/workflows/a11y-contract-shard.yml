@@ -84,7 +84,8 @@ jobs:
     # A free standard runner: the same four vCPUs and 16 GB as the release
     # check's paid 4-core-ubuntu pool.
     runs-on: ubuntu-latest
-    # About 13 minutes a pass, after about 20 of install and build.
+    # About 13 minutes a pass of one leg, after about 20 of install and build;
+    # a spec cut across two legs takes twice as long a pass, so ask fewer.
     # Expressions have no arithmetic, so the limit steps with `repeat`.
     timeout-minutes: ${{ fromJSON(inputs.repeat) > 5 && 200 || fromJSON(inputs.repeat) > 2 && 100 || 60 }}
     permissions:
@@ -161,8 +162,9 @@ jobs:
           for pass in $(seq 1 "$REPEAT"); do
             echo "::group::Pass $pass of $REPEAT"
             PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json" \
-              pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --output "test-results/pass-$pass" --reporter=list,json || status=1
-            for folder in *-audit-evidence; do
+              pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --output "test-results/pass-$pass" --reporter=list,github,json || status=1
+            # Audits write their evidence at the root or under test-results/.
+            for folder in *-audit-evidence test-results/*-audit-evidence; do
               if [ -d "$folder" ]; then
                 mkdir -p "audit-evidence/pass-$pass"
                 mv "$folder" "audit-evidence/pass-$pass/"
@@ -172,36 +174,46 @@ jobs:
           done
           exit "$status"
 
-      # Counts each case of the spec over the passes. A spec whose cases never
-      # ran (all skipped, or absent) fails by name, never a quiet zero.
+      # The report reader comes from the dispatched ref: an older commit under
+      # test may predate it.
+      - name: Check out the report reader
+        if: always() && steps.contracts.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          path: .report-reader
+          persist-credentials: false
+
+      # Counts each case of the spec over the passes, keyed by its title path.
+      # A spec whose cases never ran (all skipped, or absent) fails by name,
+      # never a quiet zero.
       - name: Count the spec's cases
         if: always() && steps.contracts.outcome != 'skipped'
         uses: actions/github-script@v9
         env:
           SPEC: ${{ inputs.spec }}
+          REPORT_READER: ${{ github.workspace }}/.report-reader/.github/scripts/webkit-a11y-report.mjs
         with:
           script: |
             const fs = require('node:fs');
             const path = require('node:path');
+            const {pathToFileURL} = require('node:url');
+            const {testsOf} = await import(pathToFileURL(process.env.REPORT_READER).href);
             const spec = process.env.SPEC;
             const counts = new Map();
             const passes = fs.existsSync('pass-results') ? fs.readdirSync('pass-results').filter(name => name.endsWith('.json')).sort() : [];
-            const walk = suite => {
-              for (const item of suite.specs ?? []) {
-                if (path.basename(item.file ?? '') !== spec) continue;
-                for (const test of item.tests ?? []) {
-                  const count = counts.get(item.title) ?? {passed: 0, failed: 0, skipped: 0};
-                  if (test.status === 'skipped') count.skipped += 1;
-                  else if (test.status === 'unexpected') count.failed += 1;
-                  else count.passed += 1;
-                  counts.set(item.title, count);
-                }
-              }
-              for (const child of suite.suites ?? []) walk(child);
-            };
             for (const name of passes) {
               const report = JSON.parse(fs.readFileSync(path.join('pass-results', name), 'utf8'));
-              for (const suite of report.suites ?? []) walk(suite);
+              for (const test of testsOf(report)) {
+                if (path.basename(test.file ?? '') !== spec) continue;
+                const count = counts.get(test.title) ?? {passed: 0, failed: 0, skipped: 0};
+                if (!test.ran || test.status === 'skipped') count.skipped += 1;
+                else if (test.status === 'unexpected') count.failed += 1;
+                else count.passed += 1;
+                counts.set(test.title, count);
+              }
             }
             const lines = [...counts].map(([title, c]) => `${spec} › ${title}: passed ${c.passed}, failed ${c.failed}, skipped ${c.skipped}`);
             for (const line of lines) core.info(line);

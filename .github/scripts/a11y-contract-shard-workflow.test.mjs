@@ -142,12 +142,16 @@ describe('the single contract-leg dispatch', () => {
     expect(run.run).not.toContain('--repeat-each');
     expect(run.run).toContain('for pass in $(seq 1 "$REPEAT"); do');
     expect(run.run).toContain(
-      `${release} --output "test-results/pass-$pass" --reporter=list,json || status=1`,
+      `${release} --output "test-results/pass-$pass" --reporter=list,github,json || status=1`,
     );
     expect(run.run).toContain(
       'PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json"',
     );
     expect(run.run).toContain('mv "$folder" "audit-evidence/pass-$pass/"');
+    // Audits write evidence at the root or under test-results/; both move.
+    expect(run.run).toContain(
+      'for folder in *-audit-evidence test-results/*-audit-evidence; do',
+    );
     expect(run.run).toMatch(/exit "\$status"\s*$/);
     // The audits refuse a build without the source stamp ci.yml writes.
     const stamp = step('Stamp Storybook source revision');
@@ -294,10 +298,18 @@ describe('the single contract-leg dispatch', () => {
         addList: () => summary,
         write: async () => {},
       };
+      process.env.REPORT_READER = path.join(
+        root,
+        '.github/scripts/webkit-a11y-report.mjs',
+      );
       await new AsyncFunction(
         'core',
         'require',
-        step("Count the spec's cases").with.script,
+        'importModule',
+        step("Count the spec's cases").with.script.replaceAll(
+          'await import(',
+          'await importModule(',
+        ),
       )(
         {
           info: line => info.push(line),
@@ -305,6 +317,7 @@ describe('the single contract-leg dispatch', () => {
           summary,
         },
         createRequire(import.meta.url),
+        specifier => import(specifier),
       );
       return {info, failed};
     } finally {
@@ -324,7 +337,20 @@ describe('the single contract-leg dispatch', () => {
             specs: Object.entries(cases).map(([title, status]) => ({
               title,
               file: `packages/core/src/MoreMenu/__tests__/${SPEC}`,
-              tests: [{status}],
+              tests: [
+                {
+                  status,
+                  results:
+                    status === 'skipped'
+                      ? []
+                      : [
+                          {
+                            status:
+                              status === 'unexpected' ? 'failed' : 'passed',
+                          },
+                        ],
+                },
+              ],
             })),
           },
         ],
@@ -335,7 +361,7 @@ describe('the single contract-leg dispatch', () => {
           {
             title: 'other',
             file: 'packages/core/src/Link/__tests__/Link.a11y.chromium.spec.ts',
-            tests: [{status: 'unexpected'}],
+            tests: [{status: 'unexpected', results: [{status: 'failed'}]}],
           },
         ],
       },
@@ -349,10 +375,18 @@ describe('the single contract-leg dispatch', () => {
       report({default: 'flaky', sheet: 'skipped'}),
     ]);
     expect(step3.failed).toBeNull();
+    // Keyed by title path, as the shared report reader names a test.
     expect(step3.info).toEqual([
-      `${SPEC} › default: passed 3, failed 0, skipped 0`,
-      `${SPEC} › sheet: passed 1, failed 1, skipped 1`,
+      `${SPEC} › audit › default: passed 3, failed 0, skipped 0`,
+      `${SPEC} › audit › sheet: passed 1, failed 1, skipped 1`,
     ]);
+    const reader = step('Check out the report reader');
+    expect(reader.with).toEqual({
+      ref: '${{ github.sha }}',
+      'sparse-checkout': '.github/scripts',
+      path: '.report-reader',
+      'persist-credentials': false,
+    });
   });
 
   it('fails by name when the spec ran zero times: every case skipped, or no report', async () => {
