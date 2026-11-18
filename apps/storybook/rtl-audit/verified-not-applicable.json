@@ -464,5 +464,17 @@
   {
     "component": "core/MobileNavToggle",
     "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row)."
+  },
+  {
+    "component": "core/CheckboxIndicator",
+    "reason": "CheckboxIndicator draws a centered square box with an equal border on every side, holding a checkmark or an indeterminate dash. Neither mark is a previous, next, start, end or progression cue, so neither mirrors (design:bidirectionality DR4/DR5). It owns no inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior; its row placement belongs to the control that renders it."
+  },
+  {
+    "component": "core/CheckIndicator",
+    "reason": "CheckIndicator renders a centered checkmark glyph, or caller children, in an inline-flex box with no inline-axis spacing of its own. A checkmark is not a previous, next, start, end or progression cue, so it does not mirror (design:bidirectionality DR4/DR5). It owns no physical position, order, scroll, drag, overlay or keyboard behavior."
+  },
+  {
+    "component": "core/RadioIndicator",
+    "reason": "RadioIndicator draws a centered circle with an equal border and a centered dot; both are symmetric about the inline axis. It owns no directional glyph, inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior; its row placement belongs to the control that renders it."
   }
 ]
