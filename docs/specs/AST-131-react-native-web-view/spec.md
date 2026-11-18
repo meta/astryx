@@ -36,19 +36,31 @@ and its opt-in capabilities (`spec:AST-112/FR1`, `spec:AST-112/FR3`), the
 result vocabulary (`spec:AST-112/FR6`), the capability shape
 (`spec:AST-112/FR7`), additive evolution (`spec:AST-112/FR8`), and Astryx
 Stage (`spec:AST-112/FR12`). It specifies the native web view
-(`AstryxWebView`) and its feature report (`AstryxWebViewInfo`), which the
+(`AstryxWebView`) and its device report (`AstryxWebViewInfo`), which the
 library's `WebView` and `WebContent` use. The capability's other modules are
 part of the same platform package; "Who uses it" lists them, and each has its
 own record.
 
 ## Why this exists
 
-| Piece                                                                           | What the ecosystem already does well                                                                                                                                                                                                                                           | Why Astryx owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AstryxWebView`                                                                 | react-native-webview is mature and widely used. It covers iOS, Android, macOS, and Windows, has a large API (injected scripts, `onShouldStartLoadWithRequest`, `postMessage`/`onMessage`, cookies, file access, downloads, incognito mode), and handles most apps' needs well. | The gaps are specific. A bundled folder served from a private origin with no network, plus a byte route from the page to the app, instead of file access. Origin and path pinning that holds across redirects, decided natively from declared data, not by a JavaScript callback per navigation. Per-view session handles whose cookies never appear in props, and a page-storage-off mode. A message event whose sender origin comes from the engine. Results with closed reasons, never a throw. One dependency set (`spec:AST-112/FR2`). Theme colour scheme and text size wired by the library. Astryx Stage parity. |
-| `AstryxWebViewInfo`                                                             | react-native-webview reports no per-binary feature list; an app reads the package version.                                                                                                                                                                                     | An app and the library ask the binary whether it keeps a guarantee (page storage off, a bundled origin, a frame-safe channel) before they rely on it, so a missing guarantee refuses loudly instead of loading a weaker page (DEC-5).                                                                                                                                                                                                                                                                                                                                                                                    |
-| `AstryxAuthSession`                                                             | expo-web-browser opens the system's authentication session (ASWebAuthenticationSession, Custom Tabs) and expo-auth-session builds OAuth on it, PKCE and discovery included. Both are well maintained.                                                                          | The gap is narrow: results with closed reasons, no Expo runtime library (`spec:AST-112/FR11`), and a redirect URI per runtime. No Astryx component uses it (OQ3).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `AstryxWebSessions`, `AstryxWebData`, `AstryxWebBundles`, `AstryxPageSnapshots` | react-native-webview shares or isolates cookies per app (`sharedCookiesEnabled`, `incognito`) and loads local files through file access. No common library draws an inert page snapshot.                                                                                       | They serve the web view's sessions, stores, bundled folders, and thumbnails. Each is part of the `web` capability with its own record. No Astryx component calls them; `WebView` depends on one part of `AstryxWebSessions`: the view resolves its handles natively (FR8).                                                                                                                                                                                                                                                                                                                                               |
+- `AstryxWebView`: an app cannot add these guarantees from outside an
+  ecosystem web view component, so Astryx owns the view. A bundled folder
+  loads from a private origin with no network (FR7). A pin holds across
+  redirects and is decided natively (FR5, DEC-1). A session's cookie values
+  never appear in props (FR8, DEC-3). Pages can run with no storage (FR8). The
+  message sender comes from the engine (FR9, DEC-2). Loads report closed
+  reasons (FR13). The package keeps one dependency set (`spec:AST-112/FR2`),
+  and Astryx Stage shows the view as the device does (FR20).
+- `AstryxWebViewInfo`: it answers what the device can keep (a frame-safe
+  channel, separate page data), so a caller that needs a guarantee is refused
+  loudly instead of getting a weaker page (DEC-5). OQ7 asks whether it folds
+  into the platform info.
+- `AstryxAuthSession`: the gap is narrow: closed result reasons, no Expo
+  library (`spec:AST-112/FR11`), and a redirect URI per runtime. OQ3 asks
+  whether sign-in is its own opt-in.
+- `AstryxWebSessions`, `AstryxWebData`, `AstryxWebBundles`, and
+  `AstryxPageSnapshots` serve the web view's sessions, page data, bundled
+  folders, and thumbnails; each has its own record.
 
 ## Who uses it
 
@@ -98,12 +110,11 @@ Notes on the `web` capability's other modules, each part of the platform package
 ## Requirements
 
 - **FR1 — `web` is an opt-in capability.** The web view and its modules belong
-  to the `web` capability, which an app opts in (`spec:AST-112/FR3`): opting in
-  links WebKit on iOS, and the AndroidX Browser library and the sign-in
-  redirect activity on Android. The `./web` entry exports `NativeWebView`,
+  to the `web` capability, which an app opts in (`spec:AST-112/FR3`). An app
+  that does not opt it in links no web engine and no sign-in redirect
+  handling. The `./web` entry exports `NativeWebView`,
   `isNativeWebViewAvailable()`, `AstryxWebViewInfo`, and the capability's other
-  modules.
-  The library reaches the capability only through
+  modules. The library reaches the capability only through
   `AstryxPlatform.capability('web')` (`spec:AST-112/FR2`).
 - **FR2 — `NativeWebView` is the platform's web view.** Its props:
   - `source`, one of `{uri}` (an http or https page), `{html, baseUrl?,
@@ -127,26 +138,28 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     (FR5).
 - **FR3 — The native contract.**
 
-  | Contract        | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                                                              | Commands                | Events                                                                                                                                                                                               | Platforms    |
-  | --------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxWebView` | native component (Fabric Native Component) | `html`, `baseUrl`, `url`, `grantsOrigin`, `bundleName`, `bundlePath`, `warm`, `allowedOrigins`, `externalNavigation`, `allowedExternalSchemes`, `noExternalSchemes`, `pinnedOrigin`, `pinnedPathPrefix`, `sessionId`, `sessionCookies`, `ephemeral`, `allowsPageStorage`, `colorScheme`, `textScale`, `scrollEnabled`, `layerTypeAndroid`, `applicationNameForUserAgent`, `userAgent`, `preventsCapture`, `linkMenu`, `reloadsOnContentProcessEnd` | `postMessage`, `reload` | `onWebLoadStart`, `onWebLoad`, `onWebError`, `onWebProgress`, `onWebContentHeight`, `onWebMessage`, `onWebOpenExternal`, `onWebNavigationBlocked`, `onWebLinkMenuAction`, `onWebContentProcessEnded` | iOS, Android |
+  | Contract        | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                                            | Commands                | Events                                                                                                                                                                                               | Platforms    |
+  | --------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+  | `AstryxWebView` | native component (Fabric Native Component) | `html`, `baseUrl`, `url`, `grantsOrigin`, `bundleName`, `bundlePath`, `warm`, `allowedOrigins`, `externalNavigation`, `allowedExternalSchemes`, `noExternalSchemes`, `pinnedOrigin`, `pinnedPathPrefix`, `sessionId`, `ephemeral`, `allowsPageStorage`, `colorScheme`, `textScale`, `scrollEnabled`, `layerTypeAndroid`, `applicationNameForUserAgent`, `userAgent`, `preventsCapture`, `linkMenu`, `reloadsOnContentProcessEnd` | `postMessage`, `reload` | `onWebLoadStart`, `onWebLoad`, `onWebError`, `onWebProgress`, `onWebContentHeight`, `onWebMessage`, `onWebOpenExternal`, `onWebNavigationBlocked`, `onWebLinkMenuAction`, `onWebContentProcessEnded` | iOS, Android |
 
-  | Contract            | Kind                                | Methods                                                                                       | Platforms    |
-  | ------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- | ------------ |
-  | `AstryxWebViewInfo` | native module (Turbo Native Module) | `getConstants()` (`version`, and the device's `channelIsolation` and `pageProfile` constants) | iOS, Android |
-  - The JavaScript maps its props onto the host's flat props and leaves absent
-    keys absent. Codegen gives an absent array and an empty one the same
-    value, so an empty `allowedExternalSchemes` is sent as the separate
-    `noExternalSchemes` flag.
+  | Contract            | Kind                                | Methods                                                                                | Platforms    |
+  | ------------------- | ----------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
+  | `AstryxWebViewInfo` | native module (Turbo Native Module) | `getConstants()`: the device constants `channelIsolation` and `pageProfile` (FR8, FR9) | iOS, Android |
+  - `noExternalSchemes` is the host's form of an empty
+    `allowedExternalSchemes` (FR5).
+  - Both contracts are at revision 1. The web view's named features
+    (FR14) are listed with every other contract's by the platform info
+    module (`spec:AST-112/FR8`); `AstryxWebViewInfo` carries no feature list
+    and no revision counter.
 
 - **FR4 — Safe defaults.** A page in the view cannot read local files or
   content URIs, cannot open a second window, cannot ask for the device's
   location, and cannot load http content into an https page. Before the
-  page's own script runs, a hardening script in each frame takes WebRTC
-  (`RTCPeerConnection`, `navigator.mediaDevices`) away from the page, stops
-  DNS prefetching, and strips the `preconnect` relation from links. Apart
-  from that script and the message channel's (FR9), the view adds no script
-  to a page, and no prop lets a caller add one.
+  page's own script runs, each frame loses WebRTC (`RTCPeerConnection`,
+  `navigator.mediaDevices`), DNS prefetching, and the `preconnect` relation on
+  links. The view's only other script in a page is its own page script, which
+  carries the message channel (FR9), the colour scheme and text scale (FR10),
+  and the content height. No prop lets a caller add a script.
 - **FR5 — Navigation follows declared policy, decided natively.**
   - The view shows the first page, and any top-level page on that page's
     origin or on an origin listed in `allowedOrigins`. The policy covers
@@ -154,10 +167,10 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     page's own rules allow.
   - A top-level navigation to any other origin that a person causes (tapping
     a link, sending a form, a `target=_blank` link, `window.open`) follows
-    `externalNavigation`: `allow` (the
-    default) opens it in the system browser and sends `onOpenExternal`;
-    `report` opens nothing and sends `onNavigationBlocked` with `external` or
-    `newWindow`; `block` opens nothing and sends nothing.
+    `externalNavigation`: `allow` (the default) opens it in the system browser
+    and sends `onOpenExternal`; `report` opens nothing and sends
+    `onNavigationBlocked` with `external` or `newWindow`; `block` opens
+    nothing and sends nothing.
   - A non-web scheme opens outside the view only when it is in
     `allowedExternalSchemes` (default `mailto`, `tel`, `sms`; an empty list
     allows none). Any other scheme is cancelled and reported as
@@ -166,9 +179,8 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     segments, `/` when absent) limits every top-level navigation to that
     origin and path, and a redirect counts as a navigation. The view stops a
     navigation outside the pin and reports it with reason `pin`.
-  - The native view decides each navigation on the UI thread from these props.
-    No navigation waits on JavaScript; the events reach JavaScript after the
-    decision.
+  - No navigation waits on JavaScript: the view decides from these props, and
+    the events reach JavaScript after the decision.
 - **FR6 — An HTML string has an opaque origin unless granted one.** With
   `{html}` the page has an opaque origin: no site's cookies or storage, and
   relative links do not resolve. With `grantsOrigin: true` and an http or
@@ -177,57 +189,50 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 - **FR7 — Bundled folders load from a private origin with no network.**
   - `{bundle: {name, path?}}` loads a folder the app's runtime registered with
     `AstryxWebBundles` under `name` (a DNS label). The page is `path` (default
-    `/index.html`) under the bundle's origin: `astryx-bundle://<name>/` on iOS,
-    on Android an https origin whose host is a reserved `.invalid` name that
-    no DNS lookup answers.
+    `/index.html`) under the bundle's origin, which the page reads as
+    `astryx-bundle://<name>` on iOS and as an https origin on a reserved
+    `.invalid` host on Android.
   - The page and every file it references come from the folder, and no
-    request leaves the device. The view's store is discarded with the view,
-    and the page gets no cookies, credentials, or client identity. Requests under `/_app/` go to the app over `AstryxWebBundles`'
-    byte route.
+    request leaves the device. The page's storage is discarded with the
+    view, and the page gets no cookies, credentials, or client identity.
+    Requests under `/_app/` go to the app, which answers them through
+    `AstryxWebBundles`.
   - The bundle's origin is the view's only origin: `html`, `url`, `baseUrl`,
     `grantsOrigin`, `ephemeral`, and `allowedOrigins` do not apply. A bundle
-    source with `session.pin` or session cookies, a name that is not a DNS
-    label, or a path with `..`, `.`, a hidden, or an empty segment loads
-    nothing and reports `invalid-config`.
+    source with `session.pin`, a name that is not a DNS label, or a path with
+    `..`, `.`, a hidden, or an empty segment loads nothing and reports
+    `invalid-config`.
   - A bundle page needs a message channel that tells frames apart (FR9). Where
-    the device's channel cannot, nothing loads and `onError` reports
-    `unsupported`.
-  - Warm-up: with `warm`, a bundle view adopts a loaded page from
-    `AstryxWebBundles`' warm pool for its bundle and path on mount. It sends
-    `onLoad` at once and then the messages the page sent while it waited, in
-    order. Each warm page goes to at most one view. When the pool has no page
-    for it, or the view sets a custom user agent, turns page storage off, or
-    carries session cookies, the view loads the page itself and reports no
-    error.
+    the device cannot, nothing loads and `onError` reports `unsupported`.
+  - Warm-up: with `warm`, a bundle view shows a page that `AstryxWebBundles`
+    loaded ahead of time for its bundle and path. It sends `onLoad` at once,
+    then the messages that page sent before it appeared, in order. Each page
+    loaded ahead of time goes to at most one view. When none is ready, or the
+    view sets a custom user agent or turns page storage off, the view loads
+    the page itself and reports no error.
 - **FR8 — Sessions and page storage.**
   - `session` is `{sessionId}` (a handle `AstryxWebSessions.create` answered)
-    or options: `isEphemeral`, `pin` (FR5), `allowsPageStorage`, and
-    `cookies`. A handle wins over the options. An empty or unknown handle
-    loads nothing and reports `invalid-config`.
-  - The part of `AstryxWebSessions` the view depends on: the view resolves a
-    handle natively, in the registry of the runtime that created it, so the
-    session's cookie values are never part of the view's props. The registered session supplies
-    the view's cookies, its ephemeral store, `allowsPageStorage`, and its pin.
-    The view resolves a handle once per value: a view that loaded with a
-    session keeps it after `AstryxWebSessions.remove`.
-  - `cookies` go into the view's store before the first request. Each one is
-    HttpOnly and Secure, has no expiry, and applies to the page's https host
-    alone. They need `isEphemeral`; a caller that has a handle uses it
-    instead.
+    or options: `isEphemeral`, `pin` (FR5), and `allowsPageStorage`. A handle
+    wins over the options. An empty or unknown handle loads nothing and
+    reports `invalid-config`.
+  - The part of `AstryxWebSessions` the view depends on: a handle works only
+    in the runtime that created it, and the session's cookies, ephemeral
+    store, page-storage setting, and pin apply to the view without their
+    values appearing in its props. A view that loaded with a session keeps
+    it after `AstryxWebSessions.remove`.
   - `isEphemeral` gives the view a private store that leaves no data behind:
-    a non-persistent data store on iOS; on Android a profile of its own whose
-    cookies, storage, and HTTP cache are deleted with the view, with no Cache
-    API or service workers. The view reads the option once, when it first
-    renders.
+    its cookies, storage, and HTTP cache are gone when the view goes, and the
+    page has no Cache API or service workers. The view reads the option once,
+    when it first renders.
   - `allowsPageStorage: false` gives the page no `localStorage`,
     `sessionStorage`, IndexedDB, Cache API, or service workers, and its loads
-    do not read the HTTP cache; what a load writes to the HTTP cache goes when
-    the view goes. A change reloads the page.
-  - Views without an ephemeral store share the runtime's page store, which is
-    apart from the runtime's network cookie jar where the device can keep them
-    apart (the `pageProfile` constant: Android WebView with multiple profiles,
-    iOS 17 and later). Where it cannot, those views run with no page storage,
-    and clearing the page store never clears the app's network cookies.
+    do not use cached responses; what a load caches is gone when the view
+    goes. A change reloads the page.
+  - Pages in views without an ephemeral store share the runtime's page data.
+    Where the device can keep it apart from the app's network cookies (the
+    `pageProfile` constant), clearing page data never signs the app's own
+    requests out. Where it cannot, those pages run with no page storage, and
+    clearing page data still leaves the app's network cookies.
 - **FR9 — One message channel.**
   - The page sends with `window.astryx.postMessage(string)`. The view accepts a
     message only from the main frame of the page's own origin or an allowed
@@ -236,19 +241,17 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   - The app sends with `ref.postMessage(data)` (the `postMessage` command). The
     page receives it through `window.astryx.addListener` and as a `message`
     event on `window` (`event.data`, a string).
-  - Where the device's channel cannot tell frames apart (an Android WebView
-    without document-start scripts and a message listener), the binary reports
+  - Where the device's web engine cannot tell frames apart, the binary reports
     `channelIsolation` false and the sender as `origin: "null"`,
     `isMainFrame: false`. An app that must know the sender ignores those
     messages.
 - **FR10 — The page follows the app's appearance.**
-  - `colorScheme` (`light`, `dark`, or `system`) sets the page's
-    `prefers-color-scheme`: on iOS through the view's interface style, on
-    Android by setting the document's CSS `color-scheme` and turning the
-    engine's automatic darkening off. `NativeWebView` takes the platform appearance's
-    scheme when the prop is absent, else `system`.
-  - `textScale` (React Native's font scale; default 1) scales the page's text:
-    `-webkit-text-size-adjust` on iOS, `textZoom` on Android.
+  - `colorScheme` (`light`, `dark`, or `system`) sets what the page reads from
+    `prefers-color-scheme`, and the engine does not darken the page by
+    itself. Without the prop, `NativeWebView` takes the platform appearance's
+    scheme, else `system`.
+  - `textScale` scales the page's text. Without the prop, it is the system's
+    font scale, so the page's text follows the person's text size.
   - `onContentHeight` reports the document's height in dp whenever it changes,
     so a caller lays the page out at its height with `isScrollEnabled: false`
     inside an outer scroll view.
@@ -261,15 +264,16 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   `onContentProcessEnded({reason, willReload, url})` with `reason`
   `terminated`, `crashed`, `killed-for-memory`, or `unknown`. `onError` does
   not fire for it, because the page loaded. With `reloadsOnContentProcessEnd`
-  true (the default) the view reloads the page on its own; on Android it
-  creates a new engine view for the reload. With false, the view shows
-  nothing until the app calls `ref.reload()` or mounts it again, so the
-  screen can show its own message. The app keeps running in every case.
+  true (the default) the view reloads the page on its own. With false, the
+  view shows nothing until the app calls `ref.reload()` or mounts it again, so
+  the screen can show its own message. The app keeps running in every case.
 - **FR12 — Capture prevention and the link menu.**
-  - `preventsCapture` keeps screenshots, screen recordings, and the recents
-    image out while the view is in a window (Android's `FLAG_SECURE`, counted
-    across views). iOS has no view-level equivalent: it ignores the prop and
-    does not report the feature.
+  - `preventsCapture` keeps screenshots, screen recordings, and the app
+    switcher's image of the window out while the view is on screen, however
+    many views ask for it. iOS has no view-level equivalent: it ignores the
+    prop, shows the page, and does not list the feature, so capture
+    prevention there is best effort. A caller that requires it checks
+    `supports('preventsCapture')` first.
   - `linkMenu` describes the menu a long press on a link shows: actions
     (`id`, `title`, an optional icon, `destructive`) with declarative matchers
     (`schemes`, `hosts` with `*.<domain>` patterns that never match a public
@@ -294,20 +298,19 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   colour scheme, text scale, and content height (FR10), the message channel
   without sender fields, and the load events (FR13). Every other behaviour is
   a named contract feature, `AstryxWebView.<feature>`: `session`,
-  `userAgent`, `hardening`, `externalNavigation`, `sessionHandle`,
+  `userAgent`, `externalNavigation`, `sessionHandle`,
   `externalSchemes`, `grantsOrigin`, `channelIsolation`, `preventsCapture`,
   `pageStorage`, `bundledOrigin`, `pageProfile`, `linkMenu`, `messageOrigin`,
-  `warmBundle`, and `contentProcessEnd`. The binary of each platform lists the
-  features it implements (FR18); there are no counters.
-  - `AstryxWebViewInfo.isAvailable()` and `supports(feature)` answer from that
-    list for this binary (`spec:AST-112/FR7`).
-  - A feature one platform implements is listed only there:
-    `preventsCapture` on Android; `linkMenu` and `warmBundle` on iOS.
-  - `channelIsolation` and `pageProfile` also follow the device's constants
-    (FR8, FR9).
-  - Without the module (not opted in, Jest, the web), nothing is claimed. The
-    library's `useWebViewSupports(feature)` answers the same, and false without
-    a web view.
+  `warmBundle`, and `contentProcessEnd` (`spec:AST-112/FR8`).
+  - The binary of each platform lists the features it implements. A feature
+    one platform implements is listed only there: `preventsCapture` on
+    Android; `linkMenu` and `warmBundle` on iOS.
+  - `AstryxWebViewInfo.supports(feature)` answers true when the binary lists
+    the feature and, for `channelIsolation` and `pageProfile`, the device's
+    constant is not false. `isAvailable()` answers whether the module is
+    linked. Without it (not opted in, Jest, the web), nothing is claimed.
+  - The library's `useWebViewSupports(feature)` answers the same, and false
+    without a web view.
 - **FR15 — The caller supplies the appearance.** `NativeWebView` has no
   theme of its own. Its caller passes the colour scheme and text scale to use
   (the library passes its theme's), and the view applies a new value to the
@@ -324,47 +327,44 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
     switched off through the capabilities provider), the library's components
     draw their own fallback; their records own its content. The handle's
     `postMessage` does nothing there.
-  - `useAuthSession()` answers `isAvailable: false`, and its calls resolve
-    `no-module`.
 - **FR17 — Accessibility.** The engine exposes the page's own structure
   (headings, links, form fields, text) to VoiceOver and TalkBack, and the
   platform neither adds to it nor hides it. The view has no accessible name of
   its own: the caller names the region on a containing view (the library's
   components require a label). The page's text follows the system text size
   through `textScale` (FR10). The link menu is the system's context menu.
-- **FR18 — Contract baseline.** Every contract in the group is at revision 1.
-  A behaviour added after revision 1 is a named feature
-  (`AstryxWebView.<feature>`) that the binary lists and the JavaScript checks
-  with `hasContractFeature` before it uses it. Without the feature the
-  JavaScript keeps the revision-1 behaviour or answers `unsupported`, never a
-  silent weaker path (DEC-5). Compatibility with Astryx Stage goes through the
-  library's Stage version floor: the package names the oldest Astryx Stage
-  that supports its contracts, and an older Stage refuses the project and
-  lists the contracts it lacks.
+- **FR18 — Contract baseline.** Every contract in the group is at revision 1
+  (`spec:AST-112/FR8`). JavaScript checks a named feature (FR14) before it
+  uses the behaviour; without it, JavaScript keeps the revision-1 behaviour
+  or answers `unsupported`, never a silent weaker path (DEC-5).
 - **FR19 — Native code uses public platform API only.** The web view and its
-  modules use only the public API of WebKit, the Android SDK, and AndroidX.
-  One exception exists, and it is off by default: an app may opt in (the
-  configuration plugin's `web.privateHardening` option) to WebKit's private
-  preference switches that turn peer connections, media devices, and DNS
-  prefetching off in every frame on iOS. WebKit has no public setting for
-  them, so the switches are the only way to cover a frame the document-start
-  script cannot reach. The view uses each switch only when the running WebKit
-  answers to it, and the app that opts in takes the review risk of private
-  API. Without the opt-in, the document-start script is the layer on both
-  platforms.
+  modules use only public platform API (`spec:AST-112/FR4`). One exception
+  exists, and it is off by default: an app may opt in through its
+  configuration (`web.privateHardening`) to private WebKit settings that turn
+  peer connections, media devices, and DNS prefetching off in every frame on
+  iOS. WebKit has no public setting for them, and they cover frames that the
+  page-level protection of FR4 cannot reach. The view uses each setting only
+  when the running WebKit has it, and the app that opts in takes the review
+  risk of private API. Without the opt-in, FR4's protection is the same on
+  both platforms.
+- **FR20 — Astryx Stage shows the web view as the device does.** Astryx
+  Stage answers every contract of this record as iOS and Android do
+  (`spec:AST-112/FR12`): navigation, sessions, page storage, bundled folders,
+  messages, and content process end. A project whose contracts or named
+  features the Stage lacks is refused by that Stage, which lists what it
+  lacks (the version floor of `spec:AST-112/FR12`).
 
 ### Platform support
 
-| Contract            | iOS                                                                                                                                                                                                                                                              | Android                                                                                                                                                                                                                                                                                                             | Astryx Stage                                                                                                                                                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxWebView`     | `WKWebView` (WebKit): `WKURLSchemeHandler` for bundled folders, `WKWebsiteDataStore` (non-persistent, or by identifier on iOS 17 and later) for stores, `WKUIDelegate` context menus for the link menu, a warm pool for bundle pages. `preventsCapture` ignored. | `android.webkit.WebView` with AndroidX WebKit: document-start scripts and a web message listener for the channel, profiles for stores, request interception for bundled folders, `FLAG_SECURE` for capture, `onRenderProcessGone` for a content process end (Android 8.0 and later). `linkMenu` and `warm` ignored. | On macOS, shows the page in the system's web engine (WebKit) and behaves as the device does for navigation, sessions, page storage, bundled folders, messages, and content process end. Ignores `preventsCapture`, as iOS does. |
-| `AstryxWebViewInfo` | Reports `version` and the device constants; `channelIsolation` always true                                                                                                                                                                                       | Reports `version` and the device constants; `channelIsolation` false on a WebView without document-start scripts and a message listener; `pageProfile` false without multiple profiles                                                                                                                              | Lists the web view features it shows                                                                                                                                                                                            |
+| Contract            | iOS                                                                                                                                    | Android                                                                                                                                                                                                            | Astryx Stage                                                                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxWebView`     | WebKit (`WKWebView`). Every named feature except `preventsCapture`, which iOS ignores because it has no view-level capture protection. | Android System WebView (`android.webkit.WebView`) with AndroidX WebKit. Every named feature except `linkMenu` and `warmBundle`, which Android ignores. A content process end is reported on Android 8.0 and later. | On macOS, shows the page in the system's web engine (WebKit) and behaves as the device does for navigation, sessions, page storage, bundled folders, messages, and content process end. Ignores `preventsCapture`, as iOS does. |
+| `AstryxWebViewInfo` | `channelIsolation` is true; `pageProfile` is true on iOS 17 and later.                                                                 | Both constants follow the installed WebView: `channelIsolation` needs its frame-aware message support, `pageProfile` its support for separate profiles.                                                            | Answers as the device it shows.                                                                                                                                                                                                 |
 
-- FR18 gap: Astryx Stage renders `AstryxWebView` only on macOS; on Linux and
-  Windows the view reports absent, and `WebView` and `WebContent` draw their
-  fallback.
-- FR18 gap: Astryx Stage keeps no warm pages: a `warm` bundle view loads its
-  own page, and Stage does not report `warmBundle`.
+- FR20 gap: Astryx Stage shows `AstryxWebView` only on macOS; on Linux and
+  Windows the view reports absent, and the library draws its fallback.
+- FR20 gap: Astryx Stage loads no page ahead of time: a `warm` bundle view
+  loads its own page, and Stage does not list `warmBundle`.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, Android API level 24, the New Architecture only), with the
   system web engine the device carries.
@@ -377,36 +377,43 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 
 ## Current-state impact
 
-- None beyond `spec:AST-112`. This record details its FR3 (the `web`
-  capability stays opt-in), FR6 (the web view's closed load reasons), FR7 (the
-  web view's probes and features), FR8 (the group's revision-1 baseline), and
-  FR12 (the web view in Astryx Stage).
+- Relies on `spec:AST-112` FR3 (amended): the `web` capability is a device
+  feature an app opts in; Astryx's components link by default.
+- Relies on `spec:AST-112` FR4 (amended): native code uses public platform
+  API only, and a record names any exception (FR19).
+- Relies on `spec:AST-112` FR8 (amended): every contract is at revision 1,
+  later behaviour is a named feature the platform info module lists, and no
+  contract carries a revision counter (FR3, FR14, FR18).
+- Relies on `spec:AST-112` FR12 (amended): Astryx Stage matches the device,
+  and a Stage below the project's version floor refuses it and lists what it
+  lacks (FR20).
 - `spec:AST-093/FR5` (every native component is tested and validated the same
   way) applies to `WebView` and `WebContent` unchanged.
 
 ## Verification
 
-| Contract | Verification                                                                                                          | Representative states                                                                                                             | Mutation or failure expectation                                                                                                            |
-| -------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | Built app with the core only compared with one that opts `web` in; unit tests of the loader                           | `web` opted out; opted in                                                                                                         | An opted-out app links WebKit or the redirect activity, or the library imports the capability outside its loader                           |
-| FR2      | Unit tests of `NativeWebView` through the `./testing` doubles                                                         | each source kind; each event; the `ref` handle                                                                                    | An event arrives with more than one argument, or a prop does not reach the host                                                            |
-| FR3      | The platform's spec rules check; `contracts.json` against the codegen specs                                           | the view's props, commands, and events; the module's constants                                                                    | A listed member is missing, or a shipped member changes                                                                                    |
-| FR4      | Simulator and emulator checks with a hostile page; tests that keep the document-start scripts equal on every platform | a page that opens WebRTC, a pop-up, a file URL, mixed content, a preconnect link, inside an iframe                                | Any of them succeeds                                                                                                                       |
-| FR5      | Simulator, emulator, and Astryx Stage scripts                                                                         | an allowed origin; another origin under `allow`, `report`, `block`; a blocked scheme; a pin with a redirect out                   | A navigation outside policy stays in the view, opens without its event, or sends the wrong reason                                          |
-| FR6      | Simulator and emulator checks                                                                                         | `html` with and without `grantsOrigin`                                                                                            | An ungranted page reads the base origin's cookies or storage                                                                               |
-| FR7      | Unit tests of the refusals; Simulator, emulator, and Astryx Stage scripts of a bundled folder                         | a valid bundle; a bad name or path; a bundle with a pin; a device without channel isolation; `warm` with and without a ready page | A bundle page reaches a network, loads with a refused config, or a warm view loads twice or loses an early message                         |
-| FR8      | Unit tests of the session refusals; Simulator and emulator checks of stores                                           | a handle; an empty handle; an ephemeral view; page storage off; a device without separate page profiles                           | A cookie crosses as a prop, an empty handle loads the page, an ephemeral view leaves data behind, or a page-storage-off page keeps storage |
-| FR9      | Unit tests through the doubles; Simulator, emulator, and Astryx Stage scripts                                         | both directions; a message from an iframe; a device without channel isolation                                                     | An iframe's message is delivered as the main frame's, or an origin comes from the page's data                                              |
-| FR10     | Simulator, emulator, and Astryx Stage renders                                                                         | light, dark, and system schemes; text scale 1 and 2; auto height; a custom user agent                                             | The page ignores the scheme or text scale, the height is stale, or a non-ASCII user agent is applied                                       |
-| FR11     | Device-level termination checks on the Simulator and emulator; Astryx Stage scripted process end                      | reload on; reload off then `reload()`                                                                                             | The app ends, the event reaches `onError`, or a view with reload off reloads by itself                                                     |
-| FR12     | Emulator check of capture; unit tests of the link-menu matchers shared by every platform; Simulator long press        | a protected view; matchers with schemes, hosts, `*.` over a public suffix, prefixes                                               | A screenshot captures a protected view on Android, a `javascript:` link gets a menu, or a menu loads a preview                             |
-| FR13     | Unit tests through the doubles in their absent, older, and current shapes                                             | each reason; an unknown native reason; a refusal                                                                                  | A call throws, a reason falls outside the set, or a refusal crosses to the host                                                            |
-| FR14     | Unit tests of `supports` per platform and device constant                                                             | each feature on iOS and Android; no module                                                                                        | A one-platform feature answers true on the other platform, or a device constant is ignored                                                 |
-| FR15     | Platform tests through the `./testing` doubles                                                                        | a colour scheme or text scale change on a loaded page                                                                             | The new value does not reach the page, or an event's shape differs from the library's                                                      |
-| FR16     | Platform tests with the module absent, not linked, and switched off                                                   | a `NativeWebView` with and without `fallback`; a module call                                                                      | `fallback` is not drawn, `no-native-view` is reported more than once, or a call rejects                                                    |
-| FR17     | VoiceOver and TalkBack checks on the Simulator, emulator, and device; text-size checks                                | a page with headings, links, and a form; the largest text size                                                                    | The page's content is not read, the platform hides part of it, or the text does not scale                                                  |
-| FR18     | Contract baseline check; Astryx Stage contract checks; Stage version floor check                                      | a binary without a named feature; an older Stage                                                                                  | The JavaScript uses a feature the binary does not list, or an older Stage runs the project                                                 |
-| FR19     | Source check of the native code's symbols on both platforms; Simulator check with the opt-in on and off               | the default app; an app that opts in to `web.privateHardening`                                                                    | A private symbol is used without the opt-in, or on Android at all                                                                          |
+| Contract | Verification                                                                                                                     | Representative states                                                                                                              | Mutation or failure expectation                                                                                                                            |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built app with the core only compared with one that opts `web` in; unit tests of the loader                                      | `web` opted out; opted in                                                                                                          | An opted-out app links WebKit or the redirect activity, or the library imports the capability outside its loader                                           |
+| FR2      | Unit tests of `NativeWebView` through the `./testing` doubles                                                                    | each source kind; each event; the `ref` handle                                                                                     | An event arrives with more than one argument, or a prop does not reach the host                                                                            |
+| FR3      | The platform's spec rules check of the codegen specs                                                                             | the view's props, commands, and events; the module's constants                                                                     | A listed member is missing, a shipped member changes, or a contract carries a revision counter or a feature list of its own                                |
+| FR4      | Simulator and emulator checks with a hostile page; tests that keep the page protection equal on every platform                   | a page that opens WebRTC, a pop-up, a file URL, mixed content, a preconnect link, inside an iframe                                 | Any of them succeeds                                                                                                                                       |
+| FR5      | Simulator, emulator, and Astryx Stage scripts                                                                                    | an allowed origin; another origin under `allow`, `report`, `block`; a blocked scheme; a pin with a redirect out                    | A navigation outside policy stays in the view, opens without its event, or sends the wrong reason                                                          |
+| FR6      | Simulator and emulator checks                                                                                                    | `html` with and without `grantsOrigin`                                                                                             | An ungranted page reads the base origin's cookies or storage                                                                                               |
+| FR7      | Unit tests of the refusals; Simulator, emulator, and Astryx Stage scripts of a bundled folder                                    | a valid bundle; a bad name or path; a bundle with a pin; a device without channel isolation; `warm` with and without a ready page  | A bundle page reaches a network, loads with a refused config, or a warm view loads twice or loses an early message                                         |
+| FR8      | Unit tests of the session refusals; Simulator and emulator checks of page data                                                   | a handle; an empty handle; a handle from another runtime; an ephemeral view; page storage off; a device without separate page data | A cookie value appears in props, an empty or foreign handle loads the page, an ephemeral view leaves data behind, or a page-storage-off page keeps storage |
+| FR9      | Unit tests through the doubles; Simulator, emulator, and Astryx Stage scripts                                                    | both directions; a message from an iframe; a device without channel isolation                                                      | An iframe's message is delivered as the main frame's, or an origin comes from the page's data                                                              |
+| FR10     | Simulator, emulator, and Astryx Stage renders                                                                                    | light, dark, and system schemes; no `textScale` at the largest system text size; text scale 2; auto height; a custom user agent    | The page ignores the scheme or text scale, unscaled text without the prop, a stale height, or a non-ASCII user agent applied                               |
+| FR11     | Device-level termination checks on the Simulator and emulator; Astryx Stage scripted process end                                 | reload on; reload off then `reload()`                                                                                              | The app ends, the event reaches `onError`, or a view with reload off reloads by itself                                                                     |
+| FR12     | Emulator check of capture; unit tests of the link-menu matchers shared by every platform; Simulator long press                   | a protected view; matchers with schemes, hosts, `*.` over a public suffix, prefixes                                                | A screenshot captures a protected view on Android, a `javascript:` link gets a menu, or a menu loads a preview                                             |
+| FR13     | Unit tests through the doubles in their absent, older, and current shapes                                                        | each reason; an unknown native reason; a refusal                                                                                   | A call throws, a reason falls outside the set, or a refusal crosses to the host                                                                            |
+| FR14     | Unit tests of `supports` through `./testing` doubles of binaries with and without each feature, per platform and device constant | each feature on iOS and Android; no module                                                                                         | A feature answers true when the binary does not list it, a one-platform feature is listed on the other platform, or a device constant is ignored           |
+| FR15     | Platform tests through the `./testing` doubles                                                                                   | a colour scheme or text scale change on a loaded page                                                                              | The new value does not reach the page, or an event's shape differs from the library's                                                                      |
+| FR16     | Platform tests with the module absent, not linked, and switched off                                                              | a `NativeWebView` with and without `fallback`; a module call                                                                       | `fallback` is not drawn, `no-native-view` is reported more than once, or a call rejects                                                                    |
+| FR17     | VoiceOver and TalkBack checks on the Simulator, emulator, and device; text-size checks                                           | a page with headings, links, and a form; the largest text size                                                                     | The page's content is not read, the platform hides part of it, or the text does not scale                                                                  |
+| FR18     | Unit tests through `./testing` doubles of a binary without a named feature                                                       | each named feature absent                                                                                                          | The JavaScript uses a feature the binary does not list, or falls back silently instead of keeping the revision-1 behaviour or answering `unsupported`      |
+| FR19     | Source check of the native code's symbols on both platforms; Simulator check with the opt-in on and off                          | the default app; an app that opts in to `web.privateHardening`                                                                     | A private symbol is used without the opt-in, or on Android at all                                                                                          |
+| FR20     | Astryx Stage contract checks beside the same scripts on the Simulator and emulator; Stage version floor check                    | each requirement of this record; a Stage below the floor                                                                           | A Stage result differs from the device and is not a named gap, or a Stage below the floor runs the project                                                 |
 
 ## Decision log
 
@@ -491,8 +498,8 @@ a working page that leaks what the app meant to keep.
   iOS-only features?** (`human-design`)
 - **OQ6 — Does the page's `prefers-reduced-motion` follow the system's Reduce
   Motion setting on both engines?** (`checkable`)
-- **OQ7 — Does `AstryxWebViewInfo` fold into the platform info's named
-  features?** (`human-api`) Options: keep a web-view feature report in the
-  `web` capability; or list `AstryxWebView.<feature>` in the platform info's
-  contract features with every other contract, and keep `supports(feature)`
-  as a reader of that list.
+- **OQ7 — Do the device constants of `AstryxWebViewInfo` move into the
+  platform info?** (`human-api`) The named features already live in the
+  platform info's list (FR3, FR18). Options: keep `AstryxWebViewInfo` for
+  `channelIsolation` and `pageProfile`; or report both through the platform
+  info and remove the module.
