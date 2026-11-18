@@ -32,14 +32,15 @@ theme defines replaces it, and a drawn glyph stands in where no system symbol
 exists. Icons mirror in right-to-left layouts, are named or hidden for screen
 readers, enlarge in the iOS Large Content Viewer where a fixed-size control
 needs it. The package installs no icon font, SVG library, or image library; an
-app may still use such libraries beside these components.
+app may still use such libraries beside these components (`spec:AST-140/FR9`).
 
 This record details the icon and drawing pieces of the platform layer of
-`spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the result
-vocabulary (`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`),
-additive evolution (`spec:AST-112/FR8`), the mapping of Astryx icon names onto
-system symbols (`spec:AST-112/FR9`). Icon names and theme icons follow
-`spec:AST-082/FR17`.
+`spec:AST-112`: the always-present core (`spec:AST-112/FR1`), the capability
+shape (`spec:AST-112/FR7`), and the mapping of Astryx icon names onto system
+symbols (`spec:AST-112/FR9`). It follows the shared platform rules of
+`spec:AST-140`: the missing piece (FR2), the result vocabulary (FR3), additive
+evolution (FR5), threading (FR6), conformance suites (FR7), and coexistence with
+other libraries (FR9). Icon names and theme icons follow `spec:AST-082/FR17`.
 
 ## Why this exists
 
@@ -228,7 +229,7 @@ All five contracts belong to the platform's core: every binary has them.
     existing scene unchanged. A rule that would change how an existing scene
     looks gets a new `version` number.
   - One set of shared conformance cases fixes what every reader (iOS, Android,
-    and the JavaScript reference reader) draws and reports.
+    and the JavaScript reference reader) draws and reports (`spec:AST-140/FR7`).
 - **FR7 — `NativeVectorView` draws one scene on one native view.** The `.` entry
   exports `NativeVectorView` with `scene`, `isLargeContentImage`, `fallback`,
   `onError`, the view props, and a ref, the scene types, and the probe
@@ -278,10 +279,10 @@ All five contracts belong to the platform's core: every binary has them.
 
 - **FR10 — The group is at its baseline.** Every contract in this group is at
   revision 1 on iOS and Android, `isLargeContentImage` included, and lists no
-  named feature (`spec:AST-112/FR8`).
+  named feature (`spec:AST-140/FR5`).
 - **FR11 — Absence never throws.** Every probe answers false, every call
-  resolves a result (`spec:AST-112/FR6`), and every absent view reports
-  `no-native-view` and draws its fallback (`spec:AST-112/FR7`). The
+  resolves a result (`spec:AST-140/FR3`), and every absent view reports
+  `no-native-view` and draws its fallback (`spec:AST-140/FR2`). The
   `isPlatformEnabled={false}` switch sends `SymbolView`, `NativeIconView`, and
   `Vector` to their fallbacks; `Icon` then draws built-in names as drawn glyphs,
   because the vector view is core.
@@ -308,7 +309,7 @@ All five contracts belong to the platform's core: every binary has them.
 - Unsupported behavior: an absent view draws its fallback and reports
   `no-native-view`; an absent module answers `no-module`; a binary without a
   named feature keeps the revision-1 behavior, draws its fallback, or answers
-  `unsupported` (`spec:AST-112/FR8`, FR11).
+  `unsupported` (`spec:AST-140/FR5`, FR11).
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, and devices (`spec:AST-112/FR15`).
 
@@ -316,8 +317,8 @@ All five contracts belong to the platform's core: every binary has them.
 
 - Relies on `spec:AST-112` FR3 (amended): the library's own native pieces link
   by default, so these five core contracts are in every binary.
-- Relies on `spec:AST-112` FR8 (amended): every contract starts at revision 1
-  and later behavior is a named feature the binary reports.
+- Relies on `spec:AST-140/FR5`: every contract starts at revision 1 and later
+  behavior is a named feature the binary reports.
 - Changes `spec:AST-112/FR1`: the core's list gains `AstryxIconView`,
   `AstryxIcons`, `AstryxVectorView`, and `AstryxVectorInfo` beside system
   symbols.
@@ -407,9 +408,9 @@ would render the glyph again and the two could differ.
     system's own.
 - **OQ2 — Does `AstryxVectorInfo` fold into the platform info's named
   features?** (`human-api`) Its reported scene version is a counter, and
-  `spec:AST-112/FR8` (amended) gives contracts named features instead. Options:
-  keep `AstryxVectorInfo` and its reported scene version; or list each scene
-  version after 1 as a named feature of `AstryxVectorView` and retire
+  `spec:AST-140/FR5` gives contracts named features instead. Options: keep
+  `AstryxVectorInfo` and its reported scene version; or list each scene version
+  after 1 as a named feature of `AstryxVectorView` and retire
   `AstryxVectorInfo`.
 - **OQ3 — Is `cacheInfo` part of the `AstryxIcons` API?** (`checkable`) Options:
   expose it on `AstryxIcons` for an app's status page; or keep it a native
