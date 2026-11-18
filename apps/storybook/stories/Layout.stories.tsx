@@ -15,6 +15,7 @@ import {
   VStack,
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
+import {Divider} from '@astryxdesign/core/Divider';
 import {
   colorVars,
   spacingVars,
@@ -2319,6 +2320,259 @@ export const HeaderStates: Story = {
                 {headerText}
               </LayoutHeader>
             }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
+};
+
+export const PanelStates: Story = {
+  name: 'Panel States',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const panelText = <p {...stylex.props(styles.bodyText)}>Panel</p>;
+    const rows = Array.from({length: 12}, (_, index) => (
+      <p key={index} {...stylex.props(styles.bodyText)}>
+        Item {index + 1}
+      </p>
+    ));
+    const cases = [
+      {
+        id: 'start-automatic',
+        label: 'Start, no divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={120} data-panel-case="start-automatic">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'start-divider',
+        label: 'Start, hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                data-panel-case="start-divider">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'end-automatic',
+        label: 'End, no divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            end={
+              <LayoutPanel width={120} data-panel-case="end-automatic">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'end-divider',
+        label: 'End, hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            end={
+              <LayoutPanel width={120} hasDivider data-panel-case="end-divider">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'header-footer',
+        label: 'Start, hasDivider, with header and footer',
+        layout: (
+          <Layout
+            padding={6}
+            header={
+              <LayoutHeader hasDivider>
+                <p {...stylex.props(styles.bodyText)}>Header</p>
+              </LayoutHeader>
+            }
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                data-panel-case="header-footer">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider>
+                <p {...stylex.props(styles.bodyText)}>Footer</p>
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'bleed-child',
+        label: 'Start, hasDivider, full-bleed Divider inside',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={160} hasDivider data-panel-case="bleed-child">
+                {panelText}
+                <Divider isFullBleed />
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'padding-2',
+        label: 'Start, hasDivider, panel padding=2',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                padding={2}
+                data-panel-case="padding-2">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'full-bleed',
+        label: 'Start, hasDivider, panel padding=0',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                padding={0}
+                data-panel-case="full-bleed">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'width-string',
+        label: 'Start, hasDivider, width="10rem"',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width="10rem"
+                hasDivider
+                data-panel-case="width-string">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'landmark',
+        label: 'Start, role="navigation", label="Sections"',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                role="navigation"
+                label="Sections"
+                data-panel-case="landmark">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'scrolling',
+        label: 'Start, overflowing content',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={120} hasDivider data-panel-case="scrolling">
+                <VStack gap={2}>
+                  {rows}
+                  {/* A focusable control keeps the scrolling content keyboard-reachable. */}
+                  <Button label="More" variant="secondary">
+                    More
+                  </Button>
+                </VStack>
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'not-scrollable',
+        label: 'Start, overflowing content, isScrollable={false}',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                isScrollable={false}
+                data-panel-case="not-scrollable">
+                <VStack gap={2}>{rows}</VStack>
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
           />
         ),
       },

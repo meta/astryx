@@ -40,13 +40,19 @@ import {
   type RefCallback,
   type RefObject,
 } from 'react';
+import {sharedState} from '../utils/sharedRealm';
 
-const outlets: HTMLDialogElement[] = [];
-// Outlets whose order among themselves is decided by their caller (a stack of
-// bottom sheets), keyed by that caller's group. Reordering stays inside the
-// group: such an outlet never moves above an outlet of another group supplied
-// later (a Dialog opened from a sheet).
-const outletGroups = new WeakMap<HTMLDialogElement, string>();
+// Every copy of Core on the page shares these outlets. The top layer is one
+// per document, so a swizzled modal and a package modal order as one.
+const modalState = sharedState('layer/modal-outlet/state', 1, () => ({
+  outlets: [] as HTMLDialogElement[],
+  // Outlets whose order among themselves is decided by their caller (a stack of
+  // bottom sheets), keyed by that caller's group. Reordering stays inside the
+  // group: such an outlet never moves above an outlet of another group supplied
+  // later (a Dialog opened from a sheet).
+  outletGroups: new WeakMap<HTMLDialogElement, string>(),
+  listeners: new Set<(change: ModalOutletChange) => void>(),
+}));
 
 /**
  * Why a host is told to place itself: `outlet` when the latest open modal
@@ -56,10 +62,8 @@ const outletGroups = new WeakMap<HTMLDialogElement, string>();
  */
 export type ModalOutletChange = 'outlet' | 'entry';
 
-const listeners = new Set<(change: ModalOutletChange) => void>();
-
 function notify(change: ModalOutletChange): void {
-  for (const listener of listeners) {
+  for (const listener of modalState.listeners) {
     listener(change);
   }
 }
@@ -72,31 +76,31 @@ function notify(change: ModalOutletChange): void {
  * a toast raised from it still lands there, not in the covered, inert step.
  */
 function addOutlet(element: HTMLDialogElement, beneathGroupTop: boolean): void {
-  const index = outlets.indexOf(element);
+  const index = modalState.outlets.indexOf(element);
   if (index !== -1) {
-    outlets.splice(index, 1);
+    modalState.outlets.splice(index, 1);
   }
-  const group = outletGroups.get(element);
+  const group = modalState.outletGroups.get(element);
   if (beneathGroupTop && group != null) {
-    for (let other = outlets.length - 1; other >= 0; other -= 1) {
-      if (outletGroups.get(outlets[other]) === group) {
-        outlets.splice(other, 0, element);
+    for (let other = modalState.outlets.length - 1; other >= 0; other -= 1) {
+      if (modalState.outletGroups.get(modalState.outlets[other]) === group) {
+        modalState.outlets.splice(other, 0, element);
         notify('outlet');
         return;
       }
     }
   }
-  outlets.push(element);
+  modalState.outlets.push(element);
   notify('outlet');
 }
 
 function removeOutlet(element: HTMLDialogElement): void {
-  const index = outlets.indexOf(element);
+  const index = modalState.outlets.indexOf(element);
   if (index === -1) {
     return;
   }
-  outlets.splice(index, 1);
-  outletGroups.delete(element);
+  modalState.outlets.splice(index, 1);
+  modalState.outletGroups.delete(element);
   notify('outlet');
 }
 
@@ -108,14 +112,14 @@ function removeOutlet(element: HTMLDialogElement): void {
  * not a sheet.
  */
 function raiseWithinGroup(element: HTMLDialogElement): void {
-  const group = outletGroups.get(element);
-  const index = outlets.indexOf(element);
+  const group = modalState.outletGroups.get(element);
+  const index = modalState.outlets.indexOf(element);
   if (group == null || index === -1) {
     return;
   }
-  let target = outlets.length;
-  for (let other = outlets.length - 1; other > index; other -= 1) {
-    if (outletGroups.get(outlets[other]) !== group) {
+  let target = modalState.outlets.length;
+  for (let other = modalState.outlets.length - 1; other > index; other -= 1) {
+    if (modalState.outletGroups.get(modalState.outlets[other]) !== group) {
       target = other;
     } else {
       break;
@@ -126,14 +130,14 @@ function raiseWithinGroup(element: HTMLDialogElement): void {
   if (target - 1 === index) {
     return;
   }
-  outlets.splice(index, 1);
-  outlets.splice(target - 1, 0, element);
+  modalState.outlets.splice(index, 1);
+  modalState.outlets.splice(target - 1, 0, element);
   notify('outlet');
 }
 
 /** The latest open native modal, or null when none is open. */
 export function getActiveModalOutlet(): HTMLDialogElement | null {
-  return outlets[outlets.length - 1] ?? null;
+  return modalState.outlets[modalState.outlets.length - 1] ?? null;
 }
 
 /**
@@ -143,9 +147,9 @@ export function getActiveModalOutlet(): HTMLDialogElement | null {
 export function subscribeModalOutlets(
   listener: (change: ModalOutletChange) => void,
 ): () => void {
-  listeners.add(listener);
+  modalState.listeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    modalState.listeners.delete(listener);
   };
 }
 
@@ -259,7 +263,7 @@ function useOutletSupply(
     const isResupply = suppliedRef.current != null;
     suppliedRef.current = element;
     if (group != null) {
-      outletGroups.set(element, group);
+      modalState.outletGroups.set(element, group);
     }
     // A native close (a `method="dialog"` form) ends the modal without a
     // render. A `close` that arrives while the dialog is open again is stale:

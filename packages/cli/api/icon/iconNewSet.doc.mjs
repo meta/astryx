@@ -10,7 +10,7 @@ export const doc = {
   displayName: 'iconNewSet()',
   summary: 'Add an icon set to an integration package.',
   description:
-    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them, records the installed library and version as the data file's source, copies the library's license notices into the set, uses the library's license, maps each Astryx definition whose name is an icon id, and returns up to three likely icons for each other definition as suggestions (by its name, its words, and the other names the library gives an icon; never a part of a word, a negated form, or the opposite direction), never written. A library whose export names end in style, size and weight words gives one icon per glyph, named without those words, in the look the default variant names, else the library's usual default (outline, regular, the middle weight). Over an existing set, `from` refreshes it; without `from`, `variants`, `defaultVariant`, `displayName` and `description` update it in place and leave its icons, map and generated module unchanged (a variant an icon has must stay declared, and a set with icons keeps its default variant). It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. It never writes the package's entry, exports, main, types, files list, peers, or scripts: its notes name each change the package needs as text to copy. Every path is confined to the package, and an existing set is changed only as above. Experimental: it may change or be removed in a patch release.",
+    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them, records the installed library and version as the data file's source, copies the library's license notices into the set, uses the library's license, maps each Astryx definition whose name is an icon id, and returns up to three likely icons for each other definition as suggestions (by its name, its words, and the other names the library gives an icon; never a part of a word, a negated form, or the opposite direction), never written. A library whose export names end in style, size and weight words gives one icon per glyph, named without those words, in the look the default variant names, else the library's usual default (outline, regular, the middle weight). With adapter, it declares the data file's adapter, so `from` also wraps a library's data exports through it. Over an existing set with icons, `from` refreshes it (the first `from` into a set with no icons creates them); without `from`, `variants`, `defaultVariant`, `displayName` and `description` update it in place and leave its icons, map and generated module unchanged (a variant an icon has must stay declared, and a set with icons keeps its default variant). It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. It never writes the package's entry, exports, main, types, files list, peers, or scripts: its notes name each change the package needs as text to copy. Every path is confined to the package, and an existing set is changed only as above. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'iconNewSet(name: string, options?: IconNewSetOptions): Promise<IconNewSetResponse>',
@@ -47,6 +47,12 @@ export const doc = {
         'With from: export names that are not icons; a string is split on commas. SCREAMING_CASE names and number or boolean exports are always left out.',
     },
     {
+      name: 'options.adapter',
+      type: 'string',
+      description:
+        "`./<path>#<export>`: a function in the package that turns one library export that is not a component (an icon data object, an SVG string) into one. The file must exist. It is written to the data file's adapter; with from, every data export of the library becomes an icon through it. A set that already has icons takes another adapter only with from.",
+    },
+    {
       name: 'options.variants',
       type: 'string[] | string',
       description:
@@ -75,7 +81,7 @@ export const doc = {
     {
       type: 'icon.newSet',
       description:
-        'What it wrote: the manifest root, the files, and what to do next.',
+        "What it wrote: the manifest root, the files, and what to do next. Except in a dry run, `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
   ],
   throws: [

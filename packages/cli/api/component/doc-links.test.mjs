@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./component.mjs')} */
@@ -108,7 +109,7 @@ function scaffold() {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-component-links-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-component-links-'));
 });
 
 afterEach(() => {
@@ -138,6 +139,7 @@ describe("a link in a component doc's text", () => {
       expect(read.data.examples[0]).toEqual({
         label: 'As `astryx docs acme-setup` shows',
         code: '// {@link generic:acme-setup}',
+        kind: 'demo',
       });
     },
     SLOW,
@@ -193,9 +195,11 @@ describe("a link in a component doc's text", () => {
         '`astryx docs acme-setup`',
       );
 
+      // Text shows the command with the project's runner, as docs reads do.
       const text = await runCli(['component', 'AcmeButton'], tmpDir);
       expect(text.status).toBe(0);
-      expect(text.stdout).toContain('`astryx docs acme-setup`');
+      expect(text.stdout).toMatch(/`[^`\n]*astryx[^`\n]* docs acme-setup`/);
+      expect(text.stdout).not.toContain('`astryx docs acme-setup`');
       expect(text.stdout).not.toContain('{@link generic:acme-setup} says');
     },
     SLOW,

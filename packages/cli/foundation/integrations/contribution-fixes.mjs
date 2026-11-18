@@ -20,7 +20,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {
   isThemeFolder as readsAsTheme,
@@ -28,6 +27,7 @@ import {
   THEME_MODULE_EXTENSIONS,
   THEME_SLUG_RE,
 } from '../discovery/theme-discovery.mjs';
+import {jscodeshift} from '../runtime/lazy-dependencies.mjs';
 
 /** @typedef {'components' | 'templates' | 'docs' | 'themes'} MetadataRoot */
 
@@ -88,23 +88,8 @@ const ROOT_HOLDS = /** @type {Record<MetadataRoot, string>} */ ({
   themes: 'themes',
 });
 
-const require = createRequire(import.meta.url);
-/** @type {typeof import('jscodeshift').default | undefined} */
-let jscodeshiftModule;
 /** @type {ReturnType<typeof import('jscodeshift').default['withParser']> | undefined} */
 let tsxParser;
-
-/**
- * jscodeshift, loaded at its first use: it is a large module, and a run that
- * checks no contribution file never needs it.
- * @returns {typeof import('jscodeshift').default}
- */
-function jscodeshift() {
-  jscodeshiftModule ??= require('jscodeshift');
-  return /** @type {typeof import('jscodeshift').default} */ (
-    jscodeshiftModule
-  );
-}
 
 /** jscodeshift with the TypeScript parser, made once. */
 function tsx() {

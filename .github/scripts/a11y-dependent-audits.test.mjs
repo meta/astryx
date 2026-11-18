@@ -24,6 +24,7 @@ import {
   changedPrimitives,
   dependentAudits,
   LATER_MAX_LEGS,
+  legsFor,
   listAuditSpecs,
   MAX_LEGS,
   planDependentAudits,
@@ -358,7 +359,47 @@ describe('the dependent-audits jobs', () => {
     expect(planJob.outputs.complete).toBe(
       "${{ steps.plan.outputs.complete || 'true' }}",
     );
+    // A run out of scope still writes a record that owes nothing.
+    const skip = step(planJob, 'Skip the dependent audits outside their scope');
+    expect(skip.run).toContain(
+      '"owed": [], "ran": [], "deferred": [], "complete": true',
+    );
+    expect(skip.run).toContain('> "$RUNNER_TEMP/a11y-dependent-audits.json"');
+    // It names the same fields as the planner's own record for a decided scope.
+    const template = /printf '(\{.*\})\\n'/.exec(skip.run)[1];
+    const outOfScope = JSON.parse(
+      template.replace('"%s"', '"head"').replace('%s', '1'),
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-record-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'changed.txt'), 'README.md\n');
+      execFileSync(
+        process.execPath,
+        [
+          '.github/scripts/a11y-dependent-audits.mjs',
+          '--changed',
+          path.join(dir, 'changed.txt'),
+          '--out',
+          path.join(dir, 'record.json'),
+        ],
+        {
+          cwd: root,
+          env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+        },
+      );
+      const planned = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(Object.keys(outOfScope).sort()).toEqual(
+        Object.keys(planned).sort(),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
     const upload = step(planJob, 'Upload the dependent-audit record');
+    // Every run uploads a record, and a run without one fails in CI.
+    expect(upload.if).toBe('always()');
+    expect(upload.with['if-no-files-found']).toBe('error');
     expect(upload.with.name).toBe(
       'a11y-dependent-audits-record-${{ github.run_attempt }}',
     );
@@ -368,7 +409,35 @@ describe('the dependent-audits jobs', () => {
   });
 
   it('run up to six legs, on a full runner only when a leg has a share', () => {
-    expect(legs.strategy.matrix.leg).toEqual([1, 2, 3, 4, 5, 6]);
+    // Only the planned legs start; a plan that did not succeed starts one.
+    expect(legs.strategy.matrix.leg).toBe(
+      "${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}",
+    );
+    // A plan that owes no audit starts no leg at all.
+    expect(legs.if).toContain(
+      "(needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0')",
+    );
+    // The name has no condition: GitHub shows a skipped job's name
+    // unevaluated, and a skipped job is the usual case when nothing is owed.
+    // The failing step's error says to re-run.
+    expect(legs.name).toBe(
+      'Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      '::error title=Dependent-audit plan did not run::',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'Re-run all jobs.',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'exit 1',
+    );
+    expect(planJob.outputs.legs).toBe(
+      "${{ steps.plan.outputs.legs || '[1]' }}",
+    );
+    expect(legsFor(0)).toEqual([1]);
+    expect(legsFor(3)).toEqual([1, 2, 3]);
+    expect(legsFor(LATER_MAX_LEGS)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(legs.strategy['fail-fast']).toBe(false);
     expect(legs['runs-on']).toBe(
       "${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}",
@@ -392,6 +461,16 @@ describe('the dependent-audits jobs', () => {
 
   it('block the merge through the test join', () => {
     expect(ci.jobs.test.needs).toContain('pr-a11y-dependent-audits');
+    expect(ci.jobs.test.needs).toContain('a11y-dependent-audits-plan');
+    const joinEnv = ci.jobs.test.steps.find(
+      s => s.name === 'Require expected test-owner outcomes',
+    ).env;
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_PLAN_RESULT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.result }}',
+    );
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_COUNT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.outputs.count }}',
+    );
     expect(
       ci.jobs.test.steps.find(
         s => s.name === 'Require expected test-owner outcomes',
@@ -402,8 +481,6 @@ describe('the dependent-audits jobs', () => {
         path.join(root, '.github/scripts/ci-test-join.mjs'),
         'utf8',
       ),
-    ).toContain(
-      "['pr-a11y-dependent-audits', process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT]",
-    );
+    ).toContain('process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT');
   });
 });

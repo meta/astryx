@@ -19,7 +19,7 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useMemo, useRef} from 'react';
+import {useMemo, useState} from 'react';
 import type {TablePlugin, TableColumn} from '../../types';
 import type {UseTableColumnSettingsStateConfig} from './useTableColumnSettingsState';
 
@@ -61,9 +61,8 @@ export interface ColumnSettingsOption<TColumnKey extends string = string> {
  *
  * @template TColumnKey - String literal union of column keys
  */
-export type UseTableColumnSettingsConfig<
-  TColumnKey extends string = string,
-> = UseTableColumnSettingsStateConfig<TColumnKey>;
+export type UseTableColumnSettingsConfig<TColumnKey extends string = string> =
+  UseTableColumnSettingsStateConfig<TColumnKey>;
 
 // =============================================================================
 // Plugin Hook
@@ -87,20 +86,25 @@ export function useTableColumnSettings<
   T extends Record<string, unknown>,
   TColumnKey extends string = string,
 >(config: UseTableColumnSettingsConfig<TColumnKey>): TablePlugin<T> {
-  // Keep config in a ref so the plugin reads the latest values
-  // without changing plugin identity.
-  const configRef = useRef(config);
-  configRef.current = config;
+  // The active keys the plugin reads, kept in state while their entries stay
+  // the same. The plugin's identity follows them, and a render React discards
+  // takes its update with it.
+  const [activeColumnKeys, setActiveColumnKeys] = useState(
+    config.activeColumnKeys,
+  );
+  const nextKeys = areKeysEqual(activeColumnKeys, config.activeColumnKeys)
+    ? activeColumnKeys
+    : config.activeColumnKeys;
+  if (nextKeys !== activeColumnKeys) {
+    setActiveColumnKeys(nextKeys);
+  }
 
   return useMemo(
     (): TablePlugin<T> => ({
       transformColumns(columns: TableColumn<T>[]): TableColumn<T>[] {
-        const cfg = configRef.current;
-        const activeSet = new Set(cfg.activeColumnKeys);
+        const activeSet = new Set(nextKeys);
         // Build a map for ordering by activeColumnKeys position
-        const orderMap = new Map(
-          cfg.activeColumnKeys.map((key, index) => [key, index]),
-        );
+        const orderMap = new Map(nextKeys.map((key, index) => [key, index]));
         return columns
           .filter(col => activeSet.has(col.key as TColumnKey))
           .sort((a, b) => {
@@ -110,6 +114,15 @@ export function useTableColumnSettings<
           });
       },
     }),
-    [],
+    [nextKeys],
+  );
+}
+
+function areKeysEqual<TColumnKey extends string>(
+  a: ReadonlyArray<TColumnKey>,
+  b: ReadonlyArray<TColumnKey>,
+): boolean {
+  return (
+    a === b || (a.length === b.length && a.every((key, i) => key === b[i]))
   );
 }

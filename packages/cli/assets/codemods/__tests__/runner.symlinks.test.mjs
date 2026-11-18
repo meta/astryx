@@ -11,13 +11,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCodemods} from '../runner.mjs';
 import {findSourceFiles as findIntegrationSourceFiles} from '../run-codemod.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-runner-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-runner-test-'));
   process.chdir(tmpDir);
 });
 

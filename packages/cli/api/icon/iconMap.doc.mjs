@@ -58,12 +58,12 @@ export const doc = {
     {
       type: 'icon.mapMany',
       description:
-        'With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed.',
+        "With pairs: the set, the data file, each entry with the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
     {
       type: 'icon.map',
       description:
-        'The set, the data file, the definition, the icon now mapped, the icon it replaced, and whether the file changed.',
+        "The set, the data file, the definition, the icon now mapped, the icon it replaced, and whether the file changed. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
   ],
   throws: [

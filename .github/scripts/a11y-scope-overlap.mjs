@@ -11,7 +11,9 @@
  *   run from a checkout of main.
  * @output JSON `{"version": 1, "specs": [{"path", "reason", "scope"}]}`, where
  *   `reason` is `added-on-main` or `changed-on-main` and `scope` names what
- *   selects the spec; exit 0. Any other exit means the answer is unknown.
+ *   selects the spec; exit 0. Any other exit means the answer is unknown. A
+ *   spec whose code and routing lines are the same at the head and on main
+ *   (only comments or whitespace changed) is not listed.
  * @position merge-guard reads it: a spec listed here never ran on the pull
  *   request's runs, which use the head's specs, so a non-empty list needs a
  *   fresh ref (update the branch) before the merge, as a file overlap does.
@@ -99,20 +101,74 @@ export function selectingScope(
 }
 
 /**
+ * A spec's code tokens and its routing lines: two sources with equal keys run
+ * the same tests for the same pull requests, whatever their comments and
+ * whitespace.
+ * @param {typeof import('typescript')} ts
+ * @param {string} source
+ */
+export function codeKey(ts, source) {
+  const file = ts.createSourceFile(
+    'spec.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const tokens = [];
+  const visit = node => {
+    // A doc comment attached to a statement is a child node, not code.
+    if (node.kind === ts.SyntaxKind.JSDoc) return;
+    const children = node.getChildren(file);
+    if (children.length === 0) {
+      // The parent's kind keeps a line break that changes the program
+      // (`return` then a value on the next line) from reading as formatting.
+      if (node.kind !== ts.SyntaxKind.EndOfFileToken)
+        tokens.push(`${node.parent.kind}:${node.getText(file)}`);
+      return;
+    }
+    for (const child of children) visit(child);
+  };
+  visit(file);
+  return JSON.stringify({tokens, routing: parseRouting(source)});
+}
+
+/**
+ * Compares sources by code when TypeScript can be loaded, and by text
+ * otherwise, so a missing parser never hides a change.
+ */
+export async function loadSameCode() {
+  try {
+    const ts = (await import('typescript')).default;
+    return (a, b) => {
+      try {
+        return codeKey(ts, a) === codeKey(ts, b);
+      } catch {
+        return a === b;
+      }
+    };
+  } catch {
+    return (a, b) => a === b;
+  }
+}
+
+/**
  * The specs that need a fresh ref before the merge.
  * @param {{path: string, status: 'added' | 'changed', mainSource: string,
  *   headSource: string | null}[]} changedOnMain the spec files main added or
  *   changed since the merge base, with their source on main and at the head
  * @param {string[]} changedPaths the pull request's changed paths
  * @param {{primitives: string[], importers: Map<string, Set<string>>,
- *   labelled?: boolean}} graph main's shared primitives and import graph, for
- *   the audits a change owes, and whether the run label is on
+ *   labelled?: boolean, sameCode?: (a: string, b: string) => boolean}} graph
+ *   main's shared primitives and import graph, for the audits a change owes;
+ *   whether the run label is on; and whether two sources of a spec run the
+ *   same (by default, only when they are identical)
  * @returns {{path: string, reason: string, scope: string}[]}
  */
 export function overlappingSpecs(
   changedOnMain,
   allChangedPaths,
-  {primitives, importers, labelled = false},
+  {primitives, importers, labelled = false, sameCode = (a, b) => a === b},
 ) {
   const changedPaths = allChangedPaths.filter(renders);
   const routings = changedOnMain.map(spec => ({
@@ -133,7 +189,7 @@ export function overlappingSpecs(
   const owedAudits = new Set(owed);
   const out = [];
   for (const {path, status, mainSource, headSource} of routings) {
-    if (headSource === mainSource) continue;
+    if (headSource != null && sameCode(headSource, mainSource)) continue;
     const scope = selectingScope(
       path,
       mainSource,
@@ -168,7 +224,7 @@ function sourceAt(sha, file) {
   }
 }
 
-function main() {
+async function main() {
   const argv = process.argv.slice(2);
   const value = name => {
     const at = argv.indexOf(name);
@@ -213,7 +269,9 @@ function main() {
       headSource: sourceAt(head, file),
     }));
   const root = process.cwd();
+  const sameCode = await loadSameCode();
   const specs = overlappingSpecs(changedOnMain, changedPaths, {
+    sameCode,
     labelled: argv.includes('--labelled'),
     primitives: readPrimitives(root),
     importers: importerGraph(root),
@@ -225,4 +283,7 @@ if (
   process.argv[1] &&
   fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 )
-  main();
+  main().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });

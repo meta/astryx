@@ -309,6 +309,10 @@ function HeatmapGLCanvas({
       posBufferRef.current = null;
       colBufferRef.current = null;
       locsRef.current = null;
+      // A context lost on purpose stays lost, and the canvas would hand it
+      // back. If the effects run again on this instance (StrictMode, a
+      // hidden and shown Activity), they mount a fresh canvas instead.
+      canvasRef.current = null;
     };
   }, []);
 

@@ -25,7 +25,15 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {StrictMode, createRef, useState, type ReactNode} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   Tokenizer,
@@ -51,7 +59,7 @@ import {getActiveModalOutlet} from '../Layer/modalOutlet';
 // transform can take seconds on a busy machine. The file loads the sheet
 // module before any test runs, so that load counts against no wait or time
 // limit.
-await import('./TokenizerBottomSheet');
+const {TokenizerBottomSheet} = await import('./TokenizerBottomSheet');
 
 const ITEMS: SearchableItem[] = [
   {id: 'design', label: 'Design'},
@@ -971,7 +979,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     );
   });
 
-  it('announces the rows it lists, not the source count: a created value and a maxMenuItems cap (FR20; AR6)', async () => {
+  it('announces the rows it lists plus the matches past maxMenuItems: a created value and a cap (FR20; AR6)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi
       .spyOn(Element.prototype, 'matches')
@@ -1013,17 +1021,67 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(region()).not.toHaveTextContent('0 results');
       // A query the cap applies to: the source has three matches, capped to
       // two rows, plus the created value's checked row, plus the create row
-      // the sheet offers for "en" — four entries listed, four announced (the
-      // source count would say two, or three uncapped).
+      // the sheet offers for "en" — four entries listed. The match the cap
+      // hides counts too, as the inline field counts it: five announced.
       fireEvent.change(screen.getByLabelText('Search Tags'), {
         target: {value: 'en'},
       });
       await screen.findByRole('button', {name: 'Add en'});
-      await waitFor(() => expect(region()).toHaveTextContent('4 results'));
+      await waitFor(() => expect(region()).toHaveTextContent('5 results'));
       expect(screen.getAllByRole('checkbox')).toHaveLength(3);
       expect(
         screen.queryByRole('checkbox', {name: 'Energizer'}),
       ).not.toBeInTheDocument();
+    } finally {
+      modalSpy.mockRestore();
+    }
+  });
+
+  it('counts a selected match past maxMenuItems once (AR6)', async () => {
+    const matches = Element.prototype.matches;
+    const modalSpy = vi
+      .spyOn(Element.prototype, 'matches')
+      .mockImplementation(function (this: Element, selector: string) {
+        return selector === ':modal'
+          ? this instanceof HTMLDialogElement && this.open
+          : matches.call(this, selector);
+      });
+    try {
+      const tags = Array.from({length: 5}, (_, index) => ({
+        id: `tag-${index}`,
+        label: `Tag ${index}`,
+      }));
+      // Five matches, two listed by the cap, and Tag 4 (past the cap) selected:
+      // the sheet lists Tag 4, Tag 0 and Tag 1, and the cap hides Tag 2 and
+      // Tag 3. Five matches in all.
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (q: string) =>
+              tags.filter(tag =>
+                tag.label.toLowerCase().includes(q.toLowerCase()),
+              ),
+            bootstrap: () => [],
+          }}
+          value={[tags[4]]}
+          onChange={() => {}}
+          debounceMs={0}
+          maxMenuItems={2}
+          presentation="bottom-sheet"
+        />,
+      );
+      fireEvent.click(openTrigger());
+      const dialog = await screen.findByRole('dialog', {name: 'Tags'});
+      const region = () =>
+        dialog.querySelector(
+          ':scope > [data-astryx-modal-live-region="polite"]',
+        );
+      fireEvent.change(screen.getByLabelText('Search Tags'), {
+        target: {value: 'tag'},
+      });
+      await waitFor(() => expect(region()).toHaveTextContent('5 results'));
+      expect(screen.getAllByRole('checkbox')).toHaveLength(3);
     } finally {
       modalSpy.mockRestore();
     }
@@ -1204,6 +1262,141 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     await screen.findByRole('dialog', {name: 'Tags'});
     expect(screen.getByLabelText('Search Tags')).toHaveValue('En');
     expect(onChangeQuery).not.toHaveBeenCalled();
+  });
+
+  it('announces nothing on a reopen that runs no search, after React discards a reopen that searched', async () => {
+    // A transition that suspends for good: React renders its element, then
+    // keeps the committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    const finalFocusRef = createRef<HTMLElement>();
+    function Screen({
+      isOpen,
+      minQueryLength,
+      isPending = false,
+    }: {
+      isOpen: boolean;
+      minQueryLength: number;
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <TokenizerBottomSheet
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            finalFocusRef={finalFocusRef}
+            initialQuery="Eng"
+            label="Tags"
+            searchSource={source}
+            value={[ITEMS[0]]}
+            maxEntries={undefined}
+            hasCreate={false}
+            maxMenuItems={10}
+            minQueryLength={minQueryLength}
+            debounceMs={0}
+            emptySearchText="No results"
+            onCommit={() => {}}
+          />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    const {rerender} = render(<Screen isOpen minQueryLength={2} />);
+    await screen.findByRole('dialog', {name: 'Tags'});
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    // The sheet is not modal here, so it speaks through the page's region.
+    const liveRegion = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+    // The first open searched the kept query and said so.
+    expect(liveRegion()?.textContent).toBe('2 results');
+    // Closed by its field, keeping its query; the exit has not finished.
+    rerender(<Screen isOpen={false} minQueryLength={2} />);
+    const region = liveRegion();
+    if (region != null) {
+      region.textContent = '';
+    }
+    // A reopen that searches the kept query, in a render React discards.
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen isOpen minQueryLength={2} isPending />);
+      });
+    });
+    // The reopen that commits runs no search: the query is now too short.
+    rerender(<Screen isOpen minQueryLength={4} />);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+
+    expect(liveRegion()?.textContent ?? '').toBe('');
+  });
+
+  it('reports a created item as created after a Suspense boundary above the open sheet hides and shows it again (FR26)', async () => {
+    let resolve = () => {};
+    const pending = new Promise<void>(done => {
+      resolve = done;
+    });
+    function Suspender(): null {
+      use(pending);
+      return null;
+    }
+    const onCommit = vi.fn();
+    const finalFocusRef = createRef<HTMLElement>();
+    function Screen({
+      isOpen,
+      isSuspended = false,
+    }: {
+      isOpen: boolean;
+      isSuspended?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <TokenizerBottomSheet
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            finalFocusRef={finalFocusRef}
+            initialQuery=""
+            label="Tags"
+            searchSource={source}
+            value={[]}
+            maxEntries={undefined}
+            hasCreate
+            maxMenuItems={10}
+            minQueryLength={1}
+            debounceMs={0}
+            emptySearchText="No results"
+            onCommit={onCommit}
+          />
+          {isSuspended ? <Suspender /> : null}
+        </Suspense>
+      );
+    }
+    // Mounted closed, then opened, as the field opens it.
+    const {rerender} = render(<Screen isOpen={false} />);
+    rerender(<Screen isOpen />);
+    const search = await screen.findByLabelText('Search Tags');
+    fireEvent.change(search, {target: {value: 'Custom'}});
+    const create = await screen.findByRole('button', {name: 'Add Custom'});
+    await act(async () => {
+      fireEvent.click(create);
+    });
+    // The boundary falls back, hiding the open sheet, then shows it again.
+    rerender(<Screen isOpen isSuspended />);
+    await act(async () => {
+      resolve();
+      await pending;
+    });
+
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+    expect(onCommit).toHaveBeenCalledWith([{id: 'Custom', label: 'Custom'}], {
+      item: {id: 'Custom', label: 'Custom'},
+      type: 'create',
+    });
   });
 
   it('reopens settled, not pending, after a forced close kept a query shorter than minQueryLength (FR18, FR20)', async () => {
@@ -3365,5 +3558,93 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     ).toHaveFocus();
     expect(getActiveModalOutlet()).toBe(sheet);
     expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
+  });
+});
+
+// The sheet calls the source's cancel where the inline field does: when a
+// newer query replaces pending work, and when the sheet closes or unmounts
+// while work is pending (spec:BaseTypeahead PR1, component:Tokenizer).
+describe('Tokenizer sheet presentation: search cancellation', () => {
+  function pendingSource() {
+    const cancel = vi.fn();
+    const pending: SearchSource<SearchableItem> = {
+      search: async () => new Promise<SearchableItem[]>(() => {}),
+      bootstrap: async () => new Promise<SearchableItem[]>(() => {}),
+      cancel,
+    };
+    return {source: pending, cancel};
+  }
+
+  function renderSheet(searchSource: SearchSource<SearchableItem>) {
+    return render(
+      <Tokenizer
+        label="Tags"
+        searchSource={searchSource}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />,
+    );
+  }
+
+  it('cancels a pending search once when a newer query replaces it', async () => {
+    const {source: pending, cancel} = pendingSource();
+    renderSheet(pending);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    expect(cancel).not.toHaveBeenCalled();
+    fireEvent.change(search, {target: {value: 'en'}});
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels pending work once when the sheet closes', async () => {
+    const {source: pending, cancel} = pendingSource();
+    renderSheet(pending);
+    fireEvent.click(openTrigger());
+    await screen.findByLabelText('Search Tags');
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+  });
+
+  it('cancels pending work once when the field unmounts', async () => {
+    const {source: pending, cancel} = pendingSource();
+    const {unmount} = renderSheet(pending);
+    fireEvent.click(openTrigger());
+    await screen.findByLabelText('Search Tags');
+    unmount();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the source that started a request, not a replacement source', async () => {
+    const first = pendingSource();
+    const second = pendingSource();
+    const {rerender} = renderSheet(first.source);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    rerender(
+      <Tokenizer
+        label="Tags"
+        searchSource={second.source}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />,
+    );
+    fireEvent.change(search, {target: {value: 'en'}});
+    expect(first.cancel).toHaveBeenCalledTimes(1);
+    expect(second.cancel).not.toHaveBeenCalled();
+  });
+
+  it('does not cancel when no work is pending', async () => {
+    const cancel = vi.fn();
+    const {unmount} = renderSheet({...source, cancel});
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    fireEvent.change(search, {target: {value: 'en'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    unmount();
+    expect(cancel).not.toHaveBeenCalled();
   });
 });

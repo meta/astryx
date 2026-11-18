@@ -2164,6 +2164,68 @@ describe('R10 concurrent React', () => {
     expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledTimes(1);
   });
 
+  it('a sheet whose close waits in a suspended transition takes the scrim when the sheet beneath it closes', () => {
+    const never = new Promise<never>(() => {});
+    function Forever(): ReactNode {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- Suspense protocol: a thrown promise suspends the subtree
+      throw never;
+    }
+    // A keeps its own state, so an update to it renders only A.
+    let closeBeneath!: () => void;
+    function Beneath() {
+      const [isOpen, setIsOpen] = useState(true);
+      closeBeneath = () => setIsOpen(false);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="A">
+          a
+        </BottomSheet>
+      );
+    }
+    let closeTopInTransition!: () => void;
+    function App() {
+      const [isTopOpen, setIsTopOpen] = useState(true);
+      const [isWaiting, setIsWaiting] = useState(false);
+      closeTopInTransition = () =>
+        startTransition(() => {
+          setIsTopOpen(false);
+          setIsWaiting(true);
+        });
+      return (
+        <>
+          <Beneath />
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen={isTopOpen}
+              onOpenChange={setIsTopOpen}
+              label="B">
+              b
+            </BottomSheet>
+            {isWaiting ? <Forever /> : null}
+          </Suspense>
+        </>
+      );
+    }
+    render(<App />);
+    const a = getDialog('A');
+    const b = getDialog('B');
+    expect(scrim(a)).toBe('1');
+    expect(scrim(b)).toBe('0');
+    // B's close renders, then suspends for good: B stays open on screen.
+    act(() => {
+      closeTopInTransition();
+    });
+    expect(openDialogs()).toEqual(['A', 'B']);
+    // A closes from code beneath the open B. The dim is B's from here on.
+    act(() => {
+      closeBeneath();
+    });
+    expect(scrim(a)).toBe('0');
+    expect(scrim(b)).toBe('1');
+    finishExit(a);
+    expect(stackSummary()).toEqual(['B:top:0']);
+    expect(scrim(b)).toBe('1');
+  });
+
   it('Suspense hide takes a sheet out of the stack; reveal re-presents it on top', async () => {
     let resolveGate!: () => void;
     const gate = new Promise<void>(resolve => {

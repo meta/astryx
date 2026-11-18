@@ -8,6 +8,7 @@ import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Text} from '@astryxdesign/core/Text';
+import {readAnchorNames} from '../../../packages/core/src/Layer/anchorName';
 
 const styles = stylex.create({
   popoverContent: {
@@ -629,13 +630,46 @@ function sameRect(a: DOMRect, b: DOMRect) {
   );
 }
 
+/** The open layer that anchors to this trigger, or null. */
+function openLayerOf(trigger: HTMLElement): HTMLElement | null {
+  const names = readAnchorNames(trigger);
+  for (const layer of document.querySelectorAll<HTMLElement>(
+    '[popover]:popover-open[id]',
+  )) {
+    if (names.includes(layer.style.getPropertyValue('position-anchor'))) {
+      return layer;
+    }
+  }
+  return null;
+}
+
 /**
- * Click the trigger, read the first frame's geometry synchronously (the
- * discrete event flushes React and the rect read forces layout), then settle
- * and read again. A difference is a paint-then-shift (FR8).
+ * Fail unless the trigger's own layer is open by the end of the click's task.
+ * The click's update can commit in the microtask after `click()` returns. That
+ * is still before the next paint, so a read after this check is the first
+ * frame's geometry.
+ */
+async function assertLayerOpened(trigger: HTMLElement): Promise<void> {
+  await committed();
+  if (openLayerOf(trigger) == null) {
+    fail("the layer did not open by the end of the click's task");
+  }
+}
+
+/**
+ * Click the trigger, check that its layer opened in the click's task, read the
+ * first frame's geometry (the rect read forces layout), then settle and read
+ * again. A difference is a paint-then-shift (FR8).
  */
 async function open(canvasElement: HTMLElement): Promise<Rects> {
-  canvasElement.querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+  const trigger = canvasElement.querySelector<HTMLElement>(
+    '[data-testid="trigger"]',
+  );
+  if (!trigger) {
+    throw new Error('No trigger');
+  }
+  trigger.click();
+  await assertLayerOpened(trigger);
   const first = rects(canvasElement);
   await settle();
   const settled = rects(canvasElement);

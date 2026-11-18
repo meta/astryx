@@ -84,6 +84,34 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
     storyId: 'a11y-status-message-pattern--toast-error-announcement',
   },
   {
+    id: 'toast-info-announcement-top-layer',
+    binding: 'Toast announcement channel',
+    summary:
+      'a top-layer viewport outside a modal announces an info toast once through the shared polite region, and adds no region of its own',
+    facts: liveFacts({
+      role: 'status',
+      politeness: 'polite',
+      message: 'Changes saved',
+      replacement: 'Profile updated',
+      semanticTransitions: ['show', 'replace', 'repeat'],
+    }),
+    storyId: 'a11y-status-message-pattern--toast-info-announcement-top-layer',
+  },
+  {
+    id: 'toast-error-announcement-top-layer',
+    binding: 'Toast announcement channel',
+    summary:
+      'a top-layer viewport outside a modal announces an error toast once through the shared assertive region, and adds no region of its own',
+    facts: liveFacts({
+      role: 'alert',
+      politeness: 'assertive',
+      message: 'Upload failed',
+      replacement: 'Connection failed',
+      semanticTransitions: ['show', 'replace', 'repeat'],
+    }),
+    storyId: 'a11y-status-message-pattern--toast-error-announcement-top-layer',
+  },
+  {
     id: 'toast-info-card-mounted',
     binding: 'Toast card',
     summary:

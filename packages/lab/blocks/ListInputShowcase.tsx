@@ -11,6 +11,7 @@
 
 import {useMemo, useState} from 'react';
 import {VStack} from '@astryxdesign/core/Layout';
+import {createReorderable} from '@astryxdesign/core';
 import {Selector} from '@astryxdesign/core/Selector';
 import {proportional} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -104,6 +105,23 @@ export default function ListInputShowcase() {
     [],
   );
 
+  // The tags' reorder: each move lands where the list reports it.
+  const reorderable = useMemo(
+    () =>
+      createReorderable<string>({
+        onReorder: ({key, to}) =>
+          setTags(current => {
+            const moved = current.find(tag => tag.id === key);
+            if (moved == null) {
+              return current;
+            }
+            const rest = current.filter(tag => tag.id !== key);
+            return [...rest.slice(0, to), moved, ...rest.slice(to)];
+          }),
+      }),
+    [],
+  );
+
   return (
     <VStack width={680} maxWidth="100%">
       <ListInput<TagOption>
@@ -115,7 +133,7 @@ export default function ListInputShowcase() {
         createItem={() => ({id: crypto.randomUUID(), color: 'blue', label: ''})}
         columns={columns}
         itemName="tag"
-        isReorderable
+        reorderable={reorderable}
         status={
           tags.length < 5
             ? {type: 'error', message: 'Add at least five tag options.'}

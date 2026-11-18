@@ -26,9 +26,9 @@ import {cubicBezier} from '../../motion/bezier';
 import {keyboard as ANDROID_KEYBOARD} from '../../motion/android/keyboard';
 import {
   animationStoryboard,
+  armHold,
   compareCurve,
   curveOf,
-  holdAnimations,
   type HeldAnimation,
   openStory,
   releaseAnimations,
@@ -39,7 +39,6 @@ import {
   timeline,
   touchDriver,
   traceRendering,
-  waitForAnimation,
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -694,14 +693,19 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       return at;
     }, cover);
 
-  test('the rise does no Layout or Paint per frame', async ({page}) => {
-    const {editable} = await openChat(page, {android: true});
-    // Records each ride the motion engine starts on the dock, when it starts
-    // and when it is cancelled. Reading an animation's times reads no layout.
-    // The engine sets the start in the task that makes the ride, so a
-    // microtask reads it. A promise on `ready` would add a main-thread frame
-    // when the compositor starts the ride.
-    await page.evaluate(() => {
+  // Gboard's show runs 267 ms and its hide 167 ms. On a busy machine, a hold
+  // or a read sent from the test after the report or the blur can arrive
+  // after the ride ends. So the page holds the ride itself as it starts.
+  const armRideHold = async (page: Page, dock: Locator) =>
+    armHold(page, dock, {judges: {target: dock, property: 'translate'}});
+
+  // Records each ride the motion engine starts on the dock from here on, when
+  // it starts and when it is cancelled, in epoch ms. Reading an animation's
+  // times reads no layout. The engine sets the start in the task that makes
+  // the ride, so a microtask reads it, before a hold pauses it. A promise on
+  // `ready` would add a main-thread frame when the compositor starts the ride.
+  const recordRides = async (page: Page) =>
+    page.evaluate(() => {
       const dock = document.querySelector('[data-testid="keyboard-dock"]');
       const rides: {start: number | null; cancelled: number | null}[] = [];
       (window as unknown as {__rides: typeof rides}).__rides = rides;
@@ -734,6 +738,26 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         return animation;
       };
     });
+
+  // The start of the first ride since `recordRides`, on the document
+  // timeline, where an event's `timeStamp` sits.
+  const firstRideStart = async (page: Page) => {
+    const starts = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __rides: {start: number | null}[];
+        }
+      ).__rides.flatMap(({start}) =>
+        start == null ? [] : [start - performance.timeOrigin],
+      ),
+    );
+    expect(starts, 'the engine started a ride on the dock').not.toHaveLength(0);
+    return starts[0];
+  };
+
+  test('the rise does no Layout or Paint per frame', async ({page}) => {
+    const {editable} = await openChat(page, {android: true});
+    await recordRides(page);
     // No polling inside the trace: reading a sticky element's presented style
     // from the test forces a layout every frame by itself.
     let reported = 0;
@@ -875,11 +899,20 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       });
       const viewport = page.viewportSize() ?? {width: 402, height: 714};
       await editable.focus();
+      // The transcript rides the same slide beside the dock, from the same
+      // task. The film seeks only what the hold took, so it takes both.
+      const hold = await armHold(page, dock.locator('xpath=..'), {
+        newOnly: true,
+        count: 2,
+        judges: [
+          {target: dock, property: 'translate'},
+          {target: messages, property: 'translate'},
+        ],
+      });
       await reportAt(page, COVER);
-      await waitForAnimation(dock);
       const {storyboard} = await animationStoryboard(page, {
         name: 'chatlayout-keyboard-show',
-        judges: {target: dock, property: 'translate'},
+        held: await hold.held(),
         clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
         times: timeline(300, 300 / 12),
         columns: 6,
@@ -890,12 +923,22 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         }),
       });
       await storyboard.write(testInfo);
-      const trace = storyboard.frames.map(f => f.data as {dockY: number});
+      const trace = storyboard.frames.map(
+        f => f.data as {dockY: number; messagesY: number},
+      );
       // The dock only ever rises during the show, ending at the cover.
       for (let i = 1; i < trace.length; i += 1) {
         expect(trace[i].dockY).toBeLessThanOrEqual(trace[i - 1].dockY + 0.01);
       }
       expect(trace.at(-1)?.dockY).toBeCloseTo(-lift, 0);
+      // The transcript at its newest message rides with the composer in every
+      // frame.
+      for (const frame of trace) {
+        expect(frame.messagesY, JSON.stringify(trace)).toBeCloseTo(
+          frame.dockY,
+          0,
+        );
+      }
     },
   );
 
@@ -904,21 +947,16 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
   }) => {
     const {dock, editable, lift} = await openChat(page, {android: true});
     await editable.focus();
+    await recordRides(page);
+    const hold = await armRideHold(page, dock);
     const reported = await reportAt(page, COVER);
-    await waitForAnimation(dock);
-    const start = await dock.evaluate(el =>
-      Math.max(
-        ...el.getAnimations().map(a => Number(a.startTime ?? -Infinity)),
-      ),
-    );
+    const ride = rideOf(await hold.held());
     expect(
-      Math.abs(start - (reported - ANDROID_KEYBOARD.showReportLagMs)),
+      Math.abs(
+        (await firstRideStart(page)) -
+          (reported - ANDROID_KEYBOARD.showReportLagMs),
+      ),
     ).toBeLessThan(2);
-    const ride = rideOf(
-      await holdAnimations(page, dock, {
-        judges: {target: dock, property: 'translate'},
-      }),
-    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
@@ -965,6 +1003,8 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     await waitForRest(dock);
     await page.waitForTimeout(100);
     const lifted = -(await dockY(dock));
+    await recordRides(page);
+    const hold = await armRideHold(page, dock);
     const blurAt = await editable.evaluate(el => {
       let at = 0;
       el.addEventListener(
@@ -977,20 +1017,13 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       (el as HTMLElement).blur();
       return at;
     });
-    await waitForAnimation(dock);
-    const start = await dock.evaluate(el =>
-      Math.max(
-        ...el.getAnimations().map(a => Number(a.startTime ?? -Infinity)),
-      ),
-    );
+    const ride = rideOf(await hold.held());
     expect(
-      Math.abs(start - (blurAt + ANDROID_KEYBOARD.hideAfterBlurMs)),
+      Math.abs(
+        (await firstRideStart(page)) -
+          (blurAt + ANDROID_KEYBOARD.hideAfterBlurMs),
+      ),
     ).toBeLessThan(8);
-    const ride = rideOf(
-      await holdAnimations(page, dock, {
-        judges: {target: dock, property: 'translate'},
-      }),
-    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',

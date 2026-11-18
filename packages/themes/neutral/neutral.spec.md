@@ -11,6 +11,8 @@ review_triggers:
 verified_by:
   [
     scripts/check-badge-contrast.test.mjs,
+    scripts/check-segmented-control-label-contrast.test.mjs,
+    packages/core/src/SegmentedControl/__tests__/SegmentedControlLabelContrast.a11y.chromium.spec.ts,
     packages/themes/neutral/src/neutralTheme.test.ts,
   ]
 package: '@astryxdesign/theme-neutral'
@@ -105,9 +107,10 @@ Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
 in both modes. In dark mode Neutral lifts `--color-text-secondary` to
 `neutral.dark[80]` on a selected `item` or `tree-list-item` (a checked
 CheckboxListItem row reflects `selected` on its `item` target), on a
-`citation` with `variant:number`, and on a `file-input` with `mode:dropzone`,
-whose drag-over fill has no state target, so that text clears 4.5:1 at rest
-and under the hover overlay. Neutral's syntax `comment`, `operator` and
+`citation` with `variant:number`, on a `file-input` with `mode:dropzone`,
+whose drag-over fill has no state target, and on every `segmented-control-item`,
+whose unselected label sits on the translucent track over the page surface, so
+that text clears 4.5:1 at rest and under the hover overlay. Neutral's syntax `comment`, `operator` and
 `punctuation` colours are `neutral.light[35]` / `neutral.dark[75]`, so they
 read on a highlighted code line.
 

@@ -14,6 +14,11 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Dialog} from '@astryxdesign/core/Dialog';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from '@astryxdesign/core/SegmentedControl';
 import {useState} from 'react';
 
 // Inline icons for story demos (not in the default icon registry)
@@ -503,4 +508,51 @@ export const DisabledStreamingNarrow: Story = {
       '1',
     );
   },
+};
+
+/**
+ * Browser fixture: "Open dialog" opens a Dialog holding a SegmentedControl,
+ * and "Close dialog" unmounts it while it is still open (its key changes).
+ * The empty composer behind it must still take a click and typing.
+ */
+function KeyedDialogFixture() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [selection, setSelection] = useState('a');
+  return (
+    <>
+      <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            label="Chat input"
+            value={draft}
+            onChange={setDraft}
+          />
+        }
+      />
+      <Dialog
+        key={String(isOpen)}
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        aria-label="Example dialog">
+        <SegmentedControl
+          label="Options"
+          value={selection}
+          onChange={setSelection}>
+          <SegmentedControlItem value="a" label="A" />
+          <SegmentedControlItem value="b" label="B" />
+        </SegmentedControl>
+        <Button label="Close dialog" onClick={() => setIsOpen(false)} />
+      </Dialog>
+    </>
+  );
+}
+
+export const BehindAKeyedDialog: Story = {
+  tags: ['!autodocs'],
+  render: () => <KeyedDialogFixture />,
 };

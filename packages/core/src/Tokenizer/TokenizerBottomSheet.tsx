@@ -407,6 +407,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // query survives the sheet's unmount between presentations (FR18).
   const [query, setQuery] = useState(initialQuery);
   const [sourceResults, setSourceResults] = useState<T[]>([]);
+  // Matches the cap hid from the last answer: the result count names every
+  // match, and a hidden match the sheet lists as selected counts once.
+  const [sourceHidden, setSourceHidden] = useState<T[]>([]);
   const trimmedQueryForSearch = query.trim();
   // A query shorter than `minQueryLength` is never searched: no source rows,
   // no busy feedback, no empty state, no outcome announcement, as the inline
@@ -415,6 +418,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     trimmedQueryForSearch !== '' &&
     trimmedQueryForSearch.length < minQueryLength;
   const results = isBelowMinQuery ? EMPTY_RESULTS : sourceResults;
+  const hiddenMatches = isBelowMinQuery ? EMPTY_RESULTS : sourceHidden;
   // Whether a query is one the source is asked about: empty (the bootstrap
   // set) or at least `minQueryLength`. Below that nothing is searched, so
   // nothing is pending and no outcome is owed. One rule for every way a query
@@ -438,20 +442,27 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // newer search's announcement and a rerender cannot repeat one. A first
   // render whose query is not searched owes no announcement for search 0.
   const [searchId, setSearchId] = useState(0);
-  const searchIdRef = useRef(0);
   const announcedSearchIdRef = useRef(
     isOpen && !willSearchFor(initialQuery.trim()) ? 0 : -1,
   );
   const startSearch = () => {
-    searchIdRef.current += 1;
-    setSearchId(searchIdRef.current);
+    setSearchId(id => id + 1);
   };
   const [renderedItemCount, setRenderedItemCount] = useState(
     LIST_RENDER_BATCH_SIZE,
   );
   const seqRef = useRef(0);
-  const lastLoadScrollHeightRef = useRef<number | null>(null);
+  const lastLoadScrollHeightRef = useRef<{
+    openId: number;
+    height: number;
+  } | null>(null);
   const [selectedItemsAtOpen, setSelectedItemsAtOpen] = useState<T[]>(value);
+
+  // Counts the opens, with the search each open retires.
+  const [openReset, setOpenReset] = useState<{
+    id: number;
+    retireSearchId: number | null;
+  }>({id: 0, retireSearchId: null});
 
   // Snapshot the selection and reset the rendered window in the render that
   // opens the sheet, so the first open frame already shows selected-first
@@ -463,7 +474,6 @@ function TokenizerSheetContent<T extends SearchableItem>({
       setSelectedItemsAtOpen(value);
       setValueAtOpen([...value]);
       setDraftValue([...value]);
-      lastDraftChangeRef.current = null;
       setRenderedItemCount(LIST_RENDER_BATCH_SIZE);
       setIsClearConfirmationOpen(false);
       setIsDiscardConfirmationOpen(false);
@@ -475,10 +485,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
       setIsPending(willSearch);
       if (willSearch) {
         startSearch();
-      } else {
-        announcedSearchIdRef.current = searchIdRef.current;
       }
-      lastLoadScrollHeightRef.current = null;
+      // Each open gets its own id, and the search it retires unannounced
+      // when it runs none. The announcement and the load-more height read
+      // them, so a render React discards changes neither.
+      setOpenReset(reset => ({
+        id: reset.id + 1,
+        retireSearchId: willSearch ? null : searchId,
+      }));
     }
   }
 
@@ -520,13 +534,18 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // it (`component:Tokenizer` FR20). Cleanup clears the debounce timer so a
   // superseded query never fetches, and the sequence guard drops a response
   // that lands after a newer request, so the list never shows stale results
-  // (`architecture:react-component-runtime` INV3).
+  // (`architecture:react-component-runtime` INV3). Cleanup also cancels a
+  // request its source has not answered — on a newer query, on close and on
+  // unmount — on the source that started it, as the inline field does.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen) {
+      // Retire the closed sheet's request, so its answer never lands.
+      seqRef.current++;
       return;
     }
     const trimmed = query.trim();
     const seq = ++seqRef.current;
+    let unanswered: SearchSource<T> | null = null;
     if (trimmed !== '' && trimmed.length < minQueryLength) {
       // Not searched; the derived `results` are already empty, and taking a
       // sequence number retires a still-running search so its rows cannot
@@ -534,8 +553,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
       return;
     }
     const settle = (items: T[]) => {
+      unanswered = null;
       if (seqRef.current === seq) {
         setSourceResults(items.slice(0, maxMenuItems));
+        setSourceHidden(items.slice(maxMenuItems));
         setIsPending(false);
       }
     };
@@ -555,17 +576,26 @@ function TokenizerSheetContent<T extends SearchableItem>({
       }
       // Anything else is awaited as a thenable — a native Promise, one from
       // another realm, or a library's — as the inline field's `await` does.
+      unanswered = source;
       void Promise.resolve(answer).then(settle, () => {
         // A rejecting source settles to no results, as the inline field does:
         // the previous query's rows are not this query's answer.
         settle([]);
       });
     };
-    if (trimmed !== '' && debounceMs > 0) {
-      const timer = setTimeout(run, debounceMs);
-      return () => clearTimeout(timer);
+    const timer =
+      trimmed !== '' && debounceMs > 0 ? setTimeout(run, debounceMs) : null;
+    if (timer == null) {
+      run();
     }
-    run();
+    return () => {
+      if (timer != null) {
+        clearTimeout(timer);
+      }
+      const source: SearchSource<T> | null = unanswered;
+      unanswered = null;
+      source?.cancel?.();
+    };
   }, [isOpen, query, minQueryLength, maxMenuItems, debounceMs]);
 
   const visibleItems = useMemo(() => {
@@ -595,6 +625,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
   }, [query, results, selectedItemsAtOpen, draftValue]);
 
   const renderedItems = visibleItems.slice(0, renderedItemCount);
+  const hiddenMatchCount = useMemo(() => {
+    const listedIds = new Set(visibleItems.map(item => item.id));
+    return hiddenMatches.filter(item => !listedIds.has(item.id)).length;
+  }, [hiddenMatches, visibleItems]);
 
   // A settled search may remove the row that holds focus: it was listed from
   // the previous search and is not in this one. Focus would fall to the page
@@ -679,7 +713,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     if (willSearch) {
       startSearch();
     } else {
-      announcedSearchIdRef.current = searchIdRef.current;
+      announcedSearchIdRef.current = searchId;
     }
     setQuery(next);
     onChangeQuery?.(next);
@@ -767,19 +801,27 @@ function TokenizerSheetContent<T extends SearchableItem>({
     String(searchId),
   );
   useEffect(() => {
-    if (!isOpen || isPending || announcedSearchIdRef.current === searchId) {
+    if (
+      !isOpen ||
+      isPending ||
+      announcedSearchIdRef.current === searchId ||
+      // A search the open retired, unannounced, since it ran none.
+      openReset.retireSearchId === searchId
+    ) {
       return;
     }
     announcedSearchIdRef.current = searchId;
     if (!isSettledEmpty && !isQueryEmpty) {
       // The rows the sheet lists for this query — the source's results,
-      // capped by `maxMenuItems`, selected items the source did not return,
-      // such as a created value, and the create row when it is offered — as
-      // the inline field announces the entries it shows (its create entry
-      // included), not the source's count.
+      // selected items the source did not return, such as a created value,
+      // and the create row when it is offered — plus the matches the cap hid
+      // that the sheet does not already list.
       announce(
         t('@astryx.typeahead.resultCount', {
-          count: visibleItems.length + (createItem == null ? 0 : 1),
+          count:
+            visibleItems.length +
+            (createItem == null ? 0 : 1) +
+            hiddenMatchCount,
         }),
       );
     }
@@ -790,7 +832,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
     isPending,
     isQueryEmpty,
     isSettledEmpty,
+    hiddenMatchCount,
     visibleItems.length,
+    openReset.retireSearchId,
     searchId,
     t,
   ]);
@@ -834,11 +878,17 @@ function TokenizerSheetContent<T extends SearchableItem>({
           const list = event.currentTarget;
           const distanceFromBottom =
             list.scrollHeight - list.scrollTop - list.clientHeight;
+          const lastLoad = lastLoadScrollHeightRef.current;
           if (
             distanceFromBottom <= LIST_LOAD_MORE_THRESHOLD_PX &&
-            lastLoadScrollHeightRef.current !== list.scrollHeight
+            (lastLoad == null ||
+              lastLoad.openId !== openReset.id ||
+              lastLoad.height !== list.scrollHeight)
           ) {
-            lastLoadScrollHeightRef.current = list.scrollHeight;
+            lastLoadScrollHeightRef.current = {
+              openId: openReset.id,
+              height: list.scrollHeight,
+            };
             setRenderedItemCount(current =>
               Math.min(current + LIST_RENDER_BATCH_SIZE, visibleItems.length),
             );

@@ -30,6 +30,7 @@ import {componentDocNamesCheck} from '../../foundation/integrations/validate-con
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 // The checks' one-time start in this file (TypeScript and its lib files) runs
 // here, while the file is collected, so no test carries it.
@@ -39,7 +40,7 @@ let tmpDir;
 let copies = 0;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-gaps-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-gaps-'));
   // The fixture is a package with its own TypeScript config, scoped to its
   // own files. Without one, the prop check reads the repository's root
   // config, as `tsc` would for a folder inside it, and compiles every
@@ -124,6 +125,15 @@ async function issuesOf(dir) {
 }
 
 /**
+ * The notes validate prints beside its issues for a package.
+ * @param {string} dir
+ * @returns {Promise<Array<{code: string, message: string, next?: boolean}>>}
+ */
+async function notesOf(dir) {
+  return (await validateLocalIntegration(dir)).notes ?? [];
+}
+
+/**
  * The notes validate lists beside its issues, which count nowhere: the layout
  * findings added after the last minor release, each with its fix.
  * @param {string} dir
@@ -136,14 +146,17 @@ async function listedOf(dir) {
 }
 
 /**
- * The example notes, which nearly every fixture here draws (a component with
- * no example template); authoring-checks.test.mjs covers them.
+ * The example and listing notes, which nearly every fixture here draws (a
+ * component with no example template, a package with no logo);
+ * authoring-checks.test.mjs and package-listing-check.test.mjs cover them.
  */
 const EXAMPLE_CODES = new Set([
   'component_without_example',
   'template_category',
   'showcase_not_standalone',
   'template_asset_not_packed',
+  'package_without_logo',
+  'package_without_example',
 ]);
 
 /**
@@ -263,7 +276,12 @@ describe('a name that differs from its file name', () => {
       });
 
       const {data} = await validateIntegration(undefined, {cwd: dir});
-      expect(others(data.notes)).toEqual([]);
+      // A relative module that is not in the package is a note of its own.
+      expect(
+        others(data.notes).filter(
+          note => note.code !== 'relative_import_not_shipped',
+        ),
+      ).toEqual([]);
       expect(data.docNames).toEqual({
         status: 'checked',
         findings: [],
@@ -949,6 +967,13 @@ describe('block component names', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
     expect(data.issues).toEqual([]);
+    // The package exports the template, so the missing helper also breaks
+    // an app that imports it.
+    expect(
+      (data.notes ?? [])
+        .filter(note => note.code === 'relative_import_not_shipped')
+        .map(note => note.next),
+    ).toEqual([true]);
     expect(data.blockComponents?.unchecked.map(entry => entry.name)).toEqual([
       'Panel',
     ]);
@@ -1652,10 +1677,19 @@ describe('the manifest', () => {
       [MANIFEST]: manifest({component: './components'}),
     });
 
-    const message = only(await issuesOf(dir), 'unknown_manifest_key');
+    const message = only(await notesOf(dir), 'unknown_manifest_key');
     expect(message).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: rename "component" to "components" in astryx.integration.mjs. If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
-    );
+    ); // A near miss is a `next` note; a key from a newer CLI is a plain one.
+    expect(
+      (await notesOf(dir)).find(note => note.code === 'unknown_manifest_key')
+        ?.next,
+    ).toBe(true);
+    expect(
+      (await issuesOf(dir)).some(
+        issue => issue.code === 'unknown_manifest_key',
+      ),
+    ).toBe(false);
   });
 
   it('says to remove a near-miss key when the manifest already sets the key it suggests', async () => {
@@ -1665,7 +1699,7 @@ describe('the manifest', () => {
       'components/AcmeWidget.tsx': componentSource('AcmeWidget'),
     });
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toBe(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: remove "component" from astryx.integration.mjs; it already sets "components". If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
     );
     const fixed = follow(dir, {
@@ -1693,14 +1727,26 @@ describe('the manifest', () => {
         'docs/a.doc.mjs': topic('a'),
       });
 
-      expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(fix);
+      expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(fix);
+    },
+  );
+
+  it.each([['componant'], ['COMPONENTS']])(
+    'still suggests %s → components, but only one edit away is a next note',
+    async key => {
+      const dir = writePackage({[MANIFEST]: manifest({[key]: './components'})});
+      const note = (await notesOf(dir)).find(
+        n => n.code === 'unknown_manifest_key',
+      );
+      expect(note?.message).toContain('Did you mean `components`?');
+      expect(note?.next).toBeUndefined();
     },
   );
 
   it('keeps the newer-CLI explanation for a key that is no near miss', async () => {
     const dir = writePackage({[MANIFEST]: manifest({playgrounds: './x'})});
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(
       'published against a newer Astryx CLI',
     );
   });

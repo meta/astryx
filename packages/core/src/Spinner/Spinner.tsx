@@ -32,6 +32,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Spinner/Spinner.generated';
 import {spinnerRotorStyles, syncRotationPhase} from './spinnerRotor';
+import {useThemeIndicator} from '../Indicator/useThemeIndicator';
 
 registerEnglishFallback(english);
 
@@ -161,6 +162,13 @@ registerSpinnerVars();
 // =============================================================================
 
 const styles = stylex.create({
+  // A theme's spinner picture takes the whole box, in the ring's grid cell.
+  themeSpinner: {
+    display: 'block',
+    gridArea: '1 / 1',
+    width: '100%',
+    height: '100%',
+  },
   wrapper: {
     display: 'inline-flex',
     flexDirection: 'column',
@@ -481,6 +489,7 @@ export function Spinner({
     },
   );
 
+  const ThemeSpinner = useThemeIndicator('spinner');
   const spinner = (
     <span
       ref={hasLabel ? undefined : rootRef}
@@ -517,47 +526,53 @@ export function Spinner({
           height: `var(${BOX_SIZE}, ${frameSize}px)`,
         },
       )}>
-      {/* The track is zero-sized by attribute. With no stylesheet, the
-          rotor's arc alone fills the box, instead of two discs side by side.
-          `ring` sizes both to the box. */}
-      <svg
-        width={0}
-        height={0}
-        aria-hidden="true"
-        {...stylex.props(styles.ring)}>
-        <circle
-          cx="50%"
-          cy="50%"
-          r={diameter / 2}
-          strokeWidth={border}
-          {...stylex.props(
-            styles.circle,
-            styles.track,
-            trackOpacityStyles[shade],
-          )}
-        />
-      </svg>
-      <span
-        ref={syncRotationPhase}
-        aria-hidden="true"
-        {...stylex.props(styles.rotor, spinnerRotorStyles.turn)}>
-        <svg
-          width={frameSize}
-          height={frameSize}
-          {...stylex.props(styles.ring)}>
-          <circle
-            cx="50%"
-            cy="50%"
-            r={diameter / 2}
-            strokeWidth={border}
-            // The size's own dash, for the render with no stylesheet. The rule
-            // above composes the same lengths from the resolved diameter, so a
-            // themed ring keeps this fraction of arc rather than this length.
-            strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-            {...stylex.props(styles.circle, styles.arc)}
-          />
-        </svg>
-      </span>
+      {ThemeSpinner ? (
+        <ThemeSpinner state="busy" xstyle={styles.themeSpinner} />
+      ) : (
+        <>
+          {/* The track is zero-sized by attribute. With no stylesheet, the
+            rotor's arc alone fills the box, instead of two discs side by side.
+            `ring` sizes both to the box. */}
+          <svg
+            width={0}
+            height={0}
+            aria-hidden="true"
+            {...stylex.props(styles.ring)}>
+            <circle
+              cx="50%"
+              cy="50%"
+              r={diameter / 2}
+              strokeWidth={border}
+              {...stylex.props(
+                styles.circle,
+                styles.track,
+                trackOpacityStyles[shade],
+              )}
+            />
+          </svg>
+          <span
+            ref={syncRotationPhase}
+            aria-hidden="true"
+            {...stylex.props(styles.rotor, spinnerRotorStyles.turn)}>
+            <svg
+              width={frameSize}
+              height={frameSize}
+              {...stylex.props(styles.ring)}>
+              <circle
+                cx="50%"
+                cy="50%"
+                r={diameter / 2}
+                strokeWidth={border}
+                // The size's own dash, for the render with no stylesheet. The rule
+                // above composes the same lengths from the resolved diameter, so a
+                // themed ring keeps this fraction of arc rather than this length.
+                strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+                {...stylex.props(styles.circle, styles.arc)}
+              />
+            </svg>
+          </span>
+        </>
+      )}
     </span>
   );
 

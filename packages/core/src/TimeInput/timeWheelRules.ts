@@ -8,8 +8,9 @@
  * @position Internal helper of the TimeInput and DateTimeInput sheets: the
  *   rows of both their finger and their mouse wheels
  *
- * The columns do not loop. Each rule follows a leaf of motion/uikit/
- * datePicker.ts `wheels`. Pure functions keep the rules testable without a
+ * Only the minute column loops, and its seam keeps the hour, as in
+ * UIDatePicker. Each rule follows a leaf of motion/uikit/datePicker.ts
+ * `wheels`. Pure functions keep the rules testable without a
  * layout engine.
  *
  * SYNC: When modified, update timeWheelRules.test.ts and TimeWheels.tsx.

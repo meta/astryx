@@ -12,6 +12,7 @@
 import {pkgOf} from '../../../foundation/discovery/template-adapter.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 
 /**
  * Project a discovered template set into the `template.list` envelope.
@@ -50,7 +51,7 @@ export function templateList(templates, options = {}) {
       id: t.dirName,
       name: t.name,
       displayName: t.displayName,
-      description: t.description,
+      description: renderTokens(t.description),
       type: t.type,
       package: pkgOf(t),
       replaces: t.replaces,

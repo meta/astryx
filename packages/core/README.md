@@ -61,8 +61,8 @@ astryx gap-report                   # report a missing capability
 
 ## Related Packages
 
-| Package                                                                                               | Description                                                   |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Package                                                                                           | Description                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
 | [`@astryxdesign/theme-neutral`](https://github.com/meta/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
 
@@ -138,6 +138,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 ### Next.js + Tailwind
 
 No build plugins needed; Astryx ships pre-built CSS that works alongside Tailwind.
+
+This `globals.css` is the whole file for a new app. For an app that already uses Tailwind, keep its own `@import "tailwindcss"` and put the `@layer` line above it, as `astryx docs styling-libraries/tailwind` shows under "Add Astryx to an app that already uses Tailwind". A `@layer` line below the Tailwind import silently inverts the cascade.
 
 **`src/app/globals.css`**
 

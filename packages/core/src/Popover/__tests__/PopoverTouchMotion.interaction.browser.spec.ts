@@ -14,7 +14,8 @@
  *   neither motion does Layout or Paint per frame. Reduce Motion
  *   cross-fades, opacity only, in 200 ms or less. A mouse keeps the layer's
  *   own entrance. A tap, a pan or a pinch while it grows does nothing but a
- *   pinch's zoom. Storyboards.
+ *   pinch's zoom. It grows from where it meets its trigger, after a flip and
+ *   when it overlaps the trigger. Storyboards.
  * @position Evidence for Popover's touch presentation; the model itself is
  *   unit-tested in popoverSurfaceMotion.test.ts
  */
@@ -37,6 +38,7 @@ import {
   freezeTimers,
   installLongTaskLog,
   installTimerGate,
+  layoutSources,
   markElement,
   openStory,
   pinch,
@@ -110,13 +112,18 @@ interface OpenStory {
   driver: TouchDriver;
   trigger: Locator;
   layer: Locator;
+  /** The box that paints the popover, where the touch growth plays. */
+  surface: Locator;
   center: {x: number; y: number};
   triggerBox: Box;
 }
 
-async function openDefault(page: Page): Promise<OpenStory> {
+async function openDefault(page: Page, css?: string): Promise<OpenStory> {
   await installLongTaskLog(page);
   await openStory(page, storybook(), 'core-popover--default');
+  if (css != null) {
+    await page.addStyleTag({content: css});
+  }
   const driver = await touchDriver(page);
   const trigger = page.getByRole('button', {name: 'Settings'});
   const triggerBox = await trigger.boundingBox();
@@ -127,6 +134,7 @@ async function openDefault(page: Page): Promise<OpenStory> {
     driver,
     trigger,
     layer: page.locator('[popover]:has(.astryx-popover)').first(),
+    surface: page.locator('[popover] .astryx-popover').first(),
     center: {
       x: triggerBox.x + triggerBox.width / 2,
       y: triggerBox.y + triggerBox.height / 2,
@@ -442,8 +450,8 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   const story = await openDefault(page);
   // The popover's layout box, from a first presentation run to rest.
   await openWithTap(story);
-  await waitForRest(story.layer);
-  const final = (await story.layer.boundingBox())!;
+  await waitForRest(story.surface);
+  const final = (await story.surface.boundingBox())!;
   const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
   await page.keyboard.press('Escape');
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
@@ -451,7 +459,7 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   await expect(exitCopyOf(page)).toHaveCount(0);
   const held = await openHeldWhileGrowing(page, story);
   const samples = await sampleBoxes(
-    story.layer,
+    story.surface,
     final,
     timeline(entrance.ms + 100),
   );
@@ -495,13 +503,146 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   }
 });
 
+/**
+ * The surface's presented scale and its `transform-origin`, in px, at each
+ * time of its held growth.
+ */
+async function sampleGrowth(locator: Locator, times: ReadonlyArray<number>) {
+  return locator.evaluate((element, ts) => {
+    const held =
+      (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? [];
+    if (held.length === 0) {
+      throw new Error('sampleGrowth: no held animations');
+    }
+    return ts.map(t => {
+      for (const animation of held) {
+        const end = Number(
+          animation.effect?.getComputedTiming().endTime ?? Infinity,
+        );
+        animation.currentTime = Math.min(t, end - 0.5);
+      }
+      const style = getComputedStyle(element);
+      const [sx, sy = sx] =
+        style.scale === 'none' ? [1, 1] : style.scale.split(' ').map(Number);
+      const [ox, oy] = style.transformOrigin
+        .split(' ')
+        .map(value => parseFloat(value));
+      return {t, sx, sy, ox, oy};
+    });
+  }, times);
+}
+
+// The story root pinned so the trigger has no room below it.
+const AT_BOTTOM =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; bottom: 12px; left: 16px; }';
+// The story root pinned so a layer forced over the trigger fits the page.
+const AT_MIDDLE =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; top: 280px; left: 140px; }';
+// The story root pinned so a layer forced beside the trigger fits the page.
+const AT_LEFT =
+  '#storybook-root { position: fixed !important; inset: auto; margin: 0 !important; top: 280px; left: 0; }';
+
+/**
+ * Pins the open layer at `left`, `top` in the viewport. No anchored layer
+ * lands over its trigger on its own, so the overlap cases place it there.
+ */
+async function placeLayer(page: Page, left: number, top: number) {
+  await page.addStyleTag({
+    content: `[popover]:has(.astryx-popover) { position-area: none !important; position-try-fallbacks: none !important; inset: auto !important; left: ${left}px !important; top: ${top}px !important; margin: 0 !important; }`,
+  });
+}
+
+const LANDINGS = [
+  {name: 'flipped above its trigger', side: 'above', root: AT_BOTTOM},
+  {name: 'over its trigger\u2019s center', side: 'over', root: AT_MIDDLE},
+  {
+    name: 'a few pixels over its trigger\u2019s side',
+    side: 'right',
+    root: AT_LEFT,
+  },
+] as const;
+
+for (const landing of LANDINGS) {
+  test(`a popover ${landing.name} grows from where it meets its trigger`, async ({
+    page,
+  }) => {
+    const story = await openDefault(page, landing.root);
+    const trigger = story.triggerBox;
+    const center = {
+      x: trigger.x + trigger.width / 2,
+      y: trigger.y + trigger.height / 2,
+    };
+    // The default story's popover is 280 x 229.
+    if (landing.side === 'over') {
+      await placeLayer(page, center.x - 140, center.y - 100);
+    } else if (landing.side === 'right') {
+      await placeLayer(page, trigger.x + trigger.width - 4, center.y - 115);
+    }
+    await openWithTap(story);
+    await waitForRest(story.surface);
+    const final = await story.surface.boundingBox();
+    if (final == null) {
+      throw new Error('no popover box');
+    }
+    await page.keyboard.press('Escape');
+    await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(exitCopyOf(page)).toHaveCount(0);
+    await openHeldWhileGrowing(page, story);
+    const samples = await sampleGrowth(story.surface, [0, 60, 120]);
+    await releaseAnimations(page, {finish: true});
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    expect(final.x).toBeGreaterThanOrEqual(0);
+    expect(final.x + final.width).toBeLessThanOrEqual(viewport?.width ?? 0);
+    const inside = {x: center.x - final.x, y: center.y - final.y};
+    let origin: {x: number; y: number};
+    if (landing.side === 'above') {
+      expect(final.y + final.height).toBeLessThanOrEqual(trigger.y);
+      origin = {
+        x: Math.min(final.width, Math.max(0, inside.x)),
+        y: final.height,
+      };
+    } else if (landing.side === 'over') {
+      expect(inside.x).toBeGreaterThan(0);
+      expect(inside.x).toBeLessThan(final.width);
+      expect(inside.y).toBeGreaterThan(0);
+      expect(inside.y).toBeLessThan(final.height);
+      origin = inside;
+    } else {
+      expect(final.x).toBeLessThan(trigger.x + trigger.width);
+      expect(final.x).toBeGreaterThan(trigger.x + trigger.width - 8);
+      origin = {x: 0, y: inside.y};
+    }
+    for (const sample of samples) {
+      expect(
+        Math.abs(sample.ox - origin.x),
+        JSON.stringify(sample),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(sample.oy - origin.y),
+        JSON.stringify(sample),
+      ).toBeLessThanOrEqual(1);
+    }
+    const [start] = samples;
+    if (landing.side === 'over') {
+      // No side to lengthen along: it only scales.
+      expect(start.sx).toBeCloseTo(start.sy, 3);
+    } else if (landing.side === 'right') {
+      expect(start.sx).toBeLessThan(start.sy);
+    } else {
+      expect(start.sy).toBeLessThan(start.sx);
+    }
+  });
+}
+
 test('the dismissal shrinks back into the trigger on the theme\u2019s exit tokens, on screen through the light dismiss', async ({
   page,
 }, testInfo) => {
   const story = await openDefault(page);
   await openWithTap(story);
-  await waitForRest(story.layer);
-  const open = (await story.layer.boundingBox())!;
+  await waitForRest(story.surface);
+  const open = (await story.surface.boundingBox())!;
   const exit = await themeTiming(story.layer, POPOVER_EXIT_TOKENS);
   // Tap outside: the browser's light dismiss closes the popover at once.
   const viewport = page.viewportSize()!;
@@ -590,13 +731,13 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   // important declaration outranks the animation. The scale, composited the
   // same way, carries the evidence.
   await page.addStyleTag({
-    content: '[popover]:has(.astryx-popover) { opacity: 1 !important; }',
+    content: '[popover] .astryx-popover { opacity: 1 !important; }',
   });
   // The growth runs 1.2 s at a constant speed here, so a 1 s block lands
   // inside it on a loaded machine too. The marker is 240 px wide, and its
   // width grows by about 3 px in every frame.
   await page.addStyleTag({content: STEADY_GROWTH});
-  await markElement(story.layer, {size: 240, inset: 0});
+  await markElement(story.surface, {size: 240, inset: 0});
   const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
   expect(entrance.ms).toBe(1200);
   const cast = await startScreencast(page);
@@ -604,7 +745,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   // here starts later on a busy machine.
   const opened = await pageNow(page);
   const blocking = blockMainThread(page, 1000, {
-    during: story.layer,
+    during: story.surface,
     minProgressMs: 16,
   });
   await openWithTap(story);
@@ -688,14 +829,18 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   let closed = 0;
   let present = 0;
   let dismiss = 0;
-  const trace = await traceRendering(page, async () => {
-    opened = await pageNow(page);
-    await page.keyboard.press('Enter');
-    present = await waitPastScaleStart(page, opened, entrance.ms + 150);
-    closed = await pageNow(page);
-    await page.keyboard.press('Escape');
-    dismiss = await waitPastScaleStart(page, closed, exit.ms + 150);
-  });
+  const trace = await traceRendering(
+    page,
+    async () => {
+      opened = await pageNow(page);
+      await page.keyboard.press('Enter');
+      present = await waitPastScaleStart(page, opened, entrance.ms + 150);
+      closed = await pageNow(page);
+      await page.keyboard.press('Escape');
+      dismiss = await waitPastScaleStart(page, closed, exit.ms + 150);
+    },
+    {keepEvents: true},
+  );
   const insets = await page.evaluate(() => [
     ...(window as unknown as {__popoverHitAreaInsets: HitAreaInsets[]})
       .__popoverHitAreaInsets,
@@ -741,8 +886,27 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
         .filter(e => e.t >= from && e.t <= end)
         .map(e => `${e.name}@${Math.round(e.t - base)}`),
     })}`;
-    expect(during.Layout ?? 0, detail).toBe(0);
-    expect(during.Paint ?? 0, detail).toBe(0);
+    // A layout in the window fails with its source: the task that ran it,
+    // and each invalidation before it. A step list that is empty names no
+    // script: the browser scheduled that work itself.
+    const rel = (t: number) => `${(t - base).toFixed(1)} ms`;
+    const steps = (task: ReadonlyArray<string>) =>
+      task.join(' > ') || 'no script';
+    const explained = [
+      detail,
+      ...((during.Layout ?? 0) === 0
+        ? []
+        : layoutSources(trace, from, end)
+      ).flatMap(source => [
+        `  Layout at ${rel(source.t)}, in: ${steps(source.task)}`,
+        ...source.invalidations.map(
+          invalidation =>
+            `    after ${invalidation.what} at ${rel(invalidation.t)}, in: ${steps(invalidation.task)}`,
+        ),
+      ]),
+    ].join('\n');
+    expect(during.Layout ?? 0, explained).toBe(0);
+    expect(during.Paint ?? 0, explained).toBe(0);
   }
   // A loaded machine stretches a task's wall time, not its thread time. So a
   // long task here is one that runs over 50 ms of thread time.
@@ -876,6 +1040,98 @@ test('the task that opens it lays out no more than a mouse opening does: the pre
   }
 });
 
+/**
+ * The frames the compositor presents while `body` runs and for `ms` after it,
+ * in order. Each says whether the frame was presented with content missing: a
+ * tile not yet rasterized. It reads the compositor's own record of each frame
+ * (`PipelineReporter`), so it is Chromium-only.
+ */
+async function presentedFrames(
+  page: Page,
+  body: () => Promise<unknown>,
+  ms: number,
+): Promise<{sequence: number; missingContent: boolean}[]> {
+  const cdp = await page.context().newCDPSession(page);
+  const events: {name: string; ph?: string; args?: Record<string, unknown>}[] =
+    [];
+  cdp.on('Tracing.dataCollected', ({value}) => {
+    events.push(...(value as unknown as typeof events));
+  });
+  const complete = new Promise<void>(resolve =>
+    cdp.once('Tracing.tracingComplete', () => resolve()),
+  );
+  await cdp.send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      includedCategories: [
+        'cc',
+        'benchmark',
+        'viz',
+        'disabled-by-default-devtools.timeline.frame',
+      ],
+      excludedCategories: ['*'],
+    },
+  });
+  await body();
+  await page.waitForTimeout(ms);
+  await cdp.send('Tracing.end');
+  await complete;
+  await cdp.detach();
+  const frames = new Map<number, boolean>();
+  for (const event of events) {
+    const report = (
+      event.args as {frame_reporter?: Record<string, unknown>} | undefined
+    )?.frame_reporter;
+    if (
+      event.name !== 'PipelineReporter' ||
+      event.ph === 'e' ||
+      report == null ||
+      !String(report.state).includes('PRESENTED')
+    ) {
+      continue;
+    }
+    frames.set(
+      Number(report.frame_sequence),
+      report.has_missing_content === true,
+    );
+  }
+  return [...frames.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([sequence, missingContent]) => ({sequence, missingContent}));
+}
+
+for (const tapOutside of [false, true]) {
+  test(`the growth shows its content from its first frames${
+    tapOutside ? ', with a tap outside while it grows' : ''
+  }`, async ({page, browserName}) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the compositor frame record is Chromium-only',
+    );
+    const story = await openDefault(page);
+    const outside = outsidePoint(page);
+    const frames = await presentedFrames(
+      page,
+      async () => {
+        await story.driver.tap(story.center);
+        if (tapOutside) {
+          await story.driver.tap(outside);
+        }
+      },
+      700,
+    );
+    // Chromium does not draw a layer at opacity 0. A growth that started
+    // there showed its first frames without its content.
+    const first = frames.slice(0, 5);
+    expect(first, 'frames presented').toHaveLength(5);
+    expect(
+      first.filter(frame => frame.missingContent).map(frame => frame.sequence),
+      'first frames presented with content missing',
+    ).toEqual([]);
+    await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+}
+
 test('a style read after the opening tap finds no CSS entrance running on the layer', async ({
   page,
 }) => {
@@ -917,7 +1173,7 @@ test('a style read after the opening tap finds no CSS entrance running on the la
   );
   expect(running).toEqual([]);
   // The growth still plays.
-  await waitForAnimation(story.layer);
+  await waitForAnimation(story.surface);
 });
 
 test('Reduce Motion: the popover cross-fades in at its size and out where it stands, in 200 ms or less with no spring', async ({
@@ -932,7 +1188,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
   const ease = cubicBezier(timing.curves.move);
   const fade = (t: number) =>
     ease(Math.min(1, Math.max(0, t / timing.reducedMotionCrossFadeMs)));
-  const samples = await sampleBoxes(story.layer, unit, timeline(300));
+  const samples = await sampleBoxes(story.surface, unit, timeline(300));
   // Resume rather than finish: the dismissal below starts from what the
   // animator presents, which follows the clock.
   await releaseAnimations(page);
@@ -1001,7 +1257,7 @@ test(
       name: 'popover-touch-present',
       clip,
       held: presented,
-      measure: measureOf(story.layer),
+      measure: measureOf(story.surface),
       // The growth ends with the entrance duration; the animation holds its
       // end state past that.
       times: timeline(entrance.ms + 100),
@@ -1010,7 +1266,7 @@ test(
     });
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
-    await waitForRest(story.layer);
+    await waitForRest(story.surface);
     const dismissal = await armExitCopyHold(story);
     await story.driver.tap({x: 20, y: viewport.height - 20});
     const dismissing = await dismissal.held();
@@ -1165,12 +1421,12 @@ async function openHeldWhileGrowing(
   story: OpenStory,
   property: 'scale' | 'opacity' = 'scale',
 ) {
-  const armed = await armHold(page, story.layer, {
-    judges: {target: story.layer, property},
+  const armed = await armHold(page, story.surface, {
+    judges: {target: story.surface, property},
   });
   await openWithTap(story);
   const held = await armed.held();
-  expect(await holdsOn(story.layer), 'held on the popover').toBe(true);
+  expect(await holdsOn(story.surface), 'held on the popover').toBe(true);
   return held;
 }
 
@@ -1189,7 +1445,7 @@ test('a tap outside while it grows is ignored: the popover stays open and keeps 
   expect(await shieldTakes(page, outside)).toBe(true);
   await story.driver.tap(outside);
   await releaseAnimations(page, {finish: true});
-  await waitForRest(story.layer);
+  await waitForRest(story.surface);
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
   const log = await readPressLog(page);
   expect(log.closed).toBe(0);
@@ -1212,7 +1468,7 @@ test('a tap on the trigger while it grows does not close the popover', async ({
   expect(await shieldTakes(page, story.center)).toBe(true);
   await story.driver.tap(story.center);
   await releaseAnimations(page, {finish: true});
-  await waitForRest(story.layer);
+  await waitForRest(story.surface);
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
   const log = await readPressLog(page);
   expect(log.closed).toBe(0);
@@ -1238,7 +1494,7 @@ test('a pan outside while it grows starts nothing: no scroll, and the popover st
     drag(from, {x: from.x, y: from.y - 100}, {durationMs: 150, hz: 60}),
   );
   await releaseAnimations(page, {finish: true});
-  await waitForRest(story.layer);
+  await waitForRest(story.surface);
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
   const log = await readPressLog(page);
   expect(log.closed).toBe(0);
@@ -1272,7 +1528,7 @@ test('a pinch while it grows zooms the page, and the popover grows and stays', a
     }),
   );
   await releaseAnimations(page, {finish: true});
-  await waitForRest(story.layer);
+  await waitForRest(story.surface);
   // The fingers landed on the shield, which leaves a pinch to the browser.
   await expect.poll(scale).toBeGreaterThan(1.1);
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
@@ -1299,12 +1555,15 @@ test(
       clip,
       held,
       measure: async () =>
-        story.layer.evaluate(node => {
+        story.surface.evaluate(node => {
           const el = node as HTMLElement;
           const style = getComputedStyle(el);
           const [sx] =
             style.scale === 'none' ? [1] : style.scale.split(' ').map(Number);
-          return {w: el.offsetWidth * sx, open: el.matches(':popover-open')};
+          return {
+            w: el.offsetWidth * sx,
+            open: el.closest('[popover]')?.matches(':popover-open') === true,
+          };
         }),
       times: timeline(entrance.ms + 100),
       columns: 8,

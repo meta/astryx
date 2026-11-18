@@ -3,8 +3,9 @@
 
 /**
  * @file ContextMenu.tsx
- * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, and the shared menu-presentation resolver
+ * @input Uses React, StyleX, useLayer, shared layer dismissal, the lazily
+ *   loaded menu sheet (DropdownMenu/lazyMenuBottomSheet), useListFocus, and the
+ *   shared menu-presentation resolver
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -44,11 +45,9 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  lazy,
   useMemo,
   useRef,
   useState,
-  Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -60,7 +59,12 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
-import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
+import {
+  MenuBottomSheet,
+  MenuBottomSheetActionList,
+  MenuBottomSheetWithoutActionList,
+  preloadMenuBottomSheetActionList,
+} from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
@@ -115,11 +119,6 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 
 registerEnglishFallback(english);
 
-const LazyMenuBottomSheet = lazy(async () =>
-  import('../DropdownMenu/MenuBottomSheet').then(module => ({
-    default: module.MenuBottomSheet,
-  })),
-);
 const styles = stylex.create({
   // Trigger wrapper: suppress the iOS long-press callout/selection so the
   // long-press opens our context menu instead of the native text/callout UI.
@@ -162,6 +161,19 @@ const styles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -378,6 +390,16 @@ export function ContextMenu({
   >;
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
+
+  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
+  // Syncs the touch sheet's action list with the presentation: a data-driven
+  // sheet menu loads its rows at rest, so its first open shows them at once. A
+  // pointer menu never loads them.
+  useEffect(() => {
+    if (usesSheetActionList) {
+      void preloadMenuBottomSheetActionList();
+    }
+  }, [usesSheetActionList]);
 
   const menuId = useId();
   // Cursor point in the trigger's local coordinate space (offset from the
@@ -602,6 +624,16 @@ export function ContextMenu({
     [listNavKeyDown, closeMenu, typeahead, ownsEvent],
   );
 
+  // The box the cursor anchor's offsets are measured from: its containing
+  // block. That is the trigger, unless a caller's triggerXstyle leaves the
+  // trigger unpositioned so that another box holds the anchor.
+  const getAnchorBaseRect = useCallback((): DOMRect | undefined => {
+    const base = cursorAnchorRef.current?.offsetParent;
+    return (
+      base instanceof HTMLElement ? base : triggerRef.current
+    )?.getBoundingClientRect();
+  }, []);
+
   // Place the 1px cursor anchor at a point in the trigger's local
   // coordinate space and open the menu. Positioning the anchor inside the
   // trigger (rather than storing viewport coordinates on the menu itself) is
@@ -609,7 +641,7 @@ export function ContextMenu({
   // browser auto-flips it against the viewport edges via CSS anchor positioning.
   const openAtLocalPoint = useCallback(
     (localX: number, localY: number, focusEl: HTMLElement | null) => {
-      const rect = triggerRef.current?.getBoundingClientRect();
+      const rect = getAnchorBaseRect();
       const x = rect ? keepAnchorInside(localX, rect.width) : localX;
       const y = rect ? keepAnchorInside(localY, rect.height) : localY;
       positionRef.current = {x, y};
@@ -634,14 +666,7 @@ export function ContextMenu({
         layer.show();
       }
     },
-    [layer, updateOpenState, usesBottomSheet],
-  );
-
-  // The box the cursor anchor's offsets are measured from: the trigger, which
-  // is its containing block.
-  const getAnchorBaseRect = useCallback(
-    (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
-    [],
+    [getAnchorBaseRect, layer, updateOpenState, usesBottomSheet],
   );
 
   const handleContextMenu = useCallback(
@@ -659,9 +684,16 @@ export function ContextMenu({
         e.clientX === 0 && e.clientY === 0 && e.detail === 0;
       // Convert the viewport cursor point into the trigger's local space so
       // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      let localX = 0;
+      let localY = rect?.height ?? 0;
+      if (rect && isKeyboardInvoked && trigger) {
+        localX = trigger.left - rect.left;
+        localY = trigger.bottom - rect.top;
+      } else if (rect && !isKeyboardInvoked) {
+        localX = e.clientX - rect.left;
+        localY = e.clientY - rect.top;
+      }
       // A finger's long press reaches here as a pointer `contextmenu` where
       // the browser sends one (Chromium); its compatibility mousedown then
       // belongs to the opening press. A mouse or the keyboard opens without
@@ -876,6 +908,9 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const SheetForContent = usesSheetActionList
+    ? MenuBottomSheet
+    : MenuBottomSheetWithoutActionList;
 
   return (
     <>
@@ -910,14 +945,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
+        <SheetForContent
+          isOpen={isOpen}
+          onOpenChange={updateOpenState}
+          label={sheetLabel}>
+          {renderedBottomSheetContent}
+        </SheetForContent>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

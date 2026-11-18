@@ -231,11 +231,18 @@ export function coreBuildIsStale(entry, roots, generated = []) {
 }
 
 function buildCore() {
-  execFileSync('pnpm', ['-F', '@astryxdesign/core', 'build'], {
-    cwd: REPO_ROOT,
-    stdio: 'pipe',
-    timeout: BUILD_TIMEOUT_MS,
-  });
+  const args = ['-F', '@astryxdesign/core', 'build'];
+  /** @type {import('node:child_process').ExecFileSyncOptions} */
+  const options = {cwd: REPO_ROOT, stdio: 'pipe', timeout: BUILD_TIMEOUT_MS};
+  // On Windows, pnpm is a `pnpm.cmd` batch file. execFileSync cannot start a
+  // batch file without a shell: `pnpm` gives ENOENT and `pnpm.cmd` gives
+  // EINVAL. The arguments are literals, so cmd.exe gets them directly.
+  /** @type {[string, string[]]} */
+  const [file, fileArgs] =
+    process.platform === 'win32'
+      ? ['cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args]]
+      : ['pnpm', args];
+  execFileSync(file, fileArgs, options);
 }
 
 /**

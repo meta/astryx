@@ -3,14 +3,23 @@
 /**
  * @file ListInput.test.tsx
  * @input Uses Vitest, Testing Library, and the controlled ListInput API
- * @output Behavioral coverage for list editing, pointer-stable adding, tokenized mutation motion, validation, focus, the hover-revealed reorder grip that hangs beside the first field, and free-floating stationary-list reordering
+ * @output Behavioral coverage for list editing, pointer-stable adding,
+ *   tokenized mutation motion, validation, focus, and reordering. Reordering
+ *   goes through core List's reorder handle at each record's end, with keys
+ *   here. The handle is the one element it adds to a record, and it comes
+ *   with the owner's object. The a11y Chromium specs cover it in a real
+ *   browser
  * @position Lab tests; validates ListInput.tsx
  *
  * SYNC: When ListInput.tsx behavior changes, update these tests.
  */
 
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
+import userEvent from '@testing-library/user-event';
+import {createReorderable} from '@astryxdesign/core';
 import {
   fireEvent,
   render,
@@ -115,6 +124,72 @@ function renderListInput(overrides: Partial<ListInputProps<Guest>> = {}) {
 
   return render(<ListInput<Guest> {...props} />);
 }
+
+/** A reorderable object whose moves go to `onReorder` and nowhere else. */
+function reorderableFor(
+  onReorder: (move: {key: string | number; to: number}) => void = () => {},
+) {
+  return createReorderable({onReorder});
+}
+
+/**
+ * A reorderable ListInput whose owner applies each move it is handed to its
+ * value, as an app does.
+ */
+function OwnedList({
+  onReorder,
+  isReorderable,
+  ...props
+}: Partial<ListInputProps<Guest>> & {
+  onReorder?: (move: {key: string | number; to: number}) => void;
+  isReorderable?: (key: string | number) => boolean;
+}) {
+  const [value, setValue] = useState(props.value ?? guests);
+  const reorderable = useMemo(
+    () =>
+      createReorderable({
+        onReorder: move => {
+          onReorder?.(move);
+          setValue(current => {
+            const moved = current.find(guest => guest.id === move.key);
+            if (moved == null) {
+              return current;
+            }
+            const rest = current.filter(guest => guest !== moved);
+            return [...rest.slice(0, move.to), moved, ...rest.slice(move.to)];
+          });
+        },
+        isReorderable,
+      }),
+    [onReorder, isReorderable],
+  );
+  return (
+    <ListInput<Guest>
+      label="Guests"
+      itemName="guest"
+      getItemKey={guest => guest.id}
+      createItem={() => createdGuest}
+      columns={columns}
+      reorderable={reorderable}
+      {...props}
+      value={value}
+      onChange={(nextValue, change) => {
+        props.onChange?.(nextValue, change);
+        setValue(nextValue);
+      }}
+    />
+  );
+}
+
+const isNotAda = (key: string | number) => key !== 'ada';
+
+const HINT =
+  'Drag to move this item, or press Space or Enter, then the arrow keys to move it one place at a time. Press Escape when you are done.';
+
+const shownNames = () =>
+  screen
+    .getAllByRole('textbox')
+    .map(input => (input as HTMLInputElement).value);
 
 function classTokens(element: Element | null): string[] {
   return element?.getAttribute('class')?.split(/\s+/).filter(Boolean) ?? [];
@@ -740,31 +815,28 @@ describe('ListInput', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('hangs the grip beside the first field and reveals it on hover or focus', () => {
+  it("ends each record with core List's reorder handle, revealed on hover or focus", () => {
+    // A fine pointer (jsdom models a mouse): hover reveals the handle.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const reveal = revealClasses();
-    const {container} = renderListInput({isReorderable: true});
+    const {container} = renderListInput({reorderable: reorderableFor()});
     const row = container.querySelector<HTMLElement>('[data-list-input-row]');
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     const remove = screen.getByRole('button', {name: 'Remove guest 1'});
-    const [firstField] = within(row!).getAllByRole('textbox');
 
-    // The grip is the record's first control in reading and tab order. It sits
-    // in the first field's cell but hangs in the inline-start gutter, out of the
-    // flow, so the fields keep their columns.
-    expect(within(row!).getAllByRole('button')).toEqual([handle, remove]);
-    expect(row!.querySelector('[data-list-input-cell="0"]')).toContainElement(
-      handle,
+    // The handle is the record's last control, after Remove in Remove's
+    // cell, as UIKit's reorder control ends an editing row.
+    expect(within(row!).getAllByRole('button')).toEqual([remove, handle]);
+    expect(handle).toHaveAttribute('data-astryx-list-reorder');
+    expect(row!.querySelector('[data-list-input-cell]')?.contains(handle)).toBe(
+      false,
     );
-    expect(
-      handle.compareDocumentPosition(firstField) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
 
-    // The row is the reveal container; the grip fades with opacity alone, so
-    // at rest it stays mounted, named, and focusable.
-    expect(reveal.container.length).toBeGreaterThan(0);
+    // The row is the reveal container; the controls' cell fades with opacity
+    // alone, so at rest the handle stays mounted, named, and focusable.
+    const handleCell = [...row!.children].find(child => child.contains(handle));
     expect(classTokens(row)).toEqual(expect.arrayContaining(reveal.container));
-    expect(classTokens(handle.parentElement)).toEqual(
+    expect(classTokens(handleCell ?? null)).toEqual(
       expect.arrayContaining(reveal.grip),
     );
     expect(handle).toBeEnabled();
@@ -773,8 +845,8 @@ describe('ListInput', () => {
 
   it('reveals Remove on hover or focus, with or without reordering', () => {
     const reveal = revealClasses();
-    for (const isReorderable of [false, true]) {
-      const {container, unmount} = renderListInput({isReorderable});
+    for (const reorderable of [undefined, reorderableFor()]) {
+      const {container, unmount} = renderListInput({reorderable});
       const rows = container.querySelectorAll<HTMLElement>(
         '[data-list-input-row]',
       );
@@ -801,85 +873,8 @@ describe('ListInput', () => {
     }
   });
 
-  it('keeps the moving grip shown and quiets other rows during a pointer drag', () => {
-    const reveal = revealClasses();
-    expect(reveal.onlyShown.length).toBeGreaterThan(0);
-    expect(reveal.onlyInactive.length).toBeGreaterThan(0);
-    const {container} = renderListInput({isReorderable: true});
-    const rows = container.querySelectorAll<HTMLElement>(
-      '[data-list-input-row]',
-    );
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-    const hasAll = (element: Element | null, tokens: string[]) =>
-      tokens.every(token => classTokens(element).includes(token));
-    const hasAny = (element: Element | null, tokens: string[]) =>
-      tokens.some(token => classTokens(element).includes(token));
-
-    fireEvent.pointerDown(handle, {
-      button: 0,
-      pointerId: 4,
-      clientX: 10,
-      clientY: 10,
-    });
-
-    expect(hasAll(handle.parentElement, reveal.onlyShown)).toBe(true);
-    expect(hasAny(rows[0], reveal.onlyInactive)).toBe(false);
-    expect(hasAll(rows[1], reveal.onlyInactive)).toBe(true);
-    // The duplicate under the pointer shows its grip too.
-    const previewGrip = document.querySelector(
-      '[data-list-input-drag-preview] [data-list-input-cell="0"] button',
-    );
-    expect(hasAll(previewGrip?.parentElement ?? null, reveal.onlyShown)).toBe(
-      true,
-    );
-
-    fireEvent.pointerUp(handle, {pointerId: 4, clientX: 10, clientY: 10});
-
-    expect(hasAny(handle.parentElement, reveal.onlyShown)).toBe(false);
-    expect(hasAny(rows[1], reveal.onlyInactive)).toBe(false);
-  });
-
-  it('keeps a lifted grip shown without quieting rows during keyboard reorder', () => {
-    const reveal = revealClasses();
-    const {container} = renderListInput({isReorderable: true});
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-    const otherRow = container.querySelectorAll('[data-list-input-row]')[1];
-
-    handle.focus();
-    fireEvent.keyDown(handle, {key: ' ', code: 'Space'});
-    expect(classTokens(handle.parentElement)).toEqual(
-      expect.arrayContaining(reveal.onlyShown),
-    );
-    expect(
-      classTokens(otherRow).some(token => reveal.onlyInactive.includes(token)),
-    ).toBe(false);
-
-    fireEvent.keyDown(handle, {key: 'Escape'});
-    expect(
-      classTokens(handle.parentElement).some(token =>
-        reveal.onlyShown.includes(token),
-      ),
-    ).toBe(false);
-  });
-
   it('focuses the first field of an added record, not its grip', () => {
-    function ReorderableList() {
-      const [value, setValue] = useState(guests);
-      return (
-        <ListInput<Guest>
-          label="Guests"
-          itemName="guest"
-          value={value}
-          onChange={setValue}
-          getItemKey={guest => guest.id}
-          createItem={() => createdGuest}
-          columns={columns}
-          isReorderable
-        />
-      );
-    }
-
-    render(<ReorderableList />);
+    render(<OwnedList />);
     fireEvent.click(screen.getByRole('button', {name: 'Add guest'}));
 
     expect(screen.getByDisplayValue('Linus')).toHaveFocus();
@@ -988,367 +983,129 @@ describe('ListInput', () => {
     });
   });
 
-  it('moves a focused handle with arrow keys without showing a tooltip', () => {
+  it("moves a record in reorder mode with the arrow keys, through the owner's onReorder", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
     const onChange = vi.fn();
-
-    function ArrowReorderList() {
-      const [value, setValue] = useState(guests);
-      return (
-        <ListInput<Guest>
-          label="Guests"
-          itemName="guest"
-          value={value}
-          onChange={(nextValue, change) => {
-            onChange(nextValue, change);
-            setValue(nextValue);
-          }}
-          getItemKey={guest => guest.id}
-          createItem={() => createdGuest}
-          columns={columns}
-          isReorderable
-        />
-      );
-    }
-
-    render(<ArrowReorderList />);
+    render(<OwnedList onReorder={onReorder} onChange={onChange} />);
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     expect(handle).toHaveAttribute('type', 'button');
+    expect(handle).toHaveAccessibleDescription(HINT);
     expect(
       screen
         .queryAllByRole('tooltip', {hidden: true})
         .some(tooltip => tooltip.textContent === 'Reorder guest 1'),
     ).toBe(false);
-    expect(handle).toHaveAccessibleDescription(
-      'Use Arrow Up or Arrow Down to move this item one position. Press Space or Enter to pick it up for extended keyboard reordering.',
-    );
 
+    // Enter turns on reorder mode. Each arrow then moves the record a place.
+    // The move is reported in the value's terms: its key and its new index.
     handle.focus();
-    fireEvent.keyDown(handle, {key: 'ArrowDown', altKey: true});
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowUp}');
+    expect(onReorder).not.toHaveBeenCalled();
+    await user.keyboard('{ArrowDown}');
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(onReorder).toHaveBeenCalledWith({key: 'ada', to: 1});
+    expect(shownNames()).toEqual(['Grace', 'Ada']);
+    // A move is the owner's, never a ListInput change.
     expect(onChange).not.toHaveBeenCalled();
-
-    fireEvent.keyDown(handle, {key: 'ArrowUp'});
-    expect(onChange).not.toHaveBeenCalled();
-
-    fireEvent.keyDown(handle, {key: 'ArrowDown'});
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith([guests[1], guests[0]], {
-      type: 'reorder',
-      item: guests[0],
-      fromIndex: 0,
-      toIndex: 1,
-    });
-    expect(
-      screen
-        .getAllByRole('textbox')
-        .map(input => (input as HTMLInputElement).value),
-    ).toEqual(['Grace', 'Ada']);
     expect(handle).toHaveFocus();
     expect(handle).toHaveAccessibleName('Reorder guest 2');
-    expect(
-      document.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
   });
 
-  it('commits a keyboard reorder with change metadata', () => {
-    const onChange = vi.fn();
-    renderListInput({isReorderable: true, onChange});
+  it('keeps reorder mode through a move that renames the record, and announces it by its new name', async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    render(<OwnedList onReorder={onReorder} />);
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-    expect(handle.querySelectorAll('circle')).toHaveLength(6);
 
     handle.focus();
-    fireEvent.keyDown(handle, {key: ' ', code: 'Space'});
-    let source = document.querySelector('[data-list-input-reorder-source]');
-    expect(source?.closest('li')).toHaveAttribute('aria-posinset', '1');
-    expect(source?.querySelector('input')).toHaveValue('Ada');
-
-    fireEvent.keyDown(handle, {key: 'ArrowDown'});
-    source = document.querySelector('[data-list-input-reorder-source]');
-    expect(source?.closest('li')).toHaveAttribute('aria-posinset', '2');
-    expect(source?.querySelector('input')).toHaveValue('Ada');
-
-    fireEvent.keyDown(handle, {key: 'Enter'});
-
-    expect(onChange).toHaveBeenCalledWith([guests[1], guests[0]], {
-      type: 'reorder',
-      item: guests[0],
-      fromIndex: 0,
-      toIndex: 1,
-    });
-    expect(
-      document.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
+    await user.keyboard('{Enter}{ArrowDown}');
+    // Records are named by their place, so the move renames this one.
+    expect(handle).toHaveAccessibleName('Reorder guest 2');
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'guest 2, position 2 of 2, after guest 1, at the end',
+      ),
+    );
+    // Still in the mode: the next arrow moves it back.
+    await user.keyboard('{ArrowUp}');
+    expect(onReorder).toHaveBeenCalledTimes(2);
+    expect(onReorder).toHaveBeenLastCalledWith({key: 'ada', to: 0});
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'guest 1, position 1 of 2, at the top, before guest 2',
+      ),
+    );
   });
 
-  it('keeps pointer order stationary, follows both pointer axes, and commits once', () => {
-    const onChange = vi.fn();
-    const {container} = renderListInput({
-      isReorderable: true,
-      onChange,
-      value: [...guests, createdGuest],
-    });
-    const rows = container.querySelectorAll<HTMLElement>(
-      '[data-list-input-row]',
+  it('adds one element to each record for reordering: the handle', () => {
+    const plain = renderListInput();
+    const plainCount = plain.container
+      .querySelector('[data-list-input-row]')!
+      .querySelectorAll('*').length;
+    plain.unmount();
+    const {container} = renderListInput({reorderable: reorderableFor()});
+    const row = container.querySelector('[data-list-input-row]');
+    expect(row).toContainElement(
+      screen.getByRole('button', {name: 'Reorder guest 1'}),
     );
-    vi.spyOn(rows[0], 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      right: 400,
-      bottom: 40,
-      left: 0,
-      width: 400,
-      height: 40,
-      toJSON: () => {},
-    });
-    vi.spyOn(rows[1], 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 40,
-      top: 40,
-      right: 400,
-      bottom: 80,
-      left: 0,
-      width: 400,
-      height: 40,
-      toJSON: () => {},
-    });
-    vi.spyOn(rows[2], 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 80,
-      top: 80,
-      right: 400,
-      bottom: 120,
-      left: 0,
-      width: 400,
-      height: 40,
-      toJSON: () => {},
-    });
-    const remove = screen.getByRole('button', {name: 'Remove guest 2'});
+    expect(row!.querySelectorAll('*').length - plainCount).toBe(1);
+  });
+
+  it('loads no reorder code without reorderable: the handle comes with the object', () => {
+    const source = readFileSync(
+      path.join(import.meta.dirname, 'ListInput.tsx'),
+      'utf8',
+    );
+    const names =
+      /import\s*\{([^}]*)\}\s*from\s*'@astryxdesign\/core\/internal\/reorder';/
+        .exec(source)?.[1]
+        .split(',')
+        .map(name => name.trim())
+        .filter(name => name !== '');
+    expect(names?.sort()).toEqual(['ListReorderScope', 'useListReorderScope']);
+    expect(source).not.toMatch(/ListReorderHandle/);
+  });
+
+  it('ends reorder mode with Escape, keeping the moves', async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    render(<OwnedList onReorder={onReorder} />);
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+
+    handle.focus();
+    await user.keyboard('{Enter}{ArrowDown}{Escape}');
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(shownNames()).toEqual(['Grace', 'Ada']);
+    // Out of the mode, an arrow moves nothing.
+    await user.keyboard('{ArrowUp}');
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(handle).toHaveFocus();
+  });
+
+  it("gives no handle to a record the owner's isReorderable rejects, and moves no record past it at either end", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    render(<OwnedList onReorder={onReorder} isReorderable={isNotAda} />);
+    expect(screen.queryByRole('button', {name: 'Reorder guest 1'})).toBeNull();
     const handle = screen.getByRole('button', {name: 'Reorder guest 2'});
-    expect(within(rows[1]).getAllByRole('button')).toEqual([handle, remove]);
-
-    fireEvent.pointerDown(handle, {
-      button: 0,
-      pointerId: 7,
-      clientX: 300,
-      clientY: 50,
-    });
-
-    const source = container.querySelector<HTMLElement>(
-      '[data-list-input-reorder-source]',
-    );
-    const preview = document.querySelector<HTMLElement>(
-      '[data-list-input-drag-preview]',
-    );
-    const previewLayer = preview?.closest<HTMLElement>('[popover="manual"]');
-    expect(source).toBe(rows[1]);
-    expect(getComputedStyle(source!).opacity).toBe('0.5');
-    expect(container).toContainElement(preview);
-    expect(preview).toBeInTheDocument();
-    expect(previewLayer).toBeInTheDocument();
-    expect(getComputedStyle(previewLayer!).opacity).toBe('0.5');
-    expect(preview).toHaveAttribute('aria-hidden', 'true');
-    expect(preview?.querySelector('input')).toHaveValue('Grace');
-    expect(previewLayer!.style.getPropertyValue('--x-transform')).toBe(
-      'translate3d(0px, 40px, 0)',
-    );
-    expect(
-      container.querySelector('[data-list-input-drop-target]'),
-    ).not.toBeInTheDocument();
-
-    fireEvent.pointerMove(handle, {pointerId: 7, clientX: 345, clientY: 5});
-    expect(previewLayer!.style.getPropertyValue('--x-transform')).toBe(
-      'translate3d(45px, -5px, 0)',
-    );
-    expect([
-      ...container.querySelectorAll<HTMLElement>('[data-list-input-row]'),
-    ]).toEqual([...rows]);
-    expect(
-      screen
-        .getAllByRole('textbox')
-        .map(input => (input as HTMLInputElement).value),
-    ).toEqual(['Ada', 'Grace', 'Linus']);
-    expect(onChange).not.toHaveBeenCalled();
-    expect(rows[0].closest('li')).toHaveAttribute(
-      'data-list-input-drop-target',
-      'before',
-    );
-
-    fireEvent.pointerMove(handle, {pointerId: 7, clientX: 245, clientY: 115});
-    expect(previewLayer!.style.getPropertyValue('--x-transform')).toBe(
-      'translate3d(-55px, 105px, 0)',
-    );
-    expect(rows[0].closest('li')).not.toHaveAttribute(
-      'data-list-input-drop-target',
-    );
-    expect(rows[2].closest('li')).toHaveAttribute(
-      'data-list-input-drop-target',
-      'after',
-    );
-    expect([
-      ...container.querySelectorAll<HTMLElement>('[data-list-input-row]'),
-    ]).toEqual([...rows]);
-    expect(onChange).not.toHaveBeenCalled();
-
-    fireEvent.pointerUp(handle, {pointerId: 7, clientX: 245, clientY: 115});
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(
-      [guests[0], createdGuest, guests[1]],
-      {
-        type: 'reorder',
-        item: guests[1],
-        fromIndex: 1,
-        toIndex: 2,
-      },
-    );
-    expect(
-      document.querySelector('[data-list-input-drop-target]'),
-    ).not.toBeInTheDocument();
-    expect(
-      document.querySelector('[data-list-input-drag-preview]'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('cancels a pointer reorder when a second pointer lands, as a pinch does', () => {
-    const onChange = vi.fn();
-    const {container} = renderListInput({isReorderable: true, onChange});
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-
-    fireEvent.pointerDown(handle, {
-      button: 0,
-      pointerId: 8,
-      clientX: 10,
-      clientY: 10,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 8, clientX: 10, clientY: 34});
-    expect(
-      container.querySelector('[data-list-input-reorder-source]'),
-    ).toBeInTheDocument();
-
-    // The second finger of a pinch lands elsewhere on the page.
-    fireEvent.pointerDown(document.body, {pointerId: 9, clientX: 200});
-    expect(
-      container.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
-
-    fireEvent.pointerUp(handle, {pointerId: 8, clientX: 10, clientY: 90});
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it('clears a sub-threshold pointer drag without reordering', () => {
-    const onChange = vi.fn();
-    const {container} = renderListInput({isReorderable: true, onChange});
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-
-    fireEvent.pointerDown(handle, {
-      button: 0,
-      pointerId: 8,
-      clientX: 10,
-      clientY: 10,
-    });
-    expect(
-      fireEvent.pointerMove(handle, {
-        pointerId: 8,
-        clientX: 14,
-        clientY: 10,
-      }),
-    ).toBe(true);
-
-    expect(
-      container.querySelector('[data-list-input-reorder-source]'),
-    ).toBeInTheDocument();
-    expect(
-      document.querySelector('[data-list-input-drag-preview]'),
-    ).toBeInTheDocument();
-    expect(
-      container.querySelector('[data-list-input-drop-target]'),
-    ).not.toBeInTheDocument();
-
-    fireEvent.pointerUp(handle, {pointerId: 8, clientX: 14, clientY: 10});
-
-    expect(onChange).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
-    expect(
-      document.querySelector('[data-list-input-drag-preview]'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('activates a pointer drag after horizontal threshold movement', async () => {
-    const onChange = vi.fn();
-    renderListInput({isReorderable: true, onChange});
-    const rows = document.querySelectorAll<HTMLElement>(
-      '[data-list-input-row]',
-    );
-    vi.spyOn(rows[1], 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 40,
-      top: 40,
-      right: 400,
-      bottom: 80,
-      left: 0,
-      width: 400,
-      height: 40,
-      toJSON: () => {},
-    });
-
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-
-    fireEvent.pointerDown(handle, {
-      button: 0,
-      pointerId: 9,
-      clientX: 10,
-      clientY: 10,
-    });
-
-    expect(
-      fireEvent.pointerMove(handle, {
-        pointerId: 9,
-        clientX: 15,
-        clientY: 10,
-      }),
-    ).toBe(false);
-
-    fireEvent.pointerUp(handle, {pointerId: 9, clientX: 15, clientY: 10});
-
-    expect(onChange).not.toHaveBeenCalled();
-    // The grab and the return land in the same frame, so they are spoken
-    // together, in order (spec:AST-086 FR9).
-    await waitFor(() => {
-      expect(
-        Array.from(document.querySelectorAll('[aria-live="polite"]')).some(
-          node =>
-            node.textContent ===
-            'guest 1 grabbed. Use arrow keys to move, Space or Enter to drop, and Escape to cancel. guest returned to position 1.',
-        ),
-      ).toBe(true);
-    });
-  });
-
-  it('cancels a keyboard reorder with Escape', () => {
-    const onChange = vi.fn();
-    renderListInput({isReorderable: true, onChange});
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-
     handle.focus();
-    fireEvent.keyDown(handle, {key: 'Enter'});
-    fireEvent.keyDown(handle, {key: 'ArrowDown'});
-    fireEvent.keyDown(handle, {key: 'Escape'});
-
-    expect(onChange).not.toHaveBeenCalled();
-    expect(
-      document.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole('textbox')
-        .map(input => (input as HTMLInputElement).value),
-    ).toEqual(['Ada', 'Grace']);
+    await user.keyboard('{Enter}{ArrowUp}{Escape}');
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(shownNames()).toEqual(['Ada', 'Grace']);
   });
 
   it('locks every field and mutation control when isDisabled is set', () => {
     const onChange = vi.fn();
-    renderListInput({isDisabled: true, isReorderable: true, onChange});
+    const onReorder = vi.fn();
+    renderListInput({
+      isDisabled: true,
+      reorderable: reorderableFor(onReorder),
+      onChange,
+    });
 
     const group = screen.getByRole('group');
     expect(group).toHaveAttribute('aria-disabled', 'true');
@@ -1361,9 +1118,15 @@ describe('ListInput', () => {
       'aria-disabled',
       'true',
     );
-    expect(
-      screen.getByRole('button', {name: 'Reorder guest 1'}),
-    ).toBeDisabled();
+    // The handle stays focusable but moves nothing (spec:AST-085 FR1, FR2).
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    expect(handle).toHaveAttribute('aria-disabled', 'true');
+    expect(handle).not.toHaveAttribute('disabled');
+    handle.focus();
+    fireEvent.keyDown(handle, {key: 'ArrowDown'});
+    fireEvent.keyDown(handle, {key: ' '});
+    fireEvent.keyDown(handle, {key: 'ArrowDown'});
+    expect(handle).toHaveFocus();
     // Remove carries a tooltip, so it is disabled via aria and stays focusable
     // rather than dropping out of the tab order with its explanation.
     expect(
@@ -1373,10 +1136,11 @@ describe('ListInput', () => {
     // The values stay readable — a disabled list still communicates content.
     expect(screen.getAllByRole('textbox')[0]).toHaveValue('Ada');
     expect(onChange).not.toHaveBeenCalled();
+    expect(onReorder).not.toHaveBeenCalled();
   });
 
   it('marks the list busy and locks the same controls when isLoading is set', () => {
-    renderListInput({isLoading: true, isReorderable: true});
+    renderListInput({isLoading: true, reorderable: reorderableFor()});
 
     const group = screen.getByRole('group');
     expect(group).toHaveAttribute('aria-busy', 'true');
@@ -1398,53 +1162,39 @@ describe('ListInput', () => {
     expect(addButton).toHaveAttribute('aria-busy', 'true');
     expect(
       screen.getByRole('button', {name: 'Reorder guest 1'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(
       screen.getByRole('button', {name: 'Remove guest 1'}),
     ).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('cancels an in-flight keyboard reorder when the list becomes busy', () => {
-    const onChange = vi.fn();
-    const {rerender} = render(
-      <ListInput<Guest>
-        label="Guests"
-        itemName="guest"
-        value={guests}
-        onChange={onChange}
-        getItemKey={guest => guest.id}
-        createItem={() => createdGuest}
-        columns={columns}
-        isReorderable
-      />,
-    );
+  it('abandons reorder mode when the list becomes busy', async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    const reorderable = reorderableFor(onReorder);
+    const props: ListInputProps<Guest> = {
+      label: 'Guests',
+      itemName: 'guest',
+      value: guests,
+      onChange: () => {},
+      getItemKey: guest => guest.id,
+      createItem: () => createdGuest,
+      columns,
+      reorderable,
+    };
+    const {rerender} = render(<ListInput<Guest> {...props} />);
 
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     handle.focus();
-    fireEvent.keyDown(handle, {key: ' ', code: 'Space'});
-    expect(
-      document.querySelector('[data-list-input-reorder-source]'),
-    ).toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    rerender(<ListInput<Guest> {...props} isLoading />);
 
-    rerender(
-      <ListInput<Guest>
-        label="Guests"
-        itemName="guest"
-        value={guests}
-        onChange={onChange}
-        getItemKey={guest => guest.id}
-        createItem={() => createdGuest}
-        columns={columns}
-        isReorderable
-        isLoading
-      />,
-    );
-
-    // The pick-up is abandoned rather than committed, so no order change escapes.
-    expect(
-      document.querySelector('[data-list-input-reorder-source]'),
-    ).not.toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalled();
+    // The handle keeps focus but is inert now: no key moves the record, so
+    // no order change escapes (spec:AST-085 FR2, FR4).
+    expect(handle).toHaveFocus();
+    expect(handle).toHaveAttribute('aria-disabled', 'true');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onReorder).not.toHaveBeenCalled();
   });
 
   it('describes warning and success list statuses from the group', () => {
@@ -1499,44 +1249,6 @@ describe('ListInput', () => {
     const rowDescribedBy = rows[1].getAttribute('aria-describedby');
     expect(document.getElementById(rowDescribedBy!)).toHaveTextContent(
       'Grace is already invited.',
-    );
-  });
-
-  it('moves a picked-up record to the first and last positions with Home and End', () => {
-    const onChange = vi.fn();
-    const threeGuests = [...guests, createdGuest];
-    render(
-      <ListInput<Guest>
-        label="Guests"
-        itemName="guest"
-        value={threeGuests}
-        onChange={onChange}
-        getItemKey={guest => guest.id}
-        createItem={() => createdGuest}
-        columns={columns}
-        isReorderable
-      />,
-    );
-
-    const handle = screen.getByRole('button', {name: 'Reorder guest 3'});
-    handle.focus();
-    fireEvent.keyDown(handle, {key: ' ', code: 'Space'});
-
-    fireEvent.keyDown(handle, {key: 'Home'});
-    expect(
-      document.querySelector('[data-list-input-reorder-source]')?.closest('li'),
-    ).toHaveAttribute('aria-posinset', '1');
-
-    fireEvent.keyDown(handle, {key: 'End'});
-    expect(
-      document.querySelector('[data-list-input-reorder-source]')?.closest('li'),
-    ).toHaveAttribute('aria-posinset', '3');
-
-    fireEvent.keyDown(handle, {key: 'Home'});
-    fireEvent.keyDown(handle, {key: 'Enter'});
-    expect(onChange).toHaveBeenCalledWith(
-      [createdGuest, guests[0], guests[1]],
-      {type: 'reorder', item: createdGuest, fromIndex: 2, toIndex: 0},
     );
   });
 

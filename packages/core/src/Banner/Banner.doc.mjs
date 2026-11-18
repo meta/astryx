@@ -172,6 +172,7 @@ function SaveSettings() {
       {className: 'astryx-banner-icon', visualProps: ['status']},
       {className: 'astryx-banner-description'},
       {className: 'astryx-banner-content', visualProps: ['container', 'status']},
+      {className: 'astryx-banner-close'},
     ],
     vars: [
       {name: '--_banner-radius', description: 'Border radius of the card container (header, content area and the elevated root silhouette)', default: 'var(--radius-container)', private: true},
@@ -261,6 +262,9 @@ export const docsZh = {
           'container',
           'status',
         ],
+      },
+      {
+        className: 'astryx-banner-close',
       },
     ],
     vars: [

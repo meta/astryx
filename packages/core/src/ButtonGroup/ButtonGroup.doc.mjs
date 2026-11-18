@@ -11,6 +11,11 @@ export const docs = {
   playground: {
     defaults: {
       label: 'Actions',
+      children: [
+        {__element: 'Button', props: {label: 'Copy', variant: 'secondary'}},
+        {__element: 'Button', props: {label: 'Paste', variant: 'secondary'}},
+        {__element: 'Button', props: {label: 'Delete', variant: 'secondary'}},
+      ],
     },
   },
   theming: {

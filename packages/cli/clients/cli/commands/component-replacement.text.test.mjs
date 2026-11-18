@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {COMPONENT_REPLACES_CLI} from '../../../foundation/integrations/cli-requirement.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 vi.setConfig({testTimeout: 60_000, hookTimeout: 60_000});
 
@@ -63,7 +64,7 @@ function writeIntegration(name, components, peers) {
 beforeAll(() => {
   // Under the repository so the project resolves the workspace's Core.
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-component-replacement-text-'),
+    path.join(REPO_ROOT, '.astryx-component-replacement-text-'),
   );
   writeIntegration(
     '@acme/nav',

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from MetadataList.tsx and MetadataListItem.tsx
@@ -12,10 +10,7 @@
  */
 
 export {MetadataList} from './MetadataList';
-export type {
-  MetadataListProps,
-  MetadataListColumns,
-} from './MetadataList';
+export type {MetadataListProps, MetadataListColumns} from './MetadataList';
 export {MetadataListItem} from './MetadataListItem';
 export type {MetadataListItemProps} from './MetadataListItem';
 export type {MetadataListLabelConfig} from './MetadataListContext';

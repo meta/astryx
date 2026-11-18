@@ -131,6 +131,54 @@ describe('ChatLayout — default scroll button keyboard reachability', () => {
   });
 });
 
+describe('ChatLayout — a page that scrolls the document', () => {
+  // The page's root element scrolls, and the browser raises the scroll at the
+  // document. The root's offsetHeight is the page's height; its clientHeight
+  // is the viewport's.
+  const root = document.documentElement;
+  const geometry = {scrollHeight: 3000, clientHeight: 700, offsetHeight: 3000};
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    for (const [property, value] of Object.entries(geometry)) {
+      Object.defineProperty(root, property, {value, configurable: true});
+    }
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const property of Object.keys(geometry)) {
+      Reflect.deleteProperty(root, property);
+    }
+    root.scrollTop = 0;
+  });
+
+  function scrollPageTo(top: number) {
+    root.scrollTop = top;
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+  }
+
+  it('shows the scroll-to-bottom button when the reader scrolls the page up from its end', () => {
+    const scrollRef = {current: root};
+    render(
+      <ChatLayout composer={<div>composer</div>} scrollRef={scrollRef}>
+        <div>msg</div>
+      </ChatLayout>,
+    );
+    const hiddenPill = () =>
+      screen.getByLabelText('Scroll to bottom').closest('[inert]');
+
+    scrollPageTo(2300);
+    expect(hiddenPill()).not.toBeNull();
+
+    scrollPageTo(2000);
+    expect(hiddenPill()).toBeNull();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Self-scroll layout contract (#2573)
 //

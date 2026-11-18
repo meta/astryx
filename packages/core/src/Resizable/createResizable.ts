@@ -15,6 +15,7 @@
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/Resizable/createResizable.generated';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {readWindowExtent, standInMaximum} from '../utils/windowExtent';
 import {createDevWarnings, devWarn} from '../utils/devWarning';
 import {project} from '../motion/projection';
 import {
@@ -62,6 +63,7 @@ import {separatorAttributes} from './separatorAttributes';
 import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // The English for the two messages it names, and nothing more of the catalog.
 registerEnglishFallback(english);
@@ -178,14 +180,6 @@ function readViewportBasis(): number {
   return typeof window === 'undefined' ? SERVER_BASIS : window.innerWidth;
 }
 
-/** The window's extent along the axis, for an unbounded region's maximum. */
-function readWindowExtent(direction: ResizableDirection): number | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  return direction === 'vertical' ? window.innerHeight : window.innerWidth;
-}
-
 /** The factory warns. This first-render read does not. */
 const QUIET = null;
 
@@ -279,9 +273,7 @@ export function readInitialResizableState(
     effectiveMaxPx:
       max !== Infinity
         ? max
-        : windowExtent == null
-          ? undefined
-          : Math.max(windowExtent, isCollapsed ? min : size),
+        : standInMaximum(windowExtent, isCollapsed ? min : size, min),
   };
 }
 
@@ -335,7 +327,11 @@ interface ResizableInternals {
   followRegion(slot: RegionPaneSlot): () => void;
 }
 
-const internals = new WeakMap<ResizableController, ResizableInternals>();
+// Every copy of Core reads a controller through this one channel.
+const internals = sharedWeakMap<ResizableController, ResizableInternals>(
+  'resizable/create-resizable/internals',
+  1,
+);
 
 /** The factory's internal channel, or undefined for anything else. */
 export function readResizableInternals(
@@ -697,9 +693,7 @@ export function createResizableAs(
     const effectiveMax =
       max !== Infinity
         ? max
-        : measuredForMax == null
-          ? undefined
-          : Math.max(measuredForMax, isCollapsed ? min : size);
+        : standInMaximum(measuredForMax, isCollapsed ? min : size, min);
 
     derived = {size, isCollapsed, min, max, effectiveMax, isBasisMeasured};
   }

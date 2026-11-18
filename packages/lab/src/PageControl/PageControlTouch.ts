@@ -437,7 +437,7 @@ export function usePageControlTouch({
       switch (hold.state) {
         case 'began':
           begin(landingX(hold, x));
-          // The held look commits in the hold timer's own task. A render
+          // The held look commits in the task where the hold begins. A render
           // scheduled after it can wait behind a busy page's other tasks.
           flushSync(showHeld);
           break;

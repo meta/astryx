@@ -9,7 +9,7 @@
  * SYNC: When TransferListSelector.tsx behavior changes, update this test.
  */
 
-import {Profiler, useState} from 'react';
+import {Profiler, useMemo, useRef, useState} from 'react';
 import {afterAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   fireEvent,
@@ -24,6 +24,7 @@ import {
   type TransferListSelectorProps,
 } from './TransferListSelector';
 import type {TransferListOption} from './TransferList';
+import {createReorderable} from '@astryxdesign/core';
 
 type Column = 'name' | 'owner' | 'status' | 'updated';
 
@@ -71,6 +72,8 @@ afterAll(() => {
 type HarnessProps = {
   initialValue?: readonly Column[];
   onCommit: (value: readonly Column[]) => void;
+  /** The owner's reorderable object's `isReorderable`. */
+  isMovable?: (value: Column) => boolean;
   selectorProps?: Partial<
     Omit<
       TransferListSelectorProps<Column>,
@@ -83,8 +86,25 @@ function Harness({
   initialValue = ['name', 'status'],
   onCommit,
   selectorProps,
+  isMovable,
 }: HarnessProps) {
   const [value, setValue] = useState<readonly Column[]>(initialValue);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  // The owner's reorder: each move it is handed applies to its value.
+  const reorderable = useMemo(
+    () =>
+      createReorderable<Column>({
+        onReorder: ({key, to}) => {
+          const rest = valueRef.current.filter(item => item !== key);
+          const next = [...rest.slice(0, to), key, ...rest.slice(to)];
+          onCommit(next);
+          setValue(next);
+        },
+        isReorderable: isMovable,
+      }),
+    [isMovable, onCommit],
+  );
 
   return (
     <>
@@ -97,6 +117,7 @@ function Harness({
           onCommit(nextValue);
           setValue(nextValue);
         }}
+        reorderable={reorderable}
         {...selectorProps}
       />
     </>
@@ -114,6 +135,14 @@ async function openSelector(
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
   return trigger;
+}
+
+/** The selector moves the focus into its panel once open; wait for it. */
+async function waitForPanelFocus(trigger: HTMLElement): Promise<void> {
+  await waitFor(() => {
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).not.toBe(trigger);
+  });
 }
 
 describe('TransferListSelector', () => {
@@ -263,6 +292,55 @@ describe('TransferListSelector', () => {
     );
     expect(trigger).toHaveTextContent('3 selected');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('reorders a staged draft through its own reorder object: Cancel drops the move with the draft, Apply commits it', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <Harness
+        initialValue={['name', 'status', 'updated']}
+        onCommit={onCommit}
+        selectorProps={{commitBehavior: 'staged'}}
+      />,
+    );
+    await waitForPanelFocus(await openSelector());
+    screen.getByRole('button', {name: 'Reorder Name', ...hidden}).focus();
+    await user.keyboard('{Enter}{ArrowDown}{Escape}');
+    expect(onCommit).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', {name: 'Cancel', ...hidden}));
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByTestId('applied-value')).toHaveTextContent(
+      '["name","status","updated"]',
+    );
+
+    await waitForPanelFocus(await openSelector());
+    screen.getByRole('button', {name: 'Reorder Name', ...hidden}).focus();
+    await user.keyboard('{Enter}{ArrowDown}{Escape}');
+    await user.click(screen.getByRole('button', {name: 'Apply', ...hidden}));
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit).toHaveBeenCalledWith(['status', 'name', 'updated']);
+  });
+
+  it('keeps in place the values the owner\u2019s isReorderable rejects, and hands immediate moves to the owner at once', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <Harness
+        initialValue={['owner', 'name', 'status']}
+        onCommit={onCommit}
+        isMovable={value => value !== 'owner'}
+      />,
+    );
+    await waitForPanelFocus(await openSelector());
+    expect(
+      screen.queryByRole('button', {name: 'Reorder Owner', ...hidden}),
+    ).toBeNull();
+    screen.getByRole('button', {name: 'Reorder Status', ...hidden}).focus();
+    await user.keyboard('{Enter}{ArrowUp}{ArrowUp}{Escape}');
+    // Owner leads the list, so Status stops below it.
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit).toHaveBeenCalledWith(['owner', 'status', 'name']);
   });
 
   it('closes unchanged Apply without calling onChange or changeAction', async () => {
@@ -574,7 +652,6 @@ describe('TransferListSelector', () => {
         availableLabel="Hidden"
         hasSearch
         searchPlaceholder="Find a column"
-        isReorderable={false}
         hasSelectAll
         hasClear
         commitBehavior="staged"

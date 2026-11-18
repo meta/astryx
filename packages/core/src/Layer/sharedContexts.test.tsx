@@ -154,6 +154,29 @@ describe('two Reacts in one process', () => {
     expect(other).not.toBe(context);
     expect(onOtherReact.createSharedContext(name, 1, 'default')).toBe(other);
   });
+
+  it('gives each React its own React-bound value, and one per React', async () => {
+    const otherReact = secondReact();
+    const onThisReact = await freshInstance(
+      async () => import('../utils/sharedForReact'),
+    );
+    const copyOnThisReact = await freshInstance(
+      async () => import('../utils/sharedForReact'),
+    );
+    vi.resetModules();
+    vi.doMock('react', () => ({...otherReact, default: otherReact}));
+    const onOtherReact = await import('../utils/sharedForReact');
+    vi.doUnmock('react');
+    const value = onThisReact.sharedForReact('test/two-reacts', 1, () => ({}));
+    expect(
+      copyOnThisReact.sharedForReact('test/two-reacts', 1, () => ({})),
+    ).toBe(value);
+    const other = onOtherReact.sharedForReact('test/two-reacts', 1, () => ({}));
+    expect(other).not.toBe(value);
+    expect(onOtherReact.sharedForReact('test/two-reacts', 1, () => ({}))).toBe(
+      other,
+    );
+  });
 });
 
 describe('every Core context is registered under a versioned key', () => {
@@ -200,10 +223,11 @@ describe('every Core context is registered under a versioned key', () => {
           /\bcreate(?:Shared|LayerScoped)Context\b(?:<[\s\S]*?>)?\(\s*'([^']+)',\s*\d+\s*,/g,
         ),
       ];
-      // Every call names its key and version; imports name the factory too.
+      // Every call names its key and version; imports and named re-exports
+      // (an internal entry) name the factory too.
       const imports = (
         text.match(
-          /import[^;]*\bcreate(?:Shared|LayerScoped)Context\b[^;]*;/g,
+          /import[^;]*\bcreate(?:Shared|LayerScoped)Context\b[^;]*;|export\s*\{[^}]*\bcreate(?:Shared|LayerScoped)Context\b[^}]*\}\s*from\b/g,
         ) ?? []
       ).length;
       expect(keyed.length, path.relative(SRC, file)).toBe(

@@ -148,6 +148,11 @@ export {
 
 export {SLIDER_PATTERN, type SliderStateFacts} from './patterns/slider';
 export {
+  SLIDER_MULTITHUMB_PATTERN,
+  UPPER_THUMB,
+  type SliderMultithumbStateFacts,
+} from './patterns/slider-multithumb';
+export {
   PROGRESSBAR_PATTERN,
   type ProgressbarStateFacts,
 } from './patterns/progressbar';
