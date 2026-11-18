@@ -1182,6 +1182,14 @@ prints when standard error is not one, because agents, the CLI's main
 callers, run it without a terminal and would otherwise never learn of a newer
 release; `CI` and `NO_UPDATE_NOTIFIER` still silence it.
 
+The setup reminder, in a project that installs Astryx but has not run `init`,
+is the one notice that prints before the command's output: on standard error,
+at most once a day per project, on a failing command too (which uses up the
+day), and never into standard output or machine-readable output; `CI` and its
+other quiet paths silence it. It comes first because agents keep the start of
+a long answer (`2>&1 | head`), so a line after the output is cut and its one
+showing of the day is spent unseen.
+
 Rejected: a line on every run, which agents learn to ignore; printing only to
 a terminal, which no agent sees; staying silent, which leaves copies and
 projects behind indefinitely; and updating a project automatically, which
