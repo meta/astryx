@@ -27,10 +27,9 @@ search, and the person using it can get the platform's own navigation: the iOS
 navigation bar with its large title, back swipes and Liquid Glass, the iOS tab
 bar with its minimize and bottom accessory, and on Android a Material 3 app bar,
 a navigation bar or rail, and predictive back. The developer writes this once,
-with the Astryx router (`@astryxdesign/react-native/navigation`), and never
-touches native code. The navigation hosts are the native half of that router:
+in JavaScript, with the Astryx router (`@astryxdesign/react-native/navigation`). The navigation hosts are the native half of that router:
 six native components that hold the stack and tab containers, and one
-JavaScript protocol through which host-facing UI reads and drives the router's
+JavaScript protocol through which in-app UI reads and drives the router's
 state.
 
 This record details `spec:AST-112` for one group of the platform layer and
@@ -39,8 +38,8 @@ and its capability loader (`spec:AST-112/FR1`, `spec:AST-112/FR2`),
 registration and exposure (`spec:AST-140/FR1`), the missing-piece rule
 (`spec:AST-140/FR2`), the result vocabulary (`spec:AST-140/FR3`), the
 capability shape (`spec:AST-112/FR7`), additive evolution
-(`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and Astryx Stage, which conforms to these contracts and never defines them
-(`spec:AST-139`). It applies `spec:AST-112/DEC-9`: Astryx owns navigation, routing included.
+(`spec:AST-140/FR5`), and threading (`spec:AST-140/FR6`). It applies
+`spec:AST-112/DEC-9`: Astryx owns navigation, routing included.
 
 ## Why this exists
 
@@ -63,63 +62,39 @@ it build its own:
 - **Android back.** Predictive back gives way to Astryx's back consumers
   (sheets, menus, search fields) and to the router's guard before the gesture
   starts.
-- **Router protocol.** Host-facing UI, such as a development inspector or an
-  address bar, reads one serialisable snapshot and opens paths through the
-  app's own linking. Whether it belongs in this group is OQ2.
+- **Router protocol.** In-app UI that shows routes, such as a development
+  inspector or a route list, reads one serialisable snapshot and opens paths
+  through the app's own linking. Whether it belongs in this group is OQ2.
 
-Astryx takes no third-party native navigation dependency, and an app may use
-react-native-screens, react-native-gesture-handler or another router beside
-these components without conflict (`spec:AST-140/FR9`).
+Astryx takes no third-party native navigation dependency, and Astryx components
+work beside react-native-screens, react-native-gesture-handler or another
+router in the same app (`spec:AST-140/FR9`).
 
 ## Who uses it
 
-| Native piece       | Kind                                       | Astryx components that use it                                                                                                                                                                                                                                                                                     | What a person sees                                                                                 |
-| ------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), with `render: 'system'` or `'drawn'`; with `'drawn'`, `Header` draws inside its screens                                                                                                                                                 | Native push and pop transitions, the back swipe, Android predictive back                           |
-| AstryxStackScreen  | native component (Fabric Native Component) | The router's stack navigator; `Header` (its composed parts declare the screen's stack options) and `ScreenView`; `ScreenScroll` (the screen's scroll target); the header search row, drawn with `SearchField`                                                                                                     | The navigation bar: titles, large title, back button, bar buttons and menus, toolbar, search field |
-| AstryxHeaderSlot   | native component (Fabric Native Component) | The router's stack navigator, for a screen's `headerTitle`, `headerLeft` and `headerRight` given as React                                                                                                                                                                                                         | A custom title view or bar button in the system bar                                                |
-| AstryxTabsHost     | native component (Fabric Native Component) | The router's tab navigator (`createTabs`) with `render: 'system'`                                                                                                                                                                                                                                                 | The system tab bar (iOS) or a Material navigation bar or rail (Android)                            |
-| AstryxTabScreen    | native component (Fabric Native Component) | The router's tab navigator with `render: 'system'`                                                                                                                                                                                                                                                                | Each tab's icon, label and badge, and the tab's content                                            |
-| AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its bottom accessory (`BottomAccessory`, one component for both placements)                                                                                                                                                                                                       | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
-| AstryxRouter       | protocol (JavaScript)                      | The router provides it: `NavigationRoot` (its handle) and `createNavigationRef()` carry the four methods, and `useNavigationInspector` reads it. No other Astryx component reads it; apps (`useRouterState`), Astryx Stage's address bar (`spec:AST-139`) and the Astryx app's preview chrome (`spec:AST-141`) do | An address bar or route list that shows and opens the app's routes                                 |
+| Native piece       | Kind                                       | Astryx components that use it                                                                                                                                                                                 | What a person sees                                                                                 |
+| ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| AstryxStackHost    | native component (Fabric Native Component) | The router's stack navigator (`createStack` in the `./navigation` entry), with `render: 'system'` or `'drawn'`; with `'drawn'`, `Header` draws inside its screens                                             | Native push and pop transitions, the back swipe, Android predictive back                           |
+| AstryxStackScreen  | native component (Fabric Native Component) | The router's stack navigator; `Header` (its composed parts declare the screen's stack options) and `ScreenView`; `ScreenScroll` (the screen's scroll target); the header search row, drawn with `SearchField` | The navigation bar: titles, large title, back button, bar buttons and menus, toolbar, search field |
+| AstryxHeaderSlot   | native component (Fabric Native Component) | The router's stack navigator, for a screen's `headerTitle`, `headerLeft` and `headerRight` given as React                                                                                                     | A custom title view or bar button in the system bar                                                |
+| AstryxTabsHost     | native component (Fabric Native Component) | The router's tab navigator (`createTabs`) with `render: 'system'`                                                                                                                                             | The system tab bar (iOS) or a Material navigation bar or rail (Android)                            |
+| AstryxTabScreen    | native component (Fabric Native Component) | The router's tab navigator with `render: 'system'`                                                                                                                                                            | Each tab's icon, label and badge, and the tab's content                                            |
+| AstryxTabAccessory | native component (Fabric Native Component) | The router's tab navigator, for its bottom accessory (`BottomAccessory`, one component for both placements)                                                                                                   | A bar above the tab bar (a mini player), inline beside a minimized bar on iOS 26                   |
+| AstryxRouter       | protocol (JavaScript)                      | The router provides it: `NavigationRoot` (its handle) and `createNavigationRef()` carry the four methods, and `useNavigationInspector` reads it; apps read it through `useRouterState`                        | A route list or an in-app address field that shows and opens the app's routes                      |
 
 The drawn tab bar (`TabBar`) and the drawn modal route (`BottomSheet`) render
 no navigation host.
 
 ## Non-goals
 
-- Routing semantics: the state tree, actions, `navigate` rules, linking
-  configuration and persistence format belong to the router's own records; this
-  record names only what the hosts and the protocol expose.
-- Presentation of sheets and modals: the platform's presentation host owns
-  native sheets; a stack's modal routes reach it, not the stack host.
-- Safe-area measurement outside navigation: the core's safe-area provider owns
-  window insets; the hosts report screen insets only.
-- How headers, tab bars and header search render, system or drawn, and which
-  rendering is the default: the header and tab bar components decide it in
-  their own component records, and Android's header search rendering is the
-  `Header` component's decision. The hosts host either rendering (FR1).
-- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
-  are separate products; they conform to this record's contracts.
-- The API of the stack and tab options, the `Header` component's parts and
-  the `BottomAccessory` component: they map onto the native props here, and
-  their own records own them.
-- Equivalent internal implementations remain valid when they satisfy this
-  contract.
-- Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. In that case, state who depends on it and why an equivalent
-  implementation would not satisfy the contract.
+None.
 
 ## Requirements
 
 - **FR1 — The router owns state and URLs; the hosts own the native containers.**
   - The router (`NavigationRoot`, `createStack`, `createTabs`) holds every
-    route, its params, focus, linking and persistence. The hosts hold no route
-    list of their own: the native stack always ends up showing the router's
-    active screens in the router's order, with a push or pop animation where
+    route, its params, focus, linking and persistence. The native stack always
+    ends up showing the router's active screens in the router's order, with a push or pop animation where
     one screen came or went, and a change that arrives during a transition
     shows once the transition ends.
   - The hosts own what the system draws and moves: the native stack and tab
@@ -136,50 +111,46 @@ no navigation host.
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
-  - The hosts are reached only by the router, through the package's internal
-    host entry; an app imports the router, never a host.
+  - The router reaches the hosts through the package's internal host entry; an
+    app imports the router, and the hosts stay internal behind it.
   - Astryx provides this router so that Astryx's header, tab bar and sheets
     work with the native hosts and the gesture layer. An app may navigate with
-    another router instead, such as Expo Router. Astryx components work inside
-    that router's screens, but its navigation and chrome stay its own: the
-    navigation hosts and Astryx's chrome do not apply to it, and this record
-    does not cover it (DEC-6).
-- **FR2 — The AstryxRouter protocol.** One serialisable, revisioned view of a
-  root's routes for host-facing UI.
-  - The host root is the root that host-facing UI names, else the outermost root that mounted first and is still mounted. In
-    every app, a host or none, `getRouterState()` returns the host root's
-    snapshot, or `undefined` while no root is mounted. `subscribeRouterState(listener)` calls the listener with
+    another router instead, such as Expo Router: Astryx components work inside
+    that router's screens, and its navigation and chrome stay its own (DEC-6).
+- **FR2 — The AstryxRouter protocol.** One serialisable view of a root's
+  routes for in-app UI that shows and opens routes.
+  - The default root is the root a caller names, else the outermost root that
+    mounted first and is still mounted. `getRouterState()` returns the default
+    root's snapshot, or `undefined` while no root is mounted. `subscribeRouterState(listener)` calls the listener with
     each new snapshot, after each committed navigation change, and returns an unsubscribe
     function. `useRouterState()` is the hook form: inside a root, that root's;
-    outside, the host root's.
-  - A snapshot holds `revision`, `seq` (one more per published change of its
+    elsewhere, the default root's.
+  - A snapshot holds `features` (FR14), `seq` (one more per published change of its
     root), `routes` (depth first: `key`, `name`, JSON-safe `params`, `path`,
     `presentation`, `focused`, `navigator`, `depth`, `parentKey`),
     `focusedKey`, `focusedPath`, `canGoBack` and `hasLinking`. It is
     immutable plain data.
   - `navigateToPath(pathOrURL)` opens a path or in-app URL through the root's
-    linking and returns true only when the app went somewhere. A URL that is not
-    in-app, matches nothing, or fails the config returns false and is never
-    handed to the system. `canOpenPath(path)` answers whether a path turns into a
-    route and back into the same path; it never navigates.
+    linking and returns true when the app went somewhere. A URL for another
+    app, one that matches nothing, and one that fails the config return false
+    and stay inside the app. `canOpenPath(path)` answers whether a path turns
+    into a route and back into the same path, without navigating.
   - The same four functions exist per root on the root's handle and on
-    `createNavigationRef()`. Host-facing UI reads a root's routes only by
-    calling this protocol; an app's own mount never offers its routes to a
-    host.
-  - A change to the snapshot's shape or meaning, or to the protocol's members,
-    changes `revision` (`RouterStateRevision`).
+    `createNavigationRef()`. In-app UI reads a root's routes by calling this
+    protocol.
+  - The protocol grows by named features (FR14).
 - **FR3 — The stack host.** A native stack container whose children are
   `AstryxStackScreen`s.
   - `canPop` (no active prevent-remove guard), `swipeEnabled` (`canPop` and the
     top screen's `gestureEnabled`), `backEnabled` (`canPop` and no JavaScript
     back consumer) and `popToRootEnabled` (no guard above the root) are
-    published by the router and default to false, so nothing pops natively until
-    the router allows it.
+    published by the router and default to false, so a native pop waits for
+    the router to allow it.
   - The back button and the VoiceOver escape show when the stack is deeper than
     one screen; they pop when `canPop` and otherwise emit `onBackPrevented`.
     The event's `source` is `button` (the back button), `escape` (the VoiceOver
     escape) or `reselect` (a tab re-select refused by `popToRootEnabled`,
-    FR8). A stack's root never shows a back button.
+    FR8).
   - `onWillShow` and `onDidShow` (`animated`) mark a transition's start and
     end. `onGestureCancel` reports a cancelled interactive pop. `onNativePop`
     reports, once per settled transition, every route the system removed (back
@@ -195,10 +166,11 @@ no navigation host.
     `button` (the back button or its menu). Pop start groups backs by input
     kind, so the VoiceOver escape counts as `key`, a back without a gesture or
     a button; `onBackPrevented` keeps `escape` because it names the control the
-    person used. A pop or `onGestureCancel` follows it. It never fires for a pop the router asked for, a prevented back, or a
-    tab re-select. The router passes it to the leaving screen as a navigation
-    event: a handler can start work as the pop begins, and the pop does not
-    wait for it.
+    person used. A pop or `onGestureCancel` follows it. It reports pops the
+    system starts; a pop the router asked for, a prevented back, and a tab
+    re-select each have their own event. The router passes it to the leaving
+    screen as a navigation event: a handler can start work as the pop begins,
+    and the pop runs on at its own pace.
   - `colorScheme` (`unspecified | light | dark`) sets the container's interface
     style, which the system bars' material, buttons and search field follow;
     the router sends the theme's chrome appearance, and `unspecified` follows
@@ -221,11 +193,12 @@ no navigation host.
     below) and TalkBack's back pop only while `backEnabled`, the depth and the
     top screen allow; otherwise React Native's back handling runs, where sheets,
     menus, search fields and the router consume it.
-  - A prevent-remove guard turns `canPop` off before any gesture, so the
-    system never starts a swipe the router would refuse.
+  - A prevent-remove guard turns `canPop` off before any gesture, so every
+    swipe the system starts is one the router accepts.
 - **FR5 — The stack screen carries each screen's chrome.** These are native
   props. The stack options, which a screen declares through the composed
-  `Header` parts, map onto them; their API is outside this record. Where a concept is the same, a prop keeps
+  `Header` parts, map onto them; their API lives in their own records. Where a
+  concept is the same, a prop keeps
   the name and meaning react-native-screens and React Navigation give it:
   compatibility with the ecosystem's option vocabulary is a goal, so an app
   that moves from those libraries reads the same words. Booleans are positive.
@@ -265,8 +238,8 @@ no navigation host.
     hard, hidden) apply to it on iOS 26.
   - Vertical bars (iOS 27.1): `verticalBarBehavior`, `verticalBarCompression`,
     and each item's `axis` and `visibilityPriority` pass the system's own
-    options through. The system keeps items without an icon, and header slots,
-    out of a vertical bar.
+    options through. A vertical bar shows the items that have an icon, and
+    header slots stay in the horizontal bar.
 - **FR6 — The stack screen hosts header search as a system field or a drawn
   row.** The
   native prop `headerSearchBarOptions` (placement, placeholder,
@@ -285,19 +258,19 @@ no navigation host.
   - While the screen is on top, its mode applies to the navigation bar, the
     status bar glyphs (and the Android navigation bar glyphs), the background
     behind the screen, the surfaces the screen presents natively, and the tab
-    bar of the tabs that hold the stack. The tabs host has no prop for it.
+    bar of the tabs that hold the stack.
   - The change happens within the frames of the push or pop transition. During
     an interactive back the top screen's mode stays until the back completes;
     a cancelled back changes nothing.
   - The router exposes this as a per-screen option and draws the screen's own
-    content in the same mode; that option's API is outside this record.
+    content in the same mode; that option's API lives in the router's records.
   - The chrome behaviour is the named feature `AstryxStackScreen.appearance`
     (FR14). On a binary without it, the chrome follows the host's
     `colorScheme`, and the router warns once.
 - **FR8 — The tabs host.** A native tab container whose children are
   `AstryxTabScreen`s and at most one `AstryxTabAccessory`.
   - `selectedRouteKey` names the selected tab. The host selects it only when
-    the value changes, so a tap the router is still answering is not undone.
+    the value changes, so a tap the router is still answering stands.
     A new `selectionNonce` makes the host apply `selectedRouteKey` again.
   - `onTabSelect` reports a tap on a tab, with `reselected` true when the tab
     was already selected. A tab with `tabBarSelectionEnabled: false` stays
@@ -308,7 +281,7 @@ no navigation host.
     `popToRootEnabled` allows (reported by the stack host as `onNativePop`),
     else the stack host emits `onBackPrevented` with `source: 'reselect'`; a
     tab at its root scrolls its scroll view to the top. Under the system tab
-    bar this pop is the host's, not the router's.
+    bar the host performs this pop.
   - `tabBarMinimizeBehavior` (automatic, never, on scroll down, on scroll up;
     from the selected tab's scroll target), `tabBarControllerMode` (automatic,
     tab bar, sidebar), `tabBarHidden`, `tabBarActiveTintColor`,
@@ -320,7 +293,7 @@ no navigation host.
     `tabBarButtonTestID`, `tabBarRole` (`search`), `verticalBarBehavior` and
     `scrollViewNativeID`. A tab whose only child is a stack host uses that
     stack's container as the tab itself, so the back swipe pops only that
-    stack; a stack arriving in the selected tab never replaces or blanks it.
+    stack; a stack arriving in the selected tab keeps it on screen.
   - FR8 gap: on iOS 26, a tab whose content container changes after the tab bar
     is installed has no accessibility identifier from `tabBarButtonTestID`.
 - **FR9 — The tab accessory.** The accessory's content sits above the tab bar.
@@ -344,10 +317,10 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - A pushed screen's first frame is laid out at its real size and insets; the
     event may reach JavaScript one frame after the layout uses the numbers.
   - `safeAreaEdges` pads non-scrolling content natively and the reported insets
-    on those edges are 0, so nothing pads twice.
+    on those edges are 0, so each edge is padded once.
   - The router exposes them as `useScreenInsets()`, `useContentWidth()` and
     `useVerticalBarEdge()`. Every value comes from the system's own
-    measurement of the screen, not from the device or its orientation.
+    measurement of the screen.
 - **FR11 — Threading and motion.** Under `spec:AST-140/FR6`: transitions, back gestures, large-title
   collapse, scroll-edge effects, tab bar minimize and the accessory's placement
   run on the UI thread under the system, with no JavaScript per frame.
@@ -361,8 +334,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
   - The router checks that the hosts are present before it renders through
     them (`spec:AST-140/FR2`). When they are absent (an app that opted out of the default set, or a
     binary without them), a navigator whose rendering resolves to `system` fails at its first
-    render with an error that names the missing capability. It never renders
-    a blank screen.
+    render with an error that names the missing capability.
   - Drawn tabs render without a host. The stack needs its host for transitions
     with either `render` value (OQ1).
 - **FR13 — Accessibility.**
@@ -379,8 +351,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     The drawn search row's motion follows Reduce Motion (it swaps instead of
     moving).
   - After a push or pop, the system container moves VoiceOver and TalkBack
-    focus to the incoming screen as the platform does; the hosts add no focus
-    rule of their own.
+    focus to the incoming screen as the platform does.
 - **FR14 — Named features.**
   - The group's native contracts follow `spec:AST-140/FR5`: each contract's
     baseline is its first release's shape, and behaviour added later is a
@@ -391,10 +362,11 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     `AstryxStackScreen`. On a binary without `pop-start`, a `popStart` listener
     hears no native pop and the router warns once, in development and in
     release builds.
-  - `AstryxRouter` is JavaScript that ships with the router, so the protocol
-    and its callers never differ in version and it has no named features. Its
-    `revision` (FR2) tells a reader, such as a development inspector, which
-    snapshot shape it reads.
+  - `AstryxRouter` ships with the router and grows by named features too,
+    `AstryxRouter.<feature>`: FR2 states its baseline, and each snapshot's
+    `features` lists the named features the router implements, so a reader
+    such as a development inspector checks a feature before it reads what the
+    feature adds.
 - **FR15 — Public platform API, with two named exceptions.** The hosts follow
   `spec:AST-112/FR4` and use the public API of UIKit, the Android SDK, AndroidX
   and Material Components. The group's exceptions are on Android, each with a
@@ -466,7 +438,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 | Contract | Verification                                                                                                                                                                                             | Representative states                                                                                  | Mutation or failure expectation                                                                                  |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | FR1      | Router unit tests over the `./testing` host doubles; Simulator and emulator push, pop, replace and reset                                                                                                 | a push during a transition; a reset; a native pop of two routes                                        | The host keeps a route the router removed, or a native pop reaches the router as more than one action            |
-| FR2      | Unit tests of the snapshot, its shape fingerprint, and each declared consumer's reads                                                                                                                    | no root; nested roots; a URL the config fails on; an unchanged commit                                  | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
+| FR2      | Unit tests of the snapshot, its `features` list, and each declared consumer's reads                                                                                                                      | no root; nested roots; a URL the config fails on; an unchanged commit                                  | A snapshot leaks a store object, publishes without a commit, or a failed URL goes to the system                  |
 | FR3      | Simulator and emulator checks of each event                                                                                                                                                              | depth 1 and 2; `canPop` false; a cancelled swipe; a back button pop; a router pop                      | The back button shows at depth 1, a pop happens while `canPop` is false, or `onPopStart` fires for a router pop  |
 | FR4      | Simulator swipe checks (edge, content, full width) and emulator predictive back checks; unit tests of the gating                                                                                         | a guarded screen; a horizontal scroller; three-button navigation; TalkBack back                        | A swipe starts on a guarded screen, or system back pops while a sheet consumes back                              |
 | FR5      | Simulator and emulator captures per option                                                                                                                                                               | each bar item kind; menus; header slots; large title collapse; scroll edge effects                     | An option changes nothing where this record says it is honored, or a header slot's press region is not the bar's |
@@ -478,7 +450,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 | FR11     | UI-thread frame checks during transitions, swipes, large-title collapse and the drawn search row                                                                                                         | a push; an interactive back; a scroll under a large title                                              | Any JavaScript work per frame during these motions                                                               |
 | FR12     | Unit tests through the `./testing` doubles with the hosts absent; a built app with the default capability set                                                                                            | hosts absent; drawn tabs                                                                               | A blank screen, a silent fallback, or an error that does not name the capability                                 |
 | FR13     | VoiceOver and TalkBack checks on the Simulator, the emulator and a device; largest Dynamic Type captures                                                                                                 | the escape gesture; a tab long press; a badge; Reduce Motion                                           | The escape pops while `canPop` is false, or a badge is not read                                                  |
-| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `revision` changes with its shape                              | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A contract whose baseline changes, or a feature used without the check                                           |
+| FR14     | The platform's spec rules check; unit tests of the feature checks with older and current binary shapes; a test that the router protocol's `features` lists what it implements                            | a binary without `AstryxStackHost.pop-start` or `AstryxStackScreen.appearance`                         | A contract whose baseline changes, or a feature used without the check                                           |
 | FR15     | Source check of the native code for non-public members; unit tests that the two Android bridges' members exist in the resolved AndroidX and Material versions; emulator checks with each bridge disabled | a resolved AndroidX or Material version without the member                                             | A non-public member outside the two named exceptions, or a missing member that crashes instead of falling back   |
 
 ## Decision log
@@ -491,10 +463,8 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 The router is the one source of truth for routes, focus and URLs, so linking,
 persistence and the inspector read one state. The hosts apply the
 router's list, own everything the system moves, and report each native change
-as one event the router applies as one action.
-
-Rejected: hosts that keep their own route list, because two lists drift during
-gestures and transitions.
+as one event the router applies as one action, so the one list stays exact through gestures
+and transitions.
 
 ### DEC-2 — Back is gated before a gesture starts
 
@@ -502,12 +472,9 @@ gestures and transitions.
 **Decider:** imdreamrunner, 2026-11-17
 
 The router publishes `canPop`, `swipeEnabled`, `backEnabled` and
-`popToRootEnabled` ahead of time, all false by default, so the system never
-starts a swipe or predictive back that the router would refuse, and the gesture
-stays on the UI thread.
-
-Rejected: cancelling a started gesture from JavaScript, because it needs a
-round trip mid-gesture.
+`popToRootEnabled` ahead of time, all false by default, so every swipe or predictive back the system starts is
+one the router accepts, and the gesture
+stays on the UI thread with no round trip mid-gesture.
 
 ### DEC-3 — Removed routes stay mounted until the host dismisses them
 
@@ -516,8 +483,8 @@ round trip mid-gesture.
 
 A route the router removes keeps its content drawn with `active: false` until
 `onScreenDismissed`, and a native pop reaches the router once, after the
-transition settles. The person never sees a blank screen sliding away, and the
-router never sees a half-finished pop.
+transition settles. The person sees the screen's content for the whole pop, and
+the router hears each pop once it has finished.
 
 ### DEC-4 — Tab re-select and per-screen appearance are native
 
@@ -528,7 +495,7 @@ A system tab re-select pops the tab's stack through the stack host's own guard,
 and a screen's appearance changes the chrome inside the system's transition
 frames. Both follow the system's timing exactly, which JavaScript cannot match.
 
-### DEC-5 — Pop start is a notification, not a hold
+### DEC-5 — Pop start is a notification
 
 **Reference:** `spec:AST-125/DEC-5`
 **Decider:** imdreamrunner, 2026-11-17
@@ -545,10 +512,8 @@ off the predictive back scrub.
 Astryx's header, tab bar and sheets need a router that drives the native hosts
 and the gesture layer, so Astryx provides one. An app that navigates with
 another router keeps it: Astryx components render inside its screens, and its
-navigation and chrome stay that router's.
-
-Rejected: requiring the Astryx router for every Astryx component, because an
-app could not adopt the components without replacing its navigation.
+navigation and chrome stay that router's, so an app adopts the components and
+keeps its navigation.
 
 ## Open questions
 
@@ -557,8 +522,8 @@ app could not adopt the components without replacing its navigation.
   JavaScript stack with drawn transitions, at the cost of a second gesture and
   transition path to keep in step with the native one.
 - **OQ2 — Does the AstryxRouter protocol stay in this group?**
-  (`human-design`) The router provides it, and no other Astryx component
-  reads it; its readers are apps' host-facing UI and the inspector. Options: keep it here beside the hosts it describes; or move it to the
+  (`human-design`) The router provides it; its readers are apps' in-app UI
+  and the inspector. Options: keep it here beside the hosts it describes; or move it to the
   router's own record.
 - **OQ3 — Does the Android stack screen host a bottom toolbar?**
   (`human-design`) On Android, `toolbarItems`, `toolbarShown` and
