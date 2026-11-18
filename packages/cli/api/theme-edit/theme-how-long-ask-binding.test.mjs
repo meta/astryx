@@ -138,10 +138,118 @@ const ROWS = [
     },
   ],
   [
+    "a labelled look reads each label as its dial, its value as that dial's word",
+    {
+      q: 'Bulma — Type: system sans 16px, 1.5 leading. Density: roomy. Surface: flat, soft shadows on cards. Edges: 6px corners, 1px #dbdbdb borders. Feel: border darkens on hover. Color: turquoise #00d1b2 primary, blue #485fc7 links.',
+      has: [
+        'font system',
+        'text-size 16',
+        '--text-body-leading 1.5',
+        'spacing roomy',
+        'surfaces flat',
+        'corners 6px',
+      ],
+    },
+  ],
+  [
+    "a labelled look: a dial value after its label, a color before a part's variant",
+    {
+      q: 'Primer — Type: system sans 14px, 1.5 leading. Density: medium. Surface: flat, subtle shadow only on overlays. Edges: 6px corners, 1px #d0d7de borders. Feel: light gray fill on hover, darker on press. Color: green #1f883d primary buttons, blue #0969da links, neutral grays.',
+      has: ['font system', 'text-size 14', 'spacing medium', 'corners 6px'],
+      never: /spacing more/,
+    },
+  ],
+  [
+    'two clashes are each offered as a choice',
+    {
+      q: '8px corners on cards, 2px corners on cards, compact tables, roomy tables, a teal accent',
+      says: /contradict each other[\s\S]*contradict each other(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    'a whole-theme color takes its typed value whatever word comes with it',
+    {q: 'navy #000080 everywhere', has: ["accent '#000080'"]},
+  ],
+  [
+    'a bare size beside a font family is the text size',
+    {
+      q: '16px, Inter font',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*not used: "16px")/,
+    },
+  ],
+  [
+    "title bars said of dialogs are the dialogs', never the app's top bar",
+    {q: 'navy title bars on dialogs', never: /--on app-shell-header/},
+  ],
+  [
+    "a modal window's title bars are the modal's",
+    {q: 'modal window title bars navy', never: /--on app-shell-header/},
+  ],
+  [
+    'a bare size beside a leading said in words is the text size',
+    {
+      q: '16px, tight leading',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*contradict)/,
+    },
+  ],
+  [
+    'a bare size beside tracking said in words is the text size',
+    {
+      q: '16px, tight tracking',
+      has: ['text-size 16'],
+      says: /^(?![\s\S]*not used: "16px")/,
+    },
+  ],
+  [
+    "a dialog's title bar is the dialog's, never the app's top bar",
+    {q: 'dialog title bar #eeeeee background', never: /--on app-shell-header/},
+  ],
+  [
+    'a bare size beside a leading is the text size, never a second leading',
+    {
+      q: '16px, 1.5 leading',
+      has: ['text-size 16', '--text-body-leading 1.5'],
+      says: /^(?![\s\S]*contradict)/,
+    },
+  ],
+  [
+    'a clash holds back only its own pair; the rest is answered',
+    {
+      q: '8px corners on cards, compact tables, a teal accent, 2px corners on cards',
+      has: ['spacing less --on table-row', "accent '#0d9488'"],
+      says: /contradict each other/,
+    },
+  ],
+  [
+    "a decimal after a look's name is one value",
+    {
+      q: 'Windows 98 look: silver #c0c0c0 everywhere, 1.5 leading, square corners, bevelled buttons',
+      has: ['--text-body-leading 1.5', "neutral '#c0c0c0'"],
+      never: /line-height 5|^accent '#c0c0c0'/,
+      says: /^(?![\s\S]*not taken: [^\n]*"everywhere")/,
+    },
+  ],
+  [
+    'a color for the whole theme keeps the mode said with it',
+    {
+      q: 'red everywhere in dark mode',
+      has: ["--color-accent '#dc2626' --mode dark"],
+      never: /^accent '#dc2626'|^--color-accent '#dc2626'$/,
+    },
+  ],
+  [
+    'white for the whole theme is its page',
+    {q: 'white everywhere', has: ["--color-background-body '#ffffff'"]},
+  ],
+  [
     "a look's name before its colon is the theme's look, never an unknown part",
     {
       q: 'neon synthwave: deep purple night background, hot pink accent #ff69b4, cyan accent, a glow',
-      has: ["accent '#ff69b4'"],
+      // (The two accents clash: offered as a choice; the rest is answered.)
+      has: ["--color-background-body '#230d47' --mode dark"],
+      says: /accent #ff69b4 and accent #0891b2/,
     },
   ],
   [
@@ -478,9 +586,12 @@ const ROWS = [
     'a tinted glass is a tint, in the whole answer too',
     {
       // (A soft blue said as a tint is a pale wash of it, as main reads
-      // it; the tint reading is in the follow-up #13044.)
+      // it; the tint reading is in the follow-up #13044. It clashes with
+      // the white content, so that pair is offered as its own choice and
+      // the rest of the ask is written.)
       q: 'translucent glassy window frames, soft blue-tinted glass, white content',
-      has: ["background-color '#eff6ff' --on containers --mode light"],
+      has: ['surfaces glass'],
+      says: /#eff6ff/,
       never: /'#2563eb'/,
     },
   ],
