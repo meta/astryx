@@ -197,11 +197,12 @@ Dialog and DropdownMenu.
 
 ### Accessibility
 
-- **AR1 — Focus leaves a surface that loses its anchor.** When FR6 hides an
-  open popover while focus is inside it, focus moves to the trigger, else
-  through FR20's chain. When the surface shows again, focus is not moved
-  back. No other hide strands focus: a layer never hides for an anchor that
-  is out of view while focus is inside it (`spec:AST-059` FR5).
+- **AR1 — Focus leaves a surface that loses its anchor.** When FR6, or
+  `spec:AST-059` FR5 for an anchor that generates no box, hides an open
+  popover while focus is inside it, focus moves to the trigger, else through
+  FR20's chain. When the surface shows again, focus is not moved back. No
+  other hide strands focus: a layer never hides for a clipped anchor while
+  focus is inside it (`spec:AST-059` FR5).
 - **AR2 — A separate anchor is named in the surface.** The anchor carries no
   ARIA attribute (FR1), so a popover whose anchor is separate states what it
   points at in its accessible name or description, from its `dialogLabel` or
@@ -299,9 +300,10 @@ Dialog and DropdownMenu.
   Popover inside a Dialog, in the page and in an iframe, name the modal or
   focus-holding Popover. Its `FR2 and FR3 gap:` line cites the
   FR15 gap.
-- Tooltip and BaseTypeahead keep their `anchorRef` as a ref to an
-  `HTMLElement`. `usePopover`'s is a ref to an `Element` (FR2), and the same
-  type on the other two is a non-breaking widening.
+- Tooltip, BaseTypeahead and Popover each take `anchorRef` as a ref to an
+  `HTMLElement`. `usePopover`'s is a ref to an `Element` (FR2). This record
+  does not change the other three; a ref to an `Element` there would accept
+  every ref they accept today (`spec:AST-017` FR5).
 - Consumer docs: `usePopover.doc.mjs` documents `anchorRef`;
   `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
   `DropdownMenu.doc.mjs` document `isModal`'s meaning and that focus return has
@@ -348,7 +350,7 @@ AR4 gap: a dialog popover opened from code is not announced.
 | FR19       | Menu-to-Dialog suite in jsdom and real Chromium                       | A menu row opens a Dialog; the Dialog closes; nested popovers                                                                                                                                                                                                                      | Focus on the body or on the removed row fails                                                                                                                                       |
 | FR20, FR21 | `focusReturn.test.ts` and a real-browser spec                         | Each candidate missing in turn: a tour opened by code, a remounted filter button, a removed opener, no candidate left                                                                                                                                                              | A candidate skipped out of order, a hidden or closing candidate chosen, focus on the body, or no warning fails                                                                      |
 | FR22       | Existing Popover, Dialog, DropdownMenu and Popover-family suites      | Every released state except FR22's three named changes                                                                                                                                                                                                                             | Any other changed expectation in an existing suite fails                                                                                                                            |
-| AR1        | Real-browser interaction spec                                         | Focus inside a surface whose anchor leaves the document, with a trigger and with none                                                                                                                                                                                              | Focus left in a hidden surface, or moved back when it shows, fails                                                                                                                  |
+| AR1        | Real-browser interaction spec                                         | Focus inside a surface whose anchor leaves the document, or is set to `display: none`, with a trigger and with none                                                                                                                                                                | Focus left in a hidden surface, or moved back when it shows, fails                                                                                                                  |
 | AR2–AR4    | `Popover.test.tsx` accessibility suite                                | A trigger-less popover with a separate anchor; a fallback without a tab stop; a popover opened by code                                                                                                                                                                             | An ARIA attribute on the anchor, a tab stop left behind, or an unannounced code-opened popover fails                                                                                |
 
 ## Decision log
