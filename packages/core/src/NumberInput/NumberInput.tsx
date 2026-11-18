@@ -38,7 +38,6 @@ import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
-  sizeVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
@@ -63,7 +62,10 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {inputRowSizeStyles} from '../Field/inputStyles.stylex';
+import {
+  inputRowSizeStyles,
+  inputRowStepperSizeStyles,
+} from '../Field/inputStyles.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -210,42 +212,6 @@ const styles = stylex.create({
 });
 
 const sizeStyles = inputRowSizeStyles;
-
-// The stepper icons' size (Icon `xsm`). They grow with the text, so at a
-// larger text size their column, two icons and the divider between them, can
-// be taller than the text line; the row then takes the column's height so
-// the icons are not cut. Steppers are hidden under a coarse pointer, where
-// the row is the plain field row.
-const STEPPER_ICON_SIZE = '0.75rem';
-const stepperRowSizeStyles = stylex.create({
-  sm: {
-    height: {
-      default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        default: `max(${sizeVars['--size-element-sm']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-sm']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-  md: {
-    height: {
-      default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        default: `max(${sizeVars['--size-element-md']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-md']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-  lg: {
-    height: {
-      default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}), calc(2 * ${STEPPER_ICON_SIZE} + ${borderVars['--border-width']} + 2 * ${borderVars['--border-width']}))`,
-      '@media (pointer: coarse)': {
-        default: `max(${sizeVars['--size-element-lg']}, calc(${typeScaleVars['--text-body-size']} * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-        '@supports (-webkit-touch-callout: none)': `max(${sizeVars['--size-element-lg']}, calc(max(1rem, ${typeScaleVars['--text-body-size']}) * ${typeScaleVars['--text-body-leading']} + 2 * ${borderVars['--border-width']}))`,
-      },
-    },
-  },
-});
 
 export type NumberInputSize = keyof typeof sizeStyles;
 
@@ -1419,7 +1385,7 @@ export function NumberInput({
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
-          hasNumberSteppers && stepperRowSizeStyles[size],
+          hasNumberSteppers && inputRowStepperSizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
           fieldStatus && inputStatusBorderStyles[fieldStatus.type],
