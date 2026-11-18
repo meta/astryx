@@ -178,9 +178,10 @@ export function AvatarGroupOverflow({
   // `total - visibleCount`, which goes negative whenever the list is shorter
   // than the slice. Clamping keeps that from rendering "+-3".
   const safeCount = Math.max(0, count);
-  // A caller's aria-label names the indicator; the count is the fallback.
+  // A caller's non-empty aria-label names the indicator; the count is the
+  // fallback. A caller's aria-labelledby wins over both in the browser.
   const label =
-    ariaLabel ?? t('@astryx.avatarGroup.overflow', {count: safeCount});
+    ariaLabel || t('@astryx.avatarGroup.overflow', {count: safeCount});
   const content = children ?? `+${safeCount}`;
 
   if (onClick) {

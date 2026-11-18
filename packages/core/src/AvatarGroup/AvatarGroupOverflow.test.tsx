@@ -301,6 +301,36 @@ describe('AvatarGroupOverflow', () => {
       expect(screen.getByLabelText('Everyone else')).toHaveTextContent('+5');
     });
 
+    it("is a caller's aria-labelledby when an aria-label is also set", () => {
+      render(
+        <>
+          <span id="overflow-both">Everyone else</span>
+          <AvatarGroup>
+            <Avatar name="Alice" />
+            <AvatarGroupOverflow
+              count={5}
+              onClick={onClick}
+              aria-label="Show 5 more teammates"
+              aria-labelledby="overflow-both"
+            />
+          </AvatarGroup>
+        </>,
+      );
+
+      expect(screen.getByLabelText('Everyone else')).toHaveTextContent('+5');
+    });
+
+    it('is the count when the caller aria-label is empty', () => {
+      render(
+        <AvatarGroup>
+          <Avatar name="Alice" />
+          <AvatarGroupOverflow count={5} onClick={onClick} aria-label="" />
+        </AvatarGroup>,
+      );
+
+      expect(screen.getByLabelText('5 more')).toHaveTextContent('+5');
+    });
+
     it('is the localized count without either', () => {
       render(
         <InternationalizationProvider
