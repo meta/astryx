@@ -495,6 +495,128 @@ export default function Notice() {
     dom.window.close();
   }, 120_000);
 
+  it('keeps showing an image the page names by a path from the site root once the script draws the page', async () => {
+    put(
+      'site/public/pics/shoe.png',
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    put(
+      'site/src/shoe.tsx',
+      `const shoe = {src: '/pics/shoe.png'};
+export default function Page() {
+  return <main><img src={shoe.src} alt="Shoe" /></main>;
+}
+`,
+    );
+    await render('site/src/shoe.tsx', {cwd: dir, out: 'shoe.html'});
+    const dom = new JSDOM(read('shoe.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const doc = dom.window.document;
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Shoe"]`)?.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+    expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('/pics/shoe.png');
+    dom.window.close();
+  }, 120_000);
+
+  it('carries an image the page draws only after a click, and shows it then from the carried data', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    put('drawn-later/public/pics/later.png', png);
+    put('drawn-later/src/near.png', png);
+    put(
+      'drawn-later/src/later.tsx',
+      `import {useState} from 'react';
+const photos = ['/pics/later.png', './near.png'];
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <button type="button" onClick={() => setOpen(true)}>Show</button>
+      {open && photos.map(src => <img key={src} src={src} alt={src} />)}
+    </main>
+  );
+}
+`,
+    );
+    const rendered = /** @type {any} */ (
+      await render('drawn-later/src/later.tsx', {cwd: dir, out: 'drawn-later.html'})
+    );
+    expect(rendered.data.files).toEqual(
+      expect.arrayContaining(['public/pics/later.png', 'src/near.png']),
+    );
+    const dom = new JSDOM(read('drawn-later.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await settle();
+    const doc = dom.window.document;
+    expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await settle();
+    const srcs = [...doc.querySelectorAll(`#${ROOT_ID} img`)].map(img => img.getAttribute('src'));
+    expect(srcs).toHaveLength(2);
+    for (const src of srcs) expect(src).toMatch(/^data:image\/png;base64,/);
+    dom.window.close();
+    const back = /** @type {any} */ (
+      await render('drawn-later.html', {cwd: dir, reverse: true, out: 'drawn-later-back/src/later.tsx'})
+    );
+    expect(back.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'drawn-later-back/public/pics/later.png'))).toEqual(png);
+    expect(fs.readFileSync(path.join(dir, 'drawn-later-back/src/near.png'))).toEqual(png);
+  }, 120_000);
+
+  it('shows the file a relative string names from the page, also when modules in two folders each name one', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    // Three different files with the same name: the same image bytes, each with its own trailing byte.
+    const own = (/** @type {number} */ n) => Buffer.concat([png, Buffer.from([n])]);
+    put('two-folders/a/photo.png', own(1));
+    put('two-folders/b/photo.png', own(2));
+    put('two-folders/photo.png', own(3));
+    const card = (/** @type {string} */ name) => `export function ${name}() {\n  return <img src="./photo.png" alt="${name}" />;\n}\n`;
+    put('two-folders/a/CardA.tsx', card('CardA'));
+    put('two-folders/b/CardB.tsx', card('CardB'));
+    put(
+      'two-folders/page.tsx',
+      `import {useState} from 'react';
+import {CardA} from './a/CardA';
+import {CardB} from './b/CardB';
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <><CardA /><CardB /></>}</main>;
+}
+`,
+    );
+    await render('two-folders/page.tsx', {cwd: dir, out: 'two-folders.html'});
+    const dom = new JSDOM(read('two-folders.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await settle();
+    const doc = dom.window.document;
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await settle();
+    // In a browser both strings name the page folder's photo.png, so both show it.
+    const page = `data:image/png;base64,${own(3).toString('base64')}`;
+    for (const alt of ['CardA', 'CardB']) {
+      expect(doc.querySelector(`#${ROOT_ID} img[alt="${alt}"]`)?.getAttribute('src')).toBe(page);
+    }
+    dom.window.close();
+    // Each module's own photo.png is still carried, so a restore lays it out beside the module.
+    const back = /** @type {any} */ (await render('two-folders.html', {cwd: dir, reverse: true, out: 'two-folders-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'two-folders-back/a/photo.png'))).toEqual(own(1));
+    expect(fs.readFileSync(path.join(dir, 'two-folders-back/b/photo.png'))).toEqual(own(2));
+  }, 120_000);
+
   it("keeps the first paint when the page's script throws", async () => {
     put(
       'src/throws.tsx',
