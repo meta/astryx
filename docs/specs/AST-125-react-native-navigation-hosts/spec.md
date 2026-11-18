@@ -23,7 +23,7 @@ affects_consumer_docs: []
 ## Intent
 
 A developer builds an app with screens that push and pop, tabs, headers, and
-search, and the person using it gets the platform's own navigation: the iOS
+search, and the person using it can get the platform's own navigation: the iOS
 navigation bar with its large title, back swipes and Liquid Glass, the iOS tab
 bar with its minimize and bottom accessory, and on Android a Material 3 app bar,
 a navigation bar or rail, and predictive back. The developer writes this once,
@@ -51,9 +51,9 @@ it build its own:
   give way to Astryx's own chrome. A stack container whose built-in UI and
   gestures the library cannot own allows neither.
 - **Header slot.** No gap of its own: it exists because the stack screen does.
-- **Search and large title.** One option set covers the system search field on
-  iOS and the router's drawn row elsewhere, with one set of insets, and the
-  large title collapses with the scroll view the library names.
+- **Search and large title.** One option set covers the system search field and
+  a drawn search row, with one set of insets, and the large title collapses
+  with the scroll view the library names.
 - **Tabs host, tab screen and tab accessory.** The tab bar's minimize, the iOS
   26 bottom accessory, re-select through the stack's own guard, and a Material
   bar or rail follow Astryx's theme and insets and work with Astryx's stack
@@ -63,7 +63,7 @@ it build its own:
   starts.
 - **Router protocol.** Host-facing UI, such as a development inspector or an
   address bar, reads one serialisable snapshot and opens paths through the
-  app's own linking. Whether it belongs in this group is OQ3.
+  app's own linking. Whether it belongs in this group is OQ2.
 
 Astryx takes no third-party native navigation dependency, and an app may use
 react-native-screens, react-native-gesture-handler or another router beside
@@ -93,7 +93,10 @@ no navigation host.
   native sheets; a stack's modal routes reach it, not the stack host.
 - Safe-area measurement outside navigation: the core's safe-area provider owns
   window insets; the hosts report screen insets only.
-- How an app chooses system or drawn chrome (OQ1).
+- How headers, tab bars and header search render, system or drawn, and which
+  rendering is the default: the header and tab bar components decide it in
+  their own component records, and Android's header search rendering is the
+  `Header` component's decision. The hosts host either rendering (FR1).
 - Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
   they conform to this record's contracts.
 - The API of the stack and tab options, the `Header` component's parts and
@@ -121,6 +124,10 @@ no navigation host.
     containers, transitions, back gestures, bars, large titles, search fields,
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
     scroll-edge and bar behaviour, and the insets they report.
+  - The header and tab bar components decide their own rendering, system or
+    drawn, in their own component records. The hosts host either rendering:
+    the stack host carries a screen with the system bar or with a header the
+    component draws, and a drawn tab bar renders without the tabs host (FR12).
   - A native change reaches the router as an event, which the router applies as
     one action. Every event carries the router's `navigatorKey` and, where it
     concerns a route, its `routeKey`.
@@ -252,15 +259,16 @@ no navigation host.
     and each item's `axis` and `visibilityPriority` pass the system's own
     options through. The system keeps items without an icon, and header slots,
     out of a vertical bar.
-- **FR6 — Header search is a system field or a row the router draws.** The
+- **FR6 — The stack screen hosts header search as a system field or a drawn
+  row.** The
   native prop `headerSearchBarOptions` (placement, placeholder,
   capitalization, hiding on scroll, dimming, controlled `text` with
   `textRevision`, the Cancel title, autofocus, scopes) configures the system
   search field on iOS, which reports through `onSearchChange`,
   `onSearchFocus`, `onSearchBlur`, `onSearchCancel`, `onSearchButtonPress` and
-  `onScopeChange`. Where the system field is not used (Android, drawn chrome),
-  the router draws its own search row, and three members of the screen support
-  it: `searchActive` hides the bar while the row is edited, `searchRowInset`
+  `onScopeChange`. Where the `Header` component draws its own search row
+  instead (how header search renders, Android included, is that component's
+  decision), three members of the screen support it: `searchActive` hides the bar while the row is edited, `searchRowInset`
   adds the row's height to the screen's top safe area, and `onBarEdge` reports
   the bar's bottom edge to a native-driver binding.
 - **FR7 — A stack screen may take its own appearance.** The native prop
@@ -348,7 +356,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     render with an error that names the missing capability. It never renders
     a blank screen.
   - Drawn tabs render without a host. The stack needs its host for transitions
-    in both chrome modes (OQ2).
+    in both chrome modes (OQ1).
 - **FR13 — Accessibility.**
   - The system bars, back buttons, tab items and menus keep the platform's own
     VoiceOver and TalkBack behaviour, including UIKit's Large Content Viewer
@@ -411,15 +419,15 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 
 ### Platform support
 
-| Contract           | iOS                                                                                                                                                                                                                                                        | Android                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AstryxStackHost    | UINavigationController; the edge swipe, the iOS 26 content pop, a full-width swipe below iOS 26                                                                                                                                                            | An AndroidX FragmentManager back stack; predictive back with Material's shared-axis transition or the shrink preview                                                                                                                                                                                                                                                                                                                                |
-| AstryxStackScreen  | A view controller with its navigation item: bar button items, UIMenu, title menu (iOS 16+), subtitles (iOS 26), toolbar, UISearchController, scroll edge effects (iOS 26), vertical bars (iOS 27.1); ignores `backPreview` and the scrolled header colours | A fragment with a Material 3 top app bar (small, in-row, or medium collapsing); bar items, menus, header slots. No bottom toolbar (`toolbarItems`, `toolbarShown` and `toolbarHidesOnScroll` are no-ops); search is the library's drawn row, not a Material search bar. Other no-ops: back title and its menu, `headerLargeSubtitle`, scroll-edge effects, `fullScreenGestureEnabled`, `statusBarAnimation`, `autoHideHomeIndicator`, vertical bars |
-| AstryxHeaderSlot   | The navigation item's title view and custom bar button views                                                                                                                                                                                               | Views placed in the Material app bar's start, title and end areas                                                                                                                                                                                                                                                                                                                                                                                   |
-| AstryxTabsHost     | UITabBarController; UITab and UISearchTab (iOS 18+), the iPad sidebar (iOS 18+), minimize (iOS 26); ignores `tabBarBackgroundColor` and `tabBarActiveIndicatorColor`                                                                                       | Material 3 NavigationBarView below 600dp, NavigationRailView at 600dp and above; a More list beyond five destinations on the bar (seven on the rail). No-ops: `tabBarRole: 'search'`, `tabBarMinimizeBehavior: 'automatic'` (never)                                                                                                                                                                                                                 |
-| AstryxTabScreen    | A UITab or a UITabBarItem with badge colours                                                                                                                                                                                                               | A Material destination with a BadgeDrawable                                                                                                                                                                                                                                                                                                                                                                                                         |
-| AstryxTabAccessory | UITabAccessory (iOS 26); a docked view below iOS 26                                                                                                                                                                                                        | A docked view above the bar; placement is always `expanded`; `isChromeHidden` is a no-op                                                                                                                                                                                                                                                                                                                                                            |
-| AstryxRouter       | JavaScript                                                                                                                                                                                                                                                 | JavaScript                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Contract           | iOS                                                                                                                                                                                                                                                        | Android                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AstryxStackHost    | UINavigationController; the edge swipe, the iOS 26 content pop, a full-width swipe below iOS 26                                                                                                                                                            | An AndroidX FragmentManager back stack; predictive back with Material's shared-axis transition or the shrink preview                                                                                                                                                                                                                                                                                                                                                                                          |
+| AstryxStackScreen  | A view controller with its navigation item: bar button items, UIMenu, title menu (iOS 16+), subtitles (iOS 26), toolbar, UISearchController, scroll edge effects (iOS 26), vertical bars (iOS 27.1); ignores `backPreview` and the scrolled header colours | A fragment with a Material 3 top app bar (small, in-row, or medium collapsing); bar items, menus, header slots. No bottom toolbar (`toolbarItems`, `toolbarShown` and `toolbarHidesOnScroll` are no-ops); no native search field (`headerSearchBarOptions` is a no-op; the `Header` component decides how header search renders). Other no-ops: back title and its menu, `headerLargeSubtitle`, scroll-edge effects, `fullScreenGestureEnabled`, `statusBarAnimation`, `autoHideHomeIndicator`, vertical bars |
+| AstryxHeaderSlot   | The navigation item's title view and custom bar button views                                                                                                                                                                                               | Views placed in the Material app bar's start, title and end areas                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| AstryxTabsHost     | UITabBarController; UITab and UISearchTab (iOS 18+), the iPad sidebar (iOS 18+), minimize (iOS 26); ignores `tabBarBackgroundColor` and `tabBarActiveIndicatorColor`                                                                                       | Material 3 NavigationBarView below 600dp, NavigationRailView at 600dp and above; a More list beyond five destinations on the bar (seven on the rail). No-ops: `tabBarRole: 'search'`, `tabBarMinimizeBehavior: 'automatic'` (never)                                                                                                                                                                                                                                                                           |
+| AstryxTabScreen    | A UITab or a UITabBarItem with badge colours                                                                                                                                                                                                               | A Material destination with a BadgeDrawable                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| AstryxTabAccessory | UITabAccessory (iOS 26); a docked view below iOS 26                                                                                                                                                                                                        | A docked view above the bar; placement is always `expanded`; `isChromeHidden` is a no-op                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| AstryxRouter       | JavaScript                                                                                                                                                                                                                                                 | JavaScript                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 - Supported feature/engine floor: `spec:AST-112`'s floor (iOS at React
   Native's minimum, Android API level 24, the New Architecture only). Features
@@ -535,19 +543,15 @@ app could not adopt the components without replacing its navigation.
 
 ## Open questions
 
-- **OQ1 — How does an app choose system or drawn navigation chrome?**
-  (`human-api`) The hosts serve both; the choice's API shape (per navigator, per
-  theme, or one axis across components) is not settled.
-- **OQ2 — Does the stack draw its own transitions when its host is absent?**
+- **OQ1 — Does the stack draw its own transitions when its host is absent?**
   (`human-design`) Options: fail loudly and name the capability (FR12); or a
   JavaScript stack with drawn transitions, at the cost of a second gesture and
   transition path to keep in step with the native one.
-- **OQ3 — Does the AstryxRouter protocol stay in this group?**
+- **OQ2 — Does the AstryxRouter protocol stay in this group?**
   (`human-design`) The router provides it, and no other Astryx component
   reads it; its readers are apps' host-facing UI and the inspector. Options: keep it here beside the hosts it describes; or move it to the
   router's own record.
-- **OQ4 — Does Android get a Material search bar and a bottom toolbar?**
-  (`human-design`) Android draws header search as the library's row and has no
-  bottom toolbar. Options: map `headerSearchBarOptions` onto Material's search
-  bar and `toolbarItems` onto a Material bottom app bar; or keep the drawn row
-  and document the toolbar options as iOS-only.
+- **OQ3 — Does the Android stack screen host a bottom toolbar?**
+  (`human-design`) On Android, `toolbarItems`, `toolbarShown` and
+  `toolbarHidesOnScroll` are no-ops. Options: map them onto a Material bottom
+  app bar; or document the toolbar options as iOS-only.
