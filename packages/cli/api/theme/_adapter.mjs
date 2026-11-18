@@ -2210,13 +2210,7 @@ function undoSharedTheme(projectDir, slug, remaining) {
   fs.rmSync(path.join(dir, SHARED_RECEIPT), {force: true});
   removeEmptyFolder(dir, {deep: true});
   const root = path.join(projectDir, LOCAL_THEME_ROOT);
-  if (receipt.madeRoot) {
-    try {
-      if (fs.readdirSync(root).length === 0) fs.rmdirSync(root);
-    } catch {
-      // Left as it is.
-    }
-  }
+  if (receipt.madeRoot) removeEmptyFolder(root);
   // A package a theme still in the record is owned by or imports stays,
   // and so does one the generated module or another local theme imports.
   /** @type {Set<string>} */
