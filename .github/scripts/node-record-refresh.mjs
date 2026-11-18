@@ -28,7 +28,11 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {nodeLegFiles, readDurations} from '../../scripts/vitest-node-legs.mjs';
-import {recordDurations} from '../../scripts/vitest-shard-sequencer.mjs';
+import {
+  countedTestFiles,
+  nodeLegLogs,
+  recordDurations,
+} from '../../scripts/vitest-shard-sequencer.mjs';
 import {MARGIN_S, drifted} from './node-time-drift.mjs';
 
 /** The least share of Node test files the record must time: nine in ten. */
@@ -42,12 +46,6 @@ export const DRIFT_MARGIN_S = MARGIN_S;
 /** The one branch, and so the one pull request, that carries a refresh. */
 export const BRANCH = 'ci/node-durations-refresh';
 export const TITLE = 'ci: refresh the recorded Node test times';
-
-/** A test file's line in Vitest's default reporter, with its result mark. */
-const REPORTED_FILE =
-  /[✓❯×↓]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(/g;
-/** A Main run's Node leg, as its log names each line's job. */
-const NODE_LEG_JOB = /^test-node \(\d+\)$/;
 
 /**
  * How much of the Node project the record times.
@@ -78,15 +76,9 @@ export function coverage(nodeFiles, recorded) {
  * @returns {{file: string, recorded: number, measured: number}[]}
  */
 export function driftedEntries(log, recorded) {
-  /** @type {Map<string, string[]>} */
-  const legs = new Map();
-  for (const line of log.split('\n')) {
-    const job = line.split('\t')[0];
-    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
-  }
-  return [...legs.values()]
-    .flatMap(lines =>
-      drifted(recordDurations(lines.join('\n')), recorded, [], {
+  return [...nodeLegLogs(log).values()]
+    .flatMap(text =>
+      drifted(recordDurations(text), recorded, [], {
         all: true,
         margin: DRIFT_MARGIN_S,
       }),
@@ -100,7 +92,7 @@ export function driftedEntries(log, recorded) {
 }
 
 /**
- * The Node legs whose log does not name every test file Vitest counted:
+ * The Node legs whose log does not time every test file Vitest counted:
  * fewer files than its `Test Files` summary, or no summary (a leg that
  * crashed). A log that stops early (a reader that drops a long line and all
  * that follows) would keep older times for the rest of the leg.
@@ -108,25 +100,12 @@ export function driftedEntries(log, recorded) {
  * @returns {{job: string, read: number, counted: number | null}[]}
  */
 export function incompleteLegs(log) {
-  /** @type {Map<string, string[]>} */
-  const legs = new Map();
-  for (const line of log.split('\n')) {
-    const job = line.split('\t')[0];
-    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
-  }
-  return [...legs]
-    .map(([job, lines]) => {
-      const text = lines.join('\n').replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
-      // Every file the reporter names counts, skipped and todo files too.
-      const read = new Set(
-        [...text.matchAll(REPORTED_FILE)].map(match => match[1]),
-      ).size;
-      const summary = text.match(/Test Files\s+[^\n]*\((\d+)\)/g)?.pop();
-      const counted = summary
-        ? Number(/\((\d+)\)\s*$/.exec(summary)?.[1])
-        : null;
-      return {job, read, counted};
-    })
+  return [...nodeLegLogs(log)]
+    .map(([job, text]) => ({
+      job,
+      read: Object.keys(recordDurations(text)).length,
+      counted: countedTestFiles(text),
+    }))
     .filter(({read, counted}) => counted == null || read < counted)
     .sort((a, b) => a.job.localeCompare(b.job, 'en', {numeric: true}));
 }
