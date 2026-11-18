@@ -422,7 +422,13 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   add: delete each file the add wrote that still holds what it wrote, keep and
   name any changed, and uninstall the packages it installed that no theme
   still in the record is owned by or imports. It edits no application code (DEC-2) and adds no
-  configuration (`spec:AST-017/FR19`) (DEC-12).
+  configuration (`spec:AST-017/FR19`) (DEC-12). When the shared theme also
+  carries the theme editor's saved state for that theme (a folder holding
+  `<name>.settings.json`), the add copies it to the editor's folder for the
+  theme, `themes/<name>/`, so the theme editor opens it, unless that folder
+  already holds editor state the add did not write, which is left in place
+  and named; its receipt lists those files, and `theme remove` takes back the
+  unchanged ones.
 
 ### Platform support
 
@@ -719,7 +725,10 @@ with install scripts off, because those are the theme's base (a project whose
 integration says how it adds packages gets that line instead); a package from
 anywhere else is the builder's call, so it is named, never installed. Nothing
 of the theme runs while it is added, so a theme arrives built, and the add is
-a copy the builder can see in full and undo with `theme remove`.
+a copy the builder can see in full and undo with `theme remove`. The
+editor's saved state travels with it when the bundle carries it, because the
+copy is the low-level output and that state is the high-level description
+the builder keeps editing.
 
 Rejected: routing the shared copy through `theme eject`, the author's fork verb.
 Rejected: installing every imported package, which runs scripts the builder never chose.

@@ -52,9 +52,12 @@ export function isSharedThemeSource(arg) {
  * Read a shared theme into a staging folder.
  * @param {string} arg a folder, a `.tgz`, or an https URL to a `.tgz`
  * @param {string} cwd
- * @returns {Promise<{root: string, folder: string, slug: string, cleanup: () => void}>}
+ * @returns {Promise<{root: string, folder: string, slug: string, editor: {dir: string, folder: string} | null, cleanup: () => void}>}
  *   `root` is the staging folder, holding the theme in `root/<slug>`;
- *   `folder` is where the theme sat in what was shared, for messages
+ *   `folder` is where the theme sat in what was shared, for messages;
+ *   `editor` is the theme editor's saved state for that theme when the
+ *   bundle carries one (a folder holding `<slug>.settings.json`), staged in
+ *   `editor.dir`
  */
 export async function stageSharedTheme(arg, cwd) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-add-'));
@@ -94,16 +97,60 @@ export async function stageSharedTheme(arg, cwd) {
     }
     const [{dir, slug}] = found;
     copyTree(dir, path.join(stage, 'theme', slug));
+    // (The theme editor's saved state for the same theme, when the bundle
+    // carries exactly one: the high-level description the copy was built
+    // from, which the editor opens.)
+    const editors = editorFolders(from, slug).filter(e => e !== dir);
+    /** @type {{dir: string, folder: string} | null} */
+    let editor = null;
+    if (editors.length === 1) {
+      copyTree(editors[0], path.join(stage, 'editor', slug));
+      editor = {
+        dir: path.join(stage, 'editor', slug),
+        folder: shown(editors[0], from),
+      };
+    }
     return {
       root: path.join(stage, 'theme'),
       folder: shown(dir, from),
       slug,
+      editor,
       cleanup,
     };
   } catch (error) {
     cleanup();
     throw error;
   }
+}
+
+/**
+ * The folders under `from`, four deep at most, that hold the theme editor's
+ * saved state for `slug` (a regular `<slug>.settings.json`); dependencies and
+ * hidden folders are skipped.
+ * @param {string} from
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function editorFolders(from, slug) {
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} dir @param {number} depth */
+  const walk = (dir, depth) => {
+    const st = fs.lstatSync(path.join(dir, `${slug}.settings.json`), {
+      throwIfNoEntry: false,
+    });
+    if (st?.isFile()) found.push(dir);
+    if (depth >= 4) return;
+    for (const entry of fs.readdirSync(dir, {withFileTypes: true}))
+      if (
+        entry.isDirectory() &&
+        entry.name !== 'node_modules' &&
+        !entry.name.startsWith('.')
+      )
+        walk(path.join(dir, entry.name), depth + 1);
+  };
+  walk(from, 0);
+  return found;
 }
 
 /** @param {string} dir @param {string} from */
@@ -337,7 +384,7 @@ function themeFolders(from) {
  * @param {string} from
  * @param {string} to
  */
-function copyTree(from, to) {
+export function copyTree(from, to) {
   fs.mkdirSync(to, {recursive: true});
   for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
     const src = path.join(from, entry.name);
