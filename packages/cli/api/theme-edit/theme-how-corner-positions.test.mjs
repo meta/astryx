@@ -278,6 +278,43 @@ describe('the corners an ask names', () => {
     );
   }, 240_000);
 
+  it('reads a negative and a bare 0 as square', async ctx => {
+    if (needBases(ctx)) return;
+    expect(await writes('cards not rounded at the bottom')).toEqual([
+      'border-end-start-radius 0 --on card',
+      'border-end-end-radius 0 --on card',
+    ]);
+    expect(await writes('tooltips top-left corner 0')).toEqual([
+      'border-start-start-radius 0 --on tooltip',
+    ]);
+  }, 240_000);
+
+  it('keeps a radius the theme sets as a token, and rounds the square corners of a radius of several', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('v', {cwd, like: 'neutral'});
+    await themeEditSet('v', 'border-radius', 'var(--radius-container)', {
+      cwd,
+      on: 'tab',
+    });
+    await themeEditSet('v', 'border-radius', '4px 4px 0 0', {cwd, on: 'card'});
+    const all = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'v'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set v /, ''));
+    // (Rounded now with the theme's token: nothing written; the offered
+    // line keeps that token.)
+    expect(await all('tabs rounded on top')).toEqual([
+      "border-radius 'var(--radius-container) var(--radius-container) 0 0' --on tab",
+    ]);
+    expect(await all('cards rounded on the bottom')).toEqual([
+      'border-end-start-radius 4px --on card',
+      'border-end-end-radius 4px --on card',
+    ]);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
