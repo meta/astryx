@@ -31,7 +31,8 @@ architecture:
     architecture:react-component-runtime,
   ]
 contributing: []
-system_specs: [spec:AST-013, spec:AST-020, spec:AST-021, spec:AST-094/FR35, spec:AST-116]
+system_specs:
+  [spec:AST-013, spec:AST-020, spec:AST-021, spec:AST-094/FR35, spec:AST-116]
 ---
 
 # Dialog component contract
@@ -48,10 +49,10 @@ current family and architecture owners.
 
 ## Compatibility and migration
 
-- Released default preserved: yes.
+- Released default preserved: yes, except the focus-return accessibility fix `spec:AST-116` FR22 names.
 - Compatibility class: records the shipped native-modal and inline-preview split.
 - Controlled/uncontrolled behavior: Dialog visibility remains controlled.
-- Migration decision: none; the current focus lifecycle is made explicit.
+- Migration decision: none; the current focus lifecycle is made explicit, and focus return ships as an accessibility fix (`spec:AST-116` FR22).
 
 ## Ownership boundary
 
@@ -88,7 +89,7 @@ current family and architecture owners.
 | FR1  | A native Dialog MUST become visibly modal before Dialog applies its component-owned initial-focus request.                                                                                                                                                                                                                                                                                                                                                                                                                                                         | shipped `showModal()` ordering and descendant-focus behavior                                   | settled            |
 | FR2  | Dialog MUST honor an eligible descendant initial-focus request. A request is eligible only when its rendered target is inside the active Dialog, is neither hidden nor inert, and can receive programmatic focus when selection runs. DialogHeader supplies its title as the default when no non-default eligible request is rendered. Ordering among multiple non-default requests is unspecified (AV3).                                                                                                                                                          | shipped DialogHeader and descendant autofocus behavior                                         | settled            |
 | FR3  | When no eligible descendant request exists, Dialog MUST preserve the native dialog's valid initial-focus behavior rather than move focus outside the modal.                                                                                                                                                                                                                                                                                                                                                                                                        | native modal semantics and shipped fallback                                                    | settled            |
-| FR4  | Closing a native Dialog MUST return focus to the still-connected external element that invoked the modal when that element can receive focus. Descendant mount focus MUST NOT replace that return owner. When that element is gone, focus follows the shared layer focus return's fallback chain (`spec:AST-116` FR17–FR21) and never falls to the body.                                                                                                                                                                                                           | shipped trigger-return intent and regression history                                           | settled            |
+| FR4  | Closing a native Dialog MUST return focus to the still-connected external element that invoked the modal when that element can receive focus. Descendant mount focus MUST NOT replace that return owner. When that element is gone, focus follows the shared layer focus return's fallback chain (`spec:AST-116` FR17–FR21) and never falls to the body. Gap: the fallback chain is not shipped (`spec:AST-116` FR19 and FR20 gaps).                                                                                                                               | shipped trigger-return intent and regression history                                           | settled            |
 | FR5  | Inline rendering MUST NOT open a modal, apply modal initial focus, trap focus, or return focus as if a modal had closed.                                                                                                                                                                                                                                                                                                                                                                                                                                           | documented `isInline` preview behavior                                                         | settled            |
 | FR6  | Initial-focus selection MUST follow the rendered eligible descendants, not a private component type or source-only assumption.                                                                                                                                                                                                                                                                                                                                                                                                                                     | composable descendant contract                                                                 | settled            |
 | FR7  | A native modal Dialog MUST be a focus region through Core's shared focus-region module: Tab from its last tabbable control moves focus to its first, and Shift+Tab from its first moves focus to its last, so focus never leaves the modal for the browser's own interface. Tab and Shift+Tab wrap with or without Alt (Option), since Safari moves focus on Option+Tab; Tab chorded with Ctrl or Meta passes through to the browser. When a Dialog opens from a Dialog, the innermost one holding focus answers Tab.                                              | owner decision DEC-2                                                                           | settled            |
@@ -105,19 +106,19 @@ current family and architecture owners.
 - **AV3 — Multiple requests.** Callers should identify one intended initial target.
   Conflict ordering among multiple simultaneous requests is not a public API promise.
 - **AV4 — Unavailable invoker.** Dialog MUST still close without error when the
-  invoker was removed or can no longer receive focus; in that state it need not
-  restore focus.
+  invoker was removed or can no longer receive focus; in that state focus
+  follows the shared layer focus return's fallback chain (`spec:AST-116` FR20).
 
 ### Representative states
 
-| State                                         | Required invariant                                          | Allowed variation                          |
-| --------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------ |
-| native modal with DialogHeader                | modal is visible before focus; title receives default focus | another earlier supported request may win  |
-| native modal with explicit descendant request | requested eligible descendant receives focus                | descendant type and location               |
-| native modal without request                  | focus remains within valid native modal behavior            | browser-selected eligible descendant       |
-| modal close                                   | connected invoking element regains focus                    | no restoration when invoker is unavailable |
-| Tab or Shift+Tab at the modal's edge          | focus wraps to the other end inside the modal               | which controls are tabbable                |
-| inline preview                                | surrounding page focus remains unchanged                    | inline content and layout                  |
+| State                                         | Required invariant                                          | Allowed variation                                             |
+| --------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| native modal with DialogHeader                | modal is visible before focus; title receives default focus | another earlier supported request may win                     |
+| native modal with explicit descendant request | requested eligible descendant receives focus                | descendant type and location                                  |
+| native modal without request                  | focus remains within valid native modal behavior            | browser-selected eligible descendant                          |
+| modal close                                   | connected invoking element regains focus                    | focus follows `spec:AST-116` FR20 when invoker is unavailable |
+| Tab or Shift+Tab at the modal's edge          | focus wraps to the other end inside the modal               | which controls are tabbable                                   |
+| inline preview                                | surrounding page focus remains unchanged                    | inline content and layout                                     |
 
 ## Accessibility contract
 

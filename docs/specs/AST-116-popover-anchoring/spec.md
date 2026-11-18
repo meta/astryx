@@ -49,8 +49,8 @@ live on the hook, and the Popover component keeps its trigger-first props
 modal popover holds Tab, a non-modal one (a coachmark, a tour step) lets focus
 move through the page.
 
-When any layer closes, focus lands somewhere reasonable without the caller
-asking. Popover, Dialog and DropdownMenu share one rule: focus that the close
+When a Popover, Dialog or DropdownMenu closes, focus lands somewhere
+reasonable without the caller asking. Popover, Dialog and DropdownMenu share one rule: focus that the close
 would strand goes to the opener, or to the nearest surviving stand-in for it,
 and never to the page body. Focus the person already moved elsewhere stays
 where it is.
@@ -163,7 +163,8 @@ where it is.
   sheet, `isModal: true` presents the released modal sheet
   (`component:Popover` DEC-8). `isModal: false` presents a non-modal sheet:
   no scrim, the page stays interactive and focus is not contained. It closes
-  by a swipe down, its close control and Escape while it holds focus.
+  by a swipe down, its close control and Escape while it holds focus. Either
+  sheet returns focus through FR17–FR21, as an anchored Popover does.
 
 ### Layer focus return
 
@@ -224,13 +225,21 @@ Dialog and DropdownMenu.
 
 ### Compatibility
 
-- **FR22 — Defaults are the released behavior, with two named changes.** A
+- **FR22 — Defaults are the released behavior, with three named changes.** A
   Popover, and a `usePopover` that sets none of `anchor`,
   `anchorOutOfViewBehavior` and `onOutsidePress`, anchors, stays and dismisses
-  as before. Two released
-  behaviors change, and the release notes say so: `isModal: false` stops
-  containing Tab and scopes its Escape (FR12, FR15), and Popover, Dialog and
-  DropdownMenu return focus that used to fall to the body (FR17–FR20).
+  as before. Three released behaviors change. Each ships as an accessibility
+  fix (`spec:AST-017` FR53), and the release notes name each change and its
+  target:
+  - `isModal: false` stops containing Tab and scopes its Escape (FR12, FR15):
+    a non-modal surface no longer keeps keyboard focus from the page (WCAG 2.2
+    SC 2.1.2, No Keyboard Trap; SC 2.4.3, Focus Order).
+  - An `isModal: false` popover shown as a sheet is a non-modal sheet (FR16),
+    for the same targets.
+  - Popover, Dialog and DropdownMenu return focus that used to fall to the body
+    (FR17–FR20; SC 2.4.3, Focus Order).
+    No input restores a changed behavior: `isModal: true` is the modal behavior,
+    and focus return has no off switch (FR18).
 - **FR23 — The trigger inputs keep their meaning.** Popover's `anchorRef`
   remains a referenced trigger and anchor (`component:Popover` AV1). With
   `usePopover`, the element given to `triggerRef` is the trigger, and `anchor`,
@@ -256,26 +265,43 @@ Dialog and DropdownMenu.
   says `isModal` sets containment.
   DEC-9's rule that every Popover is a focus region, modal or not, and its
   rejection of "no Tab containment for non-modal popovers", are superseded for
-  `isModal: false` (DEC-5); DEC-9 still governs the modal default. AR3, which
-  states that containment, narrows to the modal default. AR4 points to
-  FR17–FR20. Current-state impact loses "Popover has no viewport-rectangle
-  anchor".
+  `isModal: false` (DEC-5); DEC-9 keeps its text and gains an amendment line,
+  and still governs the modal default. AR3, the Tab row, the AR3 and DEC-9
+  verification row and Open questions narrow containment to the modal
+  default. DEC-8's modal, always light-dismissing sheet is superseded for
+  `isModal: false` (FR16), with an amendment line. AR4 and the close state row
+  follow FR20's order. The Trigger binding and side-effect lines and FR9 name
+  the anchor, the trigger unless `usePopover` names another element. The
+  "no viewport-rectangle anchor" line stays and names `usePopover`'s element
+  anchor. Released default preserved notes the FR22 changes.
 - `component:Dialog` FR4 and AR2 and `component:DropdownMenu` FR6 point to
-  FR17–FR20 for the return target and its fallbacks.
+  FR17–FR20 for the return target and its fallbacks. Dialog's AV4 and its
+  "modal close" state follow FR20 when the invoker is gone, its FR4 fallback
+  clause is a gap until it ships (FR19 and FR20 gaps), and its Released default
+  and Migration decision lines note the FR22 change.
+- `component:BottomSheet` keeps its own `finalFocusRef` rule (FR11); FR17–FR21
+  do not cover a BottomSheet used directly.
 - `architecture:layer-runtime`: the anchor-visibility observation also drives
   FR7's hide. INV18, INV20 and INV22 say "trigger" for the element a layer
   anchors to; with a separate anchor they read "anchor", and the trigger keeps
-  only its trigger role (FR1).
+  only its trigger role (FR1). INV7's move to another trigger applies only when
+  no separate anchor is named, and INV20's centered case and the touch growth
+  use the anchor's center.
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a non-modal participant takes Escape only
-  while focus is inside it or on its anchor or trigger (FR15).
+  while focus is inside it or on its anchor or trigger (FR15). A platform close
+  request follows the same presence rule (FR3).
 - Consumer docs: `usePopover.doc.mjs` documents the anchoring inputs;
   `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
   `DropdownMenu.doc.mjs` document `isModal`'s meaning and that focus return has
   no off switch.
-- Callers that set `isModal: false` today: PowerSearch's token editor (a
-  dialog popover) and Popover's own tests. The token editor then lets Tab
-  leave the editor in page order.
+- Callers that set `isModal: false` today, and what changes for each: Tab
+  leaves in page order, and Escape works only while focus is inside the
+  popover or on its anchor or trigger.
+  - PowerSearch's token editor (a dialog popover) and its role-`none` adding
+    popup, which share one `usePopover` call.
+  - The rich text editor's link form, a dialog popover in a published package.
+  - The `LayerSamePress` story and Popover's own tests.
 
 FR1 gap: `usePopover` anchors to its trigger only; Popover's `anchorRef` must
 reference a button, and any other element warns in development and never
@@ -313,7 +339,7 @@ the body.
 ### DEC-1 — One `anchor` input for every anchor shape
 
 **Reference:** `spec:AST-116/DEC-1`
-**Decider:** pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 Every shape `anchor` accepts answers one question — which box the layer sits
 on — so one input carries all of them. A ref names a stable element, a
@@ -322,13 +348,12 @@ inputs.
 
 Rejected: widening `anchorRef` to non-buttons, because it would change what a
 released input does to the element it names; and a rectangle anchor with no
-element, because every consumer holds an element. A rectangle shape can be added
-later; it widens `anchor` and leaves existing callers unchanged.
+element, because every consumer holds an element.
 
 ### DEC-3 — Hiding with the anchor is a state, not a dismissal
 
 **Reference:** `spec:AST-116/DEC-3`
-**Decider:** pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 A popover whose anchor is out of view under `hideWhileOutOfView` stays open.
 The value names a temporary state, because `hide()` and `onHide` mean close. Closing it would
@@ -338,7 +363,7 @@ not do.
 ### DEC-4 — The veto is a callback with a cancellable event
 
 **Reference:** `spec:AST-116/DEC-4`
-**Decider:** pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 `onOutsidePress` runs before the dismissal and its event's `preventDefault()`
 cancels it, following the callback cancellation rule in the API conventions.
@@ -351,28 +376,31 @@ target or pointer type later.
 ### DEC-5 — `isModal` is the modality switch, and non-modal means page order
 
 **Reference:** `spec:AST-116/DEC-5`
-**Decider:** `nynexman4464` (direction, 2026-11-10), pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 Containment is a modality policy, not a separate concept: one boolean names
 whether the popover is modal. A modal popover
 contains Tab and says so with `aria-modal`; a non-modal popover does neither,
-and Tab follows the browser's order through the anchor, the popover and the
-page. A coachmark or tour step is non-modal so the person can reach the control
+and Tab follows the browser's order: the popover's controls come after its
+trigger, or after the anchor when there is no trigger (FR12). A coachmark or tour step is non-modal so the person can reach the control
 it describes. This supersedes `component:Popover` DEC-9 and AR3 for
-`isModal: false`, and adds FR15's exception to `family:overlay-dismissal`'s
-topmost Escape; DEC-9 still governs the modal default.
+`isModal: false`, and DEC-8's modal, always light-dismissing sheet for an
+`isModal: false` sheet (FR16), and adds FR15's exception to
+`family:overlay-dismissal`'s topmost Escape; DEC-9 and DEC-8 still govern the
+modal default.
 
 Rejected: a separate focus-region input with a value that cycles through the
 popover and its anchor, which would be a second name for modality and a trap
 the platform does not have.
 
-### DEC-6 — One focus return rule for every layer, with no off switch
+### DEC-6 — One focus return rule for Popover, Dialog and DropdownMenu, with no off switch
 
 **Reference:** `spec:AST-116/DEC-6`
-**Decider:** `nynexman4464` (direction, 2026-11-10), pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
-Losing focus strands keyboard and screen reader users, so every layer returns
-stranded focus through the same chain, and no caller can opt out. The chain
+Losing focus strands keyboard and screen reader users, so Popover, Dialog and
+DropdownMenu return stranded focus through the same chain, and no caller can
+opt out. The chain
 prefers the opener, then the elements that stand for it after a remount or a
 removal, and ends at the page's main region rather than the body. Focus the
 person or the caller already placed outside the layer is never moved.
@@ -382,7 +410,7 @@ Rejected: a `returnFocus` input with a value that skips the return.
 ### DEC-7 — A function anchor is read, not watched
 
 **Reference:** `spec:AST-116/DEC-7`
-**Decider:** pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 A function anchor is read when the popover opens and when the caller passes a
 new function. The caller knows when its page replaced the element; the
@@ -395,7 +423,7 @@ for the element's removal.
 ### DEC-8 — Anchoring inputs live on `usePopover`, not on Popover
 
 **Reference:** `spec:AST-116/DEC-8`
-**Decider:** `nynexman4464` (direction, 2026-11-16), pending owner review
+**Decider:** `nynexman4464`, `2026-11-17`
 
 `anchor`, `anchorOutOfViewBehavior` and `onOutsidePress` serve compositions
 such as a tour, a popover shared between table rows, or a filter that moves

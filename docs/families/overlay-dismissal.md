@@ -184,6 +184,8 @@ this record's current membership snapshot must be updated with it.
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
   registered present member. A request aimed at a lower member is declined.
+  Presence follows FR2, so a non-modal Popover that does not hold focus does
+  not take the request, and it goes to the member beneath it.
 - **FR4 — Available nesting signals outrank host placement.** When a member
   provides `LayerDepthProvider`, React-tree depth orders its descendant layers
   ahead of the member even when both mount in the same commit. DOM containment

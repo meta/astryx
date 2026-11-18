@@ -59,7 +59,7 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
+- Released default preserved: `yes`, except the accessibility fixes `spec:AST-116` FR22 names
 - `presentation` (DEC-6) defaults to `popover`, the released anchored surface;
   `presentation="popover"` is also the value that keeps it wherever a touch
   default would otherwise apply (`architecture:public-component-api` INV16,
@@ -78,6 +78,13 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 
 - The input hold starts on the first frame after the open; a touch landing
   within that frame reaches the page.
+- Popover has no viewport-rectangle anchor: it anchors to its trigger or to
+  a button through `anchorRef`, and `usePopover` anchors to an element
+  (`spec:AST-116` FR1). A panel whose control moved into a More menu
+  anchors to the More trigger through a `usePopover` composition whose
+  `triggerRef` receives that trigger, so the trigger keeps its menu-button
+  attributes (`component:MoreMenu` AR1). This is revisited once the headless
+  context menu's `open(at)` (`spec:AST-107` FR8) ships.
 - `spec:AST-116` gap: `usePopover`'s `anchor`, `anchorOutOfViewBehavior` and
   `onOutsidePress`, and non-modal Tab order, are not implemented; `isModal: false` still holds
   Tab, and focus return still falls to the body when the trigger is gone.
@@ -166,20 +173,21 @@ table owns their semantic effect.
 
 ### Public `usePopover` semantic outputs
 
-| Output concept        | Meaning and lifetime                                                                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trigger binding       | While the popover shows or animates out, the attached trigger is its anchor; ARIA trigger state tracks the current role and open state; a stable anchor identifier supports advanced composition. Detaching removes the anchor. |
-| Visibility operations | `show`, `hide`, and `toggle` are the canonical operations for the mounted hook instance. Public signatures remain unchanged, and every opening path inherits same-gesture reopen protection.                                    |
-| Open state            | Reflects the hook's reconciled visibility. Browser-initiated close is observed on the queued native toggle event, so DOM visibility may lead React state briefly.                                                               |
-| Surface binding       | A content ref identifies the focus-trap surface while mounted.                                                                                                                                                                  |
-| Renderer              | Produces the positioned layer and painted surface around caller content, including focus containment and the optional fallback close control. The renderer must remain in the React tree for the surface to exist.              |
-| Surface identifier    | A stable identifier connects the trigger's control relationship to the rendered surface for the hook instance.                                                                                                                  |
+| Output concept        | Meaning and lifetime                                                                                                                                                                                                                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trigger binding       | While the popover shows or animates out, its anchor is the attached trigger, or the element `usePopover`'s `anchor` names (`spec:AST-116` FR1); ARIA trigger state tracks the current role and open state; a stable anchor identifier supports advanced composition. Detaching removes the anchor. |
+| Visibility operations | `show`, `hide`, and `toggle` are the canonical operations for the mounted hook instance. Public signatures remain unchanged, and every opening path inherits same-gesture reopen protection.                                                                                                       |
+| Open state            | Reflects the hook's reconciled visibility. Browser-initiated close is observed on the queued native toggle event, so DOM visibility may lead React state briefly.                                                                                                                                  |
+| Surface binding       | A content ref identifies the focus-trap surface while mounted.                                                                                                                                                                                                                                     |
+| Renderer              | Produces the positioned layer and painted surface around caller content, including focus containment and the optional fallback close control. The renderer must remain in the React tree for the surface to exist.                                                                                 |
+| Surface identifier    | A stable identifier connects the trigger's control relationship to the rendered surface for the hook instance.                                                                                                                                                                                     |
 
 ### Side effects and lifetime
 
-- While the popover is shown, and until its exit animations end, the attached
-  trigger carries the CSS anchor name used by the Layer runtime
-  (`architecture:layer-runtime` INV18). Detaching the trigger removes it.
+- While the popover is shown, and until its exit animations end, its anchor
+  (the attached trigger, or the element `usePopover`'s `anchor` names) carries
+  the CSS anchor name used by the Layer runtime (`architecture:layer-runtime`
+  INV18). Detaching the anchor removes it.
 - Every opening path applies same-gesture reopen protection before changing
   visibility. A rejected opening does not invoke `onShow`.
 - Successful visibility operations call the browser popover methods when
@@ -204,7 +212,7 @@ table owns their semantic effect.
 | FR6  | Component anatomy contains the caller trigger and content, one painted Popover surface, and the optional fallback close control. Popover owns no Header, Body, or separate shared-hook surface part.                                                                                                                                                                                                                                                                                                                                   | Current source, docs target inventory, and tests                                                      | Accepted anatomy; stale consumer anatomy corrected by this contract                         |
 | FR7  | The painted surface has one broad canonical target, `popover`; composed components may add one authoritative component-specific refinement target.                                                                                                                                                                                                                                                                                                                                                                                     | Owner direction on 2026-08-31 plus current target inventory                                           | Accepted canonical contract; covered by focused target tests                                |
 | FR8  | The surface padding is one spacing-scale rung applied on the painted surface. Popover defaults to step 3 (the released inset); `0` paints a flush surface; a direct `usePopover` composition paints none unless it asks for a rung. The rung sits where a theme's `padding` on the `popover` target replaces it.                                                                                                                                                                                                                       | PR #6683 and its Popover tests; `architecture:container-padding/INV8` (padding alone does not enroll) | Pending owner review (DEC-4); implemented and covered by the Popover surface-padding suite  |
-| FR9  | Under a finger, Popover grows from its trigger on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged.                                                                                                                                                                                                           | `spec:AST-094` FR31, FR35                                                                             | Implemented                                                                                 |
+| FR9  | Under a finger, Popover grows from its anchor (its trigger unless `usePopover` names another element) on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged.                                                                                                                                                    | `spec:AST-094` FR31, FR35                                                                             | Implemented                                                                                 |
 | FR10 | Under forced colors, the painted surface keeps a visible edge, a 1 px system-colour (`CanvasText`) border, so it stays apart from the page when forced colors drop its shadow (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.11). Every surface `usePopover` paints, DropdownMenu's included, does the same; the ContextMenu surface and DropdownMenuSubMenu flyouts paint their own surface and keep the same border. Outside forced colors the edge sets no border width, style or colour, so each surface keeps its own border or a caller's. | `spec:AST-020` FR1; `component:Dialog` FR9                                                            | Implemented                                                                                 |
 
 ### Allowed variation
@@ -225,20 +233,20 @@ table owns their semantic effect.
 
 ### Representative focus and dismissal states
 
-| State                                             | Required invariant                                                                                                                                                                                                               | Allowed variation                                                                                        |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Pointer or touch activation of dialog Popover     | Initial focus enters the first genuine content control, with dialog-surface fallback when none exists. Shared modality-aware indication suppresses keyboard-only rings after pointer input.                                      | The trigger and content may vary.                                                                        |
-| Keyboard or AT-style activation of dialog Popover | Initial focus enters the first genuine content control, with dialog-surface fallback when none exists. The eligible destination paints the shared keyboard focus indication.                                                     | Activation with absent or zero event detail follows this path. Named AT announcement remains unverified. |
-| Read-only dialog                                  | With no genuine caller control, the dialog surface receives initial focus. The injected fallback close control remains hidden and reachable by Tab but is never selected initially.                                              | Caller content may contain no tabbable control.                                                          |
-| Neutral-role popup                                | The neutral wrapper is not selected as a dialog focus target; automatic entry prefers genuine content focus, or callers may disable autofocus for trigger-retained patterns.                                                     | Child menu, listbox, or other semantics own their focus model.                                           |
-| Automatic focus disabled                          | Opening does not move focus.                                                                                                                                                                                                     | May be persistent configuration or a one-opening show preference.                                        |
-| Controlled open                                   | External open state invokes the no-activation opening path: first genuine content control, then dialog-container fallback.                                                                                                       | The caller remains the visibility source of truth.                                                       |
-| Tab or Shift+Tab inside the open popup            | Focus moves to the next or previous tabbable descendant and wraps at either end, so it stays inside the popup, modal or not. It wraps with or without Alt (Option); Tab chorded with Ctrl or Meta passes through to the browser. | A role-neutral menu closes on Tab and a listbox keeps focus in its input, as their own records state.    |
-| Tab or Shift+Tab from outside the open popup      | The popup does not capture it: focus moves to the next or previous control in the page's own order, as if the popup were not there.                                                                                              | The browser's order, which places an anchored popup after its trigger, may still lead into it.           |
-| Tab from a focused container                      | Focus enters the first tabbable descendant.                                                                                                                                                                                      | If none exists, focus remains inside.                                                                    |
-| Shift+Tab from a focused container                | Focus enters the last tabbable descendant.                                                                                                                                                                                       | If none exists, focus remains inside.                                                                    |
-| Escape                                            | The topmost eligible Popover closes according to shared dismissal policy.                                                                                                                                                        | Explicit-dismiss surfaces may disable both light and Escape dismissal.                                   |
-| Close after focus entered the popup               | Focus returns to the trigger when removal would otherwise strand focus.                                                                                                                                                          | A caller may additionally own focus return through its hide notification.                                |
+| State                                             | Required invariant                                                                                                                                                                                                                                                          | Allowed variation                                                                                        |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Pointer or touch activation of dialog Popover     | Initial focus enters the first genuine content control, with dialog-surface fallback when none exists. Shared modality-aware indication suppresses keyboard-only rings after pointer input.                                                                                 | The trigger and content may vary.                                                                        |
+| Keyboard or AT-style activation of dialog Popover | Initial focus enters the first genuine content control, with dialog-surface fallback when none exists. The eligible destination paints the shared keyboard focus indication.                                                                                                | Activation with absent or zero event detail follows this path. Named AT announcement remains unverified. |
+| Read-only dialog                                  | With no genuine caller control, the dialog surface receives initial focus. The injected fallback close control remains hidden and reachable by Tab but is never selected initially.                                                                                         | Caller content may contain no tabbable control.                                                          |
+| Neutral-role popup                                | The neutral wrapper is not selected as a dialog focus target; automatic entry prefers genuine content focus, or callers may disable autofocus for trigger-retained patterns.                                                                                                | Child menu, listbox, or other semantics own their focus model.                                           |
+| Automatic focus disabled                          | Opening does not move focus.                                                                                                                                                                                                                                                | May be persistent configuration or a one-opening show preference.                                        |
+| Controlled open                                   | External open state invokes the no-activation opening path: first genuine content control, then dialog-container fallback.                                                                                                                                                  | The caller remains the visibility source of truth.                                                       |
+| Tab or Shift+Tab inside the open popup            | Focus moves to the next or previous tabbable descendant and wraps at either end, so it stays inside a modal popup (AR3); a non-modal popup follows `spec:AST-116` FR12. It wraps with or without Alt (Option); Tab chorded with Ctrl or Meta passes through to the browser. | A role-neutral menu closes on Tab and a listbox keeps focus in its input, as their own records state.    |
+| Tab or Shift+Tab from outside the open popup      | The popup does not capture it: focus moves to the next or previous control in the page's own order, as if the popup were not there.                                                                                                                                         | The browser's order, which places an anchored popup after its trigger, may still lead into it.           |
+| Tab from a focused container                      | Focus enters the first tabbable descendant.                                                                                                                                                                                                                                 | If none exists, focus remains inside.                                                                    |
+| Shift+Tab from a focused container                | Focus enters the last tabbable descendant.                                                                                                                                                                                                                                  | If none exists, focus remains inside.                                                                    |
+| Escape                                            | The topmost eligible Popover closes according to shared dismissal policy.                                                                                                                                                                                                   | Explicit-dismiss surfaces may disable both light and Escape dismissal.                                   |
+| Close after focus entered the popup               | Focus returns through `spec:AST-116` FR20's order, the element focused at open first, when removal would otherwise strand focus.                                                                                                                                            | A caller may additionally own focus return through its hide notification.                                |
 
 ### Transformation and precedence order
 
@@ -296,7 +304,8 @@ table owns their semantic effect.
   placement to suppress pointer outlines.
 - **AR4 — Focus return.** Dismissal returns focus that would otherwise be lost
   through the shared layer focus return (`spec:AST-116` FR17–FR21): to the
-  trigger first, then to the elements that stand for it, never to the body.
+  element focused when the popover opened first, then to the opener and the
+  elements that stand for it (`spec:AST-116` FR20), never to the body.
 - **AR5 — Evidence boundary.** Current automated tests establish DOM roles, ARIA
   state, focus movement, and focus return. The Storybook manual-AT story is a
   fixture, not a recorded result. PR #5373 records no named NVDA + Chrome or
@@ -380,7 +389,7 @@ consumers that need distinct theme reachability provide and document an owned
 | Public boundary, FR1         | `Popover.test.tsx` compile-time public-surface assertions plus package/barrel inspection                                                                                                         | Unchanged public signatures and same-gesture rejection across Popover-family openings                                                                                                                                                   | A public type changes or a same-gesture request reaches visibility state.                                                                                            | `audit:Popover/api`           |
 | FR2, AR2–AR4                 | `Popover.test.tsx` focus/role suites and `useFocusTrap.test.tsx` container-entry suites                                                                                                          | Pointer, keyboard/AT-style, read-only, neutral role, no autofocus, controlled, Tab/Shift+Tab, Escape, focus return                                                                                                                      | Changing semantic destination by modality, selecting fallback close initially, losing shared indication, or allowing focus escape fails assertions.                  | `audit:Popover/accessibility` |
 | FR2, user activation         | `Popover.test.tsx` "focuses the first content control within the click that opens it" and "keeps focus that onShow moves inside the popover"; real Chromium with mobile (touch) emulation        | A tap or click opens a popover whose content is mounted: initial focus lands within that event (iOS raises its on-screen keyboard only for a focus made while the tap is handled); focus that `onShow` or a press placed inside is kept | Initial focus that waits for a later frame, or a frame that moves focus already inside the popover, fails assertions.                                                | `audit:Popover/accessibility` |
-| AR3, DEC-9                   | `useFocusTrap.test.tsx` and `Popover.test.tsx` focus-region suites                                                                                                                               | Modal and non-modal; Tab and Shift+Tab inside the popup and from a control outside it                                                                                                                                                   | A Tab outside that the popup pulls into itself, or a Tab inside that leaves it, fails assertions.                                                                    | `audit:Popover/accessibility` |
+| AR3, DEC-9                   | `useFocusTrap.test.tsx` and `Popover.test.tsx` focus-region suites                                                                                                                               | Modal popovers (non-modal ones follow `spec:AST-116` FR12); Tab and Shift+Tab inside the popup and from a control outside it                                                                                                            | A Tab outside that the popup pulls into itself, or a Tab inside that leaves it, fails assertions.                                                                    | `audit:Popover/accessibility` |
 | ORD2, FR4                    | `Popover.test.tsx` sizing/overflow suites; `Popover.stories.tsx` match-trigger and overflow scenarios; geometry under `Core/Layer` viewport-inset stories                                        | Explicit width clamped to the viewport, trigger matching, fitting and overflowing content                                                                                                                                               | Reversing width precedence, capping to the span beside the trigger, or always enabling scroll fails emitted-style or overflow assertions.                            | `audit:Popover/layout`        |
 | FR8                          | `Popover.test.tsx` surface-padding suite                                                                                                                                                         | Default rung, `0`, an explicit rung, a direct hook composition with and without a rung                                                                                                                                                  | A default other than step 3, a rung landing on a box inside the surface, or the hook painting a rung it was not given fails the suite.                               | `audit:Popover/theming`       |
 | FR9                          | `spec:AST-094` verification for FR31 and FR35                                                                                                                                                    | Under a finger: open, close, a touch during growth; a mouse                                                                                                                                                                             | A Popover that does not grow from and shrink into its trigger, a changed dismissal, or a changed mouse path fails.                                                   | `audit:Popover/behavior`      |
@@ -484,6 +493,9 @@ trigger's expanded state and controlled element follow whichever surface is
 open. The sheet loads on demand, so pages whose popovers stay anchored do not
 load it.
 
+Amended: `spec:AST-116` FR16 and DEC-5 supersede the modal, always
+light-dismissing sheet for `isModal: false`, which presents a non-modal sheet.
+
 ### DEC-9 — A Popover is a focus region, modal or not
 
 **Reference:** `component:Popover/DEC-9`
@@ -495,13 +507,16 @@ Tab and Shift+Tab cycle through its controls, and a dismissal closes it and
 returns focus to the trigger (AR4). It leaves the rest of the
 page's focus order alone: a Tab pressed outside it moves to the next control in
 the page and is never pulled into the popup, and a non-modal Popover leaves the
-page interactive. This holds for a modal Popover; for `isModal: false`,
-`spec:AST-116/DEC-5` governs instead, and a non-modal Popover holds no focus. A
+page interactive. This holds for modal and non-modal popovers alike. A
 role-neutral popup keeps its child role's own Tab model, so a menu still closes
 on Tab and a listbox's focus stays in its input.
 
-Rejected: no Tab containment for modal popovers, which would let focus fall out
-of an open popup into the page behind it.
+Rejected: no Tab containment for non-modal popovers, which would let focus
+fall out of an open popup into the page behind it.
+
+Amended: `spec:AST-116` DEC-5 supersedes this decision for `isModal: false`, where
+Tab follows the page's order (`spec:AST-116` FR12). It still governs the modal
+default.
 
 ## Verification gaps
 
@@ -522,7 +537,8 @@ not block acceptance of the semantic contract above.
 
 None. DEC-1 settles the visibility model, DEC-2 settles canonical target
 ownership, DEC-3 settles semantic focus versus modality-aware indication, and
-DEC-9 settles focus containment for modal and non-modal popovers.
+DEC-9 settles focus containment for modal popovers, and `spec:AST-116` DEC-5
+for non-modal ones.
 The remaining items are verification work, not human API questions.
 
 ## Content boundary

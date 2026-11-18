@@ -545,7 +545,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV7 — Existing native-light-dismiss guards identify gestures.** The press
   that closes a layer cannot reopen it from the trigger it was open for; a press
   on another trigger of the same layer may show it, anchored to that trigger: a
-  show in the same gesture from another trigger moves the layer to that trigger;
+  show in the same gesture from another trigger moves the layer to that trigger,
+  unless a separate anchor is named, which keeps the layer on that anchor;
   menu-hover also
   suppresses exposure-induced hover. A one-finger touch that starts outside an
   open light-dismiss popover and travels the shared pan distance is a gesture,
@@ -702,10 +703,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
   its anchor (its trigger unless a separate anchor is named). It scales about
   the point where the layer meets its anchor: on the edge that faces the
   anchor, on the anchor's center line. A layer
-  that covers its trigger's center has no side: its entrance scales about
+  that covers its anchor's center has no side: its entrance scales about
   that center and does not slide. A show that leaves the layer in place
   reads the side in its one measurement pass. Popover's touch growth starts
-  from the same point. Over its trigger's center it has no side to lengthen
+  from the same point. Over its anchor's center it has no side to lengthen
   along, so it only scales.
 
 - **INV21 — Script never moves a layer to follow its anchor.** An anchored
