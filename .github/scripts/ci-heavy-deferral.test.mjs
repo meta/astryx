@@ -63,6 +63,7 @@ function pushEvent({
   login = 'cixzhang',
   base = 'main',
   head = 'fix/thing',
+  labels = [],
 } = {}) {
   return {
     event_name: 'pull_request',
@@ -76,7 +77,7 @@ function pushEvent({
         draft: false,
         user: {login},
         head: {repo: {full_name: 'meta/astryx'}},
-        labels: [],
+        labels: labels.map(name => ({name})),
       },
     },
   };
@@ -155,20 +156,31 @@ function starts(id, github, {specOnly, others = 'success'} = {}) {
 const deferralStep = id =>
   ci.jobs[id].steps.find(step => step.name === 'Heavy CI deferred');
 
-describe('which pushes defer the heavy suites (spec:AST-030 FR20)', () => {
-  it('is a push to a ready agent-lane pull request into main, in its first attempt', () => {
+describe('which runs defer the heavy suites (spec:AST-030 FR20, DEC-32)', () => {
+  it('is any first attempt of a pull request into main', () => {
     expect(ci.jobs['heavy-ci'].if).toContain(HEAVY_CANDIDATE);
     expect(evaluate(HEAVY_CANDIDATE, {github: pushEvent()})).toBe(true);
   });
 
   it.each([
+    ['a push', {}],
     ['marked ready', {action: 'ready_for_review'}],
     ['opened', {action: 'opened'}],
     ['reopened', {action: 'reopened'}],
-    ['re-run (the pre-merge run)', {attempt: '2'}],
     ['from another author', {login: 'someone'}],
+    ['from an engineering owner', {login: 'engineer'}],
+  ])('defers on %s, for every author', (_, event) => {
+    const github = pushEvent(event);
+    expect(evaluate(HEAVY_CANDIDATE, {github})).toBe(true);
+    expect(heavyCi(github).outputs.deferred).toBe('true');
+    for (const id of HEAVY) expect(starts(id, github), id).toBe(false);
+  });
+
+  it.each([
+    ['re-run in full (review passed, or the pre-merge run)', {attempt: '2'}],
     ['a release merge-back', {head: 'chore/merge-v1.2.3-to-main'}],
-  ])('runs everything when the pull request is %s', (_, event) => {
+    ['release-critical', {labels: ['release-critical']}],
+  ])('runs everything when the run is %s', (_, event) => {
     const github = pushEvent(event);
     expect(evaluate(HEAVY_CANDIDATE, {github})).toBe(false);
     expect(heavyCi(github).result).toBe('skipped');
@@ -190,10 +202,8 @@ describe('which pushes defer the heavy suites (spec:AST-030 FR20)', () => {
     expect(heavyCi(github).result).toBe('skipped');
   });
 
-  it('names the shared agent logins in one list, the heavy-suite caps included', () => {
-    expect(HEAVY_CANDIDATE).toContain(
-      `fromJSON('${JSON.stringify(SHARED_AGENT_LOGINS)}')`,
-    );
+  it('names no author in the deferral, and keeps the shared agent logins in one list with the heavy-suite caps', () => {
+    expect(HEAVY_CANDIDATE).not.toContain('user.login');
     const caps = fs.readFileSync(
       path.resolve(import.meta.dirname, '../actions/heavy-caps/action.yml'),
       'utf8',
@@ -414,7 +424,10 @@ describe("heavy-ci's skip on every other run", () => {
             ? {a11y: 'true', rtl: 'true', visual: 'true'}
             : id === 'room'
               ? {full: String(full)}
-              : {},
+              : // A push that is not spec-only or Lab-only defers.
+                id === 'heavy-ci' && runs
+                ? {deferred: 'true'}
+                : {},
       };
     }
     return results;
@@ -453,16 +466,24 @@ describe("heavy-ci's skip on every other run", () => {
       expect(results[id].result, id).toBe('skipped');
   });
 
-  it('runs the suites an opt-in label asks for on a pull request', () => {
-    const github = pushEvent({login: 'someone', action: 'labeled'});
-    github.event.pull_request.labels = [
-      {name: 'ci:run-a11y'},
-      {name: 'ci:run-rtl'},
-    ];
-    const results = plan(github);
-    expect(results['heavy-ci'].result).toBe('skipped');
+  it('runs the suites an opt-in label asks for once review passes, not on the first attempt', () => {
+    const labelled = attempt => {
+      const github = pushEvent({login: 'someone', attempt});
+      github.event.pull_request.labels = [
+        {name: 'ci:run-a11y'},
+        {name: 'ci:run-rtl'},
+      ];
+      return plan(github);
+    };
+    const first = labelled('1');
+    expect(first['heavy-ci'].result).toBe('success');
+    for (const id of ['pr-a11y-specs', 'pr-rtl-shard'])
+      expect(first[id].result, id).toBe('skipped');
+    // The review-pass re-run (a later attempt) runs them.
+    const again = labelled('2');
+    expect(again['heavy-ci'].result).toBe('skipped');
     for (const id of ['pr-a11y-guards', 'pr-a11y-specs', 'pr-rtl-shard'])
-      expect(results[id].result, id).toBe('success');
+      expect(again[id].result, id).toBe('success');
   });
 });
 

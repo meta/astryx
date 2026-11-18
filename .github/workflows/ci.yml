@@ -683,19 +683,23 @@ jobs:
   # code and theme, nothing sent to a document the code navigated to), and
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
-  # Whether this push defers the heavy suites (spec:AST-030 FR20, DEC-14): a
-  # push to a ready agent-lane pull request (the shared agent login), in its
-  # first attempt, runs only the fast checks (lint, typecheck). The heavy jobs
-  # skip, and the required checks fail with the reason until the pull request
-  # is marked ready or reopened, or its run is re-run in full before merge
-  # (any later attempt runs everything). A spec-only change is never deferred.
+  # Whether this push defers the heavy suites (spec:AST-030 FR20, DEC-32): a
+  # pull request's run into main, from any author, in its first attempt, runs
+  # only the fast checks (lint, typecheck): on a push, and when the pull
+  # request is opened, reopened or marked ready. The heavy jobs skip, and the
+  # required checks fail with the reason until review passes: at the first
+  # head whose review and spec gates pass, ci-review-pass.yml runs the run
+  # again in full, and so does merge-guard before merge (any later attempt
+  # runs everything). A spec-only or Lab-only change is never deferred, nor a
+  # release merge-back, a release-branch pull request or a release-critical
+  # one.
   # Every other run skips this job at once, so it delays nothing; every job
   # below it carries a status check, so the skip never skips them. It needs
   # only room, beside admission, so the Storybook build it gates still starts
   # with room (spec:AST-030 FR16), and like room it holds one slim job.
   heavy-ci:
     needs: [room]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.run_attempt == '1' && contains(fromJSON('["cixzhang"]'), github.event.pull_request.user.login) && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v')) && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.run_attempt == '1' && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v') && !contains(github.event.pull_request.labels.*.name, 'release-critical')) && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true') }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -728,8 +732,8 @@ jobs:
             exit 0
           fi
           echo 'deferred=true' >> "$GITHUB_OUTPUT"
-          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when marked ready and before merge. Mark the pull request ready, reopen it, or re-run all jobs of this run to run everything."
-          echo "Heavy CI deferred: runs when marked ready and before merge." >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when review passes and before merge. It starts on its own when the review and spec gates pass at this head; re-run all jobs of this run to run everything now."
+          echo "Heavy CI deferred: runs when review passes and before merge." >> "$GITHUB_STEP_SUMMARY"
 
   docsite-build:
     needs: [room, admission, heavy-ci]
@@ -1004,12 +1008,12 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: 'Lab-only: Lab tests + Storybook build'
@@ -1917,12 +1921,12 @@ jobs:
           path: heavy-ci-deferred.json
           retention-days: 7
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: Check out the scope action
@@ -2624,12 +2628,12 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
 
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # A push defers the heavy suites until review passes (spec:AST-030 FR20): the
       # required check fails with the reason, never passes as skipped.
       - name: Heavy CI deferred
         if: needs.heavy-ci.outputs.deferred == 'true'
         run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          echo "::error::Heavy CI deferred: runs when review passes and before merge (spec:AST-030 FR20)."
           exit 1
 
       - name: 'Lab-only: Lab tests + Storybook build'
