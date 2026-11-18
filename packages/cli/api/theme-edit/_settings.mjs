@@ -175,6 +175,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
  * @property {boolean} [only]
+ * @property {string[]} [hold] - Variants of its part (axis:value) drawn on another ground, where it would make text unreadable: they keep Core's look; the editor writes it.
  * @property {string[]} [keep] - Members of the group or family it reaches
  *   that keep their own look: the editor writes it when reaching them would
  *   make their text unreadable.
@@ -1721,6 +1722,15 @@ export function settingsProblem(
         !s.keep.every((/** @type {unknown} */ x) => typeof x === 'string' && x))
     )
       return `${s.thing} has keep ${JSON.stringify(s.keep)}, not a list of parts`;
+    if (
+      s.hold != null &&
+      (!Array.isArray(s.hold) ||
+        !s.hold.every(
+          (/** @type {unknown} */ x) =>
+            typeof x === 'string' && /^[\w-]+:[\w-]+$/.test(x),
+        ))
+    )
+      return `${s.thing} has hold ${JSON.stringify(s.hold)}, not a list of variants (axis:value)`;
     if (s.only === true && !onlyFits(s))
       return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one part, never a group or the whole theme`;
     const key = keyOf(s);
@@ -1836,6 +1846,7 @@ const ENTRY_FIELDS = [
   'mode',
   'only',
   'keep',
+  'hold',
 ];
 
 /**
@@ -4667,6 +4678,118 @@ export function borderFrames(ctx, data, value) {
       steps: (scoped ? variants.map(v => `variant:${v}`) : [undefined]).map(
         when => ({thing: 'border', value, on: p, ...(when ? {when} : {})}),
       ),
+    });
+  }
+  return out;
+}
+
+/**
+ * The value Core draws a property of a part with in one of its variants
+ * (`mode:drawer`), as the census read it: the value under that variant
+ * alone, else the part's value at rest; null when Core draws none.
+ * @param {Ctx} ctx @param {string} part @param {string} prop @param {string} variant axis:value
+ * @returns {string | null}
+ */
+export function coreValueIn(ctx, part, prop, variant) {
+  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at?.[prop];
+  if (!at) return null;
+  const cond = variant.replace(':', '=');
+  return at[cond] ?? at.always ?? null;
+}
+
+/**
+ * The variants of a part a setting on it would make unreadable while it
+ * reads elsewhere: each new contrast problem on the part is matched to the
+ * texts the census drew it with (by its sample and ground). A failing text
+ * drawn only in one placement on another ground (a top nav link in the
+ * phone menu, `mode:drawer`), where the part also draws text outside it,
+ * holds that placement at Core's look; a text failing where the part is
+ * drawn at rest stays a problem.
+ * @param {Ctx} ctx @param {string} part @param {Array<{key: string}>} newProblems
+ * @returns {string[]} axis:value
+ */
+export function heldVariantsOf(ctx, part, newProblems) {
+  const C = /** @type {any} */ (ctx).C;
+  const axes = /** @type {Record<string, string[]>} */ (
+    C?.variantValues?.(part) ?? {}
+  );
+  const pairs = /** @type {any[]} */ (C?.pairs ?? []).filter(
+    p => p.text === part,
+  );
+  /** The variants a census text was drawn in. @param {any} p */
+  const variantsOf = p =>
+    new Set(
+      (p.conds ?? []).flatMap((/** @type {string} */ c) =>
+        c
+          .split(/[,\s]+/)
+          .map(x => x.split('='))
+          // (A placement, never the style variant a theme picks.)
+          .filter(([a, v]) => a !== 'variant' && axes[a]?.includes(v))
+          .map(([a, v]) => `${a}:${v}`),
+      ),
+    );
+  // The grounds the part's text sits on where it is drawn in no variant.
+  const restGrounds = new Set(
+    pairs.filter(x => !variantsOf(x).size).map(x => x.bg?.target),
+  );
+  /** @type {Set<string>} */
+  const held = new Set();
+  for (const p of newProblems) {
+    const k = p.key.split('|');
+    if (k[0] !== 'text' || k[1] !== part) continue;
+    // (The same text on the ground it failed on: a link's label is drawn in
+    // the bar and in the menu alike.)
+    const drawn = pairs.filter(
+      x => x.sample === k[7] && (!k[4] || x.bg?.target === k[4]),
+    );
+    // (Only text on another ground: a region around the part, never the
+    // part's own fill, and not one it is drawn on at rest.)
+    if (
+      drawn.some(
+        x =>
+          !x.bg?.target ||
+          x.bg.target === part ||
+          restGrounds.has(x.bg.target),
+      )
+    )
+      continue;
+    // (A text that fails where the part is drawn at rest is the look asked:
+    // it stays a problem the result names, and holds nothing.)
+    if (!drawn.length) continue;
+    const common = drawn
+      .map(variantsOf)
+      .reduce((a, b) => new Set([...a].filter(v => b.has(v))));
+    if (!common.size) continue;
+    for (const v of common) held.add(v);
+  }
+  // (A variant that holds every text of the part is the part itself.)
+  return [...held].filter(v => pairs.some(x => !variantsOf(x).has(v)));
+}
+
+/**
+ * The settings that keep a part's held variants (`hold`) at Core's look:
+ * the same property, in each held variant, at the value Core draws it with
+ * there (a top nav link's color in the phone menu, where a color set for
+ * the dark bar would be unreadable).
+ * @param {Ctx} ctx @param {Setting} s
+ * @returns {Setting[]}
+ */
+export function holdCopies(ctx, s) {
+  const hold = /** @type {any} */ (s).hold;
+  if (!Array.isArray(hold) || !s.on || s.when) return [];
+  /** @type {Setting[]} */
+  const out = [];
+  for (const variant of hold) {
+    const value = coreValueIn(ctx, String(s.on), kebab(s.thing), variant);
+    if (value == null) continue;
+    out.push({
+      ...s,
+      value,
+      when: variant,
+      only: true,
+      hold: undefined,
+      keep: undefined,
+      note: undefined,
     });
   }
   return out;
@@ -7665,6 +7788,7 @@ export function compileTheme(ctx, data, base) {
     ...frameCopies(ctx, data, x),
     ...disabledCopies(ctx, data, x),
     ...edgeCopies(ctx, data, x),
+    ...holdCopies(ctx, x),
   ]);
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
@@ -11156,6 +11280,11 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  * @returns {Promise<ThemeProblem[]>}
  */
 export async function contrastProblems(ctx, data, res) {
+  // (Measured as built: a held variant keeps Core's look there.)
+  data = {
+    ...data,
+    settings: data.settings.flatMap(x => [x, ...holdCopies(ctx, x)]),
+  };
   const base = await baseResolved(ctx.project, data.like);
   /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string | null} [when] @param {string | null} [state] the state the pair is drawn in */
   const override = (side, _which, m, when, state = null) => {
@@ -11321,6 +11450,36 @@ export async function contrastProblems(ctx, data, res) {
     const t = p.fg.target;
     const token = p.fg.tokens[0];
     if (!t || !token) return null;
+    // A placement the census drew the text's own part in, every time (a top
+    // nav link in the phone menu, `mode=drawer`): an axis of the part other
+    // than its variant, and no state.
+    {
+      const axes = /** @type {Record<string, string[]>} */ (
+        ctx.C.variantValues?.(p.text) ?? {}
+      );
+      const states = ctx.project.target.get(p.text)?.states ?? [];
+      const conds = /** @type {string[]} */ (/** @type {any} */ (p).conds ?? []);
+      const placed = conds.length
+        ? conds
+            .map(
+              c =>
+                new Set(
+                  c
+                    .split(/[,\s]+/)
+                    .map(x => x.split('='))
+                    .filter(
+                      ([a, v]) =>
+                        a !== 'variant' &&
+                        !states.includes(v) &&
+                        axes[a]?.includes(v),
+                    )
+                    .map(([a, v]) => `${a}:${v}`),
+                ),
+            )
+            .reduce((a, b) => new Set([...a].filter(v => b.has(v))))
+        : new Set();
+      if (placed.size === 1) return [...placed][0];
+    }
     // A fill its part draws under one condition alone (an error toast's
     // red, `type=error`): the text on it is drawn in that condition.
     if (p.bg.target === t) {
