@@ -9,7 +9,16 @@
  * @position Colocated test for the marks/ directory (issue #4295 viz coverage)
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {createRef} from 'react';
+import {
+  describe,
+  it,
+  expect,
+  expectTypeOf,
+  vi,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {render, act, screen} from '@testing-library/react';
 import {Chart} from '../Chart';
 import {bar} from './bar';
@@ -427,6 +436,42 @@ describe('GL marks without WebGL', () => {
       handleRef.current!.clear();
     });
     unmount();
+  });
+
+  it('streamGL takes an object ref or a callback ref as handleRef', () => {
+    const objectRef = createRef<StreamGLHandle>();
+    const callbackRef = vi.fn<(handle: StreamGLHandle | null) => void>();
+    expectTypeOf(streamGL).toBeCallableWith({
+      color: '#10b981',
+      handleRef: objectRef,
+    });
+    expectTypeOf(streamGL).toBeCallableWith({
+      color: '#10b981',
+      handleRef: callbackRef,
+    });
+  });
+
+  it('streamGL passes its handle to a callback ref when the series mounts, and null on unmount', () => {
+    const handleRef = vi.fn<(handle: StreamGLHandle | null) => void>();
+    const {unmount} = renderMarks(
+      [streamGL({color: '#10b981', handleRef})],
+      [],
+      'x',
+      {xDomain: [0, 10]},
+    );
+    expect(handleRef).toHaveBeenCalledTimes(1);
+    const handle = handleRef.mock.calls[0][0];
+    expect(handle).toEqual({
+      push: expect.any(Function),
+      clear: expect.any(Function),
+    });
+    act(() => {
+      handle!.push(1, 2);
+      handle!.clear();
+    });
+    unmount();
+    expect(handleRef).toHaveBeenCalledTimes(2);
+    expect(handleRef).toHaveBeenLastCalledWith(null);
   });
 
   it('dotGLInteractive renders its two canvases and hover hit area without crashing', () => {

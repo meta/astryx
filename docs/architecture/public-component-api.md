@@ -25,6 +25,7 @@ verified_by:
     internal/eslint-plugin-astryx/require-baseprops-passthrough.js,
     packages/core/src/docPropLiterals.test.ts,
     packages/core/src/docPropReferences.test.ts,
+    packages/charts/src/marks/marks.test.tsx,
   ]
 deciding_specs:
   [
@@ -152,7 +153,13 @@ guidance owns the process used to propose and test APIs.
   moves a handler to another element keeps the order and cancellation it
   released for that handler and documents it (`family:input-fields` DEC-8).
 - **INV8 — Refs follow React 19.** A public DOM component accepts `ref` as a prop
-  and connects it to the element promised by its contract.
+  and connects it to the element promised by its contract. A public `handleRef`
+  through which a component or a chart series definition exposes its imperative
+  handle takes `Ref<Handle>`, so it accepts an object ref or a callback ref.
+  React calls a callback ref with the handle when the handle attaches, so the
+  caller learns when the handle is ready. When the handle detaches, a cleanup
+  the callback ref returned runs; a callback ref without a cleanup is called
+  with `null`.
 - **INV9 — Released APIs change deliberately.** A released prop, type, export,
   default, or observable behavior is not removed, renamed, retyped, deprecated, or
   corrected incompatibly without the lifecycle, evidence, and migration required by
@@ -460,7 +467,7 @@ Rejected: keeping a committed generated API report per package.
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element; a `handleRef` that exposes a handle rejects a callback ref                                                                                                                                                                                                                                                                                                                                   |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
 | INV2, DEC-1             | Public-API review against the system vocabulary                                                                          | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
