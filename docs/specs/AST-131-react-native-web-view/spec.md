@@ -141,9 +141,8 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   pop-up window, offers no geolocation, and blocks mixed content. A script at
   document start in every frame removes WebRTC (`RTCPeerConnection` and
   `navigator.mediaDevices`), turns DNS prefetching off, and removes
-  `<link rel=preconnect>`; on iOS the system's own switches for these are off
-  as well. The view injects no script besides this one and the message
-  channel's (FR9). There is no prop that injects JavaScript.
+  `<link rel=preconnect>`. The view injects no script besides this one and the
+  message channel's (FR9). There is no prop that injects JavaScript.
 - **FR5 — Navigation follows declared policy, decided natively.**
   - The first load and every main-frame navigation to the page's own origin
     or to an origin in `allowedOrigins` stay in the view. Subresources and
@@ -276,15 +275,21 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   JavaScript refuses a session or source it knows the view cannot honour before
   anything crosses: it renders no host view and reports the reason once per
   refusal and page.
-- **FR14 — The binary reports what it honours.**
-  `AstryxWebViewInfo.isAvailable()`, `version()`, and `supports(feature)`
-  answer for this binary (`spec:AST-112/FR7`). The features are `session`,
+- **FR14 — The web view's behaviour beyond the baseline is named features.**
+  `AstryxWebView`'s baseline is loading a page or an HTML string, the safe
+  defaults (FR4), navigation to the page's own and allowed origins, the
+  colour scheme, text scale, and content height (FR10), the message channel
+  without sender fields, and the load events (FR13). Every other behaviour is
+  a named contract feature, `AstryxWebView.<feature>`: `session`,
   `userAgent`, `hardening`, `externalNavigation`, `sessionHandle`,
   `externalSchemes`, `grantsOrigin`, `channelIsolation`, `preventsCapture`,
   `pageStorage`, `bundledOrigin`, `pageProfile`, `linkMenu`, `messageOrigin`,
-  `warmBundle`, and `contentProcessEnd`.
-  - A feature one platform implements answers false on the other:
-    `preventsCapture` on Android only; `linkMenu` and `warmBundle` on iOS only.
+  `warmBundle`, and `contentProcessEnd`. The binary of each platform lists the
+  features it implements (FR18); there are no counters.
+  - `AstryxWebViewInfo.isAvailable()` and `supports(feature)` answer from that
+    list for this binary (`spec:AST-112/FR7`).
+  - A feature one platform implements is listed only there:
+    `preventsCapture` on Android; `linkMenu` and `warmBundle` on iOS.
   - `channelIsolation` and `pageProfile` also follow the device's constants
     (FR8, FR9).
   - Without the module (not opted in, Jest, the web), nothing is claimed. The
@@ -330,6 +335,17 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
   library's Stage version floor: the package names the oldest Stage that
   implements its contract set, and an older Stage refuses the project with the
   gaps listed.
+- **FR19 — Native code uses public platform API only.** The web view and its
+  modules use only the public API of WebKit, the Android SDK, and AndroidX.
+  One exception exists, and it is off by default: an app may opt in (the
+  configuration plugin's `web.privateHardening` option) to WebKit's private
+  preference switches that turn peer connections, media devices, and DNS
+  prefetching off in every frame on iOS. WebKit has no public setting for
+  them, so the switches are the only way to cover a frame the document-start
+  script cannot reach. The view uses each switch only when the running WebKit
+  answers to it, and the app that opts in takes the review risk of private
+  API. Without the opt-in, the document-start script is the layer on both
+  platforms.
 
 ### Platform support
 
@@ -384,6 +400,7 @@ grantsOrigin?}` (an HTML string), or `{bundle: {name, path?}}` (a bundled
 | FR16     | Library and platform tests with the module absent, not linked, and switched off                                       | `html` and `url` sources without a web view                                                                                       | A fallback is missing, `no-native-view` is reported more than once, or a call rejects                                                      |
 | FR17     | VoiceOver and TalkBack checks on the Simulator, emulator, and device; text-size checks                                | a page with headings and links; the largest text size                                                                             | The region has no name, the page's content is not read, or the text does not scale                                                         |
 | FR18     | Contract baseline check; Astryx Stage contract suites; Stage version floor check                                      | a binary without a named feature; an older Stage                                                                                  | The JavaScript uses a feature the binary does not list, or an older Stage runs the project                                                 |
+| FR19     | Source check of the native code's symbols on both platforms; Simulator check with the opt-in on and off               | the default app; an app that opts in to `web.privateHardening`                                                                    | A private symbol is used without the opt-in, or on Android at all                                                                          |
 
 ## Decision log
 
@@ -459,10 +476,12 @@ a working page that leaks what the app meant to keep.
   `WebView` and `WebContent` take a bundle source?** (`human-api`) Options:
   app API through `NativeWebView` only; or a `bundle` prop on the library's
   components.
-- **OQ4 — Does `AstryxAuthSession` stay in the `web` capability when no
-  Astryx component uses it?** (`human-api`) Options: keep it beside the web
-  view with the `useAuthSession` hook; or make sign-in a capability of its
-  own.
+- **OQ4 — Is web sign-in (`AstryxAuthSession`) an opt-in capability of its
+  own?** (`human-api`) It needs no embedded web view and no Astryx component
+  uses it. Options: keep it in `web` beside the web view with the
+  `useAuthSession` hook; or make sign-in its own opt-in, so an app that signs
+  in links no WebKit web view and an app with a web view links no redirect
+  activity.
 - **OQ5 — Does `AstryxPageSnapshots` stay in this group's scope?**
   (`human-api`) Options: keep it as app API in `web`; or remove it from the
   public surface.
@@ -473,3 +492,8 @@ a working page that leaks what the app meant to keep.
   iOS-only features?** (`human-design`)
 - **OQ8 — Does the page's `prefers-reduced-motion` follow the system's Reduce
   Motion setting on both engines?** (`checkable`)
+- **OQ9 — Does `AstryxWebViewInfo` fold into the platform info's named
+  features?** (`human-api`) Options: keep a web-view feature report in the
+  `web` capability; or list `AstryxWebView.<feature>` in the platform info's
+  contract features with every other contract, and keep `supports(feature)`
+  as a reader of that list.
