@@ -12,7 +12,8 @@ import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {
   projectAugmentations,
-  propAugmentationPoint,
+  propWideningInterfaces,
+  resolveAugmentationTarget,
 } from './core-augmentation-points.mjs';
 
 const CORE_ROOT = path.resolve(
@@ -20,18 +21,42 @@ const CORE_ROOT = path.resolve(
   '../../../core',
 );
 
-describe('propAugmentationPoint', () => {
-  it('names the interface that widens an open axis, and nothing for a closed one', () => {
-    expect(propAugmentationPoint(CORE_ROOT, 'Button', 'variant')).toEqual({
-      moduleName: 'Button',
-      interfaceName: 'ButtonVariantMap',
+describe('propWideningInterfaces', () => {
+  it.each([
+    ['Button', 'variant', ['ButtonVariantMap']],
+    ['Button', 'size', []],
+    ['ClickableCard', 'variant', ['CardVariantMap']],
+    ['Link', 'color', ['TextColorMap']],
+    ['Heading', 'color', ['TextColorMap']],
+    ['TextInput', 'statusVariant', ['FieldStatusVariantMap']],
+    ['Text', 'type', ['CustomTextTypes']],
+    ['Icon', 'variant', ['IconVariantMap']],
+    ['AvatarStatusDot', 'variant', ['AvatarStatusDotVariantMap']],
+  ])('%s %s takes the keys of %j', async (component, prop, names) => {
+    const found = await propWideningInterfaces(CORE_ROOT, component, prop);
+    expect([...(found ?? ['unknown'])]).toEqual(names);
+  });
+
+  it('cannot follow a prop without a Core', async () => {
+    expect(await propWideningInterfaces(null, 'Button', 'variant')).toBeNull();
+  });
+});
+
+describe('resolveAugmentationTarget', () => {
+  it("names the interface theme build enrolls a target's values in, by the doc that owns the target", async () => {
+    expect(
+      await resolveAugmentationTarget(
+        CORE_ROOT,
+        'avatar-status-dot',
+        'variant',
+      ),
+    ).toEqual({
+      moduleName: 'Avatar',
+      interfaceName: 'AvatarStatusDotVariantMap',
     });
-    expect(propAugmentationPoint(CORE_ROOT, 'Button', 'size')).toBeNull();
-    expect(propAugmentationPoint(CORE_ROOT, 'Text', 'type')).toEqual({
-      moduleName: 'theme',
-      interfaceName: 'CustomTextTypes',
-    });
-    expect(propAugmentationPoint(null, 'Button', 'variant')).toBeNull();
+    expect(
+      await resolveAugmentationTarget(CORE_ROOT, 'button', 'size'),
+    ).toBeNull();
   });
 });
 
@@ -91,7 +116,10 @@ declare module 'somewhere-else' {
       'node_modules/other/index.d.ts',
       "export {};\ndeclare module '@astryxdesign/core/Banner' { interface BannerStatusMap { unrelated: true } }\n",
     );
-    const {keys, complete} = projectAugmentations(dir);
+    const {keys, complete} = projectAugmentations(
+      dir,
+      path.join(dir, 'src', 'page.tsx'),
+    );
     expect(complete).toBe(true);
     expect([...(keys.get('ButtonVariantMap') ?? [])]).toEqual([
       'primary-muted',
@@ -100,11 +128,69 @@ declare module 'somewhere-else' {
     expect([...(keys.get('BannerStatusMap') ?? [])]).toEqual(['neutral']);
   });
 
+  it('reads past a broken file that cannot augment Core', () => {
+    put('src/broken.tsx', 'export default function Page( { return <div>; }\n');
+    expect(
+      projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+    ).toBe(true);
+  });
+
   it('says it is incomplete when a file that may augment Core does not parse', () => {
     put(
       'src/broken.ts',
       "declare module '@astryxdesign/core/Button' { interface ButtonVariantMap { \n",
     );
-    expect(projectAugmentations(dir).complete).toBe(false);
+    expect(
+      projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+    ).toBe(false);
+  });
+
+  it("says it is incomplete when the page's tsconfig reaches outside the project", () => {
+    put(
+      'tsconfig.json',
+      JSON.stringify({include: ['src', '../shared/**/*.ts']}),
+    );
+    expect(
+      projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+    ).toBe(false);
+    put(
+      'tsconfig.json',
+      JSON.stringify({
+        include: ['src'],
+        compilerOptions: {typeRoots: ['../types']},
+      }),
+    );
+    expect(
+      projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+    ).toBe(false);
+    put(
+      'tsconfig.json',
+      JSON.stringify({
+        include: ['src/**/*'],
+        compilerOptions: {typeRoots: ['./types']},
+      }),
+    );
+    expect(
+      projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+    ).toBe(true);
+  });
+
+  it('says it is incomplete when the walk meets a linked folder', () => {
+    const outside = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-augmentations-linked-'),
+    );
+    try {
+      fs.mkdirSync(path.join(dir, 'src'), {recursive: true});
+      fs.symlinkSync(
+        outside,
+        path.join(dir, 'src', 'shared'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      expect(
+        projectAugmentations(dir, path.join(dir, 'src', 'page.tsx')).complete,
+      ).toBe(false);
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
   });
 });
