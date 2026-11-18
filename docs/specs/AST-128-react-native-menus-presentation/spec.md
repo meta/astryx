@@ -46,7 +46,10 @@ the capability shape of `spec:AST-112/FR7` and the host wiring of
 Interface Guidelines pages Menus, Pull-down buttons, Context menus, Action
 sheets, Sheets, and Modality) to React Native on iOS.
 The menu, action sheet, presentation, and modal hosts belong to the platform's
-core (`spec:AST-112/FR1`) and link in every app.
+core (`spec:AST-112/FR1`) and link in every app. Each component's own record
+states its rows, sheet heights, dismissal rules, and `auto` default for
+`render`, and the navigation record states the router's route options; this
+record states the native pieces they present through.
 
 ## Why this exists
 
