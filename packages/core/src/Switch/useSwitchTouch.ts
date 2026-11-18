@@ -208,6 +208,8 @@ interface Drag {
 export class SwitchTouchController {
   private elements: Elements | null = null;
   private geometry: SwitchTouchGeometry;
+  /** Whether `geometry` holds the rendered boxes since the last attach. */
+  private isGeometryMeasured = false;
   private isOn: boolean;
   private isInteractive = true;
   /** The side the visuals show or head to. */
@@ -274,7 +276,9 @@ export class SwitchTouchController {
     this.detach();
     this.elements = elements;
     this.presentation = presentation;
-    this.measureGeometry();
+    // The boxes are read at the first press, not here: a read at mount forces
+    // a layout for every switch on the page.
+    this.isGeometryMeasured = false;
     this.direction = isRtlElement(elements.surface) ? -1 : 1;
     this.isVisuallyOn = this.isOn;
     const host = getGestureHost(elements.surface.ownerDocument);
@@ -386,7 +390,7 @@ export class SwitchTouchController {
 
   setGeometry(geometry: SwitchTouchGeometry): void {
     this.geometry = geometry;
-    this.measureGeometry();
+    this.isGeometryMeasured = false;
     this.thumb?.set({x: 0, scaleX: 1, scaleY: 1}, {promote: false});
   }
 
@@ -410,6 +414,7 @@ export class SwitchTouchController {
     if (trackWidth <= 0 || trackHeight <= 0) {
       return;
     }
+    this.isGeometryMeasured = true;
     const style = thumb == null ? null : getComputedStyle(thumb);
     const thumbWidth = style == null ? NaN : parseFloat(style.width);
     const thumbHeight = style == null ? NaN : parseFloat(style.height);
@@ -444,6 +449,11 @@ export class SwitchTouchController {
     // and is sent to the new rest below. A spring already heading for the new
     // rest moves whole instead, keeping its start time and velocity. A
     // reduced-motion dip shifts whole, its end included, and keeps going.
+    // A value change before any press reads the boxes first, so the shift uses
+    // the rendered travel.
+    if (!this.isGeometryMeasured) {
+      this.measureGeometry();
+    }
     const springs = thumb.reducedMotion() === 'off';
     thumb.rebase(
       {x: this.direction * (this.rest(previous) - this.rest(isOn))},
@@ -496,6 +506,8 @@ export class SwitchTouchController {
   // --- Touches ---------------------------------------------------------------
 
   private touchDown(time: number): void {
+    // Each press reads the rendered boxes once, before the drag needs them.
+    this.measureGeometry();
     this.landBase(time);
     this.released = false;
     this.pendingTravel = false;

@@ -302,3 +302,34 @@ describe("the press's lift and settle at the theme's tempo", () => {
     expect(settleSeconds(0.75) / atOne).toBeCloseTo(0.75, 6);
   });
 });
+
+describe('the track geometry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+    animators.length = 0;
+  });
+
+  it('reads no box when it attaches, and reads the track once at each press', () => {
+    const boxReads: Element[] = [];
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        boxReads.push(this);
+        return original.call(this);
+      },
+    );
+    const {controller, track} = mount();
+    expect(boxReads.filter(element => element === track)).toHaveLength(0);
+
+    const press = controller as unknown as {
+      onControlEvent(event: string, touch: {x: number; startX: number}): void;
+    };
+    press.onControlEvent('touchDown', {x: 0, startX: 0});
+    expect(boxReads.filter(element => element === track)).toHaveLength(1);
+    press.onControlEvent('touchUpInside', {x: 0, startX: 0});
+    press.onControlEvent('touchDown', {x: 0, startX: 0});
+    expect(boxReads.filter(element => element === track)).toHaveLength(2);
+  });
+});
