@@ -126,7 +126,7 @@ Every run reads one base: Core, or an installed integration whose manifest decla
 `--json` works with every command listed in `jsonSupported` (`astryx manifest --json`), which is every command except the bare groups such as `astryx theme`. The other four change only the reads named here; other commands ignore them:
 
 - `--json`: Output as typed JSON envelope: `{ apiVersion, type, package?, data, meta? }` (errors: `{ apiVersion, error, code, suggestions? }`)
-- `--detail <level>`: Detail level for `component`, `hook`, and docs tree reads (such as `astryx docs cli/commands/build`), increasing in size: `brief` (names only, default for lists) < `compact` (names + 1-line descriptions) < `full` (full docs per entry). Single-item views default to `full`.
+- `--detail <level>`: Detail level for `component`, `hook`, and docs tree reads (such as `astryx docs cli/commands/build`), increasing in size: `brief` (names only, default for lists) < `compact` (names + 1-line descriptions) < `full` (full docs per entry). A component read (`astryx component <Name>`) defaults to `compact`, a short answer that ends with the `--detail full` command; hook and docs reads default to `full`.
 - `--zh`: Simplified Chinese for component reads and for docs topics that have a translation (English otherwise)
 - `--dense`: Token-efficient dense text for `astryx component <Name>` and `astryx docs <topic>`
 - `--lang <locale>`: Language or format for component and docs reads: `en` (default), `zh` (as `--zh`), or `dense` (as `--dense`)

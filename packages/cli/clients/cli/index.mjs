@@ -695,7 +695,7 @@ export async function createProgram({argv} = {}) {
       describeOption(new Option('--detail <level>'), [
         'Detail level for component, hook, and docs tree reads (e.g. docs cli/commands/build)',
         {commands: ['theme build'], text: ', and for theme build reports'},
-        '. Lists default to brief',
+        '. Lists default to brief, and a component read to compact',
         {
           commands: ['theme build'],
           text: '; theme build prints one line per built theme unless full, which adds the install example and font recipe',
