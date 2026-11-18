@@ -211,6 +211,14 @@ one pending load per module, caches a success, and resets after a failure.
   that imports a component that reaches it. Default behavior, CSS (`spec:AST-080` DEC-4 governs it),
   tests, stories, docs and generated files are outside this rule (DEC-5).
 
+  Named entry: the shared theme lookup Spinner reads for a theme's `spinner`
+  indicator (`Indicator/useThemeIndicator` through `theme/useTheme` and
+  `theme/themeRegistry`) costs under 0.5 KB gzip on a page that renders only
+  Spinner, and under 0.1 KB on one that renders only TreeList.
+  It is not an unused feature: a page that renders an indicator a theme can
+  replace uses theming, and the lookup is how the theme reaches it
+  (`component:Indicator` DEC-1).
+
 ### Allowlist
 
 | Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |

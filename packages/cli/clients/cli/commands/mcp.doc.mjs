@@ -31,7 +31,11 @@ export const doc = {
       flag: '--docs-only',
       cliOnly: true,
       description:
-        'Serve only the commands that read the docs (search, build, component, hook, docs, template, discover, theme list and theme targets), one message at a time, without the inputs that name a folder, a file to write or a package to read',
+        'Serve only the commands that read the docs (search, build, component, hook, docs, template, discover, theme list',
+      pointers: [
+        {commands: ['theme targets'], text: ' and theme targets'},
+        '), one message at a time, without the inputs that name a folder, a file to write or a package to read',
+      ],
     },
   ],
   examples: [

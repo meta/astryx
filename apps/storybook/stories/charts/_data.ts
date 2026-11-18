@@ -5,6 +5,36 @@
  * suffix) so Storybook won't pick it up as a story.
  */
 
+/**
+ * Seeded pseudo-random generator (mulberry32) with values in [0, 1). Stories use
+ * it instead of `Math.random`, so every load renders the same data and two
+ * captures of one story can be compared.
+ */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Returns a function that gives the next sample of a noisy sine wave at
+ * x = 0, 1, 2, … Each call to this factory starts the same sequence again.
+ */
+export function createStreamSamples(seed = 4): () => {x: number; y: number} {
+  const random = seededRandom(seed);
+  let x = 0;
+  return () => {
+    const sample = {x, y: 50 + Math.sin(x / 10) * 30 + random() * 10};
+    x++;
+    return sample;
+  };
+}
+
 export const monthlyData = [
   {month: 'Jan', revenue: 45, costs: 30, trend: 38},
   {month: 'Feb', revenue: 52, costs: 35, trend: 42},
@@ -53,26 +83,29 @@ export const salesData = [
   {month: 'Jun', sales: 70, target: 50, errorHigh: 76, errorLow: 64},
 ];
 
+const stockRandom = seededRandom(1);
 export const stockData = Array.from({length: 30}, (_, i) => {
   const base = 100 + Math.sin(i / 5) * 20 + i * 0.5;
-  const open = base + (Math.random() - 0.5) * 8;
-  const close = base + (Math.random() - 0.5) * 8;
+  const open = base + (stockRandom() - 0.5) * 8;
+  const close = base + (stockRandom() - 0.5) * 8;
   return {
     day: `Day ${i + 1}`,
     open: Math.round(open * 10) / 10,
     close: Math.round(close * 10) / 10,
     high:
-      Math.round(Math.max(open, close, base + Math.random() * 10) * 10) / 10,
-    low: Math.round(Math.min(open, close, base - Math.random() * 10) * 10) / 10,
-    volume: Math.round(500 + Math.random() * 1000),
+      Math.round(Math.max(open, close, base + stockRandom() * 10) * 10) / 10,
+    low: Math.round(Math.min(open, close, base - stockRandom() * 10) * 10) / 10,
+    volume: Math.round(500 + stockRandom() * 1000),
   };
 });
 
+const scatterRandom = seededRandom(2);
 export const scatterData = Array.from({length: 200}, () => ({
-  x: Math.random() * 100,
-  y: Math.random() * 100,
+  x: scatterRandom() * 100,
+  y: scatterRandom() * 100,
 }));
 
+const heatmapRandom = seededRandom(3);
 export const heatmapData: Record<string, unknown>[] = [];
 const HEATMAP_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 for (const day of HEATMAP_DAYS) {
@@ -84,7 +117,7 @@ for (const day of HEATMAP_DAYS) {
         50 +
           Math.sin(hour / 4) * 30 +
           (day === 'Sat' || day === 'Sun' ? -20 : 10) +
-          Math.random() * 20,
+          heatmapRandom() * 20,
       ),
     });
   }

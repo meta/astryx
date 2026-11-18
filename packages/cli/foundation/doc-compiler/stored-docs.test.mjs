@@ -7,6 +7,7 @@ import {pathToFileURL} from 'node:url';
 import * as util from 'node:util';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {importUrl} from '../fs/import-url.mjs';
 import {importDocModule} from './import.mjs';
 import {storedKey, storedParseKey, STORED_DOCS_FILE} from './stored-docs.mjs';
 import {parseReadableDoc} from './parse-readable.mjs';
@@ -123,7 +124,8 @@ describe('stored doc exports', () => {
     ]) {
       const exports = stored[storedKey(fs.readFileSync(file, 'utf-8'))];
       if (!exports) continue;
-      const native = await import(`${pathToFileURL(file).href}?native`);
+      // Node loads these directly, without a request per doc to Vitest's main process.
+      const native = await importUrl(`${pathToFileURL(file).href}?native`);
       expect(exports, file).toEqual({...native});
       checked++;
     }
