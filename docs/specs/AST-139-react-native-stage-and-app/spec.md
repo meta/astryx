@@ -171,6 +171,9 @@ define, so Astryx React Native itself stays the same with or without it.
   FR6 gap: Astryx Stage's `AstryxAppearance` has no `getRunOverride` and no
   launch link.
 
+  FR6 gap: Astryx Stage has no `AstryxBack` and no `AstryxLaunch` in the
+  Android look (OQ7).
+
   FR6 gap: in Astryx Stage the context menu does not play the lift
   animation, a held finger cannot slide onto a row, and `medium` row elements
   draw as a list.
@@ -252,10 +255,14 @@ define, so Astryx React Native itself stays the same with or without it.
     channel, its outcome codes have no frozen shape either; from the first
     stable release that ships a code, the code is append-only and keeps its
     meaning (`architecture:cli-surface` INV3).
-  - Where `@astryxdesign/react-native-stage` is not installed, the group does
-    not exist: the CLI reserves no Stage name and answers as it does for any
-    unknown command. The `astryx experimental` group admits it
-    (`spec:AST-017` FR27, `spec:AST-084` FR0).
+  - The `astryx experimental rn` level belongs to no package: each installed
+    package that contributes a group under it (this group, or Preview's in
+    `spec:AST-141` FR12) adds that group, and bare `astryx experimental rn`
+    lists the groups installed packages contribute. With no such package
+    installed, `astryx experimental rn` and its groups do not exist: the CLI
+    reserves no Stage name and answers as it does for any unknown command.
+    The `astryx experimental` group admits the level (`spec:AST-017` FR27,
+    `spec:AST-084` FR0).
   - `stage open`, `stage shot`, `stage play`, and `stage a11y` take one set of
     render options, which set the simulated device and its settings (FR3):
     - the device: `--platform ios|android`, `--device <name>`,
@@ -271,8 +278,11 @@ define, so Astryx React Native itself stays the same with or without it.
     - the network: `--network wifi|ethernet|cellular|offline`, with
       `+constrained` for a low-data path, and
       `--network-profile <name|latency,down,up,loss>` for a conditioned link;
-    - the project: `--route <path>`, `--dev-server-url <url>`,
-      `--engine <path>`, and `--out <path>`.
+    - the project: `--route <path>`, `--dev-server-url <url>` (the running
+      dev server, FR4), `--bundle <path>` (a prebuilt app bundle),
+      `--sample <name>` (one of Stage's built-in samples), `--engine <path>`,
+      and `--out <path>`. Without `--dev-server-url`, `--bundle`, or
+      `--sample`, a run builds the project's one-shot production bundle.
   - `--window <id>` on `stage shot`, `stage a11y`, and `stage play` acts on
     that window's running app, with its state kept, instead of a fresh render:
     a capture of the live screen, its accessibility tree, or a script of steps
@@ -287,8 +297,8 @@ define, so Astryx React Native itself stays the same with or without it.
     use, in a file it ships, never in `astryx.config`. The pin names the release that
     `stage install` gets, not a minimum: FR7 decides whether a Stage runs the
     project. A binary that fails its checksum
-    or signature never runs. `--engine <path>` runs a binary that no checksum
-    covers, and `stage which` reports that source. No command passes
+    or signature never runs. `--engine <path>` runs a binary that neither the
+    checksum nor the signature check covers, and `stage which` reports that source. No command passes
     arguments through to another tool.
   - `stage open` says in its summary that it keeps running. It writes its
     result once, when the window is ready, and then closes standard output;
@@ -299,14 +309,18 @@ define, so Astryx React Native itself stays the same with or without it.
     Stage cache is a per-user place (`spec:AST-081` FR7), and a file that
     `--out` names by an absolute path is written there, never replacing a
     file the command did not write (`architecture:cli-surface` DEC-16).
-  - The group answers: what does this app render, and
-    how does it behave, without a simulator? `experimental export` writes a
+  - The four render commands (`open`, `shot`, `play`, `a11y`) answer: what
+    does this app render, and how does it behave, without a simulator? `experimental export` writes a
     page as one HTML file, so it does not answer, and `astryx rn run`
     puts the app on a simulator, an emulator, or a device and returns no
     picture, accessibility tree, or step report, so an option on it cannot
-    answer either (`spec:AST-042` FR4). Its function is
-    `stage` in `@astryxdesign/react-native-stage`, and its result is captures,
-    step reports, and the accessibility tree.
+    answer either (`spec:AST-042` FR4). Their result is captures, step
+    reports, and the accessibility tree. `install` answers how a developer
+    gets the Stage release the package pins, `windows` which windows
+    `--window` can drive, and `which` which Stage binary the commands run;
+    each runs without rendering a project, so none is an option of a render
+    command. Each subcommand is its own function in
+    `@astryxdesign/react-native-stage`, named after it.
   - Its outcomes beyond a wrong or missing argument or option:
 
     | Outcome                                                                                                                           | Code                               |
@@ -317,6 +331,7 @@ define, so Astryx React Native itself stays the same with or without it.
     | `--window` names no open Stage window                                                                                             | `ERR_STAGE_NO_WINDOW`              |
     | A script step fails; the report names the step                                                                                    | `ERR_STAGE_STEP_FAILED`            |
     | The app throws or fails to start in Stage                                                                                         | `ERR_STAGE_JS_ERROR`               |
+    | The app does not take the route `--route` names                                                                                   | `ERR_STAGE_ROUTE_NOT_TAKEN`        |
     | Stage cannot set up the project                                                                                                   | `ERR_STAGE_PROJECT_SETUP`          |
     | The project's package needs a contract this Stage does not implement or does not know; the envelope lists each one                | `ERR_STAGE_CONTRACTS`              |
     | The project's package version has feature lists Stage can neither read nor find in its own record; the envelope names the version | `ERR_STAGE_CONTRACTS`              |
@@ -356,8 +371,8 @@ define, so Astryx React Native itself stays the same with or without it.
   `@astryxdesign/react-native-stage`, the experimental package that
   contributes the `astryx experimental rn stage` group (FR8).
 - `architecture:cli-surface` INV6, which places every command in the CLI's
-  own command folder, gains a command group that an installed package
-  contributes, loaded by the mechanism `spec:AST-112` OQ5 settles for
+  own command folder, gains command groups that installed packages
+  contribute under `astryx experimental rn` (FR8), loaded by the mechanism `spec:AST-112` OQ5 settles for
   package commands; the CLI carries no Stage command code and reserves no
   Stage name, and `@astryxdesign/react-native` does not change.
 - `architecture:cli-surface` INV2 and INV9 admit a command that keeps
@@ -372,8 +387,8 @@ define, so Astryx React Native itself stays the same with or without it.
   the canary channel, its outcome codes may change or be removed (FR8). The
   codes of FR8's table are registered by this record: `ERR_STAGE_UNTRUSTED`,
   `ERR_STAGE_NO_WINDOW`, `ERR_STAGE_STEP_FAILED`, `ERR_STAGE_JS_ERROR`,
-  `ERR_STAGE_PROJECT_SETUP`, `ERR_STAGE_CONTRACTS`, and
-  `ERR_STAGE_DEV_SERVER_UNREACHABLE` are new and the group's own, and `ERR_DEP_MISSING`,
+  `ERR_STAGE_PROJECT_SETUP`, `ERR_STAGE_CONTRACTS`, `ERR_STAGE_ROUTE_NOT_TAKEN`,
+  and `ERR_STAGE_DEV_SERVER_UNREACHABLE` are new and the group's own, and `ERR_DEP_MISSING`,
   `ERR_FETCH_FAILED`, and `ERR_INVALID_OPTION` keep the meanings the CLI
   gives them.
 - Each platform group record (`spec:AST-123` to `spec:AST-132`, and `spec:AST-135`) states its
@@ -415,8 +430,8 @@ components instead of the native contracts.
 **Decider:** imdreamrunner, 2026-11-17
 
 A picture that silently leaves out a native piece misleads the person or agent
-who trusts it. Stage reads what the project's package declares and refuses,
-with the list, when it lacks what the project needs. Known differences that
+who trusts it. Stage derives what the project's package version needs (FR7)
+and refuses, with the list, when it lacks what the project needs. Known differences that
 remain are listed in every report.
 
 Rejected: a minimum Stage version named by each Astryx release, because every release of the package would then track a development tool.
@@ -532,7 +547,9 @@ contracts to a development tool's output.
   app does. The second lets a reviewer without a phone open the same link; it
   brings the encrypted-bundle checks of `spec:AST-141/FR8` to Stage.
 - **OQ7 — Does Stage simulate the Android root back gate and launch hold?**
-  (`checkable`) Options: keep both absent, as on iOS (FR6); or simulate the
+  (`checkable`) Both are absent today, a divergence from Android that FR6
+  lists as a gap; keeping them absent would amend DEC-4 for these two
+  modules. Options: keep both absent, as on iOS; or simulate the
   back-to-home animation at the root and a launch window held until the
   first content. Absent keeps Stage simple and honest in the report; a
   simulation lets a check cover the Android root and the first frame.
