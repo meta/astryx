@@ -76,8 +76,8 @@ other libraries (FR9). Icon names and theme icons follow `spec:AST-082/FR17`.
   vector scene. Text lies over a drawing; touches go to the view under it.
 - The system menu's own symbol images (the Menus and presentation record owns
   the menu host).
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
