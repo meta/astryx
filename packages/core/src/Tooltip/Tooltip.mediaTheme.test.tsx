@@ -4,9 +4,10 @@
  * @file Tooltip.mediaTheme.test.tsx
  * @input Tooltip with `Text` content under themes whose inverted surface is
  *   dark or light, in either color mode
- * @output Proves that the supplied content renders inside a MediaTheme whose
- *   side reads on the tooltip's inverted surface, so token-colored content
- *   such as `Text` does not take the surface's own color
+ * @output Proves that the supplied content renders with a media side, so
+ *   token-colored content such as `Text` does not take the surface's own
+ *   color. jsdom paints no surface, so these cases read the side before a
+ *   measurement; the Chromium contrast spec measures every shipped theme
  * @position Unit test for the tooltip content's media context
  */
 
@@ -52,21 +53,17 @@ describe('Tooltip content media context', () => {
     expect(mediaOfContent(withSurface('#0a1317'), 'light')).toBe('dark');
   });
 
-  it('a dark inverted surface in a dark page still gives light text', () => {
-    expect(mediaOfContent(withSurface('#0a1317'), 'dark')).toBe('dark');
-  });
-
   it('a light inverted surface gives Text content dark text', () => {
     expect(mediaOfContent(withSurface('#f4f0e8'), 'dark')).toBe('light');
   });
 
-  it('a surface the theme cannot resolve starts from the color mode', () => {
+  it('before a measurement the side is the one opposite the color mode', () => {
     expect(mediaOfContent(withSurface('oklch(0.2 0.01 230)'), 'light')).toBe(
       'dark',
     );
   });
 
-  it('content that already holds a MediaTheme keeps its own and gets no second one', () => {
+  it('content that holds a MediaTheme keeps its own side for what it holds', () => {
     render(
       <Theme theme={withSurface('#0a1317')} mode="light">
         <Tooltip
@@ -83,6 +80,5 @@ describe('Tooltip content media context', () => {
     const text = screen.getByText('Own context');
     const media = text.closest('[data-astryx-media]');
     expect(media?.getAttribute('data-astryx-media')).toBe('light');
-    expect(media?.parentElement?.closest('[data-astryx-media]')).toBeNull();
   });
 });

@@ -519,10 +519,13 @@ export const gothicTheme = defineTheme({
       '--color-icon-accent': 'var(--color-accent)',
     },
   },
+  // Gothic's secondary text is one light color too, so a light media surface
+  // takes a darker one that reads on it.
   onLight: {
     tokens: {
       '--color-text-accent': 'var(--color-accent)',
       '--color-icon-accent': 'var(--color-accent)',
+      '--color-text-secondary': neutral.dark[50],
     },
   },
 

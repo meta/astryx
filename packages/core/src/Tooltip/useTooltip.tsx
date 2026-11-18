@@ -14,7 +14,6 @@
  */
 
 import {
-  isValidElement,
   use,
   useCallback,
   useEffect,
@@ -22,7 +21,6 @@ import {
   useState,
   type ReactNode,
   type RefCallback,
-  type RefObject,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -46,9 +44,7 @@ import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
-import {MediaTheme, MediaTokens} from '../theme/MediaTheme';
-import {useInvertedSurfaceMediaMode} from '../hooks/useAutoMediaMode';
-import {pickInvertedSide, type MediaSidePicker} from '../hooks/mediaSide';
+import {TooltipMediaContent} from './TooltipMediaContent';
 import {
   colorVars,
   radiusVars,
@@ -63,43 +59,6 @@ import {
  * the tooltip surface without the tooltip disappearing (WCAG 1.4.13 hoverable).
  */
 const HOVER_BRIDGE_DELAY = 100;
-
-/**
- * The page's primary text is not the color this surface uses. So only the two
- * on-colors compete, and the content always gets a media side.
- */
-const pickTooltipSide: MediaSidePicker = (
-  background,
-  _ambient,
-  onDark,
-  onLight,
-) => pickInvertedSide(background, null, onDark, onLight);
-
-/**
- * Content on the tooltip surface, with the tokens of the media side that
- * reads on it. Token-colored content, such as `Text`, otherwise resolves
- * against the page theme and can take the surface's own color. Inherited
- * text keeps the `tooltip` surface's color. This component renders with
- * the tooltip content, also while the tooltip is closed, as one element. It
- * measures only while the tooltip shows.
- */
-function TooltipMediaContent({
-  surfaceRef,
-  isShown,
-  children,
-}: {
-  surfaceRef: RefObject<HTMLElement | null>;
-  isShown: boolean;
-  children: ReactNode;
-}): ReactNode {
-  const mode = useInvertedSurfaceMediaMode(
-    surfaceRef,
-    isShown,
-    pickTooltipSide,
-    '--color-background-inverted',
-  );
-  return <MediaTokens mode={mode}>{children}</MediaTokens>;
-}
 
 const styles = stylex.create({
   // The same inverted surface Toast paints, so the two match in every theme.
@@ -1017,11 +976,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // document listeners still see it.
         // The hold's announcement reads this element's text.
         <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {typeof children === 'string' ||
-          typeof children === 'number' ||
-          (isValidElement(children) && children.type === MediaTheme) ? (
-            // Plain text reads no tokens, so it renders as before. Content
-            // that holds a MediaTheme already chose its media context.
+          {typeof children === 'string' || typeof children === 'number' ? (
+            // Plain text reads no tokens, so it renders as before.
             children
           ) : (
             <TooltipMediaContent surfaceRef={contentRef} isShown={isLayerOpen}>
