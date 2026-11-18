@@ -2222,11 +2222,13 @@ async function pictureLook(cwd, name, read) {
   const results = [];
   const unsure = read.unsure.map(u => ({
     text: `${u.trait} on ${u.on}: ${u.why}`,
-    ...(u.options ? {options: u.options.map(o => `${P} ${o.replace(/^set my /, `set ${env.slug} `)}`)} : {}),
+    ...(u.options ? {options: u.options.map(st => render(st, env.slug))} : {}),
   }));
   for (const tr of read.traits) {
     const step = tr.step;
-    const kept = own.find(s => s.thing === step.thing && (s.on ?? null) === (step.on ?? null));
+    // What the theme sets itself, for the whole theme or on the same part,
+    // wins over a reading.
+    const kept = own.find(s => s.thing === step.thing && (!s.on || s.on === step.on));
     if (kept) {
       unsure.push({
         text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
