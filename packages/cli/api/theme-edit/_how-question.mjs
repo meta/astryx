@@ -21758,6 +21758,17 @@ export function draftAnswer(ctx, env, question) {
                 'end-start': at(3),
               });
             };
+            // (Four corners back as one radius: elliptical where a corner
+            // has two radii.)
+            const radiusOf = (/** @type {string[]} */ corners) => {
+              const pairs = corners.map(x => {
+                const w = splitTop(String(x), ' ').map(y => y.trim());
+                return [w[0], w[1] ?? w[0]];
+              });
+              const hs = pairs.map(x => x[0]).join(' ');
+              const vs = pairs.map(x => x[1]).join(' ');
+              return hs === vs ? hs : `${hs} / ${vs}`;
+            };
             const nowAt =
               ownNow != null
                 ? fourOf(String(ownNow).trim())
@@ -21820,6 +21831,36 @@ export function draftAnswer(ctx, env, question) {
                 : tok
                   ? `${tok}, ${String(current(tok)).trim()}`
                   : 'square';
+            // (Rounded on one side, the part rounded all round: those corners
+            // are as asked and the others stay as they are. The line that
+            // squares the others, as "only" would, is offered, never written
+            // unasked.)
+            const otherRounded = others.filter(roundedAt);
+            if (
+              !changing.length &&
+              rounded &&
+              !squareRest &&
+              otherRounded.length &&
+              nowAt != null
+            ) {
+              const squared = ALL.map(k =>
+                named.corners.includes(k)
+                  ? /** @type {Record<string, string>} */ (nowAt)[k]
+                  : '0',
+              );
+              return {
+                text: `${sideWords(named.corners)} on ${on}: already rounded (now ${nowSaid}); ${sideWords(others)} stay as they are. To square ${sideWords(others)} too, as "only" says, run this line`,
+                options: [
+                  [
+                    set('border-radius', radiusOf(squared), {
+                      ...f,
+                      ...modeOf(c),
+                    }),
+                  ],
+                ],
+                offer: true,
+              };
+            }
             if (!changing.length)
               return {
                 text: `${sideWords(named.corners)} on ${on}: already ${rounded ? 'rounded' : sidePx === '0' ? 'square' : sidePx} (now ${nowSaid}), nothing to change`,
@@ -21828,15 +21869,6 @@ export function draftAnswer(ctx, env, question) {
             // (Every corner written: one radius of four, top-left first,
             // clockwise, as CSS gives them, elliptical where a corner has
             // two radii. Else the longhands of the corners that change.)
-            const radiusOf = (/** @type {string[]} */ corners) => {
-              const pairs = corners.map(x => {
-                const w = splitTop(String(x), ' ').map(y => y.trim());
-                return [w[0], w[1] ?? w[0]];
-              });
-              const hs = pairs.map(x => x[0]).join(' ');
-              const vs = pairs.map(x => x[1]).join(' ');
-              return hs === vs ? hs : `${hs} / ${vs}`;
-            };
             const every = ALL.every(k => target[k] != null);
             /** @type {Step[]} */
             const steps = every

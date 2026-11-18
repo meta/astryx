@@ -128,7 +128,28 @@ describe('the corners an ask names', () => {
     // rounded there need nothing, and the other corners are never
     // rewritten. "Only" said of rounding squares the rest, keeping the
     // radius the part reads (the corners dial still moves it).
-    expect(await writes('tabs rounded on top')).toEqual([]);
+    // (It writes nothing and offers the line that squares the bottom, as
+    // "only" says.)
+    {
+      const {data} = await themeEditHow('tabs rounded on top', {
+        cwd,
+        theme: 'k',
+      });
+      const rs = /** @type {Array<{text: string, commands: string[]}>} */ (
+        data.results ?? []
+      );
+      expect(rs[0]?.commands).toEqual([]);
+      expect(rs[0]?.text).toMatch(
+        /the top corners on tab: already rounded .*the bottom corners stay as they are/,
+      );
+      expect(
+        rs
+          .flatMap(r => r.commands)
+          .map(c => c.replace(/^.*? editor set k /, '')),
+      ).toEqual([
+        "border-radius 'var(--radius-element) var(--radius-element) 0 0' --on tab",
+      ]);
+    }
     expect(await writes('rounded top corners only on tabs')).toEqual([
       "border-radius 'var(--radius-element) var(--radius-element) 0 0' --on tab",
     ]);
@@ -198,9 +219,24 @@ describe('the corners an ask names', () => {
         (await themeEditHow(q, {cwd, theme: 'n'})).data.results?.[0]
           ?.commands ?? []
       ).map((/** @type {string} */ c) => c.replace(/^.*? editor set n /, ''));
-    // (An elliptical radius already rounded on top: nothing to change.)
+    // (An elliptical radius already rounded on top: nothing is written;
+    // the line that squares the bottom, as "only" says, is offered.)
     await themeEditSet('n', 'border-radius', '12px / 6px', {cwd, on: 'card'});
-    expect(await ask('cards rounded on top')).toEqual([]);
+    {
+      const rs = /** @type {Array<{text: string, commands: string[]}>} */ (
+        (await themeEditHow('cards rounded on top', {cwd, theme: 'n'})).data
+          .results ?? []
+      );
+      expect(rs.map(r => r.text).join('\n')).toMatch(
+        /the top corners on card: already rounded .*the bottom corners stay as they are/,
+      );
+      expect(
+        rs
+          .flatMap(r => r.commands)
+          .filter(c => / editor set /.test(c))
+          .map(c => c.replace(/^.*? editor set n /, '')),
+      ).toEqual(["border-radius '12px 12px 0 0 / 6px 6px 0 0' --on card"]);
+    }
     // (Elliptical corners square at the bottom: each one rounded as an
     // elliptical longhand, the top untouched.)
     await themeEditSet('n', 'border-radius', '12px 12px 0 0 / 6px 6px 0 0', {
