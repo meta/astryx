@@ -6,8 +6,9 @@
  * schema and module-loader packages, and none of the CLI's own doc, discovery,
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
- * only patching an integration manifest uses, and a search with icon
- * features off loads none of the icon section's code. A module hook in the
+ * only patching an integration manifest uses, a search with icon features
+ * off loads none of the icon section's code, and a search loads no gzip
+ * code, which only unpacking a shared theme uses. A module hook in the
  * child records every module that the run loads (resolving a package loads
  * none).
  */
@@ -129,9 +130,11 @@ function modulesLoadedBy(args) {
   );
   const packages = new Set();
   const cliModules = new Set();
+  const builtins = new Set();
   for (const url of fs.readFileSync(log, 'utf8').split('\n')) {
     const name = packageOf(url);
     if (name != null) packages.add(name);
+    else if (url.startsWith('node:')) builtins.add(url);
     else if (url.startsWith('file:')) {
       const file = fileURLToPath(url);
       if (file.startsWith(CLI_ROOT)) {
@@ -139,7 +142,7 @@ function modulesLoadedBy(args) {
       }
     }
   }
-  return {status: result.status, packages, cliModules};
+  return {status: result.status, packages, cliModules, builtins};
 }
 
 describe('a run of the bin that prints the version', () => {
@@ -199,6 +202,19 @@ describe('a run of the bin that prints the version, and its base', () => {
       expect(cliModules.size).toBeLessThanOrEqual(VERSION_RUN_MODULE_LIMIT);
     },
   );
+});
+
+describe('a search in a folder with no project', () => {
+  it('loads no gzip code (astryx search tooltip)', () => {
+    const {status, cliModules, builtins} = modulesLoadedBy([
+      'search',
+      'tooltip',
+    ]);
+    expect(status).toBe(0);
+    expect(cliModules.has('clients/cli/commands/search.mjs')).toBe(true);
+    // Only unpacking a shared theme's archive reads gzip.
+    expect(builtins.has('node:zlib')).toBe(false);
+  });
 });
 
 describe('a component lookup in a folder with no project', () => {

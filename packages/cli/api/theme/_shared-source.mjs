@@ -15,7 +15,6 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {gunzipSync} from 'node:zlib';
 import {AstryxError} from '../error.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -230,6 +229,9 @@ export function extractTgz(packed, dest, arg) {
   /** @type {Buffer} */
   let tar;
   try {
+    // zlib loads here, when an archive is unpacked: the commands that load
+    // the theme adapter and never add a theme do not load it.
+    const {gunzipSync} = process.getBuiltinModule('node:zlib');
     tar = gunzipSync(packed, {maxOutputLength: MAX_ARCHIVE_BYTES});
   } catch {
     throw bad('it does not unpack');
