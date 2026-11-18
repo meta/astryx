@@ -37,7 +37,8 @@ additive evolution (`spec:AST-140/FR5`), threading (`spec:AST-140/FR6`), and
 coexistence with an app's own native code (`spec:AST-140/FR9`); probes take
 the shape of `spec:AST-112/FR7`. Every piece in the group belongs to the
 platform's core (`spec:AST-112/FR1`): it links in every app. The on-screen keyboard in browsers is `spec:AST-099`; this record
-owns the keyboard on native React Native.
+owns the keyboard on native React Native. Each library component's own record
+states how that component lays out against the insets and the keyboard.
 
 ## Why this exists
 
@@ -70,7 +71,14 @@ owns the keyboard on native React Native.
 
 ## Non-goals
 
-None.
+- Equivalent internal implementations remain valid when they satisfy this
+  contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
+  topology belong in architecture or implementation unless callers or
+  interoperating systems intentionally depend on that exact mechanism as a public
+  protocol. In that case, state who depends on it and why an equivalent
+  implementation would not satisfy the contract.
 
 ## Requirements
 
@@ -240,12 +248,14 @@ None.
   - Without the dock, `KeyboardDockView` is a plain view: the keyboard's start
     and end positions arrive through React Native's `Keyboard` events, the
     caller's padding moves the children at the start and end of a change, and
-    the caller hears those events in place of `onKeyboardDockChange`.
+    the caller reads React Native's `Keyboard` events directly;
+    `onKeyboardDockChange` comes from the native dock alone.
   - Without the window status bar, the modal window keeps the look React
     Native copied into it.
   - Without the selectable text view, each block draws as a React Native
     `Text` with `selectable`, selection works one block at a time, and
-    `onError` reports `no-native-view` once per mount.
+    `onError` reporting `no-native-view` once per mount is the one event the
+    fallback sends.
 - **FR14 — The group follows the package's contract baseline.** Each
   contract's baseline is its first release's shape, and it grows by named
   features (`spec:AST-140/FR5`). The keyboard dock's `transcriptNativeID`,
@@ -346,6 +356,9 @@ it. A platform-only prop says so in its documentation (`spec:AST-140/FR1`).
   default.
 - Relies on `spec:AST-112` FR4 (amended): native code calls public platform
   API only.
+- Relies on `spec:AST-112` FR2 and FR5 (amended): the package declares no
+  react-native-safe-area-context, and Astryx measures its own insets beside it
+  (FR5).
 - Relies on `spec:AST-140` FR5: each contract's baseline is its first
   release's shape, and it grows by named features.
 - Details `spec:AST-140/FR2`, `spec:AST-140/FR3`, `spec:AST-112/FR7` and
