@@ -985,7 +985,12 @@ export function generateThemeRules(
   // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
   if (components) {
-    generateComponentRules(components, parts, {sink});
+    generateComponentRules(components, parts, {
+      sink,
+      darkPageSides: darkPageSides(
+        resolveModes({...theme.localTokens, ...theme.tokens}),
+      ),
+    });
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
@@ -1111,6 +1116,11 @@ interface ComponentRuleOptions {
   sink?: DiagnosticSink;
   /** Location prefix for diagnostics, e.g. `onDark.` or `adaptations[0].`. */
   location?: string;
+  /**
+   * The sides a media surface takes on a dark page beyond its light-page
+   * side, whose color-mode blocks follow that side there.
+   */
+  darkPageSides?: ReadonlySet<MediaSide>;
 }
 
 /**
@@ -1126,6 +1136,7 @@ function generateComponentRules(
     surface,
     sink = warnToConsole,
     location: locationPrefix = '',
+    darkPageSides = new Set<MediaSide>(),
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
@@ -1248,10 +1259,42 @@ function generateComponentRules(
             `${inside(`${forcedAround} ${system}`)}${outsideSurfaces}`,
             preference,
           );
-          modeEmit(
-            `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`,
-            wrap,
-          );
+          const nearest = `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`;
+          // A surface that takes another side on a dark page draws
+          // that side's block inside it there, and not this one, before any
+          // script names its side in `data-astryx-media`.
+          const onDarkPage = (side: MediaSide, preference: boolean) =>
+            darkPageConditions(preference).map(
+              condition => `${condition} ${mediaDarkPageIs(side)} *`,
+            );
+          const byPreference = (rule: string) =>
+            wrap(`  @media (prefers-color-scheme: dark) {\n${rule}\n  }`);
+          const others = [...darkPageSides].filter(side => side !== name);
+          if (others.length === 0) {
+            modeEmit(nearest, wrap);
+          } else {
+            const plain = others.flatMap(side => onDarkPage(side, false));
+            const preferred = others.flatMap(side => onDarkPage(side, true));
+            modeEmit(`${nearest}:where(:not(${plain.join(', ')}))`, rule =>
+              wrap(
+                `  @media not all and (prefers-color-scheme: dark) {\n${rule}\n  }`,
+              ),
+            );
+            modeEmit(
+              `${nearest}:where(:not(${[...plain, ...preferred].join(', ')}))`,
+              byPreference,
+            );
+          }
+          if (darkPageSides.has(name)) {
+            modeEmit(
+              `:is(${selector}):where(${onDarkPage(name, false).join(', ')})`,
+              wrap,
+            );
+            modeEmit(
+              `:is(${selector}):where(${onDarkPage(name, true).join(', ')})`,
+              byPreference,
+            );
+          }
         }
       };
       emit(

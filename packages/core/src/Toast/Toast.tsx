@@ -45,7 +45,6 @@ import {MediaDarkPage} from '../theme/MediaDarkPage';
 import {MediaTheme} from '../theme/MediaTheme';
 import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
 import {pickInvertedSide} from '../hooks/mediaSide';
-import {parseColor} from '../utils/color';
 import type {
   ToastType,
   ToastDismissReason,
@@ -433,25 +432,13 @@ export function ToastSurface({
   }, [onDismiss]);
 
   // Before the measurement, take the side from the theme's resolved surface by
-  // the measurement's rule. If the surface is translucent, or parseColor cannot
-  // read it or an on-color, use the mode.
+  // the measurement's rule. If the surface is translucent, or an on-color
+  // cannot be read, use the mode.
   const {mode, tokens} = useTheme();
-  const surface = parseColor(
-    tokens[
-      isError
-        ? '--color-background-error-inverted'
-        : '--color-background-inverted'
-    ] ?? '',
-  );
-  const fromTokens =
-    surface !== null && surface.a >= 1
-      ? pickInvertedSide(
-          surface,
-          null,
-          parseColor(tokens['--color-on-dark'] ?? ''),
-          parseColor(tokens['--color-on-light'] ?? ''),
-        )
-      : null;
+  const surfaceToken = isError
+    ? '--color-background-error-inverted'
+    : '--color-background-inverted';
+  const fromTokens = invertedSideIn(tokens, surfaceToken);
   // A system-mode page's scheme is the reader's, which the server does not
   // know. The card takes its light-page side, and the side it takes on a
   // dark page rides beside it; the theme writes that side's rules for a dark
@@ -462,30 +449,25 @@ export function ToastSurface({
   const isHydrating = useIsHydrating();
   const themeMode = use(ThemeContext)?.mode ?? 'system';
   const isSchemeUnknown = themeMode === 'system' && isHydrating;
-  const sides = useMemo(() => {
-    if (theme == null) {
-      return null;
-    }
-    const token = isError
-      ? '--color-background-error-inverted'
-      : '--color-background-inverted';
-    return {
-      light: invertedSideIn(resolveThemeTokens(theme, {mode: 'light'}), token),
-      dark: invertedSideIn(resolveThemeTokens(theme, {mode: 'dark'}), token),
-    };
-  }, [theme, isError]);
-  const pageSide = isSchemeUnknown
-    ? sides?.light
-    : mode === 'light' || mode === 'dark'
-      ? sides?.[mode]
-      : undefined;
+  const sides = useMemo(
+    () =>
+      theme == null
+        ? null
+        : {
+            light: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'light'}),
+              surfaceToken,
+            ),
+            dark: invertedSideIn(
+              resolveThemeTokens(theme, {mode: 'dark'}),
+              surfaceToken,
+            ),
+          },
+    [theme, surfaceToken],
+  );
+  const pageSide = isSchemeUnknown ? sides?.light : fromTokens;
   const fallbackMediaMode =
-    pageSide ??
-    (fromTokens === 'dark' || fromTokens === 'light'
-      ? fromTokens
-      : isError || mode === 'light'
-        ? 'dark'
-        : 'light');
+    pageSide ?? (isError || mode === 'light' ? 'dark' : 'light');
   const darkPageSide =
     isSchemeUnknown && sides?.dark != null && sides.dark !== fallbackMediaMode
       ? sides.dark

@@ -2293,6 +2293,45 @@ describe('a media surface that flips with the page', () => {
     );
   });
 
+  it('draws a root color-mode block by the side a flipped surface takes on a dark page', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'flip-modes',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        components: {
+          button: {
+            base: {
+              '@dark': {color: '#fafafa'},
+              '@light': {color: '#121212'},
+            },
+          },
+        },
+      }),
+    ).component;
+    const rules = css.split('}').map(rule => rule.trim());
+    const flipped =
+      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"] *';
+    // Inside the flipped surface on a dark page the light block applies...
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(${flipped}`) && rule.includes('color: #121212'),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves it out there.
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(:not(${flipped}`) &&
+          rule.includes('color: #fafafa'),
+      ),
+    ).toBe(true);
+  });
+
   it('writes no dark-page rules when every inverted surface keeps its side', () => {
     const css = surfaces({
       '--color-background-inverted': ['#0a1317', '#0a1317'],
