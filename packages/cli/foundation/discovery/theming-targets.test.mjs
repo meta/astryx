@@ -113,7 +113,7 @@ describe('collectThemingTargets', () => {
       {className: 'astryx-dialog-header-start-content'},
       {className: 'astryx-dialog-header-title-block'},
       {className: 'astryx-dialog-header-end-content'},
-      {className: 'astryx-dialog-header-close-icon'},
+      {className: 'astryx-dialog-header-close-icon', sitsOn: 'icon'},
     ]);
   });
 

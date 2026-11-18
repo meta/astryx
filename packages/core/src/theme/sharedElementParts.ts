@@ -56,6 +56,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   timestamp: 'text',
   'timestamp-copy-button': 'button',
   'toggle-button': 'button',
+  'typeahead-popup': 'popover',
 };
 
 /** Whether a theme target is a part on another component's element. */
