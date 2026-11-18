@@ -2026,6 +2026,9 @@ const BLOCK_BOX =
 export const BAR_REACH_THINGS =
   /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/;
 
+/** The elements a control is drawn as: never a bar, nor a bar's row. */
+const CONTROL_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label']);
+
 /**
  * The value a part draws a property with as the census saw it: the one it
  * always has, else the one every condition it was drawn in agrees on; null
@@ -2046,10 +2049,12 @@ export function drawnValue(rec, prop) {
  * The bar rows a part holds, from the part map's `contains` relation: the
  * parts drawn inside it that lay their own children out in one row,
  * centered across its whole width (display flex, align-items center, width
- * 100%: the top nav in the app's header), drawn there once (a part that
- * is listed inside it is a list's item, never its bar's row: a menu's items,
- * a side nav's items), reached through frames that draw no box of their
- * own (a layout region). A part holding such a row is laid out as a bar:
+ * 100%: the top nav in the app's header) and holding items of more than
+ * one kind, drawn there once (a part listed inside it is a list's item,
+ * never its bar's row: a menu's items, a side nav's items), neither of them
+ * drawn as a control (a collapsible's trigger, an avatar's button), reached
+ * through frames that draw no box of their own (a layout region). A part
+ * holding such a row is laid out as a bar:
  * a height or a vertical padding set on it makes the bar that row fills.
  * @param {Record<string, PartRecord>} map
  * @param {string} holder
@@ -2059,10 +2064,17 @@ export function barRows(map, holder) {
   const inside = map[holder]?.contains ?? [];
   /** @param {string} p */
   const frame = p => !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  /** A part drawn as a control (a button, a link, a field). @param {string} p */
+  const control = p =>
+    (map[p]?.tags ?? []).some(t => CONTROL_TAGS.has(t.toLowerCase()));
+  if (control(holder)) return [];
   const listed = new Set(map[holder]?.listed ?? []);
   return inside.filter(r => {
     const rec = map[r];
-    if (listed.has(r)) return false;
+    if (listed.has(r) || control(r)) return false;
+    // (A bar's row lays out items: more than one kind of part inside it,
+    // where a menu's divider or a typeahead option's icon is one or none.)
+    if ((rec?.contains ?? []).length < 2) return false;
     if (
       !/^(inline-)?flex$/.test(drawnValue(rec, 'display') ?? '') ||
       /^column/.test(drawnValue(rec, 'flex-direction') ?? '') ||

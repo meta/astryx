@@ -40,8 +40,6 @@ import {
   unitsJoined,
 } from './_css.mjs';
 import {
-  BAR_REACH_THINGS,
-  barRows,
   calcVars,
   coreFallback,
   multipliedTokens,
@@ -153,6 +151,7 @@ import {
   dialNumber,
   dialValueFits,
   groupsOf,
+  onlyFits,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -5351,19 +5350,21 @@ function checkOne(
   // for what the change does anyway: the change is made, without it, and
   // said, so the escape always works.
   if (s.only && (!s.on || TARGET.has(s.on) || groupsOf(ctx)[s.on])) {
-    const means = s.on ? onlyMeans(s.on) : 'group';
-    if (!s.on || groupsOf(ctx)[s.on] || means === 'group')
+    if (!s.on || groupsOf(ctx)[s.on])
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    // (A height or vertical padding on a bar keeps --only: it keeps the
-    // setting off the row the bar holds, see barReach.)
-    const barOnly =
-      BAR_REACH_THINGS.test(thing) &&
-      barRows(/** @type {any} */ (ctx.C?.MAP ?? {}), s.on).length === 1;
-    if (means === 'own' && !barOnly) {
+    // (One predicate with the settings reader: a group member, or a
+    // height or vertical padding on a bar, see barReach.)
+    if (
+      !onlyFits(
+        // (The source is read from the thing here: a CSS property is one.)
+        {...s, thing, source: propertySpelling(thing) ? 'property' : s.source},
+        /** @type {any} */ (ctx.C?.MAP ?? {}),
+      )
+    ) {
       s.only = undefined;
       if (!unset)
         s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
