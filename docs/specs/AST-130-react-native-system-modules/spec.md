@@ -93,7 +93,7 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 - The data and security modules (files, secure storage) and their records.
 - Capabilities that no Astryx component uses. They are outside the core
-  package.
+  package; OQ4 asks whether `AstryxAppearance` is an exception.
 - Client identity, crash reports, daily metrics, the frame recorder, and
   image markup. Each is part of the platform package and has its own record.
 - Camera capture. The `camera` capability owns it, the camera source of a
@@ -175,8 +175,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     return the unsubscribe function. A native event that repeats an unchanged
     value is not delivered.
   - A module follows native changes only while at least one listener is
-    subscribed. After the last unsubscribe it stops, and the next read starts
-    again from the launch value.
+    subscribed. After the last unsubscribe it stops; until the next subscribe,
+    a read answers the last value it followed, and the next first subscriber
+    reads the settings again.
   - On the first subscribe, the accessibility snapshot is read once more. A
     change that arrives before that answer wins, because it is newer.
   - Hooks (`useAccessibilitySettings`, `useCameraPermission`)
@@ -262,8 +263,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
 
 - **FR8 — `AstryxPlatformInfo` says what this binary has.**
   - Constants: `app` (version, build, identifier, and `installedAt` in ISO
-    8601 UTC: the bundle container's creation date on iOS,
-    `PackageInfo.lastUpdateTime` on Android), `capabilities` (the opted-in
+    8601 UTC: when this binary was installed or last updated, the bundle
+    container's creation date on iOS and `PackageInfo.lastUpdateTime` on
+    Android), `capabilities` (the opted-in
     capabilities this binary links; `[]` for core only), `contractFeatures` (the named contract
     features, FR17), and `launch` (`processStartedAt` in epoch milliseconds,
     and `isPrewarmed`, always false on Android). `packageVersion` is the
@@ -343,11 +345,14 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     picker closes before it loads and copies, and `events.onLoading()` (no
     argument) is called once when that loading step starts.
   - Android: `photos` is the Photo Picker (the document picker on devices
-    without it) and `files` is the Storage Access Framework; the `content://`
-    URIs the pickers grant are returned as they are.
+    without it) and `files` is the Storage Access Framework. Each picked file
+    is copied into the app's cache location (FR14) and returned as a `file://`
+    URL.
   - Defaults: one file, the platform's limit, the media `accept` allows (else
     all), and any file type.
   - The library's `FileInput` reaches it through `useFilePicker()`.
+  - FR12 gap: on Android the core picker returns the `content://` URIs the
+    pickers grant instead of `file://` URIs in the cache location.
   - FR12 gap: on iOS the core picker offers a `camera` source
     (`UIImagePickerController`) and answers its `permission-denied` and
     `restricted` reasons.
@@ -367,9 +372,9 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
     update check keeps its "Not now" in the app's namespace.
 
 - **FR14 — The core package owns the app's cache location.**
-  - The core package owns one cache location for the app. Core pieces that
-    produce files, such as the camera view's photos and the photos that
-    `FileInput`'s picker returns, write them there and return `file://` URIs.
+  - The core package owns one cache location for the app. Pieces that produce
+    files write them there and return `file://` URIs: the core's file picker
+    (FR12), which `FileInput` uses, and the `camera` capability's camera view.
   - The system may reclaim the location under storage pressure. A caller that
     needs a file to last copies it elsewhere.
   - Deleting files in the location is outside the core package.
@@ -461,10 +466,11 @@ concrete gap; where the gap is small, OQ1 keeps the scope open.
   API only.
 - Changes `spec:AST-112/FR1`: the core's list gains appearance, accessibility
   settings, platform info, the Android back gate and launch hold, and the
-  file picker; network, cookies and secure random bytes leave the core, since
-  capabilities that no Astryx component uses are outside the core package; the
-  `camera` capability gains camera
-  capture, the camera source of a picker included (FR12).
+  file picker; the `camera` capability gains camera capture, the camera source
+  of a picker included (FR12).
+- Changes `spec:AST-112` FR1 and FR5 (amended): cookies leave the core's list
+  and the `./network` entry, since no Astryx component uses them; the network
+  state and secure random bytes are already outside the amended core.
 - Changes `spec:AST-112/FR1` and FR3: the core links no web engine, and the
   `web` capability carries web view data and its cookie store (FR18).
 - Departs from `spec:AST-112/FR7` ("never a silent no-op") for the calls that
@@ -584,3 +590,9 @@ answered.
   - Tokens resolved in JavaScript: one token pipeline shared with the web, and
     any computed token works. Each flip costs a JavaScript re-resolve and a
     re-render.
+- **OQ4 — Does `AstryxAppearance` stay in the core?** (`human-design`) No
+  Astryx component or create template calls it; the theme follows its effect
+  through React Native's colour scheme. Options: keep it in the core as a
+  named exception, because the native shell applies the saved choice before
+  the first frame (DEC-1); or move it outside the core package with the other
+  capabilities no Astryx component uses.
