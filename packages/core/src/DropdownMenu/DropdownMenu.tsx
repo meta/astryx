@@ -748,6 +748,9 @@ function DropdownMenuBottomSheet({
     // parent render must not move focus.
   }, [submenuKey, isOpen]);
 
+  // Syncs DOM focus with the level the sheet shows: when the open depth
+  // changes, focus moves to that level's heading after the frame that draws
+  // it.
   useEffect(() => {
     if (!isOpen) {
       previousSubmenuDepthRef.current = 0;
