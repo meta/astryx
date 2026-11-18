@@ -412,6 +412,15 @@ describe('isComputerLevel', () => {
     expect(isComputerLevel(['docs', 'init', '--user'])).toBe(false);
   });
 
+  it('is init --to naming the computer alone', () => {
+    expect(isComputerLevel(['init', '--to', 'user'])).toBe(true);
+    expect(isComputerLevel(['--json', 'init', '--to=user'])).toBe(true);
+    expect(isComputerLevel(['init', '--to', 'user', '--to', 'user'])).toBe(true);
+    expect(isComputerLevel(['init', '--to', 'user,skills'])).toBe(false);
+    expect(isComputerLevel(['init', '--to', 'skills'])).toBe(false);
+    expect(isComputerLevel(['init', '--to', './team'])).toBe(false);
+  });
+
   it('is docs global and its pages, whatever the options', () => {
     expect(isComputerLevel(['docs', 'global'])).toBe(true);
     expect(isComputerLevel(['--json', 'docs', 'global/problems'])).toBe(true);

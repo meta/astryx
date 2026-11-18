@@ -2,7 +2,7 @@
 
 /**
  * @file Cut a stylesheet down to the rules a rendered page uses, for
- * `astryx experimental render`. A rule stays when every class in one of its
+ * `astryx experimental export`. A rule stays when every class in one of its
  * selectors appears in the page; rules without classes (`:root` tokens,
  * element resets) always stay. `@property`,
  * `@font-face` and the `@keyframes` a kept rule names stay too; `@layer`

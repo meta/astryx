@@ -85,12 +85,12 @@ export const doc = {
     {
       type: 'theme.build',
       description:
-        'Build receipt {name, tokenCount, componentCount, sizeKB, outputs, warnings, notices}: the theme name; how many tokens (portable plus theme-local) and component targets it overrides; the CSS size in KB; the written outputs {css, cssDts for strict side-effect imports, js, dts, and variantsDts when custom prop values were augmented}; warnings, the defects the author should fix, including exact canonical replacements for deprecated component target keys and declarations the generator dropped; and notices, advisories about a correct theme, such as a font it names but does not load. Resolves to null instead when the theme produced no CSS (nothing to build).',
+        'Build receipt {name, tokenCount, componentCount, sizeKB, outputs, warnings, notices, settingIssues}: the theme name; how many tokens (portable plus theme-local) and component targets it overrides; the CSS size in KB; the written outputs {css, cssDts for strict side-effect imports, js, dts, and variantsDts when custom prop values were augmented}; warnings, the defects the author should fix, including exact canonical replacements for deprecated component target keys and declarations the generator dropped; and notices, advisories about a correct theme, such as a font it names but does not load; and settingIssues, each component setting of the page rules (the file of the theme or a local theme it extends; not its onDark and onLight surfaces or adaptation rules) the browser does not show as written, also among the warnings: {kind, wins, part, element, key, state, conditions, property, value, path, line, file?, by, why, against, message, fix}. `kind` is `hidden` (another rule reaching everything it reaches wins: a later shorthand of its block, or a second key that builds the same rule), `loses` (a more specific rule of the theme it extends wins on a variant) or `collides` (where both situations hold, cascade order or weight decides; `wins` says which way it ends). A rule for a runtime state (`:hover`, `selected`) alone is the look of that state and never counts. A setting is named when a key of the source writes it, also through a call, a const or a spread; one a helper function builds, or one a module the theme imports writes, is not. `by` is the rule that keeps it from showing most, as {part, element, key, state, conditions, property, value, from: `theme` (the source of the setting) | `extended` (a theme it extends), path (null when no source of the theme writes it)}, and `against` lists every such rule as {kind, wins, by, why}; `element` is the pseudo-element (`::before`) or null, `conditions` every other condition of the rule as written (color-mode ancestors, media queries, and the zero-weight guards Core adds, such as the disabled guard of a `:hover` rule), beyond its part, key, state and pseudo-element, `path` the key path of the setting in the source, `line` its line (in `file` when a local theme it extends writes it, or, on a --family build, the member that does), `why` and `message` say it in words, and `fix` is the change that makes it show. Resolves to null instead when the theme produced no CSS (nothing to build).',
     },
     {
       type: 'theme.build.check',
       description:
-        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, and, when stale, code ERR_THEME_STALE. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
+        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, when stale, code ERR_THEME_STALE, and, when there are any, settingIssues as on the build receipt. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
     },
   ],
   throws: [
@@ -100,7 +100,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_LOAD',
-      when: 'the file cannot be loaded or parsed into a defineTheme() result, or its extension is not one a theme source has (.mjs, .js, .mts, .ts, .tsx, .jsx, .cjs, .cts), which is refused before loading',
+      when: 'the file cannot be loaded or parsed into a defineTheme() result, or its extension is not one a theme source has (.mjs, .js, .mts, .ts, .tsx, .jsx, .cjs, .cts), which is refused before loading. A theme that imports a stylesheet or an asset (an .svg, a picture, a font) needs Node 22.15 or later, or 23.5 or later; on an older Node its load is refused, naming the file, and nothing is written',
     },
     {
       code: 'ERR_THEME_INVALID',

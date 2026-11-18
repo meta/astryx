@@ -12,7 +12,6 @@
 
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, expect} from 'vitest';
@@ -23,6 +22,19 @@ import {readKept} from './kept-entry.mjs';
 
 export {readKept, writeKept} from './kept-entry.mjs';
 export const BUILD_ID = 'clients/cli/build-id.generated.json';
+
+/**
+ * Doctor's kept-cache row with its entry count and size masked: a write
+ * earlier in the run changes them. Covers the message, `(3 entries, 1.2 MB)`,
+ * and the brief, `3 entries (1.2 MB)`.
+ * @param {string} text
+ * @returns {string}
+ */
+export function maskCacheCount(text) {
+  return text
+    .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)')
+    .replace(/\d+ entr(?:y|ies) \([\d.]+ MB\)/g, '<count>');
+}
 
 /** @type {string} */
 export let work;
@@ -388,10 +400,24 @@ export function themeFactsEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds a summary (kept-tree.mjs), such as the check
+ * that the stored component list matches the installed Core, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function summaryEntry(file) {
+  try {
+    return readKept(file).summary === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
  * (a value derived from a catalog, search's entry table, is not a catalog;
  * nor is the CLI's own docs tree, which every project shares, nor theme
- * build's facts from Core's docs).
+ * build's facts from Core's docs, nor a summary).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -407,7 +433,8 @@ export function entries(tmp) {
       issuesEntry(file) ||
       templatesEntry(file) ||
       docsTreeEntry(file) ||
-      themeFactsEntry(file)
+      themeFactsEntry(file) ||
+      summaryEntry(file)
     )
       continue;
     const {ino, mtimeMs} = fs.statSync(file);
@@ -519,8 +546,7 @@ export async function expectSameAsFresh(tmp, options = {}) {
 // keeps none and gathers fresh each run. The cases that need a kept catalog or
 // kept check results skip there, and packed-gather-cache.records.test.mjs
 // proves the fresh gather.
-export const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+export {hasModuleHooks} from './module-hooks.mjs';
 
 /** Packs and installs the CLI and makes the project before this file's cases. */
 export function usePackedCli() {
