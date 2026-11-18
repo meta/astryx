@@ -41,12 +41,22 @@ build against (`spec:AST-112/FR12`) to eight native components.
 
 ## Why this exists
 
-| Pieces                                                    | What the ecosystem does well                                                                                                                                                                                                                                                    | Why Astryx owns the piece                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gesture ownership (`GestureOwnerView`, `GestureRootView`) | react-native-gesture-handler runs native recognizers off the JS thread and composes them declaratively (simultaneous, exclusive, wait-for relations) under its root view.                                                                                                       | Its relations arbitrate between its own handlers. Astryx components must win against the platform's own recognizers inside Astryx's native hosts: the iOS content-wide and edge back swipes of the stack host, UIKit's sheet drag, enclosing scroll views, and Android's system back gesture, each from the component's live state. The package takes no peer dependency beyond React and React Native (`spec:AST-112/FR2`). The touch that dismisses an iOS system menu has no ecosystem counterpart.                                                                                                                                                                                                                                      |
-| Drag and snap, swipe row (`DragSnap`, `SwipeRow`)         | react-native-reanimated runs animation and gesture logic as worklets on the UI thread, with react-native-gesture-handler for input; sheet and swipeable libraries built on them (for example @gorhom/bottom-sheet and the gesture handler's swipeable) are mature and flexible. | A worklet runtime is a second JavaScript runtime and a Babel plugin that every app must carry. Astryx needs release projection, one stop per fling, UIScrollView's rubber band, sheet detents, and scroll hand-off matched to UIKit and to Android, the same behaviour in Astryx Stage, and arbitration with its own hosts. Astryx Stage can simulate a native view with a declared props, commands, and events contract exactly; it cannot simulate arbitrary worklet code. The swipe row draws system-style actions itself because UIKit's swipe actions (`UIContextualAction`) exist only in `UITableView` and `UICollectionView` list cells and Android's `ItemTouchHelper` only in `RecyclerView`, and React Native lists are neither. |
-| Pan and zoom, zoomable pager (`PanZoomView`, `ZoomPager`) | React Native's ScrollView zooms on iOS (`maximumZoomScale`); react-native-pager-view pages natively; zoom and image-viewer libraries built on the gesture handler and reanimated cover pinch, pan, and dismiss.                                                                 | ScrollView zoom is iOS only and has no camera API, and the pager view has no zoom. The zoom libraries carry the worklet dependency above. Astryx needs a programmatic camera whose animation resolves once, per-frame values for the native driver, iOS 26 back-swipe arbitration, and Stage parity. The create command's `gallery` and `maps` templates use them.                                                                                                                                                                                                                                                                                                                                                                          |
-| System drag and drop (`DragItem`, `DropZone`)             | Reordering libraries (for example react-native-draggable-flatlist) move a view inside the app with the gesture handler and reanimated, and suit list reordering.                                                                                                                | They move a view inside the app; they do not start a system drag session. The platform's session gives the system lift and preview, arbitration with scroll views and with a context menu on the same item, pointer drags on iPad, VoiceOver's drag and drop actions, and data that travels to other apps.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+- Gesture ownership and the gesture root: an Astryx component must win a drag
+  against the platform's own back swipes, sheets, and scroll views inside
+  Astryx's native hosts, from the component's live state, and a system menu's
+  dismiss tap must not press the content under it (DEC-4).
+- Drag and snap, and the swipe row: the motion matches UIKit and Android
+  physics, Astryx Stage shows the same behaviour, and no app carries a second
+  JavaScript runtime for it (DEC-3). The swipe row draws its actions itself
+  because the system's swipe actions exist only in UIKit table and collection
+  views and Android's `RecyclerView`, which React Native lists are not.
+- Zoomable pager: the native paging and zoom behind `Lightbox` (FR8).
+- Pan and zoom surface: a programmatic camera with native-driven frames on iOS
+  and Android, where React Native's ScrollView zooms on iOS only; its place in
+  the default set is OQ3.
+- System drag and drop: only the system session lifts with the system preview,
+  carries data to other apps, and offers the screen readers' drag actions
+  (DEC-5).
 
 ## Who uses it
 
@@ -73,7 +83,7 @@ build against (`spec:AST-112/FR12`) to eight native components.
 - `AstryxTouchShieldView`: Preview and inspector tooling, part of the Astryx
   app's Preview host (`spec:AST-139`), outside this record.
 - The native stack's back gesture itself, the menu hosts, and the presentation
-  hosts, which the Navigation hosts and the Menus and presentation records own.
+  hosts, which `spec:AST-125` and `spec:AST-128` own.
   This record owns only how a drag yields to them.
 - React Native's Animated and its native driver, beyond the event route FR2
   depends on.
@@ -96,29 +106,24 @@ build against (`spec:AST-112/FR12`) to eight native components.
   outcome: a change of state, a crossed threshold (reported once per crossing,
   with a small dead band so a hovering finger does not repeat it), a resting
   place, a commit, a dismissal, a camera that stopped. No view sends JavaScript
-  an event per frame.
+  an event on every frame, with two bounded streams a caller asks for:
+  `onDropZoneMove`, at most once a frame and only while a drag moves over the
+  zone, because JavaScript turns the point into a place to insert; and
+  `onCameraChange` during motion, only while `cameraChangeInterval` is above 0
+  and no more often than that interval.
 - **FR2 — Frame events feed only Animated's native driver.** `onDragFrame`,
-  `onSwipeFrame`, `onCameraFrame`, and `onPagerFrame` exist so that
-  `Animated.Value`s follow a gesture through React Native's native driver.
-  - The platform's wrapper binds a frame event to its values with
-    `Animated.attachNativeEvent` on the host view, for as long as the view and
-    the values stay the same, and unbinds it on change and unmount. It never
-    binds them through an `Animated.event` prop, because an animated
-    component's event prop puts a JavaScript listener on every mapped value and
-    so delivers every frame to JavaScript.
-  - For as long as the view lives, the wrapper keeps one hidden view that
-    consumes each bound value, so the value's native node stays the event's
-    target when the caller's own consumers mount and unmount.
-  - iOS delivers a frame on the route that Animated's native driver observes (a
-    Fabric direct event when React Native's C++ Animated backend is on);
-    Android delivers an ordinary event that the native animated module consumes
-    before JavaScript.
-  - The JavaScript side of a bound value holds whatever JavaScript last set, or
-    the end of a native animation; a caller that wants every frame adds its own
-    listener.
+  `onSwipeFrame`, `onCameraFrame`, and `onPagerFrame` exist so that the
+  `Animated.Value`s a caller gives a view follow its gesture through React
+  Native's native driver.
+  - While a gesture and its settle run, the given values move on every frame
+    and JavaScript receives nothing. They keep following when the caller's own
+    views that use them unmount and mount again.
+  - A given value's JavaScript copy holds what JavaScript last set, or the end
+    of a native animation; a caller that wants every frame adds its own
+    listener to the value.
   - `AstryxPanZoomView` sends `onCameraFrame` only while `cameraFramesEnabled`
-    is true: once when it turns on, then once for each camera change, and
-    nothing while the camera rests.
+    is true: once when it turns on, then once per camera change, and nothing
+    while the camera rests.
 - **FR3 — A frame declares the drags it owns.** `AstryxGestureOwnerView` marks
   the area a drag starts in.
   - `ownsLeft`, `ownsRight`, `ownsUp`, and `ownsDown` name the physical
@@ -128,7 +133,6 @@ build against (`spec:AST-112/FR12`) to eight native components.
     scroller let go. `ownsEdge` extends the claim to the screen-edge back
     swipe. `backGesture` (`always`, `atLeadingEdge`, `never`; `auto` declares
     nothing) states when a back gesture may start from a drag in the frame.
-    `strategy` is accepted and has no effect.
   - When frames sit inside one another, the deepest frame under the finger decides; no nesting
     level is passed.
   - iOS: the frame's own recognizer begins only for an owned direction, and
@@ -151,15 +155,17 @@ build against (`spec:AST-112/FR12`) to eight native components.
   does not fire, matching UIKit's own controls. It acts once per shown menu.
 - **FR5 — Drag and snap.** `AstryxDragSnap` moves its children along one axis
   and lets them rest only at its `detents`.
-  - Stops: a stop is identified by its value, a named stop, never by an index.
-    The resting stop, `snapTo`, `onDragSnap`, and `onDragThreshold` take and
-    report that value. Any list of stops, `detents` included, is ordered
-    ascending by the height the surface shows. A stop's position is in dp along
-    the axis (+ down, + right).
+  - Stops: `detents` lists the stops, each a value: the stop's position in dp
+    along the axis (+ down, + right). A stop is identified by that value, never
+    by an index. The list is ordered ascending by the extent of the surface the
+    stop shows (its height on a vertical axis, its width on a horizontal one),
+    so the first stop is the smallest. `restStop`, `snapTo(stop, animated)`,
+    `placeAt(position, stop)`, `onDragSnap` (`stop`), and `onDragThreshold`
+    (`target`: a stop, or a dismiss) take and report that value.
   - FR5 gap: the contract identifies stops by index (`restIndex`,
-    `snapTo(index, …)`, `onDragSnap`'s `index`, `onDragThreshold`'s `target`)
-    and orders `detents` by position along the axis, so a sheet's first stop
-    is its tallest.
+    `snapTo(index, …)`, `placeAt(…, index)`, `onDragSnap`'s `index`,
+    `onDragThreshold`'s `target`, -1 for a dismiss) and orders `detents` by
+    position along the axis, so a sheet's first stop is its tallest.
   - `dragAxis` is `vertical`, `horizontal`, or `either`, which picks the
     dominant axis once the drag is claimed (`claim`, `verticalIntent`). For
     each axis, `*Before` and `*After` say whether travel past the outer
@@ -271,16 +277,16 @@ build against (`spec:AST-112/FR12`) to eight native components.
 - **FR10 — Native contracts.** The group's contracts are native components
   (Fabric Native Components) generated from codegen specs:
 
-  | Contract                 | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Commands                                        | Events                                                                                                       | Platforms    |
-  | ------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------ |
-  | `AstryxGestureOwnerView` | native component (Fabric Native Component) | `ownsLeft`, `ownsRight`, `ownsUp`, `ownsDown`, `releasesScroll`, `ownsEdge`, `backGesture`, `strategy`                                                                                                                                                                                                                                                                                                                                                                                                     | none                                            | none                                                                                                         | iOS, Android |
-  | `AstryxGestureRootView`  | native component (Fabric Native Component) | none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | none                                            | none                                                                                                         | iOS          |
-  | `AstryxDragItem`         | native component (Fabric Native Component) | `dragEnabled`, `itemId`, `itemType`, `itemText`, `crossApp`, `previewCornerRadius`                                                                                                                                                                                                                                                                                                                                                                                                                         | none                                            | `onDragItemLift`, `onDragItemStart`, `onDragItemEnd`                                                         | iOS, Android |
-  | `AstryxDropZone`         | native component (Fabric Native Component) | `dropEnabled`, `acceptTypes`, `acceptsText`, `dropOperation`, `autoScrollEdge`                                                                                                                                                                                                                                                                                                                                                                                                                             | none                                            | `onDropZoneEnter`, `onDropZoneMove`, `onDropZoneLeave`, `onDropZonePerform`                                  | iOS, Android |
-  | `AstryxDragSnap`         | native component (Fabric Native Component) | `dragAxis`, `detents`, `restIndex`, `verticalBefore`, `verticalAfter`, `verticalDismissBefore`, `verticalDismissAfter`, `horizontalBefore`, `horizontalAfter`, `horizontalDismissBefore`, `horizontalDismissAfter`, `canDismiss`, `reduceMotion`, `dragEnabled`, `rtl`, `scrollHandoff`, `claim`, `verticalIntent`, `projectionFactor`, `projectionMinTravel`, `stepPerFling`, `flickVelocity`, `flickMinTravel`, `rubberDimension`, `rubberCoefficient`, `springStiffness`, `springDamping`, `springMass` | `snapTo`, `placeAt`                             | `onDragFrame`, `onDragStateChange`, `onDragSnap`, `onDragDismiss`, `onDragDismissAttempt`, `onDragThreshold` | iOS, Android |
-  | `AstryxSwipeRow`         | native component (Fabric Native Component) | `leadingWidth`, `trailingWidth`, `swipeBehavior`, `rtl`, `reduceMotion`, `swipeEnabled`, `leadingDrag`, `trailingDrag`, `axisLock`, `commitPastPanel`, `commitFraction`, `restFraction`, `overshootResistance`, `flingVelocity`, `flingMin`, `slideOutOvershoot`, `slideOutMs`, `springStiffness`, `springDamping`, `springMass`                                                                                                                                                                           | `snapTo`                                        | `onSwipeFrame`, `onSwipeBegin`, `onSwipeThreshold`, `onSwipeSettle`, `onSwipeCommit`                         | iOS, Android |
-  | `AstryxPanZoomView`      | native component (Fabric Native Component) | `contentWidth`, `contentHeight`, `minScale`, `maxScale`, `initialX`, `initialY`, `initialScale`, `doubleTapScale`, `decelerationRate`, `cameraChangeInterval`, `reduceMotion`, `panZoomEnabled`, `cameraFramesEnabled`                                                                                                                                                                                                                                                                                     | `animateTo`, `setCamera`                        | `onCameraChange`, `onCameraFrame`, `onCameraAnimationEnd`, `onTap`                                           | iOS, Android |
-  | `AstryxZoomPager`        | native component (Fabric Native Component) | `count`, `pagerIndex`, `viewportWidth`, `viewportHeight`, `contentWidth`, `contentHeight`, `rtl`, `reduceMotion`, `pagerEnabled`, `zoomMax`, `doubleTapZoom`, `pinchSlack`, `rubber`, `pageShare`, `pageFling`, `dismissDistance`, `dismissFling`, `dismissRight`, `panRequiresTwoFingers`, `doubleTapCenters`, `dismissDistanceRight`, `dismissFlingRight`, `panPageShare`, `slop`, `doubleTapMs`, `pageMs`, `zoomMs`, `decelerationRate`                                                                 | `setIndex`, `resetZoom`, `toggleZoom`, `zoomTo` | `onPagerFrame`, `onPagerIndexChange`, `onPagerZoom`, `onPagerDismiss`, `onPagerTap`, `onPagerSwipeUp`        | iOS, Android |
+  | Contract                 | Kind                                       | Props                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Commands                                        | Events                                                                                                       | Platforms    |
+  | ------------------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------ |
+  | `AstryxGestureOwnerView` | native component (Fabric Native Component) | `ownsLeft`, `ownsRight`, `ownsUp`, `ownsDown`, `releasesScroll`, `ownsEdge`, `backGesture`                                                                                                                                                                                                                                                                                                                                                                                                                | none                                            | none                                                                                                         | iOS, Android |
+  | `AstryxGestureRootView`  | native component (Fabric Native Component) | none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | none                                            | none                                                                                                         | iOS          |
+  | `AstryxDragItem`         | native component (Fabric Native Component) | `dragEnabled`, `itemId`, `itemType`, `itemText`, `crossApp`, `previewCornerRadius`                                                                                                                                                                                                                                                                                                                                                                                                                        | none                                            | `onDragItemLift`, `onDragItemStart`, `onDragItemEnd`                                                         | iOS, Android |
+  | `AstryxDropZone`         | native component (Fabric Native Component) | `dropEnabled`, `acceptTypes`, `acceptsText`, `dropOperation`, `autoScrollEdge`                                                                                                                                                                                                                                                                                                                                                                                                                            | none                                            | `onDropZoneEnter`, `onDropZoneMove`, `onDropZoneLeave`, `onDropZonePerform`                                  | iOS, Android |
+  | `AstryxDragSnap`         | native component (Fabric Native Component) | `dragAxis`, `detents`, `restStop`, `verticalBefore`, `verticalAfter`, `verticalDismissBefore`, `verticalDismissAfter`, `horizontalBefore`, `horizontalAfter`, `horizontalDismissBefore`, `horizontalDismissAfter`, `canDismiss`, `reduceMotion`, `dragEnabled`, `rtl`, `scrollHandoff`, `claim`, `verticalIntent`, `projectionFactor`, `projectionMinTravel`, `stepPerFling`, `flickVelocity`, `flickMinTravel`, `rubberDimension`, `rubberCoefficient`, `springStiffness`, `springDamping`, `springMass` | `snapTo`, `placeAt`                             | `onDragFrame`, `onDragStateChange`, `onDragSnap`, `onDragDismiss`, `onDragDismissAttempt`, `onDragThreshold` | iOS, Android |
+  | `AstryxSwipeRow`         | native component (Fabric Native Component) | `leadingWidth`, `trailingWidth`, `swipeBehavior`, `rtl`, `reduceMotion`, `swipeEnabled`, `leadingDrag`, `trailingDrag`, `axisLock`, `commitPastPanel`, `commitFraction`, `restFraction`, `overshootResistance`, `flingVelocity`, `flingMin`, `slideOutOvershoot`, `slideOutMs`, `springStiffness`, `springDamping`, `springMass`                                                                                                                                                                          | `snapTo`                                        | `onSwipeFrame`, `onSwipeBegin`, `onSwipeThreshold`, `onSwipeSettle`, `onSwipeCommit`                         | iOS, Android |
+  | `AstryxPanZoomView`      | native component (Fabric Native Component) | `contentWidth`, `contentHeight`, `minScale`, `maxScale`, `initialX`, `initialY`, `initialScale`, `doubleTapScale`, `decelerationRate`, `cameraChangeInterval`, `reduceMotion`, `panZoomEnabled`, `cameraFramesEnabled`                                                                                                                                                                                                                                                                                    | `animateTo`, `setCamera`                        | `onCameraChange`, `onCameraFrame`, `onCameraAnimationEnd`, `onTap`                                           | iOS, Android |
+  | `AstryxZoomPager`        | native component (Fabric Native Component) | `count`, `pagerIndex`, `viewportWidth`, `viewportHeight`, `contentWidth`, `contentHeight`, `rtl`, `reduceMotion`, `pagerEnabled`, `zoomMax`, `doubleTapZoom`, `pinchSlack`, `rubber`, `pageShare`, `pageFling`, `dismissDistance`, `dismissFling`, `dismissRight`, `panRequiresTwoFingers`, `doubleTapCenters`, `dismissDistanceRight`, `dismissFlingRight`, `panPageShare`, `slop`, `doubleTapMs`, `pageMs`, `zoomMs`, `decelerationRate`                                                                | `setIndex`, `resetZoom`, `toggleZoom`, `zoomTo` | `onPagerFrame`, `onPagerIndexChange`, `onPagerZoom`, `onPagerDismiss`, `onPagerTap`, `onPagerSwipeUp`        | iOS, Android |
 
   Positions and widths are dp, velocities dp/ms, durations ms. A dismiss line
   at ±1e9 or beyond is none.
@@ -293,8 +299,9 @@ build against (`spec:AST-112/FR12`) to eight native components.
   `isNativeDragItemViewAvailable()`, `isNativeDropZoneViewAvailable()`)
   answers false, and the wrapper renders the children in a plain View with the
   same style, test id, and accessibility props and no gesture
-  (`spec:AST-112/FR7`). A command sent to an absent view does nothing and
-  throws nothing. What a component draws instead is the component's own
+  (`spec:AST-112/FR7`). An absent view exposes no command handle, so the
+  caller's ref stays empty; the probe tells the caller, and no command silently
+  does nothing. What a component draws instead is the component's own
   contract (OQ1).
 - **FR12 — Accessibility passes through.** Every view forwards the
   accessibility props it is given, custom actions and escape included, so the
@@ -323,24 +330,10 @@ build against (`spec:AST-112/FR12`) to eight native components.
   drag-and-snap axis swaps its ends, a swipe row's leading side is on the
   right, and the pager runs right to left. The back direction is the trailing
   one.
-- **FR14 — Contract baseline.** Every contract in this group is at revision 1,
-  and FR3 to FR10 describe revision 1. A behaviour added after revision 1 is a
-  named feature (`<Contract>.<feature>`) that the binary lists and the
-  JavaScript checks with `hasContractFeature` before it uses it; without it the
-  JavaScript keeps the revision-1 behaviour or answers `unsupported`, and warns
-  once, never a silent weaker path. These contracts list no named features.
-  Compatibility with Astryx Stage goes through the library's Stage version
-  floor: the package names the oldest Stage that simulates its contract set,
-  and an older Stage refuses the project with the gaps listed.
-- **FR15 — The group's native code links by default.** The native half of
-  these pieces is part of Astryx's own components, so every app built with the
-  package links it without opting in: `DragSnapView`, `SwipeRowView`,
-  `PanZoomView`, and `ZoomPagerView` as well as the core's gesture owner, gesture
-  root, and drag-and-drop views. An app may opt out; its components then follow
-  FR11.
-  - FR15 gap: the drag-and-snap, swipe-row, pan-zoom, and zoom-pager views link
-    only when the app opts the `controls` capability in (`spec:AST-112/FR3`).
-- **FR16 — Native code uses public platform API only.** The views use public
+- **FR14 — Contract baseline.** Every contract in this group is at revision 1
+  (`spec:AST-112/FR8`); FR3 to FR10 describe revision 1, and no contract in
+  the group lists a named feature.
+- **FR15 — Native code uses public platform API only.** The views use public
   UIKit and Android framework API, and React Native's own touch handler and
   event routes. One exception: the iOS gesture root (FR4) recognizes an open
   system menu by the class name of UIKit's private context-menu container,
@@ -366,38 +359,43 @@ build against (`spec:AST-112/FR12`) to eight native components.
   iOS content-wide back swipe applies from iOS 26.
 - Unsupported behavior: an absent view reports itself unavailable and renders
   its children without a gesture (FR11); a behaviour a binary lacks follows
-  FR14.
+  `spec:AST-112/FR8`.
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, devices, and Astryx Stage (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
-- Details `spec:AST-112` FR1 (the gesture owner and gesture root hosts of the
+- Details `spec:AST-112` FR1 (the gesture owner and gesture root in the
   core), FR6, FR7, FR8, and FR12 for this group.
-- Changes `spec:AST-112` FR1 and FR3: the swipe-row, drag-and-snap, zoom-pager,
-  and pan-zoom views are the native half of Astryx's own components, so they
-  link by default (FR15) instead of through the opt-in `controls` capability.
-  The drag-and-snap, swipe-row, and pan-zoom views stay on the `./controls`
-  entry; the zoom pager is internal (FR8).
-- No other record changes.
+- Relies on `spec:AST-112` FR3 (amended): the native half of the library's
+  components, these views included, links in every app by default.
+- Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and
+  grow by named features that JavaScript checks before it uses them.
+- Relies on `spec:AST-112` FR12 (amended): each release names its Astryx Stage
+  version floor, and an older Astryx Stage refuses the project and lists the
+  contracts it lacks.
+- Changes `spec:AST-112` FR1: the touch shield, which FR1 lists in the core,
+  is Preview and inspector tooling in the Astryx app's Preview host
+  (`spec:AST-139`).
+- Changes `spec:AST-112` FR5: `./controls` also holds the pan-zoom view as app
+  API, and the zoom pager is internal (FR8).
 
 ## Verification
 
 | Contract | Verification                                                                                                                         | Representative states                                                                                                                                                 | Mutation or failure expectation                                                                                               |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | UI-thread frame checks on the Simulator, the emulator, and Astryx Stage: JavaScript wakes counted during a drag and its settle       | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                                                                      | Any JavaScript wake per frame during a gesture or its settle                                                                  |
+| FR1      | UI-thread frame checks on the Simulator, the emulator, and Astryx Stage: JavaScript wakes counted during a drag and its settle       | a sheet drag and fling; a swipe-row commit; a pinch; a page turn                                                                                                      | Any JavaScript wake per frame during a gesture or its settle, other than `onDropZoneMove` and an asked-for `onCameraChange`   |
 | FR2      | Unit tests of each wrapper through the `./testing` doubles; frame checks on device builds                                            | values given and not; values changed; a consumer remounted; frames turned on                                                                                          | An `Animated.event` prop, a frame listener added in JavaScript, a value that stops following after a remount, a frame at rest |
 | FR3      | Astryx Stage contract checks and Simulator and emulator checks of back swipes against owner frames                                   | a slider at the screen edge; a carousel at its leading edge; a toast dragged toward its edge; `backGesture` values                                                    | A back swipe takes an owned drag, an edge swipe ignores `ownsEdge`, or an owned frame blocks an unowned drag                  |
 | FR4      | Simulator and Astryx Stage checks with a system menu open                                                                            | the dismiss tap over a pressable row; the root absent                                                                                                                 | The row's press fires on the dismiss tap                                                                                      |
 | FR5–FR8  | Unit tests of the shared rules and wrappers through `./testing` doubles; Astryx Stage contract checks; Simulator and emulator checks | stops by value; fling, slow drag, interrupt, dismiss, threshold; reveal and commit; pan, pinch, tap, glide; paging, zoom, dismiss, two fingers                        | A release settles on another stop than the rules choose, an event fires per frame, or a command sends a milestone it must not |
-| FR9      | Astryx Stage contract checks and Simulator and emulator checks with two apps                                                         | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag                                           | No `onEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                                      |
+| FR9      | Astryx Stage contract checks and Simulator and emulator checks with two apps                                                         | a held lift; a quick drag that scrolls; nested zones; a refused type; text from another app; a lift released without a drag                                           | No `onDragItemEnd` after a lift, an ancestor zone gets the events, or a refused item is accepted                              |
 | FR10     | The platform's spec rules check over the codegen specs and the contract list                                                         | each contract's props, commands, events, platforms                                                                                                                    | A contract differs from the table                                                                                             |
-| FR11     | Unit tests with each view absent through the `./testing` doubles                                                                     | each absent view; a command sent to an absent view                                                                                                                    | Children dropped, a probe that answers true, or a throw                                                                       |
+| FR11     | Unit tests with each view absent through the `./testing` doubles                                                                     | each absent view; a command sent to an absent view                                                                                                                    | Children dropped, a probe that answers true, a throw, or a command handle on an absent view                                   |
 | FR12     | VoiceOver and TalkBack checks on the Simulator, the emulator, and devices; unit tests of forwarded accessibility props               | actions passed to each view; the pager and the pan-zoom surface as adjustable elements; drag item and drop zone; the large content viewer inside a drag-and-snap view | An accessibility prop not forwarded, or an adjustable that does something other than its gesture                              |
 | FR13     | Unit tests and Astryx Stage contract checks with Reduce Motion and right-to-left                                                     | each settle under Reduce Motion; each horizontal gesture under right-to-left                                                                                          | An animated settle under Reduce Motion, a missing event, or an unmirrored horizontal gesture                                  |
-| FR14     | Unit tests of `hasContractFeature` through the `./testing` doubles (absent, older, and current shapes); Astryx Stage floor check     | a binary without a named feature; a Stage below the floor                                                                                                             | A silent weaker path, or an older Stage that runs the project                                                                 |
-| FR15     | A built app without any capability opted in: binary symbols and registered components                                                | the four gesture views                                                                                                                                                | A gesture view missing from a default build                                                                                   |
-| FR16     | Source review of the iOS and Android views; an iOS build with the private class name absent                                          | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
+| FR14     | The platform's spec rules check over the contract list                                                                               | each contract in the group                                                                                                                                            | A contract above revision 1, or a named feature the record does not list                                                      |
+| FR15     | Source review of the iOS and Android views; an iOS build with the private class name absent                                          | each view; the gesture root with no menu container found                                                                                                              | A private API call, or a gesture root that blocks a touch when the name is absent                                             |
 
 ## Decision log
 
