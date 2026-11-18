@@ -34,9 +34,11 @@ gesture, scroll views, and sheets take every other drag as they do in a native
 app.
 
 This record details the gesture and drag pieces of the platform layer that
-`spec:AST-112` defines: it applies the result vocabulary (`spec:AST-112/FR6`),
-the capability shape (`spec:AST-112/FR7`), and additive evolution of native
-interfaces (`spec:AST-112/FR8`) to eight native components.
+`spec:AST-112` defines, under the shared platform code rules of `spec:AST-140`:
+it applies the result vocabulary (`spec:AST-140/FR3`), the capability shape
+(`spec:AST-112/FR7`), additive evolution of native interfaces
+(`spec:AST-140/FR5`), and threading (`spec:AST-140/FR6`) to eight native
+components.
 
 ## Why this exists
 
@@ -97,9 +99,9 @@ interfaces (`spec:AST-112/FR8`) to eight native components.
 
 ## Requirements
 
-- **FR1 — Motion runs on the UI thread.** Each view in this group tracks the
-  touch, decides what it means, and animates the result inside its native
-  implementation on the UI thread: drags, flings, rubber bands, springs,
+- **FR1 — Motion runs on the UI thread.** Under `spec:AST-140/FR6`, each view
+  in this group tracks the touch, decides what it means, and animates the
+  result inside its native implementation on the UI thread: drags, flings, rubber bands, springs,
   glides, pinches, and page turns. A touch that lands on a moving view stops it
   where it is. JavaScript controls a view only through its props and commands,
   and hears back through direct events that carry one object and mark an
@@ -299,7 +301,7 @@ interfaces (`spec:AST-112/FR8`) to eight native components.
   `isNativeDragItemViewAvailable()`, `isNativeDropZoneViewAvailable()`)
   answers false, and the wrapper renders the children in a plain View with the
   same style, test id, and accessibility props and no gesture
-  (`spec:AST-112/FR7`). An absent view exposes no command handle, so the
+  (`spec:AST-140/FR2`). An absent view exposes no command handle, so the
   caller's ref stays empty; the probe tells the caller, and no command silently
   does nothing. What a component draws instead is the component's own
   contract (OQ1).
@@ -331,7 +333,7 @@ interfaces (`spec:AST-112/FR8`) to eight native components.
   right, and the pager runs right to left. The back direction is the trailing
   one.
 - **FR14 — Contract baseline.** Every contract in this group is at revision 1
-  (`spec:AST-112/FR8`); FR3 to FR10 describe revision 1, and no contract in
+  (`spec:AST-140/FR5`); FR3 to FR10 describe revision 1, and no contract in
   the group lists a named feature.
 - **FR15 — Native code uses public platform API only.** The views use public
   UIKit and Android framework API, and React Native's own touch handler and
@@ -359,18 +361,18 @@ interfaces (`spec:AST-112/FR8`) to eight native components.
   iOS content-wide back swipe applies from iOS 26.
 - Unsupported behavior: an absent view reports itself unavailable and renders
   its children without a gesture (FR11); a behaviour a binary lacks follows
-  `spec:AST-112/FR8`.
+  `spec:AST-140/FR5`.
 - Browser evidence: none. Claims are proven on the iOS Simulator, the Android
   emulator, and devices (`spec:AST-112/FR15`).
 
 ## Current-state impact
 
 - Details `spec:AST-112` FR1 (the gesture owner and gesture root in the
-  core), FR6, FR7, and FR8 for this group.
+  core) and FR7, and `spec:AST-140` FR2, FR3, FR5, and FR6, for this group.
 - Relies on `spec:AST-112` FR3 (amended): the native half of the library's
   components, these views included, links in every app by default.
-- Relies on `spec:AST-112` FR8 (amended): contracts start at revision 1 and
-  grow by named features that JavaScript checks before it uses them.
+- Relies on `spec:AST-140` FR5: contracts start at revision 1 and grow by
+  named features that JavaScript checks before it uses them.
 - Changes `spec:AST-112` FR1: the touch shield, which FR1 lists in the core,
   is Preview and inspector tooling in the Astryx app's Preview host
   (`spec:AST-139`).
@@ -427,7 +429,8 @@ Each gesture is a native view with declared props, commands, and events, so
 iOS and Android show the same behaviour and the package keeps React and React
 Native as its only peers. Astryx takes no third-party native dependency for
 these gestures; an app may use react-native-gesture-handler or
-react-native-reanimated beside these components without conflict.
+react-native-reanimated beside these components without conflict
+(`spec:AST-140/FR9`).
 
 Rejected: building on react-native-reanimated and react-native-gesture-handler,
 because they add a second JavaScript runtime to every app.
