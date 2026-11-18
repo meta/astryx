@@ -1167,7 +1167,7 @@ export function baseWeightNotes(ctx, data) {
  * @param {any} before
  * @param {any} after
  * @param {any} [base] the base theme, whose own values a write that repeats them does not change
- * @param {(target: string, prop: string) => string | null} [drawn] what Core itself draws for a part's property at rest, with the base theme's tokens (a badge's corners: 9999px), which a write that repeats it does not change either
+ * @param {(target: string, prop: string) => string | null} [drawn] the value Core itself writes for a part's property, as written (a token reference: `var(--radius-full)`), when it is the same at rest and in every state; a write of that same value repeats it and is not listed
  * @returns {string[]}
  */
 export function styledChanges(before, after, base, drawn) {

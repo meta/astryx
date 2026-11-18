@@ -608,6 +608,7 @@ function changeBlocks(r) {
     missed: _missed,
     missedParts: _missedParts,
     missedOn: _missedOn,
+    missedWhere: _missedWhere,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -2279,9 +2280,13 @@ export function registerExperimentalTheme(group, program) {
             ...missedLine(/** @type {any} */ (r.data)),
             ...changeFields(
               /** @type {any} */ (
-                (({missed: _m, missedParts: _p, missedOn: _o, ...x}) => x)(
-                  /** @type {any} */ (r.data),
-                )
+                (({
+                  missed: _m,
+                  missedParts: _p,
+                  missedOn: _o,
+                  missedWhere: _w,
+                  ...x
+                }) => x)(/** @type {any} */ (r.data))
               ),
             ),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,

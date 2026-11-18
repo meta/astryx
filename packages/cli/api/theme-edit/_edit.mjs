@@ -6414,9 +6414,12 @@ async function changeOnce(
   /** @param {string} part @param {string} prop */
   // (Every look the write reaches, its states included: a write that
   // recolors a checked box changes what shows, whatever it draws at rest.)
+  // (And the part must draw it at rest: a look Core draws only while
+  // pressed, or on a ::before, is no reason to skip a resting tint.)
   const drawnAtRest = (part, prop) => {
+    const rest = coreAtRest(part, prop);
     const ref = coreAtRest(part, prop, false, true);
-    return ref && /var\(/.test(ref) ? ref : null;
+    return ref && rest === ref && /var\(/.test(ref) ? ref : null;
   };
   // A new plain part setting that only writes what Core already draws
   // there at rest (pill corners on a badge that is round already) changes

@@ -90,6 +90,7 @@ describe('a part setting Core already draws', () => {
   }, 240_000);
 
   it('pill corners on a badge are written after the theme squares the pill token', async () => {
+    if (unbuilt) return;
     await themeEditSet('t', '--radius-full', '0px', {cwd});
     const r = /** @type {any} */ (
       await themeEditSet('t', 'corners', 'pill', {cwd, on: 'badge'})
@@ -115,6 +116,24 @@ describe('a part setting Core already draws', () => {
       cwd,
       thing: 'background-color',
       on: 'checkbox-indicator',
+    });
+  }, 240_000);
+
+  it('a tint Core draws only while pressed is written at rest', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet(
+        't',
+        'background-color',
+        'var(--color-overlay-pressed)',
+        {cwd, on: 'tree-list-item'},
+      )
+    );
+    expect(JSON.stringify(r)).not.toContain('no change: tree-list-item');
+    await themeEditUndo('t', {
+      cwd,
+      thing: 'background-color',
+      on: 'tree-list-item',
     });
   }, 240_000);
 
