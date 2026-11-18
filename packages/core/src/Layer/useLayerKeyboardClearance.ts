@@ -166,6 +166,7 @@ export interface LayerKeyboardClearance {
 export function useLayerKeyboardClearance(
   isOpen: boolean,
   layerRef: RefObject<HTMLElement | null>,
+  followsVisualViewportOffset = false,
 ): LayerKeyboardClearance {
   const [cap, setCap] = useState<number | null>(null);
   const [lift, setLift] = useState<number | null>(null);
@@ -281,15 +282,11 @@ export function useLayerKeyboardClearance(
       const held = Math.max(reported, keyboardInsetRef.current ?? 0);
       const previousVisualViewportOffsetTop =
         visualViewportOffsetTopRef.current;
-      const measurementVisualViewportOffsetTop =
-        nextVisualViewportOffsetTop === previousVisualViewportOffsetTop
-          ? nextVisualViewportOffsetTop
-          : previousVisualViewportOffsetTop;
       commitCap(
         null,
         held > 0 ? held : null,
         null,
-        measurementVisualViewportOffsetTop,
+        previousVisualViewportOffsetTop,
       );
       if (inset <= 0) {
         commitCap(
@@ -308,7 +305,9 @@ export function useLayerKeyboardClearance(
       // as the visual viewport. Use that projected box for the one cap
       // calculation that accompanies a keyboard report; the steady-state pan
       // path below only publishes the offset and never reads the box.
-      const pan = nextVisualViewportOffsetTop - previousVisualViewportOffsetTop;
+      const pan = followsVisualViewportOffset
+        ? nextVisualViewportOffsetTop - previousVisualViewportOffsetTop
+        : 0;
       const boxAtNextOffset =
         pan === 0
           ? box
@@ -419,7 +418,9 @@ export function useLayerKeyboardClearance(
 
     const avoid = (
       inset: number,
-      requestedVisualViewportOffsetTop = readVisualViewportOffsetTop(),
+      requestedVisualViewportOffsetTop = followsVisualViewportOffset
+        ? readVisualViewportOffsetTop()
+        : 0,
     ) => {
       sync();
       const nextVisualViewportOffsetTop =
@@ -558,7 +559,9 @@ export function useLayerKeyboardClearance(
       if (event.type !== 'viewport') {
         return;
       }
-      const nextVisualViewportOffsetTop = readVisualViewportOffsetTop();
+      const nextVisualViewportOffsetTop = followsVisualViewportOffset
+        ? readVisualViewportOffsetTop()
+        : 0;
       const heightChanged =
         Math.abs(event.height - lastKeyboardReportHeight) >= 1;
       lastKeyboardReportHeight = event.height;
@@ -568,7 +571,12 @@ export function useLayerKeyboardClearance(
       // A keyboard-height change is already handled by the guide above. A
       // same-height report is the browser's pan: the existing cap remains
       // valid, and the offset property carries the panned room to the layer.
-      if (!heightChanged && keyboardInsetRef.current != null) {
+      if (
+        event.height > 0 &&
+        followsVisualViewportOffset &&
+        !heightChanged &&
+        keyboardInsetRef.current != null
+      ) {
         commitVisualViewportOffset(nextVisualViewportOffsetTop);
       }
     });
@@ -639,7 +647,7 @@ export function useLayerKeyboardClearance(
         setVisualViewportOffsetTop(0);
       }
     };
-  }, [isOpen, layerRef]);
+  }, [followsVisualViewportOffset, isOpen, layerRef]);
 
   const followLayerElement = useCallback(() => {
     resyncRef.current?.();

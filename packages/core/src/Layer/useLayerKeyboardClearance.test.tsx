@@ -129,6 +129,7 @@ function Harness({
   shiftedTop,
   ignoresLift = false,
   slidesAboveKeyboard = false,
+  followsVisualViewportOffset = false,
 }: {
   isOpen?: boolean;
   isAnchored?: boolean;
@@ -154,10 +155,11 @@ function Harness({
    * inset is out, the layer ends above it.
    */
   slidesAboveKeyboard?: boolean;
+  followsVisualViewportOffset?: boolean;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
   const {cap, lift, inset, visualViewportOffsetTop, followLayerElement} =
-    useLayerKeyboardClearance(isOpen, layerRef);
+    useLayerKeyboardClearance(isOpen, layerRef, followsVisualViewportOffset);
   // The layer's box: its content height, no taller than the cap the hook
   // returned. The runtime applies the cap as the layer's own style, which its
   // block-size cap folds in; the harness applies it the same way. Below its
@@ -727,7 +729,7 @@ describe('useLayerKeyboardClearance', () => {
     });
     guide.inset = COVER;
     try {
-      const {container} = render(<Harness />);
+      const {container} = render(<Harness followsVisualViewportOffset />);
       await act(async () => {
         await Promise.resolve();
       });

@@ -536,6 +536,8 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * runtime's read.
    */
   writesEntranceSide?: boolean;
+  /** Whether the layer's own placement follows a visual viewport pan. */
+  followsVisualViewportOffset?: boolean;
 }
 
 function toCssLength(value: number | string): string {
@@ -1306,6 +1308,8 @@ function useLayerImplementation(
     mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
+  const followsVisualViewportOffset =
+    mode === 'context' ? (options.followsVisualViewportOffset ?? false) : false;
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onOpenPendingChange =
     mode === 'context' ? options.onOpenPendingChange : undefined;
@@ -2293,7 +2297,11 @@ function useLayerImplementation(
     inset: keyboardInset,
     visualViewportOffsetTop: keyboardVisualViewportOffsetTop,
     followLayerElement,
-  } = useLayerKeyboardClearance(isOpen && mode === 'context', popoverRef);
+  } = useLayerKeyboardClearance(
+    isOpen && mode === 'context',
+    popoverRef,
+    followsVisualViewportOffset,
+  );
 
   const popoverRefCallback = useCallback(
     (el: HTMLElement | null) => {

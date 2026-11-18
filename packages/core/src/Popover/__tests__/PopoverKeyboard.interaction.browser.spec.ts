@@ -81,21 +81,27 @@ async function installKeyboard(page: Page, {chrome = false} = {}) {
       configurable: true,
       get: () => viewport,
     });
-    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard =
-      cover => {
-        viewport.height = window.innerHeight - cover;
-        viewport.dispatchEvent(new Event('resize'));
-      };
+    (
+      window as unknown as {
+        __keyboard: (cover: number, offsetTop?: number) => void;
+      }
+    ).__keyboard = (cover, offsetTop = viewport.offsetTop) => {
+      viewport.offsetTop = offsetTop;
+      viewport.height = window.innerHeight - cover;
+      viewport.dispatchEvent(new Event('resize'));
+    };
   }, chrome);
 }
 
-const keyboard = async (page: Page, cover: number) =>
+const keyboard = async (page: Page, cover: number, offsetTop?: number) =>
   page.evaluate(
-    value =>
-      (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-        value,
-      ),
-    cover,
+    ({cover: nextCover, offsetTop: nextOffsetTop}) =>
+      (
+        window as unknown as {
+          __keyboard: (cover: number, offsetTop?: number) => void;
+        }
+      ).__keyboard(nextCover, nextOffsetTop),
+    {cover, offsetTop},
   );
 
 interface Opened {
@@ -636,6 +642,36 @@ for (const [what, cover] of [
     }
   });
 }
+
+test('a tall popover does not follow a visual-viewport pan', async ({page}) => {
+  const {surface} = await openPopover(
+    page,
+    'core-popover--keyboard-avoidance',
+    'Add note',
+    {style: TALLER},
+  );
+  const field = page.getByRole('textbox', {name: 'Title'});
+  await field.focus();
+  const layer = page.locator('[popover]:has([role="dialog"])').first();
+  await keyboard(page, COVER);
+  await expect
+    .poll(async () => (await boxOf(surface)).keyboardCap)
+    .not.toBe('');
+  await frames(page, 6);
+  const beforePan = await boxOf(layer);
+  const fieldTop = await field.evaluate(
+    element => element.getBoundingClientRect().top,
+  );
+
+  await keyboard(page, COVER, 40);
+  await frames(page, 6);
+  const afterPan = await boxOf(layer);
+  const afterFieldTop = await field.evaluate(
+    element => element.getBoundingClientRect().top,
+  );
+  expect(Math.abs(afterPan.top - beforePan.top)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(afterFieldTop - fieldTop)).toBeLessThanOrEqual(0.5);
+});
 
 test('a popover clear of the keyboard is left as it is', async ({page}) => {
   const {surface} = await openPopover(

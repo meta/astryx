@@ -13,7 +13,7 @@
  *   cap held grows downward in place. A list that slid above a late keyboard
  *   holds against a shorter one. A pan before or after the cap, and a keyboard
  *   change after a pan, keep the list clear of the visible keyboard line.
- *   holds against a shorter one. A list beside a field near the viewport's
+ *   A list beside a field near the viewport's
  *   end, which the browser flips above it, also ends above the keyboard, as
  *   its options grow. A list taller than the room above the keyboard shrinks
  *   to that room.
