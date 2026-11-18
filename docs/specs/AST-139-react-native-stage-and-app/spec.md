@@ -23,8 +23,8 @@ affects_consumer_docs: []
 ## Intent
 
 Astryx Stage is an experimental feature: its commands, flags, results and
-behaviour may change or be removed in any release, and nothing in Astryx React
-Native depends on it.
+behaviour may change or be removed in any release (its outcome codes excepted,
+FR8), and nothing in Astryx React Native depends on it.
 
 **Astryx Stage** is a desktop app for developers and their agents, beside the
 React Native packages of `spec:AST-112`. It runs the real JavaScript of an app
@@ -59,7 +59,7 @@ define, so Astryx React Native itself stays the same with or without it.
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | A developer building an Astryx app     | Opens the app in a window beside the editor, switches iOS and Android looks, light and dark, text size, and RTL.      |
 | An AI agent working on an Astryx app   | Renders a route headless, taps through a scripted flow, reads the accessibility tree and logs, and checks the result. |
-| A continuous-integration job           | Runs scripted checks and captures on Linux on every change, with stable reports and exit codes.                       |
+| A continuous-integration job           | Runs scripted checks and captures on Linux on every change, with deterministic reports and exit codes.                |
 | A reviewer, designer, or product owner | Reads the pictures and reports an agent or a job attached.                                                            |
 | Astryx's own maintainers               | Checks every platform contract against the Simulator and emulator, and every documentation example.                   |
 
@@ -138,6 +138,10 @@ define, so Astryx React Native itself stays the same with or without it.
   - Every public platform API has a Stage simulation or is reported as not
     simulated (FR5). Each contract's documentation names where Stage's
     simulation differs from iOS and Android until the difference is fixed.
+  - Stage implements each contract from its engine-neutral description, in
+    the contract's result shape, and passes the contract's conformance suite,
+    the same suite that runs on iOS, on Android, and against the contract's
+    JavaScript double (`spec:AST-140`).
   - Each module answers its calls as the device of the chosen look does,
     in the calling runtime's namespace (the app's, or a Preview project's,
     `spec:AST-141/FR4`): its results, reasons, and
@@ -275,17 +279,17 @@ define, so Astryx React Native itself stays the same with or without it.
     step reports, and the accessibility tree.
   - Outcomes beyond the shared ones of `spec:AST-112/FR13`:
 
-    | Outcome                                                                                                             | Code                         |
-    | ------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                           | `ERR_DEP_MISSING`            |
-    | The Stage download fails                                                                                            | `ERR_FETCH_FAILED`           |
-    | A Stage binary fails its checksum or signature                                                                      | `ERR_STAGE_UNTRUSTED`        |
-    | `--window` names no open Stage window                                                                               | `ERR_STAGE_NO_WINDOW`        |
-    | A script step fails; the report names the step                                                                      | `ERR_STAGE_STEP_FAILED`      |
-    | The app throws or fails to start in Stage                                                                           | `ERR_STAGE_JS_ERROR`         |
-    | Stage cannot set up the project                                                                                     | `ERR_STAGE_PROJECT_SETUP`    |
-    | The project needs contracts or named features this Stage lacks; the envelope lists them and the Stage that has them | `ERR_STAGE_CONTRACTS`        |
-    | A named dev server does not answer                                                                                  | `ERR_DEV_SERVER_UNREACHABLE` |
+    | Outcome                                                                                                                      | Code                         |
+    | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+    | No Stage binary is installed; the suggestion is `astryx rn stage install`                                                    | `ERR_DEP_MISSING`            |
+    | The Stage download fails                                                                                                     | `ERR_FETCH_FAILED`           |
+    | A Stage binary fails its checksum or signature                                                                               | `ERR_STAGE_UNTRUSTED`        |
+    | `--window` names no open Stage window                                                                                        | `ERR_STAGE_NO_WINDOW`        |
+    | A script step fails; the report names the step                                                                               | `ERR_STAGE_STEP_FAILED`      |
+    | The app throws or fails to start in Stage                                                                                    | `ERR_STAGE_JS_ERROR`         |
+    | Stage cannot set up the project                                                                                              | `ERR_STAGE_PROJECT_SETUP`    |
+    | The project's Stage version floor is above this Stage; the envelope lists the contracts it lacks and the Stage that has them | `ERR_STAGE_CONTRACTS`        |
+    | A named dev server does not answer                                                                                           | `ERR_DEV_SERVER_UNREACHABLE` |
 
 ### Evidence
 
@@ -306,8 +310,8 @@ define, so Astryx React Native itself stays the same with or without it.
 - Browser evidence: none. Stage claims are checked against the Simulator and
   the emulator.
 - Compatibility: experimental (DEC-6). No release promises Stage's commands,
-  flags, reports, or behavior, and an app's build and run never depend on
-  them.
+  flags, reports, or behavior, its outcome codes excepted (FR8), and an app's
+  build and run never depend on them.
 
 ## Current-state impact
 
@@ -398,8 +402,8 @@ would then carry the requirements of a development tool.
 **Decider:** imdreamrunner, 2026-11-17
 
 Stage is a tool that follows the contracts, not part of them, so its commands,
-flags, reports, and behavior stay free to change with its simulation, and no
-app or contract depends on them.
+flags, reports, and behavior stay free to change with its simulation, its
+outcome codes excepted, and no app or contract depends on them.
 
 Rejected: a stable compatibility promise for Stage, because it would bind the
 contracts to a development tool's output.
