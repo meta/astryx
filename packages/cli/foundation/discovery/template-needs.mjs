@@ -290,9 +290,11 @@ function cliPackageRanges() {
  * in, or null; where it is set, printers show it instead of the command.
  * @param {string[]} packages
  * @param {string} cwd
+ * @param {string} [shownFrom] the folder the reason names other folders from;
+ *   `cwd` unless the command runs from another folder
  * @returns {{installCommand: string | null, noCommandReason: string | null, installGuidance: string | null}}
  */
-export function installCommandFor(packages, cwd) {
+export function installCommandFor(packages, cwd, shownFrom = cwd) {
   if (packages.length === 0) {
     return {installCommand: null, noCommandReason: null, installGuidance: null};
   }
@@ -311,7 +313,7 @@ export function installCommandFor(packages, cwd) {
       installGuidance,
     };
   }
-  const where = path.relative(cwd, resolved.dir) || '.';
+  const where = path.relative(shownFrom, resolved.dir) || '.';
   return {
     installCommand: null,
     noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,

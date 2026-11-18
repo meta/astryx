@@ -38,6 +38,10 @@ import {
   pageSource,
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
+import {
+  fileStamp,
+  recordContentRead,
+} from '../../foundation/fs/read-record.mjs';
 
 /**
  * A fingerprint of a module and every file it imports by a relative path,
@@ -456,6 +460,20 @@ export function catalogItems(project) {
         label: v.label,
         tree: {__element: name, props: v.props},
       });
+  // (A component whose layout changes at phone width renders that layout
+  // too, from its doc's mobile props over its demo: AppShell's menu button
+  // in the top bar and its open drawer.)
+  for (const [name, info] of Object.entries(project.components)) {
+    const mobile = /** @type {any} */ (info).mobile;
+    if (!mobile) continue;
+    const demo = demoProps(project, name);
+    if (!demo) continue;
+    items.push({
+      name,
+      label: 'mobile',
+      tree: {__element: name, props: {...demo, ...mobile}},
+    });
+  }
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
@@ -719,8 +737,8 @@ export async function renderGenerated(
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
- * Part data read from a cache file, by file, with the file's identity, size
- * and time when it was read. Shared by every command in the process, so it
+ * Part data read from a cache file, by file, with the file's stamp
+ * (`fileStamp`) when it was read. Shared by every command in the process, so it
  * is frozen.
  * @type {Map<string, {stamp: string, data: PartData}>}
  */
@@ -750,8 +768,8 @@ export async function partData(project) {
   try {
     // The file is read again only when it changed: every command reads it,
     // and parsing it costs more than the rest of a small command.
-    const st = fs.statSync(file);
-    const stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    recordContentRead(file);
+    const stamp = fileStamp(file);
     const kept = readParts.get(file);
     const cached =
       kept?.stamp === stamp
@@ -766,7 +784,9 @@ export async function partData(project) {
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
     ) {
-      readParts.set(file, {stamp, data: cached});
+      // A file that appeared after its stamp is not kept: the entry would
+      // outlive its removal.
+      if (stamp !== '-') readParts.set(file, {stamp, data: cached});
       return cached;
     }
   } catch {

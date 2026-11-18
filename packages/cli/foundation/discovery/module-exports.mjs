@@ -22,6 +22,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
@@ -115,13 +116,15 @@ function keptEntry(kept, file, stamp) {
 
 /**
  * Keep `entry` for `file`; past {@link MAX_KEPT_MODULES}, the least recently
- * used entry goes.
- * @template T
+ * used entry goes. An entry read under the absent stamp `-` is not kept: the
+ * file appeared after its stamp, and a kept entry would outlive its removal.
+ * @template {{stamp: string}} T
  * @param {Map<string, T>} kept
  * @param {string} file
  * @param {T} entry
  */
 function keepEntry(kept, file, entry) {
+  if (entry.stamp === '-') return;
   kept.delete(file);
   kept.set(file, entry);
   if (kept.size > MAX_KEPT_MODULES) {
@@ -130,17 +133,13 @@ function keepEntry(kept, file, entry) {
 }
 
 /**
- * A file's identity for these caches: size and mtime, plus ctime and inode,
- * which change when a file is rewritten even if npm stamps the same mtime on it.
+ * The text of `file`, kept while its stamp (`fileStamp`) is the same. A kept
+ * text still counts as a read of the file, so a caller that keeps its own
+ * result while what it read is unchanged sees a change to it.
  * @param {string} file
  */
-function fileStamp(file) {
-  const {size, mtimeMs, ctimeMs, ino} = fs.statSync(file);
-  return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
-}
-
-/** @param {string} file */
 function moduleText(file) {
+  recordContentRead(file);
   const stamp = fileStamp(file);
   const cached = keptEntry(moduleTexts, file, stamp);
   if (cached) return cached.text;
@@ -149,8 +148,13 @@ function moduleText(file) {
   return text;
 }
 
-/** @param {string} file */
+/**
+ * The parsed module at `file`, kept while its stamp is the same, and counted
+ * as a read of the file as `moduleText` is.
+ * @param {string} file
+ */
 function parseModule(file) {
+  recordContentRead(file);
   const stamp = fileStamp(file);
   const cached = keptEntry(parsedModules, file, stamp);
   if (cached) return cached.ast;

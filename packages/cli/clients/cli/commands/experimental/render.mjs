@@ -85,6 +85,7 @@ export function registerExperimentalRender(group, program) {
             classes: d.classes,
             images: d.images,
             files: d.files.join(', '),
+            ...(d.notCarried?.length ? {notCarried: d.notCarried.join(', ')} : {}),
             stylesheets: d.stylesheets.join(', ') || 'none',
             scriptBytes: kb(d.scriptBytes),
             scriptModules: d.scriptModules,

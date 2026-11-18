@@ -65,6 +65,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {string} description - What the doc says the component is.
  * @property {unknown} defaults - Playground defaults, or null.
+ * @property {Record<string, unknown> | null} [mobile] - The props of its render at a phone viewport, merged over the defaults (`playground.mobile`: AppShell's mobile layout), or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
@@ -79,7 +80,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 8;
+const DOCS_VERSION = 9;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -248,6 +249,12 @@ async function readComponents(coreDir) {
         category: typeof doc.category === 'string' ? doc.category : '',
         description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,
+        mobile:
+          pg?.mobile &&
+          typeof pg.mobile === 'object' &&
+          !Array.isArray(pg.mobile)
+            ? pg.mobile
+            : null,
         wrapper:
           typeof pg?.wrapper?.component === 'string'
             ? {
