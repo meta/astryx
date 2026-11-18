@@ -37,8 +37,8 @@ writes every word the person reads. A step the app leaves out of the list does
 not exist, so a control that is off for this person never gets a step.
 
 A step never stands between the person and the page. The person can reach and
-use the control a step points at, by pointer and by keyboard, and the tour
-keeps running. Tour owns the callout, the highlight, the optional dimming and
+use the control a step points at by keyboard, and by pointer when the step has
+no backdrop, and the tour keeps running. Tour owns the callout, the highlight, the optional dimming and
 where focus goes; the app owns the content, when the tour runs, and what
 happens between pages.
 
@@ -70,7 +70,8 @@ happens between pages.
 - **FR4 — The app owns the active step.** `activeId` names the active step;
   `null` means the tour is not running. Back and Next report the step they move
   to through `onActiveIdChange`, and the app may set any step at any time,
-  for example from the anchor's own click handler. An `activeId` that
+  for example from the anchor's own click handler on a step without a
+  backdrop. An `activeId` that
   matches no step renders nothing and warns in development.
 - **FR5 — Every end reports why.** `onEnd(reason)` reports `'complete'` (the
   last step's Done), `'skip'` (Skip), `'close'` (the close control), `'escape'`
@@ -98,7 +99,7 @@ happens between pages.
   returns, for example while the app opens a panel. Until it settles, no
   callout shows and focus does not move. A rejected promise is treated as a
   missing anchor (FR8).
-- **FR10 — A anchor that leaves hides the callout.** While the active step's
+- **FR10 — An anchor that leaves hides the callout.** While the active step's
   anchor is out of view or out of the document, its callout is hidden and the
   tour keeps running (`spec:AST-116` FR6, FR7). It shows again when the
   anchor returns.
@@ -110,7 +111,7 @@ happens between pages.
   Next, Done, Skip, the close control and the step count's format —
   translated with the rest of Core and overridable through `labels`.
 - **FR12 — Controls follow the step's place.** Back is absent on the first
-  step. Next shows on every other step, and the last step shows Done in its
+  step. Next shows on every step but the last, which shows Done in its
   place. Skip shows with `hasSkipButton` and the step count with
   `hasStepCount`.
 - **FR13 — The anchor is highlighted.** The active anchor has a visible ring.
@@ -123,7 +124,8 @@ happens between pages.
 - **FR14 — A step is non-modal.** Each callout is a non-modal popover
   (`spec:AST-116` FR12; `component:Tour` AR1). Tab moves from the callout
   through the page in the browser's order, and the anchor stays operable by
-  pointer and keyboard. Escape ends the tour with `'escape'` only while focus is
+  keyboard, and by pointer when the step has no backdrop (with a backdrop, a
+  press on the anchor ends the tour, `component:Tour` FR1). Escape ends the tour with `'escape'` only while focus is
   in the callout or on its anchor (`spec:AST-116` FR15).
 - **FR15 — Focus follows the tour, not the app.** When a step shows, focus
   moves to its heading if focus is in the previous callout, on the previous
@@ -156,20 +158,18 @@ happens between pages.
   `steps` array; the lab doc carries a migration example.
 
 FR1 gap: lab steps are `<TourStep>` children, ordered by mount order.
-FR6 gap: a lab anchor must be a button.
 FR8 gap: a lab anchor that is not in the document when its step starts never
 shows, and nothing reports it.
 FR11 gap: lab control labels are English only.
-FR14 gap: lab keyboard focus stays in the callout (`component:Tour` AR1 gap).
-FR5 gap: lab never reports `'escape'` or `'skip'`.
+FR5 gap: lab never reports `'skip'`.
 
 ## Verification
 
 | Contract  | Verification                            | Representative states                                                                                        | Mutation or failure expectation                                                                  |
 | --------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | FR1–FR3   | `Tour.test.tsx` steps suite             | Three steps; the middle one left out; the active step removed; the last step removed                         | A count or Back/Next that includes a left-out step, or a removed active step left showing, fails |
-| FR4, FR5  | `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from a anchor's click                          | A step change not reported, a missing or wrong end reason, or an internal step override fails    |
-| FR6, FR7  | `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; a anchor below the fold and in a scrolled panel; reduced motion                   | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails         |
+| FR4, FR5  | `Tour.test.tsx` control suite           | Back, Next, Done, Skip, close, Escape; the app setting a step from an anchor's click                         | A step change not reported, a missing or wrong end reason, or an internal step override fails    |
+| FR6, FR7  | `Tour.test.tsx` and a real-browser spec | Ref, lookup and no anchor; an anchor below the fold and in a scrolled panel; reduced motion                  | No scroll, a smooth scroll under reduced motion, or a highlight on a centered step fails         |
 | FR8, FR9  | `Tour.test.tsx` anchor suite            | Missing anchor with each `missingAnchorBehavior` value and the default; a pending and a rejected preparation | A timer, a callout shown before preparation settles, or a missing anchor with no report fails    |
 | FR10      | Real-browser spec                       | The anchor scrolled out and removed while its step shows                                                     | A callout over unrelated content, or an end, fails                                               |
 | FR11–FR13 | `Tour.test.tsx` callout suite           | First, middle and last steps; Skip and count on and off; a locale; `labels`                                  | A built-in title or body text, Back on the first step, or an untranslated label fails            |
@@ -207,10 +207,10 @@ array already does.
 **Decider:** `nynexman4464` (direction, 2026-11-11), pending owner review
 
 Only the app knows whether a missing anchor will appear, so Tour follows the
-app's `missingAnchorBehavior` (FR8) or waits for the app's own preparation (FR9). A anchor that exists but is
+app's `missingAnchorBehavior` (FR8) or waits for the app's own preparation (FR9). An anchor that exists but is
 off screen scrolls into view.
 
-Rejected: waiting a fixed time for a anchor to appear.
+Rejected: waiting a fixed time for an anchor to appear.
 
 ### DEC-4 — Tour owns the chrome; the app owns the words and the journey
 
@@ -229,8 +229,8 @@ Rejected: an intro-modal step type inside Tour, which duplicates Dialog.
 **Decider:** `nynexman4464`, `2026-11-17`, pending owner review
 
 Tour takes `steps`, `activeId`, `onActiveIdChange`, `onEnd`,
-`missingAnchorBehavior`, `hasScrollIntoView`, `hasStepCount`, `hasSkipButton`
-and `labels`; a step has `id`, `anchor`, `title`, `body`, `placement` and
+`missingAnchorBehavior`, `hasScrollIntoView`, `hasStepCount`, `hasSkipButton`,
+`hasBackdrop` (as the lab Tour names it) and `labels`; a step has `id`, `anchor`, `title`, `body`, `placement` and
 `showAction`. A callback mirrors the prop it reports, a choice of response is a
 `<thing>Behavior`, a boolean is `has…`, and `anchor` matches `usePopover`. Next
 always shows, so no input hides it.
@@ -241,4 +241,4 @@ callback, and a per-step scroll override.
 ## Open questions
 
 - **OQ3 — Uncontrolled use.** (`human-api`) Whether Tour also takes
-  `defaultActiveStepId` and manages the active step itself.
+  `defaultActiveId` and manages the active step itself.
