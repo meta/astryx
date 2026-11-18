@@ -21,7 +21,9 @@ const read = file => yaml.parse(fs.readFileSync(path.join(root, file), 'utf8'));
 const workflow = read('.github/workflows/a11y-contract-shard.yml');
 const ci = read('.github/workflows/ci.yml');
 const job = workflow.jobs.shard;
-const step = name => job.steps.find(item => item.name === name);
+const room = workflow.jobs.room;
+const step = name =>
+  [...room.steps, ...job.steps].find(item => item.name === name);
 const releaseLeg = ci.jobs['a11y-contracts-shard'];
 const releaseStep = releaseLeg.steps.find(
   item => item.name === 'Run accessibility spec-test contracts',
@@ -37,10 +39,43 @@ describe('the single contract-leg dispatch', () => {
     ]);
     expect(workflow.permissions).toEqual({});
     expect(job.permissions).toEqual({contents: 'read'});
+    expect(room.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+  });
+
+  it('waits for room under the CI ceiling as a pull-request run does, so a main check or release re-check fits first', () => {
+    expect(job.needs).toEqual(['room']);
+    // The inputs are checked before the wait.
+    expect(room.steps[0].name).toBe('Check the inputs');
+    const wait = step('Wait for room under the CI ceiling');
+    expect(wait.uses).toBe('./.ci-admission/.github/actions/ci-admission');
+    expect(wait.with).toEqual({
+      phase: 'whole',
+      peak: 2,
+      main: 'false',
+      'max-wait-minutes': 120,
+      'max-looks': 30,
+    });
+    // The admission action comes from the dispatched ref (main), not the
+    // commit under test.
+    expect(step('Check out the admission action').with).toEqual({
+      'sparse-checkout':
+        '.github/actions/ci-admission\n.github/scripts/lib\nscripts/lib\n',
+      path: '.ci-admission',
+      'persist-credentials': false,
+    });
+    expect(step('Stop when CI is full').if).toBe(
+      "steps.room.outputs.full == 'true'",
+    );
+    // A standard runner: the wait outlasts a slim job's fifteen minutes.
+    expect(room['runs-on']).toBe('ubuntu-latest');
   });
 
   it('never puts an input into a script: each reaches it through the environment', () => {
-    for (const item of job.steps.filter(entry => entry.run))
+    for (const item of [...room.steps, ...job.steps].filter(entry => entry.run))
       expect(item.run, item.name).not.toContain('${{');
   });
 
