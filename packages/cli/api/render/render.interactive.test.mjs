@@ -509,6 +509,7 @@ export default function Notice() {
 export default function Page() {
   return <main><img src={shoe.src} alt="Shoe" /></main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('site/src/shoe.tsx', {cwd: dir, out: 'shoe.html'});
@@ -543,6 +544,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     const rendered = /** @type {any} */ (
@@ -595,6 +597,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <><CardA /><CardB /></>}</main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('two-folders/page.tsx', {cwd: dir, out: 'two-folders.html'});

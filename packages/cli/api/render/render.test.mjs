@@ -1042,7 +1042,7 @@ describe('render(): every write stays inside the current folder', () => {
 
   it('reads a root-relative image from the public/ folder of a site that shares its project', async () => {
     put('shared-site/public/pics/shoe.png', PNG);
-    put('shared-site/src/page.tsx', 'export default function Page() { return <img src="/pics/shoe.png" alt="Shoe" />; }\n');
+    put('shared-site/src/page.tsx', 'export default function Page() { return <img src="/pics/shoe.png" alt="Shoe" />; }\nimport "@astryxdesign/core/astryx.css";\n');
     const r = /** @type {any} */ (await render('shared-site/src/page.tsx', {cwd: dir}));
     expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
     expect(r.data.files).toEqual(['src/page.tsx', 'public/pics/shoe.png']);
@@ -2958,7 +2958,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(site, 'src/pages/p/page.css'), '.hero { background: url(/pics/bg.png); }\n');
     fs.writeFileSync(
       path.join(site, 'src/pages/p/page.tsx'),
-      "import './page.css';\nconst shoe = {src: '/pics/shoe.png'};\nexport default function Page() {\n  return <main className=\"hero\"><img src={shoe.src} alt=\"Shoe\" /></main>;\n}\n",
+      "import './page.css';\nconst shoe = {src: '/pics/shoe.png'};\nexport default function Page() {\n  return <main className=\"hero\"><img src={shoe.src} alt=\"Shoe\" /></main>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const run = runBin(site, ['experimental', 'export', 'src/pages/p/page.tsx']);
     expect(run.status).toBe(0);
@@ -2989,7 +2989,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(site, 'top.png'), PNG);
     fs.writeFileSync(
       path.join(site, 'page.tsx'),
-      'export default function Page() {\n  return <main><img src="/../secret.png" alt="" /><img src="/top.png" alt="" /><img src="/gone.png" alt="" /></main>;\n}\n',
+      'export default function Page() {\n  return <main><img src="/../secret.png" alt="" /><img src="/top.png" alt="" /><img src="/gone.png" alt="" /></main>;\n}\nimport "@astryxdesign/core/astryx.css";\n',
     );
     const run = runBin(site, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
@@ -3012,7 +3012,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(site, 'src/styles/a.css'), '.hero { background: url(/gone-bg.png); }\n');
     fs.writeFileSync(
       path.join(site, 'src/pages/p/page.tsx'),
-      "import '../../styles/a.css';\nexport default function Page() {\n  return <main className=\"hero\"><img src=\"/gone.png\" alt=\"\" /></main>;\n}\n",
+      "import '../../styles/a.css';\nexport default function Page() {\n  return <main className=\"hero\"><img src=\"/gone.png\" alt=\"\" /></main>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const run = runBin(site, ['experimental', 'export', 'src/pages/p/page.tsx']);
     expect(run.status).toBe(0);
@@ -3029,7 +3029,7 @@ describe('render(): a page outside a project', () => {
     const lone = path.join(away, 'from-root');
     fs.mkdirSync(lone, {recursive: true});
     const page = path.join(lone, 'page.tsx');
-    fs.writeFileSync(page, 'export default function Page() {\n  return <main><img src="/none.png" alt="" /></main>;\n}\n');
+    fs.writeFileSync(page, 'export default function Page() {\n  return <main><img src="/none.png" alt="" /></main>;\n}\nimport "@astryxdesign/core/astryx.css";\n');
     const root = path.parse(lone).root;
     const run = runBin(root, ['experimental', 'export', path.relative(root, page), '--out', path.relative(root, path.join(lone, 'page.html'))]);
     expect(run.status).toBe(0);

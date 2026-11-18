@@ -72,7 +72,6 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
- * @property {boolean | null} [astryx] - Whether the script's module graph, or a package stylesheet a module imports, is Astryx's; null in a markup-only render.
  */
 
 /** An error carrying a render error code. */

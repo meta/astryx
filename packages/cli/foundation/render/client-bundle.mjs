@@ -17,6 +17,7 @@ import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
+import {packageOf} from '../doc-compiler/source.mjs';
 import {SOURCE_TYPE} from './source-block.mjs';
 
 /** The id of the element that holds the page's markup in a rendered file. */
@@ -584,7 +585,7 @@ export function graphHoldsAstryx(inputs, entry) {
   return inputs.some(key => {
     const file = inputFile(key);
     if (!file || path.resolve(file) === page) return false;
-    return ownerName(file)?.startsWith('@astryxdesign/') === true;
+    return packageOf(file).startsWith('@astryxdesign/');
   });
 }
 
@@ -599,32 +600,4 @@ function inputFile(key) {
   const named = /^([a-z][a-z-]+):(.+)$/.exec(key);
   if (!named) return path.resolve(key);
   return named[1] === PAGE ? named[2] : null;
-}
-
-/** @type {Map<string, string | null>} */
-const ownerNames = new Map();
-
-/**
- * The name of the package whose package.json holds `file`: the nearest
- * package.json above it that has a name.
- * @param {string} file
- * @returns {string | null}
- */
-function ownerName(file) {
-  const dir = path.dirname(file);
-  if (ownerNames.has(dir)) return /** @type {string | null} */ (ownerNames.get(dir));
-  /** @type {string | null} */
-  let name = null;
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-    if (typeof pkg?.name === 'string') name = pkg.name;
-  } catch {
-    // No package.json here, or one that is not JSON: look further up.
-  }
-  if (name === null) {
-    const up = path.dirname(dir);
-    name = up === dir ? null : ownerName(path.join(up, path.basename(dir)));
-  }
-  ownerNames.set(dir, name);
-  return name;
 }
