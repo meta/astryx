@@ -26,12 +26,6 @@ interface UseHighlightedOptionScrollOptions {
    * min/max-clamped lists). A count change runs the scroll again.
    */
   itemCount?: number;
-  /**
-   * Changes when a key moves the highlight without moving it to another
-   * option, such as between a grid row's cells. Each change holds the
-   * highlight again and drops a hover that was waiting.
-   */
-  holdKey?: unknown;
 }
 
 /**
@@ -61,14 +55,19 @@ interface WaitingHover {
  * under a still mouse, and the browser reports the row under it as entered;
  * that row takes the highlight only once the pointer moves or presses.
  */
-export function useHighlightedOptionScroll({
+export interface HighlightedOptionHover {
+  highlightFromHover: HighlightFromHover;
+  /** Hold the highlight after a key that keeps it on the same option. */
+  holdHighlight: () => void;
+}
+
+export function useHighlightedOptionHover({
   isOpen,
   highlightedIndex,
   setHighlightedIndex,
   getOptionId,
   itemCount,
-  holdKey,
-}: UseHighlightedOptionScrollOptions): HighlightFromHover {
+}: UseHighlightedOptionScrollOptions): HighlightedOptionHover {
   // The callback reads no render state, so memoized rows keep one function.
   const hoveredIndexRef = useRef<number | null>(null);
   const shownIndexRef = useRef(highlightedIndex);
@@ -180,15 +179,25 @@ export function useHighlightedOptionScroll({
     }
     startHold();
     option.scrollIntoView?.({block: 'nearest'});
-  }, [
-    isOpen,
-    highlightedIndex,
-    getOptionId,
-    itemCount,
-    holdKey,
-    endHold,
-    startHold,
-  ]);
+  }, [isOpen, highlightedIndex, getOptionId, itemCount, endHold, startHold]);
 
-  return highlightFromHover;
+  // A key that moves the highlight without changing the option (between a
+  // grid row's cells) holds it again, dropping a hover that was waiting.
+  const holdHighlight = useCallback(() => {
+    if (isOpen && highlightedIndex >= 0) {
+      startHold();
+    }
+  }, [isOpen, highlightedIndex, startHold]);
+
+  return {highlightFromHover, holdHighlight};
+}
+
+/**
+ * {@link useHighlightedOptionHover}, for a list whose keys only ever move the
+ * highlight to another option.
+ */
+export function useHighlightedOptionScroll(
+  options: UseHighlightedOptionScrollOptions,
+): HighlightFromHover {
+  return useHighlightedOptionHover(options).highlightFromHover;
 }

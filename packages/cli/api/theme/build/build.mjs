@@ -63,6 +63,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
+import {projectMapsImport} from '../../../foundation/render/ts-paths.mjs';
 import {STYLESHEET_FILE} from '../../../foundation/fs/stylesheet-file.mjs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
@@ -132,6 +133,7 @@ import {
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
+  installStepFor,
   parsedSpecifiers,
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
@@ -608,6 +610,15 @@ function inAstryxRepository(cwd) {
 }
 
 /**
+ * The step that installs Core in the project at `cwd`, as message text.
+ * @param {string} cwd
+ */
+function coreInstallText(cwd) {
+  const {line, note} = installStepFor(['@astryxdesign/core'], cwd);
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
  * Why `theme build` has no Core to generate with, and the fix for where it
  * ran: the Astryx repository builds Core, an app installs it, and an installed
  * Core that will not load is named.
@@ -634,7 +645,7 @@ export function coreUnavailableMessage(cwd, importError) {
   }
   return (
     `This project does not have @astryxdesign/core installed: ${why}. Install ` +
-    `it: \`npm install @astryxdesign/core\` (or yarn/pnpm/bun).${detail}`
+    `it: ${coreInstallText(cwd)}.${detail}`
   );
 }
 
@@ -3515,14 +3526,15 @@ function themeLoadSuggestions(error, shown, cwd, mode = {}) {
     ];
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
-    const {installCommand} = installCommandFor(
+    const {installCommand, installGuidance} = installCommandFor(
       [missing],
       findPackageRoot(cwd) ?? cwd,
     );
-    if (installCommand) {
+    const install = installGuidance ?? installCommand;
+    if (install) {
       return [
         {
-          name: installCommand,
+          name: install,
           reason: `install ${missing}, which the theme imports`,
         },
       ];
@@ -3576,70 +3588,6 @@ function importerOf(message) {
     return from.startsWith('file:') ? fileURLToPath(from) : from.trim();
   } catch {
     return null;
-  }
-}
-
-/**
- * Whether the project that holds `from` maps `specifier` itself: the nearest
- * tsconfig.json or jsconfig.json names it in `compilerOptions.paths` (`@app/*`
- * maps `@app/c`), or its `baseUrl` holds the file (`lib/c`). The theme loader
- * maps neither, so such an import is a path alias, never a package.
- * @param {string} specifier
- * @param {string | null} from the importing module
- * @returns {boolean}
- */
-export function projectMapsImport(specifier, from) {
-  if (!from) return false;
-  for (let dir = path.dirname(from); ; dir = path.dirname(dir)) {
-    for (const name of ['tsconfig.json', 'jsconfig.json']) {
-      const file = path.join(dir, name);
-      /** @type {any} */
-      let config;
-      try {
-        // JSON with comments and trailing commas, as TypeScript reads it.
-        config = JSON.parse(
-          fs
-            .readFileSync(file, 'utf8')
-            .replace(
-              /("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-              (m, str) => str ?? '',
-            )
-            .replace(/,(\s*[}\]])/g, '$1'),
-        );
-      } catch {
-        continue;
-      }
-      const options = config?.compilerOptions ?? {};
-      const paths = Object.keys(
-        options.paths && typeof options.paths === 'object' ? options.paths : {},
-      );
-      if (
-        paths.some(pattern =>
-          pattern.endsWith('*')
-            ? specifier.startsWith(pattern.slice(0, -1))
-            : specifier === pattern,
-        )
-      )
-        return true;
-      if (typeof options.baseUrl === 'string') {
-        const base = path.resolve(dir, options.baseUrl, specifier);
-        if (
-          ['', ...THEME_MODULE_EXTENSIONS].some(ext => {
-            try {
-              return fs.statSync(base + ext).isFile();
-            } catch {
-              return false;
-            }
-          }) ||
-          THEME_MODULE_EXTENSIONS.some(ext =>
-            fs.existsSync(path.join(base, `index${ext}`)),
-          )
-        )
-          return true;
-      }
-      return false;
-    }
-    if (path.dirname(dir) === dir) return false;
   }
 }
 
@@ -5757,9 +5705,10 @@ async function themeBuildInternal(
         ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`
         : '';
 
-    // #3658: also emit attribute-specific rules so <Theme mode> can override
-    // color-scheme. Inspect root and rule-owned values, not generated CSS, which
-    // also carries theme-independent data-token defaults with light-dark().
+    // A theme with light-dark() values pins the scheme where html forces a
+    // mode (a Theme's mode, or the host's data-theme). Inspect root and
+    // rule-owned values, not generated CSS, which also carries
+    // theme-independent data-token defaults with light-dark().
     const themeOwnValues = JSON.stringify(
       [
         resolvedTheme.tokens ?? {},
@@ -5777,10 +5726,14 @@ async function themeBuildInternal(
       ],
       bigIntAsText,
     );
+    // A theme follows the page's scheme: it pins the scheme only where the
+    // page or the Theme provider forces a mode (`data-theme` on html).
+    // Following the reader's device is the page's own choice, made by
+    // reset.css or the app's own `color-scheme` on html, never by a theme.
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')
-        ? '  :root { color-scheme: light dark; }\n  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
+        ? '  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
         : '';
     if (colorSchemeDecl || componentScope) {
       cssParts.push(

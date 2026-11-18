@@ -101,6 +101,7 @@ describe('visual, accessibility and RTL owners', () => {
       visual: '${{ steps.decide.outputs.visual }}',
       a11y: '${{ steps.decide.outputs.a11y }}',
       rtl: '${{ steps.decide.outputs.rtl }}',
+      swizzle: '${{ steps.decide.outputs.swizzle }}',
     });
     expect(gate.steps[0].with).toMatchObject({
       'sparse-checkout':

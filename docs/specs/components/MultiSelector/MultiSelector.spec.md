@@ -178,6 +178,10 @@ Complete prop syntax and examples remain in `MultiSelector.doc.mjs`.
   observer of its own; its timers are an animation frame that moves focus as
   the panel opens and the typeahead reset timeout. Announcements use the shared
   polite channel.
+- **PR2 — The keyboard module is MultiSelector's own.** Its keyboard behavior
+  builds on the shared `useHighlightedOptionHover` and `useTypeahead`. No
+  shared engine models a grid row's option and action cells, so
+  `architecture:react-component-runtime` INV19's shared engines do not fit.
 
 ## Accessibility contract
 

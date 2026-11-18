@@ -38,6 +38,10 @@ import {
   pageSource,
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
+import {
+  fileStamp,
+  recordContentRead,
+} from '../../foundation/fs/read-record.mjs';
 
 /**
  * A fingerprint of a module and every file it imports by a relative path,
@@ -648,6 +652,9 @@ export async function renderGenerated(
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // The editor shows the markup itself and writes no file, so it needs
+      // no script.
+      markupOnly: true,
       // A theme's image too large for a page is named by the editor (show's
       // notes); the page goes on without it.
       leaveLargeStyleAssets: true,
@@ -716,8 +723,8 @@ export async function renderGenerated(
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
- * Part data read from a cache file, by file, with the file's identity, size
- * and time when it was read. Shared by every command in the process, so it
+ * Part data read from a cache file, by file, with the file's stamp
+ * (`fileStamp`) when it was read. Shared by every command in the process, so it
  * is frozen.
  * @type {Map<string, {stamp: string, data: PartData}>}
  */
@@ -747,8 +754,8 @@ export async function partData(project) {
   try {
     // The file is read again only when it changed: every command reads it,
     // and parsing it costs more than the rest of a small command.
-    const st = fs.statSync(file);
-    const stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    recordContentRead(file);
+    const stamp = fileStamp(file);
     const kept = readParts.get(file);
     const cached =
       kept?.stamp === stamp
@@ -763,7 +770,9 @@ export async function partData(project) {
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
     ) {
-      readParts.set(file, {stamp, data: cached});
+      // A file that appeared after its stamp is not kept: the entry would
+      // outlive its removal.
+      if (stamp !== '-') readParts.set(file, {stamp, data: cached});
       return cached;
     }
   } catch {

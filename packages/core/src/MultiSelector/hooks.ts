@@ -16,7 +16,7 @@
 
 import {useCallback, useState} from 'react';
 import {isRtlElement} from '../hooks/isRtlElement';
-import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
+import {useHighlightedOptionHover} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
@@ -177,16 +177,13 @@ export function useMultiCombobox({
 
   // The scroll effect lives here, the highlight owner, so the hover/keyboard
   // split is shared instead of re-implemented in MultiSelector.tsx (#6077).
-  // Counts the keys that move between a grid row's cells, so a hover that
-  // waited through the key is dropped, as one waiting through a row move is.
-  const [cellMoves, setCellMoves] = useState(0);
-  const highlightOnHover = useHighlightedOptionScroll({
-    isOpen,
-    highlightedIndex,
-    setHighlightedIndex,
-    getOptionId: getItemId,
-    holdKey: cellMoves,
-  });
+  const {highlightFromHover: highlightOnHover, holdHighlight} =
+    useHighlightedOptionHover({
+      isOpen,
+      highlightedIndex,
+      setHighlightedIndex,
+      getOptionId: getItemId,
+    });
 
   const onItemMouseEnter = useCallback(
     (
@@ -238,7 +235,7 @@ export function useMultiCombobox({
           ) {
             e.preventDefault();
             setHighlightedCell('action');
-            setCellMoves(moves => moves + 1);
+            holdHighlight();
           }
           return;
         }
@@ -246,7 +243,7 @@ export function useMultiCombobox({
           if (highlightedCell === 'action') {
             e.preventDefault();
             setHighlightedCell('option');
-            setCellMoves(moves => moves + 1);
+            holdHighlight();
           }
           return;
         }
@@ -369,6 +366,7 @@ export function useMultiCombobox({
       isDisabled,
       isOpen,
       onOpen,
+      holdHighlight,
       closeAndReset,
       selectableItems,
       highlightedIndex,

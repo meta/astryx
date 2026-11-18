@@ -74,6 +74,7 @@ import {
 } from '@astryxdesign/core/Chat';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 // StackItem has no wrapping basis; Stack has no body variant.
 // LayoutContent has no height cap; keep the message viewport bounded.
@@ -1327,7 +1328,7 @@ function InventoryCard({
             columns={[
               {
                 key: 'select',
-                header: '',
+                header: <VisuallyHidden>Select</VisuallyHidden>,
                 width: pixel(64),
                 renderCell: row => (
                   <CheckboxInput
@@ -1365,7 +1366,7 @@ function InventoryCard({
               },
               {
                 key: 'actions',
-                header: '',
+                header: <VisuallyHidden>Actions</VisuallyHidden>,
                 width: pixel(64),
                 align: 'end',
                 renderCell: () => <ActionsCell />,

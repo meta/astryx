@@ -52,7 +52,13 @@ owns response fields and compatibility.
 - **FR1 — search answers with the lexical matches.** Every result is an entry
   the lexical ranker matched, with that ranker's score and reason, and
   `matchCount` equals its match count. Search never returns more results than
-  the lexical ranker does for the same query and limit.
+  the lexical ranker does for the same query and limit. In search's reading of
+  the catalog, a doc that opens a level (a docs-tree namespace) does not answer
+  a query word through its text (its prose, or a code term or table cell its
+  keywords gather) when a doc beneath its route answers that word at least as
+  strongly: the word is that doc's evidence. Its name, title, description and
+  declared keywords stay its own. `searchCore`, which build reads, keeps the
+  gathered reading.
 - **FR2 — bands do not cross.** Search orders matches only inside a run of one
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
@@ -60,7 +66,12 @@ owns response fields and compatibility.
   including its domain priority. Inside a run, a family's root leads a part of
   its own family when the part answers no query word the root does not, and no
   query word, in any plural or stem form, is a word of the part's name that
-  does not start a word of the root's name.
+  does not start a word of the root's name. Among matches of the first
+  result's domain that tie with it on score and on the query words they
+  matched, the match whose own name holds more query words leads. A first
+  result that matched the whole query (a name, keyword, or title hit), or
+  whose title the query holds, keeps its place, and a part of the first result
+  never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
   ranker's answer unchanged.

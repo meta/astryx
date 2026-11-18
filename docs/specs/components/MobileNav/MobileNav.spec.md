@@ -49,15 +49,15 @@ system_specs: [spec:AST-094/FR13, spec:AST-094/FR35]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                   |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `MobileNav` with `isOpen`, `onOpenChange`, `header`, `width` (320), `side` (`start`, `end`, `auto`; default `auto`), `label`, and `children`; target `mobile-nav` with a `side` state; `MobileNavToggle` with `label` and `children`.                                                                                      |
-| Behavior                | A modal native dialog with a drawer that slides in from one inline edge, a header with a Close button, and a scrolling content region. Escape, the backdrop, and Close request closing; the dialog stays open while the drawer starts sliding out and closes within the slide-out (FR5), then focus returns to the opener. |
-| End-user impact         | Phone users open navigation in a drawer that contains focus, lock the page behind it, close it any usual way, and land back on the control that opened it.                                                                                                                                                                 |
-| Builder impact          | None.                                                                                                                                                                                                                                                                                                                      |
-| Compatibility/readiness | Records shipped behavior; no public change. Six implementation gaps: automatic side selection uses physical position, reduced motion still animates, its own top layer, close hold, and backdrop, a caller `id` disconnects the Toggle, and a caller `aria-label` and `onCancel` are dropped (see Current-state impact).   |
-| Review checks           | Reject a non-modal drawer, a close that hides the drawer before its slide-out runs, focus not returned to a connected opener, a backdrop click inside the drawer that closes it, or a Toggle rendered outside an enabled AppShell mobile layout.                                                                           |
-| Governing rules         | `family:overlay-dismissal`; `architecture:layer-runtime` INV14; `component:AppShell` FR10–FR13; `design:bidirectionality` DR7; `design:reduced-motion` DR1–DR3; `architecture:public-component-api` INV5, INV7; `architecture:component-theming-surface`.                                                                  |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `MobileNav` with `isOpen`, `onOpenChange`, `header`, `width` (320), `side` (`start`, `end`, `auto`; default `auto`), `label`, and `children`; targets `mobile-nav` (the overlay) and `mobile-nav-drawer` (the painted panel), each with a `side` state; `MobileNavToggle` with `label` and `children`.                                                                           |
+| Behavior                | A modal native dialog with a drawer that slides in from one inline edge, a header with a Close button, and a scrolling content region. Escape, the backdrop, and Close request closing; the dialog stays open while the drawer starts sliding out and closes within the slide-out (FR5), then focus returns to the opener.                                                       |
+| End-user impact         | Phone users open navigation in a drawer that contains focus, lock the page behind it, close it any usual way, and land back on the control that opened it.                                                                                                                                                                                                                       |
+| Builder impact          | A theme can style the painted drawer panel through `mobile-nav-drawer`.                                                                                                                                                                                                                                                                                                          |
+| Compatibility/readiness | Records shipped behavior; one compatible addition: the Drawer's `mobile-nav-drawer` target (DEC-2). Six implementation gaps: automatic side selection uses physical position, reduced motion still animates, its own top layer, close hold, and backdrop, a caller `id` disconnects the Toggle, and a caller `aria-label` and `onCancel` are dropped (see Current-state impact). |
+| Review checks           | Reject a non-modal drawer, a close that hides the drawer before its slide-out runs, focus not returned to a connected opener, a backdrop click inside the drawer that closes it, or a Toggle rendered outside an enabled AppShell mobile layout.                                                                                                                                 |
+| Governing rules         | `family:overlay-dismissal`; `architecture:layer-runtime` INV14; `component:AppShell` FR10–FR13; `design:bidirectionality` DR7; `design:reduced-motion` DR1–DR3; `architecture:public-component-api` INV5, INV7; `architecture:component-theming-surface`.                                                                                                                        |
 
 This table is a review projection; the body below is authoritative.
 
@@ -71,8 +71,10 @@ Toggle's link to the drawer. Consumer usage lives in `MobileNav.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; runtime, DOM, styling,
-  targets, aliases, and public API remain unchanged
+- Compatibility class: records shipped behavior, plus one additive public
+  target, `mobile-nav-drawer` on the Drawer (DEC-2); runtime, DOM structure,
+  default styling, existing targets, aliases, and the component API remain
+  unchanged
 - Controlled/uncontrolled behavior: `isOpen` and `onOpenChange` control the
   drawer; without them it follows the enclosing AppShell's drawer state (FR2)
 - Migration decision: none
@@ -112,7 +114,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The Navigation overlay and its current `mobile-nav` target.
+- The Navigation overlay and its `mobile-nav` target; the Drawer and its
+  `mobile-nav-drawer` target.
 - Drawer placement and motion, the stable Header and Content regions, and the
   connection between AppShell state, MobileNav, and MobileNavToggle (FR1–FR12).
 - The backdrop's appearance (FR13).
@@ -125,7 +128,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - The Close and Toggle button surfaces — delegated to `component:Button`.
 - Header or navigation content supplied by the caller.
-- A public target for the painted Drawer, Header, or Content region; none exists.
+- A public target for the Header or Content region; none exists.
 - AppShell responsive policy, when the drawer renders, and its close hold —
   owned by `component:AppShell`.
 - Shared Escape and close-request ordering — owned by `family:overlay-dismissal`;
@@ -141,7 +144,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 | ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Basis                                                                                                                                                                                                                      |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1  | MobileNav renders one native `<dialog>` Navigation overlay containing a Drawer with a stable Header, Close button, and scrollable Content region. The overlay carries `mobile-nav` with the resolved `side`; Drawer, Header, and Content carry no MobileNav public target.                                                                                                                                                                                                | Current source, docs, and tests                                                                                                                                                                                            |
+| FR1  | MobileNav renders one native `<dialog>` Navigation overlay containing a Drawer with a stable Header, Close button, and scrollable Content region. The overlay carries `mobile-nav` and the Drawer carries `mobile-nav-drawer`, each with the resolved `side`; Header and Content carry no MobileNav public target.                                                                                                                                                        | Current source, docs, and tests                                                                                                                                                                                            |
 | FR2  | `isOpen` and `onOpenChange` win when given; otherwise the drawer reads and changes the enclosing AppShell's drawer state. The dialog uses AppShell's drawer id when there is one, else its own; a caller `id` replaces either (Current-state impact).                                                                                                                                                                                                                     | Current source and tests                                                                                                                                                                                                   |
 | FR3  | Opening calls `showModal()`, and records the focused element as the opener; where focus lands inside the open drawer is uncontracted here. While open, the page's scroller clips its overflow and keeps its scrollbar gutter: the root, or `<body>` when `<body>` sets its own overflow and the root's stays `visible`. Pull-to-refresh and the page's bounce stop, because a scroll lock under a modal holds the page (`spec:AST-094` FR19). Closing releases all three. | Current source and tests                                                                                                                                                                                                   |
 | FR4  | The native cancel request (Escape) is routed through the shared dismissal stack and requests close only when this drawer is topmost. A click on the overlay outside the Drawer requests close; a click inside does not. The Close button, named by `@astryx.mobileNav.closeNavigation`, requests close. A caller `onClick` on the dialog runs before the backdrop check; one that calls `preventDefault()` cancels that backdrop close.                                   | Current source and tests                                                                                                                                                                                                   |
@@ -213,11 +216,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Close button       | Dismisses the current drawer.                                         | `component:Button`             | Supporting     | FR4                |
 | Toggle button      | Opens or closes the AppShell-owned mobile drawer state.               | `component:Button`             | Supporting     | FR11               |
 
-Drawer is the primary painted surface, but the only current MobileNav target is
-on the full-viewport dialog overlay. Its `none` disposition is a factual
-reachability gap, not a decision that the Drawer must remain unthemeable. Header
-and Content likewise have no current local target. Close and Toggle retain Button
-ownership.
+Drawer is the primary painted surface and carries `mobile-nav-drawer` with the
+resolved `side`, so a theme styles the panel without the full-viewport overlay
+behind it. Header and Content have no current local target; their `none`
+dispositions are factual reachability gaps, not a decision that they must
+remain unthemeable. Close and Toggle retain Button ownership.
 
 ### Theming anatomy
 
@@ -226,11 +229,7 @@ ownership.
 ```json
 {
   "Navigation overlay": {"target": "mobile-nav"},
-  "Drawer": {
-    "none": {
-      "reason": "reachability-gap: No current public target is applied to the painted drawer panel"
-    }
-  },
+  "Drawer": {"target": "mobile-nav-drawer"},
   "Header": {
     "none": {
       "reason": "reachability-gap: No current public target is applied to the stable header row"
@@ -270,25 +269,25 @@ ownership.
 
 ## Verification map
 
-| Contract             | Verification                                                                                                                       | Representative states                                                                 | Mutation or failure expectation                                                                                                                                                                      | Audit section                   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1, FR2, FR10, FR12 | `MobileNav.test.tsx`                                                                                                               | Open and closed; string and no header; caller `id` on a standalone drawer             | Losing the dialog, name, Close, or forwarded props fails.                                                                                                                                            | `audit:MobileNav/anatomy`       |
-| FR2, FR3, FR4        | `MobileNav.test.tsx`; `MobileNavCloseEdgeCases.test.tsx`; `MobileNavScrollbarGutter.test.tsx`; `MobileNavRootScrollClaim.test.tsx` | Escape, backdrop, content click, Close                                                | A wrong close source or a lingering scroll lock fails.                                                                                                                                               | `audit:MobileNav/behavior`      |
-| FR4                  | `layerDismissalFamilies.test.tsx` MobileNav cases                                                                                  | Escape over a required Dialog; cancel while topmost and while not                     | Closing when not topmost, or not closing when topmost, fails.                                                                                                                                        | `audit:MobileNav/behavior`      |
-| FR5, ORD3            | `MobileNavCloseVisibility.test.tsx`; `MobileNavCloseEdgeCases.test.tsx`; `MobileNavCloseTiming.test.ts`                            | Close, reduced motion, reopen, unmount, the 250 ms bound                              | Closing before the slide-out or a stuck dialog fails.                                                                                                                                                | `audit:MobileNav/behavior`      |
-| FR5                  | `MobileNavTouchPresentation.a11y.chromium.spec.ts` (the slide-out after the close)                                                 | Closed dialog, drawer still sliding out; open drawer                                  | A tap on the leaving drawer reaching it, or the browser's accessibility tree exposing the dialog or its links after the close, fails.                                                                | `audit:MobileNav/behavior`      |
-| FR6, AR2             | `MobileNavFocus.test.tsx`                                                                                                          | Standalone, AppShell, Escape, removed opener                                          | Focus not returned, or returned too early, fails.                                                                                                                                                    | `audit:MobileNav/accessibility` |
-| FR7                  | `MobileNavEntryAnimation.test.tsx`                                                                                                 | Start and end edges                                                                   | Missing starting style or a scroll-container overlay fails.                                                                                                                                          | `audit:MobileNav/behavior`      |
-| FR11, AR3            | `MobileNavToggle.test.tsx`; `MobileNavReopen.test.tsx`                                                                             | Closed, open, reopen                                                                  | Broken expanded state or id link fails.                                                                                                                                                              | `audit:MobileNav/accessibility` |
-| AR4                  | `MobileNavPinchZoom.a11y.chromium.spec.ts`                                                                                         | Open drawer on a touch viewport                                                       | Pinch zoom blocked fails.                                                                                                                                                                            | `audit:MobileNav/accessibility` |
-| FR9                  | `MobileNav.test.tsx` drawer cap test; `MobileNavWidth.a11y.chromium.spec.ts`                                                       | Default and wide `width` on a narrow viewport                                         | A drawer wider than 85% of the viewport fails.                                                                                                                                                       | `audit:MobileNav/behavior`      |
-| FR14                 | Chromium accessibility-tree check of the open drawer with SideNav items and with a TopNav's drawer content                         | Drawer from SideNav's drawer mode and from a TopNav's drawer                          | The tree shows no navigation landmark, an unnamed one, a name other than the dialog's, or two nested ones (`spec:AST-009` FR3: computed role and name need accessibility-tree evidence)              | `audit:MobileNav/accessibility` |
-| Theming anatomy map  | `scripts/check-knowledge.mjs`; `themingTargets.test.ts`                                                                            | Canonical parent anatomy and current target                                           | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                                                           | `audit:MobileNav/theming`       |
-| RTL relation         | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `MobileNav / Default` (drawer opened)                     | The open drawer; LTR and RTL                                                          | A drawer that does not move to the mirrored side of the page in RTL fails D4. Evidence gap: the story centres its opener, so the documented `side="auto"` far-side RTL drawer (FR8) is not observed. | `audit:MobileNav/i18n-rtl`      |
-| FR13                 | `modalBackdrop.test.tsx`; `ModalBackdrop.a11y.browser.spec.ts` in Chromium and WebKit                                              | A finger at phone width; a mouse at desktop width; forced colors under either pointer | A `backdrop-filter` on the backdrop at either width, or no visible edge in forced colors, fails.                                                                                                     | `audit:MobileNav/theming`       |
-| FR15                 | `MobileNav.test.tsx` ("draws the panel's own text in the surface's text color"); `MobileNav.textColor.a11y.chromium.spec.ts`       | Open panel with a selected row, light and dark                                        | A selected row in `CanvasText`, or under 4.5:1 on the panel, fails.                                                                                                                                  | `audit:MobileNav/theming`       |
+| Contract             | Verification                                                                                                                       | Representative states                                                                                   | Mutation or failure expectation                                                                                                                                                                      | Audit section                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| FR1, FR2, FR10, FR12 | `MobileNav.test.tsx`                                                                                                               | Open and closed; string and no header; caller `id` on a standalone drawer; the Drawer's target and side | Losing the dialog, name, Close, forwarded props, or the Drawer's target fails.                                                                                                                       | `audit:MobileNav/anatomy`       |
+| FR2, FR3, FR4        | `MobileNav.test.tsx`; `MobileNavCloseEdgeCases.test.tsx`; `MobileNavScrollbarGutter.test.tsx`; `MobileNavRootScrollClaim.test.tsx` | Escape, backdrop, content click, Close                                                                  | A wrong close source or a lingering scroll lock fails.                                                                                                                                               | `audit:MobileNav/behavior`      |
+| FR4                  | `layerDismissalFamilies.test.tsx` MobileNav cases                                                                                  | Escape over a required Dialog; cancel while topmost and while not                                       | Closing when not topmost, or not closing when topmost, fails.                                                                                                                                        | `audit:MobileNav/behavior`      |
+| FR5, ORD3            | `MobileNavCloseVisibility.test.tsx`; `MobileNavCloseEdgeCases.test.tsx`; `MobileNavCloseTiming.test.ts`                            | Close, reduced motion, reopen, unmount, the 250 ms bound                                                | Closing before the slide-out or a stuck dialog fails.                                                                                                                                                | `audit:MobileNav/behavior`      |
+| FR5                  | `MobileNavTouchPresentation.a11y.chromium.spec.ts` (the slide-out after the close)                                                 | Closed dialog, drawer still sliding out; open drawer                                                    | A tap on the leaving drawer reaching it, or the browser's accessibility tree exposing the dialog or its links after the close, fails.                                                                | `audit:MobileNav/behavior`      |
+| FR6, AR2             | `MobileNavFocus.test.tsx`                                                                                                          | Standalone, AppShell, Escape, removed opener                                                            | Focus not returned, or returned too early, fails.                                                                                                                                                    | `audit:MobileNav/accessibility` |
+| FR7                  | `MobileNavEntryAnimation.test.tsx`                                                                                                 | Start and end edges                                                                                     | Missing starting style or a scroll-container overlay fails.                                                                                                                                          | `audit:MobileNav/behavior`      |
+| FR11, AR3            | `MobileNavToggle.test.tsx`; `MobileNavReopen.test.tsx`                                                                             | Closed, open, reopen                                                                                    | Broken expanded state or id link fails.                                                                                                                                                              | `audit:MobileNav/accessibility` |
+| AR4                  | `MobileNavPinchZoom.a11y.chromium.spec.ts`                                                                                         | Open drawer on a touch viewport                                                                         | Pinch zoom blocked fails.                                                                                                                                                                            | `audit:MobileNav/accessibility` |
+| FR9                  | `MobileNav.test.tsx` drawer cap test; `MobileNavWidth.a11y.chromium.spec.ts`                                                       | Default and wide `width` on a narrow viewport                                                           | A drawer wider than 85% of the viewport fails.                                                                                                                                                       | `audit:MobileNav/behavior`      |
+| FR14                 | Chromium accessibility-tree check of the open drawer with SideNav items and with a TopNav's drawer content                         | Drawer from SideNav's drawer mode and from a TopNav's drawer                                            | The tree shows no navigation landmark, an unnamed one, a name other than the dialog's, or two nested ones (`spec:AST-009` FR3: computed role and name need accessibility-tree evidence)              | `audit:MobileNav/accessibility` |
+| Theming anatomy map  | `scripts/check-knowledge.mjs`; `themingTargets.test.ts`                                                                            | Canonical parent anatomy and current target                                                             | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                                                           | `audit:MobileNav/theming`       |
+| RTL relation         | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `MobileNav / Default` (drawer opened)                     | The open drawer; LTR and RTL                                                                            | A drawer that does not move to the mirrored side of the page in RTL fails D4. Evidence gap: the story centres its opener, so the documented `side="auto"` far-side RTL drawer (FR8) is not observed. | `audit:MobileNav/i18n-rtl`      |
+| FR13                 | `modalBackdrop.test.tsx`; `ModalBackdrop.a11y.browser.spec.ts` in Chromium and WebKit                                              | A finger at phone width; a mouse at desktop width; forced colors under either pointer                   | A `backdrop-filter` on the backdrop at either width, or no visible edge in forced colors, fails.                                                                                                     | `audit:MobileNav/theming`       |
+| FR15                 | `MobileNav.test.tsx` ("draws the panel's own text in the surface's text color"); `MobileNav.textColor.a11y.chromium.spec.ts`       | Open panel with a selected row, light and dark                                                          | A selected row in `CanvasText`, or under 4.5:1 on the panel, fails.                                                                                                                                  | `audit:MobileNav/theming`       |
 
-Read from source, with no focused test yet:
+Read from source, with no focused test:
 
 - FR1: the distinct Drawer, Header, and Content elements, and the `mobile-nav`
   target with its `side` state.
@@ -320,11 +319,22 @@ name. One landmark covers whatever fills the drawer.
 
 Rejected: leaving the drawer without a landmark, so landmark navigation on a phone finds no navigation at all.
 
+### DEC-2 — The Drawer carries its own theming target
+
+**Reference:** `component:MobileNav/DEC-2`
+**Decider:** `josephfarina`
+
+The Drawer is the surface people see, and it carries its own target,
+`mobile-nav-drawer`, with the resolved `side` (FR1), so a theme styles the
+panel without the full-viewport overlay behind it. The target is an optional
+capability, nonbreaking under `spec:AST-017` FR5; the default look is the
+same with or without it.
+
+Rejected: styling the panel through `mobile-nav`, which paints the whole screen.
+
 ## Open questions
 
-- **OQ1 — Should Drawer gain a stable public theming target?** (`human-api`) The
-  current target reaches the Navigation overlay rather than the primary painted
-  drawer surface; this is an audit gap, not settled intent.
+None.
 
 ## Content boundary
 
