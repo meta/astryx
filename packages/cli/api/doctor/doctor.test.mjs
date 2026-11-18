@@ -22,6 +22,7 @@ import {auditCliSelfDocs} from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   doctor,
   checkCliCommand,
+  checkInstallGuidance,
   checkAuthoringDocs,
   checkCliDocs,
   checkDocsTree,
@@ -332,7 +333,7 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+      'Install the design system: `npm install @astryxdesign/core`.',
     );
   });
 });
@@ -533,6 +534,35 @@ describe('the command that adds an integration installed for the computer', () =
     });
     expect(c.status).toBe('info');
     expect(c).not.toHaveProperty('fix');
+  });
+});
+
+describe('checkInstallGuidance', () => {
+  it('is left out when no integration gives guidance', () => {
+    expect(checkInstallGuidance({cwd: mkProject({}), integrations: [{name: '@acme/a'}]})).toBeNull();
+  });
+
+  it('passes and names the guidance and who gave it', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [{name: '@acme/a', installGuidance: 'Add {packages}, then relock'}],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'pass'});
+    expect(c.message).toContain('@acme/a');
+    expect(c.message).toContain('Add {packages}, then relock');
+  });
+
+  it('warns when integrations give different guidance', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [
+        {name: '@acme/a', installGuidance: 'Add {packages}, then relock'},
+        {name: '@acme/b', installGuidance: 'Ask the platform team'},
+      ],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'warn'});
+    expect(c.message).toContain('@acme/a (`Add {packages}, then relock`)');
+    expect(c.fix).toContain('installGuidance');
   });
 });
 

@@ -213,8 +213,10 @@ own ranking and output, and template owners own what each template is.
   fields, with the values the receipt carries when that template is scaffolded
   into the directory where build ran, from the source its scaffold command (FR5)
   writes. `notes` holds one line for each thing the project lacks: the missing
-  packages with their install command, the reason there is none (FR19), or the
-  project that installs them (FR17), and a missing StyleX compiler (FR20); the receipt's `notes` is empty when the
+  packages with their install command, or in its place the install guidance a
+  loaded integration gives (`spec:AST-039` FR16), the reason there is none
+  (FR19), or the project that installs them (FR17), and a missing StyleX
+  compiler (FR20); the receipt's `notes` is empty when the
   project lacks nothing. One exception keeps build's response additive (FR22):
   on build's start and alternatives, `notes` is present only when it holds a
   line. Text shows each template's readiness beside it, as FR12 and

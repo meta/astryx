@@ -13,6 +13,8 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -406,24 +408,28 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/** @param {unknown} e */
-function asAstryxError(e) {
+/** @param {unknown} e @param {string} [cwd] the project the page belongs to */
+function asAstryxError(e, cwd = process.cwd()) {
   if (e instanceof RenderError) {
     const code = /** @type {import('../../foundation/response/error-codes.mjs').ErrorCode} */ (e.code);
     /** @type {{name: string, reason: string}[]} */
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
-      // The install command in the project's package manager, when the
-      // render named one; else one npm line for every package it found.
+      // The integration's install guidance first, then the install command
+      // the render named in the project's package manager, else the
+      // project's install step for every package it found.
       const packages = Array.isArray(e.detail.packages) ? e.detail.packages : [e.detail.package];
-      suggestions.push(
-        typeof e.detail.install === 'string'
-          ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
-          : {
-              name: `npm install ${packages.join(' ')}`,
-              reason: packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports',
-            },
-      );
+      const guidance = installGuidanceFor(packages, cwd);
+      const needs = `install ${packages.join(', ')}, which this render needs`;
+      if (guidance) {
+        suggestions.push({name: guidance, reason: needs});
+      } else if (typeof e.detail.install === 'string') {
+        suggestions.push({name: e.detail.install, reason: needs});
+      } else {
+        const {line, note} = installStepFor(packages, cwd);
+        const what = packages.length === 1 ? 'install the package the page imports' : 'install the packages the page imports';
+        suggestions.push({name: line, reason: note ? `${what} (${note})` : what});
+      }
     }
     return new AstryxError(e.message, suggestions, code);
   }
@@ -498,7 +504,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
       throw e;
     }
   } catch (e) {
-    throw asAstryxError(e);
+    throw asAstryxError(e, cwd);
   }
   for (const {name, dir} of page.fromSet) {
     let version = null;

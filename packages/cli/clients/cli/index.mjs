@@ -17,7 +17,7 @@ import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
+import {hasRecordedProject, recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
@@ -283,7 +283,7 @@ export async function loadProjectForHelp(argv = process.argv.slice(2), program) 
     if (hasRecordedProject(cwd)) return;
     if (!mayHaveIntegrations(cwd)) {
       // What loading this project would record: no declared command.
-      recordDeclaredCliCommands(cwd, []);
+      recordDeclaredSettings(cwd, []);
       return;
     }
     const {Project} = await import('../../foundation/config/project.mjs');
@@ -899,7 +899,7 @@ export async function createProgram({argv} = {}) {
       if (hasRecordedProject(cwd)) return;
       if (!mayHaveIntegrations(cwd)) {
         // What loading this project would record: no declared command.
-        recordDeclaredCliCommands(cwd, []);
+        recordDeclaredSettings(cwd, []);
         return;
       }
       const {Project} = await import('../../foundation/config/project.mjs');
