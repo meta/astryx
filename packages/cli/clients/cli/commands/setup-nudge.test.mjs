@@ -240,6 +240,9 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     const firstComponent = both.search(/^name:/m);
     expect(reminder).toBeGreaterThanOrEqual(0);
     expect(firstComponent).toBeGreaterThan(reminder);
+    // `2>&1 | head -1` shows the reminder itself, not a blank line.
+    expect(both.split('\n')[0]).toMatch(/^Astryx is not set up in this project yet\./);
+    expect(both.split('\n')[1]).toBe('');
   });
 
   it('prints for a command that fails too, and that uses the day', async () => {

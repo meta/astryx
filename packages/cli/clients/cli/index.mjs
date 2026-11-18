@@ -944,13 +944,14 @@ export async function createProgram({argv} = {}) {
    */
   /**
    * Print the reminder for `root` now, before the command's own output, at
-   * most once a day for that project.
+   * most once a day for that project: its first line is the reminder itself
+   * (`2>&1 | head -1` shows it), and one blank line follows it.
    * @param {string} root
    * @param {string} line
    */
   const remindSetup = (root, line) => {
     if (isCi(process.env)) return;
-    if (takeNotice(`${SETUP_REMINDER_KEY}${root}`)) console.error(`${line}\n`);
+    if (takeNotice(`${SETUP_REMINDER_KEY}${root}`)) console.error(`${line.trim()}\n`);
   };
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
