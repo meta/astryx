@@ -16,7 +16,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
-import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
+import {readSourceBlock, renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -2480,10 +2480,15 @@ describe('render(): a page outside a project', () => {
     expect(run.status, JSON.stringify(run.json)).toBe(0);
     expect([...run.json.data.files].sort()).toEqual(['page.tsx', 'parts/Kpi.tsx', 'parts/fmt.ts', 'parts/later.tsx']);
     expect(run.json.data).not.toHaveProperty('notCarried');
-    expect(fs.readFileSync(path.join(tree, 'page.html'), 'utf8')).toContain('Signups: #128');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Signups: #128');
+    // Earlier CLIs cannot follow a .js name to its TypeScript file, so the
+    // file says a render format they do not read, and they name this CLI.
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 3}});
+    expect(html).toContain('render format 3.');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
-    expect(back.json.data.exact).toBe(true);
+    expect(back.json.data).toMatchObject({exact: true, format: 3});
     expect(back.json.data).not.toHaveProperty('missing');
     for (const [name, text] of Object.entries(files)) {
       expect(fs.readFileSync(path.join(tree, 'page-restored', name), 'utf8'), name).toBe(text);

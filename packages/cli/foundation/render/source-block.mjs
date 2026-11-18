@@ -17,14 +17,17 @@
  */
 
 import {createHash} from 'node:crypto';
+import * as path from 'node:path';
 import {isValidSemver} from '../env/semver.mjs';
+import {importSpecifiers} from './embedded-imports.mjs';
+import {TS_SOURCES} from './ts-paths.mjs';
 import {decode, readTag, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
 
 /** The newest render format this CLI reads, and the newest it writes. */
-export const RENDER_FORMAT = 2;
+export const RENDER_FORMAT = 3;
 
 /**
  * What a format 1 reader refuses besides the page, as a kind no render
@@ -56,11 +59,41 @@ function format1Refuses(p) {
 }
 
 /**
- * The render format a file that carries these files says, the page first.
- * @param {{path: string}[]} files
+ * Whether a carried module imports another carried module by the JavaScript
+ * name of its TypeScript source (`./fmt.js` for fmt.ts) with no carried file
+ * under the name as written. Format 1 and 2 readers cannot follow such an
+ * import, so they would call the file damaged; a file that holds one says
+ * format 3.
+ * @param {{path: string, bytes?: Buffer}[]} files
+ */
+function importsTypeScriptByJsName(files) {
+  const paths = new Set(files.map(f => f.path));
+  for (const f of files) {
+    if (!f.bytes || !/\.[cm]?[jt]sx?$/i.test(f.path)) continue;
+    const dir = path.posix.dirname(f.path);
+    for (const spec of importSpecifiers(f.bytes.toString('utf8'), f.path)) {
+      const raw = spec.split('?')[0];
+      if (!raw.startsWith('.')) continue;
+      const ext = path.posix.extname(raw);
+      if (!TS_SOURCES[ext]) continue;
+      const named = path.posix.normalize(path.posix.join(dir, raw));
+      if (paths.has(named)) continue;
+      const stem = named.slice(0, named.length - ext.length);
+      if (TS_SOURCES[ext].some(x => paths.has(stem + x))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The render format a file that carries these files says, the page first:
+ * 3 when a carried module is reached only by a TypeScript-style `.js` name,
+ * else 2 when it carries a kind a format 1 reader refuses, else 1.
+ * @param {{path: string, bytes?: Buffer}[]} files
  * @returns {number}
  */
 export function formatFor(files) {
+  if (importsTypeScriptByJsName(files)) return 3;
   return files.slice(1).some(f => format1Refuses(f.path)) ? 2 : 1;
 }
 
