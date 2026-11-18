@@ -10326,14 +10326,25 @@ export function draftAnswer(ctx, env, question) {
         .replace(/-?\d*\.?\d+(px|rem|em)/g, '')
         .trim() === ''
     ) {
-      // ("avatars: round, 32px"): a shape takes no length, so a length
-      // said after the shape alone is the part's size, never its corners.
+      // ("avatars: round, 32px"): a circle takes no length, so a length
+      // said after a circle alone is the part's size, never its corners.
+      // A circle is said ("circular", "a circle", "pill") or is the part's
+      // own shape ("round" on a part drawn as a circle: an avatar);
+      // "rounded" and "round" on a part with corners ("cards: rounded,
+      // 12px") give the corners that length.
+      const circlesNow = pillShapes(C).circles;
+      const isCircle =
+        /\b(?:circular|circles?|pills?)\b/.test(prev.text) ||
+        (/\bround\b/.test(prev.text) &&
+          prev.parts.every(p =>
+            (FAMILIES[p.on] ?? [p.on]).every(m => circlesNow.includes(m)),
+          ));
       if (
         prev.parts.length &&
         prev.aspects.length === 1 &&
         prev.aspects[0] === 'corners' &&
         !prev.lengths.length &&
-        /\b(?:round(?:ed)?|circular|circles?|pills?|square)\b/.test(prev.text)
+        isCircle
       ) {
         const sized = clausesOf(
           `${prev.parts.map(p => p.on).join(' and ')} size ${c.lengths.join(' ')}`,
