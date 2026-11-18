@@ -31,11 +31,11 @@ the app owns and never asks for the microphone by itself, a decoder that
 reads codes from an image file without the camera, and a counted hold on
 screen capture that any number of screens can take and release.
 
-This record details three pieces of the platform layer of `spec:AST-112`:
-the `microphone` and `camera` opt-in capabilities (`spec:AST-112/FR1`,
-`spec:AST-112/FR3`) and one core module, with the result vocabulary
-(`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`), and
-additive evolution (`spec:AST-112/FR8`). It specifies the audio recorder
+This record details three native pieces of the React Native platform of
+`spec:AST-112` that no Astryx component uses, so they belong to the optional
+add-on package, not the core package (DEC-3). It follows the result
+vocabulary (`spec:AST-112/FR6`), the capability shape (`spec:AST-112/FR7`),
+and additive evolution (`spec:AST-112/FR8`). It specifies the audio recorder
 (`AstryxAudioRecorder`), the image code decoder (`AstryxBarcode`), and the
 screen-capture module (`AstryxScreenCapture`).
 Playback and the camera view belong to `spec:AST-132`; the permission module
@@ -43,9 +43,9 @@ and the platform info module belong to `spec:AST-130`.
 
 ## Why this exists
 
-Each piece stays in the platform package because an app's alternative is an
-open-source library that ships native code of its own, which ends a
-JavaScript-only app.
+Each piece is part of the platform's optional add-on package because an
+app's alternative is an open-source library that ships native code of its
+own, which ends a JavaScript-only app.
 
 - `AstryxAudioRecorder` records into the calling runtime's own folder, with
   native-timed levels, a closed reason for every way a recording ends by
@@ -55,18 +55,19 @@ JavaScript-only app.
   permission prompt. A pure-JavaScript decoder needs no native code but needs
   the image's pixels, which JavaScript cannot read in React Native without a
   native module; the scope stays open (OQ3).
-- `AstryxScreenCapture` is one counted hold that screens and the web view's
-  `preventsCapture` share, so one release never uncovers another screen's
-  content. It declares no permission, which keeps it in the core (DEC-3).
+- `AstryxScreenCapture` is one counted hold that many screens share, so one
+  release never uncovers another screen's content. No Astryx component uses
+  it, so it lives in the optional add-on package (DEC-3); the web view's own
+  capture prevention stays with the view in the core (`spec:AST-131/FR12`).
   Reporting capture on iOS is a scope question (OQ2).
 
 ## Who uses it
 
-| Native piece          | Kind                                | Astryx components that use it                                                                                                                                                                                      | What a person sees                                                                                                                        |
-| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `AstryxAudioRecorder` | native module (Turbo Native Module) | No library component; app API through the `./microphone` entry (`AstryxAudioRecorder`). A finished file plays through the library's `useAudioPlayer` (`spec:AST-132`)                                              | A voice note recorded with a level meter that the app draws, and the system's own microphone indicator while it records                   |
-| `AstryxBarcode`       | native module (Turbo Native Module) | No library component; app API through the `./camera` entry (`AstryxBarcode.decodeImage`), often after the file picker (`spec:AST-130`)                                                                             | A photo of a QR code or a barcode, picked from the library, that the app reads with no camera and no permission prompt                    |
-| `AstryxScreenCapture` | native module (Turbo Native Module) | No library component calls it. `WebView`'s `preventsCapture` (`spec:AST-131/FR12`) holds the same window flag through the shared count; app API through the `.` entry (`AstryxScreenCapture`, `usePreventCapture`) | On Android, a screenshot or a screen recording of a private screen comes out blank, and the recent-apps thumbnail of that screen is blank |
+| Native piece          | Kind                                | Astryx components that use it                                                                                                                                                                  | What a person sees                                                                                                                        |
+| --------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstryxAudioRecorder` | native module (Turbo Native Module) | No library component; app API from the optional add-on package (`AstryxAudioRecorder`). A finished file plays through the library's `useAudioPlayer` (`spec:AST-132`)                          | A voice note recorded with a level meter that the app draws, and the system's own microphone indicator while it records                   |
+| `AstryxBarcode`       | native module (Turbo Native Module) | No library component; app API from the optional add-on package (`AstryxBarcode.decodeImage`), often after the file picker (`spec:AST-130`)                                                     | A photo of a QR code or a barcode, picked from the library, that the app reads with no camera and no permission prompt                    |
+| `AstryxScreenCapture` | native module (Turbo Native Module) | No library component; `WebView`'s own `preventsCapture` (`spec:AST-131/FR12`) stays in the core package. App API from the optional add-on package (`AstryxScreenCapture`, `usePreventCapture`) | On Android, a screenshot or a screen recording of a private screen comes out blank, and the recent-apps thumbnail of that screen is blank |
 
 ## Non-goals
 
@@ -93,24 +94,23 @@ JavaScript-only app.
 
 ## Requirements
 
-- **FR1 — Where each piece lives.**
-  - `microphone` is an opt-in capability (`spec:AST-112/FR3`). It links
+- **FR1 — The group is part of the optional add-on package.**
+  - `AstryxAudioRecorder`, `AstryxBarcode`, and `AstryxScreenCapture` are
+    part of the optional add-on package, not the core package: no Astryx
+    component uses them (DEC-3). The add-on exports `AstryxAudioRecorder`,
+    `AstryxBarcode` with the code types of `spec:AST-132/FR10`,
+    `AstryxScreenCapture`, and `usePreventCapture`. No code in the core
+    package imports the add-on, and an app that does not install it carries
+    none of the group's native code.
+  - The recorder needs the `microphone` opt-in (`spec:AST-112/FR3`). It links
     AVFoundation on iOS and the platform's media recorder on Android. With
-    the app's opt-in, the generated native project (`spec:AST-112/FR4`)
-    carries iOS's microphone usage description and Android's `RECORD_AUDIO`
+    the opt-in, the generated native project (`spec:AST-112/FR4`) carries
+    iOS's microphone usage description and Android's `RECORD_AUDIO`
     permission with the microphone hardware feature marked optional; an app
-    that does not opt in carries neither. The `./microphone` entry exports
-    `AstryxAudioRecorder`.
-  - `AstryxBarcode` is part of the `camera` opt-in capability
-    (`spec:AST-132/FR1`). It adds no permission and no hardware feature of
-    its own. The `./camera` entry exports `AstryxBarcode` with the code types
-    of `spec:AST-132/FR10`.
-  - `AstryxScreenCapture` is a core module (DEC-3). The `.` entry exports
-    `AstryxScreenCapture` and `usePreventCapture`. Its native module exists on
-    Android only, and it declares no permission or manifest entry.
-  - The library reaches the two capabilities only through
-    `AstryxPlatform.capability('microphone' | 'camera')`
-    (`spec:AST-112/FR2`).
+    that does not opt in carries neither.
+  - `AstryxBarcode` adds no permission and no hardware feature.
+  - `AstryxScreenCapture`'s native module exists on Android only, and it
+    declares no permission or manifest entry.
 - **FR2 — The native contract.**
 
   | Contract              | Kind                                | Methods                                                           | Events               | Platforms    |
@@ -272,7 +272,8 @@ contentType, size}`; `durationMs` leaves out paused time. After a
     `io`, `no-activity` (Android), and `unavailable` (the module went away
     during a reload). The decoder adds `unreadable`, `no-types`, and
     `unavailable`.
-  - Not opted in: the capability's JavaScript still loads,
+  - Without the add-on's native code, or the recorder without the
+    `microphone` opt-in, the JavaScript still loads,
     `AstryxAudioRecorder.isAvailable()` and `AstryxBarcode.isAvailable()`
     answer false, and calls answer `not-linked` (`spec:AST-112/FR3`).
     Without the native side (Jest, the web) they answer `no-module`.
@@ -310,7 +311,7 @@ contentType, size}`; `durationMs` leaves out paused time. After a
 - FR8 gap: Android finds every QR code in an image but at most one code of
   the other types.
 - FR11 gap: Android decodes image codes with ZXing's core library, a
-  third-party library that the `camera` capability links.
+  third-party library that the add-on links.
 - Supported feature/engine floor: the floor of `spec:AST-112` (iOS at React
   Native's minimum, Android API level 24, the New Architecture only).
 - Unsupported behavior: a feature the binary lacks answers false from
@@ -322,10 +323,12 @@ contentType, size}`; `durationMs` leaves out paused time. After a
 
 ## Current-state impact
 
-- This record details `spec:AST-112`'s FR3 (`microphone` and `camera` stay
-  opt-in), FR6 (the group's closed reasons), FR7 (the probes), and FR8 (the
-  group's revision-1 baseline with no revision counter). It departs from FR7
-  in two places, the two bullets below, pending OQ1 and OQ2.
+- This record details `spec:AST-112`'s FR3 (`microphone` stays opt-in), FR6
+  (the group's closed reasons), FR7 (the probes), and FR8 (the group's
+  revision-1 baseline with no revision counter). It departs from FR7 in two
+  places, the two bullets below, pending OQ1 and OQ2.
+- `spec:AST-112/FR1` lists the public packages; the optional add-on package
+  that carries this group has no name there yet (OQ4).
 - `spec:AST-130/FR9` names `camera` as its one permission, and
   `spec:AST-112/FR7` reads permissions through `AstryxPermissions`. This
   record reads the microphone permission through the recorder with the same
@@ -336,22 +339,22 @@ contentType, size}`; `durationMs` leaves out paused time. After a
 
 ## Verification
 
-| Contract | Verification                                                                                                                              | Representative states                                                                                                              | Mutation or failure expectation                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | Built apps with the core only and with each capability opted in; unit tests of the loader                                                 | `microphone` and `camera` opted out; opted in                                                                                      | An opted-out app declares the microphone permission or links the recorder or the decoder, or the library imports a capability outside its loader |
-| FR2      | The platform's spec rules check; `contracts.json` against the codegen specs                                                               | each method and event                                                                                                              | A listed member is missing, a shipped member changes, or an asynchronous method rejects                                                          |
-| FR3      | The microphone contract suite over the `./testing` double; device and emulator permission checks                                          | each permission state; an undeclared permission; a prompt already showing                                                          | `getPermission` or `start` prompts, an undeclared permission prompts, or a state falls outside the four                                          |
-| FR4      | iOS hosted tests that write and read back an AAC file; JVM tests of the recorder rules                                                    | start, pause, resume, stop, cancel; a second start; an unknown id                                                                  | A second recording starts, a cancelled file stays, `durationMs` counts paused time, or a call after the end answers anything but `invalid-state` |
-| FR5      | iOS hosted meter tests; JVM tests of the level scale                                                                                      | silence; a loud input; paused                                                                                                      | A level falls outside 0 to 1, a level arrives while paused, or levels depend on JavaScript timers                                                |
-| FR6      | Device checks of a call, a headset change, and leaving the app; JVM tests of focus loss                                                   | an interruption and its end; a route change; background; a full disk                                                               | The recording resumes by itself, a route change stops it, the file is lost on leaving the app, or the audio session is not restored              |
-| FR7      | Device checks of the system indicators                                                                                                    | recording; paused; after leaving the app                                                                                           | The indicator is missing while the input is open, or the input stays open out of sight                                                           |
-| FR8      | Unit tests of the result mapping; Simulator and emulator decodes of fixture images                                                        | a QR code; several codes; a rotated photo; no code; a missing file; a picker grant                                                 | A box is in the unrotated image, an empty image fails, a missing file throws, or the decoder asks for the camera permission                      |
-| FR9      | Unit tests of `preventCapture` and `usePreventCapture` through the module seam; JVM tests of the count rules; emulator screenshots        | two holds and one release; a reload during a hold; an app-set flag; iOS                                                            | One release uncovers another caller's content, a reload leaves the flag on, the app's own flag is cleared, or `supports` answers true on iOS     |
-| FR10     | Emulator checks of the first frame, modal windows, and recents                                                                            | a hold before content renders; a modal open before and during a hold; no resumed activity                                          | A frame of held content appears without the flag, a modal stays capturable during a hold, or a modal keeps the flag after the last release       |
-| FR11     | Dependency check of the built native code; built apps with a third-party recorder, scanner, or screen-capture library beside the platform | the group's native dependencies; a recording after another library changed the audio session; a secure flag set by another library | The group links a third-party native library, the audio session stays changed after a recording, or the last release clears a flag set elsewhere |
-| FR12     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                                     | each capability not opted in; the module absent; an unknown native reason                                                          | A call throws, a reason falls outside the set, or `isAvailable()` answers true without the module                                                |
-| FR13     | Contract baseline check                                                                                                                   | a binary without a named feature                                                                                                   | The JavaScript uses a feature the binary does not list                                                                                           |
-| FR14     | The platform's public-API check over the native sources                                                                                   | each native source of the group                                                                                                    | A non-public API is used other than the named exception                                                                                          |
+| Contract | Verification                                                                                                                              | Representative states                                                                                                              | Mutation or failure expectation                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Built apps with the core package only, with the add-on, and with the `microphone` opt-in; unit tests of the add-on entries                | the add-on absent; present without `microphone`; present with it                                                                   | The core package carries the group's native code, an app without the add-on links it, or an app without the opt-in declares the microphone permission |
+| FR2      | The platform's spec rules check; `contracts.json` against the codegen specs                                                               | each method and event                                                                                                              | A listed member is missing, a shipped member changes, or an asynchronous method rejects                                                               |
+| FR3      | The microphone contract suite over the `./testing` double; device and emulator permission checks                                          | each permission state; an undeclared permission; a prompt already showing                                                          | `getPermission` or `start` prompts, an undeclared permission prompts, or a state falls outside the four                                               |
+| FR4      | iOS hosted tests that write and read back an AAC file; JVM tests of the recorder rules                                                    | start, pause, resume, stop, cancel; a second start; an unknown id                                                                  | A second recording starts, a cancelled file stays, `durationMs` counts paused time, or a call after the end answers anything but `invalid-state`      |
+| FR5      | iOS hosted meter tests; JVM tests of the level scale                                                                                      | silence; a loud input; paused                                                                                                      | A level falls outside 0 to 1, a level arrives while paused, or levels depend on JavaScript timers                                                     |
+| FR6      | Device checks of a call, a headset change, and leaving the app; JVM tests of focus loss                                                   | an interruption and its end; a route change; background; a full disk                                                               | The recording resumes by itself, a route change stops it, the file is lost on leaving the app, or the audio session is not restored                   |
+| FR7      | Device checks of the system indicators                                                                                                    | recording; paused; after leaving the app                                                                                           | The indicator is missing while the input is open, or the input stays open out of sight                                                                |
+| FR8      | Unit tests of the result mapping; Simulator and emulator decodes of fixture images                                                        | a QR code; several codes; a rotated photo; no code; a missing file; a picker grant                                                 | A box is in the unrotated image, an empty image fails, a missing file throws, or the decoder asks for the camera permission                           |
+| FR9      | Unit tests of `preventCapture` and `usePreventCapture` through the module seam; JVM tests of the count rules; emulator screenshots        | two holds and one release; a reload during a hold; an app-set flag; iOS                                                            | One release uncovers another caller's content, a reload leaves the flag on, the app's own flag is cleared, or `supports` answers true on iOS          |
+| FR10     | Emulator checks of the first frame, modal windows, and recents                                                                            | a hold before content renders; a modal open before and during a hold; no resumed activity                                          | A frame of held content appears without the flag, a modal stays capturable during a hold, or a modal keeps the flag after the last release            |
+| FR11     | Dependency check of the built native code; built apps with a third-party recorder, scanner, or screen-capture library beside the platform | the group's native dependencies; a recording after another library changed the audio session; a secure flag set by another library | The group links a third-party native library, the audio session stays changed after a recording, or the last release clears a flag set elsewhere      |
+| FR12     | Unit tests through the doubles in their absent, not-linked, older, and current shapes                                                     | the add-on absent; `microphone` not opted in; the module absent; an unknown native reason                                          | A call throws, a reason falls outside the set, or `isAvailable()` answers true without the module                                                     |
+| FR13     | Contract baseline check                                                                                                                   | a binary without a named feature                                                                                                   | The JavaScript uses a feature the binary does not list                                                                                                |
+| FR14     | The platform's public-API check over the native sources                                                                                   | each native source of the group                                                                                                    | A non-public API is used other than the named exception                                                                                               |
 
 ## Decision log
 
@@ -374,22 +377,22 @@ may end the app in between and the recording would be lost.
 **Decider:** imdreamrunner, 2026-11-17
 
 `AstryxBarcode` decodes an image file the app already has and opens no
-camera, so a picked photo is read with no permission prompt. It stays in the
-`camera` capability beside the camera's live detection and shares its code
-types.
+camera, so a picked photo is read with no permission prompt. It shares the
+code types of the camera's live detection (`spec:AST-132/FR10`).
 
-### DEC-3 — Screen-capture control is core
+### DEC-3 — The group lives in the optional add-on package
 
 **Reference:** `spec:AST-136/DEC-3`
 **Decider:** imdreamrunner, 2026-11-17
 
-`AstryxScreenCapture` declares no permission, framework, or manifest entry,
-and the opt-in `web` capability's `preventsCapture` shares its count, so the
-module is part of every app. An app that never holds pays for one small
-module and nothing the person can see.
+The core package ships the native code that Astryx components use. No Astryx
+component uses the recorder, the decoder, or the capture hold, so all three
+are part of the optional add-on package, and an app that does not need them
+carries none of their native code. The web view's own capture prevention
+stays in the core with the view (`spec:AST-131/FR12`).
 
-Rejected: a `screenCapture` opt-in capability, because the web view's holds
-would then depend on a second capability for one counted flag.
+Rejected: keeping them in the core package, because every app would then
+carry native code that no Astryx component uses.
 
 ## Open questions
 
@@ -413,3 +416,5 @@ would then depend on a second capability for one counted flag.
   decoder would need no native code but needs a native way to read an
   image's pixels, which the platform does not offer, and is slower on large
   photos.
+- **OQ4 — What is the optional add-on package's name, and which entries does
+  it export?** (`human-api`)
