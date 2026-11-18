@@ -406,7 +406,7 @@ shared icon names under FR17.
     | An Astryx Stage script step fails                                                                                                                          | `ERR_STAGE_STEP_FAILED`                                              |
     | The app throws or fails to start in Astryx Stage                                                                                                           | `ERR_STAGE_JS_ERROR`                                                 |
     | Astryx Stage cannot set up the project                                                                                                                     | `ERR_STAGE_PROJECT_SETUP`                                            |
-    | The app's platform contracts need revisions this Astryx Stage lacks                                                                                        | `ERR_STAGE_CONTRACTS`                                                |
+    | The app needs platform contracts or named features this Astryx Stage lacks: it is below the app's Astryx Stage version floor                               | `ERR_STAGE_CONTRACTS`                                                |
     | A React Native command runs on a base that does not provide it                                                                                             | `ERR_BASE_COMMAND`                                                   |
 
   - `preview share` takes each carrier's terms with `--accept-carrier <name>`,
