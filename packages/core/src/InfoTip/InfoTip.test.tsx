@@ -21,7 +21,10 @@ import {InternationalizationProvider} from '../i18n';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
 import {InfoTip} from './InfoTip';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {
+  getTooltip,
+  getTooltipDescription,
+} from '../__tests__/tooltipDescription';
 
 // On a coarse pointer, the shared hit area measures neighbours in a real
 // layout. Here it reports what it was asked to watch, and each test answers
@@ -143,10 +146,12 @@ describe('InfoTip', () => {
 
   it('links the trigger to the tooltip layer via aria-describedby', () => {
     render(<InfoTip content="Helpful context" />);
-    const layer = getTooltipDescription();
+    const layer = getTooltip();
     expect(layer).toHaveTextContent('Helpful context');
     const trigger = screen.getByRole('button', {name: 'More information'});
-    expect(trigger.getAttribute('aria-describedby')).toBe(layer.id);
+    expect(trigger.getAttribute('aria-describedby')).toBe(
+      getTooltipDescription().id,
+    );
   });
 
   it('is reachable with Tab', async () => {
@@ -262,7 +267,10 @@ describe('InfoTip', () => {
 
   it('renders ReactNode tooltip content', () => {
     render(<InfoTip content={<span data-testid="rich-content">Rich</span>} />);
-    expect(screen.getByTestId('rich-content')).toBeInTheDocument();
+    // Before the first show, the content's text describes the button.
+    expect(
+      screen.getByRole('button', {name: 'More information'}),
+    ).toHaveAccessibleDescription('Rich');
   });
   it('forwards its ref to the button (FR3)', () => {
     const ref = createRef<HTMLButtonElement>();

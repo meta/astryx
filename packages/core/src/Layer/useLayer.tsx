@@ -480,23 +480,6 @@ export interface FixedLayerReturn {
 }
 
 /**
- * What `useLayerInternal` returns for a context layer beyond the public
- * `useLayer` result.
- */
-export interface InternalContextLayerReturn extends ContextLayerReturn {
-  /**
-   * Whether the layer has mounted, as an external store. A caller that reads
-   * it with `useSyncExternalStore` changes what it renders in the commit that
-   * mounts the layer, and not before: a show that waits for its trigger's box
-   * mounts nothing until it runs.
-   */
-  readonly mount: {
-    readonly subscribe: (onChange: () => void) => () => void;
-    readonly isMounted: () => boolean;
-  };
-}
-
-/**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
  */
@@ -1301,7 +1284,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | FixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1363,10 +1346,6 @@ function useLayerImplementation(
   // moved to another host): the layer element is recreated then, and the
   // effects below that bind to it re-run.
   const [mountStore] = useState(createContextLayerMountStore);
-  const [mountSignal] = useState(() => ({
-    subscribe: mountStore.subscribe,
-    isMounted: () => mountStore.get() !== null,
-  }));
   const [mountGeneration, setMountGeneration] = useState(0);
   // A show() that cannot run yet is remembered here and replayed: one that
   // arrives before the final layer mounts runs when its popover ref attaches;
@@ -2668,7 +2647,7 @@ function useLayerImplementation(
     [popoverRefCallback, id, lightDismiss],
   );
 
-  const contextResult = useMemo<InternalContextLayerReturn>(
+  const contextResult = useMemo<ContextLayerReturn>(
     () => ({
       ref: contextRef,
       anchorId,
@@ -2677,9 +2656,8 @@ function useLayerImplementation(
       isOpen,
       id,
       render: renderContext,
-      mount: mountSignal,
     }),
-    [contextRef, anchorId, show, hide, isOpen, id, renderContext, mountSignal],
+    [contextRef, anchorId, show, hide, isOpen, id, renderContext],
   );
   const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
@@ -2710,10 +2688,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): InternalContextLayerReturn;
+): ContextLayerReturn;
 export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | FixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

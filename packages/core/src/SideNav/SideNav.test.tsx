@@ -768,6 +768,7 @@ describe('SideNavHeading collapsed', () => {
       el =>
         el.textContent === 'My App' &&
         !el.closest('[role="tooltip"]') &&
+        !el.hasAttribute('hidden') &&
         !el.hasAttribute('data-tooltip'),
     );
     expect(inlineHeadingText).toBeUndefined();
@@ -2618,7 +2619,7 @@ describe('SideNavItem — actions slot', () => {
 
 import {SideNavRenderContext} from './SideNavRenderContext';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 describe('SideNavItem — mobile drawer close-on-activate', () => {
   function renderInDrawer(ui: ReactNode, closeMobileNav = vi.fn()) {
@@ -4244,9 +4245,15 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
   // SideNav (the persisted-collapse case) must attach its tooltip on the first
   // render, and the tooltip must describe the control that takes focus — the
   // link or button — not the row around it.
+  /** The rail tooltip's layer: its id is the description id without `-description`. */
   function railTooltipFor(trigger: HTMLElement) {
     const id = trigger.getAttribute('aria-describedby');
-    return id == null ? null : document.getElementById(id);
+    // Before the first show the layer is not mounted; its description holds
+    // the same text.
+    return id == null
+      ? null
+      : (document.getElementById(id.replace(/-description$/, '')) ??
+          document.getElementById(id));
   }
 
   function renderRail(item: ReactNode) {
@@ -4455,7 +4462,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
 
     const link = screen.getByRole('link', {name: 'Dashboard'});
-    const tooltip = getTooltipDescription();
+    const tooltip = getTooltip();
     const ids = (link.getAttribute('aria-describedby') ?? '').split(' ');
     expect(ids).toContain('hint-b');
     expect(ids).toContain(tooltip.id);

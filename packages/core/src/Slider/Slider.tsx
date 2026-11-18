@@ -45,6 +45,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import {useTooltip} from '../Tooltip';
+import {tooltipIdOf} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
@@ -707,7 +708,10 @@ function SliderValueTooltip({
       if (element == null) {
         anchors.current.delete(index);
       } else {
-        anchors.current.set(index, {element, tooltipId: describedBy});
+        anchors.current.set(index, {
+          element,
+          tooltipId: tooltipIdOf(describedBy),
+        });
       }
     },
     [anchors, index, describedBy],

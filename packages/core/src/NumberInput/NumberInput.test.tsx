@@ -23,7 +23,7 @@ import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1838,7 +1838,7 @@ describe('NumberInput', () => {
 
       const input = screen.getByRole('spinbutton');
       const container = input.parentElement as HTMLElement;
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -1864,7 +1864,7 @@ describe('NumberInput', () => {
         />,
       );
 
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('spinbutton')).toHaveFocus();
       await waitFor(() => {
@@ -1923,7 +1923,7 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

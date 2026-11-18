@@ -30,7 +30,8 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {isTooltipDescription, useTooltip} from '../Tooltip/useTooltip';
+import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
 import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
@@ -556,9 +557,11 @@ const loadingStyles = stylex.create({
  * Layers always carry the native `popover` attribute (useLayer.tsx), and a
  * popover is never an in-flow member — it is `display: none` until shown, then
  * promoted to the top layer. Context layers also retain an inert `<template>`
- * marker so they can re-resolve their JSX position. Neither element is a group
+ * marker so they can re-resolve their JSX position. A tooltip's description is
+ * a `hidden` copy of its text after the trigger. None of these is a group
  * member, so "last member" is: no following element sibling besides those
- * pieces of layer infrastructure — the last sibling that is not one of them.
+ * pieces of layer infrastructure and hidden elements — the last sibling that
+ * is not one of them.
  *
  * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
  * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
@@ -581,7 +584,7 @@ const loadingStyles = stylex.create({
  * its own layer, so the first button is genuinely `:first-child`.
  */
 const IS_LAST_ITEM =
-  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog):not([hidden]))';
 
 const groupStyles = stylex.create({
   horizontal: {
@@ -776,12 +779,15 @@ function addsNoName(node: ReactNode): boolean {
  */
 function hasCallerTooltip(button: HTMLElement): boolean {
   const ids = button.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
-  return ids.some(
-    id =>
-      id !== '' &&
-      button.ownerDocument.getElementById(id)?.getAttribute('role') ===
-        'tooltip',
-  );
+  return ids.some(id => {
+    const described =
+      id === '' ? null : button.ownerDocument.getElementById(id);
+    // A tooltip's description is a hidden copy of its text after the trigger.
+    return (
+      described?.getAttribute('role') === 'tooltip' ||
+      (described != null && isTooltipDescription(described))
+    );
+  });
 }
 
 /**
@@ -1226,7 +1232,12 @@ export function Button({
   return (
     <>
       {element}
-      {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
+      {tooltip ? (
+        // A tooltip that repeats the name adds no description.
+        <TooltipDescribesContext value={!isTooltipName}>
+          {tooltipHook.renderTooltip(tooltip)}
+        </TooltipDescribesContext>
+      ) : null}
       {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
         <cutLabel.Tooltip
           anchorRef={buttonRef}

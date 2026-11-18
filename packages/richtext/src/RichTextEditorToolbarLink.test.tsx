@@ -142,7 +142,7 @@ function linksIn(editor: LexicalEditor) {
  * button's name is not its description, so the tooltip's own text is read:
  * its layer once it has shown, or before then the hidden copy of its text.
  */
-function tooltipOf(button: HTMLElement): string {
+async function tooltipOf(button: HTMLElement): Promise<string> {
   const described = (button.getAttribute('aria-describedby') ?? '')
     .split(' ')
     .map(id => document.getElementById(id)?.textContent ?? '')
@@ -151,13 +151,19 @@ function tooltipOf(button: HTMLElement): string {
   if (described !== '') {
     return described;
   }
+  // A tooltip that repeats the name describes nothing, and its layer mounts
+  // at its first show, so hover to read it.
   const name = button.getAttribute('aria-label') ?? '';
-  const tooltip = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      '[role="tooltip"], body > span[hidden][id$="-description"]',
-    ),
-  ).find(element => element.textContent === name);
-  return tooltip?.textContent ?? '';
+  fireEvent.mouseEnter(button);
+  const text = await waitFor(() => {
+    const tooltip = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="tooltip"]'),
+    ).find(element => element.textContent === name);
+    expect(tooltip).toBeDefined();
+    return tooltip?.textContent ?? '';
+  });
+  fireEvent.mouseLeave(button);
+  return text;
 }
 
 async function openFromLinkButton() {
@@ -229,7 +235,7 @@ describe('RichTextEditorToolbar link popover', () => {
       // Icon-only: the name is the label, the glyph is decorative.
       expect(button.textContent).toBe('');
       expect(button.querySelector('svg')).not.toBeNull();
-      expect(tooltipOf(button)).toBe(button.getAttribute('aria-label'));
+      expect(await tooltipOf(button)).toBe(button.getAttribute('aria-label'));
     }
   });
 
@@ -273,7 +279,7 @@ describe('RichTextEditorToolbar link popover', () => {
       screen.getByRole('button', {name: 'Update link', ...h}),
     ).toBeInTheDocument();
     const remove = screen.getByRole('button', {name: 'Remove link', ...h});
-    expect(tooltipOf(remove)).toBe('Remove link');
+    expect(await tooltipOf(remove)).toBe('Remove link');
 
     fireEvent.click(remove);
     await waitFor(() => expect(linksIn(editor)).toEqual([]));

@@ -42,9 +42,7 @@ import {
  */
 function tooltipDescriptions(): HTMLElement[] {
   return Array.from(
-    document.querySelectorAll<HTMLElement>(
-      '[role="tooltip"], body > span[hidden][id$="-description"]',
-    ),
+    document.querySelectorAll<HTMLElement>('span[hidden][id$="-description"]'),
   );
 }
 

@@ -3,7 +3,8 @@
 /**
  * @file ButtonGroupCornersA11y.stories.tsx
  * @input ButtonGroup, Button, DropdownMenu, Tooltip, InputGroup and TextInput,
- *   with layer pieces (popovers, templates, dialogs) placed after members
+ *   with layer pieces (popovers, templates, dialogs) and tooltip descriptions
+ *   (hidden copies) placed after members
  * @output Browser fixtures for ButtonGroup FR3: one group per member shape,
  *   each member marked with `data-corner-case`, so a browser spec reads which
  *   members round their trailing corners
@@ -153,6 +154,22 @@ export const Shapes: Story = {
           <Button
             label="Save"
             data-corner-case="input-group-addon"
+            data-trailing="round"
+          />
+        </InputGroup>
+      </div>
+      <div data-corner-shape="input-group-tooltip-addon" style={{padding: 8}}>
+        <InputGroup label="Visibility">
+          <TextInput
+            label="Audience"
+            isLabelHidden
+            value="Members"
+            onChange={() => {}}
+          />
+          <Button
+            label="Save"
+            tooltip="Saves the audience"
+            data-corner-case="input-group-tooltip-addon"
             data-trailing="round"
           />
         </InputGroup>

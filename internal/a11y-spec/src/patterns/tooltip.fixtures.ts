@@ -91,6 +91,11 @@ interface TriggerOptions {
   readonly ariaLabel?: string | null;
   /** A visible hint the trigger is already described by, besides the tooltip. */
   readonly hint?: string | null;
+  /**
+   * Renders a hidden copy of the tooltip text (`#copy`) after the
+   * trigger, and hides the tooltip's own text from assistive technology.
+   */
+  readonly copy?: boolean;
 }
 
 const TOOLTIP_TEXT = 'Saves your changes to this draft';
@@ -102,6 +107,7 @@ function tooltipHtml({
   label = 'Save',
   ariaLabel = null,
   hint = null,
+  copy = false,
 }: TriggerOptions): string {
   const b: Required<Behavior> = {
     focus: 'show',
@@ -131,7 +137,7 @@ function tooltipHtml({
   ]
     .filter(attribute => attribute != null)
     .join(' ');
-  return `<div style="padding:48px"><button type="button" id="before">Before the trigger</button> <span style="position:relative;display:inline-block"><button ${triggerAttributes}>${label}</button><div ${tipAttributes}>${TOOLTIP_TEXT}</div></span>${hint == null ? '' : ` <span id="hint">${hint}</span>`} <button type="button" id="after">After the trigger</button></div>${SCRIPT}`;
+  return `<div style="padding:48px"><button type="button" id="before">Before the trigger</button> <span style="position:relative;display:inline-block"><button ${triggerAttributes}>${label}</button>${copy ? `<span id="copy" hidden>${TOOLTIP_TEXT}</span>` : ''}<div ${tipAttributes}>${copy ? `<span aria-hidden="true">${TOOLTIP_TEXT}</span>` : TOOLTIP_TEXT}</div></span>${hint == null ? '' : ` <span id="hint">${hint}</span>`} <button type="button" id="after">After the trigger</button></div>${SCRIPT}`;
 }
 
 export interface TooltipFixture {
@@ -206,7 +212,35 @@ function beforeFirstShow(
   };
 }
 
+/**
+ * A trigger described by a hidden copy of its tooltip's text after the
+ * tooltip has shown: the tooltip's own text is hidden from assistive
+ * technology, so the hint is read once.
+ */
+function describedByCopy(
+  id: string,
+  summary: string,
+  options: TriggerOptions = {},
+): TooltipFixture {
+  return {
+    id,
+    summary,
+    facts: {...FACTS, describesWithCopy: true},
+    relations: {...RELATIONS, description: '#copy'},
+    html: tooltipHtml({describedBy: 'copy', ...options, copy: true}),
+  };
+}
+
 export const TOOLTIP_FIXTURES: readonly TooltipFixture[] = [
+  describedByCopy(
+    'conforming-described-by-copy',
+    'a button described by a hidden copy of its tooltip text, with the shown tooltip text hidden from assistive technology',
+  ),
+  describedByCopy(
+    'violating-copy-and-tooltip-described',
+    'a button described by both the hidden copy and the tooltip, so the hint is read twice',
+    {describedBy: 'copy tip'},
+  ),
   beforeFirstShow(
     'conforming-before-first-show',
     'a button whose tooltip has not shown yet, described by a hidden copy of the tooltip text that is not a tooltip',
@@ -325,12 +359,11 @@ export const CONFORMING_FIXTURES: readonly string[] = TOOLTIP_FIXTURES.filter(
 ).map(candidate => candidate.id);
 
 export const TOOLTIP_MUTATIONS: Readonly<Record<string, readonly string[]>> = {
-  'tooltip.trigger.description-before-first-show': [
-    'violating-copy-not-described',
-  ],
-  'tooltip.trigger.described-before-first-show': [
+  'tooltip.trigger.description-from-copy': ['violating-copy-not-described'],
+  'tooltip.trigger.described-by-copy': [
     'violating-copy-is-tooltip',
     'violating-copy-not-described',
+    'violating-copy-and-tooltip-described',
   ],
   'tooltip.surface.role': ['violating-status-role', 'violating-no-role'],
   'tooltip.trigger.described-by-tooltip': [

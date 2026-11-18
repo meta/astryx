@@ -81,10 +81,18 @@ function trigger() {
   return screen.getByRole('button', {name: 'Trigger'});
 }
 
-/** The popover element the trigger's aria-describedby points at. */
+/**
+ * The tooltip layer: its id is the trigger's description id without
+ * `-description`. Before the first show the layer is not mounted, so this is
+ * the description, which holds the same text and is never open.
+ */
 function tooltipElement(): HTMLElement {
   const id = trigger().getAttribute('aria-describedby');
-  const element = id == null ? null : document.getElementById(id);
+  const element =
+    id == null
+      ? null
+      : (document.getElementById(id.replace(/-description$/, '')) ??
+        document.getElementById(id));
   expect(element).not.toBeNull();
   return element as HTMLElement;
 }

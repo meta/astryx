@@ -24,7 +24,7 @@ import {PowerSearch} from './PowerSearch';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {PowerSearchConfig, PowerSearchFilter} from './types';
 import {TestIcon} from '../__tests__/TestIcon';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // =============================================================================
 // Test infrastructure
@@ -536,7 +536,7 @@ describe('PowerSearch', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderSearch();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need edit access to search');
       const wrapper = screen.getByRole('group');
       fireEvent.mouseEnter(wrapper);
@@ -548,7 +548,7 @@ describe('PowerSearch', () => {
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderSearch();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => expect(isOpen(tooltip())).toBe(true));
@@ -588,7 +588,7 @@ describe('PowerSearch', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderSearch();
       const input = screen.getByRole('combobox');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

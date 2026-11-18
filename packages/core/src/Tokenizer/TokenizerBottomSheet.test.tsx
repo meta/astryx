@@ -2113,8 +2113,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       <Harness isDisabled disabledMessage="Pick a team first" initial={[]} />,
     );
     const trigger = openTrigger();
-    fireEvent.focus(trigger);
-    expect(await screen.findByText('Pick a team first')).toBeInTheDocument();
+    expect(trigger).toHaveAccessibleDescription(
+      expect.stringContaining('Pick a team first'),
+    );
   });
 
   it('keeps an unselectable row at the limit focusable but inert (FR23; AST-085 FR1, FR2)', async () => {

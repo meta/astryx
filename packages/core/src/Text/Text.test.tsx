@@ -13,7 +13,7 @@ import {Text} from './Text';
 import '../Tooltip/Tooltip';
 import type {TextType} from './Text';
 import type {TextColor} from '../theme/types';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom does not resolve var(); the browser spec checks the resolved value.
 // Untruncated text reads the private container override, else break-word.
@@ -559,7 +559,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         {timeout: 3000},
       );
       expect(text.getAttribute('aria-describedby')).toBe(
-        screen.getByRole('tooltip', {hidden: true}).id,
+        `${screen.getByRole('tooltip', {hidden: true}).id}-description`,
       );
     } finally {
       restore();
@@ -613,7 +613,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.mouseLeave(text);
       await waitFor(
         () => {
-          expect(getTooltipDescription()).not.toBeNull();
+          expect(getTooltip()).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -690,7 +690,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       expect(link).toHaveFocus();
       await waitFor(
         () => {
-          expect(getTooltipDescription()).not.toBeNull();
+          expect(getTooltip()).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -816,7 +816,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       expect(field).toHaveFocus();
       await waitFor(
         () => {
-          expect(getTooltipDescription()).not.toBeNull();
+          expect(getTooltip()).not.toBeNull();
         },
         {timeout: 3000},
       );
@@ -911,7 +911,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       fireEvent.pointerDown(text, {pointerType: 'mouse'});
       await waitFor(
         () => {
-          expect(getTooltipDescription()).not.toBeNull();
+          expect(getTooltip()).not.toBeNull();
         },
         {timeout: 3000},
       );

@@ -150,8 +150,16 @@ describe('Button label truncation tooltip', () => {
     restore = withOverflow(true);
     render(<Button label={LABEL} />);
     const button = screen.getByRole('button', {name: LABEL});
+    expect(
+      document.querySelector('span[hidden][id$="-description"]'),
+    ).toBeNull();
     await showByFocus(button);
     expect(button).not.toHaveAttribute('aria-describedby');
+    // The cut-label tooltip renders no hidden copy, so the label is read once.
+    expect(
+      document.querySelector('span[hidden][id$="-description"]'),
+    ).toBeNull();
+    expect(button).toHaveAccessibleDescription('');
   });
 
   it('shows no tooltip when the label fits', async () => {

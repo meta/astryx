@@ -4,7 +4,7 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, useIsHydrating
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip
  *   (only while a disabled message can show),
  *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
@@ -50,7 +50,7 @@ import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner/Spinner';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {useIsHydrating} from '../hooks/useIsHydrating';
+import {TooltipDescribesContext} from '../Tooltip/tooltipPresentInterest';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -389,13 +389,10 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  // The disabled reason describes the input from the first markup on. The
-  // server and hydrating markup has no tooltip layer, so a visually hidden
-  // copy carries the reason's id there; every later render gives that id to
-  // the tooltip's text instead, so the reason renders once. The tooltip mounts
-  // only while it can show, so a checkbox with no reason runs none of its work.
+  // A visually hidden copy of the disabled reason describes the input from
+  // the first markup on. The tooltip mounts only while it can show, so a
+  // checkbox with no reason runs none of its work.
   const disabledMessageID = useId();
-  const isHydrating = useIsHydrating();
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -655,17 +652,18 @@ export function CheckboxInput({
       )}
       {isDisabled && disabledMessage ? (
         <>
-          {isHydrating ? (
-            <VisuallyHidden id={disabledMessageID}>
-              {disabledMessage}
-            </VisuallyHidden>
-          ) : null}
-          <DisabledMessageTooltip
-            message={disabledMessage}
-            messageID={isHydrating ? undefined : disabledMessageID}
-            rowRef={rowElementRef}
-            inputRef={inputRef}
-          />
+          <VisuallyHidden id={disabledMessageID}>
+            {disabledMessage}
+          </VisuallyHidden>
+          {/* The hidden reason above describes the input, so the tooltip
+              adds no description of its own. */}
+          <TooltipDescribesContext value={false}>
+            <DisabledMessageTooltip
+              message={disabledMessage}
+              rowRef={rowElementRef}
+              inputRef={inputRef}
+            />
+          </TooltipDescribesContext>
         </>
       ) : null}
     </div>
@@ -674,20 +672,16 @@ export function CheckboxInput({
 
 interface DisabledMessageTooltipProps {
   readonly message: string;
-  /** The id the input's description names, once hydration is over. */
-  readonly messageID: string | undefined;
   readonly rowRef: RefObject<HTMLElement | null>;
   readonly inputRef: RefObject<HTMLElement | null>;
 }
 
 /**
  * A disabled checkbox's message as a tooltip: hover or focus anywhere on the
- * row opens it above the checkbox. Its text carries the id that describes the
- * input.
+ * row opens it above the checkbox.
  */
 function DisabledMessageTooltip({
   message,
-  messageID,
   rowRef,
   inputRef,
 }: DisabledMessageTooltipProps): ReactNode {
@@ -708,8 +702,7 @@ function DisabledMessageTooltip({
       positionRef(null);
     };
   }, [interactionRef, positionRef, rowRef, inputRef]);
-  // The span names the reason for the input's aria-describedby.
-  return tooltip.renderTooltip(<span id={messageID}>{message}</span>);
+  return tooltip.renderTooltip(message);
 }
 
 CheckboxInput.displayName = 'CheckboxInput';

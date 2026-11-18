@@ -56,7 +56,7 @@ import {
 import type {SearchSource, SearchableItem} from './types';
 import {InternationalizationProvider} from '../i18n';
 import {InputGroup} from '../InputGroup';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -2721,7 +2721,7 @@ describe('Typeahead disabledMessage', () => {
     const container = document.querySelector(
       '.astryx-typeahead',
     ) as HTMLElement;
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(container);
@@ -2748,7 +2748,7 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
 
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     await user.tab();
     expect(screen.getByRole('combobox')).toHaveFocus();
     await waitFor(() => {
@@ -2811,7 +2811,7 @@ describe('Typeahead disabledMessage', () => {
       />,
     );
     const input = screen.getByRole('combobox');
-    const tooltip = getTooltipDescription();
+    const tooltip = getTooltip();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 

@@ -35,7 +35,7 @@ import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
 import {Token} from '../Token/Token';
 import {FormLayout} from '../FormLayout/FormLayout';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Every Token render, in order, by label.
 //
@@ -2518,7 +2518,7 @@ describe('Tokenizer', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderTokenizer();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent(
         'You need edit access to change members',
       );
@@ -2532,7 +2532,7 @@ describe('Tokenizer', () => {
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderTokenizer();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => expect(isOpen(tooltip())).toBe(true));
@@ -2574,7 +2574,7 @@ describe('Tokenizer', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderTokenizer();
       const input = screen.getByRole('combobox');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2906,7 +2906,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       const describedByIDs =
         input.getAttribute('aria-describedby')?.split(' ') ?? [];
 
@@ -3082,7 +3082,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
 
       expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
         ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),

@@ -8,7 +8,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {createRef, StrictMode, type ReactNode} from 'react';
 import {
   DecoratorNode,
@@ -80,7 +80,12 @@ describe('RichTextEditor portal ownership', () => {
       const trigger = await screen.findByRole('button', {
         name: 'Decorator action',
       });
-      const id = trigger.getAttribute('aria-describedby');
+      // The trigger names its description, a hidden copy beside it; the
+      // tooltip's layer has the same id without `-description`.
+      const id = trigger
+        .getAttribute('aria-describedby')
+        ?.replace(/-description$/, '');
+      fireEvent.mouseEnter(trigger);
       await waitFor(() => {
         const tooltip = id ? document.getElementById(id) : null;
         expect(tooltip).not.toBeNull();

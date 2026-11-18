@@ -25,7 +25,10 @@ import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
 import {readAnchorNames} from '../Layer/anchorName';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {
+  getTooltipDescription,
+  getTooltip,
+} from '../__tests__/tooltipDescription';
 
 const originalMatches = HTMLElement.prototype.matches;
 
@@ -1364,7 +1367,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
 
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     expect(tooltip()).toHaveTextContent('You need the Editor role');
 
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
@@ -1390,7 +1393,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
 
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     await user.tab();
     expect(screen.getByRole('combobox', {name: 'View options'})).toHaveFocus();
     await waitFor(() => {
@@ -1445,7 +1448,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = getTooltipDescription();
+    const tooltip = getTooltip();
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1554,7 +1557,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = getTooltipDescription();
+    const tooltip = getTooltip();
 
     const ids = (trigger.getAttribute('aria-describedby') ?? '').split(/\s+/);
     expect(ids).toHaveLength(3);
@@ -1645,7 +1648,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveFocus();
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
-    const restored = () => getTooltipDescription();
+    const restored = () => getTooltip();
     expect(trigger.getAttribute('aria-describedby')).toContain(restored().id);
   });
 
@@ -1663,7 +1666,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
 
     await user.tab();
     await waitFor(() => {
@@ -1702,7 +1705,7 @@ describe('ComplexSelector disabledMessage', () => {
       </>,
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
 
     await user.tab();
     expect(trigger).toHaveFocus();
@@ -1766,7 +1769,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveAttribute('aria-busy', 'true');
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip().id);
     fireEvent.mouseEnter(within(container).getByRole('combobox'));
     await waitFor(() => {
@@ -1798,7 +1801,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const {rerender} = render(tree('A'));
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     const anchorOf = (el: Element | null) =>
       /position-anchor:\s*([^;]+)/
         .exec(el?.getAttribute('style') ?? '')?.[1]
@@ -1892,7 +1895,7 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const trigger = screen.getByRole('combobox', {name: 'View options'});
     const container = controlBox(screen.getByTestId('view-options'));
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
 
     // A finger's arrival lands on the container (pointerenter does not
     // bubble); the press and the click it produces land on the button and
@@ -1953,12 +1956,16 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    // The reason's tooltip mounts at its first show; until then its hidden
-    // copy holds the text.
+    // The reason's tooltip mounts at its first show; its hidden description
+    // holds the text from the start.
     const reason = () =>
       screen
-        .getByText('You need the Editor role')
-        .closest<HTMLElement>('[role="tooltip"], [id$="-description"]');
+        .queryByText('You need the Editor role')
+        ?.closest<HTMLElement>('[role="tooltip"]') ??
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[id$="-description"]'),
+      ).find(element => element.textContent === 'You need the Editor role') ??
+      null;
     expect(reason()).not.toBeNull();
     const tip = screen.getByRole('button', {name: 'Error details'});
 
@@ -2000,7 +2007,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
 
-    const tooltip = () => getTooltipDescription();
+    const tooltip = () => getTooltip();
     fireEvent.mouseEnter(screen.getByTestId('view-options'));
     await waitFor(() => {
       expect(tooltip()).toHaveAttribute('popover-open');
@@ -2027,7 +2034,7 @@ describe('ComplexSelector disabledMessage', () => {
 
     it('reveals the reason on hover of the caller control', async () => {
       renderCallerTrigger();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
       fireEvent.mouseEnter(screen.getByRole('combobox', {name: 'Assign'}));
       await waitFor(() => {
@@ -2038,7 +2045,7 @@ describe('ComplexSelector disabledMessage', () => {
     it('reveals the reason on keyboard focus of the caller control', async () => {
       const user = userEvent.setup();
       renderCallerTrigger();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('combobox', {name: 'Assign'})).toHaveFocus();
       await waitFor(() => {

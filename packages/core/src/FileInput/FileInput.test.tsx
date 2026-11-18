@@ -26,7 +26,7 @@ import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // The `=1` branch names the file; the `other` branch must not. Both come from
 // this test, so neither can pass against a hardcoded English string.
@@ -1436,7 +1436,7 @@ describe('FileInput', () => {
         />,
       );
 
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       // The trigger button is visually hidden, so the disabled-reason tooltip
@@ -1467,7 +1467,7 @@ describe('FileInput', () => {
         />,
       );
 
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByRole('button')).toHaveFocus();
       await waitFor(() => {
@@ -1525,7 +1525,7 @@ describe('FileInput', () => {
         />,
       );
       const trigger = screen.getByRole('button');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1647,7 +1647,7 @@ describe('FileInput statusVariant forwarding', () => {
     expect(
       screen.getByRole('button', {name: 'Error details'}),
     ).toBeInTheDocument();
-    expect(getTooltipDescription()).toHaveTextContent(message);
+    expect(getTooltip()).toHaveTextContent(message);
     const trigger = screen.getByRole('button', {name: 'Upload'});
     const describedBy = (trigger.getAttribute('aria-describedby') ?? '')
       .split(' ')

@@ -20,7 +20,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {TextArea} from './TextArea';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1244,7 +1244,7 @@ describe('TextArea', () => {
 
       const textarea = screen.getByRole('textbox');
       const container = textarea.parentElement as HTMLElement;
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -1325,7 +1325,7 @@ describe('TextArea', () => {
         />,
       );
       const textarea = screen.getByRole('textbox');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(textarea.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

@@ -31,7 +31,7 @@ import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 describe('DateRangeInput', () => {
   it('renders with label', () => {
@@ -679,7 +679,7 @@ describe('DateRangeInput', () => {
 
       const trigger = getButton(/Range:/);
       const container = trigger.parentElement as HTMLElement;
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -697,7 +697,7 @@ describe('DateRangeInput', () => {
       const user = userEvent.setup();
       renderDisabled({disabledMessage: 'You need the Editor role'});
 
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(getButton(/Range:/)).toHaveFocus();
       await waitFor(() => {
@@ -732,7 +732,7 @@ describe('DateRangeInput', () => {
     it('links the reason tooltip from the trigger via aria-describedby', () => {
       renderDisabled({disabledMessage: 'You need the Editor role'});
       const trigger = getButton(/Range:/);
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

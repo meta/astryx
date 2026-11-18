@@ -37,7 +37,12 @@ export interface TooltipBindingState {
 const story = (id: string) => `a11y-tooltip--${id}`;
 
 /** Tooltip's and useTooltip's default hover delay. */
-const DEFAULT_DELAY: TooltipStateFacts = {showsOnHover: true, showDelayMs: 200};
+// Every Astryx tooltip describes its trigger with a hidden copy of its text.
+const DEFAULT_DELAY: TooltipStateFacts = {
+  showsOnHover: true,
+  showDelayMs: 200,
+  describesWithCopy: true,
+};
 
 export const TOOLTIP_BINDING_STATES = [
   {

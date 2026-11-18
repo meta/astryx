@@ -21,7 +21,10 @@ import {defineTheme, generateThemeCSS} from '../theme';
 import {registerIcons, resetIcons} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
-import {getTooltipDescriptions} from '../__tests__/tooltipDescription';
+import {
+  getTooltipDescriptions,
+  tooltipTextOnHover,
+} from '../__tests__/tooltipDescription';
 
 describe('Banner', () => {
   afterEach(() => {
@@ -217,7 +220,9 @@ describe('Banner', () => {
           const describedBy = button.getAttribute('aria-describedby');
           const shown =
             describedBy != null
-              ? document.getElementById(describedBy)
+              ? document.getElementById(
+                  describedBy.replace(/-description$/, ''),
+                )
               : screen
                   .getAllByRole('tooltip', {hidden: true})
                   .find(
@@ -891,19 +896,18 @@ describe('Banner', () => {
       }
     });
 
-    it('keeps the bare name and tooltip for a rich title', () => {
+    it('keeps the bare name and tooltip for a rich title', async () => {
       render(
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
       // The tooltip repeats the name, so it shows but adds no description.
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        getTooltipDescriptions().some(el => el.textContent === 'Dismiss'),
-      ).toBe(true);
+      expect(getTooltipDescriptions()).toHaveLength(0);
+      expect(await tooltipTextOnHover(button)).toBe('Dismiss');
     });
 
-    it('uses a translated dismissLabel for a rich title and its tooltip', () => {
+    it('uses a translated dismissLabel for a rich title and its tooltip', async () => {
       render(
         <Banner
           status="info"
@@ -916,11 +920,9 @@ describe('Banner', () => {
         name: 'Wartungshinweis schließen',
       });
       expect(button).not.toHaveAttribute('aria-describedby');
-      expect(
-        getTooltipDescriptions().some(
-          el => el.textContent === 'Wartungshinweis schließen',
-        ),
-      ).toBe(true);
+      expect(await tooltipTextOnHover(button)).toBe(
+        'Wartungshinweis schließen',
+      );
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {

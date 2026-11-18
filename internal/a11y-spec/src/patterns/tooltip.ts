@@ -128,9 +128,9 @@ const AST_020_FR15: AstryxRecord = {
  * element the tooltip describes, which takes focus and hover. Relations:
  * `tooltip` (the element with role tooltip, present in the page once it has
  * shown, whether or not it is showing now), `before` and `after` (focusable
- * controls on either side of the trigger in the page Tab order). Before the
- * first show, the relation is `description` (the hidden copy of the
- * tooltip's text that the trigger's aria-describedby names).
+ * controls on either side of the trigger in the page Tab order). A binding
+ * whose trigger is described by a copy also names `description` (the hidden
+ * copy of the tooltip's text that the trigger's aria-describedby names).
  */
 export interface TooltipStateFacts {
   /**
@@ -148,6 +148,12 @@ export interface TooltipStateFacts {
    * until then.
    */
   readonly isBeforeFirstShow?: boolean;
+  /**
+   * Whether the trigger's aria-describedby names a hidden copy of
+   * the tooltip's text instead of the tooltip, with the shown tooltip's
+   * content hidden from assistive technology.
+   */
+  readonly describesWithCopy?: boolean;
 }
 
 /** How long a tooltip gets to appear or disappear beyond its declared delay. */
@@ -167,9 +173,18 @@ const ONCE_SHOWN = {
   test: (facts: TooltipStateFacts) => facts.isBeforeFirstShow !== true,
 };
 
-const BEFORE_FIRST_SHOW = {
-  condition: 'the tooltip has not shown yet, so it is not in the page',
-  test: (facts: TooltipStateFacts) => facts.isBeforeFirstShow === true,
+const DESCRIBED_BY_TOOLTIP = {
+  condition:
+    'the tooltip has shown once, so it is in the page, and the trigger is described by the tooltip itself',
+  test: (facts: TooltipStateFacts) =>
+    facts.isBeforeFirstShow !== true && facts.describesWithCopy !== true,
+};
+
+const DESCRIBED_BY_COPY = {
+  condition:
+    'the trigger is described by a hidden copy of the tooltip text: the tooltip has not shown yet, or the binding describes with a copy',
+  test: (facts: TooltipStateFacts) =>
+    facts.isBeforeFirstShow === true || facts.describesWithCopy === true,
 };
 
 const ON_HOVER = {
@@ -282,7 +297,7 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           "The trigger's aria-describedby names the tooltip, so the relationship between the control and its hint is in the markup, not only in where the hint is painted.",
         sources: [WCAG_1_3_1, APG_DESCRIBEDBY],
         covers: ['1.3.1-info-and-relationships', 'apg-interaction'],
-        appliesWhen: ONCE_SHOWN,
+        appliesWhen: DESCRIBED_BY_TOOLTIP,
         evidenceLayer: 'dom',
         enforcement: 'required',
         run: async ({harness, subject}) => {
@@ -298,15 +313,15 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
         },
       },
       {
-        id: 'tooltip.trigger.described-before-first-show',
+        id: 'tooltip.trigger.described-by-copy',
         outcome:
-          "Before the tooltip first shows, the trigger's aria-describedby names a hidden copy of its text that is not itself a tooltip, so a screen-reader user hears the hint on the control and the page holds one tooltip per trigger.",
+          "The trigger's aria-describedby names a hidden copy of the tooltip text that is not itself a tooltip, present before the tooltip first shows, so a screen-reader user hears the hint on the control and the page holds one tooltip per trigger.",
         sources: [WCAG_1_3_1, APG_DESCRIBEDBY],
         covers: ['1.3.1-info-and-relationships', 'apg-interaction'],
-        appliesWhen: BEFORE_FIRST_SHOW,
+        appliesWhen: DESCRIBED_BY_COPY,
         evidenceLayer: 'dom',
         enforcement: 'required',
-        run: async ({harness, subject}) => {
+        run: async ({harness, subject, facts}) => {
           const description = await harness.related('description');
           if (
             !(await harness.references(
@@ -325,18 +340,31 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
               'the hidden description has role tooltip, so the trigger has two tooltips once the tooltip shows',
             );
           }
-          if ((await description.textContent()).trim() === '') {
+          const text = (await description.textContent())
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (text === '') {
             throw new Error('the hidden description has no text');
+          }
+          if (facts.isBeforeFirstShow !== true) {
+            const tooltip = await harness.related('tooltip');
+            if (
+              await harness.references(subject, 'aria-describedby', tooltip)
+            ) {
+              throw new Error(
+                "the trigger's aria-describedby names both the copy and the tooltip, so the hint is read twice",
+              );
+            }
           }
         },
       },
       {
-        id: 'tooltip.trigger.description-before-first-show',
+        id: 'tooltip.trigger.description-from-copy',
         outcome:
-          "Before the tooltip first shows, the browser computes the hidden copy's text into the trigger's accessible description, so a screen-reader user hears the hint on a control whose tooltip has never opened.",
+          "The browser computes the hidden copy's text into the trigger's accessible description once, before and after the tooltip shows, so a screen-reader user hears the hint on the control one time.",
         sources: [WCAG_4_1_2, APG_DESCRIBEDBY],
         covers: ['4.1.2-name-role-value', 'apg-interaction'],
-        appliesWhen: BEFORE_FIRST_SHOW,
+        appliesWhen: DESCRIBED_BY_COPY,
         evidenceLayer: 'accessibility-tree',
         alsoNeeds: ['dom'],
         enforcement: 'required',
@@ -349,10 +377,14 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
           if (text === '') {
             throw new Error('the hidden description has no text');
           }
-          const {description} = await subject.computed();
-          if (!description.replace(/\s+/g, ' ').includes(text)) {
+          const description = (await subject.computed()).description.replace(
+            /\s+/g,
+            ' ',
+          );
+          const count = description.split(text).length - 1;
+          if (count !== 1) {
             throw new Error(
-              `the trigger's accessible description ("${description}") does not include the hidden description ("${text}")`,
+              `the trigger's accessible description ("${description}") holds the hidden description ("${text}") ${count} times, not once`,
             );
           }
         },

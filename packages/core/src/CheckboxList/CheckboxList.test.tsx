@@ -34,7 +34,7 @@ import {
   hasPressedArm,
   hasReleaseFade,
 } from '../__tests__/pressState';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -1312,7 +1312,7 @@ describe('CheckboxListItem ARIA props', () => {
 
     it('shows the reason tooltip on hover when the group is disabled with a reason', async () => {
       renderGroup();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent(
         'Notifications are managed by your administrator',
       );
@@ -1328,14 +1328,14 @@ describe('CheckboxListItem ARIA props', () => {
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderGroup();
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('describes each checkbox with the reason', () => {
       renderGroup();
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       for (const name of ['Email', 'SMS']) {
         const checkbox = screen.getByRole('checkbox', {name});
         expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(
@@ -1362,7 +1362,7 @@ describe('CheckboxListItem ARIA props', () => {
           />
         </CheckboxList>,
       );
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       const checkbox = screen.getByRole('checkbox', {name: 'Email'});
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toHaveLength(2);
@@ -1395,7 +1395,7 @@ describe('CheckboxListItem ARIA props', () => {
       __resetInteractionModalityForTest();
       const onChange = vi.fn();
       renderGroup({onChange});
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       const sms = screen.getByRole('checkbox', {name: 'SMS'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(sms, {pointerType: 'touch'});
@@ -1459,7 +1459,7 @@ describe('CheckboxListItem ARIA props', () => {
     it('links the reason tooltip from the group via aria-describedby', () => {
       renderGroup();
       const group = screen.getByRole('group');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(group.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

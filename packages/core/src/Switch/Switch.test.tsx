@@ -44,7 +44,7 @@ import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {installPressFeedback} from '../utils/pressFeedback';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -716,7 +716,7 @@ describe('Switch', () => {
           disabledMessage="Notifications are turned off org-wide"
         />,
       );
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(tooltip).toHaveTextContent(
         'Notifications are turned off org-wide',
       );
@@ -800,7 +800,7 @@ describe('Switch', () => {
         />,
       );
       const control = screen.getByRole('switch', h);
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(control.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

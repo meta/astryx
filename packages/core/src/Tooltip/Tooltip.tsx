@@ -29,6 +29,7 @@ import {
   type TooltipFocusTrigger,
   type TooltipTouchTrigger,
 } from './useTooltip';
+import {TooltipDescribesContext} from './tooltipPresentInterest';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
@@ -173,12 +174,12 @@ function isTextOnly(children: ReactNode): boolean {
   return typeof children === 'string' || typeof children === 'number';
 }
 
-/**
- * Utility to merge ARIA ID strings
- */
+/** Merges ARIA ID lists, each id once. */
 function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
-  const filtered = ids.filter(Boolean);
-  return filtered.length > 0 ? filtered.join(' ') : undefined;
+  const tokens = new Set(
+    ids.flatMap(id => (id == null ? [] : id.split(/\s+/).filter(Boolean))),
+  );
+  return tokens.size > 0 ? [...tokens].join(' ') : undefined;
 }
 
 /** Sets `aria-describedby`, or removes it when no id is left. */
@@ -385,15 +386,25 @@ Tooltip.displayName = 'Tooltip';
  * `onHide` closes it (Escape). Internal: the truncation tooltip module loads
  * it with this module; the Tooltip entry does not export it.
  */
-export function UndescribedTooltip({
-  anchorRef,
-  content,
-  onHide,
-}: {
+export function UndescribedTooltip(props: UndescribedTooltipProps): ReactNode {
+  return (
+    <TooltipDescribesContext value={false}>
+      <OpenUndescribedTooltip {...props} />
+    </TooltipDescribesContext>
+  );
+}
+
+interface UndescribedTooltipProps {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
   onHide: () => void;
-}): ReactNode {
+}
+
+function OpenUndescribedTooltip({
+  anchorRef,
+  content,
+  onHide,
+}: UndescribedTooltipProps): ReactNode {
   const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
   const attach = tooltip.ref;
   // Syncs the trigger listeners with the anchor's current element on every

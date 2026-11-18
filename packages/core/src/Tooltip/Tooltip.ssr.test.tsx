@@ -5,8 +5,8 @@
  * @input Tooltip server markup and React hydration
  * @output Proves a closed Tooltip with block content inside a paragraph
  *   hydrates without a recoverable error or a console error, and that its
- *   trigger names a hidden description only once the client renders it
- *   (component:Tooltip FR2, PR2)
+ *   trigger names its visually hidden description in server markup
+ *   (component:Tooltip AR1, PR2)
  * @position SSR acceptance test for Tooltip
  */
 
@@ -37,22 +37,31 @@ const tree = (
 );
 
 describe('Tooltip server render', () => {
-  it('names no description in server markup, so no reference dangles', () => {
+  it('names its hidden description in server markup, after the trigger', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(tree);
     const trigger = container.querySelector('[tabindex="0"]');
     expect(trigger).not.toBeNull();
-    expect(trigger?.hasAttribute('aria-describedby')).toBe(false);
+    const id = trigger?.getAttribute('aria-describedby') ?? '';
+    expect(id).not.toBe('');
+    const description = container.querySelector(`[id="${id}"]`);
+    expect(description).toHaveTextContent(
+      'Renews on the 1st.Cancel any time before then.',
+    );
+    expect(trigger?.contains(description)).toBe(false);
     expect(container.querySelector('[role="tooltip"]')).toBeNull();
-    // The block content stays out of the paragraph, so the browser's parser
-    // keeps the server markup as React rendered it.
+    // The description holds the content's text, not its blocks, so the
+    // browser's parser keeps the server markup as React rendered it.
     expect(container.querySelector('p div')).toBeNull();
   });
 
-  it('hydrates block content inside a paragraph without a mismatch, then describes the trigger', async () => {
+  it('hydrates block content inside a paragraph without a mismatch, and keeps the description', async () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(tree);
     document.body.appendChild(container);
+    const serverId = container
+      .querySelector('[tabindex="0"]')
+      ?.getAttribute('aria-describedby');
     const logged = vi.spyOn(console, 'error');
     const recoverableErrors: unknown[] = [];
     let root!: ReturnType<typeof hydrateRoot>;
@@ -65,13 +74,10 @@ describe('Tooltip server render', () => {
     expect(logged).not.toHaveBeenCalled();
 
     const trigger = container.querySelector('[tabindex="0"]') as HTMLElement;
-    const id = trigger.getAttribute('aria-describedby');
-    expect(id).toBeTruthy();
-    const description = document.getElementById(id as string);
-    expect(description).toHaveTextContent(
+    expect(trigger.getAttribute('aria-describedby')).toBe(serverId);
+    expect(trigger).toHaveAccessibleDescription(
       'Renews on the 1st.Cancel any time before then.',
     );
-    expect(container.contains(description)).toBe(false);
     act(() => {
       root.unmount();
     });

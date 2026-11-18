@@ -27,7 +27,6 @@ import {
   waitFor,
 } from '@testing-library/react';
 import {Suspense, startTransition, use, useRef} from 'react';
-import {createPortal} from 'react-dom';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
@@ -38,7 +37,7 @@ import userEvent from '@testing-library/user-event';
 import {IconButton} from '../IconButton/IconButton';
 import {Toolbar} from '../Toolbar/Toolbar';
 import {TestIcon} from '../__tests__/TestIcon';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -101,7 +100,7 @@ describe('Tooltip', () => {
         <button type="button">Trigger</button>
       </Tooltip>,
     );
-    expect(getTooltipDescription()).toHaveTextContent('Tooltip text');
+    expect(getTooltip()).toHaveTextContent('Tooltip text');
   });
 
   it('calls onOpenChange(true) when shown via hover', async () => {
@@ -234,7 +233,7 @@ describe('Tooltip', () => {
 
       // The icon is still the trigger the ARIA tooltip pattern is wired to.
       expect(screen.getByTestId('icon').getAttribute('aria-describedby')).toBe(
-        screen.getByRole('tooltip', {hidden: true}).id,
+        `${screen.getByRole('tooltip', {hidden: true}).id}-description`,
       );
     });
   });
@@ -1010,7 +1009,9 @@ describe('Tooltip layer mounts at its first show', () => {
     const trigger = screen.getByRole('button', {name: 'Action 42'});
     const description = describedBy(trigger);
     expect(description).toHaveTextContent('Row 42');
-    expect(description).not.toBeVisible();
+    // A hidden sibling after the trigger, not inside it.
+    expect(description).toHaveAttribute('hidden');
+    expect(trigger).not.toContainElement(description);
     expect(trigger).toHaveAccessibleDescription('Row 42');
     // One tooltip per trigger: the hidden copy is not a tooltip.
     expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(0);
@@ -1037,7 +1038,15 @@ describe('Tooltip layer mounts at its first show', () => {
       expect(tooltips).toHaveLength(1);
       expect(tooltips[0]).toHaveTextContent('Save changes');
       expect(popoverOpenState.get(tooltips[0])).toBe(true);
-      expect(describedBy(trigger)).toBe(tooltips[0]);
+      // The description stays the hidden copy, and the shown text is hidden
+      // from assistive technology, so the description reads once.
+      expect(describedBy(trigger)).toHaveTextContent('Save changes');
+      expect(describedBy(trigger)).not.toBe(tooltips[0]);
+      expect(tooltips[0].firstElementChild).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      );
+      expect(trigger).toHaveAccessibleDescription('Save changes');
     } finally {
       vi.useRealTimers();
     }
@@ -1059,7 +1068,7 @@ describe('Tooltip layer mounts at its first show', () => {
     const tooltips = screen.getAllByRole('tooltip', {hidden: true});
     expect(tooltips).toHaveLength(1);
     expect(popoverOpenState.get(tooltips[0])).toBe(true);
-    expect(describedBy(trigger)).toBe(tooltips[0]);
+    expect(trigger).toHaveAccessibleDescription('Save changes');
   });
 
   it('keeps the trigger described while a show waits for its trigger to get a box, and after that show is cancelled', () => {
@@ -1120,47 +1129,6 @@ describe('Tooltip layer mounts at its first show', () => {
     }
   });
 
-  it('moves the hidden copy back to the page when a hook trigger attaches there again', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const shadowRoot = host.attachShadow({mode: 'open'});
-    const portalTarget = document.createElement('div');
-    shadowRoot.appendChild(portalTarget);
-    function HookTrigger({inShadow}: {inShadow: boolean}) {
-      const tooltip = useTooltip();
-      const button = (
-        <button
-          type="button"
-          ref={tooltip.ref}
-          aria-describedby={tooltip.describedBy || undefined}>
-          Save
-        </button>
-      );
-      return (
-        <>
-          {inShadow ? createPortal(button, portalTarget) : button}
-          {tooltip.renderTooltip('Save changes')}
-        </>
-      );
-    }
-    try {
-      const {rerender} = render(<HookTrigger inShadow />);
-      await waitFor(() => {
-        const trigger = portalTarget.querySelector('button') as HTMLElement;
-        const id = trigger.getAttribute('aria-describedby') ?? '';
-        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
-      });
-      rerender(<HookTrigger inShadow={false} />);
-      await waitFor(() => {
-        const trigger = screen.getByRole('button', {name: 'Save'});
-        const id = trigger.getAttribute('aria-describedby') ?? '';
-        expect(document.getElementById(id)).toHaveTextContent('Save changes');
-      });
-    } finally {
-      host.remove();
-    }
-  });
-
   it("keeps the hidden copy in a shadow root trigger's own root", async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1204,7 +1172,7 @@ describe('Tooltip layer mounts at its first show', () => {
       expect(popoverOpenState.get(layer)).toBe(false);
     });
     expect(layers()).toEqual([layer]);
-    expect(describedBy(trigger)).toBe(layer);
+    expect(describedBy(trigger)).toHaveTextContent('Save changes');
     fireEvent.mouseEnter(trigger);
     await waitFor(() => {
       expect(popoverOpenState.get(layer)).toBe(true);
@@ -1242,7 +1210,7 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     await waitFor(() => {
       expect(anchor.getAttribute('aria-describedby')).not.toBe('');
     });
-    const layer = getTooltipDescription();
+    const layer = getTooltip();
     expect(anchor.getAttribute('aria-describedby')).toBe(layer.id);
 
     // Hovering the anchor opens the tooltip: the interaction listeners were
@@ -1297,9 +1265,10 @@ describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
     expect(filter).toHaveFocus();
     const describedBy = filter.getAttribute('aria-describedby') ?? '';
     await waitFor(() => {
+      // The description names the layer: the same id without `-description`.
       const layer = describedBy
         .split(' ')
-        .map(id => document.getElementById(id))
+        .map(id => document.getElementById(id.replace(/-description$/, '')))
         .find(element => element?.textContent === 'Filter (F)');
       expect(layer).toBeDefined();
       expect(layer?.matches(':popover-open')).toBe(true);

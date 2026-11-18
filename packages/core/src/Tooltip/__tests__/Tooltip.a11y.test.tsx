@@ -30,6 +30,7 @@ import {
   TOOLTIP_EXCLUSIONS,
   type TooltipBindingState,
 } from './Tooltip.a11y.states';
+import {getTooltipDescriptions} from '../../__tests__/tooltipDescription';
 
 function triggerFor(state: TooltipBindingState): HTMLElement {
   return state.triggerRole == null
@@ -44,17 +45,21 @@ function relatedFor(
     before: screen.getByRole('button', {name: 'Before the trigger'}),
     after: screen.getByRole('button', {name: 'After the trigger'}),
   };
+  // The trigger's description: the hidden copy its aria-describedby names.
+  const description =
+    getTooltipDescriptions().find(element =>
+      (triggerFor(state).getAttribute('aria-describedby') ?? '')
+        .split(/\s+/)
+        .includes(element.id),
+    ) ?? document.body;
   if (state.facts.isBeforeFirstShow === true) {
-    const id = triggerFor(state).getAttribute('aria-describedby') ?? '';
-    return {
-      description: document.getElementById(id) ?? document.body,
-      ...neighbours,
-    };
+    return {description, ...neighbours};
   }
   return {
     // The tooltip stays in the page while hidden once it has shown; it is
     // found with hidden elements included so the DOM rows can read it.
     tooltip: screen.getByRole('tooltip', {hidden: true}),
+    description,
     ...neighbours,
   };
 }
@@ -168,11 +173,11 @@ describe('tooltip binding inventory', () => {
         screen.queryAllByRole('tooltip', {hidden: true}),
         state.id,
       ).toHaveLength(isBeforeFirstShow ? 0 : 1);
-      expect(Object.keys(relatedFor(state))).toEqual([
-        isBeforeFirstShow ? 'description' : 'tooltip',
-        'before',
-        'after',
-      ]);
+      expect(Object.keys(relatedFor(state))).toEqual(
+        isBeforeFirstShow
+          ? ['description', 'before', 'after']
+          : ['tooltip', 'description', 'before', 'after'],
+      );
       cleanup();
     }
   });

@@ -20,7 +20,7 @@ import {InputGroup, InputGroupText} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
 import type {ISOTimeString} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import {getTooltipDescription} from '../__tests__/tooltipDescription';
+import {getTooltip} from '../__tests__/tooltipDescription';
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -634,7 +634,7 @@ describe('TimeInput', () => {
 
       const container = screen.getByLabelText('Time')
         .parentElement as HTMLElement;
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -658,7 +658,7 @@ describe('TimeInput', () => {
         />,
       );
 
-      const tooltip = () => getTooltipDescription();
+      const tooltip = () => getTooltip();
       await user.tab();
       expect(screen.getByLabelText('Time')).toHaveFocus();
       await waitFor(() => {
@@ -701,7 +701,7 @@ describe('TimeInput', () => {
         />,
       );
       const input = screen.getByLabelText('Time');
-      const tooltip = getTooltipDescription();
+      const tooltip = getTooltip();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

@@ -6,11 +6,13 @@
  * @file tooltipPresentInterest.ts
  * @input createSharedContext
  * @output Exports `TooltipPresentInterestContext` and its value types: the
- *   interaction on a tooltip's anchor that mounted the tooltip
+ *   interaction on a tooltip's anchor that mounted the tooltip; and
+ *   `TooltipDescribesContext`: whether the tooltip describes its anchor
  * @position Internal to Core, not exported from the Tooltip entry. A
  *   truncated Text or Heading mounts its tooltip on the first hover, tap or
  *   focus, and provides that interaction here, so the tooltip answers it when
- *   its trigger attaches, as its own listeners would have.
+ *   its trigger attaches, as its own listeners would have. A tooltip whose
+ *   text is its anchor's own content (a cut label) describes nothing.
  */
 
 import type {RefObject} from 'react';
@@ -41,3 +43,16 @@ export const TooltipPresentInterestContext =
     null,
   );
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';
+
+/**
+ * Whether the tooltip describes its anchor: a hidden copy of its text that
+ * the anchor's `aria-describedby` names. Core components set it `false` for a
+ * tooltip whose text is already the anchor's own content or name. It is not
+ * exported from the package entry.
+ */
+export const TooltipDescribesContext = createSharedContext<boolean>(
+  'TooltipDescribesContext',
+  1,
+  true,
+);
+TooltipDescribesContext.displayName = 'TooltipDescribesContext';

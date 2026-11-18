@@ -79,12 +79,15 @@ async function mountState(
       exact: true,
     }),
   };
+  // The trigger's description: the hidden copy its aria-describedby names.
+  const ids = ((await subject.getAttribute('aria-describedby')) ?? '').split(
+    /\s+/,
+  );
+  const descriptionId =
+    ids.find(id => id.endsWith('-description')) ?? ids[0] ?? '';
+  const description = page.locator(`[id="${descriptionId}"]`);
   if (state.facts.isBeforeFirstShow === true) {
-    const id = (await subject.getAttribute('aria-describedby')) ?? '';
-    return {
-      subject,
-      related: {description: page.locator(`[id="${id}"]`), ...neighbours},
-    };
+    return {subject, related: {description, ...neighbours}};
   }
   // The layer may mount the tooltip outside the story root, and it stays in
   // the page while hidden once it has shown, so it is found page-wide,
@@ -95,7 +98,7 @@ async function mountState(
   await expect(tooltip).toBeVisible();
   await page.mouse.move(0, 0);
   await expect(tooltip).toBeHidden();
-  return {subject, related: {tooltip, ...neighbours}};
+  return {subject, related: {tooltip, description, ...neighbours}};
 }
 
 async function runState(

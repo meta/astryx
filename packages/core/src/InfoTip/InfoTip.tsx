@@ -32,7 +32,7 @@ import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
 import {stopInReactTree} from '../Layer/layerClickBoundary';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {tooltipIdOf, useTooltip} from '../Tooltip/useTooltip';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -201,7 +201,7 @@ export function InfoTip({
         aria-label={label ?? t('@astryx.infoTip.label')}
         aria-describedby={tooltip.describedBy || undefined}
         aria-expanded={isPinned}
-        aria-controls={isShown ? tooltip.describedBy : undefined}
+        aria-controls={isShown ? tooltipIdOf(tooltip.describedBy) : undefined}
         onPointerDownCapture={handlePointerDownCapture}
         onClick={handleClick}
         {...mergeProps(
