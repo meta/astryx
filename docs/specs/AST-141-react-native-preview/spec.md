@@ -64,7 +64,7 @@ project away from the app's own identity and data.
 
 ## Non-goals
 
-- Astryx Stage — settled by `spec:AST-139`.
+- Astryx Stage — settled by its own record.
 - Equivalent internal implementations remain valid when they satisfy this contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
@@ -117,7 +117,9 @@ project away from the app's own identity and data.
   - It never reaches the app's own identity, stored data, files, players,
     or the person's photo library, and it cannot change the app's
     appearance or bars. It holds the lock-screen controls only through its
-    own player, under FR5's `AstryxAudio` row, and gives th - A call that the host's policy refuses for a project answers
+    own player, under FR5's `AstryxAudio` row, and gives them back at its
+    teardown.
+  - A call that the host's policy refuses for a project answers
     `not-allowed`, Preview's own reason: Preview adds it to the reason set of
     every capability a project reaches, so a refused call resolves
     `{ok: false, reason: 'not-allowed'}`. The reason sits outside the
@@ -291,8 +293,9 @@ project away from the app's own identity and data.
     host opens. Its result is links, URLs, and host-check items.
   - Outcomes beyond the shared ones of `spec:AST-112/FR13`. Like the group,
     these codes, the link, the manifest, and the bundle's shape are
-    experimental (DEC-6): any release may change or remove them, and they are
-    outside the stable code list:
+    experimental (DEC-6): while the group is experimental, any release may
+    change or remove them (`architecture:cli-surface` INV3's exception, in
+    Current-state impact):
 
     | Outcome                                                                                                                                                    | Code                                 |
     | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
@@ -334,8 +337,7 @@ project away from the app's own identity and data.
   mechanism `spec:AST-112` OQ5 settles. The CLI carries no Preview command
   code.
 - `architecture:cli-surface` INV3 gains an exception: while the
-  `astryx experimental rn preview` group is experimental and
-  `@astryxdesign/react-native-preview` is on the canary channel, its outcome
+  `astryx experimental rn preview` group is experimental (DEC-6), its outcome
   codes may change or be removed (FR12). This record registers
   `ERR_PREVIEW_DEV_SERVER_UNREACHABLE`, `ERR_PREVIEW_HOST_MISSING`,
   `ERR_PREVIEW_SHARE_DENIED`, and `ERR_PREVIEW_CARRIER_NOT_ACCEPTED` as the
