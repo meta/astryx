@@ -22,6 +22,7 @@ import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {Selector} from '@astryxdesign/core/Selector';
 import {ThemeShowcaseStore} from '../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 import {getThemeShowcaseContent} from './themeShowcaseContent';
+import {warmThemeShowcasePhotos} from './themeShowcaseWarmup';
 import {buildPlaygroundHref} from './playgroundLink';
 import {themeObjects} from '../generated/themeRegistry';
 import type {ThemeExplorerPackage} from './themeExplorerData';
@@ -451,6 +452,19 @@ export function ThemePackagePage({
   const [selectedPkgName, setSelectedPkgName] = useState<string>(packageName);
   const router = useRouter();
   const pathname = usePathname();
+
+  // Syncs the browser's image cache with the showcase photos of every theme,
+  // so a theme switch shows them at once. The ref holds the images while
+  // this page is mounted: a held image needs no second request.
+  const warmedPhotos = useRef<HTMLImageElement[]>([]);
+  useEffect(() => {
+    const {images, cancel} = warmThemeShowcasePhotos();
+    warmedPhotos.current = images;
+    return () => {
+      cancel();
+      warmedPhotos.current = [];
+    };
+  }, []);
 
   // Ref for the mobile theme carousel — observed by IntersectionObserver
   // to toggle the floating toolbar visibility.

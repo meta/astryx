@@ -76,8 +76,15 @@
    * tools (e.g. LightningCSS) which polyfill light-dark() for older browsers
    * inject their toggle-variable initialization in the same CSS bundle.
    * XDSTheme overrides color-scheme per-wrapper as needed.
+   *
+   * html takes the --font-family-body token, and body inherits it. Libraries
+   * add text to the body outside a Theme wrapper, such as a span that
+   * measures a label. That text gets the token's font at the page root. Where
+   * no stylesheet defines the token, the declaration has no value and html
+   * keeps the browser's default font. An app's own html or body font wins.
    */
   :where(html) {
+    font-family: var(--font-family-body);
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
     tab-size: 4;

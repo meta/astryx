@@ -12,7 +12,8 @@
  * starts in.
  *
  * @input  the home folder, the platform, and those standard settings
- * @output absolute folder paths
+ * @output absolute folder paths, among them the transpile cache's folder and
+ *   the single folder earlier CLIs used for it
  * @position packages/cli/foundation/env
  */
 
@@ -90,4 +91,36 @@ export function userConfigDir({
     absoluteDirSetting(env.XDG_CONFIG_HOME) ?? join(home, '.config'),
     'astryx',
   );
+}
+
+/**
+ * The folder of the CLI's copies of transpiled code, in the per-user cache
+ * folder (foundation/fs/jiti-cache.mjs).
+ * @param {UserDirOptions} [options]
+ * @returns {string}
+ */
+export function transpiledCacheDir(options) {
+  return cacheChild(options, 'transpiled');
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies. This CLI
+ * never reads, lists or writes it; project doctor names it.
+ * @param {UserDirOptions} [options]
+ * @returns {string}
+ */
+export function oldTranspileCacheDir(options) {
+  return cacheChild(options, 'jiti');
+}
+
+/**
+ * A folder in the per-user cache folder, joined as the platform joins paths.
+ * @param {UserDirOptions | undefined} options
+ * @param {string} name
+ * @returns {string}
+ */
+function cacheChild(options, name) {
+  const platform = options?.platform ?? process.platform;
+  const join = platform === 'win32' ? path.win32.join : path.join;
+  return join(userCacheDir(options), name);
 }

@@ -20,6 +20,7 @@ import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/pars
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} IconDefinitionDoc */
 
@@ -60,7 +61,7 @@ export function readDefinitionsDir(dir, owner) {
   } catch {
     return {definitions, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (!entry.name.endsWith('.doc.mjs')) continue;
     const file = path.join(dir, entry.name);
     const label = `Icon definition ${entry.name} in ${owner}`;
@@ -104,6 +105,22 @@ export function astryxIconDefinitions() {
     ASTRYX_DEFINITIONS_PACKAGE,
   );
   return astryx;
+}
+
+/**
+ * How many of Astryx's own definitions a set's `map` covers, of how many.
+ * `experimental icon --list` reports it as `coverage.astryx`, and discover
+ * prints it on an icon set's page.
+ * @param {Iterable<string>} mapped the definitions the set's map covers
+ * @returns {{mapped: number, total: number}}
+ */
+export function astryxDefinitionCoverage(mapped) {
+  const covered = new Set(mapped);
+  const {definitions} = astryxIconDefinitions();
+  return {
+    mapped: definitions.filter(each => covered.has(each.doc.name)).length,
+    total: definitions.length,
+  };
 }
 
 /**

@@ -27,7 +27,11 @@
 //   `list --json` output, or one path per line), so a test the `--changed`
 //   run already ran does not run a second time.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file>]
+// - With `--reached <file>`: prints the tests that file lists (the tests the
+//   change reaches, in the same formats) and then the other tests, each once,
+//   so one run covers both lists and its legs balance them together.
+//
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file> | --reached <file>]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
@@ -201,15 +205,20 @@ const RECORD_ROOTS = [
   'docs/families/',
   'docs/design/',
   'packages/themes/',
+  // Only the recorded Node test times: RECORD_LITERAL names no other path
+  // under scripts/.
+  'scripts/',
 ];
 /** A path literal into a record root, relative (`../…/docs/specs/…`) or from the root. */
 const RECORD_LITERAL =
-  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes)(?:\/[^'"`\n]*)?)\1/g;
+  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes|scripts\/vitest-node-durations[^/'"`\n]*\.json)(?:\/[^'"`\n]*)?)\1/g;
 /** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
 const RECORD_SEGMENTS =
   /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
+// A changed record: a spec record, or the recorded Node test times, whose
+// readers run for a change only to them (spec:AST-030 FR13).
 const RECORD_PATH =
-  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$)/;
+  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$|scripts\/vitest-node-durations[^/]*\.json$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
@@ -315,6 +324,11 @@ export function readTestList(text, root) {
 export function withoutAlreadyRun(tests, alreadyRun) {
   const ran = new Set(alreadyRun);
   return tests.filter(test => !ran.has(test));
+}
+
+/** The `reached` tests, then the `tests` they do not list, each once. */
+export function withReached(tests, reached) {
+  return [...new Set(reached), ...withoutAlreadyRun(tests, reached)];
 }
 
 /**
@@ -432,6 +446,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   } else {
     tests = scopedExtraTests(files, read, changedFiles);
+  }
+  const reachedFlag = process.argv.indexOf('--reached');
+  if (reachedFlag !== -1) {
+    tests = withReached(
+      tests,
+      readTestList(read(process.argv[reachedFlag + 1]), process.cwd()),
+    );
   }
   const alreadyRunFlag = process.argv.indexOf('--already-run');
   if (alreadyRunFlag !== -1) {

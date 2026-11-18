@@ -99,7 +99,7 @@ export const doc = {
     {
       type: 'icon.add',
       description:
-        'The icon registered, the definition mapped, and the files written.',
+        "The icon registered, the definition mapped, and the files written. `templateMeanings.unmapped` lists the icon definitions the bundled templates use that the set's `map` does not name, each with its template count, most used first.",
     },
     {
       type: 'icon.addVariants',

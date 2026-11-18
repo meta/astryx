@@ -19,6 +19,7 @@
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 import unwrap from '../unwrap-authoring-factories.mjs';
@@ -30,6 +31,11 @@ import {
 
 const CLI_DIR = path.resolve(import.meta.dirname, '../../../../..'); // packages/cli
 const REPO_ROOT = path.resolve(CLI_DIR, '../..');
+// The workspace's own tsc, run with node. Through `pnpm exec` it fails on
+// Windows, where pnpm is a pnpm.cmd batch file that needs a shell to start.
+const TSC = createRequire(path.join(REPO_ROOT, 'package.json')).resolve(
+  'typescript/bin/tsc',
+);
 
 async function migrateSource(src) {
   const jscodeshift = (await import('jscodeshift')).default;
@@ -123,7 +129,7 @@ afterAll(() => {
 function tsc(which) {
   const project = path.join(dir, which, 'tsconfig.json');
   try {
-    execFileSync('pnpm', ['exec', 'tsc', '-p', project], {
+    execFileSync(process.execPath, [TSC, '-p', project], {
       cwd: REPO_ROOT,
       stdio: 'pipe',
     });

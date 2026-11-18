@@ -2,16 +2,19 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, and the time limit.
+ * HTML reader, the time limit, drawing the overlays a page opens, and the
+ * names a render does not carry.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
-import {readSourceBlock, sourceBlock} from './source-block.mjs';
+import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage} from './render-page.mjs';
+import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -81,8 +84,85 @@ describe('the embedded source', () => {
   it('reports a damaged block', () => {
     const block = sourceBlock('p.tsx', [{path: 'p.tsx', bytes: Buffer.from('a')}]);
     expect(readSourceBlock(block.replace(/"sha256":"[0-9a-f]/, '"sha256":"Z'))).toMatchObject({found: true});
-    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":2'))).toBe(true);
+    expect(readSourceBlock(block.replace('"version":1', `"version":${RENDER_FORMAT + 1}`))).toEqual({found: true, newer: {format: RENDER_FORMAT + 1, cli: null}});
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":"one"'))).toBe(true);
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
+  });
+
+  it('finds the block as a browser reads its tag: any attribute order, quoting or letter case', () => {
+    const bytes = Buffer.from('export default () => null;\n');
+    const block = sourceBlock('page.tsx', [{path: 'page.tsx', bytes}]);
+    const json = block.slice(block.indexOf('>') + 1, block.lastIndexOf('</script>'));
+    for (const tag of [
+      '<script type=application/x-astryx-source>',
+      "<script type='application/x-astryx-source'>",
+      '<script id="source" type="application/x-astryx-source">',
+      '<SCRIPT TYPE="Application/X-Astryx-Source">',
+      '<script\n  type="application/x-astryx-source"\n>',
+    ]) {
+      const html = `<html><head></head><body><p>x</p>${tag}${json}</SCRIPT></body></html>`;
+      const read = readSourceBlock(html);
+      expect(read.found && 'source' in read && Buffer.from(read.source.files[0].base64, 'base64')).toEqual(bytes);
+      expect(renderedMarkupOf(html)).toBe('<p>x</p>');
+    }
+    // A hand edit that leaves a comment or a textarea open before the block
+    // does not hide it.
+    for (const edit of ['<!-- note', '<textarea>draft']) {
+      const read = readSourceBlock(`<html><head></head><body><p>x</p>${edit}${block}</body></html>`);
+      expect(read.found && 'source' in read && Buffer.from(read.source.files[0].base64, 'base64')).toEqual(bytes);
+    }
+    expect(readSourceBlock(`<body><p>x</p>${block.slice(0, -20)}`)).toEqual({
+      found: true,
+      damaged: 'its embedded source is cut short: the file ends inside it',
+    });
+  });
+});
+
+describe('the record of files a render could not carry', () => {
+  it('round-trips through the embedded source, and is left out when empty', () => {
+    const files = [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}];
+    const read = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: ['../shared/rows.ts', 'site.scss']})}</body>`);
+    expect(read).toMatchObject({found: true, source: {notCarried: ['../shared/rows.ts', 'site.scss']}});
+    const none = readSourceBlock(`<body>${sourceBlock('page.tsx', files, {notCarried: []})}</body>`);
+    expect(/** @type {any} */ (none).source).not.toHaveProperty('notCarried');
+  });
+});
+
+describe('the parts of a rendered file a reverse compares', () => {
+  it('finds the title, the style and the body as a browser does: outside comments and style text', () => {
+    const style = '<style>.t::before{content:"</head><body><!-- x -->"}</style>';
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8">\n<!-- Page: src/<body>/page.tsx -->\n' +
+      `<title>Report</title>${style}</head><body class="x">Markup<script type="application/x-astryx-source">{}</script></body></html>`;
+    expect(renderedHeadOf(html)).toEqual({title: 'Report', style});
+    expect(renderedMarkupOf(html)).toBe('Markup');
+  });
+
+  it('reads <!--> and <!---> as whole comments, in the page and in its head alike', () => {
+    const p = /** @type {any} */ (parseHtml('<p>a<!-->b<!--->c<!---->d</p>').children[0]);
+    expect(p.children.map((/** @type {{text: string}} */ c) => c.text).join('')).toBe('abcd');
+    expect(renderedHeadOf('<html><head><!--><title>T</title><!---><style>s</style></head><body>M')).toEqual({
+      title: 'T',
+      style: '<style>s</style>',
+    });
+  });
+
+  it('reads crafted markup in time that grows with its length', () => {
+    const started = Date.now();
+    for (const html of ['<html><head>' + '<a '.repeat(32000), '<html><head>' + '<style>a</style>'.repeat(20000) + '<body>x']) {
+      parseHtml(html);
+      renderedHeadOf(html);
+      renderedMarkupOf(html);
+      readSourceBlock(html);
+    }
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it('reads a file a released CLI wrote, with no note', () => {
+    const html = '<!doctype html><html><head><title>A &amp; B</title><style>a{}</style></head><body><p>M</p><script type="application/x-astryx-source">{}</script></body></html>';
+    expect(renderedHeadOf(html)).toEqual({title: 'A &amp; B', style: '<style>a{}</style>'});
+    expect(renderedMarkupOf(html)).toBe('<p>M</p>');
   });
 });
 
@@ -93,6 +173,14 @@ describe('the HTML reader', () => {
     expect(body.tag).toBe('body');
     expect(body.children[0].attrs).toEqual({class: 'astryx-card', 'data-x': '1'});
     expect(body.children[0].children[0].text).toBe('a & b');
+  });
+
+  it('reads a self-closing SVG title as empty, and keeps the text after it', () => {
+    const doc = parseHtml('<div><svg><title/><path d="M0 0"/></svg><p>after</p></div>');
+    const div = /** @type {any} */ (doc.children[0]);
+    const [svg, p] = div.children;
+    expect(svg.children[0]).toEqual({tag: 'title', attrs: {}, children: []});
+    expect(p.children[0].text).toBe('after');
   });
 
   it('tells Astryx markup from other HTML', () => {
@@ -112,4 +200,119 @@ describe('renderPage time limit', () => {
       removeLinkedFixture(dir);
     }
   }, 30_000);
+});
+
+describe('drawing the overlays a page opens', () => {
+  it('draws each part alone: a part on the document hears no press on another part', async () => {
+    const dir = makeLinkedFixture('astryx-render-alone-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const heard = path.join(dir, 'heard.txt');
+      fs.writeFileSync(heard, '');
+      const file = path.join(dir, 'page.mjs');
+      fs.writeFileSync(
+        file,
+        `import * as React from 'react';
+import * as fs from 'node:fs';
+const h = React.createElement;
+// A part that listens on the document, as an outside press does.
+function Listener() {
+  React.useEffect(() => {
+    const on = () => fs.appendFileSync(${JSON.stringify(heard)}, 'x');
+    document.addEventListener('pointerdown', on);
+    return () => document.removeEventListener('pointerdown', on);
+  }, []);
+  return h('div', null, 'listens');
+}
+// A part with controls the drawing presses.
+const Opener = () => h('div', null, ...[1, 2, 3].map(i => h('button', {key: i, 'aria-haspopup': 'menu', 'aria-expanded': 'false'}, 'open ' + i)));
+export function openLayerElements() {
+  return [h(Listener), h(Opener)];
+}
+export default function Page() {
+  return h('div', null, h(Listener), h(Opener));
+}
+`,
+      );
+      // The page reads Node's fs, which no script in a browser can, so only
+      // its markup is drawn.
+      await renderPage(file, {openLayers: true, markupOnly: true, timeoutMs: 60_000});
+      expect(fs.readFileSync(heard, 'utf8')).toBe('');
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
+});
+
+describe('withCarriedPaths', () => {
+  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    expect(
+      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
+    ).toBe(
+      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    );
+  });
+});
+
+describe('withUncarriedImages', () => {
+  it('writes in the data: URI of an image the embedded source does not carry', () => {
+    const kept = 'a'.repeat(64);
+    const left = 'b'.repeat(64);
+    const script = `x=c("${kept}","data:image/png;base64");y=c('${left}','data:image/png;base64')`;
+    expect(
+      withUncarriedImages(script, new Set([kept]), (sha, prefix) => (sha === left ? `${prefix},QUJD` : null)),
+    ).toBe(`x=c("${kept}","data:image/png;base64");y="data:image/png;base64,QUJD"`);
+  });
+
+  it('reads a script with a long run of name characters in one pass', () => {
+    const left = 'b'.repeat(64);
+    // A large string in the page (a minified data blob) is one long run of
+    // name characters; a reader that starts a match at each of them takes
+    // minutes on this.
+    const script = `s="${'a1'.repeat(200_000)}";y=c("${left}","data:image/png;base64")`;
+    const started = performance.now();
+    const out = withUncarriedImages(script, new Set(), () => 'data:image/png;base64,QUJD');
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(out.endsWith('y="data:image/png;base64,QUJD"')).toBe(true);
+  });
+});
+
+describe('a name that reads as configuration', () => {
+  it('is left out, and the name its warning offers is carried', () => {
+    for (const name of [
+      'chart.config.json',
+      'test.config.json',
+      'package.json',
+      'tsconfig.app.json',
+      'yarn-lock.json',
+      'vite.config.ts',
+      'test.config.ts',
+    ]) {
+      expect(embeddedPathProblem(`data/${name}`)?.toolConfig, name).toBe(true);
+      expect(embeddedPathProblem(`data/${carriedNameFor(`data/${name}`).name}`), name).toBeNull();
+    }
+  });
+
+  it('offers a rename for a *.config.json, and a file of its own for a tool\'s file', () => {
+    expect(carriedNameFor('chart.config.json')).toEqual({action: 'rename', name: 'chart-data.json'});
+    expect(carriedNameFor('data/a.b.config.json')).toEqual({action: 'rename', name: 'a-b-data.json'});
+    for (const name of ['package.json', 'tsconfig.json', 'package-lock.json', 'vite.config.ts']) {
+      expect(carriedNameFor(name).action, name).toBe('move');
+    }
+    expect(carriedNameFor('package.json').name).toBe('page-data.json');
+    expect(carriedNameFor('vite.config.ts').name).toBe('page-data.ts');
+  });
+
+  it('never offers a name a runner picks up: test.config.ts gets page-data.ts, not test-data.ts', () => {
+    expect(embeddedPathProblem('test-data.ts')).not.toBeNull();
+    expect(carriedNameFor('test.config.ts')).toEqual({action: 'move', name: 'page-data.ts'});
+  });
+
+  it('is not the reason a runner file or a dotfile is left out', () => {
+    expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
+    expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
 });

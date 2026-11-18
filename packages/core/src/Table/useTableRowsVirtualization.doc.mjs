@@ -13,7 +13,7 @@ export const docs = {
       type: 'number',
       required: true,
       description:
-        'Total body-row pitch in CSS pixels, including existing density padding and collapsed borders. Must fit text and supported controls without reducing their size.',
+        'Total body-row pitch in CSS pixels, including existing density padding and collapsed borders. Must fit text and supported controls without reducing their size. When every row measures taller, as with enlarged text or zoom, the Table windows at the measured height and warns in development; rows of unequal height render every row.',
     },
     {
       name: 'initialViewportHeight',
@@ -31,7 +31,7 @@ export const docsDense = {
     'Geometry-only fixed-height flat-row opt-in for Table.virtualization. Keep full data and stable idKey on Table. Positive finite CSS-pixel sizes; unsupported content, geometry, identity or a caller scrollWrapper falls back to full rendering. Native mounted-row semantics, not discovery of unmounted rows.',
   propDescriptions: {
     rowHeight:
-      'Total body-row pitch including density padding and borders; text and supported controls must fit.',
+      'Total body-row pitch including density padding and borders; text and supported controls must fit. Taller equal rows window at their measured height.',
     initialViewportHeight:
       'First-frame viewport height for the window plan; does not size the Table; measured viewport wins after mount.',
   },

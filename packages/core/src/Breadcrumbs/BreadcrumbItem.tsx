@@ -50,7 +50,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {Icon} from '../Icon';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
@@ -552,7 +552,9 @@ function BreadcrumbMenuTrigger({
   // to activate the tracking they read, so it activates it itself.
   const {ref: modalityRef} = useInteractionModalityTracking();
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasLightDismiss: true,
     hasCloseButton: false,
     hasAutoFocus: false,

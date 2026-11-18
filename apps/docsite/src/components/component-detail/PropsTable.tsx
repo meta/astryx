@@ -86,6 +86,7 @@ export function PropsTable({props, heading}: PropsTableProps) {
           ]}
           density="spacious"
           dividers="rows"
+          verticalAlign="top"
         />
       </VStack>
     </Section>

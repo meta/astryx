@@ -60,7 +60,10 @@ export {
 export interface ListProps extends BaseProps<
   HTMLUListElement | HTMLOListElement
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the list element (`<ul>`, or `<ol>` for `listStyle="decimal"`),
+   * with or without a header.
+   */
   ref?: React.Ref<HTMLUListElement | HTMLOListElement>;
   /**
    * List items. Should be ListItem components.

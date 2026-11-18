@@ -1,9 +1,14 @@
-Results for "delete" (19)
+Results for "delete" (20)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
+name:        createSwipe
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Swipe
+command:     pnpm exec astryx hook createSwipe
 name:        global/uninstall
 domain:      doc
 package:     @astryxdesign/cli

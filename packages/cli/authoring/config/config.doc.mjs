@@ -71,6 +71,13 @@ export const doc = {
         'async ({signal, package: name, version}) => fetchCatalog({signal, name, version})',
     },
     {
+      name: 'skills',
+      type: '{ to?: string | string[] }',
+      description:
+        "Where the Astryx skill goes in this project. `skills.to` is one place or a list: `'agents-md'`, the managed block in AGENTS.md and the agent files beside it; `'skills'`, the project skills folders `.agents/skills/astryx-project` and `.claude/skills/astryx-project`; or a folder in the project written as `'./<path>'`, such as `'./team-skills'`, which gets `<folder>/astryx-project/SKILL.md`. Leaving it out means `'agents-md'`. `{@command init} --to` writes it, and `{@command init}` writes the places it names.",
+      example: "{ to: 'skills' }",
+    },
+    {
       name: 'experimental',
       type: '{ xle?: { components?: Record<string, XleComponent> } }',
       description: 'Unstable features; may change without a breaking bump.',
@@ -80,8 +87,16 @@ export const doc = {
           type: 'string | string[]',
           stability: 'experimental',
           description:
-            "Experimental: may change or be removed in a patch release. The project's main icon set, by set name or as `<package>/<set>`; or a list of them, the main set first and then backup sets in order. A copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. It is the opt-in: copied templates use these icons, and `astryx discover` and `astryx doctor` report icon sets, only when it is set. `astryx experimental icon use <main> --backup <set>` writes it. `astryx experimental icon` ranks the main set's icons first; without it, the only installed set is the project's there. `astryx search` never returns icons.",
+            "Experimental: may change or be removed in a patch release. The project's main icon set, by set name or as `<package>/<set>`; or a list of them, the main set first and then backup sets in order. A copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. Copied templates use these icons only when it is set. `astryx discover` and `astryx doctor` report icon sets when it is set or when an icon-set package is installed. `astryx experimental icon use <main> --backup <set>` writes it. `astryx experimental icon` ranks the main set's icons first; without it, the only installed set is the project's there. Where icon features are on, a search that asks for an icon also lists up to three installed icons in its own `icons` block after its results, which never hold an icon.",
           example: "['@acme/outline-icons/outline', '@acme/brand-icons/brand']",
+        },
+        {
+          name: 'experimental.iconVariant',
+          type: 'string',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The look every icon of the project draws, such as `outline` or `filled`, by the variant name the icon sets declare. Each set in `experimental.iconSet` that declares a variant of that name draws it: copied templates import that variant's icons, and a theme takes that look's theme map (`themeIconsFilled`). A set that declares no variant of that name draws its default look. The main set must declare it, and it needs `experimental.iconSet`. `astryx experimental icon use <main> --variant <variant>` writes it; without `--variant` that command removes it.",
+          example: "'filled'",
         },
         {
           name: 'experimental.xle.components',

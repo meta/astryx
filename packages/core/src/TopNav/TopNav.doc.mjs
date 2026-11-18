@@ -12,6 +12,10 @@ export const docs = {
     defaults: {
       label: 'Navigation',
       heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+      children: [
+        {__element: 'TopNavItem', props: {label: 'Home', href: '#', isSelected: true}},
+        {__element: 'TopNavItem', props: {label: 'Projects', href: '#'}},
+      ],
     },
   },
   theming: {

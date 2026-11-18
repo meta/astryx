@@ -11,7 +11,15 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
-import {StrictMode, createContext, createRef, use, useState} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  createContext,
+  createRef,
+  startTransition,
+  use,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Drawer} from './Drawer';
 import {DrawerHeader} from './DrawerHeader';
@@ -1235,6 +1243,51 @@ describe('Drawer', () => {
 
       fireEvent.keyDown(dialog, {key: 'Escape'});
       // Mid-exit: the live prop is now 'end', the anchor must still be 'start'.
+      expect(dialog).toHaveAttribute('data-side', 'start');
+    });
+
+    it('slides out to the side it opened from when React discards a render on the other side', async () => {
+      // A transition that suspends for good: React renders the open drawer on
+      // the other side, then keeps the committed tree and never commits it.
+      const pending = new Promise<never>(() => {});
+      function Pending(): null {
+        use(pending);
+        return null;
+      }
+      function Screen({
+        side,
+        isOpen,
+        isPending,
+      }: {
+        side: 'start' | 'end';
+        isOpen: boolean;
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <Drawer
+              isOpen={isOpen}
+              onOpenChange={() => {}}
+              label="Filters"
+              side={side}>
+              Content
+            </Drawer>
+            {isPending ? <Pending /> : null}
+          </Suspense>
+        );
+      }
+      const {rerender} = render(
+        <Screen side="start" isOpen isPending={false} />,
+      );
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      await act(async () => {
+        startTransition(() => {
+          rerender(<Screen side="end" isOpen isPending />);
+        });
+      });
+      expect(dialog).toHaveAttribute('data-side', 'start');
+      // It closes, and the consumer's side reverts to its default.
+      rerender(<Screen side="end" isOpen={false} isPending={false} />);
       expect(dialog).toHaveAttribute('data-side', 'start');
     });
   });

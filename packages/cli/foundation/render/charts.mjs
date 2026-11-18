@@ -4,11 +4,12 @@
  * @file Charts in a rendered page. A recharts chart draws only after its
  * effects run, and a ResponsiveContainer measures its parent in a browser, so
  * a server render leaves them empty. The render worker draws each one again
- * in a small document, at the size the container starts at, and puts the
- * drawing in its place.
+ * in a small document and puts the drawing in its place: a container chart
+ * at each of a set of widths, of which CSS shows the one nearest the box.
  *
  * @input The chart elements the server render set aside.
- * @output Their markup, and the CSS that lets a drawn chart fit its width.
+ * @output Their sizes, the CSS that shows a drawn chart at its box's size,
+ *   and the heights the page gives the boxes charts fill.
  * @position foundation/render — read by page-worker.mjs and render-page.mjs.
  */
 
@@ -31,113 +32,288 @@ export const CHART_ROOTS = new Set([
   'Treemap',
 ]);
 
-/** Widest starting size for a chart its page lets fill the width. */
-const CHART_MAX_WIDTH = 800;
-
-/** Height of a chart that names none. */
-const CHART_HEIGHT = 300;
-
-/** Height up to which a chart counts as a sparkline. */
-const SPARKLINE_HEIGHT = 60;
+/**
+ * The narrowest and widest boxes a chart sized by its container is drawn
+ * for: a sparkline in a narrow table cell, and a chart across a wide
+ * desktop screen.
+ */
+const NARROWEST_CHART = 60;
+const WIDEST_CHART = 1920;
 
 /**
- * The size a ResponsiveContainer starts at: its own numbers where it has
- * them. Otherwise the width follows the height: six times it for a
- * sparkline, which sits in a narrow card or a table cell, and two and a half
- * times it for a taller chart. The drawing then scales to the width the
- * page gives it, so its text stays near its own size in most layouts.
- * @param {{width?: unknown, height?: unknown, aspect?: unknown}} props
- * @returns {{width: number, height: number}}
+ * The ratio between one drawing's width and the next. A reader sees the
+ * drawing nearest the box's width, so the drawing scales by at most the
+ * square root of this step either way: 2 ** (1/4), about 1.19, keeps text
+ * within a fifth of its own size, and each doubling of width costs two
+ * drawings.
  */
-export function chartSize({width, height, aspect}) {
-  const ratio = typeof aspect === 'number' && aspect > 0 ? aspect : null;
-  const w = typeof width === 'number' && width > 0 ? width : null;
-  const h =
-    typeof height === 'number' && height > 0
-      ? height
-      : ratio
-        ? (w ?? CHART_MAX_WIDTH) / ratio
-        : CHART_HEIGHT;
-  return {
-    width:
-      w ??
-      (ratio
-        ? h * ratio
-        : Math.min(CHART_MAX_WIDTH, Math.round(h * (h <= SPARKLINE_HEIGHT ? 6 : 2.5)))),
-    height: h,
-  };
+const CHART_WIDTH_STEP = Math.SQRT2;
+
+/** The widths a chart sized by its container is drawn at, narrowest first. */
+export const CHART_WIDTHS = Array.from(
+  {length: Math.round(Math.log(WIDEST_CHART / NARROWEST_CHART) / Math.log(CHART_WIDTH_STEP)) + 1},
+  (_, k) => Math.round(NARROWEST_CHART * CHART_WIDTH_STEP ** k),
+);
+
+/** Height of a chart whose height its page does not give. */
+const CHART_HEIGHT = 300;
+
+/**
+ * @param {unknown} value
+ * @returns {number | null} the value as a positive number of pixels, or null
+ */
+const pixels = value => (typeof value === 'number' && value > 0 ? value : null);
+
+/**
+ * @param {unknown} value
+ * @returns {number | null} the value as a fraction of its box, from a
+ *   percentage such as `"100%"`, or null
+ */
+function fraction(value) {
+  const match = typeof value === 'string' ? /^\s*([\d.]+)%\s*$/.exec(value) : null;
+  const n = match ? Number(match[1]) / 100 : NaN;
+  return n > 0 ? n : null;
 }
 
 /**
- * A chart drawn at its starting size scales to the width the page gives it
- * and keeps its shape, so it never overflows its card. Its legend stays out
- * of the scaled picture, so its text never covers the chart however narrow
- * the page is. A horizontal legend takes its own row under the picture, or
- * above it when it asks for the top. A vertical legend on one side sits
- * beside the picture, on that side.
+ * How a ResponsiveContainer is drawn without a browser to measure its box,
+ * so a reader at any width sees a drawing near the box's own size.
+ *
+ * A container with its own width is drawn once, at that width. A container
+ * whose width follows its box is drawn at each of {@link CHART_WIDTHS}, and
+ * {@link CHART_CSS} shows the drawing nearest the box's width. Each drawing
+ * keeps the height the page gives: a number, the width over the aspect, or
+ * the share of its box's height when the box states that height
+ * (`boxHeight`). Otherwise it is drawn {@link CHART_HEIGHT} high, and fits
+ * the box the reader's browser gives it. The box's style is the one the
+ * container gives itself in a browser.
+ * @param {{width?: unknown, height?: unknown, aspect?: unknown, minWidth?: unknown, minHeight?: unknown, maxHeight?: unknown}} props
+ * @param {number | null} [boxHeight] the height in pixels that the box the container fills states, when it states one
+ * @returns {{sizes: {width: number, height: number}[], style: Record<string, number | string>, follows: boolean}}
+ *   `follows` when the drawings follow the box's width
  */
-export const CHART_CSS =
-  '.recharts-responsive-container{width:100%}' +
-  '.recharts-responsive-container>.recharts-wrapper{width:100%!important;height:auto!important;display:flex;flex-direction:column}' +
-  // Only the chart's own picture scales; a legend's icons keep their size.
-  '.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important;height:auto!important}' +
-  '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important;height:auto!important}' +
-  '.recharts-responsive-container>.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}' +
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]{flex-direction:row;align-items:flex-start}' +
-  // A side is physical, as in a chart of fixed size: a right-to-left page
-  // reverses the row so the legend stays on the side it asked for.
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]:dir(rtl){flex-direction:row-reverse}' +
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side][data-legend-middle]{align-items:center}' +
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side][data-legend-bottom]{align-items:flex-end}' +
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]>svg.recharts-surface{flex:1 1 0;min-width:0}' +
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]>.recharts-legend-wrapper{flex:none}' +
-  // recharts puts the legend before the picture; one on the right goes after it.
-  '.recharts-responsive-container>.recharts-wrapper[data-legend-side="right"]>.recharts-legend-wrapper{order:1}';
+export function chartDrawings(props, boxHeight = null) {
+  const {width = '100%', height = '100%', aspect, minWidth, minHeight, maxHeight} = props;
+  const ratio = pixels(aspect);
+  const ownWidth = pixels(width);
+  const ownHeight = pixels(height);
+  const share = fraction(height);
+  const low = pixels(minHeight) ?? 0;
+  const high = pixels(maxHeight) ?? Infinity;
+  /** @param {number} w */
+  const heightAt = w =>
+    Math.round(
+      Math.min(high, Math.max(low, ratio ? w / ratio : (ownHeight ?? (share && boxHeight ? share * boxHeight : CHART_HEIGHT)))),
+    );
+  const widths = ownWidth ? [ownWidth] : CHART_WIDTHS;
+  /** @type {Record<string, number | string>} */
+  const style = {width: ownWidth ?? (typeof width === 'string' ? width : '100%')};
+  if (ratio) Object.assign(style, {height: 'auto', aspectRatio: ratio});
+  else style.height = ownHeight ?? (typeof height === 'string' ? height : '100%');
+  if (pixels(minWidth)) style.minWidth = /** @type {number} */ (pixels(minWidth));
+  if (low) style.minHeight = low;
+  if (high !== Infinity) style.maxHeight = high;
+  return {sizes: widths.map(w => ({width: w, height: heightAt(w)})), style, follows: !ownWidth};
+}
 
 /**
- * Mark each container chart whose legend is vertical and on one side with
- * that side, and whether it sits at the bottom or the middle, for
- * {@link CHART_CSS}. A vertically centered legend has a `top` near the
- * middle (no room is kept for it in a container chart). A vertical legend
- * centered across takes its own row, as a horizontal one does.
+ * The width up to which each drawing in {@link CHART_WIDTHS} is the nearest:
+ * the geometric mean of its width and the next one's, so a drawing scales
+ * as far down as the next one scales up.
+ */
+const nearestUpTo = CHART_WIDTHS.map((w, k) =>
+  k + 1 < CHART_WIDTHS.length ? Math.round(Math.sqrt(w * CHART_WIDTHS[k + 1])) : Infinity,
+);
+
+/** The attribute that marks a container drawn at each of {@link CHART_WIDTHS}. */
+export const FOLLOWS_WIDTH = 'data-astryx-chart-widths';
+
+const CONTAINER = '.recharts-responsive-container';
+const DRAWING = `${CONTAINER}>.recharts-wrapper`;
+
+/**
+ * A container chart fills the box the page gives it and its drawing fits
+ * that box whole, so it never overflows or clips. A drawing as high as its
+ * box scales down when the box is narrower and never grows past its own
+ * size; a drawing that keeps an aspect scales with its box both ways. Its
+ * legend is part of the drawing (see {@link foldLegends}), so it scales with
+ * it. A container drawn at several widths shows only the drawing nearest its
+ * width, so that scale stays within the fourth root of two.
+ */
+export const CHART_CSS =
+  `${CONTAINER}{max-width:100%}` +
+  `${DRAWING}{width:100%!important;height:100%!important}` +
+  `${DRAWING}>svg.recharts-surface{width:100%;height:100%;display:block}` +
+  `${CONTAINER}[${FOLLOWS_WIDTH}]{container-type:inline-size}` +
+  `${CONTAINER}[${FOLLOWS_WIDTH}]>.recharts-wrapper{display:none}` +
+  nearestUpTo
+    .map((upTo, k) => {
+      const from = k > 0 ? `${nearestUpTo[k - 1]}px < ` : '';
+      const to = upTo === Infinity ? '' : `width <= ${upTo}px`;
+      const query = from && to ? `(${from}${to})` : from ? `(width > ${nearestUpTo[k - 1]}px)` : `(${to})`;
+      return `@container ${query}{${CONTAINER}[${FOLLOWS_WIDTH}]>.recharts-wrapper:nth-child(${k + 1}){display:block}}`;
+    })
+    .join('');
+
+/** The properties that place and size a legend in the layer above a picture. */
+const LEGEND_PLACEMENT = new Set(['position', 'left', 'right', 'top', 'bottom', 'width', 'height']);
+
+/**
+ * A legend's own style without the properties that place and size it, so it
+ * keeps the rest (`wrapperStyle`'s font, say) inside the picture.
+ * @param {string} style
+ * @returns {string[]} its other declarations
+ */
+const placement = style =>
+  style
+    .split(';')
+    .map(d => d.trim())
+    .filter(d => d && !LEGEND_PLACEMENT.has(d.slice(0, d.indexOf(':')).trim().toLowerCase()));
+
+/**
+ * Put each container chart's legend inside its picture, where recharts
+ * placed it, so the legend scales with the drawing when the drawing fits a
+ * box of another size. recharts places a legend in a layer above the
+ * picture, by its edges, and keeps room for it in the picture. The legend's
+ * box is the one recharts kept room for (see {@link legendBox}).
  * @param {any} root the element the charts were drawn in
  */
-export function markLegends(root) {
-  for (const wrapper of root.querySelectorAll('.recharts-responsive-container > .recharts-wrapper')) {
+export function foldLegends(root) {
+  for (const wrapper of root.querySelectorAll(`${DRAWING}`)) {
     const legend = wrapper.querySelector(':scope > .recharts-legend-wrapper');
-    if (!legend) continue;
-    const vertical = [...legend.querySelectorAll('.recharts-legend-item')].some(item =>
-      /display:\s*block/.test(item.getAttribute('style') ?? ''),
-    );
-    if (!vertical) continue;
+    const svg = wrapper.querySelector(':scope > svg.recharts-surface');
+    if (!legend || !svg) continue;
+    const [, , width, height] = String(svg.getAttribute('viewBox') ?? '')
+      .split(/[\s,]+/)
+      .map(Number);
+    if (!(width > 0 && height > 0)) continue;
     const style = legend.getAttribute('style') ?? '';
-    // recharts places a right-aligned legend with `right`, a left-aligned one
-    // at the chart's left margin, and a centered one half way across.
-    const width = Number(wrapper.getAttribute('width'));
-    const left = Number(/(?:^|;)\s*left\s*:\s*(-?[\d.]+)px/.exec(style)?.[1]);
-    const side = /(?:^|;)\s*right\s*:/.test(style)
-      ? 'right'
-      : Number.isFinite(left) && width > 0 && left < width * 0.2
-        ? 'left'
-        : null;
-    if (!side) continue;
-    wrapper.setAttribute('data-legend-side', side);
-    const top = Number(/(?:^|;)\s*top\s*:\s*(-?[\d.]+)px/.exec(style)?.[1]);
-    const height = Number(wrapper.getAttribute('height'));
-    if (/(?:^|;)\s*bottom\s*:/.test(style)) wrapper.setAttribute('data-legend-bottom', '');
-    else if (top > 0 && height > 0 && top > height * 0.2) wrapper.setAttribute('data-legend-middle', '');
+    /** @param {string} edge */
+    const at = edge => {
+      const n = Number(new RegExp(`(?:^|;)\\s*${edge}\\s*:\\s*(-?[\\d.]+)px`).exec(style)?.[1]);
+      return Number.isFinite(n) ? n : null;
+    };
+    const estimate = legendBox(legend);
+    const w = at('width') ?? estimate.width;
+    const h = estimate.height;
+    const left = at('left');
+    const right = at('right');
+    const top = at('top');
+    const bottom = at('bottom');
+    const x = left ?? (right !== null ? width - right - w : 0);
+    const y = top ?? (bottom !== null ? height - bottom - h : 0);
+    const object = root.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+    for (const [name, value] of Object.entries({x, y, width: w, height: h, overflow: 'visible'})) {
+      object.setAttribute(name, String(value));
+    }
+    legend.setAttribute('style', [...placement(style), 'width:100%'].join(';'));
+    object.appendChild(legend);
+    svg.appendChild(object);
+  }
+}
+
+/** Attributes that name other elements by their ids, separated by spaces. */
+const ID_LISTS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant'];
+
+/**
+ * Give each drawing of a chart drawn at several widths its own ids. Every
+ * drawing renders the page's chart children again, so an id the page writes
+ * inside the chart (a `<linearGradient id>` its areas fill with, say) would
+ * appear once per drawing, and `url(#…)` would find the copy in the first
+ * drawing, which the reader may not see. Two charts can write the same id
+ * too (one chart component used twice). Each id takes the chart's place and
+ * the drawing's width as a suffix, and each reference inside that drawing
+ * (`url(#…)`, `href`, and the attributes that list ids) follows it. Ids from
+ * outside the chart are left as they are.
+ * @param {any} root the element the charts were drawn in
+ * @param {number} [first] the place of the first chart in `root` among the page's charts
+ */
+export function separateIds(root, first = 0) {
+  const containers = [...root.querySelectorAll(`${CONTAINER}[${FOLLOWS_WIDTH}]`)];
+  for (const wrapper of root.querySelectorAll(`${CONTAINER}[${FOLLOWS_WIDTH}] > .recharts-wrapper`)) {
+    const place = first + containers.indexOf(wrapper.parentElement);
+    const width = String(wrapper.querySelector(':scope > svg.recharts-surface')?.getAttribute('viewBox') ?? '').split(/[\s,]+/)[2];
+    const elements = [wrapper, ...wrapper.querySelectorAll('*')];
+    /** @type {Map<string, string>} */
+    const own = new Map();
+    for (const el of elements) {
+      const id = el.getAttribute('id');
+      if (!id) continue;
+      own.set(id, `${id}-chart${place}-at-${width}`);
+      el.setAttribute('id', /** @type {string} */ (own.get(id)));
+    }
+    if (own.size === 0) continue;
+    /** @param {string} id */
+    const renamed = id => own.get(id) ?? id;
+    for (const el of elements) {
+      for (const {name, value} of [...el.attributes]) {
+        let next = value.replace(/url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g, (/** @type {string} */ _, /** @type {string} */ q, /** @type {string} */ id) => `url(${q}#${renamed(id)}${q})`);
+        if ((name === 'href' || name === 'xlink:href') && next.startsWith('#')) next = `#${renamed(next.slice(1))}`;
+        if (ID_LISTS.includes(name)) next = next.split(/\s+/).map(renamed).join(' ');
+        if (next !== value) el.setAttribute(name, next);
+      }
+    }
+  }
+}
+
+/** The SVG attributes that place and shape what a chart draws. */
+const GEOMETRY = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'transform'];
+
+/**
+ * Decimal places a drawing's coordinates keep: a hundredth of a pixel, finer
+ * than any screen shows, where recharts writes up to sixteen digits.
+ */
+const COORDINATE_PLACES = 2;
+
+/**
+ * Round the coordinates of each chart in `root` drawn at several widths, so
+ * its drawings take less room in the file. Text, and a chart drawn once, are
+ * left as recharts draws them.
+ * @param {any} root the element the charts were drawn in
+ */
+export function roundCoordinates(root) {
+  const long = new RegExp(`-?\\d+\\.\\d{${COORDINATE_PLACES + 1},}`, 'g');
+  /** @param {string} n */
+  const round = n => String(Number(Number(n).toFixed(COORDINATE_PLACES)));
+  const surface = `${CONTAINER}[${FOLLOWS_WIDTH}] svg.recharts-surface`;
+  for (const el of root.querySelectorAll(`${surface}, ${surface} *`)) {
+    for (const name of GEOMETRY) {
+      const value = el.getAttribute(name);
+      if (value === null) continue;
+      const rounded = value.replace(long, round);
+      if (rounded !== value) el.setAttribute(name, rounded);
+    }
   }
 }
 
 /**
+ * The height each chart's box states, by the chart's place in the server
+ * markup: the pixel height in the style of the element that holds it. A
+ * ResponsiveContainer with a percentage height takes that share of it in a
+ * browser.
+ * @param {string} markup the server markup, with a placeholder per chart
+ * @returns {Promise<(number | null)[]>}
+ */
+export async function boxHeights(markup) {
+  const {parseHTML} = await import('linkedom');
+  const {document} = parseHTML(`<!doctype html><html><body>${markup}</body></html>`);
+  /** @type {(number | null)[]} */
+  const heights = [];
+  for (const el of document.querySelectorAll('astryx-chart[data-chart]')) {
+    const style = el.parentElement?.getAttribute('style') ?? '';
+    const height = Number(/(?:^|;)\s*height\s*:\s*([\d.]+)px/.exec(style)?.[1]);
+    heights[Number(el.getAttribute('data-chart'))] = height > 0 ? height : null;
+  }
+  return heights;
+}
+
+/**
  * The box a legend would measure in a browser, estimated from its items, so
- * a chart of fixed size keeps room for it where its props place it: rows for
- * a horizontal legend, one line per item for a vertical one. A chart sized by
- * its container keeps no room, because its legend takes its own row.
+ * a chart keeps room for it where its props place it: rows for a horizontal
+ * legend, one line per item for a vertical one.
  * @param {any} el the legend wrapper
  */
 function legendBox(el) {
-  if (el.closest?.('.recharts-responsive-container')) return box(0, 0);
   const items = [...el.querySelectorAll('.recharts-legend-item')];
   const widths = items.map(item => 14 + 4 + 7 * (item.textContent ?? '').length + 10);
   const vertical = items.some(item => /display:\s*block/.test(item.getAttribute('style') ?? ''));
@@ -168,6 +344,58 @@ function textBox(el) {
 }
 
 /**
+ * Make this document's inline styles keep a custom property's name as it
+ * is written: CSS custom properties are case-sensitive, and React sets a
+ * StyleX dynamic style (`--x-aspectRatio`) with `style.setProperty`, which
+ * linkedom's style object hyphenates (`--x-aspect-ratio`) like a standard
+ * property, so no rule would read it. The style text itself keeps the name.
+ * @param {any} document
+ */
+function keepCustomPropertyNames(document) {
+  const proto = Object.getPrototypeOf(document.createElement('div').style);
+  if (!proto || proto.__keepsCustomNames) return;
+  const {setProperty, getPropertyValue, removeProperty} = proto;
+  /** The declarations of a style text but one name. @param {string} text @param {string} name */
+  const without = (text, name) =>
+    text
+      .split(';')
+      .filter(
+        rule => rule.trim() && rule.slice(0, rule.indexOf(':')).trim() !== name,
+      );
+  Object.defineProperties(proto, {
+    __keepsCustomNames: {value: true},
+    setProperty: {
+      value(/** @type {string} */ name, /** @type {unknown} */ value) {
+        if (!String(name).startsWith('--'))
+          return setProperty.call(this, name, value);
+        const rules = without(this.cssText, name);
+        if (value != null && value !== '') rules.push(`${name}:${value}`);
+        this.cssText = rules.join(';');
+      },
+    },
+    removeProperty: {
+      value(/** @type {string} */ name) {
+        if (!String(name).startsWith('--'))
+          return removeProperty.call(this, name);
+        const was = this.getPropertyValue(name);
+        this.cssText = without(this.cssText, name).join(';');
+        return was;
+      },
+    },
+    getPropertyValue: {
+      value(/** @type {string} */ name) {
+        if (!String(name).startsWith('--'))
+          return getPropertyValue.call(this, name);
+        const rule = String(this.cssText)
+          .split(';')
+          .find(r => r.slice(0, r.indexOf(':')).trim() === name);
+        return rule ? rule.slice(rule.indexOf(':') + 1).trim() : '';
+      },
+    },
+  });
+}
+
+/**
  * Give this thread the small document a chart draws in: no layout, no
  * motion, and no frames to wait for.
  * @returns {Promise<void>}
@@ -175,6 +403,7 @@ function textBox(el) {
 export async function chartDocument() {
   const {parseHTML} = await import('linkedom');
   const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+  keepCustomPropertyNames(window.document);
   const g = /** @type {any} */ (globalThis);
   const quiet = () => ({
     matches: true,

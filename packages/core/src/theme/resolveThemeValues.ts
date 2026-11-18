@@ -41,7 +41,7 @@ import {
 import {expandRadiusScale, type RadiusScaleConfig} from './expandRadiusScale';
 import {easeDefaults} from './tokens.stylex';
 import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
-import {deepMergeComponents} from './mergeComponents';
+import {deepMergeComponents, withoutUnsetComponents} from './mergeComponents';
 
 // =============================================================================
 // Types
@@ -394,7 +394,7 @@ export function resolveThemeValues(
 
   // Components: generated type-scale rules (lowest) → this input's own →
   // all of it over the seed's.
-  let components = input.components;
+  let components = withoutUnsetComponents(input.components);
   if (typeScaleConfig) {
     components = deepMergeComponents(
       generateTypeScaleComponents(typeScaleConfig),

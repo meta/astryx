@@ -143,18 +143,26 @@ describe('the drag chase', () => {
 });
 
 describe('motion roles and internal constants', () => {
-  it('its slide spring is an internal motion role once registered (spec:AST-094 FR4); the overshoot is not; the table holds no lift and no pressed dim, and the titles switch at once, with no clock', () => {
+  it('its slide and lift springs are internal motion roles once registered (spec:AST-094 FR4); the overshoot and the lift’s growth are not; the table holds no pressed dim, and the titles switch at once, with no clock', () => {
     registerSegmentedTable();
     expect(motionRoleOf(segmentedControl.selectionSpring)?.id).toBe(
       'segmented.selectionSpring',
     );
+    expect(motionRoleOf(segmentedControl.lift)?.id).toBe('segmented.lift');
     expect(motionRoleIn(segmentedControl, 'dragOvershoot')).toBeUndefined();
-    // A pressed thumb's lift is a theme's (a shared role, none by default),
-    // and a pressed segment shows the shared overlay: nothing of either here.
+    expect(motionRoleIn(segmentedControl, 'liftGrowth')).toBeUndefined();
+    // A pressed segment shows the shared overlay: no dim here.
     expect(Object.keys(segmentedControl).sort()).toEqual([
       'dragOvershoot',
+      'lift',
+      'liftGrowth',
       'selectionSpring',
     ]);
+  });
+
+  it('the lift is UIKit’s: +24 × +16 pt on a critically damped 0.25 s spring', () => {
+    expect(segmentedControl.liftGrowth).toEqual([24, 16]);
+    expect(segmentedControl.lift).toEqual({response: 0.25, dampingRatio: 1});
   });
 
   it('resolves to UIKit’s measured values whatever a theme sets: the old role variables do nothing', () => {

@@ -89,7 +89,10 @@ context)` receives an optional `SearchContext` whose `update(items)` replaces
   a non-empty `update` shows its rows and opens the popup. An empty `update`
   leaves the shown rows in place. The control stays busy, with its loading
   indicator, until the query settles. The empty-result row appears only when the
-  query settles with an empty final list.
+  query settles with an empty final list. After the popup is dismissed while the
+  query is pending, a partial list leaves the popup closed and the control not
+  busy; the next open shows the query's latest list (`component:BaseTypeahead`
+  FR3).
 - **FR6 — The highlight and scroll position stay put.** The first list shown for
   a new query highlights its first row. When a later list for the same query
   arrives, the highlighted item stays highlighted and the list keeps its scroll
@@ -106,8 +109,10 @@ context)` receives an optional `SearchContext` whose `update(items)` replaces
   technology does not re-read the highlighted row when rows are added after
   it.
 - **FR8 — One result announcement per query.** The typeahead announces the
-  result count once per query, when the query settles. A partial list announces
-  nothing. Busy start is announced once per query as `spec:AST-086` FR6 and
+  result count once per query, when the query settles. When the popup is
+  dismissed before the query settles, the count is announced once, at the next
+  open that shows that query's list (`component:BaseTypeahead` FR3). A partial
+  list announces nothing. Busy start is announced once per query as `spec:AST-086` FR6 and
   FR8 require.
 - **FR9 — A failed remote answer keeps what was shown.** When a source's promise
   rejects after a non-empty `update` for the current query, the last non-empty

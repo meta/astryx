@@ -11,6 +11,8 @@
  *
  * A column that moves by itself turns on the Wheel's own spin (`spinTo`). The
  * spin starts before the commit, so the new value finds the column moving.
+ * The minute column loops, as UIDatePicker's does. Its seam keeps the hour:
+ * each column sets only its own part of the time.
  *
  * SYNC: When modified, update TimeWheels.test.tsx, timeWheelRules.ts,
  * TimeInput.doc.mjs and DateTimeInput.doc.mjs.
@@ -190,6 +192,7 @@ export function TimeWheels({
         value={shown.minute}
         isActive={isActive}
         onChange={restOn('minute')}
+        isLooping
       />
       {hasSeconds && (
         <Wheel

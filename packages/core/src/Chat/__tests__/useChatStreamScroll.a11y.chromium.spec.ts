@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @visits Chat
 
 /**
  * @file useChatStreamScroll.a11y.chromium.spec.ts

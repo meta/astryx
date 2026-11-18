@@ -17,6 +17,9 @@ nested `AGENTS.md`.
   `packages/cli/assets/docs/`.
 - Contributors: read `CONTRIBUTING.md` and the relevant guidance linked from
   `docs/README.md`.
+- CLI output: an agent reads every byte a command prints. Think about how long
+  an answer is, and test a change with agents, as
+  `docs/contributing/cli-conventions.md` ("Output: keep answers short") says.
 - Pull requests: choose one primary intent and use its template under
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
   before opening or reviewing a mixed change. Before you request review, run
@@ -238,7 +241,7 @@ astryx template --list # available page templates
 ON DEMAND:
 astryx docs <topic> --index # section index: one line per section, with its key
 astryx docs <topic> <section> # one section, by key or title
-astryx component <Name> --dense # props, variants, usage, anatomy for one component
+astryx component <Name> --dense # import, usage and props for one component; --detail full adds anatomy and theming
 astryx template <name> # emit full page source
 astryx template <name> --skeleton # layout skeleton with spatial annotations
 astryx swizzle <Name> # eject component source for deep customization

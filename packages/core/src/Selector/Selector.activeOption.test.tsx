@@ -266,3 +266,21 @@ describe('Selector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 });
+
+describe('Selector highlighted theme state', () => {
+  it('marks only the active option row highlighted', async () => {
+    const user = userEvent.setup();
+    const field = renderSelector();
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+
+    const rows = screen.getAllByRole('option', {hidden: true});
+    const marked = rows.filter(
+      row => row.getAttribute('data-highlighted') === 'highlighted',
+    );
+    expect(marked).toEqual([activeOption(field)]);
+    expect(marked[0]).toHaveTextContent('Banana');
+    expect(marked[0]).toHaveClass('astryx-selector-option-row');
+  });
+});

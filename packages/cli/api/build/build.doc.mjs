@@ -19,8 +19,9 @@ export const doc = {
     'The "build a page" entry point. Called with no query it returns the ' +
     'how-to-build-a-page playbook as data: the workflow steps with their ' +
     'commands, the on-system rules, and related lookups. Called with a query it names the page template to ' +
-    'START from (always one: the page template a ranker built for long descriptions puts first; for a part ' +
-    'of a page, the page it names; else the app shell) and the next two templates, ' +
+    "START from (always one: for a whole page, the template its page-pick model chooses from the page ranker's list and its own word tables, or the app shell when its word weights call the shell; for a part " +
+    'of a page, the page it names; else the app shell, unless the idea reads as a whole page, which starts ' +
+    'from the closest page template) and the next two templates, ' +
     'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
     'idea-specific components/hooks, plus the always-on frame + foundation. A template carries the page ' +
     'frame and spacing, so the kit never recommends composing a page from components.',
@@ -39,7 +40,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description:
-        'Directory to resolve @astryxdesign/core and templates from.',
+        'Directory to resolve @astryxdesign/core and templates from, and whose theme wiring the playbook names.',
       default: 'process.cwd()',
     },
     {
@@ -64,7 +65,7 @@ export const doc = {
     {
       type: 'build.kit',
       description:
-        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it, whether the page ranker's pick is also search's direct match, the closest page, or the fallback app shell, the ranker's next two `alternatives`, and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates (≤3), drop-in block patterns (≤5), idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
+        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it and names where it goes in the project (`<path>` stays a placeholder outside a project), whether the start is also search's direct match, the closest page, or the fallback app shell, the next two `alternatives` in the order the start is chosen from, `fit` on a page-template start (the page-pick model's probability for it among the ready page templates, 0 to 1; 0.4 or more is a clear choice; absent for a template the word tables do not list), and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates that build could start from (≤3), drop-in block patterns (≤5) — each template, the start and its alternatives included, with `isReady` — idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
     },
   ],
   throws: [
@@ -85,7 +86,7 @@ export const doc = {
     {label: 'Get the playbook', code: 'const r = await build();'},
     {
       label: 'Find the template to start from',
-      code: "const {data} = await build('analytics dashboard');\n// data.start.command: 'astryx template dashboard --type page <path>'",
+      code: "const {data} = await build('analytics dashboard');\n// in a Next app: data.start.command: 'astryx template dashboard --type page app/dashboard'",
     },
     {
       label: 'Restrict + limit',

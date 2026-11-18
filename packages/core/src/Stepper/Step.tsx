@@ -346,6 +346,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    // A flex item's default `min-width: auto` keeps the body at least as wide
+    // as its content. A wide field then pushes the body past the step. Zero
+    // releases that floor.
+    minWidth: 0,
   },
 
   // ===================== HORIZONTAL LAYOUT =====================
@@ -1190,6 +1194,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.numberBadge, numberColorStyle),
           )}>
@@ -1264,6 +1269,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.icon, iconColorStyle),
           )}>
@@ -1315,14 +1321,11 @@ export function Step({
         : undefined;
 
   // Both text parts carry {progress, status}, the phase vocabulary of
-  // `step-indicator` above. The label additionally owns Stepper's disabled
-  // paint, so it alone carries disabled below.
+  // `step-indicator` above. The indicator and the label each own disabled
+  // paint, so each carries disabled; the description does not.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
-    // The label owns Stepper's disabled paint (`styles.labelDisabled` above),
-    // so it owns the selector too. The description does not change under
-    // disabled and deliberately keeps the smaller {progress, status} surface.
     disabled: isDisabled ? 'disabled' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
@@ -1398,7 +1401,8 @@ export function Step({
     </div>
   ) : null;
 
-  // Theme data attributes reflect progress + optional semantic status.
+  // The step paints nothing of its own when disabled, so it carries no
+  // `disabled` selector.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
@@ -1435,10 +1439,15 @@ export function Step({
   // complete ordered sequence with `aria-current` intact, while the summary row
   // below it owns the compact navigation controls and remains decorative apart
   // from those buttons.
+  // A compact step has no button to carry `aria-disabled`, and a list item
+  // cannot carry it, so a disabled step adds a hidden status word.
   const compactNameNode = isCompact ? (
     <>
       <VisuallyHidden>{label}</VisuallyHidden>
       {statusTextNode}
+      {isDisabled ? (
+        <VisuallyHidden>{t('@astryx.step.status.unavailable')}</VisuallyHidden>
+      ) : null}
     </>
   ) : null;
 
