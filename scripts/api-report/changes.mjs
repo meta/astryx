@@ -3,11 +3,10 @@
 /**
  * @file Compare API reports and render the pull request's API changes.
  *
- * @input  the merge base's committed reports, the reports generated from the
- *         head's build, and the head's committed reports, per package
+ * @input  the merge base's reports, from its built API surface, and the
+ *         reports generated from the head's build, per package
  * @output added, changed, and removed rows per package, each with its
- *         signature and a usage example, plus whether the committed report is
- *         stale against the head's build; and the advisory Markdown the pull
+ *         signature and a usage example; and the advisory Markdown the pull
  *         request report embeds
  * @position scripts/api-report — evidence only: nothing here fails a check or
  *           decides acceptance (architecture:public-component-api INV24, INV13)
@@ -159,6 +158,8 @@ export function usageFor(pkg, row) {
       : `import '${spec}'`;
   if (kind === 'component') {
     if (!row.member || row.member === 'inherits') return `<${name} />`;
+    // An overload line is another call shape of the component, not a prop.
+    if (row.member.startsWith('overload ')) return `<${name} … />`;
     const literal = row.line.match(/'([^']+)'/);
     const value = literal
       ? `"${literal[1]}"`
@@ -180,13 +181,16 @@ export function usageFor(pkg, row) {
 }
 
 /**
- * @param {Array<{pkg: string, base: string|null, head: string, committed: string|null}>} packages
+ * @param {Array<{pkg: string, base: string|null, head: string,
+ *   baseSource?: 'build'|'head'|'unknown'}>} packages
+ *   `unknown`: the merge base could not be surfaced; `base` is null
  */
 export function computeChanges(packages) {
   return packages
-    .map(({pkg, base, head, committed}) => {
+    .map(({pkg, base, head, baseSource = 'build'}) => {
       // With no report at the merge base there is nothing to compare: the
-      // package's report is new, and every row would read as added.
+      // package is new there, or its merge base could not be surfaced, and
+      // every row would read as added.
       const baseline = base == null;
       const d = baseline
         ? {added: [], changed: [], removed: []}
@@ -194,8 +198,8 @@ export function computeChanges(packages) {
       return {
         pkg,
         baseline,
-        stale: committed != null && committed !== head,
-        missing: committed == null,
+        ...(baseSource === 'unknown' ? {baseUnknown: true} : {}),
+        baseSource,
         counts: {
           added: d.added.length,
           changed: d.changed.length,
@@ -241,39 +245,51 @@ const short = pkg => code(String(pkg ?? '').replace(/^@astryxdesign\//, ''));
 
 /**
  * The advisory API changes for the pull request report: one visible summary
- * line, with every row inside a closed disclosure.
+ * line, with every row inside a closed disclosure. Fields other than
+ * `baseline`, `baseUnknown`, `counts`, and `rows`, such as those an older
+ * head wrote, are ignored.
+ *
+ * With `compared: false` (no built surface of the merge base), the line says
+ * that nothing was compared and names each listed package as unknown. Rows
+ * are not shown: they do not come from a comparison of builds.
  * @param {ReturnType<typeof computeChanges>} changes
- * @returns {string} empty when nothing changed and every report is current
+ * @param {{compared?: boolean}} [options]
+ * @returns {string} empty when no package has a change, or when nothing was
+ *   compared and no package is listed
  */
-export function renderChanges(changes) {
-  const touched = (Array.isArray(changes) ? changes : [])
-    .map(c => ({...c, rows: Array.isArray(c?.rows) ? c.rows : []}))
-    .filter(
-      c =>
-        c.rows.length ||
-        c.stale === true ||
-        c.missing === true ||
-        c.baseline === true,
+export function renderChanges(changes, {compared = true} = {}) {
+  const list = (Array.isArray(changes) ? changes : []).map(c => ({
+    ...c,
+    rows: Array.isArray(c?.rows) ? c.rows : [],
+  }));
+  if (!compared) return renderNotCompared(list);
+  const unknown = list.filter(c => c.baseUnknown === true);
+  const touched = list.filter(
+    c => c.baseUnknown !== true && (c.rows.length || c.baseline === true),
+  );
+  if (!touched.length && !unknown.length) return '';
+  const parts = touched.map(c =>
+    c.baseline === true
+      ? `${short(c.pkg)} not in the merge base's build`
+      : `${short(c.pkg)} +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`,
+  );
+  // Packages the merge base could not surface share one headline entry.
+  if (unknown.length)
+    parts.push(
+      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
     );
-  if (!touched.length) return '';
-  const parts = touched.map(c => {
-    if (c.baseline === true && c.missing !== true)
-      return `${short(c.pkg)} new report${c.stale ? ' (stale: run `pnpm api:report`)' : ''}`;
-    const counts = c.rows.length
-      ? ` +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`
-      : ' no changes';
-    const note =
-      c.missing === true
-        ? ' (report not committed: run `pnpm api:report`)'
-        : c.stale === true
-          ? ' (report stale: run `pnpm api:report`)'
-          : '';
-    return `${short(c.pkg)}${counts}${note}`;
-  });
-  const rows = touched.flatMap(c =>
+  return (
+    [`**API changes:** ${parts.join('; ')}`, ...rowTable(touched)].join('\n') +
+    '\n'
+  );
+}
+
+/** The disclosure holding every row, or nothing without rows. */
+function rowTable(packages) {
+  const rows = packages.flatMap(c =>
     c.rows.map(r => ({...r, pkg: short(c.pkg)})),
   );
-  const L = [`**API changes:** ${parts.join('; ')}`];
+  const L = [];
   if (rows.length) {
     L.push(
       '',
@@ -293,12 +309,21 @@ export function renderChanges(changes) {
       ...(rows.length > MAX_ROWS
         ? [
             '',
-            `…and ${rows.length - MAX_ROWS} more; run \`pnpm api:report\` and read the report diff.`,
+            `…and ${rows.length - MAX_ROWS} more in this run's api-changes.json.`,
           ]
         : []),
       '',
       '</details>',
     );
   }
-  return L.join('\n') + '\n';
+  return L;
+}
+
+/** The summary line when the merge base had no built surface. */
+function renderNotCompared(list) {
+  const unknown = list.filter(
+    c => c.baseUnknown === true || c.baseline === true || c.rows.length,
+  );
+  if (!unknown.length) return '';
+  return `**API changes:** not compared: no built surface of the merge base; unknown: ${unknown.map(c => short(c.pkg)).join(', ')}\n`;
 }

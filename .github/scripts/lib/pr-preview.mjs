@@ -877,85 +877,100 @@ export async function reconcilePrComment({
       })
     : null;
   let body;
-  if (analysisReady) {
-    // The comment job's own reads, handed to the generator as files.
-    const inputs = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
-    const jobs = await sourceRunJobs({
-      github,
-      owner,
-      repo,
-      runId: identity.sourceRunId,
-    });
-    const impact = await gatherCiImpact({
-      github,
-      owner,
-      repo,
-      identity,
-      jobs,
-      historyPath: ciHistoryPath,
-    });
-    const impactPath = path.join(inputs, 'ci-impact.json');
-    if (impact) fs.writeFileSync(impactPath, JSON.stringify(impact));
-    // Frames only from this PR's assets branch for this exact head.
-    const framesPath = trustedFrames({frames: visualFrames, identity, inputs});
-    const previewPath = path.join(inputs, 'preview.json');
-    const jobsPath = path.join(inputs, 'jobs.json');
-    if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
-    if (jobs) fs.writeFileSync(jobsPath, JSON.stringify(jobs));
-    const args = [
-      generator,
-      '--analysis',
-      analysisPath,
-      ...(trustedHeadReport({
-        reportPath: baseStatsPath,
-        label: 'base stats',
+  // The generator's input files live only while the report renders.
+  let inputs = null;
+  try {
+    if (analysisReady) {
+      // The comment job's own reads, handed to the generator as files.
+      inputs = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
+      const jobs = await sourceRunJobs({
+        github,
+        owner,
+        repo,
+        runId: identity.sourceRunId,
+      });
+      const impact = await gatherCiImpact({
+        github,
+        owner,
+        repo,
         identity,
-        core,
-      })
-        ? ['--base-stats', baseStatsPath]
-        : []),
-      ...(trustedHeadReport({
-        reportPath: packageSizePath,
-        label: 'package size report',
+        jobs,
+        historyPath: ciHistoryPath,
+      });
+      const impactPath = path.join(inputs, 'ci-impact.json');
+      if (impact) fs.writeFileSync(impactPath, JSON.stringify(impact));
+      // Frames only from this PR's assets branch for this exact head.
+      const framesPath = trustedFrames({
+        frames: visualFrames,
         identity,
-        core,
-      })
-        ? ['--package-size', packageSizePath]
-        : []),
-      // Part of the analysis artifact, which pr-meta.json ties to this head.
-      ...(fs.existsSync(apiChangesPath)
-        ? ['--api-changes', apiChangesPath]
-        : []),
-      // No report means the audit did not run (it runs on main and release
-      // checks, or with the ci:run-a11y label); the comment says so.
-      ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
-      ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
-      ...(framesPath ? ['--visual-frames', framesPath] : []),
-      ...(trustedHeadReport({
-        reportPath: touchedPath,
-        label: 'touched-components report',
-        identity,
-        core,
-      })
-        ? ['--touched', touchedPath]
-        : []),
-      ...(preview ? ['--preview', previewPath] : []),
-      ...(jobs ? ['--jobs', jobsPath] : []),
-      ...(impact ? ['--ci-impact', impactPath] : []),
-      '--source-conclusion',
-      identity.sourceConclusion,
-      '--run-url',
-      runUrl,
-      '--pr-number',
-      String(identity.prNumber),
-    ];
-    try {
-      body = execute(process.execPath, args, {encoding: 'utf8'}).replace(
-        PR_ANALYSIS_MARKER,
-        `${PR_ANALYSIS_MARKER}\n${headMarker(identity.headSha)}`,
-      );
-    } catch (error) {
-      core.warning(`Could not render current analysis: ${error.message}`);
+        inputs,
+      });
+      const previewPath = path.join(inputs, 'preview.json');
+      const jobsPath = path.join(inputs, 'jobs.json');
+      if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
+      if (jobs) fs.writeFileSync(jobsPath, JSON.stringify(jobs));
+      const args = [
+        generator,
+        '--analysis',
+        analysisPath,
+        ...(trustedHeadReport({
+          reportPath: baseStatsPath,
+          label: 'base stats',
+          identity,
+          core,
+        })
+          ? ['--base-stats', baseStatsPath]
+          : []),
+        ...(trustedHeadReport({
+          reportPath: packageSizePath,
+          label: 'package size report',
+          identity,
+          core,
+        })
+          ? ['--package-size', packageSizePath]
+          : []),
+        // Part of the analysis artifact, which pr-meta.json ties to this head.
+        ...(fs.existsSync(apiChangesPath)
+          ? ['--api-changes', apiChangesPath]
+          : []),
+        // No report means the audit did not run (it runs on main and release
+        // checks, or with the ci:run-a11y label); the comment says so.
+        ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
+        ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
+        ...(framesPath ? ['--visual-frames', framesPath] : []),
+        ...(trustedHeadReport({
+          reportPath: touchedPath,
+          label: 'touched-components report',
+          identity,
+          core,
+        })
+          ? ['--touched', touchedPath]
+          : []),
+        ...(preview ? ['--preview', previewPath] : []),
+        ...(jobs ? ['--jobs', jobsPath] : []),
+        ...(impact ? ['--ci-impact', impactPath] : []),
+        '--source-conclusion',
+        identity.sourceConclusion,
+        '--run-url',
+        runUrl,
+        '--pr-number',
+        String(identity.prNumber),
+      ];
+      try {
+        body = execute(process.execPath, args, {encoding: 'utf8'}).replace(
+          PR_ANALYSIS_MARKER,
+          `${PR_ANALYSIS_MARKER}\n${headMarker(identity.headSha)}`,
+        );
+      } catch (error) {
+        core.warning(`Could not render current analysis: ${error.message}`);
+        body = safeCurrentBody({
+          identity,
+          runUrl,
+          message: fallbackMessage,
+          preview,
+        });
+      }
+    } else {
       body = safeCurrentBody({
         identity,
         runUrl,
@@ -963,13 +978,8 @@ export async function reconcilePrComment({
         preview,
       });
     }
-  } else {
-    body = safeCurrentBody({
-      identity,
-      runUrl,
-      message: fallbackMessage,
-      preview,
-    });
+  } finally {
+    if (inputs != null) fs.rmSync(inputs, {recursive: true, force: true});
   }
 
   // Rendering takes a moment. Confirm the reported attempt's identity again,

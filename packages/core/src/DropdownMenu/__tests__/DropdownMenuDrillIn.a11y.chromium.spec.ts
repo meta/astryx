@@ -13,7 +13,12 @@
  *   (`(pointer: coarse)` at open time) is what jsdom cannot exercise.
  */
 
-import {devices, expect, test, type Page} from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -37,6 +42,15 @@ async function mount(page: Page) {
     `${storybook.origin}/iframe.html?id=${storyId}&viewMode=story`,
   );
   await expect(page.getByTestId('drill-in-fixture')).toBeVisible();
+}
+
+/**
+ * The open popovers a person can perceive. While a menu enters under a
+ * finger, the layer runtime's input hold keeps an aria-hidden shield in the
+ * top layer. That shield is not a menu box.
+ */
+function perceivablePopovers(page: Page) {
+  return page.locator('[popover]:popover-open:not([aria-hidden="true"])');
 }
 
 /** The rows a person can see: not under a hidden wrapper, not in a closed popover. */
@@ -64,7 +78,7 @@ test.describe('on a phone (coarse pointer)', () => {
     const rootMenu = page.getByRole('menu', {name: 'Actions'});
     await expect(rootMenu).toBeVisible();
     await expect(shownRows(page)).toHaveText(['Rename', 'Move to', 'Delete']);
-    const popoversBefore = await page.locator('[popover]:popover-open').count();
+    const popoversBefore = await perceivablePopovers(page).count();
 
     // Drill in with a finger.
     const moveTo = page.getByRole('menuitem', {name: 'Move to'});
@@ -84,9 +98,7 @@ test.describe('on a phone (coarse pointer)', () => {
         'Actions',
       ),
     ).toBe(true);
-    expect(await page.locator('[popover]:popover-open').count()).toBe(
-      popoversBefore,
-    );
+    expect(await perceivablePopovers(page).count()).toBe(popoversBefore);
     await expect(shownRows(page)).toHaveText([
       'Back to Actions',
       'Folder A',
@@ -144,6 +156,54 @@ test.describe('on a phone (coarse pointer)', () => {
     await page.getByRole('menuitem', {name: 'Folder A'}).tap();
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
+
+  test("a drill-in tap's touch sends no click and no mouse event to the page (spec:AST-094 FR21)", async ({
+    page,
+  }) => {
+    await mount(page);
+    const trigger = page.getByRole('button', {name: 'Actions'});
+    await trigger.tap();
+    await expect(page.getByRole('menu', {name: 'Actions'})).toBeVisible();
+
+    // What the browser sends for the next touch, logged ahead of the page's own
+    // listeners, and, for the touchend, after them (whether it was cancelled).
+    await page.evaluate(() => {
+      const log: string[] = [];
+      (window as unknown as {fr21Log: string[]}).fr21Log = log;
+      for (const type of ['pointerup', 'mousedown', 'mouseup', 'click']) {
+        window.addEventListener(
+          type,
+          event => {
+            if (event.isTrusted) {
+              log.push(type);
+            }
+          },
+          true,
+        );
+      }
+      window.addEventListener('touchend', event => {
+        if (event.isTrusted) {
+          log.push(event.defaultPrevented ? 'touchend cancelled' : 'touchend');
+        }
+      });
+    });
+    await page.getByRole('menuitem', {name: 'Move to'}).tap();
+    await expect(page.getByRole('menu', {name: 'Move to'})).toBeVisible();
+    // Past the stray-click window, so a late click would have shown by now.
+    await page.waitForTimeout(700);
+
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {fr21Log: string[]}).fr21Log,
+      ),
+    ).toEqual(['pointerup', 'touchend cancelled']);
+    await expect(shownRows(page)).toHaveText([
+      'Back to Actions',
+      'Folder A',
+      'Folder B',
+      'Archive',
+    ]);
+  });
 });
 
 test.describe('on a laptop (fine pointer)', () => {
@@ -158,16 +218,14 @@ test.describe('on a laptop (fine pointer)', () => {
     const trigger = page.getByRole('button', {name: 'Actions'});
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const popoversBefore = await page.locator('[popover]:popover-open').count();
+    const popoversBefore = await perceivablePopovers(page).count();
 
     const moveTo = page.getByRole('menuitem', {name: 'Move to'});
     await moveTo.click();
     const flyout = page.getByRole('menu', {name: 'Move to'});
     await expect(flyout).toBeVisible();
     // A popover of its own, beside the row; the parent rows stay shown.
-    expect(await page.locator('[popover]:popover-open').count()).toBe(
-      popoversBefore + 1,
-    );
+    expect(await perceivablePopovers(page).count()).toBe(popoversBefore + 1);
     await expect(page.getByRole('menuitem', {name: 'Rename'})).toBeVisible();
     await expect(page.getByRole('menuitem', {name: /^Back to/})).toHaveCount(0);
     await expect(page.getByRole('menuitem', {name: 'Folder A'})).toBeFocused();

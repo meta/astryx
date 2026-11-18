@@ -31,6 +31,7 @@ import type {ThemeMotionConfig, ThemeMotionKnobs} from './themeMotion';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
+import {withoutUnsetComponents} from './mergeComponents';
 import {assertNoTokenCycles, resolveAdaptationLocalTokens} from './localTokens';
 
 // =============================================================================
@@ -226,18 +227,39 @@ function assertAllowedKeys(
   }
 }
 
-function cloneData<T>(value: T): T {
-  if (Array.isArray(value)) {
-    const cloned: unknown[] = [];
-    for (const item of value) {
-      cloned.push(cloneData(item));
+/**
+ * A deep copy of plain data. A value inside the objects that hold it never
+ * ends, so it is refused by name (`path`) instead of overflowing the stack.
+ */
+function cloneData<T>(
+  value: T,
+  path = 'value',
+  holding: Set<object> = new Set(),
+): T {
+  if (Array.isArray(value) || isRecord(value)) {
+    if (holding.has(value)) {
+      throw new Error(
+        `${path} holds an object it sits in, so it never ends and is no theme value.`,
+      );
     }
-    return cloned as T;
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [key, cloneData(nested)]),
-    ) as T;
+    holding.add(value);
+    try {
+      if (Array.isArray(value)) {
+        const cloned: unknown[] = [];
+        for (const [i, item] of value.entries()) {
+          cloned.push(cloneData(item, `${path}[${i}]`, holding));
+        }
+        return cloned as T;
+      }
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          key,
+          cloneData(nested, `${path}.${key}`, holding),
+        ]),
+      ) as T;
+    } finally {
+      holding.delete(value);
+    }
   }
   return value;
 }
@@ -334,7 +356,7 @@ function normalizeCondition(
     throw new Error(`${path} must contain at least one condition.`);
   }
 
-  const condition = cloneData(defined) as ThemeAdaptationCondition;
+  const condition = cloneData(defined, path) as ThemeAdaptationCondition;
   if (condition.width !== undefined) {
     assertRecord(condition.width, `${path}.width`);
     assertAllowedKeys(condition.width, WIDTH_CONDITION_KEYS, `${path}.width`);
@@ -396,7 +418,7 @@ function normalizeValue(value: unknown, path: string): ThemeAdaptationValue {
       throw new Error(`${path}.${key} must be an object.`);
     }
   }
-  return cloneData(value);
+  return cloneData(value, path);
 }
 
 function normalizeRule(value: unknown, path: string): ThemeAdaptationRule {
@@ -858,12 +880,19 @@ function assertNoReachableTokenCycles(
           const queries = matchingRuleIndexes
             .map(index => rules[index].query)
             .join('; ');
+          const ruleContext = `defineTheme("${themeName}").adaptations ${
+            matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
+          } [${indexes}] (${queries})`;
           assertNoTokenCycles(
             effective,
-            `defineTheme("${themeName}").adaptations ${
-              matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
-            } [${indexes}] (${queries})`,
+            ruleContext,
             relevantNames,
+            // A value no matching rule sets is the theme's own root token (a
+            // root local token that holds itself is refused before this).
+            name =>
+              relevantNames.has(name)
+                ? ruleContext
+                : `defineTheme("${themeName}").tokens`,
           );
         }
       }
@@ -1077,7 +1106,8 @@ export function resolveThemeAdaptationRules(
         ? omitRootTypeScaleDefaults(
             resolved.components,
             rootComponents,
-            rule.value.components,
+            // A value the rule leaves undefined is no write of its own.
+            withoutUnsetComponents(rule.value.components),
           )
         : resolved.components,
     };

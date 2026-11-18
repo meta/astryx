@@ -142,11 +142,9 @@ describe('useToast fallback viewport theme mode', () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveAttribute('data-theme', 'light');
     });
-    // Whichever test clicks first in this file finds the fallback proxy still
-    // pending: addToast queues the entry and kicks off the ctxReady.then(...)
-    // microtask that later delivers it to the real context. Awaiting an async
-    // act() flushes that chain instead of letting it resolve outside any act
-    // scope.
+    // Whichever test clicks first in this file finds the fallback viewport
+    // not yet connected, so its toast waits in the queue. The queue hands it
+    // over in the viewport's effect, and an async act() flushes that effect.
     await act(async () => {
       fireEvent.click(screen.getByText('Trigger branded'));
     });

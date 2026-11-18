@@ -14,6 +14,11 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Dialog} from '@astryxdesign/core/Dialog';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from '@astryxdesign/core/SegmentedControl';
 import {useState} from 'react';
 
 // Inline icons for story demos (not in the default icon registry)
@@ -108,7 +113,9 @@ export const Simplest: Story = {
  * soft-keyboard Return inserts a newline instead of sending (and never strands
  * a multi-line prompt); on a pointer device Enter sends as usual. The same
  * seam covers shortcuts like Cmd/Ctrl+Enter — just call submit yourself.
- * IME composition is always respected regardless.
+ * `enterKeyHint` keeps the touch keyboard's Return key honest: Send where
+ * Enter sends, Return where it inserts a line break. IME composition is
+ * always respected regardless.
  */
 export const EnterBehavior: Story = {
   render: () => {
@@ -125,6 +132,9 @@ export const EnterBehavior: Story = {
                 ? 'Enter inserts a newline on touch — use Send'
                 : 'Enter sends; Shift+Enter for a newline'
             }
+            // The Return key says what Enter does: Send where Enter sends,
+            // Return where it inserts a line break.
+            enterKeyHint={isCoarsePointer ? 'enter' : 'send'}
             onKeyDown={e => {
               if (isCoarsePointer && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -498,4 +508,51 @@ export const DisabledStreamingNarrow: Story = {
       '1',
     );
   },
+};
+
+/**
+ * Browser fixture: "Open dialog" opens a Dialog holding a SegmentedControl,
+ * and "Close dialog" unmounts it while it is still open (its key changes).
+ * The empty composer behind it must still take a click and typing.
+ */
+function KeyedDialogFixture() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [selection, setSelection] = useState('a');
+  return (
+    <>
+      <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            label="Chat input"
+            value={draft}
+            onChange={setDraft}
+          />
+        }
+      />
+      <Dialog
+        key={String(isOpen)}
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        aria-label="Example dialog">
+        <SegmentedControl
+          label="Options"
+          value={selection}
+          onChange={setSelection}>
+          <SegmentedControlItem value="a" label="A" />
+          <SegmentedControlItem value="b" label="B" />
+        </SegmentedControl>
+        <Button label="Close dialog" onClick={() => setIsOpen(false)} />
+      </Dialog>
+    </>
+  );
+}
+
+export const BehindAKeyedDialog: Story = {
+  tags: ['!autodocs'],
+  render: () => <KeyedDialogFixture />,
 };

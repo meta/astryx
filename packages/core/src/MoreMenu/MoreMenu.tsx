@@ -30,7 +30,14 @@ import type {LayerAlignment, LayerPlacement} from '../Layer';
 import type {ButtonVariant, ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {stableClassName} from '../naming';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+import {pickDataAttributes} from '../utils/themeProps';
+
+registerEnglishFallback(english);
 
 export interface MoreMenuProps extends Pick<
   BaseProps,
@@ -59,7 +66,8 @@ export interface MoreMenuProps extends Pick<
   variant?: ButtonVariant;
 
   /**
-   * Size of the trigger button.
+   * Size of the trigger button. Without it, the trigger takes the
+   * surrounding size, else `'md'`.
    * @default 'md'
    */
   size?: ButtonSize;
@@ -91,14 +99,16 @@ export interface MoreMenuProps extends Pick<
   alignment?: LayerAlignment;
 
   /**
-   * Menu presentation policy. `adaptive` uses a BottomSheet on compact
-   * coarse-pointer viewports and an anchored popover elsewhere.
-   * @default 'popover'
+   * Menu presentation policy, forwarded to DropdownMenu. `adaptive` uses a
+   * BottomSheet on compact coarse-pointer viewports and an anchored popover
+   * elsewhere. Omitted, the menu is the anchored popover, and a finger follows
+   * UIMenu's press on every device. `'popover'` pins the pointer behavior on
+   * every device.
    */
   presentation?: DropdownMenuPresentation;
 
   /**
-   * Controlled open state for the menu.
+   * Controlled open state for the menu. Pair it with `onOpenChange`.
    */
   isMenuOpen?: boolean;
 
@@ -143,8 +153,9 @@ export function MoreMenu({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MoreMenuProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
   const size = useSize(sizeProp, 'md');
   const moreIcon = useIcon('moreHorizontal');
@@ -164,6 +175,7 @@ export function MoreMenu({
       alignment={alignment}
       presentation={presentation}
       button={{
+        ...pickDataAttributes(rest),
         label,
         icon: icon ?? moreIcon,
         variant,

@@ -20,6 +20,7 @@ import {
   fixupCoverage,
   pendingChangesets,
   isPackedFile,
+  isValidatedPreviousReleaseMergeBack,
   isWorkspaceDir,
   jsonKeyPaths,
   memoryTree,
@@ -603,6 +604,24 @@ describe('rule 1 — a shipped change names its package', () => {
     );
     expect(problem).toContain(
       'pnpm changeset:new --packages @astryxdesign/core --category <fix|feat>',
+    );
+  });
+
+  it('never exempts a normal packages/cli commit as a release merge-back', () => {
+    expect(
+      isValidatedPreviousReleaseMergeBack('/not-read-for-a-title-mismatch', {
+        sha: '1'.repeat(40),
+        subject: 'fix(cli): change shipped behavior (#1)',
+        releasedRef: 'v0.7.8',
+      }),
+    ).toBe(false);
+
+    const base = repo();
+    const head = repo({
+      'packages/cli/api/doctor/doctor.mjs': `${DOCTOR_RELEASED}\nexport const changed = true;\n`,
+    });
+    expect(change(base, head).problems[0]).toContain(
+      '@astryxdesign/cli: this change ships to consumers without a Changeset naming @astryxdesign/cli',
     );
   });
 

@@ -4,7 +4,8 @@
  * @file nativeScroll.ts
  * @input An element a touch landed on
  * @output Exports createNativeScrollProbe (the NativeScrollProbe a host gives
- *   each touch) and parseTouchAction
+ *   each touch, and each wheel gesture without the touch-action narrowing)
+ *   and parseTouchAction
  * @position DOM half of the scroll coordination in packages/core/src/gestures
  *
  * Answers one question for a recognizer without letting it touch the DOM:
@@ -27,32 +28,22 @@
  * read fresh on every question, since a native scroll moves them.
  */
 
+import {isRtlElement} from '../hooks/isRtlElement';
 import type {NativeScrollProbe} from './types';
+import {parentAcrossShadow} from '../utils/flatTree';
+import {
+  isInsideScrollView,
+  parseTouchAction,
+  rootOverflow,
+  SCROLLABLE_OVERFLOW as SCROLLABLE,
+  type AllowedPans,
+} from '../utils/scrollView';
+import {isElement} from '../utils/nodeType';
 
-export interface AllowedPans {
-  readonly x: boolean;
-  readonly y: boolean;
-}
+export {parentAcrossShadow};
 
-/** Which pans a `touch-action` value lets the browser perform. */
-export function parseTouchAction(value: string): AllowedPans {
-  const tokens = value.trim().split(/\s+/);
-  if (tokens.includes('auto') || tokens.includes('manipulation')) {
-    return {x: true, y: true};
-  }
-  if (tokens.includes('none')) {
-    return {x: false, y: false};
-  }
-  return {
-    x: tokens.some(
-      token =>
-        token === 'pan-x' || token === 'pan-left' || token === 'pan-right',
-    ),
-    y: tokens.some(
-      token => token === 'pan-y' || token === 'pan-up' || token === 'pan-down',
-    ),
-  };
-}
+export {parseTouchAction};
+export type {AllowedPans};
 
 interface ChainEntry {
   readonly element: Element;
@@ -61,35 +52,9 @@ interface ChainEntry {
   readonly isRtl: boolean;
   readonly stopsX: boolean;
   readonly stopsY: boolean;
-  /**
-   * The scroller sits beyond a `position: fixed` ancestor of the touch: it
-   * still scrolls under the finger, but it does not carry the touched
-   * element, so the element is not inside a scroll view (spec:AST-094 FR11).
-   */
-  readonly isBeyondFixed: boolean;
 }
 
-const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
 const EDGE_TOLERANCE = 1;
-
-/**
- * The node's parent in the flat tree: a slotted node's slot, then out of
- * shadow roots to their hosts, so a scroller inside a shadow tree around the
- * slot is found.
- */
-export function parentAcrossShadow(node: Node): Node | null {
-  const slot =
-    node instanceof Element || node instanceof Text ? node.assignedSlot : null;
-  if (slot != null) {
-    return slot;
-  }
-  if (node.parentNode != null) {
-    return node.parentNode instanceof ShadowRoot
-      ? node.parentNode.host
-      : node.parentNode;
-  }
-  return null;
-}
 
 interface Chain {
   readonly entries: ChainEntry[];
@@ -97,7 +62,7 @@ interface Chain {
   readonly allowsPan: boolean;
 }
 
-function buildChain(target: Element): Chain {
+function buildChain(target: Element, readsTouchAction: boolean): Chain {
   const doc = target.ownerDocument;
   const view = doc.defaultView;
   if (view == null) {
@@ -108,19 +73,20 @@ function buildChain(target: Element): Chain {
   let allowX = true;
   let allowY = true;
   let reachedRoot = false;
-  let isBeyondFixed = false;
   for (
     let node: Node | null = target;
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (!(node instanceof Element)) {
+    if (!isElement(node)) {
       continue;
     }
     const style = view.getComputedStyle(node);
-    const pans = parseTouchAction(style.touchAction || 'auto');
-    allowX &&= pans.x;
-    allowY &&= pans.y;
+    if (readsTouchAction) {
+      const pans = parseTouchAction(style.touchAction || 'auto');
+      allowX &&= pans.x;
+      allowY &&= pans.y;
+    }
     const isRoot = node === root || node === doc.documentElement;
     if (isRoot) {
       reachedRoot = true;
@@ -136,20 +102,17 @@ function buildChain(target: Element): Chain {
         element,
         x: scrollsX && allowX,
         y: scrollsY && allowY,
-        isRtl: style.direction === 'rtl',
+        // The writing direction through core's one helper.
+        isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
-        isBeyondFixed,
       });
     }
     if (isRoot) {
       break;
     }
-    if (style.position === 'fixed') {
-      isBeyondFixed = true;
-    }
   }
-  if (!reachedRoot && root instanceof Element) {
+  if (!reachedRoot && isElement(root)) {
     chain.push({
       element: root,
       x: allowX && SCROLLABLE.has(rootOverflow(doc, 'x')),
@@ -157,7 +120,6 @@ function buildChain(target: Element): Chain {
       isRtl: false,
       stopsX: false,
       stopsY: false,
-      isBeyondFixed,
     });
   }
   return {entries: chain, allowsPan: allowX || allowY};
@@ -178,28 +140,6 @@ function overscrollBehavior(style: CSSStyleDeclaration): [string, string] {
   return [x || first, y || second];
 }
 
-/**
- * The viewport scrolls unless the root or the body clips it (a scroll lock
- * sets `overflow: hidden` on one of them).
- */
-function rootOverflow(doc: Document, axis: 'x' | 'y'): string {
-  const view = doc.defaultView;
-  if (view == null) {
-    return 'hidden';
-  }
-  for (const element of [doc.documentElement, doc.body]) {
-    if (element == null) {
-      continue;
-    }
-    const style = view.getComputedStyle(element);
-    const value = axis === 'x' ? style.overflowX : style.overflowY;
-    if (value === 'hidden' || value === 'clip') {
-      return 'hidden';
-    }
-  }
-  return 'auto';
-}
-
 function canMoveY(element: Element, dy: number): boolean {
   if (element.scrollHeight - element.clientHeight <= EDGE_TOLERANCE) {
     return false;
@@ -210,7 +150,10 @@ function canMoveY(element: Element, dy: number): boolean {
         element.scrollHeight - element.clientHeight - EDGE_TOLERANCE + 0.5;
 }
 
-function canMoveX(entry: ChainEntry, dx: number): boolean {
+function canMoveX(
+  entry: Pick<ChainEntry, 'element' | 'isRtl'>,
+  dx: number,
+): boolean {
   const {element} = entry;
   const overflow = element.scrollWidth - element.clientWidth;
   if (overflow <= EDGE_TOLERANCE) {
@@ -224,14 +167,47 @@ function canMoveX(entry: ChainEntry, dx: number): boolean {
     : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
 }
 
-/** A probe of the native scrollers under `target`. */
-export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
+/**
+ * Whether `element` itself scrolls natively now for a finger moving by
+ * (dx, dy). It uses the probe's own test of each scroller: overflow that
+ * scrolls on that axis, and room past the edge tolerance. The position must
+ * also be short of the end it moves toward, a right-to-left range included.
+ * A wheel moves the content the other way, so pass its deltas negated.
+ */
+export function canElementScroll(
+  element: Element,
+  dx: number,
+  dy: number,
+): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return false;
+  }
+  const style = view.getComputedStyle(element);
+  if (dy !== 0 && SCROLLABLE.has(style.overflowY) && canMoveY(element, dy)) {
+    return true;
+  }
+  return (
+    dx !== 0 &&
+    SCROLLABLE.has(style.overflowX) &&
+    canMoveX({element, isRtl: isRtlElement(element as HTMLElement)}, dx)
+  );
+}
+
+/**
+ * A probe of the native scrollers under `target`. A wheel scrolls whatever
+ * `touch-action` says, which narrows only a finger's pan: a wheel's probe
+ * passes `readsTouchAction: false`.
+ */
+export function createNativeScrollProbe(
+  target: unknown,
+  {readsTouchAction = true}: {readsTouchAction?: boolean} = {},
+): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
-    chain ??=
-      target instanceof Element
-        ? buildChain(target)
-        : {entries: [], allowsPan: false};
+    chain ??= isElement(target)
+      ? buildChain(target, readsTouchAction)
+      : {entries: [], allowsPan: false};
     return chain.entries;
   };
   return {
@@ -262,15 +238,8 @@ export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
       return chain?.allowsPan === true;
     },
     get isInsideScroller(): boolean {
-      return getChain().some(
-        entry =>
-          !entry.isBeyondFixed &&
-          ((entry.y &&
-            entry.element.scrollHeight - entry.element.clientHeight >
-              EDGE_TOLERANCE) ||
-            (entry.x &&
-              entry.element.scrollWidth - entry.element.clientWidth >
-                EDGE_TOLERANCE)),
+      return (
+        isElement(target) && isInsideScrollView(target, {readsTouchAction})
       );
     },
   };

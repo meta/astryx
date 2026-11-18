@@ -130,7 +130,10 @@ async function sectionResponse({catalog, node, lang, entry}, sections, match) {
  * with the section its own section read returns for the query; when that
  * section's key (its `id`, else the key its title derives) is the query in
  * some guides, those guides answer first. No guide, or several, fail with ERR_UNKNOWN_SECTION, naming
- * the guides to read instead.
+ * the guides to read instead. Every guide is read from `catalog`, the one the
+ * namespace read loaded, so the read loads the project once, not once per
+ * guide below the namespace.
+ * @param {import('../../../../foundation/discovery/docs-discovery.mjs').DocsCatalog} catalog
  * @param {import('../../../../foundation/doc-compiler/tree.mjs').DocsTree} tree
  * @param {import('../../../../foundation/doc-compiler/tree.mjs').TreeNode} namespace
  * @param {string} sectionName
@@ -138,6 +141,7 @@ async function sectionResponse({catalog, node, lang, entry}, sections, match) {
  * @returns {Promise<import('../../docs.type.mjs').DocsDetailSectionResponse>}
  */
 export async function namespaceSection(
+  catalog,
   tree,
   namespace,
   sectionName,
@@ -148,7 +152,7 @@ export async function namespaceSection(
   /** @type {Omit<GuideMatch, 'match'>[]} */
   const reads = [];
   for (const guide of guides) {
-    const resolved = await resolveTopicDocs(guide.route, options);
+    const resolved = await resolveTopicDocs(guide.route, options, catalog);
     reads.push({guide, resolved, sections: readerSections(resolved.node)});
   }
 

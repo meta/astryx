@@ -22,8 +22,10 @@
  *
  *   surface — one representative story per Core component, plus explicit
  *     visual-baseline / visual-theme-matrix stories, in Neutral light and dark.
- *   probe — the smallest story set that renders every theming target, in the
- *     generated Probe fixture light and dark.
+ *   probe — a small story set that renders every theming target, in the
+ *     generated Probe fixture light and dark. It keeps the stories the
+ *     accepted baseline already holds while they still render a target no
+ *     other kept story does, so it plans itself again from its own baseline.
  *
  * `theme-matrix` remains available for focused theme evidence, but it does not
  * own permanent baseline keys. `full` widens `surface` to every story for an
@@ -543,6 +545,22 @@ export function acceptedVisualThemes(manifest, themes, defaultTheme) {
   return [...accepted].sort();
 }
 
+/**
+ * Ids of the stories the accepted baseline holds probe-theme shots for. The
+ * probe cover keeps them first while they still render a target no other kept
+ * story does.
+ * @param {{shots?: Record<string, {storyId?: string, theme?: string}>}} manifest
+ * @param {string} probeTheme
+ * @returns {Set<string>}
+ */
+export function probeBaselineStories(manifest, probeTheme) {
+  return new Set(
+    Object.values(manifest?.shots ?? {})
+      .filter(shot => shot.theme === probeTheme && typeof shot.storyId === 'string')
+      .map(shot => shot.storyId),
+  );
+}
+
 /** Current stable stories that own at least one accepted baseline contract. */
 export function baselineVisualStories(stories, manifest) {
   const indexed = new Map(stories.map(story => [story.id, story]));
@@ -626,6 +644,7 @@ function rank(name) {
  * @param {string[]} [options.matrixThemes] - restrict theme-matrix to changed shipped themes
  * @param {ReturnType<typeof readStoryIndex>} [options.themeStories] - accepted stories to render for changed themes
  * @param {string} [options.probeTheme] - name of the generated coverage theme
+ * @param {Set<string>} [options.baselineStories] - ids of stories the accepted baseline already holds probe shots for
  * @returns {Shot[]}
  */
 export function buildPlan({
@@ -640,6 +659,7 @@ export function buildPlan({
   matrixThemes = [],
   themeStories = [],
   probeTheme = 'probe',
+  baselineStories = new Set(),
 }) {
   /** @type {Map<string, Shot>} */
   const shots = new Map();
@@ -733,6 +753,7 @@ export function buildPlan({
       targets,
       observations,
       probeTheme,
+      baselineStories,
     })) {
       add(shot, reason);
     }
@@ -756,43 +777,96 @@ export function buildPlan({
  * verifies all of them at once. Without observations there is nothing to aim
  * at — the probe tier needs the scout.
  *
+ * The cover starts from the accepted baseline: it keeps each story the
+ * baseline already holds probe shots for while that story still renders a
+ * target no kept story covers, widest first. Only the targets left after that
+ * get a greedy fill, and then each story the rest of the plan already covers
+ * is dropped, narrowest first. A visual-theme-matrix story plans its probe
+ * shots anyway, so its targets count as covered from the start. The plan is a
+ * fixed point: fed back as the
+ * baseline, it plans the same stories, so a baseline sync settles in one step
+ * and the plan moves again only when a target is gained or lost. Between
+ * stories that cover the same number of targets, the smaller story id wins.
+ *
  * @param {object} options
  * @param {ReturnType<typeof readStoryIndex>} options.stories
  * @param {Array<{key: string, component: string}>} options.targets
  * @param {Record<string, Record<string, string[]>>} [options.observations]
  * @param {string} options.probeTheme
+ * @param {Set<string>} options.baselineStories
  */
-function probeShots({stories, targets, observations, probeTheme}) {
+function probeShots({stories, targets, observations, probeTheme, baselineStories}) {
   if (!observations) return [];
 
   const wanted = new Set(targets.map(target => target.key));
+  // A visual-theme-matrix story always plans its probe shots (probe:opt-in),
+  // so the targets it renders are covered before the cover starts, and it is
+  // never picked or dropped here.
+  const optIn = new Set(
+    stories
+      .filter(story => (story.tags ?? []).includes(VISUAL_THEME_MATRIX_TAG))
+      .map(story => story.id),
+  );
   const byStory = new Map();
+  const renders = new Map();
   for (const story of stories) {
     const rendered = Object.keys(observations[story.id] ?? {}).filter(key => wanted.has(key));
-    if (rendered.length > 0) byStory.set(story, new Set(rendered));
+    if (rendered.length > 0) {
+      renders.set(story.id, new Set(rendered));
+      if (!optIn.has(story.id)) byStory.set(story, new Set(rendered));
+    }
   }
 
-  // Greedy set cover: fewest stories that between them render every target.
   const planned = [];
   const uncovered = new Set(wanted);
-  while (uncovered.size > 0) {
-    let best = null;
-    let bestCount = 0;
-    for (const [story, rendered] of byStory) {
-      const count = [...rendered].filter(key => uncovered.has(key)).length;
-      if (count > bestCount) {
-        best = story;
-        bestCount = count;
+  for (const id of optIn) for (const key of renders.get(id) ?? []) uncovered.delete(key);
+  /** @param {(story: {id: string}) => boolean} eligible */
+  const cover = eligible => {
+    while (uncovered.size > 0) {
+      let best = null;
+      let bestCount = 0;
+      for (const [story, rendered] of byStory) {
+        if (!eligible(story)) continue;
+        const count = [...rendered].filter(key => uncovered.has(key)).length;
+        if (count > bestCount || (count > 0 && count === bestCount && story.id < best.id)) {
+          best = story;
+          bestCount = count;
+        }
       }
+      if (!best) return;
+      for (const key of byStory.get(best)) uncovered.delete(key);
+      for (const mode of MODES) {
+        planned.push({shot: {...toShotBase(best), theme: probeTheme, mode}, reason: 'probe'});
+      }
+      byStory.delete(best);
     }
-    if (!best) break;
-    for (const key of byStory.get(best)) uncovered.delete(key);
-    for (const mode of MODES) {
-      planned.push({shot: {...toShotBase(best), theme: probeTheme, mode}, reason: 'probe'});
-    }
-    byStory.delete(best);
+  };
+  // Keep the baseline's stories first, then a greedy set cover for the rest.
+  cover(story => baselineStories.has(story.id));
+  cover(() => true);
+  // Drop each story the rest of the plan already covers, narrowest first, so
+  // the plan, fed back as the baseline, plans itself again.
+  const kept = [...new Set(planned.map(entry => entry.shot.storyId))];
+  const rendersOf = id => [...(renders.get(id) ?? [])];
+  for (;;) {
+    const redundant = kept
+      .filter(id =>
+        rendersOf(id).every(
+          key =>
+            kept.some(other => other !== id && renders.get(other)?.has(key)) ||
+            [...optIn].some(other => renders.get(other)?.has(key)),
+        ),
+      )
+      .sort(
+        (a, b) =>
+          rendersOf(a).length - rendersOf(b).length ||
+          Number(baselineStories.has(a)) - Number(baselineStories.has(b)) ||
+          (a < b ? 1 : -1),
+      );
+    if (redundant.length === 0) break;
+    kept.splice(kept.indexOf(redundant[0]), 1);
   }
-  return planned;
+  return planned.filter(entry => kept.includes(entry.shot.storyId));
 }
 
 /**

@@ -14,7 +14,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   CAROUSEL_PATTERN,
   blockingResults,

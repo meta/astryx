@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [public-api, layout, theming]
-verified_by: [packages/core/src/Selector/Selector.test.tsx]
+verified_by:
+  [
+    packages/core/src/Selector/Selector.test.tsx,
+    apps/storybook/rtl-audit/targets.json,
+  ]
 modules: []
 families: []
 design_specs: []
@@ -142,13 +146,14 @@ map.
 
 ## Verification map
 
-| Contract             | Verification                                                                                                 | Representative states                                    | Mutation or failure expectation                                                                                                                                                 | Audit section                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1                  | `Selector.test.tsx` "renders custom option endContent" and "renders the selected option through renderValue" | Option with end content; value with icon and description | A dropped end content, label, description, or icon fails. Evidence gap: no test asserts the small secondary presentation of a semantic icon name or icon component.             | `audit:SelectorOption/anatomy`  |
-| FR2                  | `Selector.test.tsx` "follows the caller's SelectorOption layout, but folds inline in a group"                | Standalone trigger; trigger in an InputGroup             | A stacked row in an InputGroup, or an inline row standalone by default, fails. Evidence gap: no test passes `layout="inline"` outside an InputGroup.                            | `audit:SelectorOption/layout`   |
-| FR3                  | `Selector.test.tsx` "lets a narrow list shrink an option so its label can ellipsize"                         | Default option in a narrow list                          | A missing `selector-option` row or a nonzero minimum width fails. Evidence gap: no test asserts the padding and radius reset, or `xstyle`, `className`, and `style` on the row. | `audit:SelectorOption/theming`  |
-| ORD1, ORD2, PR1, AR1 | ORD1 is covered by the FR2 row. Evidence gap: no test asserts ORD2, PR1, or the decorative icon              | —                                                        | —                                                                                                                                                                               | `audit:SelectorOption/behavior` |
-| FR4                  | Evidence gap: no test, matching the FR4 gap                                                                  | —                                                        | —                                                                                                                                                                               | `audit:SelectorOption/api`      |
+| Contract             | Verification                                                                                                    | Representative states                                    | Mutation or failure expectation                                                                                                                                                 | Audit section                   |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| FR1                  | `Selector.test.tsx` "renders custom option endContent" and "renders the selected option through renderValue"    | Option with end content; value with icon and description | A dropped end content, label, description, or icon fails. Evidence gap: no test asserts the small secondary presentation of a semantic icon name or icon component.             | `audit:SelectorOption/anatomy`  |
+| FR2                  | `Selector.test.tsx` "follows the caller's SelectorOption layout, but folds inline in a group"                   | Standalone trigger; trigger in an InputGroup             | A stacked row in an InputGroup, or an inline row standalone by default, fails. Evidence gap: no test passes `layout="inline"` outside an InputGroup.                            | `audit:SelectorOption/layout`   |
+| FR3                  | `Selector.test.tsx` "lets a narrow list shrink an option so its label can ellipsize"                            | Default option in a narrow list                          | A missing `selector-option` row or a nonzero minimum width fails. Evidence gap: no test asserts the padding and radius reset, or `xstyle`, `className`, and `style` on the row. | `audit:SelectorOption/theming`  |
+| ORD1, ORD2, PR1, AR1 | ORD1 is covered by the FR2 row. Evidence gap: no test asserts ORD2, PR1, or the decorative icon                 | —                                                        | —                                                                                                                                                                               | `audit:SelectorOption/behavior` |
+| FR4                  | Evidence gap: no test, matching the FR4 gap                                                                     | —                                                        | —                                                                                                                                                                               | `audit:SelectorOption/api`      |
+| RTL relation         | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Selector / With icons` (popup opened) | Icon and label in an open option; LTR and RTL            | An option icon that is not at the inline start of its label fails D2.                                                                                                           | `audit:SelectorOption/i18n-rtl` |
 
 ## Current-state impact
 

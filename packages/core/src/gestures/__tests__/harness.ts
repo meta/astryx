@@ -20,16 +20,49 @@ import type {
   TouchConsumer,
 } from '../types';
 
-/** A clock that only moves when the test says so. */
+/**
+ * A clock that only moves when the test says so. Its timers run only when a
+ * test calls `runDue`.
+ */
 export class ManualClock implements GestureClock {
   time = 0;
+  private readonly pending = new Map<
+    number,
+    {deadline: number; callback: () => void}
+  >();
+  private nextHandle = 1;
   now(): number {
     return this.time;
   }
-  setTimeout(): number {
-    return 0;
+  setTimeout(callback: () => void, ms: number): number {
+    const handle = this.nextHandle++;
+    this.pending.set(handle, {deadline: this.time + ms, callback});
+    return handle;
   }
-  clearTimeout(): void {}
+  clearTimeout(handle: unknown): void {
+    this.pending.delete(handle as number);
+  }
+  /** Move to `time`, running every timer due by then, earliest first. */
+  runDue(time: number): void {
+    for (;;) {
+      let due: [number, {deadline: number; callback: () => void}] | null = null;
+      for (const entry of this.pending) {
+        if (
+          entry[1].deadline <= time &&
+          (due == null || entry[1].deadline < due[1].deadline)
+        ) {
+          due = entry;
+        }
+      }
+      if (due == null) {
+        break;
+      }
+      this.pending.delete(due[0]);
+      this.time = Math.max(this.time, due[1].deadline);
+      due[1].callback();
+    }
+    this.time = time;
+  }
 }
 
 export interface Harness {

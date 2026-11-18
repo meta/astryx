@@ -11,8 +11,8 @@
  * @position Implements the Swift theme generator spec
  *   (specs/swift/library/theme-generator.md). Run by `generate:swift-ios`; the
  *   Swift output is committed and a test fails when any file drifts. CSS
- *   values convert in css-values.mjs; a value it cannot convert fails the
- *   run (G7).
+ *   values convert in css-values.mjs; this file turns its notes into
+ *   warnings and its errors into a fallback or a failed run (G15).
  *
  * SYNC: When modified, update this header and the theme generator spec.
  */
@@ -23,7 +23,6 @@ import {fileURLToPath} from 'node:url';
 import {
   checkFamilyIsStatic,
   CssValueError,
-  OUTSIDE_P3,
   toColor,
   toLeading,
   toPoints,
@@ -248,12 +247,15 @@ function convertToken(token, value, group, typedSoFar, notes) {
 
 /**
  * Every kept token of a theme in one mode, read only from core's resolver:
- * `{token: {group, member, value}}` with typed values (G1, G5, G7). A value
- * with no static form fails the run with the theme, mode, token, value, and
- * reason.
+ * `{token: {group, member, value}}` with typed values (G1, G5, G7). Each loss
+ * is pushed onto `warnings` (G15). A value with no static form takes core's
+ * default for that token with a warning; with no default that converts, the
+ * run fails.
  */
-async function resolveMode(theme, mode, warn) {
+async function resolveMode(theme, mode, warnings) {
   const {resolveThemeTokens} = await core();
+  const defaults =
+    theme === CORE_DEFAULTS ? {} : resolveThemeTokens(null, {mode});
   const out = {};
   const entries = Object.entries(
     resolveThemeTokens(theme === CORE_DEFAULTS ? null : theme, {mode}),
@@ -263,37 +265,67 @@ async function resolveMode(theme, mode, warn) {
     .sort(([a], [b]) => Number(isLeading(a)) - Number(isLeading(b)));
   for (const [token, value] of entries) {
     const {group, member} = swiftMember(token);
-    let typed;
+    const where = `${theme.name} ${mode}: ${token} = ${value}`;
     const notes = [];
+    let typed;
     try {
       typed = convertToken(token, valueForMode(value, mode), group, out, notes);
     } catch (error) {
       if (!(error instanceof CssValueError)) throw error;
+      // Notes from the failed read describe a value that is not emitted.
+      notes.length = 0;
+      const fallback = error.hasNoStaticForm ? defaults[token] : undefined;
       const outcome = error.hasNoStaticForm
         ? 'Swift has no static value'
         : 'the Swift theme generator does not read this form';
-      throw new Error(
-        `${theme.name} ${mode}: ${token} = ${value}: ${error.message}; ${outcome}`,
-      );
+      try {
+        if (fallback === undefined) throw error;
+        typed = convertToken(
+          token,
+          valueForMode(fallback, mode),
+          group,
+          out,
+          [],
+        );
+      } catch {
+        throw new Error(`${where}: ${error.message}; ${outcome}`);
+      }
+      notes.push(`${error.message}; core's default ${fallback} used instead`);
+    }
+    const emitted = swiftValue(memberType(group, token), typed);
+    for (const note of new Set(notes)) {
+      warnings.push(`${where} → ${emitted}: ${note}`);
     }
     out[token] = {group, member, value: typed};
-    // A color outside Display P3 warns (G7).
-    if (notes.includes(OUTSIDE_P3))
-      warn(`${theme.name} ${mode}: ${token} = ${value}: ${OUTSIDE_P3}`);
   }
   return out;
 }
 
-/** Light and dark tokens of a theme, checked for matching names (G7). */
-export async function resolveTheme(theme, {warn = () => {}} = {}) {
-  const light = await resolveMode(theme, 'light', warn);
-  const dark = await resolveMode(theme, 'dark', warn);
+/** The error `--strict` raises for a run's warnings (G15). */
+export function strictError(warnings) {
+  return new Error(
+    `${warnings.length} warning(s), which --strict treats as errors:\n${warnings.map(w => `error: ${w}`).join('\n')}`,
+  );
+}
+
+/**
+ * Light and dark tokens of a theme, checked for matching names (G7).
+ * `warnings` collects every loss (G15); without a list, each prints to
+ * standard error. `strict` fails on the first theme with any.
+ */
+export async function resolveTheme(theme, {warnings, strict = false} = {}) {
+  const own = [];
+  const light = await resolveMode(theme, 'light', own);
+  const dark = await resolveMode(theme, 'dark', own);
   for (const token of new Set([...Object.keys(light), ...Object.keys(dark)])) {
     if (!(token in light) || !(token in dark)) {
       const missing = token in light ? 'dark' : 'light';
       throw new Error(`${theme.name} ${missing}: ${token} is missing`);
     }
   }
+  if (strict && own.length) throw strictError(own);
+  if (warnings) warnings.push(...own);
+  else for (const warning of own) console.warn(`warning: ${warning}`);
   return {light, dark};
 }
 
@@ -616,18 +648,16 @@ export const themeFileName = swiftName => `${capitalize(swiftName)}Theme.swift`;
  * The generated Swift file for one theme (G3). `source` names where the theme
  * comes from, such as `@astryxdesign/theme-neutral`. A product theme
  * (`regenerate` set) lives in the app's own target, so it imports `Astryx` and
- * its header names the app's own regenerate command.
+ * its header names the app's own regenerate command. Each loss goes onto
+ * `warnings` (printed to standard error when no list is passed); `strict`
+ * turns a loss into an error (G15).
  */
 export async function renderSwiftTheme(
   theme,
-  {
-    source = 'a product theme',
-    regenerate,
-    warn = message => console.warn(`warning: ${message}`),
-  } = {},
+  {source = 'a product theme', regenerate, warnings, strict} = {},
 ) {
   const swiftName = swiftThemeName(theme.name);
-  const {light, dark} = await resolveTheme(theme, {warn});
+  const {light, dark} = await resolveTheme(theme, {warnings, strict});
   const surface = tokenSurface(light);
   const header =
     regenerate === undefined
@@ -708,18 +738,22 @@ export async function generatedThemes(load) {
   return themes;
 }
 
-/** Every generated file as `{file: contents}`, keyed by absolute path. */
-export async function renderAll(load) {
+/**
+ * Every generated file as `{file: contents}`, keyed by absolute path. Each
+ * loss goes onto `warnings`, or prints to standard error without a list
+ * (G15).
+ */
+export async function renderAll(load, {warnings} = {}) {
   const themes = await generatedThemes(load);
   const files = {};
-  const {light} = await resolveTheme(themes[0].theme);
+  const {light} = await resolveTheme(themes[0].theme, {warnings: []});
   files[SWIFT_TOKENS_FILE] = renderTokenTypes(tokenSurface(light));
   for (const {theme, source} of themes) {
     const file = path.join(
       SWIFT_THEME_DIR,
       themeFileName(swiftThemeName(theme.name)),
     );
-    files[file] = await renderSwiftTheme(theme, {source});
+    files[file] = await renderSwiftTheme(theme, {source, warnings});
   }
   return files;
 }
@@ -735,10 +769,22 @@ async function viteLoad(file) {
   return module;
 }
 
+/**
+ * Prints a run's warnings at its end, or with `--strict` fails on them before
+ * any file is written (G15).
+ */
+export function finishRun(warnings, strict, write) {
+  if (strict && warnings.length) throw strictError(warnings);
+  write();
+  for (const warning of warnings) console.warn(`warning: ${warning}`);
+}
+
 async function main(argv) {
+  const strict = argv.includes('--strict');
+  const warnings = [];
   const at = argv.indexOf('--theme');
   if (at !== -1) {
-    // A product's own theme: `--theme <module>#<export> [--out <dir>]`.
+    // A product's own theme: `--theme <module>#<export> [--out <dir>] [--strict]`.
     const [modulePath, exportName] = argv[at + 1].split('#');
     const module = await viteLoad(path.resolve(modulePath));
     const theme = module[exportName];
@@ -746,36 +792,48 @@ async function main(argv) {
     const outAt = argv.indexOf('--out');
     const outDir = outAt === -1 ? process.cwd() : path.resolve(argv[outAt + 1]);
     const file = path.join(outDir, themeFileName(swiftThemeName(theme.name)));
-    const regenerate = `node packages/native/scripts/swift-ios-theme.mjs --theme ${argv[at + 1]}${outAt === -1 ? '' : ` --out ${argv[outAt + 1]}`}`;
-    fs.writeFileSync(
-      file,
-      await renderSwiftTheme(theme, {source: modulePath, regenerate}),
-    );
-    for (const token of localTokensLeftOut(theme)) {
-      console.warn(`left out: ${theme.name} local token ${token}`);
-    }
-    console.log(`wrote ${file}`);
+    const regenerate = `node packages/native/scripts/swift-ios-theme.mjs --theme ${argv[at + 1]}${outAt === -1 ? '' : ` --out ${argv[outAt + 1]}`}${strict ? ' --strict' : ''}`;
+    const swift = await renderSwiftTheme(theme, {
+      source: modulePath,
+      regenerate,
+      warnings,
+    });
+    finishRun(warnings, strict, () => {
+      fs.writeFileSync(file, swift);
+      for (const token of localTokensLeftOut(theme)) {
+        console.warn(`left out: ${theme.name} local token ${token}`);
+      }
+      console.log(`wrote ${file}`);
+    });
     return;
   }
-  const files = await renderAll(viteLoad);
-  for (const {theme} of await generatedThemes(viteLoad)) {
-    for (const token of localTokensLeftOut(theme)) {
-      console.warn(
-        `left out: ${theme.name} local token ${token} (core's resolver does not return local tokens per mode yet)`,
-      );
+  const files = await renderAll(viteLoad, {warnings});
+  const themes = await generatedThemes(viteLoad);
+  finishRun(warnings, strict, () => {
+    for (const {theme} of themes) {
+      for (const token of localTokensLeftOut(theme)) {
+        console.warn(
+          `left out: ${theme.name} local token ${token} (core's resolver does not return local tokens per mode yet)`,
+        );
+      }
     }
-  }
-  fs.mkdirSync(SWIFT_THEME_DIR, {recursive: true});
-  for (const existing of fs.readdirSync(SWIFT_THEME_DIR)) {
-    const file = path.join(SWIFT_THEME_DIR, existing);
-    if (existing.endsWith('.swift') && !(file in files)) fs.rmSync(file);
-  }
-  for (const [file, contents] of Object.entries(files)) {
-    fs.writeFileSync(file, contents);
-    console.log(`wrote ${path.relative(PACKAGE_ROOT, file)}`);
-  }
+    fs.mkdirSync(SWIFT_THEME_DIR, {recursive: true});
+    for (const existing of fs.readdirSync(SWIFT_THEME_DIR)) {
+      const file = path.join(SWIFT_THEME_DIR, existing);
+      if (existing.endsWith('.swift') && !(file in files)) fs.rmSync(file);
+    }
+    for (const [file, contents] of Object.entries(files)) {
+      fs.writeFileSync(file, contents);
+      console.log(`wrote ${path.relative(PACKAGE_ROOT, file)}`);
+    }
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await main(process.argv.slice(2));
+  try {
+    await main(process.argv.slice(2));
+  } catch (error) {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

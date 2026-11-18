@@ -3,16 +3,16 @@
 /**
  * @file resolveMotion.test.ts
  * @input resolveMotion.ts, the shared UIKit tables, a stubbed computed style
- * @output Proof that, with the per-role tables internal (spec:AST-094
- *   DEC-15), a role plays its table value whatever a scope's CSS variable
- *   says, reads no style, and leaves values that are not roles alone; and
- *   that the animator plays the table's spring
+ * @output Proof that a role plays its table value whatever a scope's CSS
+ *   variable says (spec:AST-094 DEC-15). No role's variable is read, and
+ *   values that are not roles are left alone. The animator plays the table's
+ *   spring. The theme's tempo has its own file: resolveMotion.tempo.test.ts
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
  *   browser proof: animator.interaction.browser.spec.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createAnimator} from './animator';
+import {createMotionEngine} from './animator';
 import {coast} from './coast';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
@@ -35,8 +35,11 @@ beforeEach(() => {
   vi.spyOn(window, 'getComputedStyle').mockImplementation(
     () =>
       ({
-        getPropertyValue: () => {
-          reads += 1;
+        getPropertyValue: (name: string) => {
+          // The theme's tempo is the one property a role may read.
+          if (name !== '--_astryx-motion-tempo') {
+            reads += 1;
+          }
           return '';
         },
       }) as unknown as CSSStyleDeclaration,
@@ -74,7 +77,7 @@ describe('resolveMotion while the per-role tables stay internal (DEC-15)', () =>
       timing.stateChangeMs,
     );
     expect(resolveMotion(null, springs.settle)).toBe(springs.settle);
-    // No style is read to resolve a role.
+    // No role's variable is read to resolve a role.
     expect(reads).toBe(0);
   });
 
@@ -93,7 +96,7 @@ describe('resolveMotion while the per-role tables stay internal (DEC-15)', () =>
 describe('the animator', () => {
   it("plays the table's spring even where a scope sets the role's variable", () => {
     const child = scoped({'--motion-springs-settle': '0.8s 0.3'});
-    const animator = createAnimator(child, {now: () => 0});
+    const animator = createMotionEngine(child, {now: () => 0});
     animator.set({y: 300});
     animator.animate({y: 0}, {spring: springs.settle}, {at: 0});
     const table = solveSpring(toSpring(springs.settle), {from: 300, to: 0});
@@ -104,7 +107,7 @@ describe('the animator', () => {
   });
   it('a coast plays the table edge spring whatever a scope sets: scroll.bounce is no role', () => {
     const child = scoped({'--motion-scroll-bounce': '0.8s 0.3'});
-    const animator = createAnimator(child, {now: () => 0});
+    const animator = createMotionEngine(child, {now: () => 0});
     animator.set({x: 60});
     // Released past the edge: straight back on the edge spring.
     animator.decay(

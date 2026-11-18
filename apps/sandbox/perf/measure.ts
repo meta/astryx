@@ -10,6 +10,9 @@
  *   (`traceRendering`); heap and listener counts from the DevTools protocol
  *   after a forced garbage collection; interaction latency from the page's
  *   own Event Timing entries, the measurement behind INP.
+ *
+ * SYNC: Keep the metric names equal to METRICS in
+ *   .github/scripts/perf-trend.mjs.
  */
 
 import type {CDPSession, Page} from '@playwright/test';
@@ -100,7 +103,10 @@ async function unmount(page: Page): Promise<void> {
  * one in the same page and returns that sample. The first cycle pays for
  * loading and compiling the scene's code and for caches that live past an
  * unmount, so the sample is a warm mount, and its heap and listener deltas
- * are what one more cycle leaves behind. The page must be freshly loaded on
+ * are what one more cycle leaves behind. The measured cycle runs under
+ * `traceRendering` and the warm-up does not, so the heap figure also holds the
+ * trace's own retained objects (tens of KB, the same on every run), which
+ * shifts the level but not the trend. The page must be freshly loaded on
  * `?scene=<id>`.
  */
 export async function measureScene(

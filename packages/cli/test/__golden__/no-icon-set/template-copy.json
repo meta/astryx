@@ -8,6 +8,7 @@
     "fileName": "page.tsx",
     "filesCopied": 1,
     "demoMediaReplaced": 0,
+    "demoContentReplaced": 0,
     "notes": [
       "<text>",
       "<text>"
@@ -15,7 +16,8 @@
     "missingPackages": [
       "@heroicons/react"
     ],
-    "installCommand": "pnpm add @heroicons/react@\"^2.2.0\""
+    "installCommand": "pnpm add @heroicons/react@\"^2.2.0\"",
+    "isReady": true
   },
   "meta": {
     "answeredBy": {

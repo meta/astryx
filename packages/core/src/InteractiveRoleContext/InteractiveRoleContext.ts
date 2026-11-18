@@ -4,7 +4,7 @@
 
 /**
  * @file InteractiveRoleContext.ts
- * @input React createContext, use
+ * @input createSharedContext, use
  * @output Exports InteractiveRoleContext, useInteractiveRoleContext
  * @position Context primitive; consumed by useInteractiveRole hook
  *
@@ -23,8 +23,9 @@
  * - /packages/core/src/InteractiveRoleContext/index.ts
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
 import type {InteractiveRole} from '../hooks/useInteractiveRole';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Context that provides a role override to child components.
@@ -37,7 +38,11 @@ import type {InteractiveRole} from '../hooks/useInteractiveRole';
  * `null` means no parent is overriding — resolve based on own props.
  */
 export const InteractiveRoleContext =
-  createContext<InteractiveRole | null>(null);
+  createSharedContext<InteractiveRole | null>(
+    'InteractiveRoleContext',
+    1,
+    null,
+  );
 InteractiveRoleContext.displayName = 'InteractiveRoleContext';
 
 /**

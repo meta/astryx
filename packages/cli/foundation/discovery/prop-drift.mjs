@@ -54,12 +54,14 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 import {judgeType} from './type-match.mjs';
 import {typeTextTooOld} from './type-text.mjs';
 import {
   unresolvedGlobals,
   unresolvedReference,
 } from './unresolved-references.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {'not_in_code' | 'not_in_doc' | 'required_mismatch' | 'type_mismatch' | 'default_mismatch'} PropDriftKind
@@ -761,7 +763,7 @@ function inDeclaredOrder(ts, checker, type, symbol) {
   /** @type {(t: any) => string} */
   const text = t => checker.typeToString(t);
   return [...type.types].sort(
-    (a, b) => place(a) - place(b) || text(a).localeCompare(text(b)),
+    (a, b) => place(a) - place(b) || compareText(text(a), text(b)),
   );
 }
 
@@ -1791,7 +1793,7 @@ export function comparePropTables(tables, options) {
         reason: `the package's TypeScript config has an error, so props were not read (${project.error})`,
       });
     }
-    unchecked.sort((a, b) => a.component.localeCompare(b.component));
+    unchecked.sort((a, b) => compareText(a.component, b.component));
     return {
       status: 'checked',
       typescript: version,
@@ -1802,6 +1804,10 @@ export function comparePropTables(tables, options) {
       typesNotCompared: [],
     };
   }
+  // Parsed once per process for these options: every check reads the same
+  // library and package declarations.
+  const host = ts.createCompilerHost(project.options);
+  host.getSourceFile = keepSourceFiles(ts, host, project.options);
   const program = ts.createProgram({
     rootNames: [
       ...new Set([
@@ -1810,6 +1816,7 @@ export function comparePropTables(tables, options) {
       ]),
     ],
     options: project.options,
+    host,
   });
   const checker = program.getTypeChecker();
   const isOwnFile = ownFileTest(root);
@@ -2207,15 +2214,14 @@ export function comparePropTables(tables, options) {
   // sort one component's findings among another's that shares its prefix.
   findings.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.prop.localeCompare(b.prop) ||
-      a.kind.localeCompare(b.kind),
+      compareText(a.component, b.component) ||
+      compareText(a.prop, b.prop) ||
+      compareText(a.kind, b.kind),
   );
-  unchecked.sort((a, b) => a.component.localeCompare(b.component));
+  unchecked.sort((a, b) => compareText(a.component, b.component));
   typesNotCompared.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.reason.localeCompare(b.reason),
+      compareText(a.component, b.component) || compareText(a.reason, b.reason),
   );
   return {
     status: 'checked',
@@ -2422,7 +2428,7 @@ export async function comparePropDocs(components, options) {
   return {
     ...report,
     unchecked: [...unchecked, ...report.unchecked].sort((a, b) =>
-      a.component.localeCompare(b.component),
+      compareText(a.component, b.component),
     ),
   };
 }

@@ -4,9 +4,11 @@
 
 /**
  * @file useCalendarNavigation.ts
- * @input Uses React useState, useMemo, useCallback, useLocale, PlainDate utilities
- * @output Exports useCalendarNavigation hook for month navigation
- * @position Calendar-specific hook; used by Calendar
+ * @input Uses React useState, useMemo, useCallback, useLocale, PlainDate and
+ *   calendar-system utilities
+ * @output Exports useCalendarNavigation hook for month navigation in any
+ *   calendar system (Gregorian by default)
+ * @position Calendar-specific public hook
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Calendar/hooks/index.ts
@@ -19,13 +21,17 @@ import {
   plainDateFromISO,
   plainDateToISO,
   plainDateToday,
-  plainDateSetFirstOfMonth,
-  plainDateAddMonths,
   plainDateAddDays,
-  plainDateFormat,
-  DATE_FORMAT_MONTH_YEAR,
 } from '../../utils/plainDate';
+import {
+  type CalendarSystem,
+  calendarAddMonths,
+  calendarMonthOf,
+  calendarYearMonthOf,
+  formatCalendarMonthLabel,
+} from '../../utils/calendarSystem';
 import {useLocale} from '../../i18n';
+import {resolveShownCalendar} from '../../i18n/useCalendarSystem';
 
 /**
  * Configuration for calendar navigation
@@ -39,17 +45,31 @@ export interface UseCalendarNavigationOptions {
   onFocusDateChange?: (focusDate: ISODateString) => void;
   /** Number of months to display */
   numberOfMonths?: 1 | 2;
+  /**
+   * The calendar system whose months the hook steps and labels. Dates stay
+   * Gregorian ISO. The hook never reads the InternationalizationProvider
+   * calendar. Calendars other than gregory, iso8601, buddhist, roc, and
+   * japanese need Temporal; without it, the hook steps Gregorian months and
+   * warns once in development.
+   * @default 'gregory'
+   */
+  calendar?: CalendarSystem;
 }
 
 /**
  * Return type for useCalendarNavigation hook
  */
 export interface UseCalendarNavigationReturn {
-  /** The base month (first day of the focus month) as a PlainDate */
+  /** The Gregorian first day of the focus month */
   baseMonth: PlainDate;
-  /** Array of visible months to render as PlainDates */
+  /** The Gregorian first day of each visible month */
   visibleMonths: PlainDate[];
-  /** Formatted label for the month header */
+  /**
+   * The year and month numbers of each visible month in `calendar`, as
+   * `useCalendarDays` reads them with the same `calendar`
+   */
+  visibleCalendarMonths: {year: number; month: number}[];
+  /** Formatted label for the month header, in `calendar` */
   monthYearLabel: string;
   /** Navigate to previous/next month */
   navigateMonth: (
@@ -88,6 +108,13 @@ export interface UseCalendarNavigationReturn {
  * // Navigate from arrow key (with focus tracking)
  * navigateMonth(1, focusedDate, 1); // horizontal offset
  * navigateMonth(1, focusedDate, 7); // vertical offset
+ *
+ * // Persian months, laid out by useCalendarDays
+ * const nav = useCalendarNavigation({initialValue, calendar: 'persian'});
+ * const {weeks} = useCalendarDays({
+ *   ...nav.visibleCalendarMonths[0],
+ *   calendar: 'persian',
+ * });
  * ```
  */
 export function useCalendarNavigation(
@@ -98,8 +125,13 @@ export function useCalendarNavigation(
     focusDate: focusDateProp,
     onFocusDateChange,
     numberOfMonths = 1,
+    calendar: calendarOption = 'gregory',
   } = options;
   const locale = useLocale();
+  const calendar = resolveShownCalendar(
+    calendarOption,
+    'useCalendarNavigation',
+  );
 
   // Pending focus target after month navigation
   const [pendingFocus, setPendingFocus] = useState<ISODateString | null>(null);
@@ -122,32 +154,40 @@ export function useCalendarNavigation(
     ? plainDateFromISO(focusDateProp)
     : internalFocusDate;
 
-  // Base month (first day of focus month)
-  const baseMonth = useMemo(() => {
-    return plainDateSetFirstOfMonth(focusDate);
-  }, [focusDate]);
+  // A controlled focus date is a new object on each render. Key the memo on
+  // its ISO string.
+  const focusIso = plainDateToISO(focusDate);
+  const shownMonths = useMemo(() => {
+    const first = calendarMonthOf(calendar, plainDateFromISO(focusIso));
+    return Array.from({length: numberOfMonths}, (_, i) =>
+      calendarAddMonths(calendar, first, i),
+    );
+  }, [calendar, focusIso, numberOfMonths]);
 
-  // Generate visible months
-  const visibleMonths = useMemo(() => {
-    return Array.from({length: numberOfMonths}, (_, i) => {
-      return plainDateAddMonths(baseMonth, i);
-    });
-  }, [baseMonth, numberOfMonths]);
+  const visibleMonths = useMemo(
+    () => shownMonths.map(month => month.start),
+    [shownMonths],
+  );
+  const baseMonth = visibleMonths[0];
 
-  // Format month header
-  const monthYearLabel = useMemo(() => {
-    if (numberOfMonths === 1) {
-      return plainDateFormat(visibleMonths[0], DATE_FORMAT_MONTH_YEAR, locale);
-    }
-    return visibleMonths
-      .map(m => plainDateFormat(m, DATE_FORMAT_MONTH_YEAR, locale))
-      .join(' – ');
-  }, [visibleMonths, numberOfMonths, locale]);
+  const visibleCalendarMonths = useMemo(
+    () => shownMonths.map(month => calendarYearMonthOf(calendar, month)),
+    [calendar, shownMonths],
+  );
+
+  // Each month is its own stand-alone label.
+  const monthYearLabel = useMemo(
+    () =>
+      shownMonths
+        .map(month => formatCalendarMonthLabel(calendar, month, locale))
+        .join(' – '),
+    [calendar, shownMonths, locale],
+  );
 
   // Navigate to previous/next month
   const navigateMonth = useCallback(
     (delta: number, focusedDate?: ISODateString, offset?: number) => {
-      const newMonth = plainDateAddMonths(baseMonth, delta);
+      const newMonth = calendarAddMonths(calendar, shownMonths[0], delta).start;
       const newISO = plainDateToISO(newMonth);
 
       // Calculate target focus date if provided
@@ -159,13 +199,12 @@ export function useCalendarNavigation(
         setPendingFocus(plainDateToISO(targetDate));
       }
 
-      if (onFocusDateChange) {
-        onFocusDateChange(newISO);
-      } else {
+      onFocusDateChange?.(newISO);
+      if (!isControlledFocus) {
         setInternalFocusDate(newMonth);
       }
     },
-    [baseMonth, onFocusDateChange],
+    [calendar, shownMonths, isControlledFocus, onFocusDateChange],
   );
 
   // Clear pending focus
@@ -176,6 +215,7 @@ export function useCalendarNavigation(
   return {
     baseMonth,
     visibleMonths,
+    visibleCalendarMonths,
     monthYearLabel,
     navigateMonth,
     pendingFocus,

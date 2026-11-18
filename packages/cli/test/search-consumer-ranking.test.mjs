@@ -10,7 +10,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {search} from '../api/search/search.mjs';
+import {requireNatively} from '../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../api/search/search.mjs')} */
+const {search} = require('../api/search/search.mjs');
 
 // Each case: [query, expected-name-in-top-3, must-NOT-be-first]
 /** @type {Array<[string, string, string?]>} */

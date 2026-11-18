@@ -14,6 +14,8 @@ export type RadioGroupBinding =
   | 'RadioListItem'
   | 'SegmentedControl'
   | 'SegmentedControlItem'
+  | 'Pagination dots'
+  | 'Pagination dot'
   | 'DropdownMenuRadioGroup'
   | 'DropdownMenuRadioItem';
 
@@ -283,11 +285,10 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-group-disabled',
     binding: 'SegmentedControl',
-    summary: 'a disabled segmented group outside the tab sequence',
+    summary: 'a disabled segmented group with one tab stop',
     facts: groupFacts({
       disabled: true,
       operable: false,
-      tabReachable: false,
       spaceSelection: false,
       pointerSelection: false,
       arrowSelection: false,
@@ -359,13 +360,12 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-option-group-disabled',
     binding: 'SegmentedControlItem',
-    summary:
-      'a selected segment disabled by its group and removed from Tab order',
+    summary: 'a selected segment disabled by its group that keeps the Tab stop',
     facts: optionFacts({
       checked: true,
       disabled: true,
       operable: false,
-      tabReachable: false,
+      tabReachable: true,
       pointerCancellation: false,
     }),
     subjectName: 'List',
@@ -388,6 +388,40 @@ export const RADIO_GROUP_BINDING_STATES = [
     storyId: story('segmented-option-group-disabled-with-message'),
   },
 
+  {
+    id: 'pagination-dots-group',
+    binding: 'Pagination dots',
+    summary:
+      'the dots of a three-page Pagination as one radio group, page 1 current',
+    facts: groupFacts({visibleLabel: false}),
+    subjectName: 'Page indicators',
+    relations: {
+      first: {role: 'radio', name: 'Page 1'},
+      second: {role: 'radio', name: 'Page 2'},
+      third: {role: 'radio', name: 'Page 3'},
+    },
+    storyId: story('pagination-dots-group'),
+  },
+  {
+    id: 'pagination-dot-unselected',
+    binding: 'Pagination dot',
+    summary: 'a dot for a page that is not current',
+    facts: optionFacts({visibleLabel: false}),
+    subjectName: 'Page 2',
+    storyId: story('pagination-dot-unselected'),
+  },
+  {
+    id: 'pagination-dot-selected',
+    binding: 'Pagination dot',
+    summary: 'the dot for the current page, the roving Tab stop',
+    facts: optionFacts({
+      checked: true,
+      tabReachable: true,
+      visibleLabel: false,
+    }),
+    subjectName: 'Page 1',
+    storyId: story('pagination-dot-selected'),
+  },
   {
     id: 'menu-group-selected',
     binding: 'DropdownMenuRadioGroup',
@@ -490,12 +524,6 @@ export const RADIO_GROUP_EXCLUSIONS = [
     classification: 'out-of-scope',
     reason:
       'TabMenu emits menuitemradio inside its menu-owned overflow navigation; it is not a standalone radio-group part.',
-  },
-  {
-    owner: 'Pagination dots',
-    classification: 'out-of-scope',
-    reason:
-      'Pagination dots are buttons in a named group with aria-current page semantics, not radio or radiogroup nodes.',
   },
   {
     owner: 'Home and End keyboard shortcuts',

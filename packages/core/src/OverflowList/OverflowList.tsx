@@ -22,7 +22,6 @@ import {
   type ReactNode,
   type ReactElement,
   Children,
-  useCallback,
   useRef,
   useState,
 } from 'react';
@@ -31,7 +30,7 @@ import {isRenderable} from '../utils/isRenderable';
 import type {SpacingStep} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
-import {useOverflow} from '../hooks/useOverflow';
+import {useOverflowInternal} from '../hooks/useOverflow';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
@@ -284,15 +283,47 @@ export function OverflowList({
   const observeParent = behavior === 'observeParent';
   const isMultiRow = maxRows != null && maxRows > 1;
 
-  const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflow(itemCount, {
+  // Re-run measurement when keyed children change without resizing the row.
+  // The measured key delays reporting until that measurement has committed.
+  // Lists without the callback skip all identity work.
+  const measurementKey = onOverflowChange
+    ? JSON.stringify({
+        children: childArray.map((child, index) => [index, child.key]),
+        gap,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+        behavior,
+      })
+    : '';
+  const [measuredKey, setMeasuredKey] = useState(measurementKey);
+  // Only the multi-row path renders from `rowHeight` (it caps the
+  // container's height), so only that path tracks it.
+  const {
+    containerRef,
+    measureRef,
+    visibleCount,
+    hasOverflow,
+    rowHeight,
+    remeasure,
+  } = useOverflowInternal(
+    itemCount,
+    {
       gap: gapPx,
       minVisibleItems,
       maxVisibleItems,
       maxRows,
       collapseFrom,
       behavior,
-    });
+    },
+    {
+      tracksRows: isMultiRow,
+      // The measured key moves with the measurement's result, so the report
+      // never sees a key that is ahead of the visible set.
+      onMeasure: () => setMeasuredKey(measurementKey),
+    },
+  );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -314,30 +345,13 @@ export function OverflowList({
   // so the indicator renders at its maximum possible width.
   const measureIndicator = overflowRenderer?.(allItems);
 
-  // Re-run measurement when keyed children change without resizing the row.
-  // The measured key delays reporting until that measurement has committed.
-  // Lists without the callback skip all identity work.
-  const measurementKey = onOverflowChange
-    ? JSON.stringify({
-        children: childArray.map((child, index) => [index, child.key]),
-        gap,
-        minVisibleItems,
-        maxVisibleItems,
-        maxRows,
-        collapseFrom,
-        behavior,
-      })
-    : '';
-  const [measuredKey, setMeasuredKey] = useState(measurementKey);
-  const reportMeasureRef = useCallback(
-    (element: HTMLElement | null) => {
-      measureRef(element);
-      if (element) {
-        setMeasuredKey(measurementKey);
-      }
-    },
-    [measureRef, measurementKey],
-  );
+  // Keyed children that change without resizing the row report no resize,
+  // so a new key measures again.
+  useIsomorphicLayoutEffect(() => {
+    if (measuredKey !== measurementKey) {
+      remeasure();
+    }
+  }, [measuredKey, measurementKey, remeasure]);
 
   // Report after measurement, before paint, so a standing menu updates in the
   // same frame as the visible row. Keys distinguish membership and order while
@@ -350,6 +364,8 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||
@@ -366,7 +382,7 @@ export function OverflowList({
     <>
       {/* Hidden measurement container */}
       <div
-        ref={reportMeasureRef}
+        ref={measureRef}
         aria-hidden="true"
         inert
         {...stylex.props(styles.measureContainer, gapStyles[gap])}>

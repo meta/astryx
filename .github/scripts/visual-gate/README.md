@@ -36,7 +36,9 @@ PR accessibility is intentionally smaller. With `ci:run-a11y` it runs an
 explicit changed-component axe scope (including grouped-folder owners), plus
 the fast modal-close, theme-var, and story-play guards. Without the label, the
 default touched-components check audits only the touched components' stories,
-without the guards. Empty/shared scope never falls back to all stories, and
+without the guards, and runs up to four browser accessibility spec files the
+pull request adds or modifies (scoped and `always` specs; `audit` and
+`release-only` specs wait). Empty/shared scope never falls back to all stories, and
 missing or approximate analysis fails rather than granting an empty scope.
 The full axe roster, whole-repository accessibility spec-test contracts and their
 pixel/evidence uploads run only during `release-check`.

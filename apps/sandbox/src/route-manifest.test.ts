@@ -81,6 +81,9 @@ describe('Sandbox static export contract', () => {
       routes.find(item => item.route === '/pages/mobile-prototypes/'),
     ).toMatchObject({group: 'raw'});
     expect(
+      routes.find(item => item.route === '/pages/text-types/'),
+    ).toMatchObject({group: 'raw'});
+    expect(
       routes.find(item => item.route === '/templates/work-item-detail/'),
     ).toMatchObject({group: 'fullscreen'});
     expect(
@@ -107,8 +110,20 @@ describe('Sandbox static export contract', () => {
     );
     expect(canHydrate('/pages/component-scores/', '?filter=all')).toBe(true);
     expect(canHydrate('/pages/shell-lab/', '')).toBe(true);
+    expect(canHydrate('/pages/chat-layout/', '?case=docked')).toBe(false);
+    expect(canHydrate('/pages/chat-layout/', '')).toBe(true);
     expect(canHydrate('/pages/perf-scenes/', '?scene=table')).toBe(false);
     expect(canHydrate('/pages/perf-scenes/', '')).toBe(true);
+    expect(
+      canHydrate('/pages/alert-dialog-cases/', '?case=alert-over-a-toast'),
+    ).toBe(false);
+    expect(canHydrate('/pages/alert-dialog-cases/', '')).toBe(true);
+    expect(canHydrate('/pages/list-reorder-cases/', '?case=list')).toBe(false);
+    expect(canHydrate('/pages/list-reorder-cases/', '')).toBe(true);
+    expect(canHydrate('/pages/scroll-edge-taps/', '?case=refresh')).toBe(false);
+    expect(canHydrate('/pages/scroll-edge-taps/', '')).toBe(true);
+    expect(canHydrate('/pages/swipe-actions-cases/', '?case=mail')).toBe(false);
+    expect(canHydrate('/pages/swipe-actions-cases/', '')).toBe(true);
   });
 
   it('does not turn unknown URLs, dynamic segments or traversal into a 200 fallback', () => {

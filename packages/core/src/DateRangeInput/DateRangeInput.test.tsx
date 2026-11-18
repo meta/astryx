@@ -954,13 +954,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         <DateRangeInput label="Range" value={null} onChange={() => {}} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Su',
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
+        'Sun',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
       ]);
     });
 
@@ -974,13 +974,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
 
@@ -994,13 +994,13 @@ describe('DateRangeInput statusVariant forwarding', () => {
         />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
   });

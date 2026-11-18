@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "format-toolbar",
+  "source": "fwc-11",
+  "title": "Formatting toolbar with tooltips and toggle buttons",
+  "prompt": "Build a text-formatting toolbar with three toggle buttons named \"Bold\", \"Italic\" and \"Underline\", grouped as a toolbar (role=\"toolbar\") labelled \"Formatting\". Each button shows a tooltip on hover and on keyboard focus with its name and shortcut: \"Bold (Ctrl+B)\", \"Italic (Ctrl+I)\" and \"Underline (Ctrl+U)\". Each button toggles its pressed state, which it reports with aria-pressed. Below the toolbar, show \"Active: none\" or the active formats in toolbar order, for example \"Active: Bold, Underline\"."
+}

@@ -28,8 +28,26 @@ export const COMPONENT_VAR_FIELDS = [
 /** Fields of the emitted `DerivedVar` interface. */
 export const DERIVED_VAR_FIELDS = ['property', 'vars', 'expand', 'replaces'];
 
+/** Fields of the emitted `ComponentIconSlot` interface. */
+export const COMPONENT_ICON_SLOT_FIELDS = [
+  'slot',
+  'description',
+  'fallback',
+  'state',
+  'whenNull',
+];
+
+/** Fields of the emitted `ComponentIconSlotState` interface. */
+export const COMPONENT_ICON_SLOT_STATE_FIELDS = ['name', 'type', 'description'];
+
 /** Fields of the emitted `ThemingDoc` interface. */
-export const THEMING_DOC_FIELDS = ['container', 'targets', 'vars', 'derived'];
+export const THEMING_DOC_FIELDS = [
+  'container',
+  'targets',
+  'vars',
+  'derived',
+  'componentIcons',
+];
 
 /**
  * @template {Record<string, unknown>} T
@@ -104,6 +122,26 @@ export function projectThemingDoc(theming) {
           )
         : entry,
     );
+  }
+  if (Array.isArray(out.componentIcons)) {
+    out.componentIcons = out.componentIcons.map(entry => {
+      if (entry == null || typeof entry !== 'object') return entry;
+      const slot = pick(
+        /** @type {Record<string, unknown>} */ (entry),
+        COMPONENT_ICON_SLOT_FIELDS,
+      );
+      if (Array.isArray(slot.state)) {
+        slot.state = slot.state.map(field =>
+          field != null && typeof field === 'object'
+            ? pick(
+                /** @type {Record<string, unknown>} */ (field),
+                COMPONENT_ICON_SLOT_STATE_FIELDS,
+              )
+            : field,
+        );
+      }
+      return slot;
+    });
   }
   return out;
 }

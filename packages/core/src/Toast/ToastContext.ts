@@ -2,22 +2,12 @@
 
 'use client';
 
-import {createContext} from 'react';
-import type {ToastEntry, ToastDismissReason} from './types';
-
-/** Internal context value for toast state management. */
-export interface ToastContextValue {
-  /** Add a toast. */
-  addToast: (entry: ToastEntry) => void;
-  /** Remove a toast by ID with a reason. */
-  removeToast: (id: string, reason: ToastDismissReason) => void;
-  /** Find a toast by uniqueID. */
-  findByUniqueID: (uniqueID: string) => ToastEntry | undefined;
-}
-
 /**
- * React context for toast state. Default is null — the hook
- * falls back to a self-mounting viewport when no provider exists.
+ * @file ToastContext.ts
+ * @input Layer's toast host
+ * @output ToastContext and ToastContextValue
+ * @position The context lives in Layer/toastHost.tsx, so LayerProvider can
+ *   provide it without importing Toast.
  */
-export const ToastContext = createContext<ToastContextValue | null>(null);
-ToastContext.displayName = 'ToastContext';
+
+export {ToastContext, type ToastContextValue} from '../Layer/toastHost';

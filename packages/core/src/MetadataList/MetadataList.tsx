@@ -4,7 +4,7 @@
 
 /**
  * @file MetadataList.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, MetadataListContext, i18n (useTranslator)
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, MetadataListContext, i18n (useComponentTranslator)
  * @output Exports MetadataList component, MetadataListProps, MetadataListColumns types
  * @position Core implementation; consumed by index.ts, tested by MetadataList.test.tsx
  *
@@ -32,7 +32,13 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {isRenderable} from '../utils/isRenderable';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MetadataList/MetadataList.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -60,7 +66,8 @@ export interface MetadataListProps extends Omit<
   columns?: MetadataListColumns;
   /**
    * Label display configuration.
-   * - position: 'start' places labels to the left, 'top' stacks labels above content
+   * - position: 'start' places each label at the inline start of its value,
+   *   'top' stacks labels above content
    * - width: Custom label width (number in px or CSS string)
    *
    * Defaults to `{ position: 'top' }` for multi-column layouts and
@@ -152,7 +159,7 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -217,7 +224,7 @@ export function MetadataList({
   );
   const [isShowAll, setIsShowAll] = useState(false);
   const contentId = useId();
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   const contextValue = useMemo(
     () => ({
@@ -254,7 +261,7 @@ export function MetadataList({
         ? styles.gridStackedSingle
         : styles.gridStackedMulti;
     }
-    // Labels on the left
+    // Labels at the inline start
     if (columns === 'single' || columns === 1) {
       return styles.gridSingle;
     }

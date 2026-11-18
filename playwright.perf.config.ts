@@ -4,7 +4,7 @@
  * @file playwright.perf.config.ts
  * @input Uses @playwright/test; reads the built Sandbox in apps/sandbox/out
  * @output The perf scenes, measured in desktop Chromium
- * @position Run after
+ * @position Run nightly by .github/workflows/perf-nightly.yml, after
  *   `pnpm build && pnpm -F @astryxdesign/sandbox build`. Separate from
  *   playwright.config.ts (accessibility contracts) and
  *   playwright.interaction.config.ts (touch and animation proofs): a perf
@@ -29,8 +29,10 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   // A scene's samples run inside one test, each with a warm-up cycle; overlay
-  // churn plays 150 open/close pairs per cycle.
-  timeout: 6 * 60_000,
+  // churn plays 150 open/close pairs per cycle and lets each anchored
+  // entrance end.
+  // It stays inside the 15-minute job budget.
+  timeout: 13 * 60_000,
   forbidOnly: isCI,
   reporter: isCI ? [['list'], ['github']] : [['list']],
   projects: [{name: 'chromium', use: {...devices['Desktop Chrome']}}],

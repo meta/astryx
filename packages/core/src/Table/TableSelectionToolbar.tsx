@@ -13,8 +13,14 @@ import type {ReactNode} from 'react';
 import {Button} from '../Button';
 import {Toolbar} from '../Toolbar';
 import type {ToolbarProps} from '../Toolbar';
-import {useTranslator} from '../i18n';
 import type {TableSelectionState} from './plugins/selection/useTableSelectionState';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/TableSelectionToolbar.generated';
+
+registerEnglishFallback(english);
 
 export interface TableSelectionToolbarProps extends Omit<
   ToolbarProps,
@@ -45,7 +51,7 @@ export function TableSelectionToolbar({
   variant = 'muted',
   ...toolbarProps
 }: TableSelectionToolbarProps): ReactNode {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.table.selection.bulkActionsLabel');
   const clearLabel =
     clearLabelFromProps ?? t('@astryx.table.selection.clearAll');

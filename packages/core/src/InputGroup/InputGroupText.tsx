@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/InputGroup/InputGroup.doc.mjs
+ * - /packages/core/src/InputGroup/InputGroupText.doc.mjs
  * - /packages/core/src/InputGroup/index.ts
  * - /packages/cli/assets/templates/blocks/components/InputGroup/
  */
@@ -28,6 +29,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {inputGroupItemProps} from './groupStyles';
+import {textDirectionProps} from '../utils/textDirection';
 
 const styles = stylex.create({
   text: {
@@ -40,6 +42,7 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-secondary'],
     whiteSpace: 'nowrap',
+    unicodeBidi: 'isolate',
     flexShrink: 0,
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
@@ -81,7 +84,7 @@ export interface InputGroupTextProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <InputGroup label="URL">
+ * <InputGroup label="Website">
  *   <InputGroupText>https://</InputGroupText>
  *   <TextInput label="URL" isLabelHidden value={url} onChange={setUrl} />
  * </InputGroup>
@@ -95,6 +98,9 @@ export function InputGroupText({
   style,
   ...rest
 }: InputGroupTextProps) {
+  // The direction goes on a span inside the cell, not on the cell: the cell's
+  // logical corners and border overlap follow the group's direction.
+  const {dir} = textDirectionProps(children);
   return (
     <div
       ref={ref}
@@ -106,7 +112,7 @@ export function InputGroupText({
         className,
         style,
       )}>
-      {children}
+      {dir == null ? children : <span dir={dir}>{children}</span>}
     </div>
   );
 }

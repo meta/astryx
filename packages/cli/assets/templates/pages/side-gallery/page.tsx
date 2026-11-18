@@ -83,7 +83,7 @@ function ImageGrid() {
   return (
     <Grid columns={3} gap={3}>
       {IMAGES.map(img => (
-        <AspectRatio key={img.src} ratio={1} style={imageClip}>
+        <AspectRatio key={img.alt} ratio={1} style={imageClip}>
           <img src={img.src} alt={img.alt} style={imageStyle} />
         </AspectRatio>
       ))}
@@ -99,8 +99,11 @@ export default function SideGalleryTemplate() {
       height="fill"
       contentWidth={1400}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 360, repeat: 'fit'}} gap={8} align="center">
+        <LayoutContent role="main" padding={6}>
+          <Grid
+            columns={{minWidth: 360, max: 2, repeat: 'fit'}}
+            gap={8}
+            align="center">
             {/* Left side: Text + CTA */}
             <VStack gap={6} vAlign="center">
               <VStack gap={3}>
@@ -119,7 +122,7 @@ export default function SideGalleryTemplate() {
               </VStack>
 
               <HStack gap={3} vAlign="center">
-                <Button label="Explore" variant="primary" />
+                <Button label="Explore" variant="primary" href="#" />
               </HStack>
 
               <VStack gap={4}>

@@ -74,7 +74,7 @@ const directionStyles = stylex.create({
 
 /**
  * Stack direction.
- * - `horizontal`: Items flow left-to-right (HStack)
+ * - `horizontal`: Items flow along the inline axis, right to left in RTL (HStack)
  * - `vertical`: Items flow top-to-bottom (VStack)
  */
 export type StackDirection = keyof typeof directionStyles;

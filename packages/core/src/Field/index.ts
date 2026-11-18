@@ -1,11 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports Field component and types from Field.tsx, FieldLabel from FieldLabel.tsx, FieldStatus from FieldStatus.tsx
- * @output Exports Field, FieldProps, FieldStatusInput, FieldStatusType, FieldLabel, FieldLabelProps, FieldStatus component
+ * @output Exports Field, FieldProps, FieldStatusInput, FieldStatusType, FieldLabel, FieldLabelProps, FieldStatus component,
+ *   and the shared input types (including the text-entry keyboard trait types)
  * @position Component entry point; re-exported by /packages/core/src/index.ts
  *
  * SYNC: When modified, update this header and /packages/core/src/Field/Field.doc.mjs
@@ -21,6 +20,7 @@ export type {
   FieldStatusVariant,
   FieldStatusVariantMap,
 } from '../FieldStatus';
+export type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 // Shared input types
 export type {InputStatus, InputStatusType, InputSize} from './types';
@@ -30,6 +30,7 @@ export type {
   FieldControlStyleProps,
   FieldPartStyleProps,
 } from './fieldParts';
+export type {AutoCapitalize, EnterKeyHint, InputMode} from './textEntryTraits';
 
 // Shared input styles
 export {

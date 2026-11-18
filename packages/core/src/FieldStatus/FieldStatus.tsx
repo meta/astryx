@@ -67,6 +67,8 @@ const styles = stylex.create({
     // URL). Let such an unbroken token wrap inside the field instead of
     // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   attached: {
     marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,

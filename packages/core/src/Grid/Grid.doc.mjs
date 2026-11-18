@@ -106,14 +106,14 @@ export const docs = {
     {
       name: 'align',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Vertical alignment of items.',
-      default: "'stretch'",
+      description:
+        'Vertical alignment of items (`align-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'justify',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Horizontal alignment of items.',
-      default: "'stretch'",
+      description:
+        'Horizontal alignment of items (`justify-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'children',

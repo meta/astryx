@@ -6,7 +6,7 @@
  * Zod is sealed in `../_schema.mjs`; consumers call `parseReference` or `parseDoc`.
  */
 
-import {GenericDocKindSchema} from '../_schema.mjs';
+import {docSchemas} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('../types.js').ReferenceDoc} ReferenceDoc */
@@ -19,7 +19,7 @@ import {formatZodError} from '../../_shared/errors.mjs';
  * @returns {ReferenceDoc}
  */
 export function parseReference(input, label = 'reference doc') {
-  const result = GenericDocKindSchema.safeParse(input);
+  const result = docSchemas().GenericDocKindSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }

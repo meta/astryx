@@ -7,7 +7,7 @@
  * button, stops at the line and its label overflows with an ellipsis.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

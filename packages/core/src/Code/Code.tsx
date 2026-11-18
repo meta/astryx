@@ -112,9 +112,12 @@ export function Code({
   return (
     <code
       ref={ref}
+      // Code keeps its own direction inside right-to-left text; a caller can
+      // still pass another dir.
+      dir="ltr"
       {...props}
       {...mergeProps(
-        themeProps('code', {color}),
+        themeProps('code', {color, size}),
         stylex.props(
           styles.base,
           colorStyles[color],

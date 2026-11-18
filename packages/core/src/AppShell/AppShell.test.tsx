@@ -18,10 +18,21 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
+import {Activity, Suspense, use} from 'react';
+import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {AppShell} from './AppShell';
+import {Card} from '../Card/Card';
+import {Section} from '../Section/Section';
+import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {
+  DEFAULT_LAYOUT_SLOTS,
+  LayoutSlotsContext,
+} from '../Layout/LayoutSlotsContext';
+import {Layout} from '../Layout/Layout';
+import {LayoutHeader} from '../Layout/LayoutHeader';
 import {InternationalizationProvider} from '../i18n';
 import {MobileNav} from '../MobileNav';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
@@ -226,6 +237,64 @@ describe('AppShell', () => {
     expect(main).toHaveAttribute('tabindex', '-1');
     fireEvent.click(skipLink);
     expect(document.activeElement).toBe(main);
+  });
+
+  it('gives a second shell its own main id; the first keeps the fixed id', () => {
+    const view = render(
+      <div>
+        <AppShell key="first">
+          <div>First</div>
+        </AppShell>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    const [firstMain, secondMain] = screen.getAllByRole('main');
+    const [firstSkip, secondSkip] = screen.getAllByTestId('skip-to-content');
+    expect(firstMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('');
+    expect(document.querySelectorAll(`[id="${secondMain.id}"]`)).toHaveLength(
+      1,
+    );
+    expect(firstSkip).toHaveAttribute('href', '#astryx-app-shell-main');
+    expect(secondSkip).toHaveAttribute('href', `#${secondMain.id}`);
+
+    fireEvent.click(secondSkip);
+    expect(document.activeElement).toBe(secondMain);
+
+    // When the first shell leaves, the remaining shell takes the fixed id.
+    view.rerender(
+      <div>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute(
+      'id',
+      'astryx-app-shell-main',
+    );
+  });
+
+  it('keeps the fixed id on the page shell when another shell is nested in its content', () => {
+    render(
+      <AppShell data-testid="outer">
+        <AppShell data-testid="inner">
+          <div>Nested</div>
+        </AppShell>
+      </AppShell>,
+    );
+    const outerMain = screen
+      .getByTestId('outer')
+      .querySelector<HTMLElement>(':scope [role="main"]');
+    const innerMain = screen
+      .getByTestId('inner')
+      .querySelector<HTMLElement>('[role="main"]');
+    expect(outerMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('');
   });
 
   it('skip link text comes from the i18n catalog', () => {
@@ -493,6 +562,71 @@ describe('AppShell', () => {
       ),
     ).not.toBeNull();
   });
+
+  it.each(['Suspense', 'Activity'] as const)(
+    'keeps server-rendered content that has not hydrated when the client is below the breakpoint (%s boundary)',
+    async boundary => {
+      // The server renders the page. On the client its code arrives late, so
+      // the page suspends while the shell hydrates.
+      let isPageCodeLate = false;
+      let deliverPageCode = () => {};
+      const pageCode = new Promise<void>(resolve => {
+        deliverPageCode = resolve;
+      });
+      function Page() {
+        if (isPageCodeLate) {
+          use(pageCode);
+        }
+        return <p data-testid="page">Page</p>;
+      }
+      // An app's layout puts elements between the shell and the boundary.
+      // React skips a boundary that is the shell's own child.
+      const app = (
+        <AppShell sideNav={<TestSideNav />}>
+          <div>
+            {boundary === 'Suspense' ? (
+              <Suspense fallback={null}>
+                <Page />
+              </Suspense>
+            ) : (
+              <Activity mode="visible">
+                <Page />
+              </Activity>
+            )}
+          </div>
+        </AppShell>
+      );
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      host.innerHTML = renderToString(app);
+      const serverPage = host.querySelector('[data-testid="page"]');
+      expect(serverPage).not.toBeNull();
+      expect(host.querySelector('dialog')).toBeNull();
+
+      mockMql = createMockMatchMedia(true);
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+      isPageCodeLate = true;
+      let root: ReturnType<typeof hydrateRoot> | undefined;
+      try {
+        await act(async () => {
+          root = hydrateRoot(host, app);
+        });
+        expect(serverPage?.isConnected).toBe(true);
+
+        await act(async () => {
+          deliverPageCode();
+          await pageCode;
+        });
+
+        expect(host.querySelector('[data-testid="page"]')).toBe(serverPage);
+        // The shell is in its mobile layout: the drawer is mounted.
+        expect(host.querySelector('dialog')).not.toBeNull();
+      } finally {
+        act(() => root?.unmount());
+        host.remove();
+      }
+    },
+  );
 
   // ===========================================================================
   // Mobile overlay (default MobileNav wrapping sideNav)
@@ -1345,5 +1479,160 @@ describe('AppShell main keyboard access', () => {
     setMainGeometry(main, 1200);
     remeasure();
     expect(main).toHaveAttribute('tabindex', '-1');
+  });
+});
+
+describe('AppShell layout root (FR18)', () => {
+  // A custom property set to `initial` reads back as `initial`; an empty
+  // value would mean the root declares nothing.
+  const CLEARED_READBACK = ['initial'];
+
+  function shell(testId: string) {
+    return (
+      <AppShell
+        data-testid={testId}
+        contentPadding={6}
+        topNav={
+          <TopNav label="Main" heading={<TopNavHeading heading="App" />} />
+        }
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem label="Dashboard" href="#" isSelected />
+            </SideNavSection>
+          </SideNav>
+        }>
+        {/* A page Layout of the app's own: its header takes the divider
+            default of the nearest Layout that sets one. */}
+        <Layout
+          header={<LayoutHeader>Page header</LayoutHeader>}
+          content={<p>Page content</p>}
+        />
+      </AppShell>
+    );
+  }
+
+  /** The shell's markup without its generated ids, for comparing two renders. */
+  function markup(testId: string): string {
+    const root = screen.getByTestId(testId);
+    return root.outerHTML
+      .replaceAll(testId, 'shell')
+      .replace(/(id|for|aria-[a-z]+|href)="[^"]*"/g, '$1=""');
+  }
+
+  it('stops the container padding, Layout values and height cap of a padded host at its root', () => {
+    render(<Card padding={3}>{shell('shell')}</Card>);
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    for (const edge of [
+      'inline-start',
+      'inline-end',
+      'block-start',
+      'block-end',
+    ]) {
+      expect(
+        computed.getPropertyValue(`--container-padding-${edge}`),
+        edge,
+      ).toBe('0px');
+    }
+    for (const name of [
+      '--layout-padding-outer-x',
+      '--layout-padding-outer-y',
+      '--layout-padding-own-outer-x',
+      '--layout-padding-own-outer-y',
+      '--layout-padding-inner-x',
+      '--layout-padding-inner-y',
+      '--layout-content-width',
+      '--layout-alignment-width',
+      '--_layout-flush-block-start',
+      '--_layout-flush-block-end',
+      '--_section-padding-propagated',
+      '--container-max-height',
+    ]) {
+      expect(CLEARED_READBACK, name).toContain(computed.getPropertyValue(name));
+    }
+  });
+
+  it('renders the same shell inside a padded Card and inside a Layout as at the page root', () => {
+    const {unmount} = render(shell('shell'));
+    const atRoot = markup('shell');
+    unmount();
+
+    const inCard = render(<Card padding={3}>{shell('shell')}</Card>);
+    expect(markup('shell')).toBe(atRoot);
+    inCard.unmount();
+
+    render(
+      <Layout
+        padding={4}
+        defaultHasDividers
+        header={<LayoutHeader>Outer header</LayoutHeader>}
+        content={shell('shell')}
+      />,
+    );
+    expect(markup('shell')).toBe(atRoot);
+  });
+
+  it('stops an enclosing divider default for every child of the root, the mobile nav node too', () => {
+    render(
+      <Layout
+        defaultHasDividers
+        content={
+          <AppShell
+            data-testid="shell"
+            mobileNav={
+              <LayoutHeader data-testid="mobile-header">Menu</LayoutHeader>
+            }>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    expect(screen.getByTestId('mobile-header')).not.toHaveAttribute(
+      'data-divider',
+    );
+  });
+
+  it('resets the Layout area and slot contexts for every child of the root', () => {
+    let seen: unknown = 'unrendered';
+    function Probe() {
+      seen = {area: use(LayoutAreaContext), slots: use(LayoutSlotsContext)};
+      return null;
+    }
+    render(
+      <Layout
+        header={<p>Outer header</p>}
+        start={<p>Outer start</p>}
+        content={
+          <AppShell mobileNav={<Probe />}>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    // Inside the outer Layout's content area the probe would read area
+    // 'content' and the outer header and start slots; at the shell's root
+    // both are back to their defaults.
+    expect(seen).toEqual({area: null, slots: DEFAULT_LAYOUT_SLOTS});
+  });
+
+  it('keeps the caller style and a Section host out of each other', () => {
+    render(
+      <Section padding={6}>
+        <AppShell
+          data-testid="shell"
+          style={{['--container-padding-inline-start' as string]: '8px'}}>
+          <p>Page content</p>
+        </AppShell>
+      </Section>,
+    );
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    // The Section's propagated padding stops at the root...
+    expect(CLEARED_READBACK).toContain(
+      computed.getPropertyValue('--_section-padding-propagated'),
+    );
+    // ...and the caller's own style still applies after the reset (FR15).
+    expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
+      '8px',
+    );
   });
 });

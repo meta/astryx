@@ -2,6 +2,8 @@
 
 /** Private DOM registry used by future axis-aware Sticky consumers. */
 
+import {sharedWeakMap} from '../utils/sharedRealm';
+
 export interface RegisteredScrollAxisState {
   isScrollable: boolean;
   atStart: boolean;
@@ -13,7 +15,12 @@ export interface RegisteredScrollOwnerState {
   block: RegisteredScrollAxisState;
 }
 
-const owners = new WeakMap<HTMLElement, RegisteredScrollOwnerState>();
+// Every copy of Core uses this one map. A copied AppShell then sees the
+// scroll regions that package components register, and the reverse.
+const owners = sharedWeakMap<HTMLElement, RegisteredScrollOwnerState>(
+  'hooks/scroll-owner-registry/owners',
+  1,
+);
 
 export function registerScrollOwner(
   element: HTMLElement,

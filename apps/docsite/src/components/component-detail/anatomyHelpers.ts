@@ -9,9 +9,8 @@
  * @position Consumed by Anatomy.tsx; kept separate so the logic is unit-testable
  *   without rendering React.
  *
- * The lead-in mirrors how the CLI marks its guidance rows (`**Do:**` /
- * `**Don't:**` in packages/cli/clients/cli/lib/component-format.mjs), so a
- * required part reads the same way in both surfaces.
+ * The lead-in is a bold label at the start of the description, so a required
+ * part reads as marked without a separate column.
  */
 
 import type {AnatomyElement} from '../../generated/componentRegistry';

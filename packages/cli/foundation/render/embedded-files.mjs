@@ -2,7 +2,7 @@
 
 /**
  * @file Which files a rendered page may carry, for `astryx experimental
- * render`. Rendering embeds only these, and `--reverse` writes only these: a
+ * export`. Rendering embeds only these, and `--reverse` writes only these: a
  * file someone sends can name nothing else. A page is a module; beside it go
  * only the stylesheets, JSON and images it imports. Never a dotfile or a
  * dot-folder (such as `.git/`), never `node_modules`, never a package
@@ -18,12 +18,32 @@ import {isAssetPath} from './assets.mjs';
 /** The file extensions a page module may have. */
 export const PAGE_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mjs'];
 
-/** JSON files that configure a project or a tool rather than hold page data. */
-const CONFIG_JSON =
-  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|config|(^|[._-])rc\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
+/**
+ * The file extensions of a module a render carries: a page module's, and the
+ * module kinds a page module may import that hold no JSX (`.mts`, `.cts`,
+ * `.cjs`).
+ */
+export const MODULE_EXTENSIONS = [...PAGE_EXTENSIONS, '.mts', '.cts', '.cjs'];
 
-/** Tool configuration modules: `vite.config.ts`, `astryx.config.mjs`, `next.config.js`, `.eslintrc.js`, ... */
-const CONFIG_MODULE = /(^|\.)config\.[cm]?[jt]sx?$|^[a-z0-9-]+rc\.[cm]?[jt]s$/i;
+/**
+ * JSON files that configure a project or a tool rather than hold page data,
+ * by the names tools read: a manifest or a tool's own file (`package.json`,
+ * `turbo.json`, `project.json`, ...), a TypeScript or JavaScript project
+ * (`tsconfig.json`, `tsconfig.app.json`, `jsconfig.json`), a `*.config.json`,
+ * and a lockfile. Page data may have any other name (`config.json`,
+ * `chart-config.json`). An rc file a tool reads is a dotfile, which no render
+ * carries.
+ */
+const CONFIG_JSON =
+  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|^(ts|js)config(\.[^.]+)*\.jsonc?$|\.config\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
+
+/**
+ * Tool configuration modules, by the names tools read: `vite.config.ts`,
+ * `astryx.config.mjs`, `next.config.js`. A module named `config.ts` or
+ * `arc.ts` is the page's own; an rc module a tool reads (`.eslintrc.js`) is
+ * a dotfile, which no render carries.
+ */
+const CONFIG_MODULE = /\.config\.[cm]?[jt]sx?$/i;
 
 /** Any script module. */
 const SCRIPT = /\.(c|m)?[jt]sx?$/i;
@@ -63,10 +83,47 @@ const extOf = p => {
 };
 
 /**
+ * Whether a file name reads as a project's or a tool's configuration, which a
+ * render never carries and --reverse never writes.
+ * @param {string} base the file's name, without its folder
+ */
+export function readsAsToolConfig(base) {
+  const ext = extOf(base);
+  return ((ext === '.json' || ext === '.jsonc') && CONFIG_JSON.test(base)) || CONFIG_MODULE.test(base);
+}
+
+/**
+ * What to do with a file a render leaves out because its name reads as
+ * configuration, so that it is carried. A `*.config.json` holds the page's
+ * data under a tool's kind of name: rename it (`chart.config.json` becomes
+ * `chart-data.json`). Any other such file is a tool's own (`package.json`,
+ * `tsconfig.json`, a lockfile, `vite.config.ts`): the page moves the values it
+ * reads into a file of its own (`page-data.json`). Each name offered is one a
+ * render carries where the file is.
+ * @param {string} p the file's `/`-separated path among the carried files
+ * @returns {{action: 'rename' | 'move', name: string}}
+ */
+export function carriedNameFor(p) {
+  const slash = p.lastIndexOf('/');
+  const dir = slash < 0 ? '' : p.slice(0, slash + 1);
+  const base = p.slice(slash + 1);
+  const ext = extOf(base);
+  const carries = (/** @type {string} */ name) => embeddedPathProblem(dir + name) === null;
+  const data = /^(.+)\.config\.jsonc?$/i.exec(base);
+  if (data) {
+    const name = `${data[1].replace(/\./g, '-')}-data${ext}`;
+    if (carries(name)) return {action: 'rename', name};
+  }
+  const own = `page-data${ext === '.jsonc' ? '.json' : ext}`;
+  return {action: 'move', name: carries(own) ? own : 'page-data.json'};
+}
+
+/**
  * Why a path may not be carried by a rendered page, or null when it may.
  * @param {string} p a `/`-separated path relative to the embedded tree's root
  * @param {{page?: boolean}} [options] `page`: the path is the page itself
- * @returns {{code: 'ERR_PATH_TRAVERSAL' | 'ERR_RENDER_SOURCE_DAMAGED', reason: string} | null}
+ * @returns {{code: 'ERR_PATH_TRAVERSAL' | 'ERR_RENDER_SOURCE_DAMAGED', reason: string, toolConfig?: true} | null}
+ *   `toolConfig`: the only problem is a name that reads as configuration
  */
 export function embeddedPathProblem(p, options = {}) {
   if (typeof p !== 'string' || p.length === 0 || p.includes('\0')) {
@@ -100,9 +157,9 @@ export function embeddedPathProblem(p, options = {}) {
   if (runnerPicksUp(segments)) {
     return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a test, spec, story or benchmark file (${p})`};
   }
-  if (((ext === '.json' || ext === '.jsonc') && CONFIG_JSON.test(base)) || CONFIG_MODULE.test(base)) {
-    return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a project or tool configuration file (${p})`};
+  if (readsAsToolConfig(base)) {
+    return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a project or tool configuration file (${p})`, toolConfig: true};
   }
-  if (PAGE_EXTENSIONS.includes(ext) || ext === '.css' || ext === '.json' || isAssetPath(p)) return null;
+  if (MODULE_EXTENSIONS.includes(ext) || ext === '.css' || ext === '.json' || isAssetPath(p)) return null;
   return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a kind of file a render never embeds (${p})`};
 }

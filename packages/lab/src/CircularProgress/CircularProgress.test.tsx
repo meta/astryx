@@ -2,6 +2,11 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
+import {
+  SPINNER_ARC_FRACTION,
+  spinnerRotorStyles,
+} from '@astryxdesign/core/internal/spinner-rotor';
 import {CircularProgress} from './CircularProgress';
 
 /**
@@ -638,6 +643,24 @@ describe('CircularProgress', () => {
   });
 
   describe('indeterminate mode', () => {
+    it("turns Spinner's arc with Spinner's rotor", () => {
+      render(<CircularProgress isIndeterminate label="Loading" size="lg" />);
+      const ring = screen.getByRole('progressbar');
+      // The rotor's own classes, so the timing is Spinner's, not a copy.
+      for (const token of (
+        stylex.props(spinnerRotorStyles.turn).className ?? ''
+      ).split(' ')) {
+        expect(ring).toHaveClass(token);
+      }
+      const circles = ring.querySelectorAll('circle');
+      const arc = circles[circles.length - 1];
+      const r = Number(arc.getAttribute('r'));
+      const circumference = 2 * Math.PI * r;
+      expect(arc.getAttribute('stroke-dasharray')).toBe(
+        `${circumference * SPINNER_ARC_FRACTION} ${circumference * (1 - SPINNER_ARC_FRACTION)}`,
+      );
+    });
+
     it('renders indeterminate when isIndeterminate is true', () => {
       render(<CircularProgress isIndeterminate value={50} label="Loading" />);
       const progressbar = screen.getByRole('progressbar');

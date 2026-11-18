@@ -10,7 +10,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export interface InputGroupContextValue {
   isInGroup: true;
@@ -20,9 +20,12 @@ export interface InputGroupContextValue {
   describedByIDs?: string;
 }
 
-export const InputGroupContext = createContext<InputGroupContextValue | null>(
-  null,
-);
+export const InputGroupContext =
+  createLayerScopedContext<InputGroupContextValue | null>(
+    'InputGroupContext',
+    1,
+    null,
+  );
 InputGroupContext.displayName = 'InputGroupContext';
 
 /**

@@ -216,13 +216,21 @@ describe('import hint correctness', () => {
     it('builds its fixture where a scan of the repo\u2019s docs running at the same time never finds it', async () => {
       // The docs-drift scan walks packages/cli/clients/cli/commands for
       // .doc.mjs files. A fixture built there handed it this test's Widget
-      // doc, which could vanish before the scan imported it.
+      // doc, which could vanish before the scan imported it. The scan's walk
+      // decides what it finds, so the case reads the walk and imports no doc.
       const fixtureDir = createIntegrationFixture();
       try {
-        const {collectDocs} = await import('../../../test/drift/docs-drift.mjs');
-        const found = (await collectDocs())
-          .map(({file}) => path.resolve(REPO_ROOT, file))
-          .filter(file => file.startsWith(fixtureDir + path.sep));
+        const {docFiles} = await import('../../../test/drift/docs-drift.mjs');
+        const files = docFiles();
+        expect(files).toContain(
+          path.join(
+            REPO_ROOT,
+            'packages/cli/clients/cli/commands/component.doc.mjs',
+          ),
+        );
+        const found = files.filter(file =>
+          file.startsWith(fixtureDir + path.sep),
+        );
         expect(found).toEqual([]);
       } finally {
         fs.rmSync(fixtureDir, {recursive: true, force: true});

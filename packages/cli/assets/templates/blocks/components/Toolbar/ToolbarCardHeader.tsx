@@ -9,8 +9,10 @@ import {Heading} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
 import {FunnelIcon, PlusIcon} from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function ToolbarCardHeader() {
+  const showToast = useToast();
   return (
     <Card style={{width: 500, height: '100%', marginTop: 260}}>
       <Toolbar
@@ -21,12 +23,18 @@ export default function ToolbarCardHeader() {
         endContent={
           <>
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: user filters would open here'})
+              }
               label="Filter"
               variant="ghost"
               icon={<Icon icon={FunnelIcon} />}
               isIconOnly
             />
             <Button
+              onClick={() =>
+                showToast({body: 'Demo: an add-user form would open here'})
+              }
               label="Add user"
               icon={<Icon icon={PlusIcon} />}
               isIconOnly

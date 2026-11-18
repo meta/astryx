@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Token/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -37,11 +37,25 @@ import {TokenLink} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {cancelNestedPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {TokenNamingContext} from './TokenNamingContext';
+import {textDirectionProps} from '../utils/textDirection';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Token/Token.generated';
+import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -137,6 +151,7 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
   interactive: {
     cursor: {
@@ -187,6 +202,8 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     width: '16px',
     height: '16px',
+    // A token cut by its width shrinks only its label, not the button.
+    flexShrink: 0,
     color: 'inherit',
     '::after': {
       content: '""',
@@ -301,6 +318,8 @@ export function Token({
   'data-testid': testId,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
+  'aria-haspopup': ariaHasPopup,
+  'aria-expanded': ariaExpanded,
   ref,
   ...rest
 }: TokenProps) {
@@ -308,9 +327,10 @@ export function Token({
   // document controller once, so the token's output stays a pure function
   // of its props.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
+  const naming = use(TokenNamingContext);
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -319,7 +339,10 @@ export function Token({
   const removeButton = onRemove != null && (
     <button
       type="button"
-      aria-label={t('@astryx.token.remove', {label})}
+      aria-label={t('@astryx.token.remove', {
+        label: naming?.removeName ?? label,
+      })}
+      {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -336,6 +359,7 @@ export function Token({
     <>
       {icon}
       <span
+        {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -344,12 +368,14 @@ export function Token({
     </>
   );
 
-  // Naming inputs reach the element that owns the token's action: the inner
-  // button of a clickable token, otherwise the root
+  // Naming and popup inputs reach the element that owns the token's action:
+  // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
     'aria-labelledby': ariaLabelledBy,
     'aria-describedby': ariaDescribedBy,
+    'aria-haspopup': ariaHasPopup,
+    'aria-expanded': ariaExpanded,
   };
 
   const sharedProps = {
@@ -404,6 +430,7 @@ export function Token({
         <LinkComponent
           ref={ref as React.Ref<HTMLAnchorElement>}
           href={href as string}
+          onClick={onClick}
           {...pressable}
           {...mergeProps(
             themeProps('token', {
@@ -444,14 +471,19 @@ export function Token({
         ref={ref}
         href={href as string}
         isDisabled={isDisabled}
+        onLinkClick={onClick}
         LinkComponent={LinkComponent}
         icon={icon}
         endContent={endContent}
         removeButton={removeButton}
-        linkStyleProps={stylex.props(styles.invisibleButton)}
+        linkStyleProps={{
+          ...stylex.props(styles.invisibleButton),
+          ...focusOwnerProps,
+        }}
         {...pressable}
         labelContent={
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -465,7 +497,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -492,6 +527,19 @@ export function Token({
       }
       effectiveOnClick(e);
     };
+    // A finger press on Remove or a control in end content does not run the
+    // token's action, so the token shows no press for it. The inner button,
+    // the first button child, is the token's own action.
+    const handleContainerPointerDown = (
+      e: React.PointerEvent<HTMLSpanElement>,
+    ) => {
+      rest.onPointerDown?.(e);
+      cancelNestedPress(
+        e,
+        e.currentTarget,
+        e.currentTarget.querySelector(':scope > button'),
+      );
+    };
 
     return (
       <span
@@ -504,7 +552,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself.
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -517,16 +568,22 @@ export function Token({
           style,
         )}
         {...rest}
-        {...sharedProps}>
+        {...sharedProps}
+        onPointerDown={
+          isDisabled ? rest.onPointerDown : handleContainerPointerDown
+        }>
         {icon}
         <button
           type="button"
           onClick={effectiveOnClick}
+          aria-label={ariaLabelledBy == null ? naming?.actionName : undefined}
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

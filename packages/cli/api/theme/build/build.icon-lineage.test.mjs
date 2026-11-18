@@ -15,11 +15,16 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeBuild} from './build.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 it('preserves merged icon lineage through a built child with colliding import names', async () => {
-  const tmpDir = fs.mkdtempSync(
-    path.resolve(import.meta.dirname, '../../..', '.tmp-icon-lineage-'),
-  );
+  const tmpDir = makeLinkedFixture('astryx-icon-lineage-', [
+    '@astryxdesign',
+    'react',
+  ]);
   try {
     for (const directory of ['base', 'child']) {
       fs.mkdirSync(path.join(tmpDir, directory));
@@ -112,6 +117,6 @@ for (const [key, label] of Object.entries(expected)) {
       {cwd: tmpDir, stdio: 'pipe', timeout: 10000},
     );
   } finally {
-    fs.rmSync(tmpDir, {recursive: true, force: true});
+    removeLinkedFixture(tmpDir);
   }
 });
