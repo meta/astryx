@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * An input Selector's value keeps its one-line width as the field's
+ * An input Selector's placeholder keeps its one-line width as the field's
  * preferred width but sets no minimum: it may break anywhere and shows one
- * clamped line. Ghost and secondary triggers keep `nowrap`.
+ * clamped line. A chosen value, and ghost and secondary triggers, keep
+ * `nowrap`, so a lane sized from its content's minimum still reads it.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -46,9 +47,28 @@ describe('a Selector value', () => {
           onChange={() => {}}
         />,
       );
-      expect(getComputedStyle(screen.getByText(PLACEHOLDER)).contain).not.toBe(
-        'inline-size',
+      expect(getComputedStyle(screen.getByText(PLACEHOLDER)).whiteSpace).toBe(
+        'nowrap',
       );
     },
   );
+
+  it('keeps nowrap for a chosen value in a field', () => {
+    render(
+      <Selector
+        label="Launch"
+        placeholder={PLACEHOLDER}
+        options={OPTIONS}
+        value="soon"
+        onChange={() => {}}
+      />,
+    );
+    // The trigger's value text, not the option of the same label.
+    const value = screen
+      .getAllByText('Within a month')
+      .find(el => el.tagName === 'SPAN' && el.id !== '') as HTMLElement;
+    expect(value).toBeDefined();
+    expect(getComputedStyle(value).whiteSpace).toBe('nowrap');
+    expect(value.getAttribute('dir')).toBe('auto');
+  });
 });

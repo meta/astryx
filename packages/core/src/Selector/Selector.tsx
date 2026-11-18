@@ -205,11 +205,13 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     textAlign: 'start',
   },
-  // An input trigger's value keeps its one-line width as the field's
+  // An input trigger's placeholder keeps its one-line width as the field's
   // preferred width but sets no minimum: it may break between any two
   // characters, and the clamp shows only its first line with an ellipsis,
   // as `nowrap` would. A long placeholder then cannot push a narrow page
-  // sideways. Ghost and secondary triggers keep `nowrap`.
+  // sideways. A chosen value keeps `nowrap`, so a lane sized from its
+  // content's minimum (a Toolbar's center) still makes room for it; ghost
+  // and secondary triggers keep it too.
   triggerLabelInField: {
     display: '-webkit-box',
     WebkitBoxOrient: 'vertical',
@@ -2142,9 +2144,14 @@ export function Selector<T extends SelectorOptionType>(
           renderIconSlot(selectedItem.icon, {size: 'sm', color: 'secondary'})}
         <span
           id={valueTextId}
+          // The value takes its own direction, so its ellipsis lands at its
+          // own end in a field of the other direction.
+          dir="auto"
           {...stylex.props(
             styles.triggerLabel,
-            variant === 'input' && styles.triggerLabelInField,
+            variant === 'input' &&
+              selectedItem == null &&
+              styles.triggerLabelInField,
           )}>
           {selectedItem?.label ?? placeholder}
         </span>
