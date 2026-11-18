@@ -14,7 +14,7 @@ export const doc = {
   namespace: 'cli/commands',
   stability: 'experimental',
   summary:
-    'Try features that may change in a patch release: icon sets, a page as one shareable HTML file, checked theme editing',
+    'Try features that may change in a patch release: icon sets, one self-contained HTML file from a page built with Astryx components (not for other pages), checked theme editing',
   description:
     'The experimental command group. Every command under it is experimental: its arguments, options, output, and JSON may change or be removed in any patch release, with no deprecation period. A feature leaves this group when it becomes stable. Nothing here changes what any other command does unless you use it.',
   subcommands: ['icon', 'export', 'theme'],
