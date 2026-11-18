@@ -64,6 +64,7 @@ project away from the app's own identity and data.
 
 ## Non-goals
 
+- Astryx Stage — settled by `spec:AST-139`.
 - Equivalent internal implementations remain valid when they satisfy this contract.
 - Internal modules, files, function names, algorithms, data structures, storage
   layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
