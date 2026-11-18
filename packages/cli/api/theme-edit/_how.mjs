@@ -580,6 +580,22 @@ async function answer(subject, options, cwd) {
         ?.toLowerCase() ?? 'kinds';
     return answer('', {...options, list: kind}, cwd);
   }
+  // (Color-blind readers asked about in a list of asks: the other pieces
+  // are answered as said, and the color-blind answer follows them.)
+  const blind = colorBlindPieces(
+    t
+      .trim()
+      .toLowerCase()
+      .replace(/[?.!]+$/, ''),
+  );
+  if (!tool && blind.blind && blind.rest) {
+    const rest = await answer(blind.rest, options, cwd);
+    return {
+      ...rest,
+      subject: t,
+      results: [...(rest.results ?? []), ...colorBlindAnswer(env)],
+    };
+  }
   if (tool)
     return {
       kind: 'question',
@@ -1507,6 +1523,55 @@ function colorsAnswer(env, dialCommands) {
   ];
 }
 
+const COLOR_BLIND =
+  /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/;
+
+/**
+ * An ask's pieces, split at commas and at an "and" that joins two asks
+ * ("color-blind friendly statuses and a blue accent"; "red and green for
+ * color-blind people" is one ask): whether a piece asks about color-blind
+ * readers, and the pieces that do not.
+ * @param {string} q
+ */
+function colorBlindPieces(q) {
+  const pieces = q
+    .split(
+      /[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}(?:colou?r[- ]?blind|cvd))/,
+    )
+    .map(x => x.trim())
+    .filter(Boolean);
+  const blind = pieces.filter(x => COLOR_BLIND.test(x));
+  if (!blind.length || blind.length === pieces.length)
+    return {blind: blind.length > 0, rest: ''};
+  // (The rest as said, its own "and"s kept: "light and dark" stays one
+  // piece.)
+  const rest = blind
+    .reduce((t, x) => t.replace(x, ' '), q)
+    .replace(/\s(?:and|plus|&)\s+(?=[,;:]|\s*$)/g, ' ')
+    .replace(/(^|[,;:])\s*(?:and|plus|&)\s/g, '$1 ')
+    .replace(/\s*[,;:](?:\s*[,;:])+/g, ',')
+    .replace(/^\s*[,;:]|[,;:]\s*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {blind: true, rest};
+}
+
+/**
+ * The answer about color-blind readers.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ */
+function colorBlindAnswer(env) {
+  return [
+    {
+      text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. A status shown with its words or an icon does not rest on color alone; a status dot does, so its colors need lightness apart too. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
+      commands: [
+        ...(env.exists ? [`${P} show ${env.slug}`] : []),
+        `${HOW} "status colors"`,
+      ],
+    },
+  ];
+}
+
 /**
  * The answer to a question about the tool itself: help, a list, how to see
  * a change, or the difference between two things it names. 'list' means
@@ -1538,22 +1603,10 @@ function toolAnswer(t, env, targets) {
     )
   )
     return 'list';
-  // (Only an ask about color-blind readers alone: in a list of asks,
-  // "…, statuses that work for color-blind operators, 13px text, …", the
-  // other pieces are answered, never swallowed by this one.)
-  if (
-    /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/.test(q) &&
-    q.split(/[,;:]/).filter(x => x.trim()).length < 2
-  )
-    return [
-      {
-        text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. Status parts also carry an icon and words, so a state never rests on color alone. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
-        commands: [
-          ...(env.exists ? [`${P} show ${env.slug}`] : []),
-          `${HOW} "status colors"`,
-        ],
-      },
-    ];
+  // (Only an ask about color-blind readers alone; in a list of asks the
+  // other pieces are answered too (answer).)
+  if (colorBlindPieces(q).blind && !colorBlindPieces(q).rest)
+    return colorBlindAnswer(env);
   if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
     return [
       {

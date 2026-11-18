@@ -67,4 +67,28 @@ describe('status colors for color-blind readers', () => {
     );
     expect(JSON.stringify(r.data)).toMatch(/color-blind readers/);
   }, 240_000);
+
+  it('answers the other asks said with a color-blind one, and never claims status color is backed by words everywhere', async () => {
+    for (const ask of [
+      'color-blind friendly statuses and a blue accent',
+      'color-blind friendly statuses, a blue accent',
+    ]) {
+      const r = /** @type {any} */ (
+        await themeEditHow(ask, {cwd, theme: 'cb'})
+      );
+      const results = /** @type {any[]} */ (r.data.results ?? []);
+      const lines = results.flatMap(x => x.commands);
+      expect(
+        lines.some(c => / set cb accent '#2563eb'$/.test(c)),
+        ask,
+      ).toBe(true);
+      expect(
+        lines.some(c => / set cb corners /.test(c)),
+        ask,
+      ).toBe(false);
+      const blind = results.find(x => /^color-blind readers/.test(x.text));
+      expect(blind, ask).toBeTruthy();
+      expect(blind.text).not.toMatch(/never rests on color alone/);
+    }
+  }, 240_000);
 });
