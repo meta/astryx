@@ -221,9 +221,11 @@ Dialog and DropdownMenu.
   to a candidate that cannot take focus is removed when focus leaves it. The
   candidate keeps its role and accessible name, so assistive technology
   announces it as it is, such as the `main` landmark.
-- **AR4 — A popover opened from code is announced.** A popover that opens
-  without a person's press or key on its trigger, and does not move focus into
-  itself, announces its accessible name politely.
+- **AR4 — A popover opened from code is announced.** A dialog popover that
+  opens without a person's press or key on its trigger, and does not move focus
+  into itself, announces its accessible name politely. A role-neutral popup
+  (`role: 'none'`), such as a typeahead's listbox, is not announced: its owner
+  announces its own results.
 
 ### Compatibility
 
