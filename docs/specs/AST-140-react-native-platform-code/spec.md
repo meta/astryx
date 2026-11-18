@@ -219,9 +219,9 @@ which an app opts in, and `spec:AST-112/FR7` lists the groups.
     native interface.
   - A binary of any earlier release and the JavaScript of a later release
     work together: every behavior the JavaScript uses on that binary is
-    either in the contract's baseline or a feature the binary reports. A
-    host that runs other projects and an app that updates its JavaScript
-    apart from its binary both rely on that pairing (DEC-3).
+    either in the contract's baseline or a feature the binary reports. An app
+    whose JavaScript updates apart from its native binary relies on that
+    pairing (DEC-3).
 
   FR5 gap: modules report their growth as a behavior revision number
   (`getConstants().version`) rather than as named features, several
@@ -499,8 +499,8 @@ caller handles every outcome with a type-checked branch.
 **Reference:** `spec:AST-140/DEC-3`
 **Decider:** imdreamrunner, 2026-11-17
 
-A host that runs other projects and an app that updates its JavaScript apart
-from its binary both pair newer JavaScript with an older binary. A shipped
+An app whose JavaScript updates apart from its native binary pairs newer
+JavaScript with an older binary. A shipped
 member keeps its shape, because an older binary in the field is not upgraded
 with its JavaScript. Each addition is a named feature the binary reports, so
 JavaScript asks for the behavior it is about to use and every pairing works or
