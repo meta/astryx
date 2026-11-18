@@ -72,8 +72,8 @@ which also place them.
 
 ## Non-goals
 
-- Astryx Stage and the Astryx app's Preview are specified in `spec:AST-139`;
-  they conform to this record's contracts.
+- Astryx Stage (`spec:AST-139`) and Preview in the Astryx app (`spec:AST-141`)
+  are separate products; they conform to this record's contracts.
 - The contract of the library's `VideoView` beyond how it uses the platform
   (FR12); its own record and `spec:AST-082/FR3` own it. The media controls an
   app draws, such as the template kit's `MediaScrubber` and
