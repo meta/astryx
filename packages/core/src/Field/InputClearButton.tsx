@@ -18,7 +18,7 @@
 
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button/Button';
+import {Button, ButtonTooltipInNameContext} from '../Button/Button';
 import {BUTTON_HIT_AREA, ButtonHitAreaContext} from '../Button/buttonHitArea';
 import {clampedHitInsets, type HitInsets, type HitRect} from '../utils/hitArea';
 import type {TouchHitAreaOptions} from '../utils/touchHitArea';
@@ -126,43 +126,46 @@ function renderInputClearButton({
   const {className: buttonTargetClassName} = themeProps('input-clear-button');
   return (
     <ButtonHitAreaContext value={CLEAR_BUTTON_HIT_AREA}>
-      <Button
-        {...pickDataAttributes(rest)}
-        variant="ghost"
-        size="sm"
-        label={label}
-        // The field's label already sits beside the glyph, so the tooltip names
-        // only the action; repeating a long label reads as awkward copy. The
-        // contextual label stays the accessible name, which still contains
-        // the visible word (WCAG 2.5.3, label in name).
-        tooltip={tooltip}
-        className={buttonTargetClassName}
-        icon={
-          <Icon
-            icon="close"
-            size="sm"
-            color="secondary"
-            className={
-              iconClassName != null
-                ? `${iconTargetClassName} ${iconClassName}`
-                : iconTargetClassName
-            }
-          />
-        }
-        onPointerDown={e => {
-          // WebKit drops the click of a touch whose pointerdown is cancelled.
-          // For touch, the mousedown handler below keeps focus in the field.
-          if (e.pointerType !== 'touch') {
-            e.preventDefault();
+      <ButtonTooltipInNameContext value>
+        <Button
+          {...pickDataAttributes(rest)}
+          variant="ghost"
+          size="sm"
+          label={label}
+          // The field's label already sits beside the glyph, so the tooltip names
+          // only the action; repeating a long label reads as awkward copy. The
+          // contextual label stays the accessible name, which still contains
+          // the visible word (WCAG 2.5.3, label in name), so the tooltip adds no
+          // description.
+          tooltip={tooltip}
+          className={buttonTargetClassName}
+          icon={
+            <Icon
+              icon="close"
+              size="sm"
+              color="secondary"
+              className={
+                iconClassName != null
+                  ? `${iconTargetClassName} ${iconClassName}`
+                  : iconTargetClassName
+              }
+            />
           }
-          onPointerDown?.(e);
-        }}
-        onMouseDown={e => e.preventDefault()}
-        onClick={onClick}
-        onClickCapture={onClickCapture}
-        isIconOnly
-        xstyle={[styles.button, xstyle]}
-      />
+          onPointerDown={e => {
+            // WebKit drops the click of a touch whose pointerdown is cancelled.
+            // For touch, the mousedown handler below keeps focus in the field.
+            if (e.pointerType !== 'touch') {
+              e.preventDefault();
+            }
+            onPointerDown?.(e);
+          }}
+          onMouseDown={e => e.preventDefault()}
+          onClick={onClick}
+          onClickCapture={onClickCapture}
+          isIconOnly
+          xstyle={[styles.button, xstyle]}
+        />
+      </ButtonTooltipInNameContext>
     </ButtonHitAreaContext>
   );
 }

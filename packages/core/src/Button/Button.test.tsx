@@ -563,6 +563,21 @@ describe('Button', () => {
       expect(button).not.toHaveAttribute('aria-describedby');
     });
 
+    it('keeps the description when the tooltip is only part of the name', () => {
+      // FR12's public rule is equality: a tooltip with fewer words than the
+      // name still describes the Button.
+      render(
+        <Button
+          label="Dismiss banner"
+          tooltip="Dismiss"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Dismiss banner'});
+      expect(button).toHaveAccessibleDescription('Dismiss');
+    });
+
     it('keeps a caller description when the tooltip repeats the name', () => {
       render(
         <>

@@ -81,7 +81,9 @@ describe('InputClearButton', () => {
     });
     const tooltip = screen.getByRole('tooltip', {hidden: true});
     expect(tooltip).toHaveTextContent(/^Clear$/);
-    expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    // The name already says "Clear", so the tooltip adds no description and a
+    // screen reader does not read the word twice.
+    expect(button).toHaveAccessibleDescription('');
 
     fireEvent.mouseEnter(button);
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
