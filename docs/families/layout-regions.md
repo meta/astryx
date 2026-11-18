@@ -126,7 +126,9 @@ wrapper, or a header-like visual treatment.
   inset across its named slots; a region's explicit padding or zero-padding
   path selects its local styles. An automatic Layout edge republishes the
   padding it applies, except LayoutContent's content-width gutter
-  (`component:LayoutContent` FR2).
+  (`component:LayoutContent` FR2) and LayoutHeader's block edges where its
+  content names a block reach, which republish the resolved padding
+  (`component:LayoutHeader` FR2).
 - **FR5 — Boundary ownership is caller-selected where composition permits two
   owners.** LayoutHeader and LayoutFooter each own their implied edge. Section
   and Toolbar expose selected edges. LayoutPanel may draw its content-facing

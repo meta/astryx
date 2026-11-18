@@ -111,7 +111,9 @@ The protocol has four layers:
    `--layout-padding-outer-*` and `--layout-padding-inner-*`; automatic region
    placement applies that split, and each region republishes the edge it
    applies, except LayoutContent's content-width gutter, which is applied but
-   not published (`component:LayoutContent` FR2).
+   not published (`component:LayoutContent` FR2), and LayoutHeader's block
+   edges where its content names a block reach, which publish the resolved
+   padding the content's reach fills (`component:LayoutHeader` FR2).
 4. **Boundary reset.** An overlay leaves its ancestor's visual box while
    remaining a DOM descendant. `overlayPaddingReset` zeroes values descendants
    subtract or take as a corner and invalidates values descendants add, so readers fall through to
@@ -122,14 +124,14 @@ The protocol has four layers:
 
 ### Current and admitted publishers and consumers
 
-| Role                       | Participants                                                   | Contract responsibility                                                                                                                                                                                |
-| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Container publisher        | Card, Section, Dialog, BottomSheet, Drawer, ScrollableArea     | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                                                           |
-| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish the padding each region applies, on every edge, on the automatic and explicit-padding paths; LayoutContent's content-width gutter is applied but not published (`component:LayoutContent` FR2) |
-| Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`                                  |
-| Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry                               |
-| Alignment consumer         | Toolbar and edge-compensating child components                 | Read the current inline inset to align visible content rather than stacked touch-target padding                                                                                                        |
-| Boundary owner             | Layer surfaces and dialog-based overlay roots; AppShell's root | Apply `overlayPaddingReset`, or at AppShell's root Layout's `layoutReset`, before descendants read inherited page geometry                                                                             |
+| Role                       | Participants                                                   | Contract responsibility                                                                                                                                                                                                                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Container publisher        | Card, Section, Dialog, BottomSheet, Drawer, ScrollableArea     | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                                                                                                                                                                                                    |
+| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish the padding each region applies, on every edge, on the automatic and explicit-padding paths; LayoutContent's content-width gutter is applied but not published (`component:LayoutContent` FR2); LayoutHeader's block edges publish the resolved padding where its content's block reach fills part of it (`component:LayoutHeader` FR2) |
+| Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`                                                                                                                                                                           |
+| Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry                                                                                                                                                                        |
+| Alignment consumer         | Toolbar and edge-compensating child components                 | Read the current inline inset to align visible content rather than stacked touch-target padding                                                                                                                                                                                                                                                 |
+| Boundary owner             | Layer surfaces and dialog-based overlay roots; AppShell's root | Apply `overlayPaddingReset`, or at AppShell's root Layout's `layoutReset`, before descendants read inherited page geometry                                                                                                                                                                                                                      |
 
 The participant list is the shared container system, not a Layout-owned family:
 Section and ScrollableArea publish content inset, Section and opt-in full-bleed
@@ -159,7 +161,10 @@ Edge compensation is a two-sided geometry contract, not a token contract:
    currently available at each logical edge through the existing private
    `--container-padding-*` variables. Those values must match that state's
    applied padding, except BottomSheet's block start, which publishes only the
-   padding past its grab bar's band (above), and follow nesting and the overlay
+   padding past its grab bar's band (above), and LayoutHeader's block edges
+   where its content names a block reach (`component:LayoutHeader` FR2),
+   which publish the resolved padding the content's reach fills, and follow
+   nesting and the overlay
    and layout-root resets;
    missing values mean zero.
    A state with a known publication mismatch is ineligible. Publication does not
@@ -332,7 +337,10 @@ without dropping the active theme's Section default.
   Section's logical-edge overrides, explicit Layout-region padding, and
   full-bleed reset—the matching variable changes with that declaration. An
   automatic Layout-region edge publishes the padding it applies, except
-  LayoutContent's content-width gutter (`component:LayoutContent` FR2).
+  LayoutContent's content-width gutter (`component:LayoutContent` FR2) and
+  LayoutHeader's block edges where its content names a block reach
+  (`component:LayoutHeader` FR2), where the published value is the resolved
+  padding and the content's reach fills the difference.
 - **INV3 — Bleed is opt-in and edge-specific.** A descendant escapes padding
   only when its component contract opts into bleed, and only on the edges that
   contract covers. The presence of an inherited variable does not make every
@@ -381,7 +389,10 @@ without dropping the active theme's Section default.
   visually neutral host states. A component-specific contract may admit a bounded
   or clipping host only with evidence for that geometry. A host state whose
   published inset does not match its applied padding is ineligible until that
-  conformance gap is fixed. Container publication alone never opts a child in,
+  conformance gap is fixed, except LayoutHeader's block edges where its
+  content names a block reach (`component:LayoutHeader` FR2): there the
+  content that names the reach fills the difference, so a reader still meets
+  the published edge. Container publication alone never opts a child in,
   and arbitrary consumer CSS that changes a component's padding is outside the
   shared alignment guarantee.
 
