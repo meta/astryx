@@ -134,6 +134,11 @@ const styles = stylex.create({
     opacity: 0,
     transform: `translateY(var(--_toast-swipe-exit-y, var(--_toast-swipe-y, var(--_toast-slide-y, ${TOAST_EDGE_DRIFT})))) scale(var(--_toast-swipe-scale, 1))`,
   },
+  // The close button draws in the card's text color, the color the card's
+  // body text inherits.
+  close: {
+    color: 'inherit',
+  },
   endContent: {
     flexShrink: 0,
     display: 'flex',
@@ -498,6 +503,8 @@ export function ToastSurface({
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon="close" size="sm" color="inherit" />}
+                className={themeProps('toast-close').className}
+                xstyle={styles.close}
                 label={t('@astryx.toast.dismiss')}
                 onClick={handleDismiss}
                 isIconOnly

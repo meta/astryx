@@ -800,9 +800,12 @@ export function Banner({
                 icon={<Icon icon="close" size="sm" color="inherit" />}
                 onClick={handleDismiss}
                 className={
-                  hasStatusStyle(status)
-                    ? stylex.props(statusControlStyles[status]).className
-                    : undefined
+                  mergeProps(
+                    themeProps('banner-close'),
+                    hasStatusStyle(status)
+                      ? stylex.props(statusControlStyles[status])
+                      : {},
+                  ).className
                 }
                 isIconOnly
               />

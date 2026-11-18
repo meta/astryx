@@ -519,8 +519,20 @@ export async function prove(
       `export {samples} from ${JSON.stringify(pathToFileURL(samplesFile).href)};\n`,
     );
     const packages = workspacePackages();
+    const marks = await import(pathToFileURL(samplesFile).href);
     for (const t of alive()) {
       if (notRendered[t.key]) continue;
+      // A required prop no sample gives fails here, by name, before the copy
+      // renders without it.
+      const unsampled = missingSample(t, await docOf(packages, t), {
+        samples: marks.samples ?? {},
+        needsNoSample: marks.needsNoSample ?? {},
+        notRendered,
+      });
+      if (unsampled) {
+        fail(t.key, 'sample', unsampled);
+        continue;
+      }
       const defaults = await playgroundDefaults(packages, t);
       const entry = entryFileOf(copies.get(t.key).dir, t.name);
       if (!entry) {
@@ -824,24 +836,67 @@ export async function prove(
   }
 }
 
-/** The playground defaults a target's doc declares, or none. */
-async function playgroundDefaults(packages, t) {
+/** A target's doc, or null when it has none or it does not load. */
+export async function docOf(packages, t) {
   const src = path.join(packages.get(t.pkg).dir, 'src');
   const rel = fs
     .readdirSync(src, {recursive: true})
     .map(String)
     .find(f => path.basename(f) === `${t.name}.doc.mjs`);
-  if (!rel) return {};
+  if (!rel) return null;
   try {
     const m = await import(pathToFileURL(path.join(src, rel)).href);
-    const doc =
+    return (
       m.doc ??
       m.default ??
-      Object.values(m).find(v => v && typeof v === 'object' && v.name);
-    return JSON.parse(JSON.stringify(doc?.playground?.defaults ?? {}));
+      Object.values(m).find(v => v && typeof v === 'object' && v.name) ??
+      null
+    );
   } catch {
-    return {};
+    return null;
   }
+}
+
+/** The playground defaults a target's doc declares, or none. */
+async function playgroundDefaults(packages, t) {
+  const doc = await docOf(packages, t);
+  return JSON.parse(JSON.stringify(doc?.playground?.defaults ?? {}));
+}
+
+/**
+ * The required props a doc names for one component that its playground
+ * defaults do not give (children aside): without a sample, the proof renders
+ * the copy without them. A multi-component doc keeps each component's props
+ * on its `components` entry.
+ * @param {any} doc
+ * @param {string} [name] the component, for a multi-component doc
+ * @returns {string[]}
+ */
+export function requiredWithoutDefault(doc, name) {
+  const entry = doc?.components?.find(c => c?.name === name) ?? doc;
+  const defaults = (entry?.playground ?? doc?.playground)?.defaults ?? {};
+  return (entry?.props ?? [])
+    .filter(prop => prop?.required && prop.name !== 'children')
+    .map(prop => prop.name)
+    .filter(prop => !(prop in defaults));
+}
+
+/**
+ * Why a target cannot be rendered by its doc's defaults alone, or null: a
+ * required prop with no sample, no default and no `needsNoSample` mark.
+ * @param {{key: string, name?: string}} t
+ * @param {any} doc
+ * @param {{samples: Record<string, unknown>, needsNoSample?: Record<string, string>, notRendered?: Record<string, string>}} marks
+ */
+export function missingSample(
+  t,
+  doc,
+  {samples, needsNoSample = {}, notRendered = {}},
+) {
+  if (samples[t.key] || needsNoSample[t.key] || notRendered[t.key]) return null;
+  const missing = requiredWithoutDefault(doc, t.name);
+  if (missing.length === 0) return null;
+  return `swizzle target ${t.key} has no sample in samples.mjs, and its doc gives no default for its required prop(s) ${missing.join(', ')}: add a sample, or mark it in needsNoSample`;
 }
 
 /** The module a copy's component is imported from. */

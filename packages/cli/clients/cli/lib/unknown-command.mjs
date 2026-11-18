@@ -7,8 +7,9 @@
  * a word from the table in other-cli-words.mjs, a command's plural, an option
  * some commands take, a command deeper in the tree, or a name another command
  * reads. Otherwise it names the commands with a near name, else every
- * command. It only suggests: it runs nothing, and it never names an
- * experimental command.
+ * command. It only suggests: it runs nothing, and it names no experimental
+ * command except the ones spec:AST-017 FR27's shareable-page exception lets a
+ * share word or a way-back word name.
  *
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints
@@ -60,6 +61,23 @@ function visible(cmd) {
 }
 
 /**
+ * Whether the run's base serves the command at `words` below `program`:
+ * each word names a command people and agents see.
+ * @param {CommandLike} program
+ * @param {string[]} words
+ * @returns {boolean}
+ */
+function served(program, words) {
+  /** @type {CommandLike | undefined} */
+  let node = program;
+  for (const word of words) {
+    node = node && visible(node).find(c => c.name() === word);
+    if (!node) return false;
+  }
+  return true;
+}
+
+/**
  * Whether `cmd` offers the long option `long` to people and agents: listed,
  * and served by the run's base.
  * @param {CommandLike} cmd
@@ -77,6 +95,34 @@ function offers(cmd, long) {
 }
 
 /**
+ * The experimental commands a stable answer may name (spec:AST-017 FR27, the
+ * shareable-page exception: the command that writes a page as one HTML file,
+ * and the one that turns that file back into its page), with the words people
+ * and agents type when they mean each one. The reason says the command is experimental.
+ */
+const NAMED_EXPERIMENTAL = [
+  {
+    words: ['experimental', 'export'],
+    asks: [
+      'export',
+      'render',
+      'share',
+      'bundle',
+      'snapshot',
+      'standalone',
+    ],
+    reason:
+      'the command is experimental export (experimental): one self-contained HTML file from a page built with Astryx components',
+  },
+  {
+    words: ['experimental', 'import'],
+    asks: ['import', 'back', 'restore', 'unrender', 'reverse'],
+    reason:
+      'the command is experimental import (experimental): a file experimental export wrote, back into its page',
+  },
+];
+
+/**
  * Every visible command in the tree, by its words: `[['theme', 'build'], …]`.
  * @param {CommandLike} program
  * @returns {Array<{words: string[], cmd: CommandLike}>}
@@ -87,8 +133,9 @@ function everyCommand(program) {
   /** @param {CommandLike} node @param {string[]} words */
   const walk = (node, words) => {
     for (const child of visible(node)) {
-      // A stable answer names no experimental command: without the opt-in,
-      // the experimental group is the one entry point stable output shows.
+      // A stable answer names no experimental command by its place in the
+      // tree: the experimental group is the one entry point stable output
+      // shows. FR27's shareable-page exception is the word table below.
       if (words.length === 0 && child.name() === 'experimental') continue;
       const path = [...words, child.name()];
       all.push({words: path, cmd: child});
@@ -331,8 +378,8 @@ function filled(template, words) {
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
 async function otherCliWords({word, before, after: rest}, program, findEntry) {
-  // A stable answer names no experimental command, so no rule here reads
-  // the experimental group.
+  // No rule here reads the experimental group: a stable answer names an
+  // experimental command only through FR27's shareable-page word table.
   const top = visible(program).filter(c => c.name() !== 'experimental');
   /** @param {string} name */
   const command = name => top.find(c => c.name() === name);
@@ -597,6 +644,37 @@ async function pointed({word, before, after: rest}, program, findEntry) {
     );
   };
   if (nested.length > 0) return nested.slice(0, 3).map(asRun);
+
+  // An experimental command a stable answer may name, asked for by a word
+  // that means it (`share page.tsx` is `experimental export page.tsx`).
+  // A share word before a name another command reads (`export Button`)
+  // leaves that name to the lookup below, and a base that does not serve the
+  // command gets no suggestion of it.
+  const asked = NAMED_EXPERIMENTAL.find(e =>
+    spellings(word).some(w => e.asks.includes(w)),
+  );
+  const readName =
+    asked && rest[0] && !rest[0].startsWith('-')
+      ? await findEntry(rest[0]).catch(() => null)
+      : null;
+  if (
+    asked &&
+    !(readName && topNames.includes(readName.command)) &&
+    served(program, asked.words) &&
+    runParses(program, [...before, ...asked.words])
+  ) {
+    // `render experimental page.tsx` already named the group: drop that
+    // one word, never a later `experimental` (a `--title` value, say).
+    const carried = rest[0] === asked.words[0] ? rest.slice(1) : rest;
+    return [
+      run(
+        runParses(program, [...before, ...asked.words, ...carried])
+          ? [...asked.words, ...carried]
+          : [...asked.words, '--help'],
+        asked.reason,
+      ),
+    ];
+  }
 
   // A name another command reads: the next word (`info Text`), else the
   // word itself (`astryx tokens`).

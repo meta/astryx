@@ -44,8 +44,9 @@ import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
-import {colorVars, typographyVars} from './tokens.stylex';
-import {generateThemeCSS, type DefinedTheme} from './defineTheme';
+import {colorVars, typeScaleVars, typographyVars} from './tokens.stylex';
+import type {DefinedTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
@@ -82,6 +83,9 @@ const wrapperStyles = stylex.create({
     display: 'contents',
     color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
+    // Text that only inherits its size takes this theme's body size, a
+    // nested theme's own included.
+    fontSize: typeScaleVars['--text-body-size'],
   },
   light: {
     colorScheme: 'light',

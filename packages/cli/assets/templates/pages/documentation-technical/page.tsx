@@ -74,10 +74,12 @@ export default function TechnicalDocumentationPage() {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">Getting started with Product Name</Text>
+              <Text as="h1" type="display-1">
+                Getting started with Product Name
+              </Text>
               <Text type="supporting" color="secondary">
                 Last updated March 30, 2026
               </Text>

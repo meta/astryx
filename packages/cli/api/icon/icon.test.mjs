@@ -733,6 +733,19 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'copy page button')[0]).toBe('paper-stack-sheets-pile');
   });
 
+  it('answers repeated queries the same, and each search reads the set as it is then', () => {
+    const first = setOf([{id: 'trash'}, {id: 'house'}]);
+    const second = setOf([{id: 'trash-2'}, {id: 'house'}]);
+    expect(answer(first, 'trash')).toEqual(['trash']);
+    expect(answer(first, 'trash')).toEqual(['trash']);
+    expect(answer(second, 'trash')).toEqual(['trash-2']);
+    expect(answer(first, 'house button')).toEqual(['house']);
+    // A set edited between searches answers from its new data.
+    first.data.icons.push({id: 'zebra', export: 'ZebraIcon', words: ['zebra']});
+    expect(answer(first, 'zebra')).toEqual(['zebra']);
+    expect(answer(first, 'zebra stripes')).toEqual(['zebra']);
+  });
+
   it('leaves every answered query as it was: word matches come only when nothing else answers', () => {
     const set = setOf([
       {id: 'arrow-up-to-line'},

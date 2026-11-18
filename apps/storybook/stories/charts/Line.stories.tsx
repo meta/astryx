@@ -5,7 +5,7 @@ import {Chart, line, ChartGrid, ChartAxis} from '@astryxdesign/charts';
 import {monthlyData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/Line',
+  title: 'Charts/Marks/Line',
   component: Chart,
 };
 export default meta;
@@ -17,7 +17,7 @@ const axes = (
   </>
 );
 
-export const Simple: StoryObj = {
+export const Default: StoryObj = {
   render: () => (
     <Chart
       data={monthlyData}
