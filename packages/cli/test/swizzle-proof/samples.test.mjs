@@ -8,46 +8,46 @@
  *   doc's playground defaults give fails here, by name, on its own pull
  *   request, instead of as a render error in the next release check
  *   (spec:AST-110 FR7)
- * @position A Node test; it reads docs and needs no build
+ * @position A Node test; it reads the same docs the proof reads and needs no
+ *   build
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
-import {missingSample} from './proof.mjs';
+import {listComponents} from '../../foundation/fs/paths.mjs';
+import {docOf, missingSample, workspacePackages} from './proof.mjs';
 import {needsNoSample, notRendered, samples} from './samples.mjs';
 import {COMPONENT_PACKAGES, REPO} from './scope.mjs';
 
 /**
- * The swizzle targets that have a doc: Core's components (a doc named for its
- * folder) and every component of each integration package.
+ * The swizzle targets, with their docs read as the proof reads them: Core's
+ * components as swizzle offers them (its capitalized folders), and each
+ * integration package's documented components.
  */
-async function documentedTargets() {
-  const targets = [];
-  for (const pkg of COMPONENT_PACKAGES) {
+async function targetsWithDocs() {
+  const packages = workspacePackages();
+  const targets = listComponents(path.join(REPO, 'packages/core')).map(
+    name => ({name, pkg: '@astryxdesign/core', key: `core__${name}`}),
+  );
+  for (const pkg of COMPONENT_PACKAGES.filter(p => p !== 'core')) {
     const src = path.join(REPO, 'packages', pkg, 'src');
     for (const file of fs
       .readdirSync(src, {recursive: true})
       .map(String)
       .filter(f => f.endsWith('.doc.mjs'))) {
       const name = path.basename(file, '.doc.mjs');
-      if (pkg === 'core' && path.basename(path.dirname(file)) !== name)
-        continue;
-      const m = await import(pathToFileURL(path.join(src, file)).href);
-      const doc =
-        m.doc ??
-        m.default ??
-        Object.values(m).find(v => v && typeof v === 'object' && v.name);
-      targets.push({key: `${pkg}__${name}`, doc});
+      targets.push({name, pkg: `@astryxdesign/${pkg}`, key: `${pkg}__${name}`});
     }
   }
-  return targets;
+  return Promise.all(
+    targets.map(async t => ({...t, doc: await docOf(packages, t)})),
+  );
 }
 
 describe('swizzle proof samples', () => {
   it('give every target with a required prop a sample, a default or a mark', async () => {
-    const unsampled = (await documentedTargets())
+    const unsampled = (await targetsWithDocs())
       .map(t => missingSample(t, t.doc, {samples, needsNoSample, notRendered}))
       .filter(Boolean);
     expect(unsampled).toEqual([]);
