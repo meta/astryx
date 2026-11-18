@@ -48,6 +48,39 @@ async function pressContainerInShadowRoot(ui: ReactElement) {
   return {host, shadow, trigger};
 }
 
+/**
+ * Renders `ui` inside an open shadow root whose host sits in a container that
+ * is no Tab stop, outside the root. Opens the list, focuses that outer
+ * container as a press on it would, and closes the list by light dismiss.
+ */
+async function pressContainerAroundHost(ui: ReactElement) {
+  const user = userEvent.setup();
+  const outer = document.createElement('div');
+  outer.tabIndex = -1;
+  document.body.append(outer);
+  const host = document.createElement('div');
+  outer.append(host);
+  const shadow = host.attachShadow({mode: 'open'});
+  const container = document.createElement('div');
+  shadow.append(container);
+  render(ui, {container});
+  const trigger = within(container).getByRole('combobox');
+  await user.click(trigger);
+  act(() => {
+    outer.focus();
+  });
+  const popover = shadow.querySelector('[popover]') as HTMLElement;
+  act(() => {
+    popover.dispatchEvent(
+      Object.assign(new Event('toggle'), {
+        oldState: 'open',
+        newState: 'closed',
+      }),
+    );
+  });
+  return {outer, shadow, trigger};
+}
+
 describe('focus return inside a shadow root', () => {
   it('Selector: a press on a container around the list that is no Tab stop returns focus to the trigger', async () => {
     const {host, shadow, trigger} = await pressContainerInShadowRoot(
@@ -83,6 +116,43 @@ describe('focus return inside a shadow root', () => {
     } finally {
       cleanup();
       host.remove();
+    }
+  });
+
+  it('Selector: a press on a container around the shadow host that is no Tab stop returns focus to the trigger', async () => {
+    const {outer, shadow, trigger} = await pressContainerAroundHost(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Banana"
+        onChange={() => {}}
+        placement="below"
+      />,
+    );
+    try {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      outer.remove();
+    }
+  });
+
+  it('MultiSelector: a press on a container around the shadow host that is no Tab stop returns focus to the trigger', async () => {
+    const {outer, shadow, trigger} = await pressContainerAroundHost(
+      <MultiSelector
+        label="Fruit"
+        options={OPTIONS}
+        value={['Banana']}
+        onChange={() => {}}
+      />,
+    );
+    try {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      outer.remove();
     }
   });
 });

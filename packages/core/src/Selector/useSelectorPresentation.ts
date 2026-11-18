@@ -145,7 +145,9 @@ export function useSelectorPresentation({
       active !== document.body &&
       active !== trigger &&
       list?.contains(active) !== true &&
-      (active.tabIndex >= 0 || !active.contains(list));
+      (active.tabIndex >= 0 ||
+        list == null ||
+        !containsAlongFlatTree(active, list));
     if (focusLandedElsewhere) {
       return;
     }
