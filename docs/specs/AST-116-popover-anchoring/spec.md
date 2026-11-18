@@ -91,7 +91,7 @@ where it is.
   `Element` or a function that returns an `Element` or `null`. The element
   need not be a button, focusable, or interactive; it is an element that
   generates a CSS box, so an SVG shape inside an `<svg>` is not an anchor, and
-  its `<svg>` element is.
+  its `<svg>` element is. A shape passed as an anchor warns in development.
 - **FR3 — An anchor is read at open and on the caller's refresh.** The popover
   reads a ref anchor when it opens and each time it renders. It reads a
   function anchor when it opens and again when the caller passes a different
@@ -352,7 +352,7 @@ the body.
 | Contract   | Verification                                                          | Representative states                                                                                                  | Mutation or failure expectation                                                                                                                              |
 | ---------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | FR1, FR23  | `PopoverAnchor.test.tsx`                                              | `anchor` with a trigger; with no trigger; Popover `anchorRef`                                                          | ARIA or a handler on the anchor, or the trigger losing ARIA, fails                                                                                           |
-| FR2, FR5   | `PopoverAnchor.test.tsx`                                              | A `div`, a table cell, an `<svg>` element; a trigger-less popover opened by `show()` and dismissed                     | A non-button anchor that warns or does not anchor, or a trigger-less dismissal without `onHide`, fails                                                       |
+| FR2, FR5   | `PopoverAnchor.test.tsx`                                              | A `div`, a table cell, an `<svg>`, a shape in an `<svg>`; a trigger-less popover opened by `show()` and dismissed      | A boxed anchor that warns or does not anchor, a shape with no warning, or a trigger-less dismissal without `onHide`, fails                                   |
 | FR3, FR6   | `PopoverAnchor.test.tsx` and a real-browser interaction spec          | A new function passed while open; anchor removed and re-added; function returning `null` at open                       | A remount, a close, a focus move, or a visible surface without an anchor fails                                                                               |
 | FR7, FR8   | `PopoverAnchorOutOfView.test.tsx` and a real-browser interaction spec | Anchor clipped by a panel, by the viewport, removed; `stay` and `hideWhileOutOfView`                                   | A dismissal on hide, a hidden surface that takes pointer input, or a layout read in a scroll frame fails                                                     |
 | FR9–FR11   | `PopoverOutsidePress.test.tsx` and a real-browser spec                | Veto and no veto; press on the anchor and on the trigger; a touch pan; `hasLightDismiss: false`; Escape                | A vetoed press that closes, a reported pan, a native event on the callback, or a callback for a non-outside close fails                                      |
