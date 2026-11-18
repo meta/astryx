@@ -121,6 +121,25 @@ describe('sides', () => {
 });
 
 describe('plain looks', () => {
+  it('a color on a part is its text; a part placed in a screen owns its list; alerts take their hue', async () => {
+    for (const ask of ['white on the CTA', 'white on accent buttons']) {
+      const w = writes(await how('q0', ask));
+      expect(w[0], ask).toMatch(
+        /^set q0 color '#ffffff' --on button --when variant:primary/,
+      );
+      expect(
+        w.some(c => /^set q0 accent /.test(c)),
+        ask,
+      ).toBe(false);
+    }
+    expect(
+      writes(await how('q0', 'cards in the admin dashboard: 8px corners'))[0],
+    ).toMatch(/--on card$/);
+    const blue = writes(await how('q0', 'blue alerts'));
+    expect(blue[0]).toMatch(/^set q0 info /);
+    expect(blue.some(c => /danger|--color-error/.test(c))).toBe(false);
+    expect(writes(await how('q0', 'red alerts'))[0]).toMatch(/^set q0 danger /);
+  });
   it('a status color list ends at its own items; an accent is never a status', async () => {
     const corners = writes(
       await how(
