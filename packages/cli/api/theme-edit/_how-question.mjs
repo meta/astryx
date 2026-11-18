@@ -60,6 +60,8 @@ import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
   selfSizedBox,
+  selfSizedWhy,
+  sizesItsOwnBox,
   pillShapes,
   DIAL_RADII,
   borderParts,
@@ -25671,7 +25673,7 @@ export function draftAnswer(ctx, env, question) {
             !/\b(?:wide|wider|narrower|width|tall|taller|shorter|height)\b/.test(
               c.text,
             ) &&
-            selfSizedBox(C, env.data.settings, one(on)) != null
+            sizesItsOwnBox(C, one(on))
           ) {
             const all = C.variantValues(one(on)).size ?? [];
             const named = /^size:(.+)$/.exec(String(f.when ?? ''))?.[1];
@@ -25681,12 +25683,17 @@ export function draftAnswer(ctx, env, question) {
             const steps = [];
             /** @type {string[]} */
             const said = [];
-            /** @type {string[]} */
+            /** @type {Array<{sz: string | undefined, why: string}>} */
             const unknown = [];
             for (const sz of sizes) {
               const box = selfSizedBox(C, env.data.settings, one(on), sz);
               if (!box) {
-                if (sz) unknown.push(sz);
+                unknown.push({
+                  sz,
+                  why:
+                    selfSizedWhy(C, env.data.settings, one(on), sz) ??
+                    'no size the editor knows',
+                });
                 continue;
               }
               const [w, h] = [box.w + step, box.h + step];
@@ -25701,12 +25708,31 @@ export function draftAnswer(ctx, env, question) {
                 `${sz ? `${sz} ` : ''}${w === h ? `${w}px` : `${w}px by ${h}px`} (now ${box.w === box.h ? `${box.w}px` : `${box.w}px by ${box.h}px`})`,
               );
             }
+            // (A size it cannot read keeps its own, and says why; with no
+            // size read at all, nothing is written: spacing never reaches
+            // the box.)
+            const give = `give its size in px, such as width 16px and height 16px --on ${on}`;
+            // (One reason for every size is said once.)
+            const whys = [...new Set(unknown.map(u => u.why))];
+            const kept = !unknown.length
+              ? ''
+              : `${
+                  whys.length === 1 && (unknown.length > 1 || !unknown[0].sz)
+                    ? whys[0]
+                    : unknown
+                        .map(u => `${u.sz ? `${u.sz}: ` : ''}${u.why}`)
+                        .join('; ')
+                }, so it keeps its own (${give})`;
             if (steps.length)
               return {
-                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: width and height one 4px step at each size, as it sets them itself: ${said.join(', ')}${unknown.length ? `; ${unknown.join(', ')}: no size the editor knows, so it keeps its own (give one, such as width 16px --on ${on} --when size:${unknown[0]})` : ''}`,
+                text: `${on} ${c.dir === 'less' ? 'smaller' : 'bigger'}: width and height one 4px step at each size, as it sets them itself: ${said.join(', ')}${kept ? `; ${kept}` : ''}`,
                 options: [steps],
                 sequence: true,
               };
+            return {
+              text: `${on} is sized by its own width and height, and the editor cannot read them to step: ${kept || give}`,
+              options: [],
+            };
           }
         }
         const tall =

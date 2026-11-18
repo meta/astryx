@@ -13913,6 +13913,35 @@ export function paddedParts(ctx, part) {
  * @returns {{w: number, h: number} | null}
  */
 export function selfSizedBox(C, settings, part, size) {
+  const r = readSelfSized(C, settings, part, size);
+  return r && 'w' in r ? r : null;
+}
+
+/**
+ * Why a part that sizes its own square ({@link sizesItsOwnBox}) has no box
+ * the editor can step at a size: the theme's own width or height is not in
+ * px, or neither the theme nor the part data gives one at that size. Null
+ * when it has one.
+ * @param {any} C the part census
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} part
+ * @param {string} [size]
+ * @returns {string | null}
+ */
+export function selfSizedWhy(C, settings, part, size) {
+  const r = readSelfSized(C, settings, part, size);
+  return r && 'why' in r ? r.why : null;
+}
+
+/**
+ * {@link selfSizedBox}'s reading, or why there is none.
+ * @param {any} C
+ * @param {Setting[]} settings
+ * @param {string} part
+ * @param {string} [size]
+ * @returns {{w: number, h: number} | {why: string} | null}
+ */
+function readSelfSized(C, settings, part, size) {
   if (!(FAMILIES.checks ?? []).includes(part)) return null;
   if ((C.partReads(part, 'size') ?? []).length) return null;
   const at = C.MAP[part]?.at ?? {};
@@ -13949,13 +13978,40 @@ export function selfSizedBox(C, settings, part, size) {
           !x.mode &&
           (!x.when || (size != null && x.when === `size:${size}`)),
       );
-    return st ? {v: px(st.value)} : null;
+    return st ? {v: px(st.value), thing: k, value: String(st.value)} : null;
   };
   const ow = own('width');
   const oh = own('height');
   const w = ow ? ow.v : core('width');
   const h = oh ? oh.v : core('height');
-  return w != null && h != null ? {w, h} : null;
+  if (w != null && h != null) return {w, h};
+  // (Why no box: the theme's own width or height is not in px, or Core
+  // draws no px box at this size.)
+  const unread = [
+    ow && ow.v == null ? ow : null,
+    oh && oh.v == null ? oh : null,
+  ]
+    .filter(x => x != null)
+    .map(x => `${x.thing} ${x.value}`);
+  return {
+    why: unread.length
+      ? `its ${unread.join(' and ')} ${unread.length > 1 ? 'are' : 'is'} not in px`
+      : 'no size the editor knows',
+  };
+}
+
+/**
+ * Whether a part sizes its own square, the way a member of the checks group
+ * does: it sets its own width and height and reads no size token.
+ * @param {any} C the part census
+ * @param {string} part
+ * @returns {boolean}
+ */
+export function sizesItsOwnBox(C, part) {
+  if (!(FAMILIES.checks ?? []).includes(part)) return false;
+  if ((C.partReads(part, 'size') ?? []).length) return false;
+  const at = C.MAP[part]?.at ?? {};
+  return Object.hasOwn(at, 'width') && Object.hasOwn(at, 'height');
 }
 
 /**

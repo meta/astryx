@@ -120,4 +120,20 @@ describe('the size of checkboxes and radios', () => {
       expect.stringMatching(/ (width|height) \d+px --on switch/),
     );
   });
+
+  it('says what it cannot read, and writes nothing, when no size can be stepped', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('r', {cwd, like: 'neutral'});
+    await themeEditSet('r', 'width', '1rem', {cwd, on: 'checks'});
+    await themeEditSet('r', 'height', '1rem', {cwd, on: 'checks'});
+    // (A box in rem is not stepped in px, and spacing never stands in.)
+    const {data} = await themeEditHow('smaller checkboxes', {cwd, theme: 'r'});
+    const first = data.results[0];
+    expect(first.text).toMatch(
+      /sized by its own width and height, and the editor cannot read them to step: its width 1rem and height 1rem are not in px, so it keeps its own/,
+    );
+    expect(first.text).toMatch(/give its size in px/);
+    expect(await lines('smaller checkboxes', 'r')).toEqual([]);
+    expect(JSON.stringify(data.results)).not.toMatch(/padding|spacing|gap/);
+  });
 });
