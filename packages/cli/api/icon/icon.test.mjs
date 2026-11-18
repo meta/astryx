@@ -80,6 +80,38 @@ describe('icon.search ranking', () => {
     expect(data.matches.map(match => match.id)).toEqual(['trash', 'x']);
   });
 
+  it('equal scores put first an icon whose id the query names in full', () => {
+    const setOf = (/** @type {Array<{id: string, words: string[]}>} */ icons) =>
+      /** @type {any} */ ({
+        name: 'brand',
+        package: '@acme/brand-icons',
+        data: {
+          schemaVersion: 1,
+          module: '@acme/brand-icons',
+          icons: icons.map(each => ({...each, export: `${each.id}Icon`})),
+        },
+      });
+    const ids = (/** @type {any} */ set, /** @type {string} */ query) =>
+      answeringMatches(rankIcons([set], query)).map(each => each.id);
+    const plus = setOf([
+      {id: 'folder-plus', words: ['folder', 'plus', 'add']},
+      {id: 'plus', words: ['plus', 'add']},
+    ]);
+    expect(ids(plus, 'plus add')).toEqual(['plus', 'folder-plus']);
+    // A word's plural or singular counts as named.
+    const arrows = setOf([
+      {id: 'arrow-down-up-lock', words: ['arrow', 'down', 'up', 'lock']},
+      {id: 'arrows-up-down', words: ['arrows', 'up', 'down']},
+    ]);
+    expect(ids(arrows, 'up down arrow')[0]).toBe('arrows-up-down');
+    // When no id is named in full, ties keep id order.
+    const parts = setOf([
+      {id: 'a-arrow-down', words: ['a', 'arrow', 'down']},
+      {id: 'arrow-down', words: ['arrow', 'down']},
+    ]);
+    expect(ids(parts, 'arrow')).toEqual(['a-arrow-down', 'arrow-down']);
+  });
+
   it('ties keep set order: the project set first', () => {
     const set = (/** @type {string} */ name) =>
       /** @type {any} */ ({

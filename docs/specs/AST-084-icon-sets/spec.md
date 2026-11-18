@@ -259,7 +259,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
   an id part, and an exact meaning
-  match by its tag position; then by `id`. `--set` keeps one set and `--limit`
+  match by its tag position; then an icon whose id the query names in
+  full (each id word, or its plural or singular, is a query word); then by
+  `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
   definition (`icon.definitions`), each with `templates`, the number of
