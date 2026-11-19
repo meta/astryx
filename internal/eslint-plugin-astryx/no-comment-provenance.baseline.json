@@ -48,8 +48,6 @@
     "spec quote"
   ],
   "packages/core/src/Banner/Banner.tsx": [
-    "#4166",
-    "#4166",
     "FR3",
     "FR3",
     "INV11",
@@ -583,18 +581,14 @@
   ],
   "packages/core/src/Markdown/Markdown.fr23.sampling.ts": ["FR23"],
   "packages/core/src/Markdown/Markdown.tsx": [
-    "AST-061",
     "DEC-6",
     "DEC-6",
     "DEC-9",
-    "FR11",
     "FR17",
     "FR23",
     "FR30",
     "FR30",
     "FR5",
-    "FR9",
-    "component:List",
     "component:Markdown",
     "component:Markdown",
     "module:Markdown/sourceLines",

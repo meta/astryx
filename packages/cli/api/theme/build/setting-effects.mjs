@@ -31,6 +31,7 @@
 import {
   coversProperty,
   cssTree,
+  keptCssTreeAnswer,
   longhandsOf,
 } from '../../../foundation/runtime/css-tree.mjs';
 
@@ -286,6 +287,23 @@ export function declarationsOf(rules) {
 }
 
 /**
+ * The declarations of a list of rules (declarationsOf), kept between runs by
+ * the rules' text (keptCssTreeAnswer), so a build of an unchanged theme reads
+ * them back and loads no css-tree. A situation's attributes are kept as their
+ * entries, in order, and read back into a Map.
+ * @param {string[]} rules
+ * @returns {Decl[]}
+ */
+function keptDeclarationsOf(rules) {
+  return keptCssTreeAnswer('theme-rule-declarations', rules, list =>
+    declarationsOf(list).map(d => ({
+      ...d,
+      at: {...d.at, attrs: [...d.at.attrs]},
+    })),
+  ).map(d => ({...d, at: {...d.at, attrs: new Map(d.at.attrs)}}));
+}
+
+/**
  * The style key a situation's attributes name (`base` with none).
  * @param {Situation} at
  */
@@ -464,7 +482,7 @@ const situationText = s =>
  * @returns {SettingEffectIssue[]}
  */
 export function settingEffectIssues(rules, writtenAt, {skip} = {}) {
-  const decls = declarationsOf(rules).filter(
+  const decls = keptDeclarationsOf(rules).filter(
     d => !skip?.(side(d, 'theme')),
   );
   /** @type {Map<Decl, {path: string[], layer: number} | null>} */
@@ -908,7 +926,7 @@ export function blockPaths(components, generate) {
     for (const [key, block] of Object.entries(keys))
       probes[part][key] = probe(block, ['components', part, key], true);
   }
-  const decls = declarationsOf(generate(probes));
+  const decls = keptDeclarationsOf(generate(probes));
   /** @type {Map<number, string[]>} */
   const blockOfRule = new Map();
   for (const d of decls)
@@ -955,3 +973,93 @@ export const settingIssueLocation = entry =>
   entry.line != null
     ? ` (${entry.file ? `${entry.file}, ` : ''}line ${entry.line})`
     : '';
+
+/**
+ * The note that stands for the settings a generated file writes that do not
+ * show as written: their count, the file and the tool that writes it, and
+ * where the full list is.
+ * @param {number} count
+ * @param {string} file - as the reader sees it
+ * @param {string} [by] - the tool the file's generated mark names
+ * @param {string} [listedBy] - what lists each setting (`--json` by default)
+ */
+export const generatedSettingNotice = (
+  count,
+  file,
+  by,
+  listedBy = '--json',
+) => {
+  const one = count === 1;
+  return `${count} ${one ? 'setting' : 'settings'} that ${file} writes ${one ? 'does' : 'do'} not show as written; that file is generated, so fix ${one ? 'it' : 'them'} in its generator${by ? `, ${by}` : ''} (${listedBy} lists ${one ? 'it' : 'each'})`;
+};
+
+/**
+ * One note of a generated file's settings: the file, as the reader sees it,
+ * and the note's text.
+ * @typedef {{file: string, text: string}} GeneratedSettingNote
+ */
+
+/**
+ * The setting issues to name one by one, and one note per generated file
+ * for the rest: a file that says a tool generates it is not where their fix
+ * goes. `theme build` and `astryx doctor` both say them this way.
+ * @template T
+ * @param {Array<T & {file?: string | undefined}>} entries
+ * @param {(file: string | undefined) => {by?: string} | null} generatedOf -
+ *   whether the file that writes an entry (undefined: the theme's own) is
+ *   generated, and by what
+ * @param {(file: string | undefined) => string} shown - the file as the
+ *   reader sees it
+ * @param {{listedBy?: string}} [options] - `listedBy`: what lists each
+ *   setting, as the note names it
+ * @returns {{listed: Array<T & {file?: string | undefined}>, notes: GeneratedSettingNote[]}}
+ */
+export function splitGeneratedIssues(
+  entries,
+  generatedOf,
+  shown,
+  options = {},
+) {
+  /** @type {Array<T & {file?: string | undefined}>} */
+  const listed = [];
+  /** @type {Map<string | undefined, {count: number, by?: string}>} */
+  const generated = new Map();
+  for (const entry of entries) {
+    const mark = generatedOf(entry.file);
+    if (!mark) {
+      listed.push(entry);
+      continue;
+    }
+    const seen = generated.get(entry.file);
+    generated.set(entry.file, {count: (seen?.count ?? 0) + 1, by: mark.by});
+  }
+  return {
+    listed,
+    notes: [...generated].map(([file, {count, by}]) => ({
+      file: shown(file),
+      text: generatedSettingNotice(count, shown(file), by, options.listedBy),
+    })),
+  };
+}
+
+/**
+ * The notes of several builds (a family's members, doctor's local themes)
+ * as one note per generated file: a theme that extends a generated one
+ * reports that file's settings too. Each with the labels of every build
+ * that reported it, in order.
+ * @param {Array<{label?: string, notes: GeneratedSettingNote[]}>} reports
+ * @returns {Array<GeneratedSettingNote & {labels: string[]}>}
+ */
+export function generatedNotesByFile(reports) {
+  /** @type {Map<string, GeneratedSettingNote & {labels: string[]}>} */
+  const byFile = new Map();
+  for (const {label, notes} of reports)
+    for (const note of notes) {
+      const seen = byFile.get(note.file);
+      if (!seen)
+        byFile.set(note.file, {...note, labels: label == null ? [] : [label]});
+      else if (label != null && !seen.labels.includes(label))
+        seen.labels.push(label);
+    }
+  return [...byFile.values()];
+}

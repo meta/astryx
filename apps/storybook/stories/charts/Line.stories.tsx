@@ -11,6 +11,7 @@ import {
 import {Grid, useLocale} from '@astryxdesign/core';
 import {
   dailyVisitorsData,
+  dailyVisitorsWithGapData,
   pageLoadTimeData,
   subscriberGrowthData,
 } from './_data';
@@ -150,5 +151,29 @@ export const Curves: StoryObj = {
         />
       ))}
     </Grid>
+  ),
+};
+
+/**
+ * Missing values (`null`) break the line. The line does not drop to zero and
+ * does not join the points on each side of the gap. Say in the subtitle why
+ * data is missing. Check: the line stops after June 9 and starts again at
+ * June 12, and there is no dot for June 10 or 11.
+ */
+export const MissingData: StoryObj = {
+  render: () => (
+    <Chart
+      data={dailyVisitorsWithGapData}
+      xKey="day"
+      title="Daily website visitors"
+      subtitle="Unique visitors per day, June 2–15. No data for June 10–11 (tracking outage)"
+      series={[
+        line('visitors', {color: '#3b82f6', label: 'Visitors', dots: true}),
+      ]}
+      tooltip
+      grid={<ChartGrid />}
+      axes={<CompactAxes />}
+      height={300}
+    />
   ),
 };

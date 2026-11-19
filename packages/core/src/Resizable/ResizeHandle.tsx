@@ -30,9 +30,8 @@ import {
   getCollapseControls,
   getEffectiveMaxPx,
   resizablePropsOf,
-  type ResizableProps,
-  type ResizableRegion,
-} from './useResizable';
+} from './resizableModel';
+import type {ResizableProps, ResizableRegion} from './useResizable';
 import {
   createResizeGesture,
   type ResizeGesture,

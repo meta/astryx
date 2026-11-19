@@ -26,6 +26,7 @@ import {reducedMotionKeys} from '../motion/reducedMotion.stylex';
 import {
   DEFAULT_COMPACT_DEFINITION,
   DEFAULT_WIDTH_BREAKPOINTS,
+  belowStyleKey,
 } from '../theme/themeAdaptations';
 import {Theme, defineTheme} from '../theme';
 import {
@@ -214,8 +215,19 @@ describe('touch presentation', () => {
 
   it('holds the same keys the resolver defines', () => {
     expect(touchKeys.touch).toBe(`@media ${TOUCH_QUERY}`);
-    expect(touchKeys.compact).toBe(`@media ${COMPACT_QUERY}`);
-    expect(touchKeys.compactTouch).toBe(`@media ${COMPACT_TOUCH_QUERY}`);
+    expect(touchKeys.compact).toBe(
+      belowStyleKey({
+        width: DEFAULT_COMPACT_DEFINITION.widthBelow,
+        height: DEFAULT_COMPACT_DEFINITION.heightBelow,
+      }),
+    );
+    expect(touchKeys.compact).toBe(
+      '@media (not ((min-width: 768px) and (min-height: 500px)))',
+    );
+    expect(COMPACT_QUERY).toBe('(width < 768px), (height < 500px)');
+    expect(COMPACT_TOUCH_QUERY).toBe(
+      '(width < 768px) and (pointer: coarse), (height < 500px) and (pointer: coarse)',
+    );
     expect(touchKeys.iosSupports).toBe(`@supports ${IOS_SUPPORTS_QUERY}`);
     expect(IOS_TOUCH_STYLE_KEYS).toEqual([
       touchKeys.touch,
@@ -270,7 +282,6 @@ describe('touch presentation', () => {
     //   the at-rule, a feature or a value, fails.
     const pointerKeys = new Set<string>([
       touchKeys.touch,
-      touchKeys.compactTouch,
       touchKeys.iosSupports,
       '@media (any-pointer: coarse)',
       '@media (pointer: fine)',
@@ -279,7 +290,7 @@ describe('touch presentation', () => {
     ]);
     const references = new Set<string>([...pointerKeys, touchKeys.compact]);
     // AppShell's standard width points are width-only queries, not the
-    // compact size; only AppShell writes them.
+    // compact size; only AppShell's unreadWidthPoint module writes them.
     const appShellWidthPointKeys = new Set(
       Object.values(DEFAULT_WIDTH_BREAKPOINTS).map(
         width => `@media not all and (min-width: ${width}px)`,
@@ -301,10 +312,10 @@ describe('touch presentation', () => {
           !/\.(test|spec|stories)\./.test(entry.name)
         ) {
           const source = fs.readFileSync(full, 'utf8');
-          const isAppShell = entry.name === 'AppShell.tsx';
+          const writesWidthPoints = entry.name === 'unreadWidthPoint.ts';
           for (const match of source.matchAll(/'(@[^'\n]*)'/g)) {
             const key = match[1];
-            if (isAppShell && appShellWidthPointKeys.has(key)) {
+            if (writesWidthPoints && appShellWidthPointKeys.has(key)) {
               continue;
             }
             if (references.has(key)) {

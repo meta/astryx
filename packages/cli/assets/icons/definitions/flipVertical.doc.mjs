@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'flipVertical',
+  group: 'flip',
   description: 'Mirror an image or shape top to bottom.',
   words: ['mirror', 'flip', 'upside down'],
 };
