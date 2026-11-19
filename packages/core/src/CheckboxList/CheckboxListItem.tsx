@@ -35,7 +35,7 @@ import {CheckboxListContext} from './CheckboxListContext';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {themeDataAttributes} from '../utils/themeProps';
+import {themeProps} from '../utils/themeProps';
 import type {ItemAlign} from '../Item';
 import {
   registerEnglishFallback,
@@ -354,10 +354,20 @@ export function CheckboxListItem({
   const isCheckedRow =
     resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
 
+  // The row's own target. A theme can style CheckboxList rows without
+  // styling every list row, as `radio-list-item` does for RadioList.
+  const {className: rowClassName, ...rowState} = themeProps(
+    'checkbox-list-item',
+    {
+      selected: isCheckedRow ? 'selected' : null,
+      disabled: effectiveDisabled ? 'disabled' : null,
+    },
+  );
+
   return (
     <ListItem
       {...restProps}
-      {...themeDataAttributes({selected: isCheckedRow ? 'selected' : null})}
+      {...rowState}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
@@ -383,7 +393,7 @@ export function CheckboxListItem({
           xstyle,
         ] as StyleXStyles
       }
-      className={className}
+      className={className ? `${rowClassName} ${className}` : rowClassName}
       style={style}
       startContent={
         // Only the row's own checkbox: a checkbox placed in the row's content

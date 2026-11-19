@@ -1336,6 +1336,26 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(167.1 89% 25%)',
       },
     },
+    'checkbox-list-item': {
+      base: {
+        backgroundColor: 'hsl(240.5 82% 52%)',
+        color: 'hsl(335.2 81% 12%)',
+        borderColor: 'hsl(190.4 85% 25%)',
+        outlineColor: 'hsl(147.3 88% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(291.8 91% 54%)',
+        color: 'hsl(283.0 78% 12%)',
+        borderColor: 'hsl(170.3 82% 25%)',
+        outlineColor: 'hsl(263.8 71% 25%)',
+      },
+      disabled: {
+        backgroundColor: 'hsl(4.9 82% 62%)',
+        color: 'hsl(169.5 72% 12%)',
+        borderColor: 'hsl(28.7 88% 25%)',
+        outlineColor: 'hsl(8.6 88% 25%)',
+      },
+    },
     citation: {
       base: {
         backgroundColor: 'hsl(51.2 94% 59%)',
