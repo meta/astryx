@@ -1560,8 +1560,8 @@ function apply(ctx, slug, d, st) {
     if (
       was.keep &&
       !s.keep &&
-      JSON.stringify({...was, keep: undefined}) ===
-        JSON.stringify({...s, keep: undefined})
+      JSON.stringify({...was, keep: undefined, reached: undefined}) ===
+        JSON.stringify({...s, keep: undefined, reached: undefined})
     )
       s.keep = was.keep;
     d.settings[i] = s;

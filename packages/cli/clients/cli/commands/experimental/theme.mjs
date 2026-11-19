@@ -615,7 +615,7 @@ function changeBlocks(r) {
   const {
     newProblems = [],
     leftProblems = [],
-    widened = [],
+    offered = [],
     leftOut = [],
     fontNotLoaded = [],
     missed: _missed,
@@ -625,32 +625,14 @@ function changeBlocks(r) {
     missedNew: _missedNew,
     ...rest
   } = /** @type {any} */ (d);
-  // A saved setting this change made reach more parts leads with the new
-  // problems: it changes the look beyond what the command named.
-  const widenedText = widened.length
-    ? `it also made ${widened.length} saved setting${widened.length > 1 ? 's' : ''} reach more parts`
-    : '';
   const status = newProblems.length
-    ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}${widenedText ? `, and ${widenedText}` : ''}:`
-    : widenedText
-      ? `${done}, but ${widenedText}:`
-      : done;
+    ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
+    : done;
   // On undo, `setting` and `removed` both name the setting removed, as in
   // the JSON; the status line says the base theme's value is back.
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
-    ...widened.map(
-      (/** @type {{setting: string, parts: string[], keep: string}} */ w) =>
-        `- ${w.setting} now also reaches ${w.parts.join(', ')} (drawn alike); to keep it as it was: ${w.keep}`,
-    ),
-    // Narrowed one at a time, the ones not yet narrowed still paint the parts
-    // the narrowed ones left: one line keeps them all as they were.
-    ...(widened.length > 1
-      ? [
-          `- to keep all ${widened.length} as they were, in one step: ${widened.map((/** @type {{keep: string}} */ w) => w.keep).join(' && ')}`,
-        ]
-      : []),
     // Problems it moved but left failing: said under the new ones.
     ...(leftProblems.length
       ? [
@@ -658,6 +640,12 @@ function changeBlocks(r) {
           ...problemList(leftProblems),
         ]
       : []),
+    // A saved setting whose family gained parts after it was made keeps
+    // its reach; the parts are offered with the line that takes them.
+    ...offered.map(
+      (/** @type {{setting: string, parts: string[], run: string}} */ o) =>
+        `- ${o.setting} would also reach ${o.parts.join(', ')}, drawn alike; to let it: ${o.run}`,
+    ),
     ...(fontNotLoaded.length
       ? [
           list(
