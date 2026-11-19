@@ -3702,6 +3702,42 @@ export default function Page() {
     expect(printed.filter((/** @type {any} */ w) => w.message.includes('rendered once'))).toHaveLength(1);
   }, 60_000);
 
+  it("logs no render timings while it draws a chart, so a chart's props are never copied into them", async () => {
+    put(
+      'charts-timings.tsx',
+      `import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+// React's development build logs each render with console.timeStamp when it can.
+let timings = 0;
+const timeStamp = console.timeStamp;
+console.timeStamp = (...args: any[]) => {
+  timings += 1;
+  return timeStamp?.apply(console, args);
+};
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} timings {timings}</text>;
+}
+function OnlyOnServer() {
+  // Throws once a document exists, so each chart is drawn by itself, one after the other.
+  if (typeof document !== 'undefined') throw new Error('drawn alone');
+  return null;
+}
+export default function Page() {
+  return (
+    <div>
+      <OnlyOnServer />
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-timings.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-timings.html'), 'utf8');
+    expect(html.match(/a timings \d+/g)).toEqual(['a timings 0', 'a timings 0']);
+  }, 60_000);
+
   it('says so when it draws each chart by itself', async () => {
     put(
       'charts-alone.tsx',
