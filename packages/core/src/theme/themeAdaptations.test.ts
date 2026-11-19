@@ -21,6 +21,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function adaptationInput(
   rules: NonNullable<NonNullable<DefineThemeInput['adaptations']>['rules']>,
 ): DefineThemeInput {
@@ -65,7 +74,7 @@ describe('width breakpoint metadata', () => {
       lg: 1100,
     });
     expect(generateAdaptationCSS(theme)).toEqual({prose: '', component: ''});
-    expect(generateThemeCSS(theme).component).not.toContain('@media');
+    expect(generateThemeCSS(theme).component).not.toMatch(/@media \(width/);
   });
 
   it('validates built breakpoint metadata even when there are no rules to emit', () => {
@@ -392,7 +401,7 @@ describe('rule order and writes', () => {
   it('keeps status aliases at the root so conditional authored roles win', () => {
     const theme = defineTheme({
       name: 'conditional-status-role-precedence',
-      tokens: {'--color-text-blue': '#0074e2'},
+      tokens: {...KEEPS_SIDE, '--color-text-blue': '#0074e2'},
       adaptations: {
         rules: [
           {
@@ -425,6 +434,7 @@ describe('rule order and writes', () => {
   it('replays authored status roles after overlapping adaptation and media aliases', () => {
     const theme = defineTheme({
       name: 'conditional-status-role-replay',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {

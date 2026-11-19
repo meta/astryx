@@ -640,17 +640,15 @@ const styles = stylex.create({
   // Static Markdown lists never host swipe actions. Let outside counter ink
   // paint through both ordered and unordered ancestors; general List and
   // swipe-capable rows retain their own inline clip (component:List FR9).
+  // List's `overflowInline` compiles to overflow-x, which this replaces;
+  // StyleX's xstyle types name only the physical property.
   blockIndent: {
-    marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
-    overflowInline: 'visible',
+    overflowX: 'visible',
   },
-  // Numbered document lists keep their ordinary text inset regardless of
-  // counter width, matching RichText's native outside markers (AST-061 FR11).
-  // These rows have no swipe actions: unlike general List, their outside ink
-  // may paint past the gutter instead of being clipped at a finite threshold.
-  markerGutter: {
-    marginInlineStart: `calc(-1 * (${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']}))`,
-    paddingInlineStart: spacingVars['--spacing-4'],
+  // A task list's rows keep CheckboxList's row inset, so its container steps
+  // out by that inset to put each checkbox on the text line.
+  taskListIndent: {
+    marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
   // HR
   hr: {
@@ -1816,7 +1814,7 @@ function renderBlock(
               label={t('@astryx.markdown.taskList')}
               isLabelHidden
               value={checkedValues}
-              containerXstyle={styles.blockIndent}
+              containerXstyle={[styles.blockIndent, styles.taskListIndent]}
               isReadOnly
               density="compact">
               {node.children.map((item, i) => {
@@ -1907,8 +1905,9 @@ function renderBlock(
           <List
             listStyle={node.ordered ? 'decimal' : 'disc'}
             density="compact"
+            edge="flush"
             start={node.ordered ? node.start : undefined}
-            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
+            xstyle={styles.blockIndent}>
             {node.children.map((item, i) => {
               const firstChild = item.children[0];
               const isInline =
