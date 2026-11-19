@@ -815,7 +815,7 @@ export default function CheckoutWizardPage() {
                     rather than the label's, so the row does not step down
                     when the status message appears under the field. */}
                       <HStack gap={2} vAlign="end">
-                        <StackItem size="fill" style={{minWidth: 0}}>
+                        <StackItem size="fill">
                           <TextInput
                             label="Promo code"
                             value={promoInput}
