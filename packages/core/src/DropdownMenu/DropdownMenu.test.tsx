@@ -696,6 +696,89 @@ describe('DropdownMenu', () => {
     );
   });
 
+  it('keeps focus on the row a keyboard user activated when the open sheet re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: `Bump (${count})`,
+              hasCloseOnSelect: false,
+              onClick: () => setCount(value => value + 1),
+            },
+            {label: 'Last'},
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Bump (0)'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: 'Bump (1)'})).toHaveFocus();
+  });
+
+  it('keeps focus in an open sub-menu of the sheet when the menu re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'Bump (0)'}),
+      ).toBeInTheDocument(),
+    );
+    await act(async () => nextFrames(3));
+    const bump = screen.getByRole('button', {name: /^Bump/});
+    bump.focus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <DropdownMenu
@@ -5572,3 +5655,16 @@ describe('DropdownMenu trigger refs across renders', () => {
     expect(refs.at(-1)).toBe(refs[0]);
   });
 });
+
+async function nextFrames(count: number): Promise<void> {
+  return new Promise(resolve => {
+    const step = (left: number) => {
+      if (left === 0) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}

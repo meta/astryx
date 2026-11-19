@@ -19,7 +19,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {typography} from './uikitTypography';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 import {generateOnMediaCSS} from './generateThemeRules';
 import {
   FONT_SIZE_STEP_STYLES,
@@ -34,6 +35,15 @@ import {
   type DynamicTypeStyle,
 } from './dynamicType';
 import {textSizeDefaults} from './tokens.stylex';
+
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
 
 const STYLES = Object.keys(typography) as DynamicTypeStyle[];
 
@@ -490,6 +500,7 @@ describe('every theme follows the reader text size', () => {
     // a descendant; written raw, they would undo the reader's text size there.
     const theme = defineTheme({
       name: 'dt-media',
+      tokens: KEEPS_SIDE,
       typography: {scale: {base: 14, ratio: 1.2}},
       onDark: {tokens: {'--font-size-base': '15px'}},
       onLight: {tokens: {'--text-supporting-size': '12px'}},

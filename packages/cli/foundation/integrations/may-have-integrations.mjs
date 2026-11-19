@@ -14,12 +14,13 @@
  * @position Read by clients/cli/index.mjs, which loads the project before
  *   help and before each command only where an integration can load (to read
  *   the commands integrations declare), and by foundation/fs/gather-cache.mjs:
- *   `component`, `template`, `theme`, `discover` and `docs` record a run only
- *   for what is worth keeping where
- *   an integration can load (its kept check results, and template
- *   discovery's records), so a project with none skips the recorder entirely. A true
- *   answer only means the run records, so a check that says true too often
- *   costs time, never an answer.
+ *   `theme`, `discover` and `docs` record a run only where an integration can
+ *   load (its kept check results), so in a project with none they skip the
+ *   recorder; `component` and `template` there record only into a catalogs
+ *   folder that exists already, and never make it, to keep template
+ *   discovery's records. A true answer only means the run records as it does
+ *   where an integration loads, so a check that says true too often costs
+ *   time, never an answer.
  */
 
 import {CONFIG_BASENAMES} from '../config/config-path.mjs';
