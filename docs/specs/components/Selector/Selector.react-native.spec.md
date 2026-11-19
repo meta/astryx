@@ -155,9 +155,9 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Transformation and precedence order
 
-- **ORD1 — List form.** An iOS `menuStyle`, the system menu host and a short
-  plain list, the system menu; else Astryx's panel, placed by `menuStyle`,
-  else as core places it.
+- **ORD1 — List form.** iOS `pullDown`, the system menu host and a short plain
+  list, the system menu; else Astryx's panel, placed by `menuStyle`, else by
+  core's default presentation (FR4).
 - **ORD2 — Availability.** Disabled, then read-only, then editable, as in
   core.
 - **ORD3 — Empty words.** While loading, none; with a query and options, the
@@ -204,8 +204,8 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 The component implements design requirements without copying their rationale.
 
-Platform controls (`spec:AST-093` FR2): the system pop-up and pull-down menu
-(UIMenu) on iOS for a short plain list; Astryx's panel, anchored or in a
+Platform controls (`spec:AST-093` FR2): the system pull-down menu (UIMenu) on
+iOS for a short plain `pullDown` list; Astryx's panel, anchored or in a
 bottom sheet, for every other list. On Android, the platform's control is
 Material 3's exposed dropdown menu, which the package has no host for, so
 Astryx's panel draws there (the `spec:AST-082` FR11 gap under Current-state
@@ -222,10 +222,10 @@ menu takes the theme's light or dark mode only.
 
 ### Native pieces
 
-| Native piece       | Record                        | What this record uses it for                        |
-| ------------------ | ----------------------------- | --------------------------------------------------- |
-| `AstryxSystemMenu` | `spec:AST-128` FR2, FR3, FR14 | the system menu for a short plain list on iOS (FR5) |
-| `Icon` resolution  | `spec:AST-127` FR4            | the control's start icon (FR1)                      |
+| Native piece       | Record                        | What this record uses it for                                             |
+| ------------------ | ----------------------------- | ------------------------------------------------------------------------ |
+| `AstryxSystemMenu` | `spec:AST-128` FR2, FR3, FR14 | the system pull-down menu for a short plain `pullDown` list on iOS (FR5) |
+| `Icon` resolution  | `spec:AST-127` FR4            | the control's start icon (FR1)                                           |
 
 ## Family and system relationships
 
@@ -242,7 +242,7 @@ menu takes the theme's light or dark mode only.
 | Contract        | Verification                                                                                           | Representative states                                                                                                                                                               | Mutation or failure expectation                                                                                                                           | Audit section                             |
 | --------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | FR1–FR4         | Type tests of the shared, iOS and Android views against the generated contracts; a contract drift test | each core prop; each web-contract prop, `isDefaultOpen`, `placement` and `changeAction` included; a string option, a divider and a section; each `menuStyle` value on each platform | a web-contract prop or another option form accepted, or a `menuStyle` value accepted on the other platform, fails                                         | `audit:react-native/Selector/api`         |
-| FR5, ORD1       | Unit tests of the list form through the package's testing doubles; Simulator checks of the system menu | eight and nine options; search; clear; loading; no host; each iOS `menuStyle`                                                                                                       | a system menu for a list FR5 keeps in the panel, the panel where the system menu applies, or a missing development note fails                             | `audit:react-native/Selector/system-menu` |
+| FR5, ORD1       | Unit tests of the list form through the package's testing doubles; Simulator checks of the system menu | eight and nine options; search; clear; loading; no host; `pullDown` and `popUp` on iOS                                                                                              | a system menu for a `popUp` list or another list FR5 keeps in the panel, the panel where the system menu applies, or a missing development note fails     | `audit:react-native/Selector/system-menu` |
 | FR6, ORD3, AR4  | Unit tests of the panel; Simulator and emulator checks with the software keyboard                      | search with matches and none; no options; loading; a disabled row; the keyboard up; a touch outside; Android back; the escape                                                       | a row below the minimum target, a disabled row that picks, the panel under the keyboard, empty words while loading, or a missing announcement fails       | `audit:react-native/Selector/panel`       |
 | FR7             | Unit tests through the doubles                                                                         | a pick; a pick of the current value; clear                                                                                                                                          | a second `onChange`, a re-pick without `onChange` or with the haptic, or a clear that reports anything but `null` fails                                   | `audit:react-native/Selector/selection`   |
 | FR8, FR10, FR12 | Unit tests of the control and field; Simulator and emulator captures in each fixture theme             | each variant and size; loading; each status placement; in an `InputGroup`; `id`; `isHidden`                                                                                         | a pressed `input` control that shrinks, an attached message on a `secondary` control, or an identifier off the trigger fails                              | `audit:react-native/Selector/control`     |
