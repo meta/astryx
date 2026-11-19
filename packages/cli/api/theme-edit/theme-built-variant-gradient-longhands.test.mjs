@@ -191,6 +191,31 @@ describe('a stress theme of gradients', () => {
 
 describe('beside a variant gradient', () => {
   it(
+    'reads a lone var() after the size slash as the size, never the color',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('lv', {cwd, like: 'neutral'});
+      const sel = '.astryx-button[data-variant="primary"]';
+      await themeEditSet(
+        'lv',
+        'background',
+        'linear-gradient(#337ab7, #265a88) center / var(--spacing-4)',
+        {cwd, on: 'button', when: 'variant:primary'},
+      );
+      const body = /** @type {{body: string}} */ (
+        rulesOn(css('lv'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        'linear-gradient(#337ab7, #265a88)',
+      );
+      expect(valueIn(body, 'background-position')).toBe('center');
+      expect(valueIn(body, 'background-size')).toBe('var(--spacing-4)');
+      expect(body).not.toMatch(/background-color:\s*var\(--spacing-4\)/);
+    },
+    T,
+  );
+
+  it(
     'takes a prefixed gradient and an image-set() as the image, with the words beside them as their longhands',
     async () => {
       if (unbuilt) return;

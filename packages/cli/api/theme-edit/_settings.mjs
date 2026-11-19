@@ -8100,8 +8100,17 @@ export function backgroundColorLayer(value) {
     .filter(Boolean);
   const last = layers.at(-1) ?? '';
   const words = splitTop(last, ' ').map(x => x.trim());
+  // A lone var() beside the size slash is a position or a size
+  // (`center / var(--spacing-4)`), never the color: CSS reads it as a length
+  // there.
+  const slash = words.indexOf('/');
+  const nearSlash = (/** @type {number} */ i) =>
+    slash >= 0 && i >= slash - 2 && i <= slash + 2;
   const at = words.findIndex(
-    w => !/gradient\(|url\(/i.test(w) && isColorValue(w),
+    (w, i) =>
+      !/gradient\(|url\(/i.test(w) &&
+      isColorValue(w) &&
+      !(/^var\(\s*--[\w-]+\s*\)$/i.test(w) && nearSlash(i)),
   );
   if (at < 0) return {images: value, color: null};
   const rest = words.filter((_, i) => i !== at).join(' ');
