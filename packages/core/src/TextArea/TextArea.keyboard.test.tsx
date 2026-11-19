@@ -6,7 +6,8 @@
  * @output Proves the focused text area stays above the on-screen keyboard with
  *   no prop. Its scroller reveals it in the keyboard's report, and a fixed bar
  *   at the viewport's bottom rides with it. A scroll area that cannot bring it
- *   up leaves the browser's reveal. Nothing attaches under a mouse
+ *   up leaves the browser's reveal. A first tap on the container focuses the
+ *   field, except while busy. Nothing attaches under a mouse
  * @position Keyboard tests of TextArea.tsx
  */
 
@@ -197,4 +198,42 @@ it('attaches nothing under a mouse or a trackpad', () => {
   act(() => field.focus());
   keyboard.show(300);
   expect(scrollBy).not.toHaveBeenCalled();
+});
+
+it('takes a first tap on the container only while the text area is not busy', () => {
+  keyboard = installKeyboardTestDouble();
+  const {rerender} = render(
+    <TextArea label="Notes" value="" onChange={() => {}} />,
+  );
+  const field = screen.getByRole('textbox');
+  const container = field.closest<HTMLElement>('.astryx-text-area')!;
+  const tap = () => {
+    const touch = (type: string) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      const points =
+        type === 'touchend' ? [] : [{identifier: 0, clientX: 12, clientY: 4}];
+      Object.assign(event, {
+        touches: points,
+        changedTouches: [{identifier: 0, clientX: 12, clientY: 4}],
+      });
+      return event;
+    };
+    act(() => {
+      container.dispatchEvent(touch('touchstart'));
+    });
+    const end = touch('touchend');
+    act(() => {
+      container.dispatchEvent(end);
+    });
+    return end;
+  };
+  expect(tap().defaultPrevented).toBe(true);
+  expect(field).toHaveFocus();
+  act(() => field.blur());
+
+  // Busy: the container's own click skips focus, and so does its first tap.
+  rerender(<TextArea label="Notes" value="" onChange={() => {}} isLoading />);
+  const busyField = screen.getByRole('textbox');
+  expect(tap().defaultPrevented).toBe(false);
+  expect(busyField).not.toHaveFocus();
 });
