@@ -29005,9 +29005,14 @@ export function draftAnswer(ctx, env, question) {
   }
 
   // ("heavy display headings", "make them blue" after it: one answer.)
+  // (A look's size now: the font size the theme sets on that look, else the
+  // token it reads.)
   oneAnswerPerFamily(drafts, d => draftClause.get(d), clauses, pluralSaid, w => {
+    const set = env.data.settings.find(
+      st => st.thing === 'font-size' && st.when === w && !st.state && !st.mode,
+    );
     const token = `--text-${w.split(':')[1]}-size`;
-    return lengthPx(String(resolvedValue(token) || current(token) || ''));
+    return lengthPx(String(set?.value ?? (resolvedValue(token) || current(token) || '')));
   });
   /** @type {Draft[]} */
   const result = [];

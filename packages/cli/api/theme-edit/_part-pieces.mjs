@@ -4,8 +4,11 @@
  * @file A part's own looks and pieces, read from what Core documents about
  * its components: the values of a numbered look ("display headings"), and
  * one answer for a clause on that whole family.
- * @position api/theme-edit — a leaf with no imports, read by _how-question.mjs
+ * @position api/theme-edit — read by _how-question.mjs; reads lengths with
+ *   _settings.mjs's lengthPx
  */
+
+import {lengthPx} from './_settings.mjs';
 
 /**
  * Every value of a numbered look family a part draws ("display headings":
@@ -67,9 +70,16 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
 }
 
 /** A step's size in px, or null. @param {unknown} v */
-const pxOf = v => {
-  const m = /^(-?\d*\.?\d+)(px|rem)$/.exec(String(v).trim());
-  return m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
+const pxOf = v => lengthPx(String(v));
+
+/**
+ * A size in px written in the unit of `like` (px, rem or em).
+ * @param {number} px
+ * @param {unknown} like
+ */
+const inUnitOf = (px, like) => {
+  const unit = /(rem|em)\s*$/i.exec(String(like))?.[1]?.toLowerCase();
+  return unit ? `${Number((px / 16).toFixed(3))}${unit}` : `${Math.round(px)}px`;
 };
 
 /**
@@ -91,10 +101,10 @@ function scaleFamilySizes(drafts, whens, sizeOf) {
   const top = now.indexOf(Math.max(.../** @type {number[]} */ (now)));
   const said = drafts[top]?.options.flat().find(isSize);
   if (!said) return null;
-  const px = /** @type {number} */ (pxOf(/** @type {any} */ (said).value));
-  const rem = /rem$/.test(String(/** @type {any} */ (said).value));
+  const value = /** @type {any} */ (said).value;
+  const px = /** @type {number} */ (pxOf(value));
   const sizes = now.map(n => (px * /** @type {number} */ (n)) / /** @type {number} */ (now[top]));
-  const written = sizes.map(v => (rem ? `${Number((v / 16).toFixed(3))}rem` : `${Math.round(v)}px`));
+  const written = sizes.map(v => inUnitOf(v, value));
   drafts.forEach((d, i) => {
     for (const o of d.options) for (const st of o) if (isSize(st)) /** @type {any} */ (st).value = written[i];
   });

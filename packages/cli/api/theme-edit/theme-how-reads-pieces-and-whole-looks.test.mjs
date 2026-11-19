@@ -534,6 +534,14 @@ describe("a part's own piece taken away", () => {
         expect(px).toBeLessThan(60);
       }
       expect(JSON.stringify(sizedData.results)).toMatch(/scaled to keep the steps/);
+      // (Any length unit scales, written in the unit said.)
+      const em = all(await answer('display headings 3em'));
+      expect(em).toMatch(/font-size 3em --on heading --when type:display-1/);
+      for (const n of [2, 3]) {
+        const v = Number(new RegExp(`font-size ([\\d.]+)em --on heading --when type:display-${n}\\b`).exec(em)?.[1]);
+        expect(v).toBeGreaterThan(0);
+        expect(v).toBeLessThan(3);
+      }
       // (A look's other options, a whole-theme dial, stay out of the family's
       // one answer.)
       expect(first(await answer('display headings tighter letter spacing'))).not.toContain(
@@ -544,6 +552,27 @@ describe("a part's own piece taken away", () => {
       expect(JSON.stringify((await answer('display headings color')).results)).not.toMatch(
         /heading and heading/,
       );
+    },
+    T,
+  );
+});
+
+describe('a plural display size after one look is set', () => {
+  it(
+    'scales from the size the theme sets on each look, so the steps stay',
+    async () => {
+      await themeEditSet('t', 'font-size', '60px', {cwd, on: 'heading', when: 'type:display-1'});
+      try {
+        const lines = first(await answer('display headings 72px')).join('\n');
+        expect(lines).toMatch(/font-size 72px --on heading --when type:display-1/);
+        for (const n of [2, 3]) {
+          const px = Number(new RegExp(`font-size (\\d+)px --on heading --when type:display-${n}\\b`).exec(lines)?.[1]);
+          expect(px).toBeGreaterThan(0);
+          expect(px).toBeLessThan(72);
+        }
+      } finally {
+        await themeEditUndo('t', {cwd, thing: 'font-size', on: 'heading', when: 'type:display-1'});
+      }
     },
     T,
   );
