@@ -41,6 +41,12 @@ export const doc = {
       description: 'Also take PNG pictures.',
     },
     {
+      name: 'options.on',
+      type: 'string',
+      description:
+        'Only what one part shows, as a lookup that writes nothing; the theme may be any theme the project builds.',
+    },
+    {
       name: 'options.cwd',
       type: 'string',
       description:
@@ -52,6 +58,11 @@ export const doc = {
       type: 'themeEdit.show',
       description:
         'Every setting and the parts it styles, key resolved values per mode, contrast problems, notes, both pages, template pages left out, and any pictures.',
+    },
+    {
+      type: 'themeEdit.showPart',
+      description:
+        'With options.on: each CSS property the part reads, at rest and in each variant, with its final value (per mode when the modes differ), the declaration that gives it, the tokens it reads, and who decides it.',
     },
   ],
   throws: [
