@@ -14,6 +14,7 @@ export {TextAlignStart as AlignStartIcon} from 'lucide-react';
 export {ArrowUpToLine as AlignTopIcon} from 'lucide-react';
 export {TriangleRight as AngleIcon} from 'lucide-react';
 export {LayoutGrid as AppsIcon} from 'lucide-react';
+export {Newspaper as ArticleIcon} from 'lucide-react';
 export {AudioLines as AudioIcon} from 'lucide-react';
 export {Zap as BoltIcon} from 'lucide-react';
 export {BookOpen as BookIcon} from 'lucide-react';

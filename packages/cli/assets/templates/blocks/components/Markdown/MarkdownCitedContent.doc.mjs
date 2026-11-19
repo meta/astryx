@@ -10,8 +10,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Icon', 'Markdown'],
-  icons: {
-    BookOpenIcon: 'book',
-    NewspaperIcon: 'document',
-  },
 };

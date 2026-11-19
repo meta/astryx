@@ -15,6 +15,7 @@ export {ArrowLeftIcon as ArrowLeftIcon} from '@heroicons/react/16/solid';
 export {ArrowRightIcon as ArrowRightIcon} from '@heroicons/react/16/solid';
 export {ArrowUpIcon as ArrowUpIcon} from '@heroicons/react/16/solid';
 export {ArrowsUpDownIcon as ArrowsUpDownIcon} from '@heroicons/react/16/solid';
+export {NewspaperIcon as ArticleIcon} from '@heroicons/react/16/solid';
 export {PaperClipIcon as AttachIcon} from '@heroicons/react/16/solid';
 export {SpeakerWaveIcon as AudioIcon} from '@heroicons/react/16/solid';
 export {BuildingLibraryIcon as BankIcon} from '@heroicons/react/16/solid';
