@@ -12,7 +12,11 @@ import {
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
-import {buildSignature, formatHookReturns} from './hook-format.mjs';
+import {
+  buildSignature,
+  formatHookParameters,
+  formatHookReturns,
+} from './hook-format.mjs';
 
 /**
  * Derive the `defineTheme` component-override key from a theming target.
@@ -446,8 +450,9 @@ export function formatFull(docs, options = {}) {
     sections.push(...formatSubComponents(docs.components, '####', plan.whole));
   }
 
-  // A read that resolves to a hook prints what it returns, as `hook <name>` does.
-  sections.push(...formatHookReturns(docs));
+  // A read that resolves to a hook prints what it takes and returns, as
+  // `hook <name>` does.
+  sections.push(...formatHookParameters(docs), ...formatHookReturns(docs));
 
   if (docs.examples?.length) {
     sections.push('## Examples\n');
@@ -697,7 +702,7 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
     }
   }
 
-  sections.push(...formatHookReturns(docs));
+  sections.push(...formatHookParameters(docs), ...formatHookReturns(docs));
 
   if (docs.theming?.componentIcons?.length) {
     sections.push('## Component Icon Slots\n');
