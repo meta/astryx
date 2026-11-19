@@ -46,12 +46,17 @@ import {
   coreAddCommand,
   packageInstallCommand,
   packageInstallStep,
+  generatedSource,
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
-import {settingIssueLocation} from '../theme/build/setting-effects.mjs';
+import {
+  settingIssueLocation,
+  splitGeneratedIssues,
+  generatedNotesByFile,
+} from '../theme/build/setting-effects.mjs';
 import {
   getCliInvocation,
   formatCliCommand,
@@ -1743,7 +1748,8 @@ export async function checkAppThemes(cwd) {
   /**
    * What each local theme's build check says does not show as written (the
    * `settingIssues` of `theme build --check`), and whether the checks ran.
-   * @type {Array<{slug: string, issues: Array<{message: string, fix: string, line: number | null, file?: string}>}>}
+   * Settings a generated file writes are one note per file instead.
+   * @type {Array<{slug: string, issues: Array<{message: string, fix: string, line: number | null, file?: string}>, notes: Array<{file: string, text: string}>}>}
    */
   const settingIssuesByTheme = [];
   /** The local themes whose build check returned a receipt. @type {Set<string>} */
@@ -1809,8 +1815,34 @@ export async function checkAppThemes(cwd) {
           if (receipt?.type === 'theme.build.check') {
             settingsChecked.add(theme.slug);
             const issues = /** @type {any} */ (receipt).data.settingIssues;
-            if (Array.isArray(issues) && issues.length > 0)
-              settingIssuesByTheme.push({slug: theme.slug, issues});
+            if (Array.isArray(issues) && issues.length > 0) {
+              // A generated file's settings: one note, as the build says.
+              const own = path.relative(state.projectDir, sourceFile);
+              /** @param {string | undefined} file */
+              const absolute = file =>
+                path.resolve(state.projectDir, file ?? own);
+              const split = splitGeneratedIssues(
+                issues,
+                file => {
+                  const text = readTextFileIfExists(absolute(file));
+                  return text == null
+                    ? null
+                    : generatedSource(text, absolute(file));
+                },
+                file => file ?? own,
+                {
+                  listedBy: formatCliCommand(
+                    `theme build ${own} --check --json`,
+                    state.projectDir,
+                  ),
+                },
+              );
+              settingIssuesByTheme.push({
+                slug: theme.slug,
+                issues: split.listed,
+                notes: split.notes,
+              });
+            }
           }
           if (
             receipt == null ||
@@ -1934,6 +1966,14 @@ export async function checkAppThemes(cwd) {
     unchecked.length > 0
       ? `Not checked, because ${unchecked.length === 1 ? 'its build check' : 'their build checks'} did not run: ${unchecked.join('; ')}.`
       : '';
+  // One note per generated file: a local theme that extends a generated one
+  // reports that file's settings too.
+  const generatedNotes = generatedNotesByFile(
+    settingIssuesByTheme.map(t => ({label: t.slug, notes: t.notes})),
+  ).map(note => `${note.labels.join(', ')}: ${note.text}`);
+  const notesText = generatedNotes.length
+    ? ` ${generatedNotes.join('; ')}.`
+    : '';
   checks.push(
     settingIssueCount > 0
       ? {
@@ -1946,29 +1986,38 @@ export async function checkAppThemes(cwd) {
                 i => `${t.slug}: ${i.message}${settingIssueLocation(i)}`,
               ),
             )
-            .join('; ')}.${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
+            .join(
+              '; ',
+            )}.${notesText}${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
           fix: `${settingIssuesByTheme
             .flatMap(t => t.issues.map(i => `${t.slug}: ${i.fix}`))
             .join('; ')}.`,
         }
-      : incompleteResolution || unchecked.length > 0
+      : generatedNotes.length > 0
         ? {
             id: 'theme-setting-effects',
             label: 'Theme settings that show',
             status: 'info',
-            message: incompleteResolution
-              ? 'Could not check that each local theme setting shows until every local output resolves.'
-              : uncheckedNote,
+            message: `${generatedNotes.join('; ')}.${uncheckedNote ? ` ${uncheckedNote}` : ''}`,
           }
-        : {
-            id: 'theme-setting-effects',
-            label: 'Theme settings that show',
-            status: 'pass',
-            message:
-              localThemes.length > 0
-                ? 'Every setting of the added local themes shows as written.'
-                : 'No added local themes to check.',
-          },
+        : incompleteResolution || unchecked.length > 0
+          ? {
+              id: 'theme-setting-effects',
+              label: 'Theme settings that show',
+              status: 'info',
+              message: incompleteResolution
+                ? 'Could not check that each local theme setting shows until every local output resolves.'
+                : uncheckedNote,
+            }
+          : {
+              id: 'theme-setting-effects',
+              label: 'Theme settings that show',
+              status: 'pass',
+              message:
+                localThemes.length > 0
+                  ? 'Every setting of the added local themes shows as written.'
+                  : 'No added local themes to check.',
+            },
   );
 
   // The inputs load with Core, and doctor reads only the Core the project
