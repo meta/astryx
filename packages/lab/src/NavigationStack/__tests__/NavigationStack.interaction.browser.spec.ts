@@ -1218,16 +1218,17 @@ test('a push whose commit blocks the main thread starts from its first frame', a
   expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
 });
 
-test("a push from rest after a heavy commit starts on the engine's clock: at rest for its presented frames in WebKit, moving at once elsewhere", async ({
+test("a push from rest after a heavy commit starts on the engine's clock and never skips into its curve", async ({
   page,
   browserName,
 }) => {
   // WebKit's UI process applies a commit late, so there the push waits until
   // the frame at rest has been presented and starts at its own commit. Other
   // engines start at the first frame after the task, as before. Either way,
-  // the first frame that moves shows the push near its start, never skipped
-  // into its curve.
-  const {driver, width} = await openStack(page, 'settings');
+  // the first frame that moves shows no more of the spring than the time
+  // since the frame before it allows, so the push never skips into its curve.
+  // A mouse click is an input task in every engine, as a tap is.
+  const {width} = await openStack(page, 'settings');
   await page.evaluate(() => {
     const observer = new MutationObserver(() => {
       if (
@@ -1241,46 +1242,66 @@ test("a push from rest after a heavy commit starts on the engine's clock: at res
       while (performance.now() < until) {
         // Hold the main thread, as a heavy commit does.
       }
+      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
     });
     observer.observe(document.body, {childList: true, subtree: true});
   });
-  await driver.tap(await rowCenter(page, 'General'));
-  // The pushed card's offset in each of the first six frames after the task.
-  const offsets = await page.evaluate(
+  const row = await rowCenter(page, 'General');
+  await page.mouse.click(row.x, row.y);
+  // The pushed card's offset and the frame time, in the first six frames,
+  // and when the block ended.
+  const {frames, blockEnd} = await page.evaluate(
     () =>
-      new Promise<number[]>(resolve => {
-        const read: number[] = [];
-        const step = () => {
-          const pushed = document.querySelector(
-            '[data-navigation-screen="screen-General"]',
-          );
-          const value =
-            pushed == null ? 'none' : getComputedStyle(pushed).translate;
-          read.push(value === 'none' ? 0 : Math.abs(parseFloat(value)));
-          if (read.length < 6) {
-            requestAnimationFrame(step);
-          } else {
-            resolve(read);
-          }
-        };
-        requestAnimationFrame(step);
-      }),
+      new Promise<{frames: {offset: number; t: number}[]; blockEnd: number}>(
+        resolve => {
+          const read: {offset: number; t: number}[] = [];
+          const step = (t: number) => {
+            const pushed = document.querySelector(
+              '[data-navigation-screen="screen-General"]',
+            );
+            const value =
+              pushed == null ? 'none' : getComputedStyle(pushed).translate;
+            read.push({
+              offset: value === 'none' ? 0 : Math.abs(parseFloat(value)),
+              t,
+            });
+            if (read.length < 6) {
+              requestAnimationFrame(step);
+            } else {
+              resolve({
+                frames: read,
+                blockEnd:
+                  (window as Window & {blockEnd?: number}).blockEnd ?? 0,
+              });
+            }
+          };
+          requestAnimationFrame(step);
+        },
+      ),
   );
-  const travelled = offsets.map(offset => 1 - offset / width);
+  const travelled = frames.map(frame => 1 - frame.offset / width);
   const firstMoving = travelled.findIndex(share => share > 0.005);
   expect(firstMoving).toBeGreaterThanOrEqual(0);
   if (browserName === 'webkit') {
-    // At rest until its frame at rest has been presented: two frames, then
-    // its commit.
-    expect(firstMoving).toBeGreaterThanOrEqual(2);
+    // At rest until its frame at rest has been presented.
+    expect(firstMoving).toBeGreaterThanOrEqual(1);
   } else {
-    // Unchanged: the first frame after the task starts it, and the next one
-    // shows it moving.
-    expect(firstMoving).toBeLessThanOrEqual(2);
+    // Unchanged: moving from the first frame after the task.
+    expect(firstMoving).toBeLessThanOrEqual(1);
   }
-  // Never skipped into its curve: the first frame that moves shows less
-  // than a third of the travel.
-  expect(travelled[firstMoving]).toBeLessThan(1 / 3);
+  // The spring's share after `ms` from rest (OMEGA, starting at
+  // PUSH_VELOCITY), and the most the first moving frame may show: the time
+  // since the frame before it (or since the block ended), plus one frame.
+  const shareAt = (ms: number) => {
+    const s = ms / 1000;
+    return 1 - (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
+  const sincePrevious =
+    frames[firstMoving].t -
+    (firstMoving > 0 ? frames[firstMoving - 1].t : blockEnd);
+  expect(travelled[firstMoving]).toBeLessThanOrEqual(
+    shareAt(sincePrevious + 17) + 0.02,
+  );
 });
 
 test('a push keeps advancing every frame while the main thread is blocked', async ({
