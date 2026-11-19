@@ -32,6 +32,7 @@ import {
   useState,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -123,10 +124,10 @@ export interface NavigationStackProps<T> {
 export interface NavigationStackApi<T = unknown> {
   /**
    * Pushes an entry. The control that started it (the click or key press
-   * being handled, or `options.sourceRef`, the current element of a ref to
-   * that control) gets focus back when its screen pops.
+   * being handled, or the element `options.sourceRef` holds) gets focus back
+   * when its screen pops.
    */
-  push: (entry: T, options?: {sourceRef?: Element | null}) => void;
+  push: (entry: T, options?: {sourceRef?: RefObject<Element | null>}) => void;
   /** Pops the top screen; nothing at the root. */
   pop: () => void;
   /** Pops back to the root. */
@@ -1592,7 +1593,7 @@ export function NavigationStack<T>({
         const last = lastActivationRef.current;
         const source =
           options?.sourceRef !== undefined
-            ? options.sourceRef
+            ? options.sourceRef.current
             : last != null && performance.now() - last.at < 1000
               ? last.target
               : null;

@@ -411,7 +411,7 @@ describe('NavigationStack', () => {
           </button>
           <button
             type="button"
-            onClick={() => nav.push('General', {sourceRef: opener.current})}>
+            onClick={() => nav.push('General', {sourceRef: opener})}>
             Push
           </button>
         </>
