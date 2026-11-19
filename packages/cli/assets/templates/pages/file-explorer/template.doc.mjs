@@ -12,7 +12,7 @@ export const doc = {
   category: 'Tools - File Explorer',
   icons: {
     AdjustmentsHorizontalIcon: 'adjustments',
-    Bars4Icon: 'list',
+    Bars4Icon: 'listView',
     ChevronLeftIcon: 'chevronLeft',
     ChevronRightIcon: 'chevronRight',
     DocumentIcon: 'file',
