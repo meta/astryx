@@ -115,6 +115,28 @@ describe('planChecks', () => {
   });
 });
 
+describe('the formatting check', () => {
+  it("passes Prettier only the TypeScript and Markdown files CI's step checks", () => {
+    const lint = argvs(
+      byId(
+        plan([
+          'packages/core/src/Button/Button.tsx',
+          '.github/scripts/cli-smoke-test.mjs',
+        ]),
+        'lint',
+      ),
+    );
+    expect(lint[1]).toBe(
+      'pnpm exec prettier --check --ignore-unknown packages/core/src/Button/Button.tsx',
+    );
+  });
+
+  it('skips it on the spec lane, as CI does', () => {
+    const lint = argvs(byId(plan(['docs/specs/AST-030/spec.md']), 'lint'));
+    expect(lint.join('\n')).not.toContain('prettier');
+  });
+});
+
 describe('planChecks --quick', () => {
   it('checks the changed packages, files and tests alone', () => {
     const checks = plan(
@@ -294,8 +316,10 @@ describe('formatTable', () => {
     expect(fail).toContain('  lint: pnpm check:repo');
     expect(fail).toContain('not ready: 1');
     expect(fail).toContain('a reviewer still judges the change');
-    // A pass names the CI checks it did not run.
-    expect(fail).toContain('Not run here (CI runs them): the docsite build');
+    // A pass promises only the checks it ran.
+    expect(fail).toContain(
+      'CI can run more for this change than the checks above',
+    );
     const pass = formatTable([
       {id: 'lint', result: 'PASS', note: '', failed: null, seconds: 3},
     ]);

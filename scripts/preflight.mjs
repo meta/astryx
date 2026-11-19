@@ -30,9 +30,12 @@ import {fileURLToPath} from 'node:url';
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** CI's checks the default run leaves out; it names them so a pass promises no more. */
+/** A pass covers only the checks above, so the verdict says so. */
 export const NOT_RUN =
-  'Not run here (CI runs them): the docsite build and tests, the Lint workflow import-boundary, probe-theme and CLI README checks, the first UI leg extra checks (copyright, exports sync, CLI type surface, Lab readiness, the isolated benchmark), and, without --browser, the Storybook build and browser specs.';
+  'CI can run more for this change than the checks above: whole-repository lint and its text and comment checks, the build tests, and the browser, visual, WebKit, accessibility and docsite jobs. CI decides.';
+
+/** Files CI's formatting step checks with Prettier. */
+const FORMATTED = /\.(?:tsx?|md)$/;
 
 /** Files ESLint lints. */
 const LINTED = /\.(?:[cm]?[jt]sx?)$/;
@@ -119,7 +122,12 @@ export function planChecks({
   );
 
   const linted = present(changed.filter(file => LINTED.test(file)));
-  const formatted = present(changed);
+  // CI checks the formatting of changed TypeScript and Markdown files, and not
+  // on the docsite and spec lanes.
+  const formatted =
+    scope.docsiteOnly || specOnly
+      ? []
+      : present(changed.filter(file => FORMATTED.test(file)));
   checks.push({
     id: 'lint',
     commands: [
