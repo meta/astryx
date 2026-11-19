@@ -1044,6 +1044,24 @@ export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
   'first-line',
 ]);
 
+/** Other words for a state, each read as the first of these there is. */
+export const STATE_SYNONYMS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    pressed: ['isPressed', 'active'],
+    press: ['isPressed', 'active'],
+    on: ['isPressed', 'checked', 'selected'],
+    down: ['active'],
+    clicked: ['active'],
+    hovered: ['hover'],
+    focused: ['focus-visible', 'focus-within', 'focus'],
+    checked: ['checked', 'selected'],
+    selected: ['selected', 'checked'],
+    open: ['open', 'expanded'],
+    expanded: ['expanded', 'open'],
+    inactive: ['disabled'],
+  }),
+);
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',

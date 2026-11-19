@@ -152,6 +152,7 @@ import {
   FOLLOWS,
   baseRedraws,
   groupsOf,
+  savedSetting,
 } from './_settings.mjs';
 import {
   borderFor,
@@ -6532,7 +6533,8 @@ async function changeOnce(
     }
   } else if (
     prev &&
-    JSON.stringify(prev) === JSON.stringify(s) &&
+    // (By what is saved: a note the command adds is no change.)
+    JSON.stringify(savedSetting(prev)) === JSON.stringify(savedSetting(s)) &&
     // A later setting that covers the same parts hides it: set again, it
     // moves last and wins.
     !data.settings
@@ -7273,6 +7275,7 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
+  if (s.stateNote) notes.push(s.stateNote);
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -7776,9 +7779,11 @@ async function changeOnce(
     data: {
       theme: slug,
       action: sub,
+      // (The state word a command read as another state is said in the
+      // notes, never a field of the setting.)
       setting:
         sub === 'set'
-          ? s
+          ? {...savedSetting(s), ...(s.note == null ? {} : {note: s.note})}
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev

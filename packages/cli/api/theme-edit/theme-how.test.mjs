@@ -4513,7 +4513,8 @@ describe('how lookups', () => {
       themeEditSet('q', 'background', '#dbeafe', {
         cwd,
         on: 'table-row',
-        state: 'checked',
+        // (A state with no other word for one of the row's.)
+        state: 'indeterminate',
       }),
     );
     expect(r.message).toContain(`States: ${part.states.join(', ')}.`);

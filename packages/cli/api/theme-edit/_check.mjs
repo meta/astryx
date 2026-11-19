@@ -77,6 +77,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  STATE_SYNONYMS,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -3996,24 +3997,6 @@ function sameState(state, states) {
   return states.find(x => flat(x) === flat(state)) ?? null;
 }
 
-/** Other words for a state, each read as the first of these there is. */
-const STATE_SYNONYMS = wordTable(
-  /** @type {Record<string, string[]>} */ ({
-    pressed: ['isPressed', 'active'],
-    press: ['isPressed', 'active'],
-    on: ['isPressed', 'checked', 'selected'],
-    down: ['active'],
-    clicked: ['active'],
-    hovered: ['hover'],
-    focused: ['focus-visible', 'focus-within', 'focus'],
-    checked: ['checked', 'selected'],
-    selected: ['selected', 'checked'],
-    open: ['open', 'expanded'],
-    expanded: ['expanded', 'open'],
-    inactive: ['disabled'],
-  }),
-);
-
 /**
  * The state a word for one names among those a part has, by the one table
  * of other words for states (expanded: open; pressed: a toggle's isPressed,
@@ -5693,6 +5676,19 @@ function checkOne(
     // name or its ARIA attribute (`isPressed`, `aria-pressed` on a button,
     // `isSelected` on a tab) is the state of that name.
     if (s.state) s.state = partState(ctx, s.on, s.state);
+    // Another word for one state the part has (pressed on a part whose
+    // press is active): written as that state, and said. A word for more
+    // than one of its states is not written: the refusal below offers one.
+    if (s.state && !s.state.includes('+') && !statesHold(states, s.state)) {
+      const same = (STATE_SYNONYMS[s.state.toLowerCase()] ?? []).filter(x =>
+        states.includes(x),
+      );
+      if (same.length === 1) {
+        // (Its own note, beside any other the setting carries.)
+        s.stateNote = `read as --state ${same[0]}: ${s.on} marks the ${s.state} moment as ${same[0]}`;
+        s.state = same[0];
+      }
+    }
     // Several states in one --state (`hover,focus-visible`, `hover
     // focus-visible`): one line per state, the value quoted as typed.
     const typedStates = String(flags.state ?? '')

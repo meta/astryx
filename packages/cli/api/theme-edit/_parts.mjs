@@ -785,8 +785,34 @@ export function addCensusStates(project, parts) {
     if (!t) continue;
     const props = new Set(t.props);
     for (const name of names)
-      if (!props.has(name) && !t.states.includes(name)) t.states.push(name);
+      if (!props.has(name) && !t.states.includes(name)) {
+        t.states.push(name);
+        let seen = CENSUS_STATES.get(t);
+        if (!seen) CENSUS_STATES.set(t, (seen = new Set()));
+        seen.add(name);
+      }
   }
+}
+
+/**
+ * The states each part target took from the census alone (addCensusStates):
+ * Core's theme takes no style key for them on that part.
+ * @type {WeakMap<object, Set<string>>}
+ */
+const CENSUS_STATES = new WeakMap();
+
+/**
+ * A part's states that came from the census alone, not its doc: states
+ * Core's theme takes no style key for on that part (a list item rides an
+ * Item, whose own `selected` it shows), which the build writes as the
+ * attribute Core marks.
+ * @param {{target: Map<string, any>}} project
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function censusStatesOf(project, part) {
+  const t = project.target.get(part);
+  return t ? [...(CENSUS_STATES.get(t) ?? [])] : [];
 }
 
 /**
@@ -2020,7 +2046,14 @@ const BLOCK_BOX =
   /^(height|min-height|max-height|(min-|max-)?block-size|padding(-(top|bottom|block(-start|-end)?))?|margin-(top|bottom|block(-start|-end)?))$/;
 
 /** The elements a control is drawn as: never a bar, nor a bar's row. */
-const CONTROL_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label']);
+const CONTROL_TAGS = new Set([
+  'button',
+  'a',
+  'input',
+  'select',
+  'textarea',
+  'label',
+]);
 
 /**
  * The value a part draws a property with as the census saw it: the one it
@@ -2056,7 +2089,8 @@ export function drawnValue(rec, prop) {
 export function barRows(map, holder) {
   const inside = map[holder]?.contains ?? [];
   /** @param {string} p */
-  const frame = p => !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
+  const frame = p =>
+    !Object.keys(map[p]?.at ?? {}).some(k => BLOCK_BOX.test(k));
   /** A part drawn as a control (a button, a link, a field). @param {string} p */
   const control = p =>
     (map[p]?.tags ?? []).some(t => CONTROL_TAGS.has(t.toLowerCase()));
@@ -2179,7 +2213,9 @@ export function partHeightPx(map, part, own, tokens, pxOf) {
   // nav heading's title) is the line it holds; else its own text, or the
   // body text it inherits.
   const inner = Object.entries(map[part]?.inside ?? {})
-    .filter(([tok, props]) => props.includes('line-height') && /-leading$/.test(tok))
+    .filter(
+      ([tok, props]) => props.includes('line-height') && /-leading$/.test(tok),
+    )
     .map(([tok]) =>
       lineOf(`var(${tok.replace(/-leading$/, '-size')})`, `var(${tok})`),
     )

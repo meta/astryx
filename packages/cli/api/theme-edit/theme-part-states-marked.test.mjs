@@ -76,7 +76,11 @@ describe('states Core marks on a part', () => {
       state: 'selected',
     });
     const css = fs.readFileSync(path.join(cwd, 'themes', 'l', 'l.css'), 'utf8');
-    expect(css).toMatch(/\.astryx-list-item\[data-selected="selected"\]/);
+    // (Written as the attribute Core marks, inside the plain rule: Core's
+    // theme takes no style key for a list item's selected.)
+    expect(css).toMatch(
+      /\.astryx-list-item(?::is\()?\[data-selected="selected"\]/,
+    );
   }, 240_000);
 
   it("refuses a checkbox's or radio's hover on the box, as main does", async ctx => {
