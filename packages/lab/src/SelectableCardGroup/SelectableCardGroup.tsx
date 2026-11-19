@@ -276,6 +276,15 @@ SelectableCardGroup.displayName = 'SelectableCardGroup';
 /**
  * One card of a SelectableCardGroup: a SelectableCard whose input, name and
  * selection come from the group.
+ *
+ * @example
+ * ```
+ * <SelectableCardGroup label="Plan" value={plan} onChange={setPlan}>
+ *   <SelectableCardGroupItem value="pro" label="Pro">
+ *     <Text type="body">Pro, $29 a month</Text>
+ *   </SelectableCardGroupItem>
+ * </SelectableCardGroup>
+ * ```
  */
 export function SelectableCardGroupItem({
   value,
