@@ -905,6 +905,70 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
   });
 }
 
+// A page font setting the `font` shorthand cannot hold (tabular figures, no
+// kerning) leaves the computed shorthand empty in Chromium, so the label's
+// one-line width is read from the font longhands; the long-label fence keeps
+// core's frame width on a wide screen.
+test("side by side: a long-label fence keeps core's frame width under page font settings", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const style = document.createElement('style');
+      style.textContent =
+        'html { font-variant-numeric: tabular-nums; font-kerning: none; }';
+      document.head.append(style);
+    });
+  });
+  const errors = await openStory(page, STORY.sideBySide, {
+    width: 2200,
+    height: 900,
+  });
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const widths = await page.evaluate(
+    ({markdownSurface, richTextSurface}) => {
+      const markdownBlock = document.querySelector<HTMLElement>(
+        `${markdownSurface} [data-parity-block="code-long-label"]`,
+      );
+      const markdownFrame = [
+        markdownBlock,
+        ...(markdownBlock?.querySelectorAll<HTMLElement>('*') ?? []),
+      ].find(element => {
+        const style = element == null ? null : getComputedStyle(element);
+        return (
+          style != null &&
+          style.borderTopStyle !== 'none' &&
+          parseFloat(style.borderTopWidth) > 0
+        );
+      });
+      const richTextFrame = document.querySelector<HTMLElement>(
+        `${richTextSurface} [data-parity-block="code-long-label"]`,
+      );
+      const title = [
+        ...document.querySelectorAll<HTMLElement>(
+          `${richTextSurface} [data-richtext-code-header] *`,
+        ),
+      ].find(
+        element =>
+          element.childElementCount === 0 &&
+          (element.textContent ?? '').includes('alonglanguagename'),
+      );
+      return {
+        shorthand: title == null ? null : getComputedStyle(title).font,
+        markdown: markdownFrame?.getBoundingClientRect().width ?? 0,
+        richText: richTextFrame?.getBoundingClientRect().width ?? 0,
+      };
+    },
+    {markdownSurface: MARKDOWN, richTextSurface: RICH_TEXT},
+  );
+  // The setting does reach the label: Chromium's shorthand is empty.
+  expect(widths.shorthand).toBe('');
+  expect(widths.markdown).toBeGreaterThan(680);
+  expect(Math.abs(widths.richText - widths.markdown)).toBeLessThanOrEqual(2);
+  expect(errors).toEqual([]);
+});
+
 // A long unbroken line wraps inside the code frame at phone width instead of
 // widening the page, and the copy button copies the block from the keyboard,
 // in the editor and the view.
