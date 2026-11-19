@@ -570,6 +570,23 @@ export interface FixedLayerReturn {
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
 }
 
+/** Context-mode members a core component may use through `useLayerInternal`. */
+interface InternalContextLayerFields {
+  /**
+   * With `lazyMount`, mounts the layer's content without showing it. The
+   * popover stays closed, so it shows no pixel and is out of the accessibility
+   * tree until `show()`, which then only shows it. A caller that knows a show
+   * is coming spares that show the first mount's render. Does nothing for a
+   * layer that is mounted already.
+   */
+  prepare: () => void;
+  /**
+   * Unmounts what `prepare()` mounted, unless the layer has shown since. A
+   * layer that has shown keeps its mount as its options say.
+   */
+  releasePrepared: () => void;
+}
+
 /**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
@@ -626,6 +643,9 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onPlacedAfresh?: () => void;
 }
+
+type InternalContextLayerReturn = ContextLayerReturn &
+  InternalContextLayerFields;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -1355,7 +1375,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): ContextLayerReturn | FixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1648,6 +1668,30 @@ function useLayerImplementation(
     [mountStore],
   );
 
+  // The mount came from `prepare()`, and the layer has not shown since.
+  const isMountPreparedRef = useRef(false);
+
+  const prepare = useCallback(() => {
+    if (mode !== 'context' || !lazyMount || contextMountRef.current != null) {
+      return;
+    }
+    isMountPreparedRef.current = true;
+    requestContextMount();
+  }, [mode, lazyMount, requestContextMount]);
+
+  const releasePrepared = useCallback(() => {
+    if (
+      !isMountPreparedRef.current ||
+      pendingShowRef.current ||
+      isOpenRef.current
+    ) {
+      return;
+    }
+    isMountPreparedRef.current = false;
+    contextMountRef.current = null;
+    mountStore.set(null);
+  }, [mountStore]);
+
   const clearContextMount = useCallback(() => {
     if (mode !== 'context' || !lazyMount || keepsMountAfterShow) {
       return;
@@ -1698,6 +1742,7 @@ function useLayerImplementation(
       isOpenRef.current = false;
       stopOutsidePanWatch();
     }
+    isMountPreparedRef.current = false;
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
     const candidate = popoverRef.current;
@@ -2769,17 +2814,29 @@ function useLayerImplementation(
     [popoverRefCallback, id, lightDismiss],
   );
 
-  const contextResult = useMemo<ContextLayerReturn>(
+  const contextResult = useMemo<InternalContextLayerReturn>(
     () => ({
       ref: contextRef,
       anchorId,
       show,
       hide,
       isOpen,
+      prepare,
+      releasePrepared,
       id,
       render: renderContext,
     }),
-    [contextRef, anchorId, show, hide, isOpen, id, renderContext],
+    [
+      contextRef,
+      anchorId,
+      show,
+      hide,
+      isOpen,
+      prepare,
+      releasePrepared,
+      id,
+      renderContext,
+    ],
   );
   const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
@@ -2801,6 +2858,8 @@ export function useLayer(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayer(
   options: ContextLayerOptions | FixedLayerOptions,
 ): ContextLayerReturn | FixedLayerReturn {
+  // Only the type hides the internal members. Stripping them at runtime
+  // would cost every page that uses a layer.
   return useLayerImplementation(options);
 }
 
@@ -2810,10 +2869,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): ContextLayerReturn;
+): InternalContextLayerReturn;
 export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): ContextLayerReturn | FixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

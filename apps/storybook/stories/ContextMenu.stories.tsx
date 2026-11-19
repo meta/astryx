@@ -9,6 +9,17 @@ import {
   ContextMenuRadioItem,
 } from '@astryxdesign/core/ContextMenu';
 import {Divider} from '@astryxdesign/core/Divider';
+import {Card} from '@astryxdesign/core/Card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+} from '@astryxdesign/core/Table';
+import {Text} from '@astryxdesign/core/Text';
+import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {
   PencilIcon,
   TrashIcon,
@@ -646,4 +657,351 @@ export const BottomSheetSubmenu: Story = {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   },
+};
+
+const touchStyles = stylex.create({
+  demo: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '12px',
+  },
+  card: {
+    width: '200px',
+    height: '120px',
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '12px',
+    backgroundColor: '#e5e7eb',
+    color: '#374151',
+    userSelect: 'none',
+  },
+});
+
+export const TouchLongPress: Story = {
+  name: 'Touch / long press',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Where the primary pointer is coarse (a touch screen), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. Once the menu is up, the same finger may slide onto an action without lifting: lifting over an action picks it, and lifting over no action leaves the menu open. The last action picked shows below the card. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back to its size. As the menu shows, the card lifts above a tinted page, with the menu beside it. A touch outside the menu closes it as it begins to pan; over the tint that pan scrolls nothing, and the next one scrolls the page. The card returns to its place when the menu closes.',
+      },
+    },
+  },
+  render: () => <TouchLongPressDemo />,
+};
+
+/** The touch story's menu, and the last action it picked. */
+function TouchLongPressDemo() {
+  const [lastAction, setLastAction] = useState<string | null>(null);
+  const pick = (label: string) => () => setLastAction(label);
+  return (
+    <div {...stylex.props(touchStyles.demo)}>
+      <ContextMenu
+        data-testid="touch-context-menu"
+        label="Photo actions"
+        items={[
+          {label: 'Copy', icon: ClipboardIcon, onClick: pick('Copy')},
+          {label: 'Share', icon: ShareIcon, onClick: pick('Share')},
+          {
+            label: 'Save to Files',
+            icon: ArrowDownTrayIcon,
+            onClick: pick('Save to Files'),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: pick('Delete'),
+          },
+        ]}>
+        <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+      </ContextMenu>
+      <p data-testid="touch-context-menu-last">
+        {lastAction == null ? 'No action yet' : `Last action: ${lastAction}`}
+      </p>
+    </div>
+  );
+}
+
+const layoutStyles = stylex.create({
+  page: {
+    display: 'grid',
+    gap: '24px',
+  },
+  pair: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+  },
+  block: {
+    padding: '12px',
+    borderRadius: '12px',
+    backgroundColor: '#f3f4f6',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '8px 16px',
+    backgroundColor: '#f3f4f6',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '40px 1fr',
+    gridTemplateRows: 'auto auto',
+    columnGap: '12px',
+    rowGap: '4px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  swatch: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    backgroundColor: '#9ca3af',
+    gridRow: '1 / 3',
+  },
+  tall: {
+    height: '160px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: '8px',
+    backgroundColor: '#d1d5db',
+  },
+});
+
+const LAYOUTS = ['block', 'row', 'grid'] as const;
+
+function TallContent() {
+  return <div {...stylex.props(layoutStyles.fill)}>Fills the trigger</div>;
+}
+
+function LayoutContent() {
+  return (
+    <>
+      <div {...stylex.props(layoutStyles.swatch)} />
+      <span>Quarterly report</span>
+      <span>Edited today</span>
+    </>
+  );
+}
+
+export const TouchTriggerLayouts: Story = {
+  name: 'Touch / trigger layouts',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The press grows only the trigger’s own visual, an inner box that lays the children out as the trigger would. Each trigger here sits beside a plain box with the same style, and both lay out the same, a set-height trigger with a full-height child too.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(layoutStyles.page)}>
+      {LAYOUTS.map(layout => (
+        <div key={layout} {...stylex.props(layoutStyles.pair)}>
+          <ContextMenu
+            data-testid={`layout-${layout}`}
+            label="Report actions"
+            triggerXstyle={layoutStyles[layout]}
+            items={[
+              {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+              {label: 'Share', icon: ShareIcon, onClick: () => {}},
+            ]}>
+            <LayoutContent />
+          </ContextMenu>
+          <div
+            data-testid={`layout-${layout}-reference`}
+            {...stylex.props(layoutStyles[layout])}>
+            <LayoutContent />
+          </div>
+        </div>
+      ))}
+      <div {...stylex.props(layoutStyles.pair)}>
+        <ContextMenu
+          data-testid="layout-tall"
+          label="Report actions"
+          triggerXstyle={layoutStyles.tall}
+          items={[
+            {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+            {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          ]}>
+          <TallContent />
+        </ContextMenu>
+        <div
+          data-testid="layout-tall-reference"
+          {...stylex.props(layoutStyles.tall)}>
+          <TallContent />
+        </div>
+      </div>
+    </div>
+  ),
+};
+
+export const TouchLongPressPopover: Story = {
+  name: 'Touch / long press, presentation="popover"',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth and no iOS timeline. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
+      },
+    },
+  },
+  render: () => (
+    <ContextMenu
+      data-testid="touch-context-menu"
+      label="Photo actions"
+      presentation="popover"
+      items={[
+        {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+        {label: 'Share', icon: ShareIcon, onClick: () => {}},
+        {label: 'Save to Files', icon: ArrowDownTrayIcon, onClick: () => {}},
+      ]}>
+      <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+    </ContextMenu>
+  ),
+};
+
+// A flat swatch as an image, so the story needs no network for its picture.
+const PLATE_SWATCH = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="hsl(280 70% 55%)"/></svg>',
+)}`;
+
+const plateStyles = stylex.create({
+  demo: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gap: 24,
+    padding: 24,
+    alignItems: 'start',
+  },
+  block: {display: 'block'},
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  outlined: {
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: '#9ca3af',
+    borderRadius: 12,
+  },
+  translucent: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  beforeSurface: {
+    position: 'relative',
+    isolation: 'isolate',
+    padding: 12,
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      zIndex: -1,
+      borderRadius: 12,
+      backgroundColor: '#e5e7eb',
+    },
+  },
+});
+
+const PLATE_ITEMS = [
+  {label: 'Copy', icon: ClipboardIcon},
+  {label: 'Share', icon: ShareIcon},
+];
+
+export const TouchLiftPlate: Story = {
+  name: 'Touch / lift plate',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Where the primary pointer is coarse, hold a finger on each trigger. A trigger that paints no surface of its own, such as a table cell, a row of text or an outlined box, lifts on a plate of the theme surface, inset from its content and rounded. A picture, a card or a box with its own fill lifts as it is.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(plateStyles.demo)}>
+      <ContextMenu
+        data-testid="plate-thumbnail"
+        label="Picture actions"
+        items={PLATE_ITEMS}>
+        <Thumbnail src={PLATE_SWATCH} alt="Purple swatch" />
+      </ContextMenu>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHeaderCell>Name</TableHeaderCell>
+            <TableHeaderCell>Size</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>
+              <ContextMenu
+                data-testid="plate-cell"
+                label="File actions"
+                items={PLATE_ITEMS}
+                triggerXstyle={plateStyles.block}>
+                <Text>Budget.xlsx</Text>
+              </ContextMenu>
+            </TableCell>
+            <TableCell>24 KB</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <ContextMenu
+        data-testid="plate-row"
+        label="Row actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.row)}>
+          <ShareIcon width={20} height={20} aria-hidden />
+          <Text>A row with an icon</Text>
+        </div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-card"
+        label="Card actions"
+        items={PLATE_ITEMS}>
+        <Card padding={2}>
+          <Text>A card</Text>
+        </Card>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-outlined"
+        label="Outlined box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.outlined)}>An outlined box</div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-translucent"
+        label="Translucent box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.translucent)}>A translucent fill</div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-before"
+        label="Painted box actions"
+        items={PLATE_ITEMS}>
+        <div {...stylex.props(plateStyles.beforeSurface)}>
+          A fill from a pseudo-element
+        </div>
+      </ContextMenu>
+      <ContextMenu
+        data-testid="plate-inline-image"
+        label="Image actions"
+        items={PLATE_ITEMS}>
+        <img src={PLATE_SWATCH} alt="Purple swatch" width={64} height={64} />
+      </ContextMenu>
+    </div>
+  ),
 };

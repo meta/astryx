@@ -4,7 +4,8 @@
  * @file ContextMenu.triggerProps.test.tsx
  * @input vitest, @testing-library/react, ContextMenu
  * @output A guard that the trigger element receives only DOM props: React
- *   warns about nothing, and no hook-internal function lands on it.
+ *   warns about nothing, and no hook-internal function lands on it. The
+ *   inner visual box adds no attribute to the trigger.
  * @position Testing; validates ContextMenu.tsx. Its own file on purpose: React
  *   warns about an unknown DOM prop once per module, so this case must be the
  *   first ContextMenu render of its file to see the warning at all.
@@ -50,5 +51,27 @@ describe('ContextMenu trigger element', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it('keeps its own attributes: the inner visual box carries only its class', () => {
+    render(
+      <ContextMenu items={[{label: 'Cut'}]} data-testid="block">
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('block');
+    expect(trigger.getAttributeNames().sort()).toEqual([
+      'class',
+      'data-testid',
+    ]);
+    const [visual, anchor] = Array.from(trigger.children);
+    expect(visual.tagName).toBe('DIV');
+    expect(visual.getAttributeNames()).toEqual(['class']);
+    expect(visual.textContent).toBe('Right-click me');
+    expect(anchor.getAttributeNames().sort()).toEqual([
+      'aria-hidden',
+      'class',
+      'style',
+    ]);
   });
 });
