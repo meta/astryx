@@ -19061,8 +19061,8 @@ export function draftAnswer(ctx, env, question) {
       const inButton = (/** @type {string} */ k) =>
         Object.values(C.MAP).some(
           v =>
-            /** @type {any} */ ((v).contains ?? []).includes(k) &&
-            /** @type {any} */ ((v).tags ?? []).includes('button'),
+            /** @type {any} */ (v.contains ?? []).includes(k) &&
+            /** @type {any} */ (v.tags ?? []).includes('button'),
         );
       if (
         pieces.length === 1 &&
@@ -22373,7 +22373,8 @@ export function draftAnswer(ctx, env, question) {
                   radiusOf(
                     ALL.map(k =>
                       String(
-                        at[k] ?? /** @type {Record<string, string>} */ (nowAt)[k],
+                        at[k] ??
+                          /** @type {Record<string, string>} */ (nowAt)[k],
                       ),
                     ),
                   ),
@@ -28759,19 +28760,26 @@ export function draftAnswer(ctx, env, question) {
   // ("heavy display headings", "make them blue" after it: one answer.)
   // (A look's size now: the font size the theme sets on that look, else the
   // token it reads.)
+  // (Only the family's own part: a Text set at display-1 is no display
+  // heading. A set size that is no length, a clamp(), reads the token.)
   oneAnswerPerFamily(
     drafts,
     d => draftClause.get(d),
     clauses,
     pluralSaid,
-    w => {
+    (w, on) => {
       const set = env.data.settings.find(
         st =>
-          st.thing === 'font-size' && st.when === w && !st.state && !st.mode,
+          st.thing === 'font-size' &&
+          st.on === on &&
+          st.when === w &&
+          !st.state &&
+          !st.mode,
       );
       const token = `--text-${w.split(':')[1]}-size`;
-      return lengthPx(
-        String(set?.value ?? (resolvedValue(token) || current(token) || '')),
+      return (
+        lengthPx(String(set?.value ?? '')) ??
+        lengthPx(String(resolvedValue(token) || current(token) || ''))
       );
     },
   );
