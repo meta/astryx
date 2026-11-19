@@ -167,9 +167,15 @@ shared icon names under FR17.
     is on the list, or on a binary that records no list (FR8).
   - The package's manifests declare no permission. The generated native
     project carries every permission the app needs (FR4).
+  - On iOS the core adds no MetricKit subscriber unless the app opts in to it
+    through its capability list, as it opts in a capability: an app that did
+    not opt in has no Astryx subscriber, and an app that did has exactly one
+    (DEC-21).
 
   FR3 gap: the native controls and the navigation hosts link only when an app
   opts in a `controls` or a `navigation` capability.
+
+  FR3 gap: the core adds its MetricKit subscriber in every app that links it.
 
 - **FR4 — Native code lives in the platform layer.**
   - The library layer contains no native code, and the package has no
@@ -223,6 +229,22 @@ shared icon names under FR17.
     third-party native dependency (FR2).
   - The platform's native code calls public platform API only. A capability
     or group record that needs an exception names the API and the reason.
+  - The core replaces no method of a UIKit or React Native class at run time
+    (DEC-22, `spec:AST-140/FR9`). It fixes what it owns inside its own hosts:
+    - The stack host resets React Native's right-to-left mirror on the scroll
+      view it owns, so the large title draws correctly.
+    - On iOS, the library's modal surfaces present only through the
+      presentation host; the library has no React Native `Modal` path on iOS.
+    - The generated app shell and the Expo package's configuration plugin
+      write the explicit call that hands an opened URL to the sign-in claim;
+      an app with its own native projects makes that call itself. No
+      interceptor stands in for it.
+    - The HTTP cache guarantees of clear on sign-out, under which nothing in
+      flight lands after a clear, cover React Native's networking session,
+      through React Native's public session-configuration hook, and Astryx's
+      own sessions. The app's shared URL cache stays the app's own. An app
+      that sets its own session-configuration provider opts in to these
+      guarantees explicitly.
   - The React Native platform ships inside
     `@astryxdesign/react-native`, with the native half of Astryx's components
     linked by default and each device feature linked when an app opts it in
@@ -235,6 +257,21 @@ shared icon names under FR17.
     they drift. No published package depends on the contracts package, and
     web pages gain 0 bytes from it. `@astryxdesign/native` is deprecated: the
     shared contracts replace it (DEC-19).
+
+  FR4 gap: the core exchanges methods on React Native's scroll view to reset
+  the right-to-left mirror under a large title.
+
+  FR4 gap: the core replaces methods on React Native's `Modal` host, and on iOS
+  the library falls back to React Native's `Modal` for a modal surface.
+
+  FR4 gap: the core replaces UIKit's view-controller presentation method for a
+  hosted-project container; that code leaves the core.
+
+  FR4 gap: the opt-in URL interceptor replaces the application's and the
+  scene's delegate setters and the delegates' URL-opening methods.
+
+  FR4 gap: the core replaces the app's shared URL cache at startup.
+
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported. While the
   package is canary-only, its public entries, `./testing` included, may change
@@ -266,6 +303,9 @@ shared icon names under FR17.
     `NavigationStack` leaves Lab (FR23, DEC-20).
   - Apart from the Jest setup file, no entry installs a global when it is
     imported (DEC-10).
+  - Every component renders and works on a runtime without `Intl`. There,
+    output that needs it falls back to a simpler form, and no `Intl` polyfill
+    is installed (DEC-10).
   - The package's own code reads no global `crypto` and does not depend on
     `fetch`'s `redirect: 'error'` or `redirect: 'manual'` modes.
   - `./testing` is the testing surface: mocks of every native module in its
@@ -295,6 +335,14 @@ shared icon names under FR17.
     `*_NAME`.
   - Each release's changelog lists every renamed or removed name or entry
     (FR14).
+
+  FR5 gap: number formatting builds `Intl.NumberFormat` with no fallback, and
+  on a runtime without `Intl.PluralRules` the package installs one as a
+  global.
+
+  FR5 gap: without `Intl.Segmenter`, Avatar's initials fall back to code
+  points, which splits a grapheme cluster.
+
 - **FR6 — One result vocabulary.** Every asynchronous call in the platform
   resolves one result shape with a closed set of reasons and never rejects;
   a person's cancel is not an error, and a message never carries a secret.
@@ -380,6 +428,13 @@ shared icon names under FR17.
     (`spec:AST-082/FR13`); `expo` is a peer dependency of
     `@astryxdesign/react-native-expo` only, which an app outside Expo never
     installs. Expo's API shapes do not limit the platform's API.
+  - On a platform Astryx React Native does not support, such as macOS through
+    react-native-macos, the package logs one development warning at startup
+    that names the platform, and it never draws icons or charts that are
+    silently empty.
+
+  FR11 gap: the package logs no warning on an unsupported platform.
+
 - **FR13 — React Native commands are one `astryx rn` group.** The React
   Native extension of the Astryx CLI (`@astryxdesign/cli`) contributes one
   command group, `rn`, and a developer or an agent runs its commands as
@@ -670,7 +725,9 @@ shared icon names under FR17.
 - Unsupported behavior: a capability a binary lacks answers `not-linked`,
   `no-module`, or `unsupported` (FR3, FR6, FR7); a view a binary lacks reports itself unavailable
   and the library draws its fallback; Expo Go and the old architecture are not
-  supported (FR11).
+  supported (FR11); an unsupported platform gets one development warning at
+  startup that names it (FR11).
+
 - Browser evidence: none. Native claims are proven on the Simulator, the
   emulator, and devices (FR15).
 
@@ -786,6 +843,11 @@ record depends on an ask whose owner has not agreed to it.
 | FR21     | `exports` map check; a capture of each `surface` value on `Button` and `IconButton` on both platforms; a theme with `platforms.ios` and `platforms.android` glass intent on both platforms                                                                                                                                                                                                                                                        | each `surface` value on `Button` and `IconButton`, drawn and system-drawn; a native theme `material` entry                                                                                                                                                                                                                                                     | A public JavaScript glass or material component, a drawn button that ignores its `surface`, a system-drawn button whose platform style does not match its `surface`, a surface whose look ignores the theme's `material`, or a look that the props and the native theme cannot express                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR22     | Review of each native module's interface; the conformance tests on the engines React Native supports                                                                                                                                                                                                                                                                                                                                              | each native module; each engine                                                                                                                                                                                                                                                                                                                                | A contract or test that depends on one engine, or an interface that names one engine's internals                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR23     | Review of where `NavigationStack`, `Screen`, `useScreenScrollProps()`, and the stack navigator are exported; the CI lane of a pull request that changes the lab folder                                                                                                                                                                                                                                                                            | each of the four names; a pull request that changes only `packages/react-native/lab/`; web's `NavigationStack` leaving Lab                                                                                                                                                                                                                                     | One of the four names in a stable entry while web's `NavigationStack` is in Lab, one outside `./unstable/*` while in the lab, or a lab pull request on the Lab-only lane                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| DEC-10   | A source check that every `Intl` read has a fallback; Avatar initials rendered under a runtime without `Intl`                                                                                                                                                                                                                                                                                                                                     | each `Intl` read in the package's own code; a name with combining marks and an emoji; a number and a plural formatted without `Intl`                                                                                                                                                                                                                           | An `Intl` read without a fallback, a component that does not render or work without `Intl`, initials without `Intl` that differ from `component:Avatar` FR3's, or a global `Intl` polyfill                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR11     | A development-warning test under an unsupported `Platform.OS`                                                                                                                                                                                                                                                                                                                                                                                     | `Platform.OS` set to `macos` and to `windows`                                                                                                                                                                                                                                                                                                                  | No warning, more than one warning, a warning that does not name the platform, or an icon or chart that draws empty without a warning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| DEC-21   | A launch test on iOS of the subscribers MetricKit holds, in an app built with and without the opt-in                                                                                                                                                                                                                                                                                                                                              | an app that did not opt in; an app that opted in; a second launch step in the same process                                                                                                                                                                                                                                                                     | An Astryx subscriber in an app that did not opt in, none or more than one in an app that did, or an app subscriber removed or replaced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| DEC-22   | A source check of the core's iOS code                                                                                                                                                                                                                                                                                                                                                                                                             | each file in the core                                                                                                                                                                                                                                                                                                                                          | A method exchange, set-implementation, or replace-method call on a UIKit or React Native class                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR4      | A launch test on iOS of the shared URL cache; a clear on sign-out with requests in flight over React Native's networking and Astryx's own sessions                                                                                                                                                                                                                                                                                                | the default session-configuration provider; an app's own provider with and without the opt-in                                                                                                                                                                                                                                                                  | The app's shared URL cache replaced, a response that lands after a clear, or an app's own provider overridden without its opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ## Decision log
 
@@ -899,7 +961,12 @@ components work beside third-party libraries in the same app (FR2, FR18).
 An app's behavior does not depend on the order of its imports, and the package
 runs in a runtime whose globals it does not control. The package's own code
 calls its platform directly instead of relying on the global `crypto` or on
-`fetch`'s redirect modes, and it installs no global. The testing surface's Jest
+`fetch`'s redirect modes, and it installs no global. It does not depend on
+`Intl` either: every component renders and works on a runtime without `Intl`,
+and there output that needs it, such as locale-aware number and plural
+formatting, falls back to a simpler form. A component may use the platform's
+formatter through its native module where one exists; no component needs one
+to render. No `Intl` polyfill is installed as a global. The testing surface's Jest
 setup, the one module with side effects, follows `spec:AST-140/FR7`. How the
 platform's native code reaches JavaScript is `spec:AST-140/FR1`'s.
 
@@ -1002,6 +1069,27 @@ Web's `NavigationStack` is still in Lab, so the React Native `NavigationStack`,
 with `Screen`, `useScreenScrollProps()`, and the stack navigator, starts in the
 React Native lab under `./unstable/*` and moves to `./navigation` when web's
 `NavigationStack` leaves Lab.
+
+### DEC-21 — App diagnostics are the app's choice
+
+**Reference:** `spec:AST-112/DEC-21`
+**Decider:** imdreamrunner, 2026-11-19
+
+A library collects no app-level diagnostics the app did not ask for. The core
+adds a MetricKit subscriber only when the app opts in through its capability
+list (FR3), so an app's diagnostics stay the app's choice, and an app that opts
+in has the core's subscriber beside any subscriber it adds itself.
+
+### DEC-22 — The core replaces no UIKit or React Native method
+
+**Reference:** `spec:AST-112/DEC-22`
+**Decider:** imdreamrunner, 2026-11-19
+
+The core replaces no method of a UIKit or React Native class at run time
+(`spec:AST-140/FR9`), so Astryx stays compatible with the other libraries in an app and with React
+Native upgrades. It fixes what it owns inside its own hosts: the scroll view
+its stack host owns, its presentation host, the explicit calls the app shell
+makes, and the network sessions it configures.
 
 ## Open questions
 
