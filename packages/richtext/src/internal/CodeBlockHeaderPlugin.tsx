@@ -5,8 +5,9 @@
 /**
  * @file CodeBlockHeaderPlugin.tsx
  * @input Uses @lexical/react (composer context), @lexical/code (CodeNode),
- *   lexical, core IconButton, Icon, useClipboard and useTranslator, and a
- *   ResizeObserver that schedules its measure frame.
+ *   lexical, core IconButton, Icon, useClipboard, useTranslator and
+ *   observeResize, and a ResizeObserver on the editor root; both only
+ *   schedule the measure frame.
  * @output Exports CodeBlockHeaderPlugin, which draws core CodeBlock's header
  *   over every fenced code block: the language label and a copy button, or
  *   just the copy button in the corner when the block names no language.
@@ -27,6 +28,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
+import {observeResize} from '@astryxdesign/core/utils';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {listedLanguage} from '../codeLanguages';
 import {
@@ -220,7 +222,11 @@ interface HeaderParts {
  */
 function naturalWidth({header, title}: HeaderParts, label: number): number {
   const style = getComputedStyle(header);
-  const others = [...header.children].filter(child => child !== title);
+  // A control's tooltip layer, its marker or a dialog sits beside it in the
+  // header but takes no room in the row.
+  const others = [...header.children].filter(
+    child => child !== title && !child.matches('[popover], template, dialog'),
+  );
   const gap = parseFloat(style.columnGap) || 0;
   return (
     parseFloat(style.paddingInlineStart) +
@@ -233,7 +239,9 @@ function naturalWidth({header, title}: HeaderParts, label: number): number {
 
 /**
  * The width of `title`'s text on one line, in its own font, or null where no
- * canvas measures text (a DOM without layout).
+ * canvas measures text (a DOM without layout). Core measures text the same
+ * way in its virtualization internals, which RichText may not import (only a
+ * package entry is public), so this small copy stays here.
  */
 function oneLineWidth(
   title: HTMLSpanElement,
@@ -273,13 +281,18 @@ export function CodeBlockHeaderPlugin({
   const canvasRef = useRef<CanvasRenderingContext2D | null | undefined>(
     undefined,
   );
-  const observerRef = useRef<ResizeObserver | null>(null);
+  // The measure frame's scheduler, which the Effect below fills.
+  const scheduleRef = useRef<(() => void) | null>(null);
   const registerHeader = useCallback(
     (key: string, parts: HeaderParts) => {
       headersRef.current.set(key, parts);
-      observerRef.current?.observe(parts.header);
+      // A header that wraps to a new line count measures again; the shared
+      // observer only schedules the frame.
+      const unobserve = observeResize(parts.header, () =>
+        scheduleRef.current?.(),
+      );
       return () => {
-        observerRef.current?.unobserve(parts.header);
+        unobserve();
         if (headersRef.current.get(key) === parts) {
           headersRef.current.delete(key);
         }
@@ -367,23 +380,15 @@ export function CodeBlockHeaderPlugin({
         frame = requestAnimationFrame(measure);
       }
     };
+    scheduleRef.current = schedule;
     const observer =
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(schedule);
-    // A header that wraps to a new line count measures again; the observer
-    // only schedules the frame.
-    observerRef.current = observer;
-    for (const {header} of headersRef.current.values()) {
-      observer?.observe(header);
-    }
     const unregisterRoot = editor.registerRootListener(root => {
       observer?.disconnect();
       if (root != null) {
         observer?.observe(root);
-        for (const {header} of headersRef.current.values()) {
-          observer?.observe(header);
-        }
       }
       schedule();
     });
@@ -393,7 +398,7 @@ export function CodeBlockHeaderPlugin({
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
-      observerRef.current = null;
+      scheduleRef.current = null;
       unregisterRoot();
       unregisterUpdate();
       window.removeEventListener('resize', schedule);

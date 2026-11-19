@@ -251,7 +251,7 @@ A reader sees a short snippet highlighted in its first render (PR1), with no pro
 
 **Decider:** `josephfarina`, `2026-11-18`
 
-A title or language label too long for its header wraps, keeping its own spacing, and the header grows a line, so the whole file name and language stay readable and nothing sits under the header's controls. Rejected: an ellipsis (it cuts the language label and a file name's extension first).
+A title or language label too long for its header wraps, keeping its own spacing, and the header grows to fit it, so the whole file name and language stay readable and nothing sits under the header's controls. Rejected: an ellipsis (it cuts the language label and a file name's extension first).
 
 ## Open questions
 
