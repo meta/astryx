@@ -47,6 +47,7 @@ import {
   baseInstalled,
   installLine,
   packageInstalled,
+  refusePlugAndPlay,
   themeCacheRoot,
 } from './_project.mjs';
 import * as preview from './_preview-app.mjs';
@@ -58,7 +59,6 @@ import {
   context,
   coreApp,
   loneFamilyNotes,
-  refusePlugAndPlay,
 } from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';

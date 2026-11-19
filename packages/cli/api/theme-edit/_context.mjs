@@ -42,7 +42,7 @@ import {
   SYSTEM_FONTS,
 } from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
-import {openProject, installLine, plugAndPlayAbove} from './_project.mjs';
+import {openProject, installLine, refusePlugAndPlay} from './_project.mjs';
 import {addCensusStates, partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
@@ -112,26 +112,6 @@ export function requireProject(cwd) {
   throw new AstryxError(
     `${path.relative(path.resolve(cwd), app) || 'This app'}'s package.json lists @astryxdesign/core, but it is not installed. astryx experimental theme checks every change against the installed Core: install the app's packages, then run the command again. Nothing was written.`,
     [{name: installAll(app), reason: 'do this first, in the app'}],
-    E.ERR_PROJECT_REQUIRED,
-  );
-}
-
-/**
- * Refuse a Yarn Plug'n'Play app: it has no node_modules for the editor to
- * read Core from, or to keep its locks and cache in. Its .pnp.cjs sits at
- * the app or at the workspace root above it.
- * @param {string} dir the app folder, or a folder in it
- */
-export function refusePlugAndPlay(dir) {
-  if (!plugAndPlayAbove(dir)) return;
-  throw new AstryxError(
-    "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
-    [
-      {
-        name: 'yarn config set nodeLinker node-modules',
-        reason: 'do this first, then yarn install',
-      },
-    ],
     E.ERR_PROJECT_REQUIRED,
   );
 }

@@ -854,6 +854,7 @@ const STATE_NAMES = new WeakMap();
  * @returns {Promise<PartData>}
  */
 export async function partData(project) {
+  if (!project.cacheDir) return buildPartData(project);
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     // The file is read again only when it changed: every command reads it,

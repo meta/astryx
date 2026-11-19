@@ -1925,6 +1925,8 @@ function borderWidthOf(res, data) {
  * @returns {Promise<{file: string} | {problem: string}>}
  */
 async function sizeSheet(ctx, slug, data, tag, measured) {
+  if (!ctx.project.cacheDir)
+    return {problem: 'the sheet has no cache folder to be drawn in'};
   const out = path.join(
     ctx.project.cacheDir,
     `size-${slug}-${process.pid}-${tag}.html`,
