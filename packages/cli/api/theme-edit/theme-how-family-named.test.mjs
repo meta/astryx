@@ -185,3 +185,67 @@ describe('a family said by name', () => {
     );
   }, 240_000);
 });
+
+describe('a mode said with capitals', () => {
+  it('is the mode, never a font family', async () => {
+    for (const ask of [
+      'headings in Dark Mode white',
+      'body text in Dark Mode #e5e5e5',
+    ]) {
+      const lines = writes(await how('q0', ask));
+      expect(lines.length, ask).toBeGreaterThan(0);
+      expect(lines.join('\n'), ask).not.toMatch(/\bfont\b/);
+      expect(lines.join('\n'), ask).toMatch(/--mode dark/);
+    }
+  }, 240_000);
+});
+
+describe('a lone color after a piece', () => {
+  it('is the text of a part that is only text, the fill of a plain fill, and the accent after a button', async () => {
+    expect(
+      writes(await how('q0', 'bold headings, dark gray')).join('\n'),
+    ).toMatch(/color '#[0-9a-f]{6}' --on heading/);
+    expect(writes(await how('q0', 'large headings, navy')).join('\n')).toMatch(
+      /color '#[0-9a-f]{6}' --on heading/,
+    );
+    expect(writes(await how('q0', 'rounder cards, white')).join('\n')).toMatch(
+      /background-color '#ffffff' --on card/,
+    );
+    expect(
+      writes(await how('q0', 'big buttons, a sky blue, high contrast')).join(
+        '\n',
+      ),
+    ).toMatch(/accent '#[0-9a-f]{6}'/);
+  }, 240_000);
+});
+
+describe('a frame said as a step from the value now', () => {
+  it('stays on the member, never on its family group', async () => {
+    const lines = writes(
+      await how('q0', 'dialogs with a thinner border and a softer shadow'),
+    ).join('\n');
+    expect(lines).not.toMatch(/--on overlays/);
+  }, 240_000);
+});
+
+describe('a color-blind piece in a list', () => {
+  it('reads the other pieces as typed and answers before the first offer', async () => {
+    const font = writes(
+      await how('q0', 'color-blind friendly statuses, headings in Lora'),
+    );
+    expect(font).toContain('set q0 font Lora --on heading');
+    const {data} = /** @type {any} */ (
+      await themeEditHow(
+        'color-blind friendly statuses and a card background #ffffff',
+        {cwd, theme: 'q0'},
+      )
+    );
+    const texts = data.results.map((/** @type {any} */ r) => r);
+    const blind = texts.findIndex((/** @type {any} */ r) =>
+      /^color-blind readers/.test(r.text),
+    );
+    const offer = texts.findIndex((/** @type {any} */ r) => r.offer);
+    expect(blind).toBeGreaterThanOrEqual(0);
+    if (offer >= 0) expect(blind).toBeLessThan(offer);
+  }, 240_000);
+});

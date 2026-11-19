@@ -581,19 +581,22 @@ async function answer(subject, options, cwd) {
     return answer('', {...options, list: kind}, cwd);
   }
   // (Color-blind readers asked about in a list of asks: the other pieces
-  // are answered as said, and the color-blind answer follows them.)
-  const blind = colorBlindPieces(
-    t
-      .trim()
-      .toLowerCase()
-      .replace(/[?.!]+$/, ''),
-  );
+  // are answered as typed, in their case and order, and the color-blind
+  // answer follows them, before the first offer, as every answer does.)
+  const blind = colorBlindPieces(t.trim().replace(/[?.!]+$/, ''));
   if (!tool && blind.blind && blind.rest) {
     const rest = await answer(blind.rest, options, cwd);
+    const results = rest.results ?? [];
+    const firstOffer = results.findIndex(r => r.offer);
+    const at = firstOffer < 0 ? results.length : firstOffer;
     return {
       ...rest,
       subject: t,
-      results: [...(rest.results ?? []), ...colorBlindAnswer(env)],
+      results: [
+        ...results.slice(0, at),
+        ...colorBlindAnswer(env),
+        ...results.slice(at),
+      ],
     };
   }
   if (tool)
@@ -1559,7 +1562,7 @@ function colorsAnswer(env, dialCommands) {
 }
 
 const COLOR_BLIND =
-  /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/;
+  /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/i;
 
 /**
  * An ask's pieces, split at commas and at an "and" that joins two asks

@@ -4455,7 +4455,10 @@ export function draftAnswer(ctx, env, question) {
         // (A casing said in words, "All Caps", "Sentence Case", is the
         // text's case, never a family.)
         !aspectsOf(name.toLowerCase()).includes('case') &&
-        !/\s(?:case|caps)$/i.test(name)
+        !/\s(?:case|caps)$/i.test(name) &&
+        // (A mode said with capitals, "Dark Mode", is the mode, never a
+        // family.)
+        !(/^[a-z]+[- ]?(?:mode|theme)\b/i.test(name) && modeNear(name.split(/[\s-]/)[0].toLowerCase()))
       );
     };
     // (The words the editor reads: its dials, their rungs and feel words
@@ -8100,7 +8103,29 @@ export function draftAnswer(ctx, env, question) {
     // it, is the theme's: "big buttons, a sky blue, high contrast". "red,
     // blue buttons" names its part right after, so it is the buttons'.)
     const j = joinOf.get(c);
-    const ownPiece =
+    // (A part that is only text, "bold headings, dark gray", or that paints
+    // a plain fill at rest, "rounder cards, white", takes the color itself:
+    // its text or its fill. A part whose family draws with the accent, a
+    // button, leaves the color to the accent; a color said with a role,
+    // "amber warnings", is that role's.)
+    const prevParts = clauses[i - 1]?.parts ?? [];
+    const accentRoles = groupsOf(ctx);
+    const drawsAccent = (/** @type {string} */ on) =>
+      ['button-like', 'accent-fills'].some(g => (accentRoles[g] ?? []).includes(on));
+    const textOnly = (/** @type {string} */ on) =>
+      /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
+      !Object.keys(C.MAP[on]?.at?.['background-color'] ?? {}).length;
+    const plainFill = (/** @type {string} */ on) =>
+      Object.entries(C.MAP[on]?.at?.['background-color'] ?? {}).some(
+        ([, v]) =>
+          !/^(?:transparent|none|initial|inherit)$/.test(String(v).trim()) &&
+          !/--color-accent\b/.test(String(v)),
+      ) && !drawsAccent(on);
+    const takesItself = (/** @type {string} */ aspect, /** @type {(on: string) => boolean} */ test) =>
+      prevParts.length > 0 &&
+      prevParts.every(p => (FAMILIES[p.on] ?? [p.on]).every(test)) &&
+      aspect;
+    const pieceOfList =
       j?.sep === 'comma' &&
       j.list == null &&
       i > 0 &&
@@ -8124,6 +8149,21 @@ export function draftAnswer(ctx, env, question) {
             o.text,
           ),
       );
+    const own =
+      pieceOfList &&
+      // (One color alone; "red #c8102e and blue #003da5 accents" is a run.)
+      !next?.colors.length &&
+      !/\b(?:success|warnings?|danger|errors?|info|neutral|accents?|brand|primary|status(?:es)?|highlights?|page|background|text|borders?)\b/.test(
+        c.text,
+      )
+        ? takesItself('text', textOnly) || takesItself('background', plainFill)
+        : null;
+    if (own && !c.aspects.length && !ownLook) {
+      c.parts = prevParts.map(p => ({...p}));
+      c.aspects = [own];
+      continue;
+    }
+    const ownPiece = pieceOfList && !own;
     if (
       !ownLook &&
       !ownPiece &&
@@ -12710,11 +12750,14 @@ export function draftAnswer(ctx, env, question) {
       /gradient\(/.test(value);
     // (A frame: a border and a shadow on the part in the same ask, in one
     // item or two, neither a removal.)
+    // (A step from the value now, "a thinner border", stays on the member:
+    // the family's members draw different values now.)
     const framed = (/** @type {string} */ aspect) =>
       clauses.some(
         x =>
           !x.except &&
           !x.neg &&
+          !x.dir &&
           x.aspects.includes(aspect) &&
           x.parts.some(p => p.on === st.on && !p.when),
       );
