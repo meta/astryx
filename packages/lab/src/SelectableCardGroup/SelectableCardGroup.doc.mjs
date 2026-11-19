@@ -27,7 +27,7 @@ export const docs = {
       required: true,
     },
     {
-      name: 'selectionMode',
+      name: 'type',
       type: "'single' | 'multiple'",
       description:
         '`single`: a radio group with one value. `multiple`: a group of checkboxes with any number of values.',
@@ -108,7 +108,7 @@ export const docs = {
     targets: [
       {
         className: 'astryx-selectable-card-group',
-        visualProps: ['orientation', 'selectionMode'],
+        visualProps: ['orientation', 'type'],
       },
     ],
   },
@@ -154,7 +154,7 @@ export const docsZh = {
       required: true,
     },
     {
-      name: 'selectionMode',
+      name: 'type',
       type: "'single' | 'multiple'",
       description:
         '`single`：单选按钮组，一个值。`multiple`：复选框组，任意多个值。',
@@ -230,7 +230,7 @@ export const docsZh = {
     targets: [
       {
         className: 'astryx-selectable-card-group',
-        visualProps: ['orientation', 'selectionMode'],
+        visualProps: ['orientation', 'type'],
       },
     ],
   },
