@@ -793,13 +793,15 @@ interface RowAction {
   id: string;
   label: string;
   icon: typeof ArchiveBoxIcon;
+  /** The icon points along the reading order, so it mirrors in RTL. */
+  isDirectional?: boolean;
 }
 
 const ROW_ACTIONS: RowAction[] = [
   {id: 'archive', label: 'Archive', icon: ArchiveBoxIcon},
   {id: 'move', label: 'Move to folder', icon: FolderArrowDownIcon},
   {id: 'delete', label: 'Delete', icon: TrashIcon},
-  {id: 'reply', label: 'Reply', icon: ArrowUturnLeftIcon},
+  {id: 'reply', label: 'Reply', icon: ArrowUturnLeftIcon, isDirectional: true},
 ];
 
 /**
@@ -1026,7 +1028,13 @@ function ReceivedCell({
             size="sm"
             label={`${action.label} — ${item.subject}`}
             tooltip={action.label}
-            icon={<Icon icon={action.icon} size="sm" />}
+            icon={
+              <Icon
+                icon={action.icon}
+                size="sm"
+                xstyle={action.isDirectional ? rtlStyles.mirror : undefined}
+              />
+            }
             onClick={() =>
               action.id === 'delete'
                 ? confirm.show({
@@ -1397,7 +1405,13 @@ function ConversationPane({
       variant="ghost"
       label={`${action.label} — ${conversation.subject}`}
       tooltip={action.label}
-      icon={<Icon icon={action.icon} size="sm" />}
+      icon={
+        <Icon
+          icon={action.icon}
+          size="sm"
+          xstyle={action.isDirectional ? rtlStyles.mirror : undefined}
+        />
+      }
       onClick={() =>
         action.id === 'delete'
           ? confirm.show({
@@ -1596,7 +1610,13 @@ function ConversationPane({
               <Button
                 label="Reply"
                 variant="primary"
-                icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ArrowUturnLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={() => onReply(replyDraft(conversation, false))}
               />
               <Button
@@ -2004,7 +2024,13 @@ function ComposeWindow({
                   <Button
                     label="Send"
                     variant="primary"
-                    icon={<Icon icon={PaperAirplaneIcon} size="sm" />}
+                    icon={
+                      <Icon
+                        icon={PaperAirplaneIcon}
+                        size="sm"
+                        xstyle={rtlStyles.mirror}
+                      />
+                    }
                     onClick={() =>
                       // Demo only: replace this toast with the call that performs the action.
                       showToast({
@@ -2572,7 +2598,17 @@ export default function SupportInboxTemplate() {
                               label={action.label}
                               variant="ghost"
                               size="sm"
-                              icon={<Icon icon={action.icon} size="sm" />}
+                              icon={
+                                <Icon
+                                  icon={action.icon}
+                                  size="sm"
+                                  xstyle={
+                                    action.isDirectional
+                                      ? rtlStyles.mirror
+                                      : undefined
+                                  }
+                                />
+                              }
                               onClick={() =>
                                 action.id === 'delete'
                                   ? confirm.show({

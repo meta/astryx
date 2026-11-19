@@ -876,7 +876,9 @@ export function themeImageNotes(ctx, slug) {
     else if (named.kind === 'missing')
       notes.set(
         named.ref,
-        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+        named.ref.startsWith('/')
+          ? `${named.ref} was not found in ${shown(ctx.project.cwd, path.join(at.root, 'public'))}/, where a path from the site's root is read, so neither the previews nor the app show it.`
+          : `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
       );
     else if (named.kind === 'not-file')
       notes.set(

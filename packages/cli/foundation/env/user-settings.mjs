@@ -7,7 +7,10 @@
  * It holds the person's choices about the computer-level agent text:
  *
  * ```json
- * {"computerAgentText": {"install": true, "links": ["/home/me/.claude/skills/astryx"]}}
+ * {
+ *   "computerAgentText": {"install": true, "links": ["/home/me/.claude/skills/astryx"]},
+ *   "skills": {"to": ["~/team-skills"]}
+ * }
  * ```
  *
  * - `computerAgentText.install`: `false` after `astryx init --user
@@ -15,8 +18,13 @@
  *   value means install.
  * - `computerAgentText.links`: the links to the skill folder Astryx made, so
  *   removal removes exactly those.
+ * - `skills.to`: the folders outside any project that `astryx init --to
+ *   <folder>` put the computer-level skill in: `~/` and a path in the home
+ *   folder, else an absolute path. The `user` place
+ *   is `computerAgentText`, which every release reads.
  *
- * Only `astryx init --user` and the global copy's refresh change it. No environment variable or option
+ * Only `astryx init --user`, `astryx init --to`, and the global copy's
+ * refresh change it. No environment variable or option
  * does. A file that cannot be read or parsed counts as missing, and one that
  * cannot be written never fails a run.
  *
@@ -93,6 +101,16 @@ export function recordComputerAgentTextSettings(
     ...readSettings(configDir),
     computerAgentText: {install: choice.install, links: choice.links},
   };
+  return writeSettings(next, configDir);
+}
+
+/**
+ * Write the whole settings object; returns whether the file was written.
+ * @param {Record<string, unknown>} next
+ * @param {string} configDir
+ * @returns {boolean}
+ */
+function writeSettings(next, configDir) {
   const file = settingsFile(configDir);
   try {
     fs.mkdirSync(path.dirname(file), {recursive: true});
@@ -103,4 +121,40 @@ export function recordComputerAgentTextSettings(
   } catch {
     return false;
   }
+}
+
+/**
+ * The folders outside any project that hold the computer-level skill
+ * (`~/team-skills`, or an absolute path).
+ * @param {string} [configDir]
+ * @returns {string[]}
+ */
+export function computerSkillFolders(configDir = userConfigDir()) {
+  const raw = readSettings(configDir).skills;
+  const to =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? /** @type {Record<string, unknown>} */ (raw).to
+      : undefined;
+  return Array.isArray(to) ? to.filter(each => typeof each === 'string') : [];
+}
+
+/**
+ * Record the folders outside any project that hold the computer-level skill,
+ * keeping every other setting. Returns whether the file was written.
+ * @param {readonly string[]} folders
+ * @param {string} [configDir]
+ * @returns {boolean}
+ */
+export function recordComputerSkillFolders(
+  folders,
+  configDir = userConfigDir(),
+) {
+  const settings = readSettings(configDir);
+  const raw = settings.skills;
+  const skills =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return writeSettings(
+    {...settings, skills: {...skills, to: [...folders]}},
+    configDir,
+  );
 }

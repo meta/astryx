@@ -889,15 +889,3 @@ export function renderFile(planned, specifierOf) {
   return out;
 }
 
-/**
- * The relative specifier from one written file to another.
- * @param {string} fromDest
- * @param {string} toDest
- */
-export function relativeSpecifierBetween(fromDest, toDest) {
-  let rel = toPosix(path.relative(path.dirname(fromDest), toDest));
-  rel = DECLARATION_FILE.test(toDest)
-    ? rel.replace(/\.d\.[cm]?ts$/, '')
-    : rel.replace(/\.(?:[cm]?[jt]sx?)$/, '');
-  return rel.startsWith('.') ? rel : `./${rel}`;
-}

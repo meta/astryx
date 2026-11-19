@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'arrowRight',
+  group: 'arrows',
   description: 'Continue to the next step or page.',
   words: ['next', 'continue', 'forward'],
 };
