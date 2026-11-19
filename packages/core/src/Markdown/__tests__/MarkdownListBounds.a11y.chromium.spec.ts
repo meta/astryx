@@ -4,9 +4,10 @@
 /**
  * @file MarkdownListBounds.a11y.chromium.spec.ts
  * @input Uses the Core/Markdown Default story, given a paragraph followed by
- *   unordered, ordered, and nested lists through its `children` arg
+ *   unordered, ordered, nested, and task lists through its `children` arg
  * @output Real-Chromium evidence that each Markdown list stays inside the
- *   column its paragraphs fill, so a list never widens a phone-width page
+ *   column its paragraphs fill, so a list never widens a phone-width page,
+ *   and that a focused task checkbox on the column edge draws its whole ring
  * @position Browser evidence for Markdown's list geometry; listEdge.test.tsx
  *   pins the row edge in jsdom
  */
@@ -31,6 +32,9 @@ const MARKDOWN = [
   '',
   '1. First numbered item',
   '2. Second numbered item',
+  '',
+  '- [x] A finished task',
+  '- [ ] An open task',
 ].join('\n');
 
 let storybook: StaticServer;
@@ -103,11 +107,56 @@ for (const dir of ['ltr', 'rtl'] as const) {
         pageWidth: document.documentElement.scrollWidth,
       };
     });
-    expect(geometry.lists.length).toBe(2);
+    expect(geometry.lists.length).toBe(3);
     for (const list of geometry.lists) {
       expect(list.left).toBeGreaterThanOrEqual(geometry.column.left - 0.5);
       expect(list.right).toBeLessThanOrEqual(geometry.column.right + 0.5);
     }
     expect(geometry.pageWidth).toBeLessThanOrEqual(390);
+  });
+}
+
+for (const dir of ['ltr', 'rtl'] as const) {
+  test(`a focused task checkbox draws its whole focus ring (${dir})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 800});
+    await renderMarkdown(page, dir);
+    const checkbox = page.getByRole('checkbox', {name: 'A finished task'});
+    await checkbox.focus();
+    await expect(checkbox).toBeFocused();
+    const clipped = await checkbox.evaluate(input => {
+      // The ring paints from the checkbox's visible box, which may be the
+      // input or a styled sibling; take the element that draws the outline.
+      let ringOwner: Element = input;
+      for (let el: Element | null = input; el != null; el = el.parentElement) {
+        if (Number.parseFloat(getComputedStyle(el).outlineWidth) > 0) {
+          ringOwner = el;
+          break;
+        }
+      }
+      const style = getComputedStyle(ringOwner);
+      const reach =
+        Number.parseFloat(style.outlineWidth) +
+        Number.parseFloat(style.outlineOffset || '0');
+      const box = ringOwner.getBoundingClientRect();
+      const ring = {left: box.left - reach, right: box.right + reach};
+      const cuts: string[] = [];
+      for (
+        let el = ringOwner.parentElement;
+        el != null && el.id !== 'storybook-root';
+        el = el.parentElement
+      ) {
+        const overflowX = getComputedStyle(el).overflowX;
+        if (overflowX === 'visible') continue;
+        const clip = el.getBoundingClientRect();
+        if (ring.left < clip.left - 0.5 || ring.right > clip.right + 0.5) {
+          cuts.push(`${el.tagName.toLowerCase()} (${overflowX})`);
+        }
+      }
+      return {reach, cuts};
+    });
+    expect(clipped.reach).toBeGreaterThan(0);
+    expect(clipped.cuts).toEqual([]);
   });
 }

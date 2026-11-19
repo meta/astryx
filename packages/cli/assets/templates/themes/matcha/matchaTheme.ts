@@ -39,6 +39,9 @@ const matchaSyntax = defineSyntaxTheme({
   },
 });
 
+/** The color modes matcha draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const matchaTheme = defineTheme({
   name: 'matcha',
 
