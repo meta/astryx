@@ -9635,6 +9635,24 @@ async function buildThemeSteps(ctx, slug, data) {
       // of it into the content's radius, after the variant's own).
       const longs = [...longhandsOf(kebab(x.prop))];
       if (longs.length && longs.every(l => camel(l) in ownState)) continue;
+      // A setting for one mode never goes into a variant that sets the
+      // property itself in both modes (a selected tab's own fill): its
+      // mode block follows the variant's own declarations and would
+      // replace them in that mode.
+      if (x.mode) {
+        const both = x.state ? (variant[x.state] ?? {}) : variant;
+        if (
+          Object.keys(both).some(
+            k =>
+              !k.startsWith('@') &&
+              !k.startsWith(':') &&
+              (k === x.prop ||
+                coversProperty(kebab(k), kebab(x.prop)) ||
+                coversProperty(kebab(x.prop), kebab(k))),
+          )
+        )
+          continue;
+      }
       const copy = x.state
         ? {...own, [x.state]: {[x.prop]: x.value, ...ownState}}
         : {[x.prop]: x.value, ...own};
