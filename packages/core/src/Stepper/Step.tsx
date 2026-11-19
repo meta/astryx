@@ -647,10 +647,12 @@ const styles = stylex.create({
   // Optional tag
   optionalDot: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-secondary'],
   },
   optionalText: {
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-secondary'],
   },
 

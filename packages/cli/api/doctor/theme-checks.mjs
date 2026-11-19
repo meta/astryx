@@ -57,6 +57,7 @@ import {
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
 import {logger} from '../logger.mjs';
+import {stylesheetLinkHrefs} from './built-checks.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
 /** @typedef {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} DiscoveredTheme */
@@ -461,6 +462,109 @@ function themeImportPairEvidence(root, generatedModule, themes) {
     }
   }
   return {unpaired, unproven};
+}
+
+/**
+ * A known font service's stylesheet URL, whose `family=` names the families
+ * it loads (Google Fonts, and Bunny Fonts, which serves the same API).
+ */
+const FONT_SERVICE_HREF =
+  /^(?:https?:)?\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css2?\?/iu;
+
+/** The app's page files a font `<link>` goes in, in the order frameworks keep them. */
+const PAGE_HEAD_FILES = [
+  'index.html',
+  'public/index.html',
+  'src/index.html',
+  ...[
+    'app/layout',
+    'src/app/layout',
+    'pages/_document',
+    'src/pages/_document',
+  ].flatMap(file =>
+    ['.tsx', '.jsx', '.js', '.mjs', '.ts'].map(ext => `${file}${ext}`),
+  ),
+];
+
+/**
+ * The font families the app's page head loads through a font service
+ * `<link>`, and the page file that holds its head (the first of the page
+ * files that exists), relative to the project.
+ * @param {string} projectDir
+ * @returns {{families: Set<string>, head: string | null}}
+ */
+function pageFontLinks(projectDir) {
+  /** @type {Set<string>} */
+  const families = new Set();
+  /** @type {string | null} */
+  let head = null;
+  for (const name of PAGE_HEAD_FILES) {
+    const file = path.join(projectDir, name);
+    const source = readTextFileIfExists(file);
+    if (source == null) continue;
+    head ??= name;
+    const hrefs = /\.html?$/i.test(name)
+      ? stylesheetLinkHrefs(source)
+      : jsxStylesheetHrefs(source);
+    for (const href of hrefs) {
+      if (!FONT_SERVICE_HREF.test(href)) continue;
+      for (const family of fontServiceFamilies(href)) families.add(family);
+    }
+  }
+  return {families, head};
+}
+
+/**
+ * The `href` of every stylesheet `<link>` a layout module renders, read from
+ * its syntax tree, so a link in any comment never counts. Only string
+ * attribute values are read; a `rel` must be the word `stylesheet`.
+ * @param {string} source
+ * @returns {string[]}
+ */
+function jsxStylesheetHrefs(source) {
+  let ast;
+  try {
+    ast = parseModule(source);
+  } catch {
+    return [];
+  }
+  /** @param {any} attribute @returns {string | null} */
+  const text = attribute => {
+    const v = attribute?.value;
+    if (v?.type === 'StringLiteral') return v.value;
+    const e = v?.type === 'JSXExpressionContainer' ? v.expression : null;
+    if (e?.type === 'StringLiteral') return e.value;
+    if (e?.type === 'TemplateLiteral' && !e.expressions.length)
+      return e.quasis[0]?.value?.cooked ?? null;
+    return null;
+  };
+  /** @type {string[]} */
+  const out = [];
+  walkAst(ast, node => {
+    if (
+      node.type !== 'JSXOpeningElement' ||
+      node.name?.type !== 'JSXIdentifier' ||
+      node.name.name !== 'link'
+    )
+      return;
+    /** @param {string} name */
+    const attr = name =>
+      text(
+        (node.attributes ?? []).find(
+          (/** @type {any} */ a) =>
+            a.type === 'JSXAttribute' && a.name?.name === name,
+        ),
+      );
+    const rel = attr('rel');
+    const href = attr('href');
+    if (
+      href &&
+      rel &&
+      rel.split(/\s+/u).some(word => /^stylesheet$/iu.test(word))
+    )
+      out.push(href);
+  });
+  return out;
 }
 
 /** @param {string} value */
@@ -2063,6 +2167,10 @@ export async function checkAppThemes(cwd) {
       importedEvidence.set(theme, null);
     }
   }
+  // A font service stylesheet the app links in its page head (the setup a
+  // theme's README gives) loads its families for every added theme.
+  const pageFonts = pageFontLinks(state.projectDir);
+  for (const family of pageFonts.families) moduleLoaded.add(family);
   for (const theme of resolved) {
     const availableTheme = available.find(
       candidate =>
@@ -2139,7 +2247,7 @@ export async function checkAppThemes(cwd) {
     }
     if (packageWarnings.length > 0) {
       fontWarningFixes.push(
-        'Load the named package fonts in app HTML, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).',
+        `Add the theme's font <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=…"> to the <head> of ${pageFonts.head ?? "the app's HTML page (index.html, or the root layout)"}, as the theme's README gives it, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).`,
       );
     }
   }

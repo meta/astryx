@@ -231,6 +231,7 @@ const itemStyles = stylex.create({
     width: typeScaleVars['--text-supporting-size'],
     height: typeScaleVars['--text-supporting-size'],
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   separator: {
     display: 'var(--separator-display)',
