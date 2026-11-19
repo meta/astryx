@@ -23,6 +23,7 @@ verified_by:
     packages/cli/api/search/search.icons.test.mjs,
     packages/cli/foundation/discovery/icon-definition-replaces.test.mjs,
     packages/cli/foundation/agent-docs/agent-docs.test.mjs,
+    packages/cli/foundation/discovery/template-placeholders.test.mjs,
   ]
 ---
 
@@ -59,7 +60,9 @@ may add definitions of its own. With a set installed:
   that look.
 
 The CLI encodes no icon library: the author, or the author's agent, picks each
-icon, and the CLI verifies it, writes the files, and checks the set.
+icon, and the CLI verifies it, writes the files, and checks the set. The one
+exception is the template icon table (FR21): it names the library icon that
+draws each meaning a bundled template imports.
 
 ## Non-goals
 
@@ -831,6 +834,20 @@ message}`) names each template or namespace doc that sets `stability`, and
   cache keys on the setting, so a changed setting rebuilds the previews.
   Unset, no loader is added and previews keep their templates' icons.
 
+- **FR21 — Template icon placeholders.** A bundled template source may
+  import an icon by meaning from `@astryxdesign/template-icons`: each export
+  is `<Meaning>Icon`, the definition's name in PascalCase (`delete` →
+  `DeleteIcon`). The import path names the variant: the package root draws 24
+  outline, and `/24/solid`, `/20/solid`, `/16/solid` and `/lucide` draw the
+  others. One table, `assets/icons/template-icons.json` in the CLI, names the
+  library icon that draws each meaning: a Heroicon for the Heroicons variants and
+  a Lucide icon for the lucide variant. The package is generated from that table
+  and re-exports those icons, so a preview that runs a template source draws
+  them with no extra step. Every table meaning is a definition, every icon
+  exists in its library, and the package matches the table. The package is
+  private to the repository; only template sources import it, and they resolve
+  it through the CLI package's dev dependency and the docs site's dependency.
+
 ### Supporting pieces
 
 - **FR18 — Additive docs support.** Every doc type except `ThemeDoc` and
@@ -860,6 +877,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   `template_icon_undeclared` next note, and the `iconSets` and `olderCliNotes`
   validate fields.
 - Docs site: the experimental `DOCSITE_ICON_SET` build setting.
+- Template icon placeholders: the CLI's template icon table and the private
+  `@astryxdesign/template-icons` workspace package generated from it (FR21).
 - `contributing:cli-conventions`: `IconSetDoc`, `IconSetData`, and
   `IconDefinitionDoc` join the authoring types.
 - Consumer docs: `cli/experimental/icon-sets`,
@@ -881,6 +900,7 @@ message}`) names each template or namespace doc that sets `stability`, and
 | FR15      | `integration check` tests, with and without `--strict`                                    | every code; unmapped optional definitions; unmapped template meanings under `--strict`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                                                                                                                     |
 | FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4; `experimental.iconVariant` with a range from 0.7.12                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                                                                                                                |
 | FR17      | Doctor and discover tests, including `discover.icon-packs` (command tests)                | opted in; a placeholder in use, commented out, and quoted; no set installed and no `experimental.iconSet`; one set installed and no `experimental.iconSet`; two sets and no `experimental.iconSet`; invalid set and no `experimental.iconSet`; a variant the main set does not declare, and one for a main set with one look; icon imports from a backup an earlier set covers, an unlisted set, a wrapped library, the main set's own library, a package not installed (declared, default, namespace, type-only, `paths`/`baseUrl`-mapped, and re-exported variants), and the main set uninstalled; a pack a project could add, with and without definitions, with icon features on and off                                                                                                                                                                                                                                                                                            | a project with no set installed and no `experimental.iconSet` sees an icon-set check, issue, or kind; or a variant the main set lacks passes; or a pack a project could add is missing, unmarked, or shows its definitions with icon features off; or another stable command shows a set                                                                  |
+| FR21      | template placeholder tests                                                                | every table meaning a definition; every icon in its library for each variant; the package files equal the generated ones; variant from each import path; meaning from each export name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a table meaning is not a definition, a library lacks an icon, or the package drifts from the table                                                                                                                                                                                                                                                        |
 | FR19–FR20 | template mapping tests of the placeholder declaration; docs site loader and config tests  | the declaration's size, color, and labels; no data attributes; setting unset and set; a set that is not installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | the placeholder is announced without a name, or an unset build changes                                                                                                                                                                                                                                                                                    |
 | FR18      | docs tree, help, and search tests                                                         | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | a stable namespace adopts another package's doc, or a marked doc reaches search                                                                                                                                                                                                                                                                           |
 
@@ -929,7 +949,9 @@ choose.
 **Decider:** `josephfarina`, `2026-10-20`
 
 Shared definitions let templates name meanings, not libraries. A set extends
-them with its own files, and the CLI never encodes a library.
+them with its own files, and the CLI never encodes a library for a set. The
+template icon table (FR21) is the one exception: it names, for each meaning a
+bundled template imports, the library icon that draws it.
 
 ### DEC-5 — Every icon is a component the package exports
 
