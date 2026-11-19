@@ -18,7 +18,7 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-dropdown-menu-divider'}],
+    targets: [{className: 'astryx-dropdown-menu-divider', sitsOn: 'divider'}],
   },
 };
 

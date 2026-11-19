@@ -20,7 +20,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-list', visualProps: ['density', 'listStyle']},
-      {className: 'astryx-list-item'},
+      {className: 'astryx-list-item', sitsOn: 'item'},
     ],
     vars: [
       {

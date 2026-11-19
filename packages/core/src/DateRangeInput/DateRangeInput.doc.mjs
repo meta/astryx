@@ -198,7 +198,7 @@ export const docs = {
         visualProps: ['size', 'status'],
         states: ['disabled'],
       },
-      {className: 'astryx-date-range-input-toggle-icon', states: ['state']},
+      {className: 'astryx-date-range-input-toggle-icon', sitsOn: 'icon', states: ['state']},
       {className: 'astryx-date-range-input-presets'},
       {
         className: 'astryx-date-range-input-preset',

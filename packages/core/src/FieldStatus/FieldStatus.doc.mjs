@@ -31,7 +31,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-field-status', visualProps: ['type', 'variant']},
-      {className: 'astryx-field-status-icon', visualProps: ['type']},
+      {className: 'astryx-field-status-icon', sitsOn: 'icon', visualProps: ['type']},
     ],
   },
   props: [

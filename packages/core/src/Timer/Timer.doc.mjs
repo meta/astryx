@@ -108,7 +108,7 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-timer'}],
+    targets: [{className: 'astryx-timer', sitsOn: 'text'}],
   },
   usage: {
     anatomy,
