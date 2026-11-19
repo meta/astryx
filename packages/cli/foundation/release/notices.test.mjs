@@ -443,6 +443,15 @@ describe('addMatchingCore', () => {
       'npm install @acme/themes',
     );
   });
+
+  it("adds the CLI, which bundles themes, at the project's Core release too", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@astryxdesign/cli')).toBe(
+      'npm install -E @astryxdesign/cli@0.7.10',
+    );
+  });
 });
 
 describe('the packages that move with Core', () => {

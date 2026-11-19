@@ -23,6 +23,7 @@ import {
   DEMO_CONTENT_MODULE,
   replaceDemoContent,
 } from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {fillTemplatePlaceholders} from '../../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {packages} from '../generated/packageRegistry';
 import {
   components,
@@ -1036,7 +1037,7 @@ describe('blockRegistry', () => {
     }
   });
 
-  it('shows each core block as a copy writes it, with no demo content (spec:AST-033 FR23)', () => {
+  it('shows each core block as a copy writes it, with no demo content or icon placeholders (spec:AST-033 FR23)', () => {
     const blocksDir = path.join(
       REPO_ROOT,
       'packages/cli/assets/templates/blocks',
@@ -1044,9 +1045,12 @@ describe('blockRegistry', () => {
     for (const block of blocks.filter(b => b.sourcePackage == null)) {
       const file = path.join(blocksDir, block.category, `${block.dirName}.tsx`);
       expect(block.source).toBe(
-        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
       );
       expect(block.source).not.toContain(DEMO_CONTENT_MODULE);
+      expect(block.source).not.toContain('@astryxdesign/template-icons');
     }
     for (const entry of Object.values(exampleRegistry).flat()) {
       expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
@@ -1067,7 +1071,9 @@ describe('blockRegistry', () => {
     for (const template of templates) {
       const file = path.join(pagesDir, template.slug, 'page.tsx');
       expect(template.source).toBe(
-        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        fillTemplatePlaceholders(
+          replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+        ).source,
       );
     }
   });

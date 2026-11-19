@@ -10,5 +10,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['TextInput', 'Layout'],
-  icons: {EnvelopeIcon: 'mail', LockClosedIcon: 'lock', UserIcon: 'user'},
 };
