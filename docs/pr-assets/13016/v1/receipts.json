@@ -1,0 +1,92 @@
+{
+ "pullRequest": 13016,
+ "storybook": {
+  "before": "main at e2b63aeb65 with the SmallPlayer story from this pull request",
+  "after": "the head of this pull request"
+ },
+ "browser": "Chromium headless shell 149 (Playwright 1.61), 900x640 viewport, 2x device pixel ratio",
+ "theme": "neutral",
+ "media": "apps/docsite/public/template-assets/Nature-1.mp4, first 16 s, re-encoded to VP9 1280x720",
+ "state": {
+  "pausedAt": 5.2,
+  "bufferedEndHeld": 9.6
+ },
+ "stories": {
+  "240": "lab-mediaplayer--small-player",
+  "640": "lab-mediaplayer--video with its 720px frame set to 640px"
+ },
+ "frames": [
+  {
+   "file": "before-240-light.png",
+   "player": 240,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "before-240-dark.png",
+   "player": 240,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "before-640-light.png",
+   "player": 640,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "before-640-dark.png",
+   "player": 640,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "after-240-light.png",
+   "player": 240,
+   "barHeight": 32,
+   "inset": 4,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "after-240-dark.png",
+   "player": 240,
+   "barHeight": 32,
+   "inset": 4,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "after-640-light.png",
+   "player": 640,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  },
+  {
+   "file": "after-640-dark.png",
+   "player": 640,
+   "barHeight": 40,
+   "inset": 8,
+   "visible": "true",
+   "time": 5.2,
+   "spinner": 0
+  }
+ ]
+}
