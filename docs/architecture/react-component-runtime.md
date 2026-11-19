@@ -351,9 +351,10 @@ those contracts.
   runtime after first paint under a coarse pointer, for the keyboard ride; it
   adds no gesture, and under a fine pointer it never loads it. The runtime
   exposes Safari on iOS's keyboard schedule
-  (`keyboard/uikitKeyboardSchedule.ts`): UIKit's keyboard spring and the
-  layout guide's focus rules there. The keyboard riders build it with the
-  duration and focus checks they hold, and register it with the layout guide.
+  (`keyboard/uikitKeyboardSchedule.ts`): the show's spring, UIKit's keyboard
+  spring for the hide, and the layout guide's focus rules there. The keyboard
+  riders build it with the duration and focus checks they hold, and register
+  it with the layout guide.
   No first-load module imports it. The layout guide cannot hold it, since
   nearly every page loads the guide first. A gesture in that
   window does not start the load. The bundler keeps one copy per page however many

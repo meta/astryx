@@ -4,8 +4,9 @@
  * @file rideKeyboard.test.ts
  * @input vitest, rideKeyboard, a stand-in animator
  * @output Tests that a ride plays its transition's curve from the
- *   transition's start, Gboard's slide or UIKit's keyboard spring, and asks
- *   for an entrance. A jump or an ended slide lands at once.
+ *   transition's start, Gboard's slide or Safari on iOS's springs, and asks
+ *   for an entrance. In Safari on iOS a surface rides the inset's edge. A jump
+ *   or an ended slide lands at once.
  * @position Unit tests for keyboard/rideKeyboard.ts
  */
 
@@ -111,6 +112,87 @@ describe('rideKeyboard', () => {
     const along = (s: number) => 1 - (1 + omega * s) * Math.exp(-omega * s);
     expect(curves.y.at(0.1)).toBeCloseTo(-336 * along(0.1), 6);
     expect(curves.y.at(span)).toBe(-336);
+  });
+
+  it('rides the inset’s edge on a show in Safari on iOS: a surface that travels less than the keyboard waits for the edge, then rides with it', () => {
+    const animator = standInAnimator();
+    const show = uikitKeyboardSchedule.showCurve;
+    expect(show).toBeDefined();
+
+    rideKeyboard(
+      animator as unknown as Animator,
+      {y: -100},
+      transition({to: 336, curve: show ?? null}),
+    );
+
+    expect(animator.play).toHaveBeenCalledTimes(1);
+    const [curves] = animator.play.mock.calls[0] as unknown as [
+      Record<string, {duration: number; at: (t: number) => number}>,
+    ];
+    const edge = (t: number) => 336 * (show?.progress(t) ?? 0);
+    // The surface rests 236 px above the keyboard's start, so it holds still
+    // until the inset's edge has risen that far.
+    for (const t of [0.01, 0.03, 0.05]) {
+      expect(edge(t)).toBeLessThan(236);
+      expect(curves.y.at(t)).toBe(0);
+    }
+    // Then the edge pushes it.
+    const t = 0.12;
+    expect(edge(t)).toBeGreaterThan(236);
+    expect(curves.y.at(t)).toBeCloseTo(-(edge(t) - 236), 6);
+    expect(curves.y.at(curves.y.duration)).toBe(-100);
+  });
+
+  it('lets a surface down only its own travel on a hide in Safari on iOS, so it comes to rest before the keyboard is down', () => {
+    const animator = standInAnimator();
+    animator.get.mockReturnValue(-100);
+
+    rideKeyboard(
+      animator as unknown as Animator,
+      {y: 0},
+      transition({
+        kind: 'hide',
+        from: 336,
+        to: 0,
+        predicted: true,
+        curve: uikitKeyboardSchedule.curve,
+      }),
+    );
+
+    const [curves] = animator.play.mock.calls[0] as unknown as [
+      Record<string, {duration: number; at: (t: number) => number}>,
+    ];
+    const fallen = (t: number) => 336 * uikitKeyboardSchedule.curve.progress(t);
+    const t = 0.03;
+    expect(fallen(t)).toBeLessThan(100);
+    expect(curves.y.at(t)).toBeCloseTo(-100 + fallen(t), 6);
+    // At rest once the edge has fallen the surface's 100 px.
+    const rest = 0.09;
+    expect(fallen(rest)).toBeGreaterThan(100);
+    expect(curves.y.at(rest)).toBe(0);
+  });
+
+  it('moves a surface over its own travel along Gboard’s slide, as Chrome on Android rides', () => {
+    const animator = standInAnimator();
+
+    rideKeyboard(
+      animator as unknown as Animator,
+      {y: -100},
+      transition({
+        to: 336,
+        curve: {
+          durationMs: androidKeyboard.showMs,
+          points: androidKeyboard.showCurve,
+        },
+      }),
+    );
+
+    const [curves] = animator.play.mock.calls[0] as unknown as [
+      Record<string, {duration: number; at: (t: number) => number}>,
+    ];
+    // From the slide's first moment, a part of its travel.
+    expect(curves.y.at(0.03)).toBeLessThan(0);
+    expect(curves.y.at(curves.y.duration)).toBe(-100);
   });
 
   it("plays the transition's own curve, even a show published with the hide slide", () => {

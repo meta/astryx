@@ -6,9 +6,9 @@
  * @output Tests the keyboard layout guide's core on Chrome. Transitions come
  *   from Chrome's reports, dated back to Gboard's start, on Gboard's slides.
  *   Also covered: a hide predicted from the blur, the accessory bar's
- *   report, and focus that comes back during a predicted hide. On iOS,
- *   transitions ride UIKit's keyboard spring from Safari's report and from
- *   the blur.
+ *   report, and focus that comes back during a predicted hide. On iOS, a show
+ *   rides a spring that leads UIKit's keyboard spring from Safari's report,
+ *   and a hide rides UIKit's keyboard spring from the blur.
  * @position Unit tests for keyboard/keyboardModel.ts
  */
 
@@ -121,8 +121,14 @@ describe('createKeyboardModel on iOS Safari', () => {
   const progress = (ms: number) =>
     1 - (1 + (omega * ms) / 1000) * Math.exp((-omega * ms) / 1000);
   const span = uikitTiming.keyboardNotificationMs;
+  // The show's spring is critically damped too, at ω₀ = 8π s⁻¹, cut and
+  // normalised at 330 ms.
+  const leadOmega = 8 * Math.PI;
+  const rawLead = (ms: number) =>
+    1 - (1 + (leadOmega * ms) / 1000) * Math.exp((-leadOmega * ms) / 1000);
+  const leadProgress = (ms: number) => rawLead(ms) / rawLead(330);
 
-  it('rides a keyboard coming up from Safari’s one report, on UIKit’s keyboard spring cut at the notification’s duration (FR8)', () => {
+  it('rides a keyboard coming up from Safari’s one report, on a spring that leads UIKit’s keyboard spring, cut at 330 ms (FR8)', () => {
     const model = safari();
     const show = model.report(336, 1000);
     expect(show).toMatchObject({
@@ -132,13 +138,13 @@ describe('createKeyboardModel on iOS Safari', () => {
       start: 1000,
       animated: true,
       predicted: false,
-      curve: uikitKeyboardSchedule.curve,
+      curve: uikitKeyboardSchedule.showCurve,
     });
     expect(model.presentation(1000)).toBe(0);
-    expect(model.presentation(1100)).toBeCloseTo(336 * progress(100), 6);
-    expect(model.presentation(1200)).toBeCloseTo(336 * progress(200), 6);
-    // Core Animation cuts the spring at the notification's duration.
-    expect(model.presentation(1000 + span)).toBe(336);
+    expect(model.presentation(1100)).toBeCloseTo(336 * leadProgress(100), 6);
+    expect(model.presentation(1200)).toBeCloseTo(336 * leadProgress(200), 6);
+    expect(model.presentation(1100)).toBeGreaterThan(336 * progress(100));
+    expect(model.presentation(1000 + 330)).toBe(336);
   });
 
   it('takes Safari’s one report as the keyboard’s own height, accessory bar included, with no prediction', () => {
@@ -149,7 +155,7 @@ describe('createKeyboardModel on iOS Safari', () => {
     expect(show).toMatchObject({kind: 'show', to: 290, predicted: false});
   });
 
-  it('rides a hide down from the blur on the same spring, and Safari’s report once the keyboard is down confirms it (FR3)', () => {
+  it('rides a hide down from the blur on UIKit’s keyboard spring cut at the notification’s duration, and Safari’s report once the keyboard is down confirms it (FR3)', () => {
     const model = safari();
     model.report(336, 1000);
     const hide = model.blurred(2000);
@@ -163,6 +169,7 @@ describe('createKeyboardModel on iOS Safari', () => {
       curve: uikitKeyboardSchedule.curve,
     });
     expect(model.presentation(2100)).toBeCloseTo(336 * (1 - progress(100)), 6);
+    // Core Animation cuts the spring at the notification's duration.
     expect(model.presentation(2000 + span)).toBe(0);
     // Safari reports the hide about half a second after the blur.
     expect(model.report(0, 2500)).toBeNull();
@@ -182,13 +189,13 @@ describe('createKeyboardModel on iOS Safari', () => {
     });
   });
 
-  it('turns back up on the spring when focus returns during a hide it predicted', () => {
+  it('turns back up on the show’s spring when focus returns during a hide it predicted', () => {
     const model = safari();
     model.report(336, 1000);
     model.blurred(2000);
     const back = model.focused(2100);
     expect(back).toMatchObject({kind: 'show', to: 336, animated: true});
     expect(back?.from).toBeCloseTo(336 * (1 - progress(100)), 6);
-    expect(back?.curve).toBe(uikitKeyboardSchedule.curve);
+    expect(back?.curve).toBe(uikitKeyboardSchedule.showCurve);
   });
 });

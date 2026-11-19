@@ -3828,36 +3828,42 @@ describe('BottomSheet', () => {
         act(async () => {
           await new Promise(resolve => setTimeout(resolve, 450));
         });
-      // UIKit's keyboard spring lands at the notification's duration.
+      // The show's spring lands at 330 ms, and UIKit's keyboard spring at the
+      // notification's duration.
       const afterTheShow = afterTheHide;
 
-      it('rides the content up from Safari\u2019s report on UIKit\u2019s keyboard spring, through the layout guide (spec:AST-099 FR8)', async () => {
+      it('rides the content up from Safari\u2019s report on the inset\u2019s edge, on a spring that leads UIKit\u2019s keyboard spring, through the layout guide (spec:AST-099 FR8)', async () => {
         const guide = getKeyboardLayoutGuide(window);
         const subscribe = vi.spyOn(guide, 'subscribe');
         const {body, input, report, drawnTop} = renderIOSSheet();
         expect(subscribe).toHaveBeenCalled();
         act(() => input.focus());
         report(500);
-        const {start, curve} = guide.transition;
+        const {start, from, to, curve} = guide.transition;
         expect(curve).toMatchObject({
-          durationMs: uikitTiming.keyboardNotificationMs,
+          durationMs: 330,
           progress: expect.any(Function),
+          followsEdge: true,
         });
         // The room and the scroll land at the report. The content is drawn
-        // where it was, then rises with the keyboard a little each frame, and
-        // lands where the reveal puts it. No frame jumps.
+        // where it was until the inset's edge reaches the field, 52 px up.
+        // Then it rises with the edge each frame, never above it, and lands
+        // where the reveal puts it.
         expect(body.scrollTop).toBe(248);
         expect(keyboardInsetOf(body)).toBe(348);
+        expect(to - from).toBe(300);
+        const edge = (time: number) =>
+          300 *
+          (curve != null && 'progress' in curve
+            ? curve.progress((time - start) / 1000)
+            : 0);
         expect(drawnTop(start)).toBeCloseTo(0, 6);
-        const samples = Array.from({length: 25}, (_, frame) =>
-          drawnTop(start + frame * 16),
-        );
-        for (let frame = 1; frame < samples.length; frame += 1) {
-          const step = (samples[frame] ?? 0) - (samples[frame - 1] ?? 0);
-          expect(step).toBeLessThanOrEqual(0.01);
-          expect(step).toBeGreaterThan(-40);
+        for (let frame = 0; frame < 25; frame += 1) {
+          const time = start + frame * 16;
+          expect(drawnTop(time)).toBeCloseTo(-Math.max(0, edge(time) - 52), 6);
         }
-        expect(drawnTop(start + uikitTiming.keyboardNotificationMs)).toBe(-248);
+        expect(drawnTop(start + 16)).toBe(0);
+        expect(drawnTop(start + 330)).toBe(-248);
         await afterTheShow();
         expect(drawnTop()).toBe(-248);
         subscribe.mockRestore();
@@ -3996,17 +4002,27 @@ describe('BottomSheet', () => {
         act(() => input.blur());
         await afterTheBlur();
         // Sampled every 16 ms through the keyboard's slide, the content moves
-        // down a little each frame. It lands where the scroll from before the
-        // keyboard draws it. No frame jumps.
-        const samples = Array.from({length: 32}, (_, frame) =>
-          drawnTop(blurAt + frame * 16),
-        );
-        for (let frame = 1; frame < samples.length; frame += 1) {
-          const step = (samples[frame] ?? 0) - (samples[frame - 1] ?? 0);
-          expect(step).toBeGreaterThanOrEqual(-0.01);
-          expect(step).toBeLessThan(40);
+        // down with the inset's edge, never faster, on UIKit's keyboard spring.
+        // It comes to rest where the scroll from before the keyboard draws it,
+        // once the edge has fallen its 248 px.
+        const {start, curve} = getKeyboardLayoutGuide(window).transition;
+        expect(curve).toMatchObject({
+          durationMs: uikitTiming.keyboardNotificationMs,
+          followsEdge: true,
+        });
+        const fallen = (time: number) =>
+          300 *
+          (curve != null && 'progress' in curve
+            ? curve.progress((time - start) / 1000)
+            : 0);
+        for (let frame = 0; frame < 32; frame += 1) {
+          const time = blurAt + frame * 16;
+          expect(drawnTop(time)).toBeCloseTo(
+            -248 + Math.min(248, fallen(time)),
+            6,
+          );
         }
-        expect(samples.at(-1)).toBeCloseTo(0, 0);
+        expect(drawnTop(blurAt + 31 * 16)).toBeCloseTo(0, 0);
         // The room and the scroll stay until the keyboard is gone.
         expect(keyboardInsetOf(body)).toBe(348);
         expect(body.scrollTop).toBe(248);
@@ -4241,11 +4257,16 @@ describe('BottomSheet', () => {
         } finally {
           clock.mockRestore();
         }
-        // Drawn where it was at the report, then down on the keyboard's spring:
-        // two frames in, it has hardly moved. The room and the scroll stay
-        // through the ride.
+        // Drawn where it was at the report, then down with the inset's edge on
+        // UIKit's keyboard spring: two frames in, it has come down as far as
+        // the edge. The room and the scroll stay through the ride.
         expect(keyboardInsetOf(body)).toBe(348);
-        expect(drawnTop(reportAt + 32)).toBeLessThan(-200);
+        const {curve} = getKeyboardLayoutGuide(window).transition;
+        const fallen =
+          300 *
+          (curve != null && 'progress' in curve ? curve.progress(0.032) : 0);
+        expect(fallen).toBeLessThan(248);
+        expect(drawnTop(reportAt + 32)).toBeCloseTo(-248 + fallen, 6);
         expect(drawnTop(reportAt + 450)).toBeCloseTo(0, 0);
         // Once it lands, the room drops and the scroll goes back with the
         // translate in one commit, so nothing drawn moves.

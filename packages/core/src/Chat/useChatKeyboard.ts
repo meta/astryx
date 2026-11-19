@@ -326,8 +326,8 @@ export function useChatKeyboard({
         .catch(() => undefined);
     };
     // The ride attaches only under a coarse primary pointer, where the guide
-    // publishes the keyboard's own motion: Gboard's slide in Chrome on Android,
-    // and UIKit's keyboard spring in Safari on iOS. UIKit's schedule comes with
+    // publishes the keyboard's motion: Gboard's slide in Chrome on Android, and
+    // in Safari on iOS the springs its schedule sets. That schedule comes with
     // the touch runtime, so the layout schedules the page's one load of it.
     if (isTouch) {
       followTouchRuntimeKeyboardSchedule();

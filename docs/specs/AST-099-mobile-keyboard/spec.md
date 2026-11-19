@@ -173,7 +173,7 @@ app to turn on.
   else, keyboard-aware surfaces ride the visual-viewport height (DEC-4).
   Safari on iOS reports the keyboard's show once, as UIKit's keyboard starts
   up, and its hide only once the keyboard is down. There Core's
-  keyboard-aware surfaces ride UIKit's keyboard motion (DEC-12): on show from
+  keyboard-aware surfaces ride the keyboard (DEC-12): on show from
   that report, and on hide from the blur that takes the keyboard down, as FR3
   sets out for a fully expanded sheet. A hide that no blur predicts rides from
   Safari's report. Focus that moves into a frame, a custom element or an open
@@ -266,7 +266,7 @@ app to turn on.
   (`spec:AST-013` FR3). FR2–FR5 apply to Safari on iOS, in the browser and as a
   home-screen app, and to Firefox for Android; FR8's ride applies wherever the
   browser reports the keyboard itself, such as Chrome on Android, and in
-  Safari on iOS on UIKit's keyboard motion (DEC-12).
+  Safari on iOS from its report and its blur (DEC-12).
 - Unsupported behavior: with no on-screen keyboard, or no visual-viewport
   support, the keyboard height is 0 and nothing changes. During server render it
   renders nothing and reads no viewport.
@@ -331,7 +331,7 @@ app to turn on.
   loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
   each platform's behavior. In Safari on iOS, the keyboard layout guide reads
   UIKit's keyboard schedule, so the same sheet, ChatLayout's dock and a docked
-  container ride UIKit's keyboard motion (FR8, DEC-12). Firefox for Android
+  container ride the keyboard (FR8, DEC-12). Firefox for Android
   gets FR2–FR5.
 - No public API exposes the keyboard height, and FR3 keeps it that way.
 - The consumer documentation gains the Android viewport setting (FR8).
@@ -563,32 +563,39 @@ that report.
 
 Rejected: a fast slide, which Chrome's pan still overtakes when the page stalls; the VirtualKeyboard overlay setting, which changes DEC-4's measurement source and the page's layout.
 
-### DEC-12 — Safari on iOS rides the keyboard on UIKit's motion
+### DEC-12 — Safari on iOS rides the keyboard from its report and its blur
 
 **Reference:** `spec:AST-099/DEC-12`
 **Decider:** pending
 
-Safari on iOS reports the keyboard's show once, as UIKit's keyboard starts
-up, and its hide only once the keyboard is down. A surface that lands at the
-report jumps while the keyboard slides, and a surface that waits for the hide
-report sits over the page the keyboard has left. So Core's keyboard-aware
-surfaces ride UIKit's own keyboard frame animation, as Astryx's UIKit tables
-measure it: a critically damped spring that Core Animation cuts at the
-duration the keyboard notifications report. The show rides from Safari's
-report. The hide rides from the blur that takes the keyboard down, as a
+Safari on iOS reports the keyboard's show once, a little after UIKit's
+keyboard starts up, and its hide only once the keyboard is down. A surface that
+lands at the report jumps while the keyboard slides, and a surface that waits
+for the hide report sits over the page the keyboard has left. So Core's
+keyboard-aware surfaces ride the keyboard. The show rides from Safari's report
+on a critically damped spring at ω = 8π s⁻¹, cut and normalised at 330 ms.
+It never trails UIKit's keyboard frame spring, as Astryx's UIKit tables
+measure it. From 30 to 97% of the rise, it leads it by 3 to 18 ms. WebKit
+reports the keys a little after they start. Its inset counts the form
+accessory bar, which rides on the keys from their first frame. The lead
+offsets part of that lag. The hide rides
+UIKit's spring, which Core Animation cuts at the duration the keyboard
+notifications report. It starts at the blur that takes the keyboard down, as a
 prediction that Safari's report confirms, as FR3 sets out for a fully expanded
 sheet. A hide that no blur predicts, such as a downward dismissal, rides from
 Safari's report: the keyboard is already down, and the ride keeps the surface
-from jumping. A field inside a frame, a custom element or an open shadow root
-can keep the keyboard up, so focus that moves there predicts no hide. A ride
-starts once the task that delivers Safari's report ends, so work inside that
-task delays it; work after it does not. UIKit's schedule loads with the touch
-runtime after the page's first paint; until then, Safari on iOS moves in one
-step, as before. WebKit's
-touch capabilities select this schedule, never the user agent. Simulator
-evidence gates merge, and a physical iPhone gates release (DEC-3).
+from jumping. Each surface rides the inset's edge, the accessory bar's top,
+with no bar height subtracted: it moves only while the edge is at it. A field
+inside a frame, a custom element or an open shadow root can keep the keyboard
+up, so focus that moves there predicts no hide. A ride starts once the task
+that delivers Safari's report ends, so work inside that task delays it; work
+after it does not. Safari on iOS's schedule loads with the touch runtime after
+the page's first paint; until then, Safari on iOS moves in one step, as
+before. WebKit's touch capabilities select this schedule, never the user
+agent. Simulator evidence gates merge, and a physical iPhone gates release
+(DEC-3).
 
-Rejected: landing in one step at Safari's report, which jumps while the keyboard slides; a cubic-bézier stand-in for the spring, which drifts from the keyboard's own motion.
+Rejected: landing in one step at Safari's report, which jumps while the keyboard slides; a cubic-bézier stand-in for the spring, which drifts from the keyboard's own motion; UIKit's spring for the show, which trails Safari's late report and the accessory bar; moving each surface over its own travel along the whole curve, which floats a surface that rests above the keyboard's start.
 
 ## Open questions
 

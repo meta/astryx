@@ -5,8 +5,9 @@
  * @input vitest, jsdom, getKeyboardLayoutGuide with UIKit's schedule
  *   registered, a stand-in visual viewport, a stand-in CSS.supports
  * @output Tests the guide in Safari on iOS. A keyboard coming up rides from
- *   Safari's one report on UIKit's keyboard spring. A hide rides down from
- *   the blur, as a prediction that Safari's later report confirms. Focus that
+ *   Safari's one report on a spring that leads UIKit's keyboard spring. A
+ *   hide rides down from the blur on UIKit's keyboard spring, as a prediction
+ *   that Safari's later report confirms. Focus that
  *   moves between fields, to a picker in the keyboard's place, or to a field
  *   the page cannot see, moves nothing. Two pending cases hold a second
  *   report that comes while the keyboard still moves.
@@ -49,6 +50,7 @@ const uikitKeyboardSchedule = createUIKitKeyboardSchedule({
   isElement,
 });
 const uikitSpring = uikitKeyboardSchedule.curve;
+const showSpring = uikitKeyboardSchedule.showCurve;
 
 const report = (cover: number) => {
   view.height = window.innerHeight - cover;
@@ -143,7 +145,7 @@ describe('the keyboard layout guide in Safari on iOS', () => {
     expect(getKeyboardLayoutGuide(window).profile).toBe('uikit');
   });
 
-  it('rides a keyboard coming up from Safari’s one report, on UIKit’s keyboard spring', () => {
+  it('rides a keyboard coming up from Safari’s one report, on a spring that leads UIKit’s keyboard spring', () => {
     a.focus();
     let reportAt = 0;
     view.addEventListener(
@@ -162,10 +164,42 @@ describe('the keyboard layout guide in Safari on iOS', () => {
       predicted: false,
     });
     expect(seen[0]?.start).toBeCloseTo(reportAt, 6);
-    expect(seen[0]?.curve).toBe(uikitSpring);
+    expect(seen[0]?.curve).toBe(showSpring);
   });
 
-  it('rides a hide down from the blur on the same spring, and keeps it until Safari reports the keyboard down', () => {
+  it('leads UIKit’s keyboard spring through the show, which WebKit reports late and with the accessory bar in the inset', () => {
+    expect(showSpring).toBeDefined();
+    if (showSpring == null) {
+      return;
+    }
+    expect(showSpring.durationMs).toBe(330);
+    expect(showSpring.progress(0)).toBe(0);
+    expect(showSpring.progress(0.33)).toBe(1);
+    // Never behind UIKit's spring, and never past the keyboard's rest.
+    for (let ms = 1; ms <= uikitTiming.keyboardNotificationMs; ms += 1) {
+      const progress = showSpring.progress(ms / 1000);
+      expect(progress).toBeGreaterThanOrEqual(uikitSpring.progress(ms / 1000));
+      expect(progress).toBeLessThanOrEqual(1);
+    }
+    // From 30 to 97 % of the rise, it is 3 to 18 ms ahead.
+    const timeAt = (curve: typeof uikitSpring, share: number) => {
+      let ms = 0;
+      while (curve.progress(ms / 1000) < share) {
+        ms += 0.1;
+      }
+      return ms;
+    };
+    for (const share of [0.3, 0.5, 0.7, 0.9, 0.97]) {
+      const lead = timeAt(uikitSpring, share) - timeAt(showSpring, share);
+      expect(lead).toBeGreaterThanOrEqual(3);
+      expect(lead).toBeLessThanOrEqual(18);
+    }
+    // A surface rides the inset's edge on both curves.
+    expect(showSpring.followsEdge).toBe(true);
+    expect(uikitSpring.followsEdge).toBe(true);
+  });
+
+  it('rides a hide down from the blur on UIKit’s keyboard spring, and keeps it until Safari reports the keyboard down', () => {
     a.focus();
     report(336);
     vi.advanceTimersByTime(1000);
@@ -381,7 +415,7 @@ describe('the keyboard layout guide in Safari on iOS', () => {
     vi.advanceTimersByTime(100);
     frame.focus();
     expect(seen.at(-1)).toMatchObject({kind: 'show', to: 336});
-    expect(seen.at(-1)?.curve).toBe(uikitSpring);
+    expect(seen.at(-1)?.curve).toBe(showSpring);
   });
 
   it('moves nothing while focus moves between fields, or to a date field whose picker takes the keyboard’s place', () => {

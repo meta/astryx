@@ -32,14 +32,21 @@ export interface KeyboardSlideCurve {
 }
 
 /**
- * A curve with its own progress: UIKit's keyboard spring, cut at
- * `durationMs` (uikitKeyboardSchedule.ts).
+ * A curve with its own progress: a spring cut at `durationMs`, as Safari on
+ * iOS rides the keyboard (uikitKeyboardSchedule.ts).
  */
 export interface KeyboardProgressCurve {
   /** Length, ms. The motion lands on its target here. */
   readonly durationMs: number;
   /** How far along the curve the keyboard is, 0 to 1, `t` seconds in. */
   readonly progress: (t: number) => number;
+  /**
+   * Whether a surface rides the inset's edge. Then a surface moves only while
+   * the edge is at it: on a show, once the edge reaches it, and on a hide,
+   * until it comes to rest. Otherwise a surface moves over its own travel
+   * along the whole curve.
+   */
+  readonly followsEdge?: boolean;
 }
 
 /** The curve a transition plays. */
@@ -82,10 +89,10 @@ export interface KeyboardTransition {
   readonly predicted: boolean;
   /**
    * The curve the keyboard moves on, or null when the inset jumps. It is
-   * Gboard's slide in Chrome on Android, and UIKit's keyboard spring in Safari
-   * on iOS. A surface riding the keyboard plays it from `start`, as
-   * rideKeyboard does.
-   * It is the keyboard's own motion, with no motion role.
+   * Gboard's slide in Chrome on Android. In Safari on iOS it is a spring that
+   * leads UIKit's keyboard spring on a show, and UIKit's keyboard spring on a
+   * hide. A surface riding the keyboard plays it from `start`, as
+   * rideKeyboard does. It follows the keyboard, with no motion role.
    */
   readonly curve: KeyboardCurve | null;
 }
@@ -145,11 +152,14 @@ export interface KeyboardSlideSchedule {
 }
 
 /**
- * A keyboard that moves on one curve, show and hide alike. It reports its
- * height once, accessory bar included, as UIKit's does in Safari on iOS.
+ * A keyboard that moves on its own curves. It reports its height once,
+ * accessory bar included, as UIKit's does in Safari on iOS.
  */
 export interface KeyboardCurveSchedule {
+  /** The hide's curve, and the show's unless `showCurve` is set. */
   readonly curve: KeyboardProgressCurve;
+  /** The show's curve, when it differs from the hide's. */
+  readonly showCurve?: KeyboardProgressCurve;
   readonly showReportLagMs: number;
   readonly hideReportLagMs: number;
   readonly hideAfterBlurMs: number;
@@ -223,10 +233,10 @@ export function createKeyboardModel(
       },
     };
   };
-  // Gboard's slides, as Chrome draws them, unless the schedule has one curve.
+  // Gboard's slides, as Chrome draws them, unless the schedule has its own.
   const showSlide: KeyboardCurve =
     'curve' in schedule
-      ? schedule.curve
+      ? (schedule.showCurve ?? schedule.curve)
       : {durationMs: schedule.showMs, points: schedule.showCurve};
   const hideSlide: KeyboardCurve =
     'curve' in schedule

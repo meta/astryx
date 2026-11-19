@@ -21,6 +21,24 @@ import type {
 } from '../motion/animator';
 import {keyboardProgress, type KeyboardTransition} from './keyboardModel';
 
+// A surface's progress, 0 to 1, on a curve that rides the inset's edge. The
+// edge travels `edge` px and the surface `own` px. A surface that travels as
+// far as the edge, or farther, rides the whole curve. On a show, the edge
+// reaches a shorter traveller once it has risen the difference, and then
+// pushes it. On a hide, the edge lets it down until it comes to rest.
+function edgeProgress(
+  progress: (t: number) => number,
+  edge: number,
+  own: number,
+  rising: boolean,
+): (t: number) => number {
+  if (own <= 0 || own >= edge) {
+    return progress;
+  }
+  const wait = rising ? edge - own : 0;
+  return t => Math.min(1, Math.max(0, (edge * progress(t) - wait) / own));
+}
+
 /** How a ride treats Reduce Motion. */
 export interface RideOptions {
   /**
@@ -42,15 +60,19 @@ function timelineTime(): number | null {
  * `transition.start`, or at once when the keyboard jumps.
  *
  * Android's keyboard moves on Gboard's slides up and down
- * (motion/android/keyboard.ts), and iOS's on UIKit's keyboard spring
- * (motion/uikit/springs.ts, as keyboard/uikitKeyboardSchedule.ts cuts it).
- * The transition publishes the curve (`curve`), and the ride plays it. Every
+ * (motion/android/keyboard.ts). In Safari on iOS, a show rides a spring that
+ * leads UIKit's keyboard spring, and a hide rides UIKit's keyboard spring
+ * (motion/uikit/springs.ts), as keyboard/uikitKeyboardSchedule.ts sets them.
+ * There each surface rides the inset's edge: it moves only while the edge is
+ * at it (`followsEdge`). Elsewhere it moves over its own travel along the
+ * whole curve. The transition publishes the curve (`curve`), and the ride
+ * plays it. Every
  * ride starts at the transition's start, so content that joins a slide late
  * lands where the keyboard is. A transition that is not animated lands at
  * once, such as a keyboard changing while up. So does a slide that has ended
- * by the call. These values are the keyboard's own motion, with no motion
- * role. The system moves the keyboard on them whatever the page does, so any
- * other curve would leave the element out of step.
+ * by the call. These values follow the keyboard, with no motion role. The
+ * system moves the keyboard whatever the page does, so a curve that does not
+ * follow it would leave the element out of step.
  *
  * @example
  * ```
@@ -88,15 +110,22 @@ export function rideKeyboard(
   const options = entrance
     ? {at: start, crossfadeAs: 'entrance' as const}
     : {at: start};
-  const span = transition.curve.durationMs / 1000;
-  const progress = keyboardProgress(transition.curve);
+  const {curve} = transition;
+  const span = curve.durationMs / 1000;
+  const progress = keyboardProgress(curve);
+  const followsEdge = 'followsEdge' in curve && curve.followsEdge === true;
+  const edge = Math.abs(transition.to - transition.from);
+  const rising = transition.to > transition.from;
   const curves: Partial<Record<MotionProperty, MotionCurve>> = {};
   for (const [property, target] of Object.entries(to) as [
     MotionProperty,
     number,
   ][]) {
     const from = animator.get(property, start);
-    const at = (t: number) => from + (target - from) * progress(t);
+    const own = followsEdge
+      ? edgeProgress(progress, edge, Math.abs(target - from), rising)
+      : progress;
+    const at = (t: number) => from + (target - from) * own(t);
     curves[property] = {
       duration: span,
       at,

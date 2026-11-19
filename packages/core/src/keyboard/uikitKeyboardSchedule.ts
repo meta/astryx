@@ -7,7 +7,8 @@
  *   notifications report, and their focus checks. From the layout guide: its
  *   field check
  * @output createUIKitKeyboardSchedule: when and how the keyboard moves in
- *   Safari on iOS, with the spring's progress and the guide's focus rules there
+ *   Safari on iOS: the show's leading spring, UIKit's spring for the hide, and
+ *   the guide's focus rules there
  * @position Part of the touch runtime (utils/touchRuntimeModules.tsx), which
  *   publishes it. The keyboard riders register it with the layout guide. No
  *   module on a page's first load imports it. It imports the spring's table
@@ -40,6 +41,22 @@ export interface UIKitKeyboardScheduleInputs {
 
 // The keyboard's progress, 0 to 1, on its spring released at rest.
 const spring = solveSpring(KEYBOARD_SPRING, {from: 0, to: 1});
+
+// WebKit reports the keys a little after they start. Its inset counts the
+// accessory bar, which rides on the keys from their first frame. So a show
+// that started at the report on UIKit's spring would trail the bar, and the
+// bar would cover a surface welded to the inset's edge. The show rides a
+// critically damped spring a little quicker than UIKit's instead, cut and
+// normalised at SHOW_MS. It never trails UIKit's spring, and from 30 to 97%
+// of the rise it leads it by 3 to 18 ms. The lead offsets part of that lag.
+// It is Core's own value, not one of UIKit's.
+const SHOW_OMEGA = 8 * Math.PI;
+const SHOW_MS = 330;
+const showSpring = solveSpring(
+  {mass: 1, stiffness: SHOW_OMEGA ** 2, damping: 2 * SHOW_OMEGA},
+  {from: 0, to: 1},
+);
+const showEnd = showSpring.value(SHOW_MS / 1000);
 
 // Only WebKit on iOS and iPadOS supports `-webkit-touch-callout`, and its
 // keyboard is UIKit's. The check reads a capability, never the user agent.
@@ -115,12 +132,14 @@ function uikitFocusRules(
 }
 
 /**
- * Safari on iOS reports the keyboard's show once, as UIKit's keyboard starts
- * up, and its hide only once the keyboard is down. So content rides UIKit's
- * keyboard spring from the show's report. On hide it rides from the blur that
- * takes the keyboard down, as a prediction that Safari's later report
- * confirms. A hide nothing predicted rides from the report. Safari reports the
- * keyboard with its accessory bar in one height.
+ * Safari on iOS reports the keyboard's show once, a little after UIKit's
+ * keyboard starts up, and its hide only once the keyboard is down. So content
+ * rides from the show's report on a spring that leads UIKit's keyboard
+ * spring. On hide it rides UIKit's keyboard spring from the blur that takes
+ * the keyboard down, as a prediction that Safari's later report confirms. A
+ * hide nothing predicted rides from the report. Safari reports the keyboard
+ * with its accessory bar in one height, so each surface rides the inset's
+ * edge, the bar's top.
  */
 export function createUIKitKeyboardSchedule(
   inputs: UIKitKeyboardScheduleInputs,
@@ -132,9 +151,17 @@ export function createUIKitKeyboardSchedule(
   const curve: KeyboardProgressCurve = {
     durationMs: notificationMs,
     progress: t => (t <= 0 ? 0 : t >= span ? 1 : spring.value(t)),
+    followsEdge: true,
+  };
+  const showCurve: KeyboardProgressCurve = {
+    durationMs: SHOW_MS,
+    progress: t =>
+      t <= 0 ? 0 : t >= SHOW_MS / 1000 ? 1 : showSpring.value(t) / showEnd,
+    followsEdge: true,
   };
   return {
     curve,
+    showCurve,
     showReportLagMs: 0,
     hideReportLagMs: 0,
     hideAfterBlurMs: 0,

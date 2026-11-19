@@ -21,7 +21,6 @@ import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
 import {editableToClaim} from './useChatKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
-import {timing as uikitTiming} from '../motion/uikit/timing';
 import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
@@ -322,7 +321,7 @@ describe('ChatLayout and the software keyboard', () => {
     expect(dockOf(container).style.translate).toBe('');
   });
 
-  it('rides the dock up from Safari’s one report on UIKit’s keyboard spring, in Safari on iOS (spec:AST-099 FR8)', async () => {
+  it('rides the dock up from Safari’s one report on a spring that leads UIKit’s keyboard spring, in Safari on iOS (spec:AST-099 FR8)', async () => {
     await stubUIKitKeyboard();
     const guide = getKeyboardLayoutGuide(window);
     const subscribe = vi.spyOn(guide, 'subscribe');
@@ -333,8 +332,9 @@ describe('ChatLayout and the software keyboard', () => {
     expect(subscribe).toHaveBeenCalled();
     expect(guide.transition).toMatchObject({kind: 'show', to: 300});
     expect(guide.transition.curve).toMatchObject({
-      durationMs: uikitTiming.keyboardNotificationMs,
+      durationMs: 330,
       progress: expect.any(Function),
+      followsEdge: true,
     });
     await settle();
     expect(layoutLift(dockOf(container))).toBe(300);
@@ -342,7 +342,7 @@ describe('ChatLayout and the software keyboard', () => {
     subscribe.mockRestore();
   });
 
-  it('rides the dock down from the blur on the same spring, ahead of Safari’s report of the keyboard down, in Safari on iOS', async () => {
+  it('rides the dock down from the blur on UIKit’s keyboard spring, ahead of Safari’s report of the keyboard down, in Safari on iOS', async () => {
     await stubUIKitKeyboard();
     const {container} = renderLayout();
     const field = screen.getByRole('textbox', {name: 'Message'});

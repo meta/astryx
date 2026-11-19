@@ -133,9 +133,11 @@ that times motion with it. Everything here is internal to
   content box's children through a functional style (FR3), committed before
   the reveal scrolls into it. Under a coarse primary pointer, where the
   guide publishes the keyboard's own motion (Gboard's slides in Chrome on
-  Android, UIKit's keyboard spring in Safari on iOS), the sheet rides it
+  Android, the springs of Safari on iOS), the sheet rides it
   (FR8). A reveal during the show scrolls the body at once, and the content
-  box rides the show's curve from where it was drawn. It reads the ride's
+  box rides the show's curve from where it was drawn. In Safari on iOS it
+  rides the inset's edge: it holds still until the edge reaches the field,
+  then rises with it. It reads the ride's
   offset from the content box's own rect, as WebKit can keep a composited
   box's rects from its last style resolution. In Chrome, the same
   commit first sets the content box so the field sits 4 px above the
@@ -189,10 +191,14 @@ Each transition is
 CSS px, `start` on the document timeline (dated back to Gboard's start for a
 slide Chrome reported, slightly ahead for a hide that starts after a blur),
 and the curve the keyboard moves on: `curve`, Gboard's slide in Chrome on
-Android or UIKit's keyboard spring, cut at the notification's duration, in
-Safari on iOS, values and no motion role (architecture:react-component-runtime
-INV11). `rideKeyboard` moves your element on the compositor from `start` on
-that curve. It lands the element at once when the transition is not animated,
+Android. In Safari on iOS a show's curve is a spring that leads UIKit's
+keyboard spring, and a hide's is UIKit's keyboard spring, cut at the
+notification's duration. They are values with no motion role
+(architecture:react-component-runtime INV11). `rideKeyboard` moves your
+element on the compositor from `start` on that curve. A curve with
+`followsEdge`, as in Safari on iOS, rides the inset's edge: the element moves
+only while the edge is at it. Otherwise it moves over its own travel along the
+whole curve. It lands the element at once when the transition is not animated,
 or when its slide has ended by the call. Hand the translate back to the layout
 once the ride ends (BottomSheet's hook does, in one commit at rest). Under Reduce Motion
 nothing travels with the keyboard
@@ -279,12 +285,19 @@ before. The keyboard riders register it with the guide
 (`followTouchRuntimeKeyboardSchedule`), and give it what the page's first load
 already holds: the notification duration, `mayKeepKeyboard` and `isElement`.
 So the schedule imports only the spring's table and the spring solver. The
-curve is UIKit's own keyboard frame animation, `../motion/uikit/springs.ts`'s
-`KEYBOARD_SPRING` (critically damped), cut at the duration the keyboard
-notifications report (`../motion/uikit/timing.ts`'s `keyboardNotificationMs`).
+hide's curve is UIKit's own keyboard frame animation,
+`../motion/uikit/springs.ts`'s `KEYBOARD_SPRING` (critically damped), cut at
+the duration the keyboard notifications report
+(`../motion/uikit/timing.ts`'s `keyboardNotificationMs`). The show's curve is
+Core's own: a critically damped spring at ω = 8π s⁻¹, cut and normalised at
+330 ms. WebKit reports the keys a little after they start. Its inset counts
+the accessory bar, which rides on the keys from their first frame. The show's
+spring never trails UIKit's, and from 30 to 97% of the rise it leads it by 3
+to 18 ms. The lead offsets part of that lag. Each surface rides the inset's
+edge, the bar's top, with no bar height subtracted.
 
-- Show: Safari sends one `resize` of the visual viewport, as the keyboard
-  starts up. The guide rides UIKit's spring from it. Safari reports the
+- Show: Safari sends one `resize` of the visual viewport, a little after the
+  keyboard starts up. The guide rides the show's spring from it. Safari reports the
   keyboard with its accessory bar in one height, so the guide predicts no
   second height.
 - Hide: Safari reports the keyboard gone only once it is down. The guide

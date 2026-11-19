@@ -270,9 +270,9 @@ export function useMobileKeyboard(
       // two can differ: Chrome 124 added 344 px of range for a 360 px inset.
       let laidOutInset = 0;
       let insetRange = 0;
-      // The keyboard layout guide publishes the keyboard's own motion: Gboard's
-      // slide in Chrome on Android, UIKit's keyboard spring in Safari on iOS.
-      // There the sheet's content rides it. This needs a coarse primary
+      // The keyboard layout guide publishes the keyboard's motion: Gboard's
+      // slide in Chrome on Android, and in Safari on iOS the springs its
+      // schedule sets. There the sheet's content rides it. This needs a coarse primary
       // pointer and a keyboard schedule. Under a fine pointer nothing
       // of the ride attaches. In a browser with neither, such as Firefox for
       // Android, the guide never starts. There the inset follows the reports.
