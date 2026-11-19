@@ -107,12 +107,17 @@ describe('a feel word said for the whole theme', () => {
       "I don't want it busy",
       'avoid anything busy',
       'bold headings without being loud',
+      'keep it from looking busy',
     ]) {
       const sets = (await answer(ask)).sets;
       expect(sets.join(' '), ask).not.toMatch(/spacing compact|type display/);
     }
     expect((await answer('bold headings without being loud')).sets).toContain(
       'headings bold',
+    );
+    // (A feel word said of a color, a status or the accent, describes it.)
+    expect((await answer('bright red errors')).sets.join(' ')).not.toMatch(
+      /vibrancy/,
     );
   }, 240_000);
 

@@ -1541,15 +1541,34 @@ function colorBlindPieces(q) {
     .map(x => x.trim())
     .filter(Boolean);
   const blind = pieces.filter(x => COLOR_BLIND.test(x));
-  if (!blind.length || blind.length === pieces.length)
-    return {blind: blind.length > 0, rest: ''};
-  // (The rest as said, its own "and"s kept, "light and dark" one piece,
-  // and each color-blind piece read as the status colors it is about, so
-  // the list keeps its shape: "soft blue" in "calm and clinical, soft
-  // blue, …, status colors that color-blind staff can tell apart" is
-  // read as it is without the color-blind words.)
+  if (!blind.length) return {blind: false, rest: ''};
+  // (A color-blind piece keeps a change said in it, "warnings darker for
+  // color-blind users", without the color-blind words; a piece that is
+  // only about color-blind readers is read as the status colors it is
+  // about, so the list keeps its shape.)
+  const own = (/** @type {string} */ x) => {
+    const left = x
+      .replace(
+        /\s*\b(?:that|which|so(?:\s+that)?|for|to)\s+(?:[\w-]+\s+){0,3}?colou?r[- ]?blind\w*(?:\s+[\w-]+){0,5}\s*$/i,
+        '',
+      )
+      .replace(/\bcolou?r[- ]?blind\w*(?:[- ](?:friendly|safe|proof))?/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return /\b(?:darker|lighter|bolder|brighter|#[0-9a-f]{3,8}|red|green|blue|amber|yellow|orange|purple|teal|\d+px|icons?|borders?|bold)\b/i.test(
+      left,
+    )
+      ? left
+      : 'status colors';
+  };
+  const kept = blind.map(own);
+  if (
+    blind.length === pieces.length &&
+    kept.every(x => x === 'status colors')
+  )
+    return {blind: true, rest: ''};
   const rest = blind
-    .reduce((t, x) => t.replace(x, ' status colors '), q)
+    .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
     .replace(/\s+/g, ' ')
     .trim();
   return {blind: true, rest};
