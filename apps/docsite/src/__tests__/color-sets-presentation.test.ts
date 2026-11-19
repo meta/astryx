@@ -17,7 +17,7 @@ describe('color-set presentation', () => {
     expect(source).toContain('density="spacious"');
     expect(source).toContain('mode="light"');
     expect(source).toContain('mode="dark"');
-    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(4);
+    expect(source.match(/width: pixel\(152\)/g)).toHaveLength(5);
     expect(source).toContain('width: proportional(1)');
     expect(source).toContain('titleDescriptionGap={1}');
     expect(source).not.toContain('Example combination');
@@ -93,6 +93,11 @@ describe('color-set presentation', () => {
     );
     expect(source).toContain("fill={colorVars['--color-overlay-hover']}");
     expect(source).toContain("isolation: 'isolate'");
+    expect(source).toContain('<ChartRadiusSample part={row.part} />');
+    expect(source).toContain('styles.radiusBar(6, 8)');
+    expect(source).toContain('styles.radiusTooltip');
+    expect(source).toContain('styles.radiusPlot');
+    expect(source).toContain('radius preview');
   });
 
   it('preserves canonical mode values and transparency', () => {

@@ -29,6 +29,7 @@ import {
   colorVars,
   focusVars,
   radiusVars,
+  shadowVars,
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
@@ -132,6 +133,43 @@ const styles = stylex.create({
     height: 12,
     borderRadius: `min(${radiusVars['--radius-element']}, 3px)`,
     backgroundColor: dataVars['--color-data-categorical-blue'],
+  },
+  radiusSample: {
+    width: 120,
+    height: 80,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radiusTooltip: {
+    backgroundColor: colorVars['--color-background-surface'],
+    borderRadius: radiusVars['--radius-container'],
+    boxShadow: shadowVars['--shadow-med'],
+    padding: spacingVars['--spacing-3'],
+  },
+  radiusBars: {
+    display: 'flex',
+    alignItems: 'end',
+    gap: spacingVars['--spacing-2'],
+    height: 48,
+  },
+  radiusBar: (width: number, height: number) => ({
+    width,
+    height,
+    backgroundColor: dataVars['--color-data-categorical-blue'],
+    borderTopLeftRadius: `min(${radiusVars['--radius-element']}, ${width / 4}px, ${height / 4}px)`,
+    borderTopRightRadius: `min(${radiusVars['--radius-element']}, ${width / 4}px, ${height / 4}px)`,
+    borderBottomLeftRadius: radiusVars['--radius-none'],
+    borderBottomRightRadius: radiusVars['--radius-none'],
+  }),
+  radiusPlot: {
+    width: 96,
+    height: 48,
+    borderRadius: radiusVars['--radius-none'],
+    backgroundColor: colorVars['--color-overlay-hover'],
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border-emphasized'],
   },
   preview: {
     display: 'flex',
@@ -557,6 +595,65 @@ function ChartStylingTable({sections}: {sections: DocSection[]}) {
   );
 }
 
+function ChartRadiusSample({part}: {part: string}) {
+  return (
+    <Theme theme={neutralTheme} mode="light">
+      <div
+        role="img"
+        aria-label={`${part} radius preview`}
+        {...stylex.props(styles.radiusSample)}>
+        {part === 'Chart card' ? (
+          <Card width={112} height={64} padding={2}>
+            <HStack gap={2} vAlign="end">
+              <div {...stylex.props(styles.radiusBar(16, 24))} />
+              <div {...stylex.props(styles.radiusBar(16, 36))} />
+              <div {...stylex.props(styles.radiusBar(16, 28))} />
+            </HStack>
+          </Card>
+        ) : part === 'Tooltip surface' ? (
+          <div {...stylex.props(styles.radiusTooltip)}>
+            <Text hasTabularNumbers>$160k</Text>
+          </div>
+        ) : part === 'Bars' ? (
+          <div {...stylex.props(styles.radiusBars)}>
+            <div {...stylex.props(styles.radiusBar(32, 48))} />
+            <div {...stylex.props(styles.radiusBar(12, 32))} />
+            <div {...stylex.props(styles.radiusBar(6, 8))} />
+          </div>
+        ) : part === 'Filled legend keys' ? (
+          <div {...stylex.props(styles.marker)} />
+        ) : part === 'Plot and hover region' ? (
+          <div {...stylex.props(styles.radiusPlot)} />
+        ) : (
+          <svg aria-hidden="true" width="96" height="48">
+            <line
+              x1="4"
+              y1="12"
+              x2="92"
+              y2="12"
+              stroke={dataVars['--color-data-neutral']}
+              strokeWidth="2"
+              strokeDasharray="6 4"
+            />
+            <circle
+              cx="28"
+              cy="36"
+              r="4"
+              fill={dataVars['--color-data-categorical-blue']}
+            />
+            <circle
+              cx="68"
+              cy="36"
+              r="4"
+              fill={dataVars['--color-data-categorical-blue']}
+            />
+          </svg>
+        )}
+      </div>
+    </Theme>
+  );
+}
+
 function ChartRadiusReference({sections}: {sections: DocSection[]}) {
   const section = sections.find(section => section.id === 'chart-radius');
   if (!section) {
@@ -586,9 +683,19 @@ function ChartRadiusReference({sections}: {sections: DocSection[]}) {
             treatment: plainText(row[2]),
           }))}
           columns={[
-            {key: 'part', header: 'Chart part', width: pixel(192)},
-            {key: 'radius', header: 'Radius', width: pixel(192)},
-            {key: 'treatment', header: 'Treatment', width: proportional(1)},
+            {key: 'part', header: 'Chart part', width: pixel(160)},
+            {key: 'radius', header: 'Radius', width: pixel(180)},
+            {
+              key: 'preview',
+              header: 'Preview',
+              width: pixel(152),
+              renderCell: row => <ChartRadiusSample part={row.part} />,
+            },
+            {
+              key: 'treatment',
+              header: 'Treatment',
+              width: proportional(1, {minWidth: 240}),
+            },
           ]}
           density="spacious"
           dividers="rows"
