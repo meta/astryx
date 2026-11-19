@@ -50,7 +50,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Import a specific icon library glyph for a semantic purpose that a theme should control, such as a success or error state.',
+          'Import a specific icon library glyph for a meaning that a theme should control, such as a success or error state.',
       },
     ],
   },
@@ -87,7 +87,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Import a library glyph for a semantic purpose a theme should control (success, error).',
+          'Import a library glyph for a meaning a theme should control (success, error).',
       },
     ],
   },

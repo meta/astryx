@@ -21,7 +21,11 @@ const ICON_GUIDE = 'packages/cli/assets/docs/icons.doc.mjs';
 const RETIRED = [
   {word: 'icon registry', pattern: /\bicon[- ]registr/i},
   {word: 'icon pack', pattern: /\bicon[- ]packs?\b/i},
-  {word: 'semantic icon name', pattern: /\bsemantic (icon|name)/i},
+  {
+    word: 'semantic icon name',
+    pattern:
+      /\bsemantic\b(?:\s+[\w/]+){0,2}?\s+(?:icons?|names?|list|purpose)\b|\bsemantic or (?:namespaced|component)\b/i,
+  },
 ];
 
 /** @param {string} dir @returns {string[]} */
