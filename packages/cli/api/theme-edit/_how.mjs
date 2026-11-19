@@ -583,21 +583,24 @@ async function answer(subject, options, cwd, blindSaid = false) {
     return answer('', {...options, list: kind}, cwd);
   }
   // (Color-blind readers asked about in a list of asks: the other pieces
-  // are answered as said, and the color-blind answer follows them.)
+  // are answered as typed, in their case and order, and the color-blind
+  // answer follows them, before the first offer, as every answer does.)
   const blind = blindSaid
     ? {blind: false, rest: ''}
-    : colorBlindPieces(
-        t
-          .trim()
-          .toLowerCase()
-          .replace(/[?.!]+$/, ''),
-      );
+    : colorBlindPieces(t.trim().replace(/[?.!]+$/, ''));
   if (!tool && blind.blind && blind.rest) {
     const rest = await answer(blind.rest, options, cwd, true);
+    const results = rest.results ?? [];
+    const firstOffer = results.findIndex(r => r.offer);
+    const at = firstOffer < 0 ? results.length : firstOffer;
     return {
       ...rest,
       subject: t,
-      results: [...(rest.results ?? []), ...colorBlindAnswer(env)],
+      results: [
+        ...results.slice(0, at),
+        ...colorBlindAnswer(env),
+        ...results.slice(at),
+      ],
     };
   }
   if (tool)
@@ -1564,7 +1567,7 @@ function colorsAnswer(env, dialCommands) {
 
 /** A word for color-vision deficiency, as a pattern's source. */
 const COLOR_BLIND_WORD = String.raw`(?:colou?r[- ]?blind\w*|colou?r[- ]vision|cvd|deuteran\w*|protan\w*|tritan\w*)`;
-const COLOR_BLIND = new RegExp(String.raw`\b${COLOR_BLIND_WORD}\b`);
+const COLOR_BLIND = new RegExp(String.raw`\b${COLOR_BLIND_WORD}\b`, 'i');
 
 /**
  * An ask's pieces, split at commas and at an "and" that joins two asks
@@ -1578,6 +1581,7 @@ function colorBlindPieces(q) {
     .split(
       new RegExp(
         String.raw`[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}${COLOR_BLIND_WORD})`,
+        'i',
       ),
     )
     .map(x => x.trim())

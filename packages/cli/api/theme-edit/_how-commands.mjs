@@ -591,9 +591,10 @@ function ruleValue(compiled, part, render, prop) {
  * @param {Step[]} steps
  * @param {MeasureIntent} intent
  * @param {'light' | 'dark' | null} visible
+ * @param {Record<string, string[]>} groups the family groups `--on` takes, read from the census
  * @returns {string | null}
  */
-function lineWay(C, was, now, tw, tn, steps, intent, visible) {
+function lineWay(C, was, now, tw, tn, steps, intent, visible, groups) {
   const fainter = Boolean(intent.fainter) || intent.zero;
   // (A dial set to a named look, "the buttons dial, outline", draws that
   // look's lines: a line it adds is the look asked.)
@@ -613,7 +614,7 @@ function lineWay(C, was, now, tw, tn, steps, intent, visible) {
     steps
       .map(st => st.on)
       .filter(Boolean)
-      .flatMap(x => groupsOf(null)[String(x)] ?? [String(x)]),
+      .flatMap(x => groups[String(x)] ?? [String(x)]),
   );
   if (changedTokens.size)
     for (const [part, info] of Object.entries(C.MAP ?? {}))
@@ -1116,7 +1117,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     (Boolean(intent.dir) &&
       intent.families.some(f => f === 'border' || f === 'shadow'));
   if (lineAsk) {
-    const why = lineWay(C, was, now, tw, tn, steps, intent, visible);
+    const why = lineWay(
+      C,
+      was,
+      now,
+      tw,
+      tn,
+      steps,
+      intent,
+      visible,
+      groupsOf(ctx),
+    );
     if (why) return why;
   }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
