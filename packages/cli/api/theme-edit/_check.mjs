@@ -3520,6 +3520,24 @@ function seamOnly(C, part, when) {
   );
 }
 
+/**
+ * Whether Core draws a line around a part where it is asked: in the look
+ * said, else the part's default look, at rest or in the state said. A side
+ * cleared on the first child, a seam with the sibling before it, counts
+ * only when a look is said.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string | null | undefined} state
+ * @param {string | undefined} when
+ */
+export function drawsLineAround(ctx, part, state, when) {
+  const look = when ?? defaultLook(ctx, part);
+  const line =
+    drawsLine(ctx.C, [part], 'border', null, look) ||
+    (!!state && drawsLine(ctx.C, [part], 'border', state, look));
+  return line && (!!when || !seamOnly(ctx.C, part, look));
+}
+
 /** A border color: one color, one per side, or one side's. */
 export const BORDER_COLOR_PROP =
   /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color$/;
@@ -3589,17 +3607,14 @@ export function borderFor(ctx, slug, data, s) {
    * first child, which is no line around it).
    * @param {string} t
    */
-  const draws = t => {
-    const when = s.when ?? defaultLook(ctx, t);
-    const at = {...s, when};
-    const line =
-      drawsLine(ctx.C, [t], 'border', null, when) ||
-      (s.state && drawsLine(ctx.C, [t], 'border', s.state, when));
-    return (
-      (line && (s.when || !seamOnly(ctx.C, t, when))) ||
-      bordersBeyondCore(ctx, data, at, t)
+  const draws = t =>
+    drawsLineAround(ctx, t, s.state, s.when) ||
+    bordersBeyondCore(
+      ctx,
+      data,
+      {...s, when: s.when ?? defaultLook(ctx, t)},
+      t,
     );
-  };
   if (
     !parts.length ||
     parts.some(t => draws(t) || borderSetToNone(ctx, data, s, t))
