@@ -9,7 +9,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
-import {PlusIcon} from '@heroicons/react/24/outline';
+import {AddIcon} from '@astryxdesign/template-icons';
 
 const card: CSSProperties = {
   width: '100%',
@@ -33,7 +33,7 @@ export default function ToolbarWithTabs() {
           </TabList>
         }
         endContent={
-          <Button label="New item" icon={<Icon icon={PlusIcon} />} isIconOnly />
+          <Button label="New item" icon={<Icon icon={AddIcon} />} isIconOnly />
         }
       />
       <Section />

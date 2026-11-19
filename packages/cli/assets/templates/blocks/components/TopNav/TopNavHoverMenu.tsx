@@ -12,13 +12,13 @@ import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  CubeIcon,
-  ChartBarIcon,
-  ShieldCheckIcon,
+  PackageIcon,
+  ChartIcon,
+  ShieldIcon,
   BoltIcon,
-  CodeBracketIcon,
+  CodeIcon,
   UserCircleIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function TopNavHoverMenu() {
   return (
@@ -27,7 +27,7 @@ export default function TopNavHoverMenu() {
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }
@@ -40,13 +40,13 @@ export default function TopNavHoverMenu() {
               {
                 title: 'Analytics',
                 description: 'Track and analyze user behavior',
-                icon: <ChartBarIcon />,
+                icon: <ChartIcon />,
                 href: '#analytics',
               },
               {
                 title: 'Security',
                 description: 'Enterprise-grade protection',
-                icon: <ShieldCheckIcon />,
+                icon: <ShieldIcon />,
                 href: '#security',
               },
               {
@@ -58,7 +58,7 @@ export default function TopNavHoverMenu() {
               {
                 title: 'Developer Tools',
                 description: 'APIs, SDKs, and CLI tools',
-                icon: <CodeBracketIcon />,
+                icon: <CodeIcon />,
                 href: '#dev-tools',
               },
             ]}

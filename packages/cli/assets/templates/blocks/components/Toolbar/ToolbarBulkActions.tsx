@@ -13,7 +13,7 @@ import {
   useTableSelectionState,
 } from '@astryxdesign/core/Table';
 import {Stack} from '@astryxdesign/core/Layout';
-import {TrashIcon, ArchiveBoxIcon} from '@heroicons/react/24/outline';
+import {DeleteIcon, ArchiveIcon} from '@astryxdesign/template-icons';
 
 const DATA = [
   {id: '1', name: 'Alex Johnson', status: 'Active', role: 'Admin'},
@@ -51,13 +51,13 @@ export default function ToolbarBulkActions() {
               <Button
                 label="Delete"
                 variant="ghost"
-                icon={<Icon icon={TrashIcon} />}
+                icon={<Icon icon={DeleteIcon} />}
                 isIconOnly
               />
               <Button
                 label="Archive"
                 variant="ghost"
-                icon={<Icon icon={ArchiveBoxIcon} />}
+                icon={<Icon icon={ArchiveIcon} />}
                 isIconOnly
               />
             </>

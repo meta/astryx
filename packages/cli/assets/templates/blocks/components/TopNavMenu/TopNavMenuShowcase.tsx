@@ -10,11 +10,11 @@ import {
 } from '@astryxdesign/core/TopNav';
 import {Button} from '@astryxdesign/core/Button';
 import {
-  ChartBarIcon,
-  Cog6ToothIcon,
-  MagnifyingGlassIcon,
+  ChartIcon,
+  SettingsIcon,
+  SearchIcon,
   UsersIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 export default function TopNavMenuShowcase() {
   return (
@@ -31,7 +31,7 @@ export default function TopNavMenuShowcase() {
               {
                 title: 'Analytics',
                 description: 'View traffic and engagement metrics',
-                icon: <ChartBarIcon />,
+                icon: <ChartIcon />,
                 href: '#analytics',
               },
               {
@@ -43,7 +43,7 @@ export default function TopNavMenuShowcase() {
               {
                 title: 'Settings',
                 description: 'Configure your workspace',
-                icon: <Cog6ToothIcon />,
+                icon: <SettingsIcon />,
                 href: '#settings',
               },
             ]}
@@ -54,7 +54,7 @@ export default function TopNavMenuShowcase() {
         <Button
           label="Search"
           variant="ghost"
-          icon={<MagnifyingGlassIcon />}
+          icon={<SearchIcon />}
           isIconOnly
         />
       }

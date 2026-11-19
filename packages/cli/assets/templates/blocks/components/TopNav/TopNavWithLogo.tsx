@@ -6,7 +6,7 @@ import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
-import {CubeIcon, UserCircleIcon} from '@heroicons/react/24/outline';
+import {PackageIcon, UserCircleIcon} from '@astryxdesign/template-icons';
 
 export default function TopNavWithLogo() {
   return (
@@ -15,7 +15,7 @@ export default function TopNavWithLogo() {
       heading={
         <TopNavHeading
           heading="My App"
-          logo={<NavIcon icon={<Icon icon={CubeIcon} size="sm" />} />}
+          logo={<NavIcon icon={<Icon icon={PackageIcon} size="sm" />} />}
           headingHref="#"
         />
       }

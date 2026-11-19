@@ -8,7 +8,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Heading} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
-import {ArrowLeftIcon} from '@heroicons/react/24/outline';
+import {ArrowLeftIcon} from '@astryxdesign/template-icons';
 import {useToast} from '@astryxdesign/core/Toast';
 import {rtlStyles} from '@astryxdesign/core/utils';
 
