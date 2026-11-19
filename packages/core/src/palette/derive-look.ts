@@ -18,7 +18,12 @@
  * cannot reach its contrast, is refused: the theme keeps its base's.
  */
 
-import {hexToOklch, luminance, maxOklchChroma, oklchClampedHex} from './color';
+import {
+  contrastRatio,
+  hexToOklch,
+  maxOklchChroma,
+  oklchClampedHex,
+} from './color';
 import {perceptualDelta} from './generator';
 
 type Mode = 'light' | 'dark';
@@ -198,13 +203,6 @@ export function isLookFamily(family: unknown): boolean {
   return Math.abs(a.L - b.L) < 0.02 && (turn < slack || a.C < GRAY_CHROMA);
 }
 
-/** The WCAG contrast ratio of two opaque colors. */
-function contrast(a: string, b: string): number {
-  const x = luminance(a);
-  const y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-
 /** What deriveLookColors reads. */
 export interface DeriveLookInput {
   /** Generated families by id. */
@@ -269,7 +267,7 @@ export function deriveLookColors({
     );
     const scored = order.map(stop => ({
       stop,
-      r: Math.min(...on.map(bg => contrast(at(id, m, stop).color, bg))),
+      r: Math.min(...on.map(bg => contrastRatio(at(id, m, stop).color, bg))),
     }));
     const best =
       scored.find(x => x.r >= needs) ??
@@ -350,7 +348,7 @@ export function deriveLookColors({
         const reads = text(m);
         const s =
           order.find(x =>
-            reads.every(c => contrast(c, at(id, m, x).color) >= TEXT),
+            reads.every(c => contrastRatio(c, at(id, m, x).color) >= TEXT),
           ) ?? s0;
         return at(id, m, s);
       });

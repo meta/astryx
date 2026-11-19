@@ -237,6 +237,17 @@ export function luminance(hex) {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 /**
+ * The WCAG contrast ratio of two opaque colors.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function contrastRatio(a, b) {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+/**
  * @param {string} hex
  * @returns {ColorTriple}
  */
