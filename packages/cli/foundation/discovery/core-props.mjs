@@ -80,7 +80,8 @@ export function scanCoreProps(source) {
       for (const attribute of path.node.attributes) {
         if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
         const prop = attribute.name.name;
-        if (NOT_COMPONENT_PROPS.has(prop) || prop.startsWith('data-') || prop.startsWith('aria-')) continue;
+        // JSX never checks a name with a hyphen against a props type.
+        if (NOT_COMPONENT_PROPS.has(prop) || prop.includes('-')) continue;
         const start = attribute.loc?.start;
         uses.push({component, prop, line: start?.line ?? 0, column: (start?.column ?? 0) + 1});
       }

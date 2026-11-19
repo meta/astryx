@@ -391,11 +391,14 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   neither warning.
 - **INV42 — `astryx doctor` warns on a prop a Core component does not
   take.** In a project on Core, `doctor` reads the app's own source as syntax
-  trees and never runs it; it leaves out test, story and fixture files and
-  the folders named `test`, `tests`, `stories`, `fixtures` or `e2e`. It reads
+  trees and never runs it; it leaves out test, story and fixture files
+  (`.test.`, `.spec.`, `.stories.` and `.story.` modules) and the folders
+  named `test`, `tests`, `stories`, `fixtures`, `e2e`, `__tests__`,
+  `__mocks__`, `__fixtures__` or `__stories__`. It reads
   each prop the source gives a component imported from `@astryxdesign/core`
   or one of its subpaths, except `key`, `ref`, `children`, the styling props
-  and `data-` and `aria-` attributes. A prop that Core's docs for the
+  and any name with a hyphen (`data-`, `aria-` and others), which JSX never
+  checks against a props type. A prop that Core's docs for the
   component do not list is a candidate. The `core-props` check reads Core's
   own published types with the project's own TypeScript, as the page's
   config has TypeScript read them: with the type packages that config names,
@@ -407,9 +410,10 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   to the element it renders, or on a prop that JSX gives every component. It
   does not judge a component that Core's docs do not describe, one whose type
   TypeScript cannot read, a generic one, or one from outside Core, and it
-  does not judge a module that compiles its JSX with another runtime. When
-  the project has no TypeScript that it can use, has a config that compiles
-  JSX with another runtime, or has more source files than `doctor` reads,
+  does not judge a module whose `@jsxImportSource` or `@jsx` pragma names
+  another JSX runtime. When the project has no TypeScript that it can use,
+  has a `tsconfig` or `jsconfig` whose `jsxImportSource` or `jsxFactory`
+  names another runtime, or has more source files than `doctor` reads,
   the check does not run and says why, whatever props the pages give. When
   there is a candidate and the types or the files that augment Core cannot
   all be read, it reports no prop and says why. The warning names each

@@ -3,7 +3,7 @@
 /**
  * @file The props a module gives Core components: named, renamed, subpath
  * and namespace imports of Core count; other components, the props every
- * component takes, styling props, `data-` and `aria-` attributes and spread
+ * component takes, styling props, names with a hyphen and spread
  * props do not.
  */
 
@@ -39,11 +39,11 @@ describe('scanCoreProps', () => {
       "import {Panel} from './Panel';",
       "import Link from 'next/link';",
       'export function Page(props: ButtonProps) {',
-      '  return <Panel tone="x"><Link href="/" tone="x" /><Button key="k" ref={null} className="c" style={{}} xstyle={null} data-id="1" aria-label="Go" {...props} label="Go">x</Button></Panel>;',
+      '  return <Panel tone="x"><Link href="/" tone="x" /><Button key="k" ref={null} className="c" style={{}} xstyle={null} data-id="1" aria-label="Go" hx-get="/save" {...props} label="Go">x</Button></Panel>;',
       '}',
       '',
     ].join('\n');
-    expect(uses(source)).toEqual(['Button.label@6:157']);
+    expect(uses(source)).toEqual(['Button.label@6:172']);
   });
 
   it('reads no component a type-only import names', () => {
