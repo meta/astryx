@@ -1266,6 +1266,35 @@ export function doctorStylesheetImports(css) {
 }
 
 /**
+ * What a stylesheet loads when loading is all it does: the `@import`
+ * specifiers of a sheet whose only rules are `@import` rules and `@layer`
+ * order statements (the setup stylesheet the getting-started steps write).
+ * Null when it holds any other rule, a `@layer` block, or does not parse.
+ * Comments never count.
+ * @param {string} css
+ * @returns {string[] | null}
+ */
+export function doctorStylesheetOnlyLoads(css) {
+  /** @type {string[]} */
+  const specs = [];
+  try {
+    for (const node of postcss().parse(css).nodes) {
+      if (node.type === 'comment') continue;
+      if (node.type !== 'atrule') return null;
+      const name = node.name.toLowerCase();
+      if (name === 'layer' && !node.nodes) continue;
+      if (name !== 'import') return null;
+      const [spec] = cssImports(`@import ${node.params};`);
+      if (!spec) return null;
+      specs.push(spec);
+    }
+  } catch {
+    return null;
+  }
+  return specs;
+}
+
+/**
  * The names of a stylesheet's at-rules, lowercased, read with postcss so
  * comments are ignored (`@stylex;` is `stylex`); empty for CSS that does not
  * parse.
