@@ -5391,6 +5391,12 @@ export function draftAnswer(ctx, env, question) {
         return dial ? `${lead}${dial} ${v}` : m;
       },
     )
+    // ("Feel: border darkens on hover."): a bare label before its colon
+    // is no clause of its own.
+    .replace(
+      /(^|[.;,!?]\s*)(?:look|feel|theme|vibe|style|palette)\s*:\s*/gi,
+      '$1',
+    )
     // ("a confident, modern look: deep navy, …"): the list after a look's
     // colon is pieces of their own.
     // (Never a part's style, "heading style: bold": that is the part's
@@ -6541,6 +6547,8 @@ export function draftAnswer(ctx, env, question) {
       ),
       '$1 text',
     )
+    // ("the border darkens on hover": a way said as a verb is the way.)
+    .replace(/\b(darken|lighten|brighten|soften|thicken|widen)s\b/gi, '$1')
     // "exactly 36px": the value said.
     .replace(/\bexactly\s+(?=\d*\.?\d+\s?(?:px|rem|em|%)\b)/gi, '')
     // ("darker by a third": the share before the way, as said either way;
@@ -18732,6 +18740,46 @@ export function draftAnswer(ctx, env, question) {
             lookup: `${HOW} ${p.on}`,
           });
       continue;
+    }
+    // ("border darkens on hover"): a border's state said with no part
+    // reaches no one part; each family that draws a border at rest and
+    // takes that state is offered, its shade from its own rest border,
+    // never written for all.
+    if (
+      !c.parts.length &&
+      c.state &&
+      c.dir &&
+      c.aspects.length === 1 &&
+      c.aspects[0] === 'border'
+    ) {
+      const state = String(c.state);
+      const draws = (/** @type {string} */ part) =>
+        Object.entries(C.MAP[part]?.own ?? {}).some(
+          ([k, r]) =>
+            /^border(?:-(?:top|right|bottom|left))?-(?:style|width)$/.test(k) &&
+            [.../** @type {Iterable<string>} */ (r?.values ?? [])].some(
+              v => !/^(?:none|hidden|0(?:px)?)$/.test(String(v).trim()),
+            ),
+        );
+      const families = Object.entries(groupsOf(ctx))
+        .filter(([, members]) =>
+          members.some(m => draws(m) && statesOf(m).includes(state)),
+        )
+        .map(([name]) => name);
+      const offers = families
+        .map(fam => ({
+          fam,
+          d: answerFor({...c, parts: [{on: fam}]}, {on: fam}, 'border'),
+        }))
+        .filter(x => x.d?.options[0]?.length)
+        .slice(0, 4);
+      if (offers.length) {
+        push({
+          text: `a border ${c.dir === 'less' ? 'lighter' : 'darker'} on ${state} said with no part reaches no one part, so nothing is written for all; the families that draw a border at rest and take ${state}, each from its own rest border: ${offers.map(x => x.fam).join(', ')} (one line each)`,
+          options: offers.map(x => /** @type {Step[]} */ (x.d?.options[0])),
+        });
+        continue;
+      }
     }
     // "combobox rounder": a word a component's doc lists, as the subject of
     // a shape change with no part named, is a part how cannot name; it is
