@@ -239,13 +239,11 @@ function naturalWidth({header, title}: HeaderParts, label: number): number {
 
 /**
  * The width of `title`'s text on one line, in its own font, or null where no
- * canvas measures text (a DOM without layout). The font is built from its
- * longhands, because Chromium returns an empty `font` shorthand when the text
- * inherits a font-variant, font-feature-settings or font-kerning value the
- * shorthand cannot hold; letter spacing is added per character. Core's
- * logical-position measure in its table internals works the same way, and
- * RichText may not import those internals (only a package entry is public),
- * so this small copy stays here.
+ * canvas measures text (a DOM without layout). Chromium returns an empty
+ * `font` shorthand when the text inherits a font-variant, feature-settings or
+ * kerning value. So the font is built from its longhands. Letter spacing is
+ * added per character. Core's table measure works the same way. Core's
+ * internal entries are for Core and Lab only, so RichText keeps this copy.
  */
 function oneLineWidth(
   title: HTMLSpanElement,
