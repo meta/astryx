@@ -904,6 +904,82 @@ describe('Item', () => {
       expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
     });
 
+    it('marks a delegated control that mounts after the row', () => {
+      function Row({hasControl}: {hasControl: boolean}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              hasControl ? (
+                <button type="button" ref={ref}>
+                  Open
+                </button>
+              ) : null
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row hasControl={false} />);
+      rerender(<Row hasControl />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open',
+      );
+    });
+
+    it('marks a delegated control that is replaced', () => {
+      function Row({version}: {version: number}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected
+            interactiveRef={ref}
+            endContent={
+              <button type="button" key={version} ref={ref}>
+                Open {version}
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row version={1} />);
+      rerender(<Row version={2} />);
+      expect(screen.getByRole('button', {current: true})).toHaveTextContent(
+        'Open 2',
+      );
+    });
+
+    it('leaves a marker the caller adds to its control after selection', () => {
+      function Row({
+        isSelected,
+        controlCurrent,
+      }: {
+        isSelected: boolean;
+        controlCurrent?: 'page';
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        return (
+          <Item
+            label="Billing"
+            isSelected={isSelected}
+            interactiveRef={ref}
+            endContent={
+              <button type="button" ref={ref} aria-current={controlCurrent}>
+                Open
+              </button>
+            }
+          />
+        );
+      }
+      const {rerender} = render(<Row isSelected />);
+      rerender(<Row isSelected controlCurrent="page" />);
+      rerender(<Row isSelected={false} controlCurrent="page" />);
+      expect(screen.getByRole('button', {current: 'page'})).toBeInTheDocument();
+    });
+
     it('keeps the marker on the root of a row with a parent role', () => {
       render(
         <Item

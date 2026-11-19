@@ -181,7 +181,8 @@ must be added here even when it delegates to an existing member or shared hook.
   interactive row (an `onClick`, `href` or delegated row), the current marker
   (`aria-current`) sits on the row's focusable element, not its list item, so a
   screen reader announces it when that element takes focus. A row whose root
-  takes focus (a parent-supplied role or a link root) keeps it on the root (DEC-1).
+  takes focus (a parent-supplied role or a link root) keeps it on the root
+  (`family:navigation-destinations/DEC-1`).
 
 ## Allowed component variation
 
@@ -260,7 +261,10 @@ element that takes focus: the row's own button or link, or the control it
 delegates to. A screen reader then announces "current" when that element
 takes focus. A row whose root takes focus keeps the marker on the root, and a
 row that is not interactive keeps it on its list item. A selected row keeps
-`data-selected` on its root for styling.
+`data-selected` on its root for styling. A caller's `aria-current` on an
+interactive row moves with the marker, which narrows `component:ListItem` FR1
+for that one prop. In server-rendered HTML a delegated row's control carries
+the marker only after hydration.
 
 Rejected: the marker on the list item of an interactive row, which a screen
 reader does not announce on focus.

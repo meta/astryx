@@ -777,7 +777,6 @@ export function Item({
   // (axe: aria-allowed-attr), so selection stays visual-only there — callers
   // that need selection semantics pass a permitted role.
   const allowsAriaSelected = role != null && ARIA_SELECTED_ROLES.has(role);
-  // The current marker: the caller's, or the selection fallback above.
   const ariaCurrent =
     restProps['aria-current'] ??
     (isSelected && !allowsAriaSelected ? true : undefined);
@@ -790,7 +789,9 @@ export function Item({
     !isLinkRoot &&
     (isDelegate || href != null || onClick != null);
   // A delegated control is the caller's element, so the row marks it while
-  // the row is current, unless the caller marks it already.
+  // the row is current, unless the caller marks it already. The sync runs on
+  // every commit, so a control that mounts late or is replaced is marked too,
+  // and the cleanup removes only the value the row wrote.
   const controlCurrent =
     ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
   useIsomorphicLayoutEffect(() => {
@@ -803,9 +804,14 @@ export function Item({
     ) {
       return;
     }
-    control.setAttribute('aria-current', String(controlCurrent));
-    return () => control.removeAttribute('aria-current');
-  }, [isDelegate, interactiveRef, controlCurrent]);
+    const written = String(controlCurrent);
+    control.setAttribute('aria-current', written);
+    return () => {
+      if (control.getAttribute('aria-current') === written) {
+        control.removeAttribute('aria-current');
+      }
+    };
+  });
 
   // The description element's id, published through ItemDescriptionContext so a
   // control Item renders in a slot can point at it with `aria-describedby`.
@@ -1048,8 +1054,8 @@ export function Item({
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
       // on any element — so the state still reaches AT. Written after
-      // {...restProps} so it must defer to a consumer-provided aria-current.
-      // On an interactive row the marker moves to the focusable element.
+      // {...restProps}: an interactive row moves the marker, a caller's
+      // included, to the element that takes focus.
       aria-current={currentOnFocusTarget ? undefined : ariaCurrent}
       aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}

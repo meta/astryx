@@ -627,7 +627,7 @@ for (const item of cases) {
         rows: item.story === 'states' ? STATE_ROWS : null,
         density: density ?? null,
         states:
-          'states: data-highlighted, data-selected and data-disabled on the astryx-item root match each row; a selected role-less row has aria-current="true"; selected rows paint accent-muted and highlighted rows overlay-hover at rest, resolved in the row scope',
+          'states: data-highlighted, data-selected and data-disabled on the astryx-item root match each row; a selected role-less row has aria-current="true" on its button or link, or on the root when it has neither; selected rows paint accent-muted and highlighted rows overlay-hover at rest, resolved in the row scope',
         disabled:
           'disabled rows: a focusable aria-disabled button, aria-disabled on the root, content at half opacity, pointer-events none; enabled interactive rows answer with a pointer cursor',
         padding:
