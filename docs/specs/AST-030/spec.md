@@ -619,8 +619,10 @@ they are separately named.
   engineering owner's `/approve-spec`
   (`architecture:knowledge-contracts` DEC-19). A Lab component's swizzle sample
   lives in the Lab package (`packages/lab/swizzle-samples.mjs`, which the CLI's
-  swizzle proof imports), so adding one is a Lab path; release checks still run
-  every sample. A component in a family folder keeps the full suite.
+  swizzle proof imports), so adding one is a Lab path. A Lab-only change runs
+  that swizzle proof for the Lab components it carries, so a new Lab component
+  without a sample fails its own pull request; release checks still run every
+  sample. A component in a family folder keeps the full suite.
   The classifier reads those files' diffs as data and never runs them; a diff
   it cannot read, or a line naming anything else, makes the change mixed. A
   Lab-only change also runs the CLI official-packages check on the first Node
