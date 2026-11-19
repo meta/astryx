@@ -7,7 +7,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 
 export default function AvatarWithStatus() {
   return (
-    <Stack direction="horizontal" gap={4} vAlign="center">
+    <Stack direction="horizontal" gap={4} vAlign="center" wrap="wrap">
       <Avatar
         src="/template-assets/DATA-Itai-Jordaan.png"
         name="Itai Jordaan"

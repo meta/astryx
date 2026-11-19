@@ -8,6 +8,8 @@ import {Card} from '@astryxdesign/core/Card';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowDownTrayIcon,
   ShareIcon,
@@ -29,6 +31,8 @@ const actions = [
  * so the demo genuinely exercises the component it documents.
  */
 export default function VisuallyHiddenShowcase() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <VStack gap={5} hAlign="center">
       <HStack gap={6} vAlign="stretch" wrap="wrap" hAlign="center">
@@ -44,6 +48,24 @@ export default function VisuallyHiddenShowcase() {
                   label={label}
                   icon={<Icon icon={icon} />}
                   variant="ghost"
+                  onClick={() =>
+                    label === 'Delete'
+                      ? confirm.show({
+                          title: 'Delete this item?',
+                          description: "This demo won't delete anything.",
+                          actionLabel: 'Delete',
+                          onAction: () => {
+                            confirm.hide();
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: 'Demo: the item would be deleted here',
+                            });
+                          },
+                        })
+                      : showToast({
+                          body: `Demo: the ${label.toLowerCase()} action would run here`,
+                        })
+                  }
                 />
               ))}
             </HStack>
@@ -73,6 +95,7 @@ export default function VisuallyHiddenShowcase() {
       <VisuallyHidden as="div" aria-live="polite">
         Actions available: Download, Share, Delete.
       </VisuallyHidden>
+      {confirm.element}
     </VStack>
   );
 }

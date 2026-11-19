@@ -91,7 +91,7 @@ export const docs = {
       name: 'sortConfig',
       type: 'UseTableSortableConfig<TSortKey>',
       description:
-        'Pass to useTableSortable(sortConfig) and give the resulting plugin to Table.',
+        'Pass to useTableSortable<Row, TSortKey>(sortConfig), with the same type arguments as this hook (TypeScript cannot infer the row type there), and give the resulting plugin to Table.',
     },
     {
       name: 'applySort',
