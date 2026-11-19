@@ -5378,8 +5378,15 @@ function checkOne(
     // control's own height. On any other part it changes nothing.)
     if (!reachGroupOf(ctx, s) && !onlyFits(s, ctx)) {
       s.only = undefined;
+      // (An effect on a member of a family stays on its part already.)
+      const effectOnly =
+        !String(thing).startsWith('--') &&
+        reachGroupOf(ctx, {...s, thing: 'color'}) &&
+        !reachGroupOf(ctx, {...s, thing});
       if (!unset)
-        s.note = `${s.on} is styled on its own already (it is in no family a setting on it spreads to; how --list groups), so --only changes nothing: it is saved without it`;
+        s.note = effectOnly
+          ? `${s.on} keeps ${thing} on its own already (an effect reaches its family only with --on <family>; how --list groups), so --only changes nothing: it is saved without it`
+          : `${s.on} is styled on its own already (it is in no family a setting on it spreads to; how --list groups), so --only changes nothing: it is saved without it`;
     }
   }
   // A later setting on one member of a thing its family already carries
