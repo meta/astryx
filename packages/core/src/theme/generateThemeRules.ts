@@ -1200,14 +1200,15 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
 }
 
 /**
- * Text's `color` and `size` prop overrides for the theme's parts on Text's
- * element (Timestamp's `timestamp`, Timer's `timer`), written on the part's
- * own target after its rules in the parts sub-layer. An explicit prop then
- * wins over the part's entry, as Text's own overrides let it win over a
- * `text` entry, and no other Text is reached: the theme's `text` entries
- * elsewhere keep their order. The color a part gives Text with no color prop
- * (`TEXT_PART_DEFAULT_COLOR`) is left out, so the part's own color applies
- * there.
+ * For each of the theme's parts on Text's element (Timestamp's `timestamp`,
+ * Timer's `timer`), what Text's `color` and `size` props draw, written on the
+ * part's own target after its rules in the parts sub-layer: Text's prop
+ * overrides, then the theme's own `text` entries keyed on those props
+ * (`type:supporting+color:accent`), their color and font size only, in the
+ * order the components sub-layer has them. A prop the caller sets then draws
+ * on the part as it would with no part entry, and no other Text is reached.
+ * The color a part gives Text with no color prop (`TEXT_PART_DEFAULT_COLOR`)
+ * is left out, so the part's own color applies there.
  */
 function generatePartTextPropOverrides(
   components: Record<string, unknown> | undefined,
@@ -1215,6 +1216,7 @@ function generatePartTextPropOverrides(
   surface?: MediaSurface,
 ): void {
   const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
+  const textRules = (components?.text ?? {}) as Record<string, StyleOverrides>;
   for (const part of Object.keys(components ?? {})) {
     if (SHARED_ELEMENT_PARTS[part] !== 'text') {
       continue;
@@ -1231,6 +1233,29 @@ function generatePartTextPropOverrides(
       parts.push(
         `  ${componentSelector(part, parseStyleKey(`size:${sizeName}`), surface)} { font-size: ${sizeValue}; }`,
       );
+    }
+    const keyed: Record<string, StyleOverrides> = {};
+    for (const [key, styles] of Object.entries(textRules)) {
+      const terms = key.split('+');
+      if (terms.includes(`color:${defaults[part]}`)) {
+        continue;
+      }
+      const kept: StyleOverrides = {};
+      if (terms.some(t => t.startsWith('color:')) && styles?.color != null) {
+        kept.color = styles.color;
+      }
+      if (terms.some(t => t.startsWith('size:')) && styles?.fontSize != null) {
+        kept.fontSize = styles.fontSize;
+      }
+      if (Object.keys(kept).length > 0) {
+        keyed[key] = kept;
+      }
+    }
+    if (Object.keys(keyed).length > 0) {
+      generateComponentRules({[part]: keyed}, parts, {
+        surface,
+        sink: () => {},
+      });
     }
   }
 }
