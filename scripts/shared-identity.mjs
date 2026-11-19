@@ -357,7 +357,8 @@ const HELPER_FILES = new Set([
  * Every call that names a shared slot. A slot's name and version are its
  * identity, so each call must spell both as literals.
  * @returns {Array<{file: string, line: number, helper: string, slot: string|null}>}
- *   `slot` is `<prefix><name>/v<version>`, or null when either is not a literal
+ *   `slot` is the registered key, `@astryxdesign/core/<prefix><name>/v<version>`
+ *   for a helper call, or null when either part is not a literal
  */
 export function sharedSlots() {
   /** @type {Array<{file: string, line: number, helper: string, slot: string|null}>} */
@@ -366,7 +367,9 @@ export function sharedSlots() {
     if (HELPER_FILES.has(file)) continue;
     const code = fs.readFileSync(path.join(REPO, file), 'utf8');
     if (
-      !/\b(?:shared[A-Z]\w*|create(?:Shared|LayerScoped)Context)\b/.test(code)
+      !/\b(?:shared[A-Z]\w*|create(?:Shared|LayerScoped)Context)\b|Symbol\.for\(\s*['"`]@astryxdesign\//.test(
+        code,
+      )
     ) {
       continue;
     }
@@ -395,7 +398,26 @@ export function sharedSlots() {
           line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
           helper,
           slot: literal
-            ? `${SLOT_HELPERS[helper]}${name.text}/v${version.text}`
+            ? `@astryxdesign/core/${SLOT_HELPERS[helper]}${name.text}/v${version.text}`
+            : null,
+        });
+      } else if (
+        ts.isCallExpression(node) &&
+        node.expression.getText(source) === 'Symbol.for' &&
+        node.arguments[0] != null &&
+        (ts.isStringLiteral(node.arguments[0]) ||
+          ts.isNoSubstitutionTemplateLiteral(node.arguments[0])) &&
+        node.arguments[0].text.startsWith('@astryxdesign/')
+      ) {
+        // A registered key written out, for a package that cannot use Core's
+        // helpers: the literal is the slot.
+        slots.push({
+          file,
+          line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          helper: 'Symbol.for',
+          // Versioned like a helper slot, or null so the check reports it.
+          slot: /\/v\d+$/.test(node.arguments[0].text)
+            ? node.arguments[0].text
             : null,
         });
       }

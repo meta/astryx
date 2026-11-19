@@ -342,8 +342,8 @@
       "reason": "Set and read inside markTravelling, which only the row's own List calls."
     },
     "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
-      "status": "open",
-      "group": "F10 List reorder"
+      "status": "allowed",
+      "reason": "No swizzle copy carries this module; copies import createReorderable from the package's public path. shared-identity.pins.test.mjs pins it."
     },
     "packages/core/src/theme/Theme.tsx:injectedThemes": {
       "status": "open",
@@ -614,12 +614,8 @@
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
     "packages/richtext/src/markdownExtensionNode.ts:decorators": {
-      "status": "open",
-      "group": "F12 RichText extensions"
-    },
-    "packages/richtext/src/markdownExtensions.ts:extensionPlugin": {
-      "status": "open",
-      "group": "F12 RichText extensions"
+      "status": "allowed",
+      "reason": "Set and read inside one copy's editor; no copy reads another's. shared-identity.pins.test.mjs pins it."
     },
     "packages/richtext/src/markdownExtensions.ts:withExport": {
       "status": "allowed",
