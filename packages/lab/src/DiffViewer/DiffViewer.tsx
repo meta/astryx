@@ -902,11 +902,6 @@ const styles = stylex.create({
     userSelect: 'none',
     color: colorVars['--color-text-secondary'],
   },
-  // Bars and no indicator: the column is only a gap before the code (and
-  // holds the bar).
-  markerSlim: {
-    paddingInline: 0,
-  },
   // The bar sits at the start of the indicator column, beside the code.
   // Added lines get a solid bar, removed lines a dashed one, so the two read
   // apart without relying on colour.
@@ -1436,7 +1431,6 @@ export function DiffViewer({
   const isPinned = !isWrapped;
   const gutter = gutterWidth(digits);
   const markerWidth = MARKER_WIDTH[changeIndicator];
-  const isSlimMarker = changeIndicator !== 'classic';
   const pinAt = (offset: string | null) =>
     isPinned &&
     offset != null && [styles.sticky, dynamicStyles.stickyAt(offset)];
@@ -1518,7 +1512,6 @@ export function DiffViewer({
         {...cellRole(tag)}
         {...stylex.props(
           styles.marker,
-          isSlimMarker && styles.markerSlim,
           pinAt(pinOffset),
           tint(kind),
           kind === 'added' && styles.markerAdded,

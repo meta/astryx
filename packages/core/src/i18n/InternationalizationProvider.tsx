@@ -31,6 +31,11 @@ import type {
   ProviderMessagesByLocale,
 } from './types';
 import {getResolve} from './resolve';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 const PROVIDER_NAME = 'InternationalizationProvider';
 
@@ -138,6 +143,13 @@ export function InternationalizationProvider({
   calendar: calendarProp,
   children,
 }: InternationalizationProviderProps) {
+  if (process.env.NODE_ENV !== 'production' && locale == null) {
+    throw devPropError(
+      'InternationalizationProvider',
+      'locale',
+      'is required: a BCP 47 language tag, for example locale="en" or locale="pt-BR".',
+    );
+  }
   const direction = dir ?? getLocaleDirection(locale);
   const calendar = useMemo(
     () =>
