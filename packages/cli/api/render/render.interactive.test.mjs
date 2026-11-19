@@ -1203,7 +1203,7 @@ export default function Page() {
   it('warns when text inside a drawing that scales shrinks on a phone', async () => {
     put(
       'src/svg-chart.tsx',
-      'export default function Page() {\n  return (\n    <svg viewBox="0 0 960 300" width="100%" role="img" aria-label="Sales">\n      <text x="0" y="20" fontSize="13">January</text>\n    </svg>\n  );\n}\n',
+      'export default function Page() {\n  return (\n    <svg viewBox="0 0 960 300" width="100%" role="img" aria-label="Sales">\n      <text x="0" y="20" fontSize="13">January</text>\n    </svg>\n  );\n}\nimport \'@astryxdesign/core/astryx.css\';\n',
     );
     const result = /** @type {any} */ (
       await render('src/svg-chart.tsx', {cwd: dir, out: 'svg-chart.html'})
