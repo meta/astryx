@@ -226,6 +226,15 @@ describe('doctor core-props', () => {
         'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
       });
       expect(augmented?.status).toBe('pass');
+      // A declaration that adds the prop through a type it imports by the
+      // config's `paths`.
+      const aliased = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', paths: {'@/*': ['./src/*']}}, include: ['src']}),
+        'src/extra.ts': 'export interface Extra {\n  selectedID?: string;\n}\n',
+        'src/tab-ids.d.ts': "import type {Extra} from '@/extra';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps extends Extra {}\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(aliased?.status).toBe('pass');
       // A string index on what JSX gives every component makes JSX take every name.
       const everyName = await propsCheck({
         'src/every-name.d.ts': "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicAttributes {\n      [name: string]: unknown;\n    }\n  }\n}\n",

@@ -456,9 +456,14 @@ function buildJsxRuntime(pages, projectDir) {
       if (dir === top || path.relative(top, dir).startsWith('..') || dir === path.dirname(dir)) break;
     }
   }
+  // A transform installed where a page finds packages: the project's own
+  // folders, or a workspace member's.
+  const pageDirs = [...new Set([projectDir, ...pages.map(page => path.dirname(page))])];
   for (const transform of [...CSS_PROP_TRANSFORMS].sort()) {
-    const installed = findInstalledPackage(projectDir, transform, Infinity);
-    if (installed) return {file: installed, transform, installed: true};
+    for (const dir of pageDirs) {
+      const installed = findInstalledPackage(dir, transform, Infinity);
+      if (installed) return {file: installed, transform, installed: true};
+    }
   }
   return null;
 }
@@ -642,6 +647,7 @@ export async function findUnknownCoreProps(projectDir) {
       augmentations: [...augmentations.files, ...jsxDeclarations],
       props: asked,
       sources,
+      configFile: group.configFile || undefined,
     });
     if (types.unread) return notChecked(types.unread);
     for (const use of candidates) {

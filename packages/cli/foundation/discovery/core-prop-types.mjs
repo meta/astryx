@@ -56,6 +56,28 @@ function queryText(components, sources) {
 const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
 
 /**
+ * The module-path options of a config, as TypeScript's own config reader
+ * resolves them through `extends`: `paths`, `baseUrl`, and the folder that
+ * `paths` without a `baseUrl` resolve from. Empty with no config, or one
+ * TypeScript cannot read.
+ * @param {any} ts
+ * @param {string | undefined} configFile
+ * @returns {Record<string, unknown>}
+ */
+function configPaths(ts, configFile) {
+  if (!configFile) return {};
+  /** @type {any} */
+  let parsed;
+  try {
+    parsed = ts.getParsedCommandLineOfConfigFile(configFile, {}, {...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {}});
+  } catch {
+    return {};
+  }
+  const {paths, baseUrl, pathsBasePath} = parsed?.options ?? {};
+  return Object.fromEntries(Object.entries({paths, baseUrl, pathsBasePath}).filter(([, value]) => value !== undefined));
+}
+
+/**
  * Whether a component is generic: its props may come from a type argument the
  * page gives it, which no fixed props type holds.
  * @param {any} ts
@@ -100,9 +122,11 @@ function isGeneric(ts, checker, type) {
  * @param {Map<string, Set<string>>} input.props for each component, the props to judge
  * @param {Map<string, string>} [input.sources] for each component, the module
  *   path a page imports it from (Core's main module when none is given)
+ * @param {string} [input.configFile] the pages' config, whose `paths` and
+ *   `baseUrl` TypeScript resolves the augmenting files' imports through
  * @returns {CorePropTypes}
  */
-export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props, sources = new Map()}) {
+export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props, sources = new Map(), configFile}) {
   const components = [...props.keys()];
   const file = path.join(projectDir, '__astryx_core_props__.ts');
   const text = queryText(components, sources);
@@ -117,6 +141,7 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
     target: ts.ScriptTarget.ES2022,
     types: strings(configOptions.types),
     typeRoots: strings(configOptions.typeRoots),
+    ...configPaths(ts, configFile),
   };
   const host = ts.createCompilerHost(options, true);
   const {getSourceFile, fileExists, readFile} = host;
