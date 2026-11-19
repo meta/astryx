@@ -1075,6 +1075,7 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          controlPressLayerStyles.rowTint,
           // The content wrapper's `::after` carries the touch band, so the
           // button's own `::before` (the touch press) and `::after` (a
           // caller's decoration) stay as they are.
