@@ -14310,6 +14310,11 @@ export function draftAnswer(ctx, env, question) {
   const seeThroughSide = text =>
     /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right|borders?|edges?|lines?)\s+|[,:;]\s*|\s[-–—]\s*)transparent\b/i.test(
       text,
+    ) ||
+    // ("make the bottom border of selected tabs transparent": the side's
+    // line said, then its part, then "transparent" last.)
+    /\b(?:top|bottom|left|right)\s+(?:borders?|edges?|lines?)\b[^,;.]*\btransparent\s*$/i.test(
+      text.trim(),
     )
       ? transparentSide(text)
       : undefined;
@@ -22598,7 +22603,7 @@ export function draftAnswer(ctx, env, question) {
         const perSide = outline ? null : sideColorsIn(c.text);
         if (perSide && c.lengths.length <= 1)
           return {
-            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : ''}border-color`,
+            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : /\b(dashed|dotted|double|solid)\b/.test(c.text) ? 'border-style, then ' : ''}border-color`,
             options: [
               [
                 ...(c.lengths.length
@@ -22611,11 +22616,28 @@ export function draftAnswer(ctx, env, question) {
                         f,
                       ),
                     ]
-                  : []),
+                  : // (A style said alone, "border dashed #eee #eee #ddd",
+                    // is the line's style.)
+                    /\b(dashed|dotted|double|solid)\b/.test(c.text)
+                    ? [
+                        set(
+                          'border-style',
+                          String(
+                            /\b(dashed|dotted|double|solid)\b/.exec(
+                              c.text,
+                            )?.[1],
+                          ),
+                          f,
+                        ),
+                      ]
+                    : []),
                 set('border-color', perSide.join(' '), {...f, ...modeOf(c)}),
               ],
             ],
-            ...(c.lengths.length ? {sequence: true} : {}),
+            ...(c.lengths.length ||
+            /\b(dashed|dotted|double|solid)\b/.test(c.text)
+              ? {sequence: true}
+              : {}),
           };
         // ("a transparent bottom border", "with a transparent bottom"): a
         // side said transparent is that side's line drawn see-through, never
@@ -29365,6 +29387,67 @@ export function draftAnswer(ctx, env, question) {
           if (line) {
             if (kind !== 'light' || /light-dark\(/.test(String(st.value)))
               continue;
+            // (A part that draws no border of its own, a button or a tab,
+            // given a width or a style here, has no dark-mode border color
+            // to keep: kept to the light mode, its dark mode would draw the
+            // line in its text color. The
+            // typed colors go to both modes, and the answer measures them
+            // on the dark page.)
+            // (Each look the line reaches: the one said, else every
+            // variant; a look that draws none, a primary button, counts.)
+            const looksDrawn = st.on
+              ? (st.when
+                  ? [String(st.when)]
+                  : (C.variantValues(one(st.on))?.variant ?? []).map(
+                      x => `variant:${x}`,
+                    )
+                ).concat(st.when ? [] : [''])
+              : [];
+            // (Only when the answer draws the line itself, its width or
+            // style said: else set brings a see-through border, and the
+            // dark mode draws nothing.)
+            const drawsItHere = o.some(
+              x =>
+                x !== st &&
+                x.on === st.on &&
+                !x.mode &&
+                /^border-(?:width|style)$/.test(x.thing),
+            );
+            const lineOn = st.on;
+            if (
+              lineOn &&
+              drawsItHere &&
+              looksDrawn.some(
+                w =>
+                  (w || !looksDrawn.some(Boolean)) &&
+                  !drawsLine(
+                    C,
+                    FAMILIES[lineOn] ?? [one(lineOn)],
+                    'border',
+                    st.state,
+                    w || undefined,
+                  ),
+              )
+            ) {
+              const page = parseColor(
+                String(current('--color-background-body', 'dark') ?? ''),
+              );
+              const sides = (run ?? [v])
+                .map(x => parseColor(x))
+                .filter(x => x != null);
+              const r =
+                page && sides.length
+                  ? Math.min(
+                      ...sides.map(x =>
+                        ratio(/** @type {number[]} */ (x), page),
+                      ),
+                    )
+                  : null;
+              notes.add(
+                `(not every ${one(lineOn)} look draws a border of its own, so those have no dark-mode border to keep: ${v} is written for both modes${r != null ? `, at ${r.toFixed(1)}:1 on the dark page` : ''}; for another dark color, set it with --mode dark)`,
+              );
+              continue;
+            }
             // (A border shorthand keeps its width in both modes: only its
             // color is the light mode's, the dark mode keeping the border
             // color the part draws now, an input's emphasized one, else the

@@ -353,7 +353,9 @@ describe('per-side border asks', () => {
       expect(await first('cards border 2px #eee #eee #ddd')).toEqual([
         'border-width 2px --on card',
         'border-style solid --on card',
-        "border-color '#eee #eee #ddd' --on card --mode light",
+        // (Both modes: most card looks draw no border of their own, so the
+        // dark mode has none to keep.)
+        "border-color '#eee #eee #ddd' --on card",
       ]);
     },
     T,
@@ -400,6 +402,46 @@ describe('per-side border asks', () => {
         /^border-top '1px solid transparent' --on card/m,
       );
       expect(top.join('\n')).not.toMatch(/^border '/m);
+    },
+    T,
+  );
+
+  it(
+    'writes per-side colors for both modes on a part that draws no border',
+    async () => {
+      if (unbuilt) return;
+      const lines = await first('buttons border 2px #eee #eee #ddd');
+      expect(lines.join('\n')).toMatch(
+        /^border-color '#eee #eee #ddd' --on button$/m,
+      );
+      expect(lines.join('\n')).not.toMatch(/--mode light/);
+    },
+    T,
+  );
+
+  it(
+    'keeps a style said without a width',
+    async () => {
+      if (unbuilt) return;
+      expect(await first('cards border dashed #eee #eee #ddd')).toEqual([
+        'border-style dashed --on card',
+        "border-color '#eee #eee #ddd' --on card",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'reads transparent said last, after the side and its part',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        (
+          await first('make the bottom border of selected tabs transparent')
+        ).join('\n'),
+      ).toMatch(
+        /^border-bottom '1px solid transparent' --on tab --state selected/m,
+      );
     },
     T,
   );
