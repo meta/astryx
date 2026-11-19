@@ -179,9 +179,9 @@ function defaultCompare<T extends Record<string, unknown>>(
   const aVal = a[sortKey];
   const bVal = b[sortKey];
 
-  // Missing values never reach the comparisons below. A NaN result reads as
-  // equal to Array.sort and breaks the order of the other rows. An Invalid
-  // Date throws in toISOString.
+  // Missing values never reach the comparisons below. Array.sort reads a NaN
+  // result as equal, which breaks the order of the other rows. toISOString
+  // throws for an Invalid Date.
   const aMissing = isMissingSortValue(aVal);
   const bMissing = isMissingSortValue(bVal);
   if (aMissing && bMissing) {

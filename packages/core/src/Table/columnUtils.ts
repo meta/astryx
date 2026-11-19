@@ -281,7 +281,7 @@ export function capitalize(str: string): string {
  * Whether a value is a Date with no time (`new Date('not a date')`). Table
  * treats it as a missing value: an empty cell, and sorted with null.
  */
-export function isInvalidDate(value: unknown): value is Date {
+export function isInvalidDate(value: unknown): boolean {
   return value instanceof Date && Number.isNaN(value.getTime());
 }
 
