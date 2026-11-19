@@ -1814,6 +1814,87 @@ describe('app-theme doctor checks', () => {
     expect(checks.some(item => item.status === 'fail')).toBe(false);
   });
 
+  it('check 9 passes when the page head links a font service stylesheet for the family, as a theme README gives it', async () => {
+    const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head><link rel="preconnect" href="https://fonts.googleapis.com" /><link\n  rel="stylesheet"\n  href="https://fonts.googleapis.com/css2?family=Ocean+Sans:wght@400;700&display=swap" /></head><body><div id="root"></div></body></html>\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('check 9 reads a Next.js root layout, and never a commented link or a preload', async () => {
+    const layout = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(layout.dir, 'app/layout.js'),
+      'export default function RootLayout({children}) {\n  return (<html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans&display=swap" /></head><body>{children}</body></html>);\n}\n',
+    );
+    expect(
+      check(await checkAppThemes(layout.dir), 'theme-fonts'),
+    ).toMatchObject({
+      status: 'pass',
+    });
+
+    const lineComment = await fixture([
+      {slug: 'ocean', fontFamily: 'Ocean Sans'},
+    ]);
+    write(
+      path.join(lineComment.dir, 'app/layout.tsx'),
+      'export default function RootLayout({children}) {\n  // <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans" />\n  return <html><head /><body>{children}</body></html>;\n}\n',
+    );
+    expect(
+      check(await checkAppThemes(lineComment.dir), 'theme-fonts'),
+    ).toMatchObject({status: 'warn'});
+
+    const commented = await fixture([
+      {slug: 'ocean', fontFamily: 'Ocean Sans'},
+    ]);
+    write(
+      path.join(commented.dir, 'index.html'),
+      '<!doctype html><html><head><!-- <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ocean+Sans" /> --><link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Ocean+Sans&stylesheet" /></head></html>\n',
+    );
+    expect(
+      check(await checkAppThemes(commented.dir), 'theme-fonts'),
+    ).toMatchObject({status: 'warn'});
+  });
+
+  it('check 9 counts only a known font service, and only the families it names', async () => {
+    const other = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(other.dir, 'index.html'),
+      '<!doctype html><html><head><link rel="stylesheet" href="https://example.com/css2?family=Ocean+Sans" /></head></html>\n',
+    );
+    expect(check(await checkAppThemes(other.dir), 'theme-fonts')).toMatchObject(
+      {
+        status: 'warn',
+      },
+    );
+
+    const wrong = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(wrong.dir, 'index.html'),
+      '<!doctype html><html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap" /></head></html>\n',
+    );
+    expect(check(await checkAppThemes(wrong.dir), 'theme-fonts')).toMatchObject(
+      {
+        status: 'warn',
+      },
+    );
+  });
+
+  it('check 9 names the page file its font link goes in', async () => {
+    const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
+    write(
+      path.join(dir, 'index.html'),
+      '<!doctype html><html><head></head></html>\n',
+    );
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'warn'});
+    expect(result.fix).toContain('to the <head> of index.html');
+  });
+
   it('check 9 warns when a local theme has no font stylesheet', async () => {
     const {dir} = await fixture([{slug: 'ocean', fontFamily: 'Ocean Sans'}]);
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
