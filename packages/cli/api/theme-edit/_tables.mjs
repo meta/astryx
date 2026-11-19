@@ -126,6 +126,18 @@ export const FAMILIES = wordTable({
  */
 export const AUTO_SPREAD = ['inputs', 'checks'];
 
+/** The family roles `--on` takes as groups. */
+export const GROUP_ROLES = /** @type {const} */ ([
+  'button-like',
+  'overlays',
+  'option-rows',
+  'selected-items',
+  'accent-fills',
+  'inset-fields',
+  'status-surfaces',
+  'overlay-headers',
+]);
+
 /** @param {string} target @returns {string | null} */
 export const familyOf = target =>
   Object.entries(FAMILIES).find(([, members]) =>
@@ -137,13 +149,18 @@ export const familyOf = target =>
  * settings reader share: on a member of a group that spreads (a text input
  * of inputs) it keeps the change on that member (`member`); on any other
  * part it changes nothing, as the part is styled on its own already
- * (`own`); on a group itself, or with no part, it means nothing at all
- * (`group`).
+ * (`own`); on a group itself, the editor's own (inputs) or a family role
+ * (button-like), or with no part, it means nothing at all (`group`).
  * @param {string | undefined} on
  * @returns {'member' | 'own' | 'group'}
  */
 export const onlyMeans = on => {
-  if (!on || Object.hasOwn(FAMILIES, on)) return 'group';
+  if (
+    !on ||
+    Object.hasOwn(FAMILIES, on) ||
+    GROUP_ROLES.includes(/** @type {any} */ (on))
+  )
+    return 'group';
   const fam = familyOf(on);
   return fam && AUTO_SPREAD.includes(fam) ? 'member' : 'own';
 };

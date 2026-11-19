@@ -289,7 +289,7 @@ function readBox(id, s, rgb, label, stats, W, H, at) {
     bevel,
     bevelColors,
     outside,
-    text: textPlace(id, s, label, W),
+    text: textPlace(id, s, label, W, radius),
   };
 }
 
@@ -421,16 +421,25 @@ function shadowBelow(rgb, W, H, x, below, w, outI) {
 
 /**
  * Where a box's text sits: the holes in its fill, left gap against right gap.
+ * The pixels a rounded corner leaves out of the fill are no holes.
  * @param {number} id
  * @param {NonNullable<ReturnType<typeof surfaces>>['stats'][number]} s
  * @param {Int32Array} label @param {number} W
+ * @param {number} [radius] the box's corner radius in pixels
  * @returns {Box['text']}
  */
-function textPlace(id, s, label, W) {
+export function textPlace(id, s, label, W, radius = 0) {
+  const r = Math.max(0, radius);
+  /** @param {number} x @param {number} y */
+  const outsideCorner = (x, y) => {
+    const dx = x < s.x0 + r ? s.x0 + r - x : x > s.x1 - r ? x - (s.x1 - r) : 0;
+    const dy = y < s.y0 + r ? s.y0 + r - y : y > s.y1 - r ? y - (s.y1 - r) : 0;
+    return dx > 0 && dy > 0 && dx * dx + dy * dy > r * r;
+  };
   let lo = Infinity, hi = -Infinity;
   for (let y = s.y0 + 2; y <= s.y1 - 2; y++)
     for (let x = s.x0 + 2; x <= s.x1 - 2; x++)
-      if (label[y * W + x] !== id) {
+      if (label[y * W + x] !== id && !outsideCorner(x, y)) {
         if (x < lo) lo = x;
         if (x > hi) hi = x;
       }
@@ -651,10 +660,12 @@ function whereIn(items, W, H) {
  * middle one (half-pixel readings that scatter around the true value).
  * @param {number[]} values @param {number} near @param {(v: number[]) => number} [middle]
  */
-function agreed(values, near, middle = mode) {
+export function agreed(values, near, middle = mode) {
   let best = {value: 0, n: 0};
   for (const v of values) {
-    const close = values.filter(o => Math.abs(o - v) <= near);
+    // (Equal values agree, pills' Infinity included: Infinity − Infinity is
+    // no number.)
+    const close = values.filter(o => o === v || Math.abs(o - v) <= near);
     if (close.length > best.n) best = {value: middle(close), n: close.length};
   }
   return best;

@@ -378,6 +378,20 @@ describe('how <picture>', () => {
     expect(lines.some(c => / set pk height \S+ --on checks$/.test(c))).toBe(false);
   });
 
+  it("keeps a checks box the theme sizes on one member, offering the pair", async () => {
+    await themeEditNew('pk2', {cwd, like: 'neutral'});
+    await themeEditSet('pk2', 'width', '18px', {cwd, on: 'checkbox-indicator', only: true});
+    fs.writeFileSync(path.join(cwd, 'checks.png'), encodePng(checksPage()));
+    const d = /** @type {any} */ ((await themeEditHow('checks.png', {cwd, theme: 'pk2'})).data);
+    const lines = /** @type {string[]} */ (d.results.flatMap((/** @type {any} */ r) => r.commands));
+    expect(lines.some(c => / set pk2 (?:width|height) \S+ --on checks\b/.test(c))).toBe(false);
+    const kept = d.unsure.find((/** @type {any} */ u) => /^box size on checks: .* sets width on checkbox-indicator 18px already, which stays/.test(u.text));
+    expect(kept).toBeTruthy();
+    // (The pair, never a height alone.)
+    expect(kept.options.some((/** @type {string} */ c) => / set pk2 width /.test(c))).toBe(true);
+    expect(kept.options.some((/** @type {string} */ c) => / set pk2 height /.test(c))).toBe(true);
+  });
+
   it('keeps a spacing dial the theme sets, which already sizes the controls', async () => {
     await themeEditNew('ps', {cwd, like: 'neutral'});
     await themeEditSet('ps', 'spacing', 'compact', {cwd});
