@@ -13,6 +13,7 @@ import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-i
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as pressRecipesScope} from './internal/eslint-plugin-astryx/press-through-recipes.js';
 import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
@@ -44,6 +45,19 @@ const internalBarrelBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Press imports, pressed state, press attributes and `:active` arms outside
+// the press recipes before `@astryx/press-through-recipes` arrived, by
+// repo-relative file, once per site. The list only shrinks.
+const pressRecipesBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/press-through-recipes.baseline.json',
     ),
     'utf8',
   ),
@@ -424,7 +438,6 @@ export default defineConfig(
             ],
             // Pre-existing hardcoded text awaiting catalog keys.
             'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
-            'Chat/useTriggerMenu.tsx': ['No results'],
             'CodeBlock/CodeBlock.tsx': [' diff'],
             'MultiSelector/MultiSelector.tsx': [' selected'],
             'PowerSearch/PowerSearch.tsx': [
@@ -478,6 +491,8 @@ export default defineConfig(
     rules: {
       '@astryx/no-border-shorthand':
         astryxConfig.rules['@astryx/no-border-shorthand'],
+      '@astryx/no-shorthand-longhand-merge':
+        astryxConfig.rules['@astryx/no-shorthand-longhand-merge'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -1048,6 +1063,25 @@ export default defineConfig(
     },
     rules: {
       '@astryx/no-prevent-default-in-passive-react-handler': 'error',
+    },
+  },
+  // One engine writes every pressed state in Core, and each pressable surface
+  // uses one of three recipes: a momentary control, a row-wide target, or a
+  // cell or menu row. A component adds no press tracker, pressed state, press
+  // attribute or `:active` arm of its own. The sites that predate this block
+  // are listed in the baseline, once per site; one more is reported (an error
+  // in strict mode). Tests are out of scope.
+  {
+    files: pressRecipesScope.files,
+    ignores: pressRecipesScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/press-through-recipes': [
+        reactSeverity,
+        {baseline: pressRecipesBaseline, root: import.meta.dirname},
+      ],
     },
   },
   // A source comment explains a reason, a constraint, or a quirk. It does not

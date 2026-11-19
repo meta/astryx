@@ -96,7 +96,7 @@ export const docs = {
     },
     {
       name: 'as',
-      type: "'span' | 'p' | 'div' | 'label'",
+      type: "'span' | 'p' | 'div' | 'label' | 'h1' | 'h2' | 'h3'",
       description: 'HTML element to render.',
       default: "'span'",
     },

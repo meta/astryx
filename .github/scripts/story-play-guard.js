@@ -39,6 +39,12 @@ const port = Number(getArg('port') || 6010);
 // whole cost of promoting its play function into required CI.
 const TARGETS = [
   {
+    component: 'Table',
+    story: 'core-table--children-mode-narrow',
+    guards:
+      'a children-mode table wider than its container scrolls inside its own box, with every heading in full and every word whole',
+  },
+  {
     component: 'Item',
     story: 'core-item--align-first-line',
     guards:
@@ -113,6 +119,14 @@ const TARGETS = [
     guards:
       'ChartTooltip stays continuously open across content-bearing points in ' +
       'nested Theme/MediaTheme scope above a native modal with nonzero geometry',
+  },
+  {
+    component: 'ChartTooltip',
+    story: 'charts-chrome-tooltip--default',
+    guards:
+      'hovering a month through the chart pointer layer opens the grouped ' +
+      "tooltip with that month's heading and every series value, and " +
+      'leaving the plot closes it',
   },
   {
     component: 'ChartTheming',

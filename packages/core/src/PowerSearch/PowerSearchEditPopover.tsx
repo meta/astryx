@@ -93,6 +93,7 @@ const styles = stylex.create({
   // Nested editor styles
   nestedRootLabel: {
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
   nestedFieldSelector: {
     flexShrink: 0,

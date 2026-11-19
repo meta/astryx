@@ -64,7 +64,10 @@ import {
   iconUseCommand,
   missingIconLook,
 } from './icon-set-discovery.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  currentDefinitionName,
+} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
 import {compareText} from '../text/compare-text.mjs';
 
@@ -623,7 +626,8 @@ export function iconsNotImported(source, declared) {
 export function sharedTemplateMeanings(declared) {
   /** @type {Map<string, Map<string, string>>} definition → icon → first key */
   const byDefinition = new Map();
-  for (const [key, definition] of Object.entries(declared)) {
+  for (const [key, declaredName] of Object.entries(declared)) {
+    const definition = currentDefinitionName(declaredName) ?? declaredName;
     const icons = byDefinition.get(definition) ?? new Map();
     const icon = key.replace(/Icon$/u, '');
     if (!icons.has(icon)) icons.set(icon, key);
@@ -983,9 +987,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       // declaration never matches an import from one (Core's `Table` is not
       // the icon a template imports as `Table as TableIcon`); an installed
       // set's icons are matched through the set instead.
+      // A declared definition that another one replaced means its successor.
       const meant =
         !isAstryxModule(module) && Object.hasOwn(declared, key)
-          ? declared[key]
+          ? (currentDefinitionName(declared[key]) ?? declared[key])
           : null;
       /** @type {SourceIcon | null} */
       const record = fromSet
@@ -1244,13 +1249,19 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       const wrapper = wrapped.get(specifier);
       if (!wrapper) continue;
       accounted.add(declaredKey(specifier));
+      // A set wraps a library package, not one subpath of it.
+      const library = wrapper.data.source?.package;
+      const from =
+        library && node.source.value !== library
+          ? `${node.source.value}, part of ${library}`
+          : node.source.value;
       icons.kept.push({
         module: node.source.value,
         export: importedName(specifier),
         reason:
           wrapper === target
-            ? `it already comes from ${node.source.value}, which ${icons.set} wraps`
-            : `no set in your list maps its icon definition, and it already comes from ${node.source.value}, which ${wrapper.package}/${wrapper.name} wraps`,
+            ? `it already comes from ${from}, which ${icons.set} wraps`
+            : `no set in your list maps its icon definition, and it already comes from ${from}, which ${wrapper.package}/${wrapper.name} wraps`,
       });
     }
   }

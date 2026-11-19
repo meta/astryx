@@ -123,6 +123,14 @@ export const doc = {
       example: "'acme astryx'",
     },
     {
+      name: 'installGuidance',
+      type: 'string',
+      description:
+        "How an app that uses your package adds a dependency, when its package manager's add command (`pnpm add`, `yarn add`, `npm install`) is the wrong step there, for example because your apps share one lockfile that a script rebuilds. One line; `{packages}` stands for the packages to add. The CLI prints it in place of the package-manager command wherever it prints a step that adds packages the app lacks: template readiness, the theme step of `{@command init}`, `{@command doctor}` fixes, theme hints and errors, `{@command theme eject}`, the theme editor's notes, and `{@command discover}` add commands; a receipt with an `installCommand` gives it beside that as `installGuidance`. A step that moves Astryx's own packages to another release, or adds `@astryxdesign/cli` at the release of the project's Core, is not an add and keeps the package-manager command. If two loaded packages give different guidance, neither is used and `{@command doctor}` warns. An invalid value is ignored with an `invalid_install_guidance` warning, and the rest of the manifest still loads.",
+      example:
+        "'Add {packages} to package.json, commit, then run the repository relock script'",
+    },
+    {
       name: 'base',
       type: '{adapters?: Record<string, string>}',
       description:

@@ -119,6 +119,20 @@ export function computeLayout({
     v => typeof v === 'string' && Number.isNaN(Number(v)),
   );
 
+  // Marks are clipped to the plot, so a dot at the first or last x would lose
+  // the half that lies past the edge. Inset the linear range by the widest
+  // overhang. The domain is not changed, so explicit domains stay exact.
+  const xInset = Math.min(
+    width / 2,
+    series.reduce((max, s) => {
+      const overhang = s.layout.xOverhang;
+      return overhang != null && Number.isFinite(overhang) && overhang > max
+        ? overhang
+        : max;
+    }, 0),
+  );
+  const xRange: [number, number] = [xInset, width - xInset];
+
   let xScale: ChartScale;
   if (xDomain && isFiniteDomain(xDomain) && !isCategoricalX) {
     // Explicit domain is authoritative (no .nice()) — enables a stable
@@ -126,11 +140,11 @@ export function computeLayout({
     // only when finite; a NaN/Infinity domain would collapse the scale.
     // A linear scale cannot place category strings: bars then draw nothing,
     // and other marks get no x position.
-    xScale = scaleLinear().domain(xDomain).range([0, width]);
+    xScale = scaleLinear().domain(xDomain).range(xRange);
   } else if (isNumericX) {
     // NaN passes `typeof === 'number'`, so derive the extent defensively.
     const [lo, hi] = finiteExtent(xValues as number[]);
-    xScale = scaleLinear().domain([lo, hi]).range([0, width]).nice();
+    xScale = scaleLinear().domain([lo, hi]).range(xRange).nice();
   } else {
     xScale = scaleBand<string>()
       .domain(xValues.map(String))

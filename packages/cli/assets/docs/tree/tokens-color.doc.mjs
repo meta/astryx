@@ -140,8 +140,8 @@ export const docs = {
             ],
             [
               "--color-text-secondary",
-              "#4E606F",
-              "#AAAFB5"
+              "#445564",
+              "#B0B5BB"
             ],
             [
               "--color-text-disabled",
