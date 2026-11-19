@@ -219,8 +219,25 @@ export const docs = {
         default: 'var(--spacing-2)',
         private: true,
       },
+      {
+        name: '--_switch-thumb-width',
+        description:
+          "Thumb width; set by width on the switch-thumb target. The thumb's rest under a finger reads it",
+        default: '14px or 16px off, 16px or 20px on, by size',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-height',
+        description: 'Thumb height; set by height on the switch-thumb target',
+        default: '14px or 16px off, 16px or 20px on, by size',
+        private: true,
+      },
     ],
-    derived: [{property: 'gap', vars: ['--_switch-field-gap'], replaces: true}],
+    derived: [
+      {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+      {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+      {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
+    ],
   },
   usage: {
     accessibility: [
@@ -414,8 +431,25 @@ export const docsZh = {
         default: 'var(--spacing-2)',
         private: true,
       },
+      {
+        name: '--_switch-thumb-width',
+        description:
+          '滑块宽度；由 switch-thumb 目标上的 width 设置。触摸时滑块的停靠位置读取它',
+        default: '按尺寸：关闭时 14px 或 16px，开启时 16px 或 20px',
+        private: true,
+      },
+      {
+        name: '--_switch-thumb-height',
+        description: '滑块高度；由 switch-thumb 目标上的 height 设置',
+        default: '按尺寸：关闭时 14px 或 16px，开启时 16px 或 20px',
+        private: true,
+      },
     ],
-    derived: [{property: 'gap', vars: ['--_switch-field-gap'], replaces: true}],
+    derived: [
+      {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+      {property: 'width', vars: ['--_switch-thumb-width'], replaces: true},
+      {property: 'height', vars: ['--_switch-thumb-height'], replaces: true},
+    ],
   },
   usage: {
     description:

@@ -82,6 +82,7 @@
 
 import {defineTheme} from '@astryxdesign/core/theme';
 // import {palette} from './palette.generated';
+// import {themePalette} from '@astryxdesign/core/palette';
 // import {dracula} from '@astryxdesign/core/theme/syntax';
 // import {neutralTheme} from '@astryxdesign/theme-neutral';
 
@@ -148,6 +149,14 @@ export const myTheme = defineTheme({
    * default.
    */
   // color: {accent: '#0064E0', neutralStyle: 'cool', contrast: 'standard'},
+
+  /**
+   * Or take the color tokens from a few seeds: `themePalette()` from
+   * `@astryxdesign/core/palette` maps them as the theme editor maps its color
+   * settings, and explicit `tokens` still win, token by token. Name the
+   * recipe: a palette with none runs the first one, `astryx-oklch-v1`.
+   */
+  // palette: themePalette({accent: '#0064E0', recipe: 'astryx-oklch-v2'}),
 
   /**
    * Type scale and the three font roles.

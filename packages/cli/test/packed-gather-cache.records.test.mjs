@@ -35,7 +35,6 @@ import {
   readKept,
   templatesEntry,
   templatesEntries,
-  allInodes,
   expectWarmHit,
   maskCacheCount,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
@@ -96,6 +95,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "the lookup commands' not-found hint's name summaries",
     );
     expect(plain).toContain("the CLI's own docs tree");
+    expect(plain).toContain(
+      "what template reads from a template's source to name the components it uses",
+    );
     expect(plain).toContain(
       "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
     );
@@ -403,9 +405,9 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         );
         return answered;
       });
+      const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
+      expect(warm.map(answer)).toEqual(fresh);
       if (hasModuleHooks) {
-        const warm = expectWarmHit(tmp, asks, {cwd: bare, json: false});
-        expect(warm.map(answer)).toEqual(fresh);
         expect(templatesEntries(tmp).size).toBe(1);
         // Besides template discovery: the stored docs' parses the recorded
         // runs keep, and the summaries any lookup keeps once the folder
@@ -419,7 +421,17 @@ Module._resolveFilename = function (request, parent, isMain, options) {
           'template discovery',
         ]);
       } else {
-        expect(allInodes(tmp).size).toBe(0);
+        // File-stamped summaries do not need module hooks. The gathers and
+        // stored doc parses still need a recorded run and keep nothing here.
+        expect(entries(tmp).size).toBe(0);
+        expect(templatesEntries(tmp).size).toBe(0);
+        expect(derivedEntries(tmp)).toEqual([]);
+        expect(keptKinds(tmp)).toEqual([
+          'summary core-component-views',
+          'summary core-hook-keywords',
+          'summary hint-names',
+          'summary stored-component-list-check',
+        ]);
       }
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
