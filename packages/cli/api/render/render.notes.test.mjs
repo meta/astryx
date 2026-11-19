@@ -112,7 +112,7 @@ describe('a rendered file describes itself', () => {
     expect(note).toContain('Page: src/report.tsx');
     expect(note).toContain('Carried files (2): report.tsx, sections/Kpi.tsx');
     expect(note).toMatch(/Rendered with: @astryxdesign\/core \d+\.\d+\.\d+\S*, react \d/);
-    expect(note).toContain(`${run} experimental export --reverse report.html`);
+    expect(note).toContain(`${run} experimental import report.html`);
     expect(note).toContain('This writes report-restored/report.tsx and the files it imports');
     expect(note).toContain(`${run} experimental export report-restored/report.tsx --out report.html`);
     expect(note).toMatch(/npx @astryxdesign\/cli upgrade --from \S+ --path report-restored --apply/);
@@ -153,7 +153,7 @@ describe('a rendered file describes itself', () => {
     const start = html.indexOf(`<script type="${SOURCE_TYPE}"`);
     const after = html.slice(html.indexOf('</script>', start) + '</script>'.length);
     expect(after.startsWith(
-      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental export --reverse report.html -->\n<script>`,
+      `\n<!-- Astryx render: the block above is the source of the page (render format 1), as JSON; each file is base64 with its SHA-256. Get it back: npx @astryxdesign/cli@${cliVersion()} experimental import report.html -->\n<script>`,
     )).toBe(true);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
   });
@@ -318,7 +318,7 @@ describe('render --reverse says what changed after the render', () => {
     const error = await errorOf(() => render('future.html', {cwd: dir, reverse: true}));
     expect(error?.code).toBe('ERR_RENDER_NEWER_FORMAT');
     expect(error?.message).toContain(`render format ${NEWER}, written by @astryxdesign/cli 9.1.0`);
-    expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental export --reverse future.html');
+    expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental import future.html');
     expect(fs.existsSync(path.join(dir, 'future-restored'))).toBe(false);
   });
 
@@ -339,7 +339,7 @@ describe('render --reverse says what changed after the render', () => {
     put('unnamed.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: NEWER, entry: 'report.tsx'})}</script>`));
     const unnamed = await errorOf(() => render('unnamed.html', {cwd: dir, reverse: true}));
     expect(unnamed?.code).toBe('ERR_RENDER_NEWER_FORMAT');
-    expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental export --reverse unnamed.html');
+    expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental import unnamed.html');
     put('crafted-gen.html', html.replace(`content="Astryx ${cliVersion()}"`, 'content="Astryx 1.0.0; touch pwned"').replace(/"cli":"[^"]*",/, ''));
     const result = /** @type {any} */ (await render('crafted-gen.html', {cwd: dir, reverse: true, out: 'crafted-gen-back/report.tsx'}));
     expect(result.data).not.toHaveProperty('renderedBy');
@@ -450,7 +450,7 @@ export default function Page() {
     expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
     expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
   });
-  it('says render format 2 only for a file that carries a module kind earlier CLIs refuse', async () => {
+  it('says render format 2 or 3 only for a file that carries what earlier CLIs cannot read', async () => {
     put('formats/lib/one.cjs', "exports.one = 'from a cjs module';\n");
     put('formats/page.tsx', "import {one} from './lib/one.cjs';\nexport default function Page() {\n  return <p>{one}</p>;\n}\n");
     await render('formats/page.tsx', {cwd: dir, out: 'formats.html'});
@@ -460,6 +460,18 @@ export default function Page() {
     // The page reads in this CLI as any other.
     const back = /** @type {any} */ (await render('formats.html', {cwd: dir, reverse: true, out: 'formats-back/page.tsx'}));
     expect(back.data).toMatchObject({exact: true, format: 2});
+    // A module reached by the JavaScript name of its TypeScript file says
+    // format 3, which format 1 and 2 readers decline by name.
+    put('formats-js/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-js/page.tsx', "import {rows} from './lib/rows.js';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    await render('formats-js/page.tsx', {cwd: dir, out: 'formats-js.html'});
+    const three = read('formats-js.html');
+    expect(readSourceBlock(three)).toMatchObject({found: true, source: {version: 3}});
+    // An extensionless import of the same file stays format 1.
+    put('formats-plain/lib/rows.ts', "export const rows = ['North'];\n");
+    put('formats-plain/page.tsx', "import {rows} from './lib/rows';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    await render('formats-plain/page.tsx', {cwd: dir, out: 'formats-plain.html'});
+    expect(readSourceBlock(read('formats-plain.html'))).toMatchObject({found: true, source: {version: 1}});
     // A file without such a module stays format 1, which every earlier CLI opens.
     const one = read('report.html');
     expect(readSourceBlock(one)).toMatchObject({found: true, source: {version: 1}});

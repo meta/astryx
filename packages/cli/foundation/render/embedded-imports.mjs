@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {babelParse as parse, postcss} from '../runtime/lazy-dependencies.mjs';
 import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import {builtinModules} from 'node:module';
-import {matchPath, pathsFor} from './ts-paths.mjs';
+import {matchPath, pathsFor, typeScriptSourcesOf} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
@@ -126,15 +126,16 @@ export function moduleImports(source, file) {
 }
 
 /**
- * Relative asset paths in a piece of text: a `./`/`../` path to an image or
- * font, bare or inside `url(...)`.
+ * Asset paths in a piece of text: a `./`/`../` path, or a path from the
+ * site's root (`/pics/a.png`, served from `public/`), to an image or font,
+ * bare or inside `url(...)`.
  * @param {string} text
  * @returns {string[]}
  */
 export function assetRefsIn(text) {
   /** @type {string[]} */
   const out = [];
-  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+)/g)) {
+  for (const m of text.matchAll(/(?:^|url\(\s*['"]?)(\.\.?\/[^'")\s]+|\/(?!\/)[^'")\s]+)/g)) {
     const ref = m[1].split(/[?#]/)[0];
     if (isAssetPath(ref)) out.push(ref);
   }
@@ -274,38 +275,55 @@ export function receivingAliases(file) {
  *   page), so it goes where the page's layout puts it.
  * @property {Set<string>} aliased - Absolute paths a receiving-project alias
  *   import names for it, so it also goes there.
+ * @property {Map<string, Set<string>>} [via] - For each path in `aliased`,
+ *   the alias imports that name it there.
+ * @property {Map<string, Set<string>>} [by] - For each of those alias
+ *   imports, the tree paths of the files that make it.
  * @property {Set<string>} unaliased - Alias imports that name it where no
  *   receiving-project alias does: the render recorded the file each named,
  *   so it goes where the page's layout puts it, and the page needs the alias.
  */
 
 /**
+ * The tree paths a relative import may name, in the order a reverse resolves
+ * it: the path as written, then the TypeScript source a `.js`-family name
+ * stands for (`fmt.js` for fmt.ts), then with each extension an
+ * extensionless import stands for, then as its folder's index file with each.
+ * @param {string} spec a tree path, `/`-separated
+ * @returns {string[]}
+ */
+export function resolutionCandidates(spec) {
+  return [
+    spec,
+    ...typeScriptSourcesOf(spec),
+    ...RESOLVE_EXTENSIONS.map(x => spec + x),
+    ...RESOLVE_EXTENSIONS.map(x => `${spec}/index${x}`),
+  ];
+}
+
+/**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown, publicDir?: unknown, reused?: Set<string>}} [options]
  *   the receiving project's path aliases (see receivingAliases), and the
  *   alias imports the render recorded (an untrusted record: only an entry
- *   that names a carried file counts)
+ *   that names a carried file counts; without a record, each such import
+ *   names the one carried file its path ends with), and the absolute paths
+ *   whose project file the page uses as it is: a file an alias leads to
+ *   there is reached, but what it imports is not followed from it
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
-export function reachableFiles(files, {aliases = [], recorded} = {}) {
+export function reachableFiles(files, {aliases = [], recorded, publicDir, reused} = {}) {
   const byPath = new Map(files.map(f => [f.path, f]));
   /** @type {Map<string, Reach>} */
   const reached = new Map();
   /** @type {Set<string>} */
   const missing = new Set();
   /** @param {string} candidate tree path, `/`-separated */
-  const resolveIn = candidate => {
-    if (byPath.has(candidate)) return candidate;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(candidate + ext)) return candidate + ext;
-    for (const ext of RESOLVE_EXTENSIONS)
-      if (byPath.has(`${candidate}/index${ext}`))
-        return `${candidate}/index${ext}`;
-    return null;
-  };
+  const resolveIn = candidate =>
+    resolutionCandidates(candidate).find(p => byPath.has(p)) ?? null;
   /**
    * The one tree file an alias import names: the file whose path ends with
    * the import's rest (`@/components/Header` -> `.../components/Header.tsx`).
@@ -315,11 +333,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     /** @type {{path: string, tail: string}[]} */
     const hits = [];
     for (const p of byPath.keys()) {
-      for (const tail of [
-        rest,
-        ...RESOLVE_EXTENSIONS.map(e => rest + e),
-        ...RESOLVE_EXTENSIONS.map(e => `${rest}/index${e}`),
-      ]) {
+      for (const tail of resolutionCandidates(rest)) {
         if (p === tail || p.endsWith(`/${tail}`)) {
           hits.push({path: p, tail});
           break;
@@ -327,6 +341,15 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
       }
     }
     return hits.length === 1 ? hits[0] : null;
+  };
+  /** @param {string} spec an import only an alias resolves */
+  const derivedTarget = spec => {
+    const segments = spec.split('/');
+    for (let drop = 1; drop < segments.length; drop++) {
+      const hit = bySuffix(segments.slice(drop).join('/'));
+      if (hit) return hit.path;
+    }
+    return undefined;
   };
   /** @param {string} p */
   const reach = p => {
@@ -338,11 +361,51 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
     }
     return {r, fresh};
   };
+  /**
+   * Where a path from the site's root lies in the tree: under the `public/`
+   * folder the render recorded reading, else the nearest one at or above the
+   * page's folder. Null when there is none, or when the path leaves it.
+   * @param {string} ref
+   */
+  const publicPath = ref => {
+    /** @param {string} dir a tree folder holding `public/` files */
+    const under = dir => {
+      const joined = path.posix.normalize(`${dir}/${ref.slice(1)}`);
+      return joined.startsWith(`${dir}/`) ? joined : null;
+    };
+    const holds = (/** @type {string} */ dir) => [...byPath.keys()].some(p => p.startsWith(`${dir}/`));
+    // The public/ the render read, as it recorded it (an untrusted record:
+    // only a plain tree path that holds carried files counts).
+    if (
+      typeof publicDir === 'string' &&
+      publicDir !== '' &&
+      !publicDir.startsWith('/') &&
+      path.posix.normalize(publicDir) === publicDir &&
+      !climbsOut(publicDir) &&
+      holds(publicDir)
+    )
+      return under(publicDir);
+    // A file without the record: the nearest public/ above the page.
+    const page = files[0]?.path ?? '';
+    for (let d = path.posix.dirname(page); ; d = path.posix.dirname(d)) {
+      const dir = d === '.' ? 'public' : `${d}/public`;
+      if (holds(dir)) return under(dir);
+      if (d === '.' || d === '/' || d === '') return null;
+    }
+  };
+
   /** @type {string[]} */
   const queue = [];
+  const queued = new Set();
+  /** @param {string} p */
+  const follow = p => {
+    if (queued.has(p)) return;
+    queued.add(p);
+    queue.push(p);
+  };
   if (files.length > 0) {
     reach(files[0].path).r.relative = true;
-    queue.push(files[0].path);
+    follow(files[0].path);
   }
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
@@ -381,9 +444,14 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
-      const joined = path.posix.normalize(
-        path.posix.join(path.posix.dirname(current), ref),
-      );
+      const joined = ref.startsWith('/')
+        ? publicPath(ref)
+        : path.posix.normalize(
+            path.posix.join(path.posix.dirname(current), ref),
+          );
+      // A path from the site's root names nothing when the tree holds no
+      // `public/` on the page's path: the render had none to read it from.
+      if (joined === null) continue;
       if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);
@@ -402,9 +470,8 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           missing.add(joined);
           continue;
         }
-        const {r, fresh} = reach(target);
-        r.relative = true;
-        if (fresh) queue.push(target);
+        reach(target).r.relative = true;
+        follow(target);
         continue;
       }
       const match = matchPath(aliases, bare);
@@ -471,26 +538,40 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
           undefined,
         );
         if (chosen) {
-          const {r, fresh} = reach(chosen.hit.path);
+          const {r} = reach(chosen.hit.path);
           r.aliased.add(chosen.abs);
-          if (fresh) queue.push(chosen.hit.path);
+          r.via ??= new Map();
+          const names = r.via.get(chosen.abs) ?? new Set();
+          names.add(bare);
+          r.via.set(chosen.abs, names);
+          r.by ??= new Map();
+          const importers = r.by.get(bare) ?? new Set();
+          importers.add(current);
+          r.by.set(bare, importers);
+          if (!reused?.has(chosen.abs)) follow(chosen.hit.path);
         }
         continue;
       }
       // No alias here names it, but the render recorded the carried file it
-      // named: that file comes back in the page's own layout.
-      const sent =
+      // named, or the file has no record and one carried file fits: that
+      // file comes back in the page's own layout.
+      const listed =
         aliasOnly(bare) &&
         recorded &&
         typeof recorded === 'object' &&
         Object.hasOwn(recorded, bare)
           ? /** @type {Record<string, unknown>} */ (recorded)[bare]
           : undefined;
+      // A file from a CLI that recorded no alias imports: the one carried
+      // file whose path ends with the import's longest tail after its first
+      // segment (`@/components/Header` -> `.../components/Header.tsx`).
+      const sent =
+        typeof listed === 'string' ? listed : aliasOnly(bare) && !recorded ? derivedTarget(bare) : undefined;
       if (typeof sent === 'string' && byPath.has(sent)) {
-        const {r, fresh} = reach(sent);
+        const {r} = reach(sent);
         r.relative = true;
         r.unaliased.add(bare);
-        if (fresh) queue.push(sent);
+        follow(sent);
       }
     }
   }

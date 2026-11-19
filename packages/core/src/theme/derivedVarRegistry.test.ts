@@ -86,7 +86,6 @@ const STRUCTURAL_VARS = new Set([
   // sticky-columns plugin: opaque backdrop (overridable) + the row overlay it
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
-  '--table-row-overlay',
   // The width a cell's row divider draws (0 on the last row), which a pinned
   // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
   // Private runtime plumbing, never authored by a theme.
@@ -287,6 +286,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   Button: 'button',
   Card: 'card',
   Chat: 'chat-composer',
+  CheckboxInput: 'checkbox-input',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -300,6 +300,8 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
+  Switch: 'switch-field',
+  Table: 'table-row',
   TextArea: 'text-area',
 };
 
@@ -341,6 +343,14 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // gives its block padding only to a direct first or last Table.
   '--_container-bleed-block-start',
   '--_container-bleed-block-end',
+  // Badge FR5 and Button FR2: a primary or destructive Button passes its fill
+  // pair to a neutral Badge in its content, which paints the pair inverted.
+  '--_button-fill',
+  '--_button-on-fill',
+  // spec:AST-025 FR22: an adopter of the shared scroll-edge fade sets the
+  // clear band at the edge and the fade length on its viewport.
+  '--_scroll-fade-inset',
+  '--_scroll-fade-length',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

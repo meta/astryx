@@ -320,9 +320,13 @@ const elevationStyles = stylex.create({
  * Focus outline is shared across variants for consistent keyboard affordance.
  */
 const variants = stylex.create({
+  // Primary and destructive pass their colour pair to their content. A neutral
+  // Badge there paints the pair inverted, so it keeps the pair's contrast.
   primary: {
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],
+    '--_button-fill': colorVars['--color-accent'],
+    '--_button-on-fill': colorVars['--color-on-accent'],
   },
   secondary: {
     backgroundColor: colorVars['--color-neutral'],
@@ -335,6 +339,8 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    '--_button-fill': colorVars['--color-error'],
+    '--_button-on-fill': colorVars['--color-on-error'],
     // Forced colors replace the fill with ButtonFace; the solid-variant edge
     // (`forcedColorsEdge`) keeps the destructive fill's shape visible
     // (architecture:theme-tokens INV11), in this color. A border, not an

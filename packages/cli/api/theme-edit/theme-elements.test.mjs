@@ -102,20 +102,17 @@ describe('an element named in a part', () => {
     const icons = await top("make the buttons' icons red", 'e');
     expect(icons.commands.every(x => / --on button$/.test(x))).toBe(true);
     expect(icons.commands.join(' ')).toMatch(/--color-icon-primary/);
-    // (A toast has no close button of its own: any write would reach every
-    // button, so nothing is written, and the answer says why.)
+    // A toast's close button is a part of its own: written there, never on
+    // every button.
     const close = await themeEditHow('make the close button of toasts red', {
       cwd,
       theme: 'e',
     });
-    expect(
-      (close.data.results ?? [])
-        .flatMap((/** @type {any} */ r) => r.commands)
-        .filter((/** @type {string} */ c) => / editor set /.test(c)),
-    ).toEqual([]);
-    expect(JSON.stringify(close.data.results)).toMatch(
-      /cannot keep toast apart.*nothing is written/,
-    );
+    const closeWrites = (close.data.results ?? [])
+      .flatMap((/** @type {any} */ r) => r.commands)
+      .filter((/** @type {string} */ c) => / editor set /.test(c));
+    expect(closeWrites.length).toBeGreaterThan(0);
+    expect(closeWrites.every(c => / --on toast-close$/.test(c))).toBe(true);
     const today = await themeEditHow(
       'make the today date in the date picker bold',
       {cwd, theme: 'e'},

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {spawnSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,12 @@ import {
   JOB_LIMIT_SECONDS,
   LEG_BUDGET_SECONDS,
   MAIN_WARN_MINUTES,
+  MAX_MIN_NODE_LEGS,
+  MIN_NODE_DURATIONS,
+  MIN_NODE_LEG_BUDGET_SECONDS,
+  MIN_NODE_SETUP_SECONDS,
+  MIN_NODE_TARGET_MINUTES,
+  MIN_NODE_TEST_SECONDS_PER_WALL_SECOND,
   MAX_MAIN_NODE_LEGS,
   MAX_NODE_LEGS,
   SLOW_RUNNER,
@@ -24,7 +30,10 @@ import {
   nodeFileCost,
   nodeLegFiles,
   mainNearLimitNotice,
+  minNodeLegFiles,
+  minNodeLegMinutes,
   overBudgetNotice,
+  planMinNodeLegs,
   planMainNodeLegs,
   projectedLegMinutes,
   planNodeLegs,
@@ -33,6 +42,7 @@ import {
   recordProblem,
   stepOutputs,
 } from './vitest-node-legs.mjs';
+import {splitByDuration} from './lib/duration-split.mjs';
 import {partitionByDuration} from './vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -284,6 +294,69 @@ describe('the Node leg plan', () => {
     const cost = nodeFileCost(guards, seconds);
     const share = guards.reduce((sum, file) => sum + cost(file), 0);
     expect(share / plan.total).toBeGreaterThan(0.5);
+  });
+});
+
+describe("the CLI's legs on its minimum Node", () => {
+  const files = minNodeLegFiles(ROOT);
+  const seconds = readDurations(MIN_NODE_DURATIONS);
+
+  it("collects only the CLI package's test files, as `pnpm -F @astryxdesign/cli test` does", () => {
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.every(file => file.startsWith('packages/cli/'))).toBe(true);
+    expect(files).toContain(
+      'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs',
+    );
+  });
+
+  it('derives the budget from the 20-minute target and the pace measured on Node 22.13', () => {
+    expect(MIN_NODE_LEG_BUDGET_SECONDS).toBe(
+      (MIN_NODE_TARGET_MINUTES * 60 - MIN_NODE_SETUP_SECONDS) *
+        MIN_NODE_TEST_SECONDS_PER_WALL_SECOND,
+    );
+    // Run 44258944787's four legs: 2,704, 2,279, 3,363 and 3,461 recorded
+    // seconds took 18.8, 15.7, 22.7 and 23.3 minutes of their test step, about
+    // 40 s after their job started. The projection stays above each, by at
+    // most three minutes.
+    for (const [seconds, minutes] of [
+      [2704, 18.8],
+      [2279, 15.7],
+      [3363, 22.7],
+      [3461, 23.3],
+    ]) {
+      expect(minNodeLegMinutes(seconds)).toBeGreaterThan(minutes + 0.6);
+      expect(minNodeLegMinutes(seconds)).toBeLessThan(minutes + 3);
+    }
+  });
+
+  it('plans the fewest legs that keep the slowest at or under the target on the repository record', () => {
+    const plan = planMinNodeLegs(files, seconds);
+    expect(plan.fits).toBe(true);
+    expect(plan.minutes).toBeLessThanOrEqual(MIN_NODE_TARGET_MINUTES);
+    if (plan.legs > 1) {
+      const fewer = splitByDuration(
+        files,
+        plan.legs - 1,
+        nodeFileCost(files, seconds),
+      ).map(leg =>
+        leg.reduce((sum, file) => sum + nodeFileCost(files, seconds)(file), 0),
+      );
+      expect(Math.max(...fewer)).toBeGreaterThan(MIN_NODE_LEG_BUDGET_SECONDS);
+    }
+  });
+
+  it('runs the most legs and says why, never stopping, when the suite outgrows the target', () => {
+    const slow = Object.fromEntries(files.map(file => [file, 100]));
+    const plan = planMinNodeLegs(files, slow);
+    expect(plan.legs).toBe(MAX_MIN_NODE_LEGS);
+    expect(plan.fits).toBe(false);
+    expect(plan.reason).toContain('past the 20-minute target');
+    const out = execFileSync(
+      process.execPath,
+      [path.join(ROOT, 'scripts/vitest-node-legs.mjs'), 'plan', '--min-node'],
+      {cwd: ROOT, encoding: 'utf8'},
+    );
+    expect(out).toMatch(/"shards":"\[1(,\d+)*\]"/);
   });
 });
 

@@ -122,6 +122,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon new-set',
   'experimental icon new-definition',
   'experimental export',
+  'experimental import',
   // The groups answer --json with their own help, as the root does.
   'experimental theme',
   'experimental theme editor',
@@ -1039,7 +1040,13 @@ export async function createProgram({argv} = {}) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);
-      mod[cmd.register](program, {jsonSupported: JSON_SUPPORTED, version: pkg.version});
+      // A run of one command passes its arguments, so a group can load only
+      // the subcommand they name.
+      await mod[cmd.register](program, {
+        jsonSupported: JSON_SUPPORTED,
+        version: pkg.version,
+        argv: loads != null ? argv : undefined,
+      });
     } catch (e) {
       // Command fails to load but CLI still works
       const reason = /** @type {any} */ (e).message;

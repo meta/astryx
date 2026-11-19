@@ -96,6 +96,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     );
     expect(plain).toContain("the CLI's own docs tree");
     expect(plain).toContain(
+      "what template reads from a template's source to name the components it uses",
+    );
+    expect(plain).toContain(
       "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
     );
     expect(plain).toContain(
@@ -105,7 +108,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
     );
     expect(plain).toContain(
-      "what theme build finds when it checks a theme's pseudo-class keys and token names",
+      "what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written",
     );
     expect(plain).toContain(
       "npm's list of the files an integration package packs",

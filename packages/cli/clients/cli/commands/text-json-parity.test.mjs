@@ -534,6 +534,27 @@ const CASES = [
       );
     },
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
+    textBlockAllowlist: [
+      "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
+    ],
+  },
+  {
+    // A page that names an https image: the text names the images not
+    // fetched under the JSON's own key. `.invalid` never resolves. It shares
+    // the folder of the case above, which links React and Core.
+    name: 'experimental export',
+    args: ['experimental', 'export', 'remote.jsx'],
+    cwd: '__TMP__',
+    setup: dir => {
+      fs.writeFileSync(
+        path.join(dir, 'remote.jsx'),
+        'export default function Page() { return <img src="https://images.example.invalid/a.png" alt="" />; }\n',
+      );
+    },
+    jsonFieldAllowlist: [
+      'warnings — listed under Warnings when present',
+      "code — each warning's kind; the text prints its message",
+    ],
   },
   {
     // The --reverse projection (same command, same folder as the case above).
@@ -549,6 +570,39 @@ const CASES = [
     ],
     cwd: '__TMP__',
     // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
+  },
+  {
+    // The way back as its own command: the --reverse projection above.
+    name: 'experimental import',
+    args: [
+      'experimental',
+      'import',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
+    cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
         'export default function Page() { return <h1>Hello</h1>; }\n',

@@ -69,6 +69,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
@@ -78,6 +79,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
@@ -87,6 +89,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
 });

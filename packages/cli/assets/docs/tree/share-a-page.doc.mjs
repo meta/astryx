@@ -127,7 +127,7 @@ export const docs = {
           style: 'ordered',
           items: [
             'Get the current file, such as the latest version of the artifact: the shared copy can be newer than yours.',
-            'Turn it back into source. `astryx experimental export --reverse page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
+            'Turn it back into source. `astryx experimental import page.html` writes the page and every local file it imports into a new folder beside the file: `page-restored/`, or `page-restored-2/` when that folder exists. The command prints the folder it wrote.',
             'Edit the page in that folder, such as `page-restored/page.tsx`.',
             'Render it over the old file: `astryx experimental export page-restored/page.tsx --out page.html`. The command replaces a file only when a render wrote it.',
             'Share the new file, or upload it as a new version of the same artifact.',
@@ -135,7 +135,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Run each command from the folder that holds the file: a relative `--out` stays inside the folder you run it from, and `--reverse` writes only there. An absolute `--out` can name any folder. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
+          text: 'Run each command from the folder that holds the file: a relative `--out` stays inside the folder you run it from, and `experimental import` writes only there. An absolute `--out` can name any folder. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
         },
       ],
     },
