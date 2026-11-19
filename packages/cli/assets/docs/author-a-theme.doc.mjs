@@ -43,7 +43,7 @@ export const docs = {
           ['color (existing themes)', '--color-accent, --color-background-*, --color-text-*, --color-border, etc.', 'Supported broad scale: accent? (hex or [light, dark] tuple), neutralStyle? (warm|cool|neutral), contrast? (standard|high). Use theme palette generate for new complete palettes.'],
           ['typography.scale', '--text-heading-*-size/weight/leading, --text-body-size/weight/leading', 'base (px), ratio'],
           ['typography.body/heading/code', '--font-family-body, --font-family-heading, --font-family-code', 'family, fallbacks?, url?, weight?'],
-          ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-chat', 'base (px), multiplier (0–2)'],
+          ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page', 'base (px), multiplier (0–2)'],
           ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (tempo also times the touch springs)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
@@ -76,9 +76,9 @@ export const docs = {
       content: [
         {type: 'prose', text: 'The `components` field in defineTheme uses semantic component keys and style keys, not raw CSS selectors. Use `base` for all instances, `variant:value` or `stateName` for specific props/states, and let the theme pipeline choose the underlying selector. For raw external CSS escape hatches, prefer the data-attribute selector surface documented in {@link generic:styling-advanced}.'},
         {type: 'code', lang: 'tsx', label: 'Component overrides with standard CSS', code: "components: {\n  card: {\n    base: { borderRadius: '20px', padding: '24px' },\n  },\n  button: {\n    base: {\n      borderRadius: '9999px',\n      textTransform: 'uppercase',\n      '--button-focus-offset': '3px',\n    },\n    'variant:ghost': { borderWidth: '2px', borderStyle: 'solid' },\n  },\n}"},
-        {type: 'prose', text: "Run `{@command theme targets}` for every themeable key in the system (`{@command theme targets <Name>}` to scope it, `--json` to lint a theme against it), and `{@command component <Name>}` for one component's theming targets, public CSS variables, and which standard CSS properties are supported."},
+        {type: 'prose', text: "Run `{@command theme targets}` for every themeable key in the system (`{@command theme targets <Name>}` to scope it, `--json` to lint a theme against it), and `{@command component <Name> --detail full}` for one component's theming targets, public CSS variables, and which standard CSS properties are supported."},
         {type: 'list', style: 'do', items: ['Write standard CSS properties (borderRadius, padding); the pipeline expands them into internal vars.', 'Set public CSS vars directly when no standard property equivalent exists.']},
-        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name>}`.']},
+        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name> --detail full}`.']},
       ],
     },
     {

@@ -481,7 +481,9 @@ export function useOverflow(
  * them. `onMeasure` runs after each measurement, in the same render as its
  * result, so a host can mark what that measurement covered. `remeasure`
  * measures again with the lists of the current commit, for a change that
- * resizes nothing.
+ * resizes nothing. With `gapToken`, the CSS value of the host's gap, the hook
+ * ignores `gap` and reads the gap the browser renders on the measurement copy;
+ * a new token measures again.
  */
 export function useOverflowInternal(
   itemCount: number,
@@ -490,10 +492,12 @@ export function useOverflowInternal(
     tracksRows,
     tracksInlineBounds = false,
     onMeasure,
+    gapToken,
   }: {
     tracksRows: boolean;
     tracksInlineBounds?: boolean;
     onMeasure?: () => void;
+    gapToken?: string;
   },
 ): UseOverflowReturn & {
   inlineBounds: OverflowInlineBounds;
@@ -586,6 +590,12 @@ export function useOverflowInternal(
         }
       }
       recordBorderBox(measuredSizes, measure);
+      // A spacing token follows the theme's scale and the root font size, so
+      // its pixel value is known only after layout.
+      const gapPx =
+        gapToken != null
+          ? Number.parseFloat(getComputedStyle(measure).columnGap) || 0
+          : gap;
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
@@ -667,7 +677,7 @@ export function useOverflowInternal(
 
       const {visibleCount: nextVisible, rows: nextRows} = computeOverflow({
         widths,
-        gap,
+        gap: gapPx,
         availableWidth,
         indicatorWidth: fitIndicatorWidth,
         minVisibleItems,
@@ -722,7 +732,7 @@ export function useOverflowInternal(
           canChangeListHeight(
             renderedSet(appliedRef.current.visibleCount),
             renderedSet(nextVisible),
-            gap,
+            gapPx,
             availableWidth,
             maxRows ?? 1,
           )
@@ -736,6 +746,7 @@ export function useOverflowInternal(
     [
       itemCount,
       gap,
+      gapToken,
       minVisibleItems,
       maxVisibleItems,
       maxRows,

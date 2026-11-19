@@ -23,7 +23,10 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {reducedMotionKeys} from '../motion/reducedMotion.stylex';
-import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {
+  DEFAULT_COMPACT_DEFINITION,
+  DEFAULT_WIDTH_BREAKPOINTS,
+} from '../theme/themeAdaptations';
 import {Theme, defineTheme} from '../theme';
 import {
   COMPACT_QUERY,
@@ -275,6 +278,13 @@ describe('touch presentation', () => {
       reducedMotionKeys.instant,
     ]);
     const references = new Set<string>([...pointerKeys, touchKeys.compact]);
+    // AppShell's standard width points are width-only queries, not the
+    // compact size; only AppShell writes them.
+    const appShellWidthPointKeys = new Set(
+      Object.values(DEFAULT_WIDTH_BREAKPOINTS).map(
+        width => `@media not all and (min-width: ${width}px)`,
+      ),
+    );
     const lowered = [...references].map(reference => reference.toLowerCase());
     const root = path.resolve(__dirname, '..');
     const drifted: string[] = [];
@@ -291,8 +301,12 @@ describe('touch presentation', () => {
           !/\.(test|spec|stories)\./.test(entry.name)
         ) {
           const source = fs.readFileSync(full, 'utf8');
+          const isAppShell = entry.name === 'AppShell.tsx';
           for (const match of source.matchAll(/'(@[^'\n]*)'/g)) {
             const key = match[1];
+            if (isAppShell && appShellWidthPointKeys.has(key)) {
+              continue;
+            }
             if (references.has(key)) {
               if (pointerKeys.has(key)) {
                 pointerLiterals++;

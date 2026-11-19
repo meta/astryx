@@ -29,6 +29,7 @@
 import {
   BUILT_FILE_LIMIT,
   BUILT_FILE_MAX_MB,
+  doctorThemeWiring,
   readBuiltPath,
   resolveBuiltPath,
 } from './_adapter.mjs';
@@ -634,6 +635,7 @@ function jsxFindings(text, rel, iconNames) {
  */
 export function scanBuilt(target, packages, {fileLimit} = {}) {
   const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
+  const wiring = doctorThemeWiring(target);
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -729,7 +731,10 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
         for (const name of names) astryxNames.add(name);
       } else if (isIconSpecifier(spec)) {
         for (const name of names) iconNames.add(name);
-      } else if (/\.(?:css|scss|sass|less)$/.test(spec)) {
+      } else if (
+        /\.(?:css|scss|sass|less)$/.test(spec) &&
+        !wiring.has(spec, rel)
+      ) {
         scan.findings.push({
           category: 'Styling',
           file: rel,

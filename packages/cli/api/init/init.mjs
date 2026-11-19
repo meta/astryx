@@ -19,11 +19,17 @@
  * (cli/commands/init.mjs), and the test suite stay unchanged.
  */
 
-import {run} from './run/run.mjs';
+import {parseFeatures, run} from './run/run.mjs';
 import {remove} from './remove/remove.mjs';
 import {user} from './user/user.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {
+  SkillPlaceError,
+  parsePlaces,
+  placeNames,
+} from '../../foundation/agent-docs/skill-places.mjs';
+import {readProjectPlaces, skillProjectRoot} from './_adapter.mjs';
 
 export {getNextSteps, getWorkflowSteps} from './run/run.mjs';
 
@@ -49,6 +55,7 @@ export {getNextSteps, getWorkflowSteps} from './run/run.mjs';
  * @returns {Promise<import('./init.type.mjs').InitRunResponse | import('./init.type.mjs').InitRemoveResponse | import('./init.type.mjs').InitUserResponse>}
  */
 export async function init(options = {}, {cwd = process.cwd()} = {}) {
+  if (options.to !== undefined) return initTo(options, cwd);
   if (options.user) {
     // Its own path: fixed files in the home folder, never the project
     // agent-docs resolution, so it works the same in every folder.
@@ -83,12 +90,67 @@ export async function init(options = {}, {cwd = process.cwd()} = {}) {
     }
     return remove({cwd});
   }
-  if (options.all && options.features) {
+  return run(options, {cwd});
+}
+
+/**
+ * `init --to`: parse the places, refuse what cannot combine with them, and
+ * write each. `--to user` alone is `--user`: the same leaf and receipt.
+ * @param {InitOptions} options
+ * @param {string} cwd
+ * @returns {Promise<import('./init.type.mjs').InitRunResponse | import('./init.type.mjs').InitUserResponse>}
+ */
+async function initTo(options, cwd) {
+  const refused = [
+    options.user ? '--user' : null,
+    options.removeAgents ? '--remove-agents' : null,
+  ].filter(Boolean);
+  if (refused.length > 0) {
     throw new AstryxError(
-      '`--all` and `--features` cannot be used together: `--all` installs every feature, so a feature list is redundant.',
+      `\`--to\` cannot be combined with ${refused.join(', ')}: \`--to user\` is the computer-level skill, and \`--remove-agents\` removes instead of writing.`,
       undefined,
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  return run(options, {cwd});
+  const projectRoot = skillProjectRoot(cwd);
+  let places;
+  try {
+    places = parsePlaces(placeNames(options.to ?? []), {cwd, projectRoot});
+  } catch (err) {
+    if (err instanceof SkillPlaceError) {
+      throw new AstryxError(
+        err.message,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    throw err;
+  }
+  if (places.length === 1 && places[0]?.kind === 'user') {
+    // The computer-level skill alone, as `--user`: nothing in the folder.
+    const refused = [
+      options.features ? '--features' : null,
+      options.all ? '--all' : null,
+      options.agentDocsPath ? '--agent-docs-path' : null,
+      options.agent ? '--agent' : null,
+    ].filter(Boolean);
+    if (refused.length > 0) {
+      throw new AstryxError(
+        `\`--to user\` cannot be combined with ${refused.join(', ')}: it writes one skill file for every agent on the computer, linked into the folders agents read, with no features, agents, or path to choose.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    return user({remove: false});
+  }
+  const features = parseFeatures(options) ?? ['agents'];
+  if (!features.includes('agents')) {
+    throw new AstryxError(
+      '`--to` says where the agent docs go, and `--features` leaves out agents: add agents to `--features`, or leave `--to` out.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  const previous = projectRoot ? await readProjectPlaces(projectRoot) : null;
+  return run(options, {cwd, places: {places, projectRoot, previous}});
 }

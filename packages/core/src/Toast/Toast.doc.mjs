@@ -93,7 +93,10 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-toast', visualProps: ['type']}],
+    targets: [
+      {className: 'astryx-toast', visualProps: ['type']},
+      {className: 'astryx-toast-close'},
+    ],
     vars: [
       {
         name: '--_toast-slide-y',
