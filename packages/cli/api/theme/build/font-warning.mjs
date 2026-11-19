@@ -437,6 +437,27 @@ export function expandFontVars(value, lookup, depth = 0) {
 }
 
 /**
+ * The families without each metric fallback face: `<family> Fallback`,
+ * listed after its family. A theme's own `fonts.css` defines such a face
+ * from fonts already on the device (`local()`), so no font service has it
+ * and `theme build` asks an app to load nothing for it. Doctor still asks
+ * for evidence that a stylesheet defines it.
+ * @param {string[]} families
+ * @returns {string[]}
+ */
+export function withoutMetricFallbacks(families) {
+  /** @type {Set<string>} */
+  const named = new Set();
+  return families.filter(family => {
+    const key = family.toLowerCase();
+    const isFallback =
+      key.endsWith(' fallback') && named.has(key.slice(0, -' fallback'.length));
+    named.add(key);
+    return !isFallback;
+  });
+}
+
+/**
  * Collect the font families a resolved theme names but does not load —
  * every `--font-family-*` token plus every component-override `fontFamily`
  * and the families of a `font` shorthand, each `var()` of the theme's own

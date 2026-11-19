@@ -67,6 +67,7 @@ import {
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {fontFaceRules} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -558,9 +559,11 @@ export function baseFontsCss(ctx, data) {
  * Null when the base ships none or the build names none of its families.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
- * With the weights it loads of each family (`weights`, by family; none
- * for a family whose weights it does not say, such as a variable face).
- * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>} | null}
+ * With the weights a font service request loads of each family (`weights`,
+ * by family; none for a family whose weights it does not say, such as a
+ * variable face), and the weight spans its `@font-face` rules load
+ * (`spans`, by family).
+ * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>, spans: Map<string, Array<[number, number]>>, localFaces: Set<string>} | null}
  */
 export function baseFontsSheet(ctx, data) {
   if (!data.like) return null;
@@ -586,11 +589,19 @@ export function baseFontsSheet(ctx, data) {
   } catch {
     return null;
   }
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  const faces = fontFaceRules(text);
+  // The families the sheet loads, each once (a family can have a face per
+  // character subset); with the theme's build at hand, the sheet is
+  // imported only while the build still names one of them.
+  const families = [
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      // A `@font-face` rule names its family itself.
+      ...faces.map(face => face.family).filter(Boolean),
+    ]),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -602,11 +613,16 @@ export function baseFontsSheet(ctx, data) {
     const css = built;
     if (!families.some(f => css.includes(f))) return null;
   }
+  // Remote stylesheets it imports, and remote font files its faces load:
+  // a static page loads neither.
   const remote = [
-    ...text.matchAll(
-      /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
-    ),
-  ].map(m => m[1]);
+    ...[
+      ...text.matchAll(
+        /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
+      ),
+    ].map(m => m[1]),
+    ...faces.flatMap(face => face.remote),
+  ];
   // The weights a font service request names: its axes (`wght`,
   // `ital,wght`, `opsz,wght`) and one tuple of values per face
   // (`Figtree:wght@400;500`, `Fraunces:opsz,wght@9..144,400`), the weight
@@ -627,7 +643,25 @@ export function baseFontsSheet(ctx, data) {
         [...new Set(list)].sort((a, b) => a - b),
       );
   }
-  return {spec: sheet, families, remote, weights};
+  // The weight spans the `@font-face` rules that load a font file give each
+  // family, each span once. A face of fonts already on the device (a metric
+  // fallback) loads nothing.
+  /** @type {Map<string, Array<[number, number]>>} */
+  const spans = new Map();
+  for (const face of faces) {
+    const span = face.span;
+    if (face.isLocalOnly || span == null || !face.family) continue;
+    const list = spans.get(face.family) ?? [];
+    if (!list.some(([from, to]) => from === span[0] && to === span[1]))
+      spans.set(face.family, [...list, span]);
+  }
+  // Families only a face of fonts already on the device names.
+  const localFaces = new Set(
+    faces
+      .filter(face => face.isLocalOnly && face.family)
+      .map(face => face.family),
+  );
+  return {spec: sheet, families, remote, weights, spans, localFaces};
 }
 
 /**
@@ -714,19 +748,9 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaceRules(text).flatMap(face =>
+    face.span == null ? [] : [face.span],
+  );
   return spans.length ? spans : null;
 }
 

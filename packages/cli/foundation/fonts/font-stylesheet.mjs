@@ -112,11 +112,78 @@ export function stylesheetFontFamilies(file, seen = new Set()) {
       if (spec)
         for (const f of importedFontFamilies(spec, path.dirname(file), seen))
           out.add(f);
-    } else if (name === 'font-face')
-      rule.walkDecls(/^font-family$/i, decl => {
-        out.add(fontKey(decl.value));
-      });
+    } else if (name === 'font-face') {
+      const face = fontFaceOf(rule);
+      if (face.family) out.add(fontKey(face.family));
+    }
   });
+  return out;
+}
+
+/**
+ * @typedef {object} FontFace
+ * @property {string} family the family the rule names, unquoted and unescaped
+ * @property {[number, number] | null} span the weights it loads: one weight
+ *   (`400`) as `[400, 400]`, a range (`100 900`, a variable face) as its ends;
+ *   400 when the rule names none; null when its weight cannot be read
+ * @property {string[]} remote the remote files its `src` loads
+ * @property {boolean} isLocalOnly whether it loads only fonts already on the
+ *   device (`local()` sources), as a metric fallback face does
+ */
+
+/**
+ * One `@font-face` rule, read.
+ * @param {import('postcss').AtRule} rule
+ * @returns {FontFace}
+ */
+function fontFaceOf(rule) {
+  let family = '';
+  let weight = '400';
+  let src = '';
+  rule.walkDecls(decl => {
+    const prop = decl.prop.toLowerCase();
+    if (prop === 'font-family') family = decl.value;
+    else if (prop === 'font-weight') weight = decl.value;
+    else if (prop === 'src') src = decl.value;
+  });
+  const nums = weight
+    .trim()
+    .replace(/\bnormal\b/gi, '400')
+    .replace(/\bbold\b/gi, '700')
+    .split(/\s+/)
+    .map(Number);
+  const urls = [...src.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)].map(
+    m => m[1],
+  );
+  return {
+    family: cssUnescape(family.replace(/["']/g, '')).trim(),
+    span:
+      nums.length && nums.every(n => Number.isFinite(n))
+        ? [nums[0], nums[1] ?? nums[0]]
+        : null,
+    remote: urls.filter(url => /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(url)),
+    isLocalOnly: urls.length === 0 && /\blocal\(/i.test(src),
+  };
+}
+
+/**
+ * Each `@font-face` rule of a stylesheet's text, read as
+ * {@link stylesheetFontFamilies} reads a file's.
+ * @param {string} css
+ * @returns {FontFace[]}
+ */
+export function fontFaceRules(css) {
+  /** @type {FontFace[]} */
+  const out = [];
+  try {
+    postcss()
+      .parse(css)
+      .walkAtRules(/^font-face$/i, rule => {
+        out.push(fontFaceOf(rule));
+      });
+  } catch {
+    // A stylesheet that does not parse declares no face.
+  }
   return out;
 }
 

@@ -1030,7 +1030,9 @@ export function fontNotes(ctx, data) {
   // opened from disk cannot load a remote stylesheet. Unless an installed
   // package loads it, the previews and pictures show the next font.
   if (base?.remote.length)
-    for (const family of base.families) {
+    for (const family of base.families.filter(
+      f => base.spans.has(f) || !base.localFaces.has(f),
+    )) {
       if (built && !built.has(family.toLowerCase())) continue;
       if (
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
@@ -1038,7 +1040,7 @@ export function fontNotes(ctx, data) {
         continue;
       const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote file and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
   notes.push(...baseWeightNotes(ctx, data));
@@ -1155,6 +1157,25 @@ export function baseWeightNotes(ctx, data) {
         ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it`
         : '',
     );
+  }
+  // A family the base sheet loads with `@font-face` rules: the weights
+  // inside their spans load; another shows as the nearest span end.
+  for (const [family, spans] of base?.spans ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const used = builtFontWeights(ctx, data.name, family) ?? [];
+    const missing = used.filter(
+      w => !spans.some(([from, to]) => w >= from && w <= to),
+    );
+    if (missing.length) {
+      const s = fontsourceSuggestion(family);
+      notes.push(
+        `${family} is loaded by ${/** @type {{spec: string}} */ (base).spec} at ${spans.map(([from, to]) => (from === to ? `${from}` : `${from}–${to}`)).join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, spans.flat())}`).join(', ')}${s ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it` : ''}`,
+      );
+    }
   }
   for (const {pkg, family, installed} of packages) {
     if (!installed || (built && !built.has(family.toLowerCase()))) continue;
