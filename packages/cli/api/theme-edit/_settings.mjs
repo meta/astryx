@@ -2464,7 +2464,7 @@ export function onlyFits(s) {
  * @param {any} s
  */
 function onlyReads(s) {
-  return typeof s.on === 'string' && onlyMeans(s.on) !== 'group';
+  return onlyMeansFor(s) !== 'group';
 }
 
 /**
