@@ -510,6 +510,34 @@ export const DisabledStreamingNarrow: Story = {
   },
 };
 
+export const NarrowFooterActions: Story = {
+  name: 'Readiness / footer actions on narrow viewport',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'At a mobile viewport, labeled footer actions wider than the footer wrap onto another line inside the composer, and the send action stays inside it. A browser spec checks the geometry at 320px.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <ChatComposer
+      data-testid="narrow-footer-composer"
+      onSubmit={() => {}}
+      placeholder="Ask anything"
+      footerActions={
+        <>
+          <Button label="Research mode" variant="ghost" size="md" />
+          <Button label="Attach files" variant="ghost" size="md" />
+          <Button label="Settings" variant="ghost" size="md" />
+        </>
+      }
+    />
+  ),
+};
+
 /**
  * Browser fixture: "Open dialog" opens a Dialog holding a SegmentedControl,
  * and "Close dialog" unmounts it while it is still open (its key changes).

@@ -2,7 +2,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
-import {parseColor} from '../utils/color';
+import {formatColor, parseColor} from '../utils/color';
 import {resolveThemeToken} from './tokens';
 
 describe('relativeLuminance', () => {
@@ -101,5 +101,30 @@ describe('the stock accent pair', () => {
     const accent = resolveThemeToken(null, '--color-accent', {mode});
     const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
     expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('secondary text on the neutral fill', () => {
+  // An unselected SegmentedControl label and AvatarGroup's overflow count are
+  // secondary text on a translucent --color-neutral fill. The fill lifts the
+  // page under it, so Core's defaults are measured on the composited fill.
+  const pages = [
+    '--color-background-surface',
+    '--color-background-card',
+    '--color-background-body',
+  ] as const;
+  const cases = (['light', 'dark'] as const).flatMap(mode =>
+    pages.map(page => [mode, page] as const),
+  );
+  it.each(cases)('meets 4.5:1 in the %s theme over %s', (mode, page) => {
+    const fill = parseColor(resolveThemeToken(null, '--color-neutral', {mode}));
+    const backdrop = parseColor(resolveThemeToken(null, page, {mode}));
+    if (fill === null || backdrop === null) {
+      throw new Error('Core default colors must parse');
+    }
+    const text = resolveThemeToken(null, '--color-text-secondary', {mode});
+    expect(
+      contrastRatio(text, formatColor(compositeOver(fill, backdrop))),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 });

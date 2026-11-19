@@ -37,6 +37,7 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
@@ -66,6 +67,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -427,9 +433,11 @@ const styles = stylex.create({
   },
   sizeSm: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   sizeMd: {
     fontSize: typeScaleVars['--text-code-size'],
+    lineHeight: typeScaleVars['--text-code-leading'],
   },
   copyButton: {
     // The copy control is a ghost IconButton (Button owns its own padding,
@@ -1047,6 +1055,13 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
+  if (process.env.NODE_ENV !== 'production' && typeof code !== 'string') {
+    throw devPropError(
+      'CodeBlock',
+      'code',
+      'must be a string, for example <CodeBlock code="const a = 1;" language="ts" />. CodeBlock does not read children.',
+    );
+  }
   const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
@@ -1158,7 +1173,11 @@ export function CodeBlock({
   // both axes, keeps focus where it is when overflow goes away, and owns the
   // overflow declarations. role="group" (not "region") so several code
   // blocks on a page don't create duplicate same-named landmarks.
-  const {getViewportProps, getContentProps} = useScrollableArea({
+  const {
+    getViewportProps,
+    getContentProps,
+    state: scrollState,
+  } = useScrollableArea({
     axis: 'both',
     // Nothing inside the code viewport sticks to an outer scroller, so the
     // viewport stays a scroll container while its code fits. A long line, or
@@ -1309,6 +1328,7 @@ export function CodeBlock({
           styles.viewport,
           styles.viewportFocusRingInset,
         ),
+        xstyle: scrollEdgeFadeStyles(scrollState.inline),
         style: scrollStyle,
         // Code scrolls and wraps left to right in every page direction.
         dir: 'ltr',

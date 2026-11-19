@@ -15,15 +15,19 @@ const printedCommands = source.slice(
   source.indexOf('  // init --user in a project on an older release'),
 );
 
-async function checkPrintedCommands({write = true, release = '0.7.17'} = {}) {
+async function checkPrintedCommands({
+  write = true,
+  release = '0.7.17',
+  destination = 'src/pages/settings',
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-smoke-command-'));
   const core071 = path.join(root, 'core071');
   const empty = path.join(root, 'empty');
   const records = [];
   const commands = [];
-  fs.mkdirSync(path.join(core071, 'src'), {recursive: true});
+  fs.mkdirSync(path.join(core071, 'src', 'pages'), {recursive: true});
   fs.mkdirSync(empty);
-  const kept = path.join(core071, 'src', 'kept.tsx');
+  const kept = path.join(core071, 'src', 'pages', 'kept.tsx');
   fs.writeFileSync(kept, 'keep');
   try {
     await vm.runInNewContext(`(async () => {${printedCommands}})()`, {
@@ -35,18 +39,16 @@ async function checkPrintedCommands({write = true, release = '0.7.17'} = {}) {
       WIN: false,
       envA: {},
       astryx: async (_argv, {cwd}) => ({
-        stdout: `command: ${cwd === core071 ? 'npx @astryxdesign/cli@0.7.17 template settings --type page src/pages/settings' : 'astryx template settings --type page <path>'}`,
+        stdout: `command: ${cwd === core071 ? `npx @astryxdesign/cli@0.7.17 template settings --type page ${destination}` : 'astryx template settings --type page <path>'}`,
         stderr: '',
       }),
       run: async (_exe, argv, {cwd}) => {
         const command = argv[1];
         commands.push(command);
-        const destination = command.split(' ').at(-1);
+        const output = command.split(' ').at(-1);
         const file = path.join(
           cwd,
-          destination.endsWith('.tsx')
-            ? destination
-            : path.join(destination, 'page.tsx'),
+          output.endsWith('.tsx') ? output : path.join(output, 'page.tsx'),
         );
         if (write) {
           fs.mkdirSync(path.dirname(file), {recursive: true});
@@ -65,10 +67,10 @@ async function checkPrintedCommands({write = true, release = '0.7.17'} = {}) {
       ok: (name, pass, detail) => records.push({name, pass, detail}),
     });
     expect(commands[0]).toBe(
-      'npx @astryxdesign/cli@0.7.17 template settings --type page src/pages/settings',
+      `npx @astryxdesign/cli@0.7.17 template settings --type page ${destination}`,
     );
     expect(fs.readFileSync(kept, 'utf8')).toBe('keep');
-    expect(fs.existsSync(path.join(core071, 'src/pages/settings'))).toBe(false);
+    expect(fs.existsSync(path.join(core071, destination))).toBe(false);
     expect(fs.readdirSync(empty)).toEqual([]);
     return records.map(record => record.pass);
   } finally {
@@ -81,9 +83,22 @@ describe('global smoke printed commands', () => {
     expect(await checkPrintedCommands()).toEqual([true, true]);
   });
 
-  it('still rejects a successful command that writes no file', async () => {
-    expect(await checkPrintedCommands({write: false})).toEqual([false, false]);
-  });
+  it.each(['src/pages/settings.tsx', 'src/pages/profile.tsx'])(
+    'checks the printed file destination %s without assuming a page directory',
+    async destination => {
+      expect(await checkPrintedCommands({destination})).toEqual([true, true]);
+    },
+  );
+
+  it.each(['src/pages/settings', 'src/pages/settings.tsx'])(
+    'still rejects a successful command that writes no file at %s',
+    async destination => {
+      expect(await checkPrintedCommands({destination, write: false})).toEqual([
+        false,
+        false,
+      ]);
+    },
+  );
 
   it('still rejects an outside-project command answered by another release', async () => {
     expect(await checkPrintedCommands({release: '0.6.8'})).toEqual([

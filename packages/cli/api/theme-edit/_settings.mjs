@@ -31,6 +31,7 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
+import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
@@ -119,7 +120,6 @@ import {
   syncPaletteRefs,
   refuseIfLockLost,
   lockHeld,
-  removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
   readRecordIn,
@@ -127,6 +127,7 @@ import {
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -6643,6 +6644,13 @@ export function compileTheme(ctx, data, base) {
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
+          // Chat surfaces (a composer, its drawer, a message bubble) read
+          // --radius-chat, which Core defaults to the container radius and
+          // the bundled themes pin to a value of their own: the dial gives it
+          // back to the container radius, as Core's own default does, so it
+          // follows whatever container radius the theme ends up with (the
+          // dial's, or an exact one set after it).
+          putTok('--radius-chat', 'var(--radius-container)');
           // A part rule of the base theme that gives a radius other than the
           // dial token the part reads (a length, or a token the dial never
           // moves, such as --radius-full) would keep it over the dial: the
@@ -8212,7 +8220,7 @@ const MODULE_EXTENSIONS = [
 /**
  * The file a relative import names, resolved as TypeScript resolves it: a
  * JavaScript extension names its TypeScript source (`.js` → `.ts`/`.tsx`,
- * `.jsx` → `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
+ * `.jsx` → `.tsx`/`.ts`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
  * written, with each module extension, and as a folder's index file.
  * @param {string} dir
  * @param {string} spec
@@ -8222,12 +8230,7 @@ export function localModuleFile(dir, spec) {
   const base = path.resolve(dir, spec);
   const ext = path.extname(base);
   const stem = base.slice(0, base.length - ext.length);
-  const sourceFor = /** @type {Record<string, string[]>} */ ({
-    '.js': ['.ts', '.tsx'],
-    '.jsx': ['.tsx'],
-    '.mjs': ['.mts'],
-    '.cjs': ['.cts'],
-  })[ext];
+  const sourceFor = TS_SOURCES[ext];
   return [
     ...(sourceFor ?? []).map(x => stem + x),
     base,
@@ -12880,6 +12883,10 @@ export function radiusAt(base, value, token) {
     const atPill = Math.max(32, 1.5 * roundPx * ratio(token, 2.5));
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }
+  // Chat surfaces are on the container step (Core's chat radius defaults to
+  // the container radius): the container radius at this value.
+  if (token === '--radius-chat')
+    return radiusAt(base, value, '--radius-container');
   return pill ? 9999 : px;
 }
 

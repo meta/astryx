@@ -31,7 +31,8 @@ export const docs = {
     bestPractices: [
       { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: `columns={{minWidth: 240, max: 4}}` renders at most 4 columns, each at least 240px, and drops to one full-width column when narrow.' },
       { guidance: false, description: 'Use `columns={4}` for a row that must work on small screens; a number never reflows and renders four narrow tracks on a phone. Reserve numbers for rows that must stay fixed, such as a 7-day week.' },
-      { guidance: true, description: 'Always pair `minWidth` with `max`: `max` caps the count on wide screens and lets the last column shrink to a narrow container; `{minWidth}` alone overflows a phone narrower than `minWidth`.' },
+      { guidance: true, description: 'Pair `minWidth` with `max` to cap the count on wide screens. In a container narrower than `minWidth`, one column shrinks to the container width, with or without `max`.' },
+      { guidance: true, description: '`{minWidth}` alone keeps each column at its track width, and a grid with fewer items than tracks keeps the empty tracks: two items in an 880px grid with `minWidth: 280` leave an empty third column. To let the items grow to fill the row, use `repeat: \'fit\'`, or set `max` to no more than the item count.' },
       { guidance: true, description: 'Use `repeat: \'fill\'` (the default) for consistent item widths. Use `\'fit\'` when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use `HStack` with wrapping for grids; use Grid instead.' },
@@ -140,7 +141,8 @@ export const docsZh = {
     bestPractices: [
       { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: `columns={{minWidth: 240, max: 4}}` renders at most 4 columns, each at least 240px, and drops to one full-width column when narrow.' },
       { guidance: false, description: 'Use `columns={4}` for a row that must work on small screens; a number never reflows and renders four narrow tracks on a phone. Reserve numbers for rows that must stay fixed, such as a 7-day week.' },
-      { guidance: true, description: 'Always pair `minWidth` with `max`: `max` caps the count on wide screens and lets the last column shrink to a narrow container; `{minWidth}` alone overflows a phone narrower than `minWidth`.' },
+      { guidance: true, description: 'Pair `minWidth` with `max` to cap the count on wide screens. In a container narrower than `minWidth`, one column shrinks to the container width, with or without `max`.' },
+      { guidance: true, description: '`{minWidth}` alone keeps each column at its track width, and a grid with fewer items than tracks keeps the empty tracks: two items in an 880px grid with `minWidth: 280` leave an empty third column. To let the items grow to fill the row, use `repeat: \'fit\'`, or set `max` to no more than the item count.' },
       { guidance: true, description: 'Use `repeat: \'fill\'` (the default) for consistent item widths. Use `\'fit\'` when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use `HStack` with wrapping for grids; use Grid instead.' },
@@ -158,7 +160,8 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: columns={{minWidth: 240, max: 4}} = at most 4 columns, each >= 240px, one full-width column when narrow.' },
       { guidance: false, description: 'Use columns={4} for rows that must work on small screens; a number never reflows (4 narrow tracks on a phone). Numbers only for rows that must stay fixed, e.g. a 7-day week.' },
-      { guidance: true, description: 'Always pair minWidth with max: max caps the count on wide screens and lets the last column shrink to a narrow container; {minWidth} alone overflows a phone narrower than minWidth.' },
+      { guidance: true, description: 'Pair minWidth with max to cap the count on wide screens. In a container narrower than minWidth, one column shrinks to the container width, with or without max.' },
+      { guidance: true, description: '{minWidth} alone keeps column width; fewer items than tracks leave empty tracks (2 items, 880px, minWidth 280 -> empty 3rd column). To let items grow: repeat: \'fit\', or max <= item count.' },
       { guidance: true, description: 'Use repeat: \'fill\' (the default) for consistent item widths. Use \'fit\' when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use HStack with wrapping for grids; use Grid instead.' },

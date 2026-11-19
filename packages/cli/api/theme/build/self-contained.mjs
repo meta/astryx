@@ -9,7 +9,8 @@
  *
  * It reads the theme's files only through the `files` reader the theme
  * adapter gives it. The JavaScript it compiles is kept between runs, under
- * the stamps of every file of Babel's code that compiled it.
+ * the stamps of every file of Babel's code that compiled it, and across CLI
+ * upgrades that leave this module and those files as they are.
  *
  * @input the built module's carried imports, the theme source, the output
  *   folder, and the adapter's file reader
@@ -19,12 +20,17 @@
  */
 
 import {createHash} from 'node:crypto';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
+import {
+  babelCore,
+  babelCorePath,
+} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {persistedSummary} from '../../../foundation/fs/gather-cache.mjs';
-import {loadedCodeStamps} from '../../../foundation/fs/loaded-files.mjs';
+import {
+  codeDigest,
+  loadedCodeStamps,
+} from '../../../foundation/fs/loaded-files.mjs';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
@@ -279,8 +285,11 @@ function compileOptions(files, file) {
   const jsx = /\.(?:tsx|jsx)$/i.test(file);
   return {
     filename: file,
+    // No file of the project's changes the JavaScript: no Babel config, and
+    // no browserslist file, which only targets-aware plugins would read.
     babelrc: false,
     configFile: false,
+    browserslistConfigFile: false,
     sourceType: /** @type {const} */ ('module'),
     compact: false,
     plugins: [
@@ -328,9 +337,10 @@ function rewriteImports(rewrite) {
  * One TypeScript or JSX module as JavaScript, its local imports naming the
  * files `rewrite` gives. The JavaScript is kept between runs beside the kept
  * gathers (fs/gather-cache.mjs persistedSummary): it is read back while the
- * source, the options, the rewrites and every file of Babel's code that made
- * it are as they were, so a build of an unchanged theme loads neither
- * `@babel/core` nor its plugins.
+ * source, the options, the rewrites, this module's code and every file of
+ * Babel's code that made it are as they were, so a build of an unchanged
+ * theme loads neither `@babel/core` nor its plugins. It is kept across CLI
+ * builds: its key holds this module's content in place of the build id.
  * @param {LocalModuleFiles} files
  * @param {string} file
  * @param {string} source
@@ -338,6 +348,9 @@ function rewriteImports(rewrite) {
  */
 function compileModule(files, file, source, rewrite) {
   const options = compileOptions(files, file);
+  // The code that compiles and rewrites, by content. Without it, the
+  // JavaScript is kept for this build only.
+  const compiler = codeDigest(fileURLToPath(import.meta.url));
   const key = createHash('sha256')
     .update(
       JSON.stringify({
@@ -345,6 +358,10 @@ function compileModule(files, file, source, rewrite) {
         options,
         rewrite: [...rewrite].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
         rewriteImports: String(rewriteImports),
+        compiler,
+        // Where the CLI finds Babel now: an upgrade that brings another copy
+        // compiles again, though the old copy stays on disk as it was.
+        babel: babelCorePath(),
         // What Babel reads for a config's `env` blocks; none is read here,
         // so it stays only as an input Babel could consult.
         envName: process.env.BABEL_ENV || process.env.NODE_ENV || 'development',
@@ -360,21 +377,25 @@ function compileModule(files, file, source, rewrite) {
         plugins: [...options.plugins, rewriteImports(rewrite)],
       });
       const code = result?.code ?? '';
-      const require = createRequire(import.meta.url);
       const roots = [
-        require.resolve('@babel/core'),
+        babelCorePath(),
         ...options.plugins.map(([plugin]) => String(plugin)),
       ];
       // Kept only while Babel's files, and the package folders its
       // modules were found in, are those this process loaded: after a
-      // reinstall, the JavaScript is the old Babel's.
+      // reinstall, the JavaScript is the old Babel's. Across builds, the key
+      // names the files the CLI finds Babel and its plugins in, so the
+      // folders the CLI's own lookups took (each CLI version's own folder
+      // under pnpm) are left out.
       const {stamps, unchangedSinceStart} = loadedCodeStamps(
         fileURLToPath(import.meta.url),
         roots,
+        [],
+        {fromLookups: compiler == null},
       );
       current = unchangedSinceStart;
       return {value: code, stamps};
     },
-    {keep: code => current && code !== ''},
+    {keep: code => current && code !== '', acrossBuilds: compiler != null},
   );
 }
