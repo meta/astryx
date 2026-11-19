@@ -57,6 +57,7 @@ import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs
 import {droppedImports, importUses} from './value-uses.mjs';
 import {OTHER_JSX_RUNTIME, coreComponentOf} from '../discovery/core-elements.mjs';
 import {corePropUsesOf} from '../discovery/core-props.mjs';
+import {writtenStrings} from '../discovery/written-prop-values.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -184,8 +185,9 @@ const texts = [];
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
 /**
- * Each string a page's own file gives a Core component's prop
- * (`<Button variant="danger">`), for the unknown-prop-value warning.
+ * Each string a page's own file certainly gives a Core component's prop
+ * (`<Button variant="danger">`, or each branch of
+ * `variant={busy ? 'ghost' : 'danger'}`), for the unknown-prop-value warning.
  * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
  */
 const propValues = [];
@@ -1332,14 +1334,9 @@ function pagePlugin(filename, browser = false, reactJsx = true) {
         if (!component) return;
         for (const attr of p.node.attributes) {
           if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
-          const value =
-            attr.value?.type === 'StringLiteral'
-              ? attr.value.value
-              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
-                ? attr.value.expression.value
-                : null;
-          if (value === null) continue;
-          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+          for (const value of writtenStrings(attr, p.scope) ?? []) {
+            propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+          }
         }
         if (reactJsx) {
           const element = {line: p.node.loc?.start.line ?? 0, column: (p.node.loc?.start.column ?? 0) + 1};
