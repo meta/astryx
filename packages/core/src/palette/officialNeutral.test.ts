@@ -71,15 +71,7 @@ it('equals the stops and lifted parts the official Neutral theme writes', () => 
           stops[key] = [one, one];
         }
       }
-      // A coloured card's own secondary text is that card's ink, not a lift
-      // on the accent tint.
-      if (
-        keys.at(-3) === 'components' &&
-        key === '--color-text-secondary' &&
-        !/^variant:(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)$/.test(
-          keys.at(-1) ?? '',
-        )
-      ) {
+      if (keys.at(-3) === 'components' && key === '--color-text-secondary') {
         lifted.push([keys.at(-2) ?? '', keys.at(-1) ?? '']);
       }
       visit(value, [...keys, key]);
