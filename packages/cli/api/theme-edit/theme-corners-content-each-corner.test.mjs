@@ -59,4 +59,13 @@ describe('a card radius of different corners', () => {
       /Core gives it a single radius/,
     );
   }, 240_000);
+
+  it('takes a menu radius of different corners', async () => {
+    await expect(
+      themeEditSet('c', 'border-radius', '0 0 12px 12px', {
+        cwd,
+        on: 'dropdown-menu',
+      }),
+    ).resolves.toBeTruthy();
+  }, 240_000);
 });

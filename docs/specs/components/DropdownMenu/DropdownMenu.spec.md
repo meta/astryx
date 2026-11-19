@@ -595,11 +595,14 @@ bottom corners rounded, each row is rounded at the bottom. This keeps the rows
 predictable and matches the uniform corners themes already give. A theme that
 wants other row corners styles the row part directly. The rule covers the item,
 checkbox, radio and sub-menu rows of DropdownMenu's popover and its sub-menu
-flyouts, and so ContextMenu. The touch sheet draws its rows as List rows (FR4),
-which keep their own corners, and a drilled-in sub-menu view with its own
-header or footer keeps the default corners. The menu's `derived` radius entry sets
+flyouts, and so ContextMenu, whose caller-rendered rows in its touch sheet are
+these rows too. DropdownMenu's touch sheet, and a ContextMenu built from
+`items`, draw their rows as List rows (FR4), which keep their own corners. A
+drilled-in sub-menu view with its own header or footer keeps the default
+corners. The menu's `derived` radius entry sets
 `corners: true` (`ComponentThemingDerivedVar.corners` in the authoring types),
 so the theme writes each corner to its own variable.
+
 Rejected: only the rows at a menu corner take that corner.
 
 ## Open questions
