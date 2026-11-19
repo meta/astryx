@@ -463,13 +463,17 @@ export class SwitchTouchController {
     // and is sent to the new rest below. A spring already heading for the new
     // rest moves whole instead, keeping its start time and velocity. A
     // reduced-motion dip shifts whole, its end included, and keeps going.
-    // A value change before any measurement starts from the previous state's
-    // default circle: the CSS already renders the new one.
+    // A value change before any measurement reads the boxes once here. The
+    // track is the rendered one, but the circle is already the new value's,
+    // so the previous circle is the state's default size.
+    let measured: SwitchTouchGeometry | null = null;
     if (!this.isGeometryMeasured && this.defaultThumb != null) {
+      this.measureGeometry();
+      measured = this.geometry;
       const size = this.defaultThumb[previous ? 'on' : 'off'];
       this.geometry = switchTouchGeometry(
-        this.geometry.trackWidth,
-        this.geometry.trackHeight,
+        measured.trackWidth,
+        measured.trackHeight,
         {width: size, height: size},
       );
     }
@@ -482,7 +486,11 @@ export class SwitchTouchController {
     // CSS now renders is the new value's. Its scale takes the old size over
     // and grows or shrinks it from there.
     const before = this.geometry;
-    this.measureGeometry();
+    if (measured == null) {
+      this.measureGeometry();
+    } else {
+      this.geometry = measured;
+    }
     if (springs) {
       this.rescaleThumb(before, this.geometry, time);
     }

@@ -401,6 +401,35 @@ describe('the first value change before any measurement', () => {
     ).toBe(16);
   });
 
+  it('shifts the thumb by the rendered track on the first change, so a themed track does not jump', () => {
+    const {controller, track} = mount();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        // A theme sizes this track 36 × 24, not the default 40 × 24.
+        return this === track
+          ? DOMRect.fromRect({x: 0, y: 0, width: 36, height: 24})
+          : DOMRect.fromRect();
+      },
+    );
+    controller.setDefaultThumb({off: 16, on: 20});
+    const thumbElement = track.firstElementChild as HTMLElement;
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    layOut(track, 20);
+    render(controller, track, true);
+    const rebase = thumb.calls.find(call => call.name === 'rebase');
+    // Off to on: back by the travel of the 36 px track with the 16 px circle.
+    expect((rebase?.args[0] as {x: number}).x).toBeCloseTo(
+      -switchTouchGeometry(36, 24, {width: 16, height: 16}).travel,
+      6,
+    );
+  });
+
   it('flips a mouse drag after a toggle at the current circle, not the mounted one', () => {
     const surface = document.createElement('div');
     const input = document.createElement('input');
