@@ -53,7 +53,9 @@ const styles = stylex.create({
     display: 'flex',
     gap: 8,
     padding: 12,
-    borderBottom: '1px solid #e5e5e5',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    borderBottomColor: '#e5e5e5',
     flexWrap: 'wrap' as const,
     alignItems: 'center',
   },
@@ -66,8 +68,10 @@ const styles = stylex.create({
   customElement: {
     padding: 16,
     borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    background: '#f9fafb',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
   },
   customElementInner: {
     display: 'flex',
@@ -75,7 +79,7 @@ const styles = stylex.create({
     justifyContent: 'center',
     height: 200,
     borderRadius: 8,
-    background: '#f3f4f6',
+    backgroundColor: '#f3f4f6',
   },
 });
 
@@ -402,9 +406,7 @@ export const ScrollBehaviorComparison: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}
@@ -565,9 +567,7 @@ export const RapidToolCalls: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}
@@ -826,9 +826,7 @@ export const MixedStreamAndTools: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}

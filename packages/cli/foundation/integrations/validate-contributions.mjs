@@ -23,11 +23,17 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {builtinModules, createRequire} from 'node:module';
+import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
+import {oncePerListing} from '../fs/listing-cache.mjs';
 import {KNOWN_INTEGRATION_KEYS} from '../../authoring/integration/schema.mjs';
+import {
+  isNodeEnvRead,
+  isProcessEnv,
+  isServerOnlyImport,
+  packagesInstalledWith,
+} from '../../authoring/example/preview.mjs';
 import {
   contributionFiles,
   findSourceOnlyCandidates,
@@ -50,7 +56,12 @@ import {
   TEMPLATE_CANDIDATE_RE,
 } from './contribution-fixes.mjs';
 import {MANIFEST_BASENAMES} from './integrations.mjs';
-import {npmCommand} from '../release/cache.mjs';
+import {
+  ignoreFilesFor,
+  negatedFilesEntry,
+  outsideFiles,
+  packState,
+} from './pack-state.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
@@ -76,6 +87,28 @@ function parseModule(source, options) {
 }
 
 /**
+ * The syntax tree of one of a package's source files, read and parsed once
+ * in a validation (oncePerListing): the template walks reach the same
+ * helpers from many templates. The checks only read the tree. Null when the
+ * file cannot be read or does not parse.
+ * @param {string} file
+ * @returns {any}
+ */
+function sourceTree(file) {
+  return oncePerListing(`source-tree\0${file}`, () => {
+    try {
+      return parseModule(fs.readFileSync(file, 'utf8'), {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+        errorRecovery: true,
+      });
+    } catch {
+      return null;
+    }
+  });
+}
+
+/**
  * @typedef {import('./issue').AstryxIntegrationIssue} Issue
  * @typedef {import('./integrations.mjs').LoadedIntegration} LoadedIntegration
  */
@@ -85,6 +118,9 @@ export const INVALID_AGENT_DOCS = 'invalid_agent_docs';
 
 /** Stable issue code for a `cliCommand` that was ignored as invalid. */
 export const INVALID_CLI_COMMAND = 'invalid_cli_command';
+
+/** Stable issue code for an `installGuidance` that was ignored as invalid. */
+export const INVALID_INSTALL_GUIDANCE = 'invalid_install_guidance';
 
 /** Stable issue code for a package whose provider ID is already claimed. */
 export const DUPLICATE_PROVIDER = 'duplicate_provider';
@@ -125,16 +161,34 @@ export function isListedIssue(issue) {
   return LISTED.has(issue);
 }
 
+/** Issues `issueNote` made: information, never counted as an issue. */
+const NOTED = new WeakMap();
+
+/**
+ * Information about a package that is not a problem with it: validate prints
+ * it as a note, and nothing counts it, so the everyday-command nudge and
+ * project doctor never report it. A manifest key the running CLI does not
+ * know is one: it is usually a key from a newer CLI, which version skew makes
+ * normal. `next` marks a note `integration check --strict --next` fails on.
+ * @param {string} code
+ * @param {string} message
+ * @param {{next?: boolean}} [options]
+ * @returns {Issue}
+ */
+function issueNote(code, message, {next = false} = {}) {
+  const issue = issueWarning(code, message);
+  NOTED.set(issue, {next});
+  return issue;
+}
+
 /**
  * Report the manifest keys this CLI does not know.
  *
- * A WARNING, deliberately: an integration is published once and installed
- * against many CLI versions, so a key introduced by a later CLI arrives here
- * routinely and means only that this CLI cannot act on it. It used to be fatal
- * — `.strict()` rejected the manifest, and a manifest that fails to parse
- * contributes nothing at all, so one added field took the package's
- * components, templates and codemods down with it on every older consumer
- * (#5119). The fix is upgrading the CLI, which is what the message says.
+ * A note, never an issue: an integration is published once and installed
+ * against many CLI versions, so a key from a later CLI arrives here routinely
+ * and means only that this CLI cannot act on it. The rest of the manifest
+ * still loads. A key one edit from a known key is almost always a typo, so
+ * that note is `next`.
  *
  * @param {LoadedIntegration} integration
  * @param {Issue[]} issues
@@ -159,16 +213,17 @@ function checkUnknownKeys(integration, issues) {
       ? `Fix: remove "${key}" from ${manifestName(integration)}; it already sets "${known}".`
       : `Fix: rename "${key}" to "${known}" in ${manifestName(integration)}.`;
     issues.push(
-      issueWarning(
+      issueNote(
         'unknown_manifest_key',
         `This CLI does not know the manifest key "${key}", so it is ignored. Did you mean \`${known}\`? ${fix} If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.`,
+        {next: editDistance(key, /** @type {string} */ (known)) <= 1},
       ),
     );
   }
   const rest = keys.filter(key => !typos.some(each => each.key === key));
   if (rest.length === 0) return;
   issues.push(
-    issueWarning(
+    issueNote(
       'unknown_manifest_key',
       `This CLI does not know the manifest ${rest.length === 1 ? 'key' : 'keys'} ` +
         `${rest.map(key => `"${key}"`).join(', ')}, so ${rest.length === 1 ? 'it is' : 'they are'} ` +
@@ -619,6 +674,42 @@ function walkNodes(node, visit) {
   }
 }
 
+/**
+ * The node types the template walks judge: what a module declares, renders,
+ * aliases, reads and loads.
+ */
+const JUDGED_NODE_TYPES = new Set([
+  'FunctionDeclaration',
+  'ClassDeclaration',
+  'VariableDeclarator',
+  'JSXMemberExpression',
+  'JSXOpeningElement',
+  'MemberExpression',
+  'OptionalMemberExpression',
+  'CallExpression',
+  'ImportExpression',
+]);
+
+/**
+ * The nodes of a source file's tree that the template walks judge, in the
+ * order {@link walkNodes} visits them, gathered once per validation
+ * (oncePerListing): each walk that reaches the file reads this list instead
+ * of the whole tree.
+ * @param {string} file
+ * @param {any} ast the file's tree (sourceTree)
+ * @returns {any[]}
+ */
+function judgedNodes(file, ast) {
+  return oncePerListing(`judged-nodes\0${file}`, () => {
+    /** @type {any[]} */
+    const nodes = [];
+    walkNodes(ast.program, node => {
+      if (JUDGED_NODE_TYPES.has(node.type)) nodes.push(node);
+    });
+    return nodes;
+  });
+}
+
 /** The extensions a local import may leave off, in the order tried. */
 const LOCAL_MODULE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs'];
 
@@ -693,14 +784,8 @@ function importedNames(file, integration) {
     if (seen.has(current)) return;
     seen.add(current);
     const shown = slash(path.relative(top, current)) || shownTop;
-    let ast;
-    try {
-      ast = parseModule(fs.readFileSync(current, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript', 'jsx'],
-        errorRecovery: true,
-      });
-    } catch {
+    const ast = sourceTree(current);
+    if (ast == null) {
       unread.push(
         `${shown} could not be read, so the components it renders are not known.`,
       );
@@ -866,9 +951,10 @@ function importedNames(file, integration) {
     // Anything this check does not model leaves the names unjudged: what
     // the module renders through a binding, an alias, a member read, a
     // component held in a variable, or a module loaded at runtime.
+    const judged = judgedNodes(current, ast);
     /** @type {Set<string>} functions and classes the module declares */
     const declared = new Set();
-    walkNodes(ast.program, node => {
+    judged.forEach(node => {
       if (
         (node.type === 'FunctionDeclaration' ||
           node.type === 'ClassDeclaration') &&
@@ -889,7 +975,7 @@ function importedNames(file, integration) {
     });
     const from = (/** @type {string} */ name) =>
       bindings.has(name) ? ` (imported from "${bindings.get(name)}")` : '';
-    walkNodes(ast.program, node => {
+    judged.forEach(node => {
       if (node.type === 'JSXMemberExpression') {
         let object = node.object;
         while (object?.type === 'JSXMemberExpression') object = object.object;
@@ -972,16 +1058,8 @@ function importedNames(file, integration) {
  * @returns {string | null}
  */
 function defaultBinding(file) {
-  let ast;
-  try {
-    ast = parseModule(fs.readFileSync(file, 'utf8'), {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
-      errorRecovery: true,
-    });
-  } catch {
-    return null;
-  }
+  const ast = sourceTree(file);
+  if (ast == null) return null;
   for (const node of ast.program.body) {
     if (node.type !== 'ExportDefaultDeclaration') continue;
     const declaration = /** @type {any} */ (node.declaration);
@@ -1049,180 +1127,6 @@ export async function blockComponentsCheck(integration) {
 // `A/B Testing`).
 const PATH_CATEGORY = /^[a-z0-9][\w.-]*(?:\/[\w.-]+)+$/u;
 
-/** Imports a browser cannot load, which a showcase must not make. */
-const SERVER_ONLY_IMPORTS =
-  /^(?:server-only|next\/headers|next\/server|next\/cache|node:.+)$/u;
-
-/**
- * Every spelling a glob's `{a,b}` braces stand for, nested braces included.
- * @param {string} pattern
- * @returns {string[]}
- */
-function expandBraces(pattern) {
-  let depth = 0;
-  let open = -1;
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '\\') {
-      i++;
-    } else if (ch === '{') {
-      if (depth++ === 0) open = i;
-    } else if (ch === '}' && depth > 0 && --depth === 0) {
-      const body = pattern.slice(open + 1, i);
-      /** @type {string[]} */
-      const parts = [];
-      let level = 0;
-      let from = 0;
-      for (let j = 0; j < body.length; j++) {
-        if (body[j] === '{') level++;
-        else if (body[j] === '}') level--;
-        else if (body[j] === ',' && level === 0) {
-          parts.push(body.slice(from, j));
-          from = j + 1;
-        }
-      }
-      parts.push(body.slice(from));
-      if (parts.length < 2) continue;
-      const head = pattern.slice(0, open);
-      const tail = pattern.slice(i + 1);
-      return parts.flatMap(part => expandBraces(head + part + tail));
-    }
-  }
-  return [pattern];
-}
-
-/**
- * One brace-free glob as a regular expression source: `**`, `*`, `?` and
- * `[…]` classes (`[!…]` negated), as npm's `files` matching reads them.
- * @param {string} pattern
- */
-function globSource(pattern) {
-  let out = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '*') {
-      if (pattern[i + 1] === '*') {
-        const slashAfter = pattern[i + 2] === '/';
-        const atStart = i === 0 || pattern[i - 1] === '/';
-        if (atStart && slashAfter) {
-          out += '(?:.*/)?';
-          i += 2;
-        } else if (atStart && i + 2 === pattern.length) {
-          out = out.replace(/\/$/u, '') + '(?:/.*)?';
-          i += 1;
-        } else {
-          out += '.*';
-          i += 1;
-        }
-      } else {
-        out += '[^/]*';
-      }
-    } else if (ch === '?') {
-      out += '[^/]';
-    } else if (ch === '[') {
-      const close = pattern.indexOf(']', i + 2);
-      if (close === -1) {
-        out += '\\[';
-      } else {
-        let body = pattern.slice(i + 1, close);
-        const negated = body.startsWith('!') || body.startsWith('^');
-        if (negated) body = body.slice(1);
-        out += `[${negated ? '^' : ''}${body.replace(/[\\\]]/gu, '\\$&')}]`;
-        i = close;
-      }
-    } else if (ch === '\\' && i + 1 < pattern.length) {
-      out += pattern[++i].replace(/[.+^${}()|[\]\\*?/]/gu, '\\$&');
-    } else {
-      out += ch.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
-    }
-  }
-  return out;
-}
-
-/**
- * The paths npm packs for the package in `base`, read from
- * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
- * written), started the way the CLI starts npm everywhere else, or why npm
- * could not answer.
- * @param {string} base
- * @returns {{paths: Set<string>} | {error: string}}
- */
-function npmPackedPaths(base) {
-  let npm;
-  try {
-    npm = npmCommand();
-  } catch {
-    return {error: 'npm was not found'};
-  }
-  const result = spawnSync(
-    npm.command,
-    [
-      ...npm.prefix,
-      'pack',
-      '--dry-run',
-      '--json',
-      '--ignore-scripts',
-      '--silent',
-    ],
-    {
-      cwd: base,
-      encoding: 'utf-8',
-      shell: false,
-      timeout: 60_000,
-      // One line per packed file: room for a very large package.
-      maxBuffer: 256 * 1024 * 1024,
-    },
-  );
-  if (result.error) return {error: `npm did not run (${result.error.message})`};
-  if (result.status !== 0) {
-    let code = '';
-    try {
-      code = JSON.parse(result.stdout)?.error?.code ?? '';
-    } catch {
-      // not JSON
-    }
-    return {
-      error: `npm pack failed${code ? ` (${code})` : ` with exit ${result.status}`}`,
-    };
-  }
-  try {
-    const [info] = JSON.parse(result.stdout);
-    if (Array.isArray(info?.files)) {
-      return {
-        paths: new Set(
-          info.files.map((/** @type {{path: string}} */ f) => f.path),
-        ),
-      };
-    }
-  } catch {
-    // fall through
-  }
-  return {error: 'npm pack printed no file list'};
-}
-
-/**
- * The ignore files npm reads for one path in a package with no `files`
- * field: in the root and each folder down to the path's own, `.npmignore`,
- * or `.gitignore` where that folder has none. Root first, each relative to
- * the package root.
- * @param {string} base
- * @param {string} rel POSIX, relative to the package root
- * @returns {string[]}
- */
-function ignoreFilesFor(base, rel) {
-  /** @type {string[]} */
-  const found = [];
-  const folders = rel.split('/').slice(0, -1);
-  for (let depth = 0; depth <= folders.length; depth++) {
-    const folder = folders.slice(0, depth).join('/');
-    const file = ['.npmignore', '.gitignore'].find(name =>
-      fs.existsSync(path.join(base, folder, name)),
-    );
-    if (file) found.push(folder ? `${folder}/${file}` : file);
-  }
-  return found;
-}
-
 /**
  * The note for an asset a package with no `files` field leaves out through
  * an ignore file, naming the line that drops it, never a `files` field,
@@ -1264,62 +1168,6 @@ function ignoreFix(base, template, asset, nestedOnly = false) {
 }
 
 /**
- * Whether no `files` entry can reach a path, read case-insensitively and
- * generously (`{a,b}` braces, globs, a no-slash entry at any depth, an entry
- * for the path or any folder above it), for when npm cannot say what it
- * packs: a path this misses is out of the package however npm reads the list.
- * @param {string} rel POSIX, relative to the package root
- * @param {unknown} files
- */
-export function outsideFiles(rel, files) {
-  if (!Array.isArray(files)) return false;
-  const parts = rel.split('/');
-  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
-  return !files.some(entry => {
-    if (typeof entry !== 'string' || entry.startsWith('!')) return false;
-    const trimmed = entry
-      .replace(/^\.?\//u, '')
-      .replace(/\/+$/u, '')
-      .replace(/\/\*$/u, '/**');
-    return expandBraces(trimmed).some(spelling => {
-      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
-      return spelling.includes('/') || /^\.?\//u.test(entry)
-        ? paths.some(at => pattern.test(at))
-        : parts.some(name => pattern.test(name));
-    });
-  });
-}
-
-/**
- * The `!` entry of a `files` field that leaves out `rel` or a folder above
- * it, as written; null when none does.
- * @param {string} rel package-relative path
- * @param {unknown} files the `files` field
- * @returns {string | null}
- */
-export function negatedFilesEntry(rel, files) {
-  if (!Array.isArray(files)) return null;
-  const parts = rel.split('/');
-  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
-  for (const entry of files) {
-    if (typeof entry !== 'string' || !entry.startsWith('!')) continue;
-    const trimmed = entry
-      .slice(1)
-      .replace(/^\.?\//u, '')
-      .replace(/\/+$/u, '')
-      .replace(/\/\*$/u, '/**');
-    const hit = expandBraces(trimmed).some(spelling => {
-      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
-      return spelling.includes('/') || /^!\.?\//u.test(entry)
-        ? paths.some(at => pattern.test(at))
-        : parts.some(name => pattern.test(name));
-    });
-    if (hit) return entry;
-  }
-  return null;
-}
-
-/**
  * The path a `new URL()` argument spells out: a string, or a template
  * literal with no expressions. Anything computed is not read.
  * @param {any} node
@@ -1341,10 +1189,10 @@ function literalPath(node) {
  * (which bundlers replace). `assets` are the relative paths it loads with `new URL('./x', import.meta.url)`. A module
  * that does not parse reports nothing; the template check owns that.
  * @param {string} source
- * @param {Set<string>} builtins
+ * @param {ReadonlyArray<string>} dependencies the packages the package declares
  * @returns {{server: string[], assets: string[]}}
  */
-function readModule(source, builtins) {
+function readModule(source, dependencies) {
   /** @type {any} */
   let ast;
   try {
@@ -1362,10 +1210,7 @@ function readModule(source, builtins) {
   const found = [];
   /** @param {unknown} spec */
   const checkSpec = spec => {
-    if (
-      typeof spec === 'string' &&
-      (SERVER_ONLY_IMPORTS.test(spec) || builtins.has(spec))
-    ) {
+    if (typeof spec === 'string' && isServerOnlyImport(spec, dependencies)) {
       found.push(`imports '${spec}'`);
     }
   };
@@ -1431,30 +1276,13 @@ function readModule(source, builtins) {
         }
         break;
       }
-      case 'MemberExpression': {
-        const object = node.object;
-        if (
-          object.type === 'Identifier' &&
-          object.name === 'process' &&
-          !node.computed &&
-          node.property.name === 'env'
-        ) {
-          found.push('reads process.env');
-          return;
-        }
-        if (
-          object.type === 'MemberExpression' &&
-          object.object.type === 'Identifier' &&
-          object.object.name === 'process' &&
-          !object.computed &&
-          object.property.name === 'env'
-        ) {
-          if (!node.computed && node.property.name === 'NODE_ENV') return;
+      case 'MemberExpression':
+        if (isNodeEnvRead(node)) return;
+        if (isProcessEnv(node) || isProcessEnv(node.object)) {
           found.push('reads process.env');
           return;
         }
         break;
-      }
       default:
         break;
     }
@@ -1476,38 +1304,6 @@ function readModule(source, builtins) {
   };
   visit(ast.program);
   return {server: found, assets};
-}
-
-/**
- * Whether npm packs one file (or, with `folder`, anything inside one
- * folder) of the package at `base`. `cache` holds what npm packs, asked at
- * most once per cache. With no `files` field and no ignore file on the
- * path, npm packs everything, so nothing is asked. Without npm's answer, a
- * path no `files` entry can reach is left out, and any other is unknown.
- * @param {string} base package root
- * @param {string} rel path relative to `base`, with forward slashes
- * @param {unknown} packedFiles package.json `files`
- * @param {{packed?: {paths: Set<string>} | {error: string}}} cache
- * @param {{folder?: boolean}} [options]
- * @returns {{packed: true} | {packed: false, by: 'npm' | 'files'} | {packed: 'unknown', error: string}}
- */
-function packState(base, rel, packedFiles, cache, {folder = false} = {}) {
-  if (!Array.isArray(packedFiles) && ignoreFilesFor(base, rel).length === 0) {
-    return {packed: true};
-  }
-  cache.packed ??= npmPackedPaths(base);
-  const packed = cache.packed;
-  if ('paths' in packed) {
-    if (packed.paths.has(rel)) return {packed: true};
-    if (folder && [...packed.paths].some(each => each.startsWith(`${rel}/`))) {
-      return {packed: true};
-    }
-    return {packed: false, by: 'npm'};
-  }
-  if (Array.isArray(packedFiles) && outsideFiles(rel, packedFiles)) {
-    return {packed: false, by: 'files'};
-  }
-  return {packed: 'unknown', error: packed.error};
 }
 
 /**
@@ -1560,21 +1356,14 @@ export async function componentExamplesCheck(integration) {
   const rel = (/** @type {string} */ file) => slash(path.relative(base, file));
   /** @type {unknown} */
   let packedFiles;
-  /** @type {Set<string>} */
-  const declared = new Set();
+  /** @type {string[]} the packages an app installs with this one */
+  let dependencies = [];
   try {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(base, 'package.json'), 'utf8'),
     );
     packedFiles = pkg.files;
-    for (const field of [
-      'dependencies',
-      'peerDependencies',
-      'optionalDependencies',
-      'devDependencies',
-    ]) {
-      for (const name of Object.keys(pkg[field] ?? {})) declared.add(name);
-    }
+    dependencies = packagesInstalledWith(pkg);
   } catch {
     packedFiles = undefined;
   }
@@ -1582,9 +1371,6 @@ export async function componentExamplesCheck(integration) {
   const npm = {};
   /** @type {Array<{file: string, asset: string, reason: string}>} */
   const unchecked = [];
-  // A bare builtin name the package installs from npm (`buffer`, `events`)
-  // is that package, which bundlers ship to the browser.
-  const builtins = new Set(builtinModules.filter(name => !declared.has(name)));
   /** @type {Set<string>} */
   const shown = new Set();
   for (const template of templates) {
@@ -1616,7 +1402,7 @@ export async function componentExamplesCheck(integration) {
     } catch {
       continue;
     }
-    const parsed = readModule(source, builtins);
+    const parsed = readModule(source, dependencies);
     // A block is a showcase when it says so, or when it shows components
     // through `alsoShowcaseFor`, which counts them as shown above.
     const showcase =
@@ -2300,16 +2086,8 @@ async function checkThemes(integration, issues) {
  * @returns {string | null}
  */
 export function literalThemeName(file, exportName) {
-  let ast;
-  try {
-    ast = parseModule(fs.readFileSync(file, 'utf8'), {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
-      errorRecovery: true,
-    });
-  } catch {
-    return null;
-  }
+  const ast = sourceTree(file);
+  if (ast == null) return null;
   /** @type {any} */
   let init = null;
   for (const node of ast.program.body) {
@@ -2420,16 +2198,24 @@ export async function validateLoadedIntegration(loaded) {
 
 /**
  * Every contribution check, split: `issues` as validateLoadedIntegration
- * returns them, and `listed`, the layout findings validate lists in its
- * `layout` report without counting them.
+ * returns them; `listed`, the layout findings validate lists in its `layout`
+ * report without counting them; and `notes`, information validate prints
+ * as notes, never counted.
  * @param {LoadedIntegration} loaded
- * @returns {Promise<{issues: Issue[], listed: Issue[]}>}
+ * @returns {Promise<{issues: Issue[], listed: Issue[], notes: Array<{code: string, message: string, next?: boolean}>}>}
  */
 export async function validateLoadedIntegrationListed(loaded) {
   const all = await allLoadedIntegrationIssues(loaded);
   return {
-    issues: all.filter(issue => !LISTED.has(issue)),
+    issues: all.filter(issue => !LISTED.has(issue) && !NOTED.has(issue)),
     listed: all.filter(issue => LISTED.has(issue)),
+    notes: all
+      .filter(issue => NOTED.has(issue))
+      .map(issue => ({
+        code: issue.code,
+        message: issue.message,
+        ...(NOTED.get(issue).next ? {next: true} : {}),
+      })),
   };
 }
 
@@ -2456,6 +2242,13 @@ async function allLoadedIntegrationIssues(loaded) {
     return [issueError('integration_error', loaded.__loadError)];
   }
   checkUnknownKeys(loaded, issues);
+  for (const {field, why} of loaded.__ignoredFields ?? [])
+    issues.push(
+      issueWarning(
+        'ignored_manifest_field',
+        `This CLI ignores the manifest field "${field}" because ${why}; the rest of ${manifestName(loaded)} loads.`,
+      ),
+    );
   if (loaded.__agentDocsError) {
     issues.push(issueError(INVALID_AGENT_DOCS, loaded.__agentDocsError));
   }
@@ -2464,6 +2257,14 @@ async function allLoadedIntegrationIssues(loaded) {
       issueWarning(
         INVALID_CLI_COMMAND,
         `${loaded.__cliCommandError}. The command is ignored; printed commands use the package-manager prefix.`,
+      ),
+    );
+  }
+  if (loaded.__installGuidanceError) {
+    issues.push(
+      issueWarning(
+        INVALID_INSTALL_GUIDANCE,
+        `${loaded.__installGuidanceError}. The guidance is ignored; printed install steps use the package manager's command.`,
       ),
     );
   }

@@ -27,6 +27,8 @@ const REST_DELAY = '0s, ' + durationVars['--duration-fast'];
 // inherits its ancestor's dwell.
 const HOVER_DELAY = 'var(--_hover-delay, 0s)';
 
+// The touch branch keys on the primary pointer (TOUCH_QUERY). A touchscreen
+// laptop used with a mouse or trackpad can hover, so it keeps the hover reveal.
 export const styles = stylex.create({
   container: {
     '--_hover-delay': '0s',
@@ -36,7 +38,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 1,
       },
       ':focus-within': 1,
-      '@media (any-pointer: coarse)': 1,
+      '@media (pointer: coarse)': 1,
     },
     '--_reveal-position': {
       default: 'absolute',
@@ -44,7 +46,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 'static',
       },
       ':focus-within': 'static',
-      '@media (any-pointer: coarse)': 'static',
+      '@media (pointer: coarse)': 'static',
     },
     // The position flip is discrete, so it transitions with allow-discrete and
     // a state-conditional delay: the dwell on entry (flips into flow when the
@@ -57,7 +59,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': HOVER_DELAY + ', ' + HOVER_DELAY,
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     // Reduced motion drops the exit sequencing (there is no fade left to wait
     // for) but keeps the dwell: an intent gate is timing, not motion.
@@ -67,7 +69,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': HOVER_DELAY + ', ' + HOVER_DELAY,
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     // Conceal is a mouse-only visual swap, so it reads hover alone: no
     // :focus-within (a keyboard user must never watch content vanish) and no
@@ -86,7 +88,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': HOVER_DELAY,
       },
       ':focus-within': '0s',
-      '@media (any-pointer: coarse)': '0s',
+      '@media (pointer: coarse)': '0s',
     },
   },
   // stateInactive is `container` with the hover branch pinned to its rest
@@ -103,7 +105,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 0,
       },
       ':focus-within': 1,
-      '@media (any-pointer: coarse)': 1,
+      '@media (pointer: coarse)': 1,
     },
     '--_reveal-position': {
       default: 'absolute',
@@ -111,7 +113,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 'absolute',
       },
       ':focus-within': 'static',
-      '@media (any-pointer: coarse)': 'static',
+      '@media (pointer: coarse)': 'static',
     },
     '--_reveal-delay': {
       default: REST_DELAY,
@@ -119,7 +121,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': REST_DELAY,
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     '--_reveal-delay-reduced': {
       default: '0s, 0s',
@@ -127,7 +129,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': '0s, 0s',
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     '--_conceal-opacity': {
       default: 1,
@@ -141,7 +143,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': '0s',
       },
       ':focus-within': '0s',
-      '@media (any-pointer: coarse)': '0s',
+      '@media (pointer: coarse)': '0s',
     },
   },
   // stateActive pins the other end: every branch reads as pointed-at, so
@@ -154,7 +156,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 1,
       },
       ':focus-within': 1,
-      '@media (any-pointer: coarse)': 1,
+      '@media (pointer: coarse)': 1,
     },
     '--_reveal-position': {
       default: 'static',
@@ -162,7 +164,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': 'static',
       },
       ':focus-within': 'static',
-      '@media (any-pointer: coarse)': 'static',
+      '@media (pointer: coarse)': 'static',
     },
     '--_reveal-delay': {
       default: '0s, 0s',
@@ -170,7 +172,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': '0s, 0s',
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     '--_reveal-delay-reduced': {
       default: '0s, 0s',
@@ -178,7 +180,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': '0s, 0s',
       },
       ':focus-within': '0s, 0s',
-      '@media (any-pointer: coarse)': '0s, 0s',
+      '@media (pointer: coarse)': '0s, 0s',
     },
     '--_conceal-opacity': {
       default: 0,
@@ -192,7 +194,7 @@ export const styles = stylex.create({
         '@media (hover: hover)': '0s',
       },
       ':focus-within': '0s',
-      '@media (any-pointer: coarse)': '0s',
+      '@media (pointer: coarse)': '0s',
     },
   },
   hoverDelay: (delay: string) => ({'--_hover-delay': delay}),

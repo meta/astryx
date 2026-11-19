@@ -8,25 +8,14 @@
  *   consumer's viewport and focus container refs
  * @output A React-tracked row and gap plan, its segments, one retained focus
  *   island, and first-visible-key anchoring across data and pitch changes
- * @position The one private long-list windowing hook in Core. A consumer
- *   decides admission and owns its DOM and diagnostics; this hook owns the
- *   window, the anchor and the focus island. It installs no observer.
+ * @position The block-axis long-list windowing hook of the private module. A
+ *   consumer decides admission and owns its DOM and diagnostics; this hook
+ *   owns the window and the anchor, and the shared focus island
+ *   (`useListFocusIsland`) keeps the focused row. It installs no observer.
  */
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type RefObject,
-} from 'react';
+import {useMemo, useState, useSyncExternalStore, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {
-  moveFocusLeftBehind,
-  noteFocusWithin,
-  type FocusWithin,
-} from '../utils/focusReturn';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import {useListFocusIsland, type ListWindowKey} from './useListFocusIsland';
 import {
   calculateListWindow,
   createListWindowSegments,
@@ -36,7 +25,7 @@ import {
   type ListWindowSegment,
 } from './listWindow';
 
-export type ListWindowKey = string | number;
+export type {ListWindowKey} from './useListFocusIsland';
 
 /** The fixed row pitch and the viewport height to plan with before measuring. */
 export interface ListWindowPitch {
@@ -145,11 +134,7 @@ export function useListWindow({
     canWindow ? geometry.getSnapshot : getEmptyGeometry,
     canWindow ? geometry.getServerSnapshot : getEmptyGeometry,
   );
-  const [focusedKey, setFocusedKey] = useState<ListWindowKey | undefined>();
   const [tracking, setTracking] = useState<WindowTracking | undefined>();
-  const focusNoteRef = useRef<FocusWithin | null>(null);
-  // Focus return reads the last input, so only a windowed list tracks it.
-  useInteractionModalityTrackingFor(viewport, canWindow);
 
   // This is the only full-data pass owned here, and never runs on a scroll snapshot.
   const keyIndices = useMemo(() => {
@@ -161,11 +146,12 @@ export function useListWindow({
     }
     return indices;
   }, [keys, isEligible]);
-  const focusIndex =
-    focusedKey === undefined ? undefined : keyIndices.get(focusedKey);
-  if (focusedKey !== undefined && focusIndex === undefined) {
-    setFocusedKey(undefined);
-  }
+  const {focusIndex, onItemFocus, onItemBlur} = useListFocusIsland({
+    keyIndices,
+    isActive: canWindow,
+    viewport,
+    focusContainer,
+  });
   const last = tracking?.window;
   const hasCurrentMeasurement =
     snapshot.isMeasured &&
@@ -286,31 +272,8 @@ export function useListWindow({
     );
   }, [isWindowed, start, end, rowCount, rowHeight, focusIndex]);
 
-  const onItemFocus = useCallback(
-    (key: ListWindowKey, focusTarget?: HTMLElement) => {
-      focusNoteRef.current =
-        noteFocusWithin(focusTarget ?? focusContainer.current) ??
-        focusNoteRef.current;
-      setFocusedKey(key);
-    },
-    [focusContainer],
-  );
-  const onItemBlur = useCallback(() => {
-    focusNoteRef.current = null;
-    setFocusedKey(undefined);
-  }, []);
-
   useIsomorphicLayoutEffect(() => {
-    // Syncs DOM focus and the viewport scroll position with the committed rows.
-    if (
-      focusNoteRef.current != null &&
-      (focusedKey === undefined || focusIndex === undefined)
-    ) {
-      moveFocusLeftBehind(focusNoteRef.current, viewport.current, null, {
-        preventScroll: true,
-      });
-      focusNoteRef.current = null;
-    }
+    // Syncs the viewport scroll position with the committed rows.
     if (!isWindowed || !pitch || !plan) {
       return;
     }

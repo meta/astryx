@@ -70,7 +70,24 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(250px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 250px), 1fr))',
+    );
+  });
+
+  it('lets an uncapped track shrink below minWidth in a narrow container', () => {
+    // A 360px floor on a 343px phone column must not push the page sideways:
+    // the track minimum resolves to the smaller of the floor and the container.
+    render(
+      <Grid columns={{minWidth: 360, repeat: 'fit'}} data-testid="grid">
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Grid>,
+    );
+    const grid = screen.getByTestId('grid');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
+    );
   });
 
   it('renders with columns object max (count capped, tracks still fill)', () => {
@@ -204,7 +221,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(200px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 200px), 1fr))',
+    );
     expect(grid.style.maxWidth).toBe('');
   });
 
@@ -361,7 +380,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, repeat: "fit"}} using auto-fit', () => {
@@ -372,7 +393,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fit, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, repeat: "fill"}} using auto-fill', () => {
@@ -383,7 +406,9 @@ describe('Grid', () => {
       </Grid>,
     );
     const grid = screen.getByTestId('grid');
-    expect(templateColumns(grid)).toBe('repeat(auto-fill, minmax(280px, 1fr))');
+    expect(templateColumns(grid)).toBe(
+      'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+    );
   });
 
   it('renders with columns={{minWidth, max}} capping the count while filling', () => {

@@ -77,13 +77,16 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedOptionality} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   useFieldInputStyling,
@@ -117,6 +120,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Selector/Selector.generated';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 registerEnglishFallback(english);
 
 /**
@@ -129,6 +136,12 @@ const MOST_ROWS_THAT_FIT = 12;
 
 // Private runtime state. No app or theme sets it.
 const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
+
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -276,17 +289,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Secondary is ghost's chrome with the resting fill of a secondary
@@ -309,15 +325,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {
@@ -432,9 +451,14 @@ const styles = stylex.create({
     transitionProperty: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Empty state
@@ -444,6 +468,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
 
   // Section heading. Plain secondary text, no rules — the same treatment
@@ -478,6 +503,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -1039,6 +1065,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
         // is the public SelectorOption content primitive, not this row.
         themeProps('selector-option-row', {
           size,
+          highlighted: isHighlighted ? 'highlighted' : null,
           selected: isSelected ? 'selected' : null,
           disabled: item.disabled ? 'disabled' : null,
         }),
@@ -1214,6 +1241,13 @@ export function Selector<T extends SelectorOptionType>(
     id,
     ...restProps
   } = props as SelectorPropsClearable<T>;
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'Selector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. Selector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -1444,7 +1478,7 @@ export function Selector<T extends SelectorOptionType>(
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
@@ -1517,7 +1551,6 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  // Calculate offset to position selected item over trigger.
   const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
     useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,
@@ -2132,17 +2165,15 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
-  // With search, the editable trigger is a role-less button, where
-  // aria-required is not allowed. The closed trigger states the required
-  // state in its name, through the Field label's visible marker, or else in
-  // its description; the search combobox carries aria-required while open.
-  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
-  const isLabelRequiredInName =
-    isLabelRequiredMarkerShown &&
-    !inputGroup &&
-    (callerAriaLabel == null || ariaLabelledByProp != null);
-  const hasRequiredDescription =
-    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: callerAriaLabel,
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2260,8 +2291,7 @@ export function Selector<T extends SelectorOptionType>(
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required':
-      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys

@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {docs} from './docs.mjs';
+import {projectTree} from './_adapter.mjs';
 import {integrationDocConflicts} from '../integration/authoring-checks.mjs';
 import {validateIntegration} from '../integration/validate-integration.mjs';
 import {integrationCheck} from '../integration/check/check.mjs';
@@ -115,9 +116,7 @@ async function cliJson(args) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(
-    path.join(REPO_ROOT, '.astryx-guide-route-targets-'),
-  );
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-guide-route-targets-'));
 });
 
 afterEach(() => {
@@ -158,7 +157,10 @@ describe('a flat topic that replaces a placed guide by its route', () => {
   it(
     'lists under its own package where the topic list names the guide',
     async () => {
-      const list = await docs(undefined, undefined, {cwd: tmpDir, depth: 'all'});
+      const list = await docs(undefined, undefined, {
+        cwd: tmpDir,
+        depth: 'all',
+      });
       if (list.type !== 'docs.list') return;
       /** @param {any[]} rows */
       const flat = rows =>
@@ -621,7 +623,9 @@ describe('review follow-ups', () => {
       });
       expect(catalog.add(record('@acme/one'))).toBeNull();
       expect(catalog.add(record('@acme/two'))).toBeNull();
-      expect(catalog.guideOverlay(GUIDE)).toMatchObject({
+      expect(
+        (await projectTree(catalog)).get(GUIDE)?.guideOverlay,
+      ).toMatchObject({
         replacement: {package: '@acme/two'},
         replacedPackage: '@acme/one',
       });
@@ -685,8 +689,10 @@ describe('second review follow-ups', () => {
   );
 
   it(
-    'lets a later replacement by the old route drop an earlier extension',
+    'keeps an earlier extension when a later doc replaces the guide by its old route',
     async () => {
+      // An extension adds to whatever answers its route, so configured order
+      // does not decide whether its sections show (spec:AST-046 FR11).
       scaffold({
         'a.doc.mjs': topic('acme-a', {
           extends: GUIDE,
@@ -697,7 +703,10 @@ describe('second review follow-ups', () => {
         }),
       });
       const index = await docs(GUIDE, undefined, {cwd: tmpDir, index: true});
-      expect(index.data.sections.map(each => each.id)).toEqual(['acme-acme-b']);
+      expect(index.data.sections.map(each => each.id)).toEqual([
+        'acme-acme-b',
+        'acme-extra',
+      ]);
     },
     SLOW,
   );

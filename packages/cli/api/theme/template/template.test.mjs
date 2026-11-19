@@ -37,13 +37,19 @@ describe('themeTemplate()', () => {
       type: 'theme.template',
       data: {path: THEME_TEMPLATE_DEFAULT_PATH, written: true, reason: null},
     });
-    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
+    const written = fs.readFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      'utf-8',
+    );
     expect(written).toMatch(/defineTheme/);
   });
 
   it('does not carry our copyright header into the consumer tree', () => {
     themeTemplate({cwd: tmpDir});
-    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
+    const written = fs.readFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      'utf-8',
+    );
     expect(written).not.toMatch(/Copyright \(c\) Meta Platforms/);
     expect(written.startsWith('/**')).toBe(true);
   });
@@ -58,6 +64,8 @@ describe('themeTemplate()', () => {
       path: THEME_TEMPLATE_DEFAULT_PATH,
       written: false,
       reason: 'exists',
+      overwritable: true,
+      alternative: null,
     });
     expect(fs.readFileSync(dest, 'utf-8')).toBe('// mine\n');
   });
@@ -73,10 +81,15 @@ describe('themeTemplate()', () => {
   });
 
   it('honors a custom path and creates its directory', () => {
-    const res = themeTemplate({cwd: tmpDir, targetPath: 'src/themes/starter.ts'});
+    const res = themeTemplate({
+      cwd: tmpDir,
+      targetPath: 'src/themes/starter.ts',
+    });
 
     expect(res.data.path).toBe(path.join('src', 'themes', 'starter.ts'));
-    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(
+      true,
+    );
   });
 
   it('refuses a path that escapes the project', () => {
@@ -209,5 +222,73 @@ describe('themeTemplate()', () => {
       );
       expect(fs.readdirSync(tmpDir)).toEqual([]);
     });
+  });
+
+  it('says when overwrite would refuse an existing file, and names a free path', () => {
+    fs.writeFileSync(path.join(tmpDir, 'util.ts'), 'export const x = 1;\n');
+    expect(themeTemplate({cwd: tmpDir, targetPath: 'util.ts'}).data).toEqual({
+      path: 'util.ts',
+      written: false,
+      reason: 'exists',
+      overwritable: false,
+      alternative: THEME_TEMPLATE_DEFAULT_PATH,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      '// mine\n',
+    );
+    expect(
+      themeTemplate({cwd: tmpDir, targetPath: 'util.ts'}).data.alternative,
+    ).toBe('theme.template-2.ts');
+
+    const editor = path.join(tmpDir, 'themes', 't');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 't.settings.json'), '{}\n');
+    fs.writeFileSync(path.join(editor, 't.theme.ts'), '// editor\n');
+    expect(
+      themeTemplate({cwd: tmpDir, targetPath: 'themes/t/t.theme.ts'}).data,
+    ).toMatchObject({
+      overwritable: false,
+      alternative: 'themes/t/theme.template.ts',
+    });
+  });
+});
+
+describe('themeTemplate() from a folder inside the project', () => {
+  it('reads paths from the current folder within the project root, and writes no path at the root', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    const up = themeTemplate({
+      cwd: sub,
+      targetPath: '../../themes/zz.theme.ts',
+    });
+    expect(up.data.written).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'themes', 'zz.theme.ts'))).toBe(
+      true,
+    );
+    const root = themeTemplate({cwd: sub});
+    expect(root.data.written).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'theme.template.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(sub, 'theme.template.ts'))).toBe(false);
+    expect(() =>
+      themeTemplate({cwd: sub, targetPath: '../../../out.ts'}),
+    ).toThrow(/"\.\.\/\.\.\/\.\.\/out\.ts": resolves outside the project root/);
+  });
+});
+
+describe('themeTemplate() paths with a backslash', () => {
+  it('reads a backslash as a folder separator, as eject does', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-template-bs-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+      fs.mkdirSync(path.join(dir, 'themes'));
+      const r = themeTemplate({cwd: dir, targetPath: 'themes\\x.theme.ts'});
+      expect(r.data.path).toBe(path.join('themes', 'x.theme.ts'));
+      expect(fs.existsSync(path.join(dir, 'themes', 'x.theme.ts'))).toBe(true);
+      expect(fs.readdirSync(dir)).not.toContain('themes\\x.theme.ts');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

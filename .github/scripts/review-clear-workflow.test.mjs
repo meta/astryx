@@ -82,6 +82,7 @@ function harness(
     statuses = [pendingGate],
     reviewApp = '',
     permission = 'write',
+    author = {login: 'author', type: 'User'},
   } = {},
 ) {
   const calls = [];
@@ -90,7 +91,7 @@ function harness(
     number: 17,
     head: {sha: head2},
     base: {sha: oldBaseSha},
-    user: {login: 'author', type: 'User'},
+    user: author,
     labels: labels.map(name => ({name})),
   };
   const methods = {
@@ -562,4 +563,33 @@ describe('review-clear review-app approval for write-access authors', () => {
       expect.objectContaining({state: 'pending'}),
     ]);
   });
+});
+
+describe("review-clear re-gates a trainer pass on the review app's own pull request (spec:AST-030 FR15)", () => {
+  it.each([
+    ['a request for changes', 'CHANGES_REQUESTED'],
+    ['a dismissal', 'DISMISSED'],
+  ])(
+    'sets review-required pending again after %s of the trainer pass',
+    async (_name, state) => {
+      const h = harness([review('APPROVED'), review(state)], {
+        labels: [],
+        statuses: [clearedGate],
+        reviewApp: APP,
+        author: {login: APP, type: 'Bot'},
+      });
+
+      await run(h);
+
+      expect(h.calls).toContainEqual({
+        type: 'status',
+        input: expect.objectContaining({
+          sha: head2,
+          context: 'review-required',
+          state: 'pending',
+          description: 'Waiting on code review after approval withdrawal.',
+        }),
+      });
+    },
+  );
 });

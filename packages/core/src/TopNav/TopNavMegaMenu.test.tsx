@@ -17,6 +17,7 @@ import {render, screen, act, fireEvent, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TopNavMegaMenu} from './TopNavMegaMenu';
 import {TopNavMegaMenuItem} from './TopNavMegaMenuItem';
+import {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 import {TopNavRenderContext} from './TopNavRenderContext';
 
 // =============================================================================
@@ -74,6 +75,13 @@ function restorePopoverApiMock() {
 // =============================================================================
 // Default (desktop) mode
 // =============================================================================
+
+/** A finger tap: a touch press, then its click. */
+function tap(el: HTMLElement) {
+  fireEvent.pointerDown(el, {pointerType: 'touch'});
+  fireEvent.pointerUp(el, {pointerType: 'touch'});
+  fireEvent.click(el, {detail: 1});
+}
 
 describe('TopNavMegaMenu — default mode', () => {
   it('renders the trigger button with label', () => {
@@ -604,6 +612,236 @@ describe('TopNavMegaMenu — keyboard (default mode)', () => {
     trigger.focus();
     await user.keyboard('{Enter}');
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes and returns focus to the trigger when a panel link is picked', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    const link = screen.getByRole('link', {name: /Analytics/, hidden: true});
+    link.addEventListener('click', event => event.preventDefault());
+    link.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes and returns focus to the trigger when a panel action is tapped', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Start a trial" onClick={onClick} />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('button', {name: /Start a trial/, hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the panel open after a mouse click on a custom link component that forwards only onClick', async () => {
+    const user = userEvent.setup();
+    const OnlyClick = ({
+      href,
+      onClick,
+      children,
+    }: {
+      href?: string;
+      onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+      children?: ReactNode;
+    }) => (
+      <a
+        href={href}
+        onClick={event => {
+          event.preventDefault();
+          onClick?.(event);
+        }}>
+        {children}
+      </a>
+    );
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Analytics"
+            href="/analytics"
+            as={OnlyClick}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    await user.click(
+      screen.getByRole('link', {name: /Analytics/, hidden: true}),
+    );
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes on a keyboard pick through a custom link component that calls onClick without the event', async () => {
+    const user = userEvent.setup();
+    const NoEvent = ({
+      href,
+      onClick,
+      children,
+    }: {
+      href?: string;
+      onClick?: () => void;
+      children?: ReactNode;
+    }) => (
+      <a
+        href={href}
+        onClick={event => {
+          event.preventDefault();
+          onClick?.();
+        }}>
+        {children}
+      </a>
+    );
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Analytics"
+            href="/analytics"
+            as={NoEvent}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const link = screen.getByRole('link', {name: /Analytics/, hidden: true});
+    link.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the panel open after a mouse click on a panel action', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Start a trial" onClick={onClick} />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    await user.click(
+      screen.getByRole('button', {name: /Start a trial/, hidden: true}),
+    );
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the panel open after a pick on an item that sets hasCloseOnSelect to false', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={
+          <TopNavMegaMenuItem
+            title="Copy link"
+            onClick={onClick}
+            hasCloseOnSelect={false}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('button', {name: /Copy link/, hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it("closes and returns focus to the trigger when the featured card's link is tapped", async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        featured={
+          <TopNavMegaMenuFeaturedCard
+            title="New"
+            linkLabel="Read more"
+            linkHref="/new"
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const link = screen.getByRole('link', {name: /Read more/, hidden: true});
+    link.addEventListener('click', event => event.preventDefault());
+    tap(link);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('does not reopen a hover-opened panel closed by a pick until the pointer leaves and returns', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <TopNavMegaMenu
+          label="Products"
+          items={
+            <TopNavMegaMenuItem title="Start a trial" onClick={() => {}} />
+          }
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Products'});
+      await user.hover(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      screen.getByRole('button', {name: /Start a trial/, hidden: true}).focus();
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The closing panel puts the trigger back under a still pointer, and
+      // the browser fires a new mouseenter: it must not reopen the panel.
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // A real leave and return opens it again.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('closes on Escape and returns focus to the trigger', async () => {

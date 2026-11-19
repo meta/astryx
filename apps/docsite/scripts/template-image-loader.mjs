@@ -14,16 +14,17 @@
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {mapFixtureRefs} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {
+  OPTIMIZED_IMAGE_QUALITY,
+  isOptimizedFormat,
+  optimizedImageUrl,
+} from '../src/lib/optimizedImageUrl.mjs';
 
 // The optimizer does not enlarge, so this width keeps the pixel size of every
 // image that is not wider. It must be a width the optimizer allows
 // (`images.deviceSizes`); the optimizer answers 400 for any other.
 export const TEMPLATE_IMAGE_WIDTH = 1920;
-// Must be in `images.qualities`.
-export const TEMPLATE_IMAGE_QUALITY = 75;
-
-// The formats the optimizer converts. It refuses a vector image.
-const OPTIMIZED_FORMAT = /\.(?:png|jpe?g)$/iu;
+export const TEMPLATE_IMAGE_QUALITY = OPTIMIZED_IMAGE_QUALITY;
 
 /**
  * The optimizer URL for a template image: the same picture in the format the
@@ -34,7 +35,7 @@ const OPTIMIZED_FORMAT = /\.(?:png|jpe?g)$/iu;
  * @returns {string}
  */
 export function templateImageUrl(path, width = TEMPLATE_IMAGE_WIDTH) {
-  return `/_next/image?url=${encodeURIComponent(path)}&w=${width}&q=${TEMPLATE_IMAGE_QUALITY}`;
+  return optimizedImageUrl(path, width);
 }
 
 /**
@@ -62,7 +63,7 @@ export function optimizeTemplateImages(
     }
     // A query or a fragment does not select another file.
     const path = reference.split(/[?#]/u)[0];
-    return OPTIMIZED_FORMAT.test(path) && isServed(path)
+    return isOptimizedFormat(path) && isServed(path)
       ? templateImageUrl(path, width)
       : null;
   }).source;

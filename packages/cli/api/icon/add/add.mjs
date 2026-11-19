@@ -184,7 +184,7 @@ export async function iconAdd(exportName, options) {
     const definition =
       givenDefinition == null
         ? undefined
-        : definitionNameOf(givenDefinition, mappableDefinitions(set));
+        : definitionNameOf(givenDefinition, mappableDefinitions(set), set);
     const source = resolveIconSource(from, where);
     const sourceExport = useDefault ? 'default' : exportName;
     assertIconExport(source.file, source.module, sourceExport);

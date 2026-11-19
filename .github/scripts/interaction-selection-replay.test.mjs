@@ -16,6 +16,7 @@ import yaml from 'yaml';
 
 import {
   failedInteractionJobs,
+  failingSpecs,
   laneScope,
   reviewKey,
 } from './interaction-selection-replay.mjs';
@@ -183,5 +184,55 @@ describe('the replay selects as the lane does', () => {
     expect(source).toMatch(
       /git -C "\$\{ROOT\}" archive [^`]*apps\/storybook\/stories/,
     );
+  });
+});
+
+describe('failingSpecs', () => {
+  const LINE =
+    'pr-interaction (1/4)\tRun\t2026-11-07T22:40:00Z   ✘  3 [chromium] › packages/core/src/A/__tests__/A.interaction.browser.spec.ts:12:3 › a';
+
+  it('tries a log download again after a server error, and reads the failing specs', () => {
+    const answers = [
+      {status: 1, stdout: '', stderr: 'HTTP 502: Server Error'},
+      {status: 0, stdout: `${LINE}\n`, stderr: ''},
+    ];
+    const waits = [];
+    expect(
+      failingSpecs(1, {
+        run: () => answers.shift(),
+        sleep: ms => waits.push(ms),
+      }),
+    ).toEqual(['packages/core/src/A/__tests__/A.interaction.browser.spec.ts']);
+    expect(waits).toEqual([5000]);
+  });
+
+  it('gives up after four server errors in a row, with no wait after the last try', () => {
+    const waits = [];
+    let calls = 0;
+    expect(
+      failingSpecs(1, {
+        run: () => {
+          calls += 1;
+          return {status: 1, stdout: '', stderr: 'HTTP 502: Server Error'};
+        },
+        sleep: ms => waits.push(ms),
+      }),
+    ).toBe(null);
+    expect(calls).toBe(4);
+    expect(waits).toEqual([5000, 10000, 15000]);
+  });
+
+  it('gives up at once on an error that is not a server error', () => {
+    let calls = 0;
+    expect(
+      failingSpecs(1, {
+        run: () => {
+          calls += 1;
+          return {status: 1, stdout: '', stderr: 'HTTP 404: Not Found'};
+        },
+        sleep: () => {},
+      }),
+    ).toBe(null);
+    expect(calls).toBe(1);
   });
 });

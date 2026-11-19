@@ -20,6 +20,7 @@
 import {useState, useMemo, useCallback, useRef} from 'react';
 import type {TableSortState, UseTableSortableConfig} from './useTableSortable';
 import {useCollator} from '../../../i18n/useCollator';
+import {useCommittedRef} from '../../../hooks/useCommittedRef';
 
 // =============================================================================
 // Comparator Types
@@ -287,13 +288,18 @@ export function useTableSortableState<
   const comparatorsRef = useRef(comparators);
   comparatorsRef.current = comparators;
 
-  // Stable ref for onSortChange to avoid recreating sortConfig on inline callback identity changes
-  const onSortChangeRef = useRef(onSortChange);
-  onSortChangeRef.current = onSortChange;
+  // The config holds one stable handler, so an inline callback does not
+  // recreate it. The handler reads the committed callback when the user sorts.
+  const onSortChangeRef = useCommittedRef(onSortChange);
+  const handleSortChange = useCallback(
+    (nextSort: TableSortState<TSortKey>) => onSortChangeRef.current(nextSort),
+    [onSortChangeRef],
+  );
 
   // Sorted data — memoized on sort state + data identity
   const sortedData = useMemo(
-    () => sortData(data, sort, comparatorsRef.current, collator),
+    () => sortData(data, sort, comparators, collator),
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- comparator identity is not reactive: callers often pass an inline object
     [data, sort, collator],
   );
 
@@ -308,11 +314,11 @@ export function useTableSortableState<
   const sortConfig = useMemo(
     (): UseTableSortableConfig<TSortKey> => ({
       sort,
-      onSortChange: onSortChangeRef.current,
+      onSortChange: handleSortChange,
       allowUnsortedState,
       isMultiSortEnabled,
     }),
-    [sort, allowUnsortedState, isMultiSortEnabled],
+    [sort, handleSortChange, allowUnsortedState, isMultiSortEnabled],
   );
 
   return {sortedData, sort, sortConfig, applySort};

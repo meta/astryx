@@ -83,6 +83,29 @@ describe('TopNav', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps a plain-text heading in its own one-line box in mobile-bar mode', () => {
+    render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNav heading="Northwind Internal Usage Analytics" />
+      </TopNavRenderContext>,
+    );
+    const text = screen.getByText('Northwind Internal Usage Analytics');
+    expect(text.tagName).toBe('SPAN');
+    expect(text.className).toContain('mobileBarHeadingText');
+  });
+
+  it('passes an element heading through unwrapped in mobile-bar mode', () => {
+    render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNav heading={<span data-testid="title-content">Logo</span>} />
+      </TopNavRenderContext>,
+    );
+    expect(screen.getByTestId('title-content')).toBeInTheDocument();
+    expect(
+      document.querySelector('[class*="mobileBarHeadingText"]'),
+    ).toBeNull();
+  });
+
   it('renders heading slot content', () => {
     render(<TopNav heading={<span data-testid="title-content">Logo</span>} />);
     expect(screen.getByTestId('title-content')).toBeInTheDocument();
@@ -228,6 +251,30 @@ describe('TopNav', () => {
 });
 
 describe('TopNavHeading', () => {
+  it("carries mode=drawer as the phone menu's title, and no mode in the bar", () => {
+    const {container, unmount} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavHeading heading="Acme" />
+      </TopNavRenderContext>,
+    );
+    expect(
+      container
+        .querySelector('.astryx-top-nav-heading')
+        ?.getAttribute('data-mode'),
+    ).toBe('drawer');
+    unmount();
+    const bar = render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNavHeading heading="Acme" />
+      </TopNavRenderContext>,
+    );
+    expect(
+      bar.container
+        .querySelector('.astryx-top-nav-heading')
+        ?.hasAttribute('data-mode'),
+    ).toBe(false);
+  });
+
   it('renders heading text', () => {
     render(<TopNavHeading heading="My App" />);
     expect(screen.getByText('My App')).toBeInTheDocument();

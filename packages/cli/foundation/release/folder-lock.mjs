@@ -14,20 +14,13 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {tryLock} from './cache.mjs';
-import {LEASE_RENEW_MS, renewLock} from './lock-lease.mjs';
+import {AsyncLocalStorage} from 'node:async_hooks';
+import * as os from 'node:os';
+import {isAlive, lockIdentity, pidSpace, tryLock} from './cache.mjs';
+import {foreignLockIsSilent, LEASE_RENEW_MS, renewLock} from './lock-lease.mjs';
 
 /** How long a held lock's record may stand unrenewed before it is taken over. */
 export const SILENT_MS = 3 * LEASE_RENEW_MS;
-
-/** @param {string} file @returns {string} */
-const recordText = file => {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-};
 
 /**
  * Move a silent lock aside and remove it; another run that moved it first
@@ -42,17 +35,57 @@ function takeOver(lockDir, judged) {
   } catch {
     return;
   }
-  // The lock moved aside must hold the record judged silent: a lock taken
-  // or renewed in between is put back.
-  if (recordText(path.join(aside, 'owner.json')) !== judged) {
+  // The lock moved aside must be the one judged silent (by its identity
+  // on disk and its record, as the release cache checks): a lock taken or
+  // renewed in between is put back. When its place is taken again, it
+  // stays aside for its run, and this run holds nothing.
+  if (lockIdentity(aside) !== judged) {
     try {
       fs.renameSync(aside, lockDir);
     } catch {
-      // Its place is taken again.
+      // Left for its run.
     }
     return;
   }
   fs.rmSync(aside, {recursive: true, force: true});
+}
+
+/**
+ * Whether a lock's holder runs on this computer, in this process space: a
+ * holder that is only stopped (Ctrl-Z, a sleeping laptop, a debugger) is
+ * alive, however long its record stands unrenewed.
+ * @param {any} owner
+ */
+function aliveHere(owner) {
+  if (!owner || owner.host !== os.hostname() || !Number.isInteger(owner.pid))
+    return false;
+  const ns = pidSpace();
+  if (owner.ns && ns && owner.ns !== ns) return false;
+  return isAlive(owner.pid);
+}
+
+/** The lock the running work holds, for the check before each write. */
+const holding = new AsyncLocalStorage();
+
+/**
+ * Throw when the work running under withFolderLock no longer holds its lock
+ * (another run took it over while this one was stopped), so it writes
+ * nothing more. Outside withFolderLock it does nothing. Call it right
+ * before a write.
+ */
+export function stillHolds() {
+  const h =
+    /** @type {{ownerFile: string, same: (o: any) => boolean} | undefined} */ (
+      holding.getStore()
+    );
+  if (!h || h.same(readOwner(h.ownerFile))) return;
+  const error = /** @type {Error & {code?: string}} */ (
+    new Error(
+      'another command took over the lock while this one was stopped, so this one writes nothing more',
+    )
+  );
+  error.code = 'ERR_LOCK_LOST';
+  throw error;
 }
 
 /** The lock folders this process holds now. */
@@ -101,16 +134,17 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
   // not changed for three of those, as this run sees it, has stopped,
   // whatever computer or process id it names (pid 1 in a container, a
   // computer whose processes this run cannot check).
-  let record = recordText(ownerFile);
-  let since = Date.now();
-  for (let waited = 0; !tryLock(lockDir); waited += 50) {
-    const text = recordText(ownerFile);
-    if (text !== record) {
-      record = text;
-      since = Date.now();
-    } else if (Date.now() - since >= SILENT_MS) {
-      takeOver(lockDir, record);
-      since = Date.now();
+  for (let waited = 0; !tryLock(lockDir, {leased: true}); waited += 50) {
+    // The release cache's own judge of silence (what this process saw of
+    // the record), with the editor's shorter window. The lock is judged by
+    // its identity on disk, so the one moved aside is the one judged.
+    const judged = lockIdentity(lockDir);
+    if (
+      judged &&
+      foreignLockIsSilent(lockDir, Date.now(), SILENT_MS) &&
+      !aliveHere(readOwner(ownerFile))
+    ) {
+      takeOver(lockDir, judged);
       continue;
     }
     const now = holderOf();
@@ -153,7 +187,7 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
-    return await fn();
+    return await holding.run({ownerFile, same}, fn);
   } finally {
     clearInterval(lease);
     release();

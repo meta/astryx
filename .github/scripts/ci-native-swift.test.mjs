@@ -18,6 +18,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {withoutCheckoutRetries} from './lib/checkout-retries.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -78,7 +79,7 @@ describe('native Swift routing', () => {
     expect(step(swift, 'Require a decided Swift runner').if).toBe(
       "needs.admission.result != 'failure' && needs.admission.result != 'skipped' && needs.native-swift-runner.result != 'success'",
     );
-    for (const candidate of swift.steps) {
+    for (const candidate of withoutCheckoutRetries(swift.steps)) {
       if (
         [
           'Stop when CI admission refused the run',

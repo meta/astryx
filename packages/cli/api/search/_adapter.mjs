@@ -6,9 +6,9 @@
  * domain, _gather-*.mjs) and loads the tree's static data before it runs.
  */
 
-import {readFileSync, realpathSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {coreContentDir, realDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
@@ -17,6 +17,9 @@ import {
 } from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
+import {Project} from '../../foundation/config/project.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
+import {iconSetDirectoryNames} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
@@ -28,20 +31,77 @@ import {
   gatherThemes,
 } from './_gather-templates.mjs';
 import {componentsInSource} from '../../foundation/discovery/template-adapter.mjs';
+import {
+  keptStoredCatalog,
+  storedSearchCatalog,
+} from '../../foundation/discovery/stored-search-catalog.mjs';
 
 export {componentKeywords} from './_gather-components.mjs';
+
+/**
+ * The icon section of a search (_icons.mjs): the installed icons that answer
+ * a query that asks for an icon, or null. Only where icon features are on:
+ * the section's code loads only then, the ask test reads the installed sets'
+ * names from their directories alone, and the sets themselves are read only
+ * for a query that asks. A project that fails to load has no section.
+ * Nothing is kept with the gathered catalog, so a pack installed or removed
+ * shows on the next search.
+ * @param {string} query
+ * @param {{cwd: string, declaredNames: string[], resultDomains: string[], limit: number}} options
+ *   `declaredNames`: the names of the components and hooks search reads;
+ *   `resultDomains`: the domains of its results
+ * @returns {Promise<import('./search.type.mjs').SearchIconSection | null>}
+ */
+export async function searchIconSection(
+  query,
+  {cwd, declaredNames, resultDomains, limit},
+) {
+  let project;
+  try {
+    project = await Project.load(cwd);
+  } catch {
+    return null;
+  }
+  if (!iconFeatureGate(project).on) return null;
+  const loaded = /** @type {Project} */ (project);
+  const {iconSection} = await import('./_icons.mjs');
+  return iconSection(
+    query,
+    {
+      setNames: loaded.loadedIntegrations.flatMap(integration =>
+        integration?.iconSets
+          ? iconSetDirectoryNames(integration.iconSets)
+          : [],
+      ),
+      read: async () => {
+        try {
+          return await loaded.iconSets();
+        } catch {
+          return {
+            sets: [],
+            withdrawn: [],
+            choice: /** @type {const} */ ({status: 'none', reason: ''}),
+          };
+        }
+      },
+    },
+    {declaredNames, resultDomains, limit},
+  );
+}
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
  * The Core a typed search reads: the project's, else the release's own,
  * installed into the per-user cache first when needed (a network install and
- * an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does.
+ * an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does. Null
+ * in a run whose base is not Core: such a search finds no Core component or
+ * hook, and still gathers its integrations' components.
  * @param {string} cwd
- * @returns {string}
+ * @returns {string | null}
  */
-export function requireSearchCoreDir(cwd) {
-  return requireCoreDir(cwd);
+export function searchCoreContentDir(cwd) {
+  return coreContentDir(cwd);
 }
 
 /**
@@ -66,7 +126,8 @@ export function gatherCandidates(options) {
  * without Core gathers the docs and themes alone and records why in
  * `coreSkipped`; it never fails silently.
  * @param {string | undefined} type
- * @param {(cwd: string) => string} lookup finds the Core folder, or throws
+ * @param {(cwd: string) => string | null} lookup finds the Core folder (null
+ *   when the run reads no Core), or throws
  * @param {string} cwd
  * @returns {{coreDir: string | null, coreSkipped: string | null, coreSkippedCode: string | null, wants: (domain: string) => boolean}}
  */
@@ -89,9 +150,10 @@ export function resolveSearchCore(type, lookup, cwd) {
       coreSkippedCode = typeof code === 'string' ? code : null;
     }
   }
+  const coreFound = needsCore && coreSkipped == null;
   /** @param {string} domain */
   const wants = domain =>
-    (!type && (coreDir != null || CORELESS_DOMAINS.includes(domain))) ||
+    (!type && (coreFound || CORELESS_DOMAINS.includes(domain))) ||
     type === domain;
   return {coreDir, coreSkipped, coreSkippedCode, wants};
 }
@@ -103,14 +165,26 @@ async function gatherDomains(options) {
   const {cwd = process.cwd(), type} = options;
   const {coreDir, coreSkipped, coreSkippedCode, wants} = resolveSearchCore(
     type,
-    requireSearchCoreDir,
+    searchCoreContentDir,
     cwd,
   );
+  const found = coreDir == null ? null : storedSearchCatalog(coreDir, cwd);
+  const stored = found && storedCatalog(found.value, DOMAINS.filter(wants));
+  if (found && stored) {
+    const result = {
+      ...stored,
+      searchedComponents: wants('component'),
+      outside:
+        stored.all.some(c => c.domain === 'theme') && isOutsideProject(cwd),
+      coreSkipped,
+      coreSkippedCode,
+    };
+    fromStore.set(result, {pm: found.pm, domains: DOMAINS.filter(wants)});
+    return result;
+  }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
-    wants('component')
-      ? gatherComponents(/** @type {string} */ (coreDir), cwd)
-      : [],
-    wants('hook') ? gatherHooks(/** @type {string} */ (coreDir)) : [],
+    wants('component') ? gatherComponents(coreDir, cwd) : [],
+    wants('hook') ? gatherHooks(coreDir) : [],
     wants('doc') ? gatherDocs(cwd) : [],
     wants('template') ? gatherTemplates(cwd) : [],
     wants('theme') ? gatherThemes(cwd) : [],
@@ -131,19 +205,6 @@ async function gatherDomains(options) {
 }
 
 /**
- * The folder's real path, so a link and its target share a kept gather.
- * @param {string} dir
- * @returns {string}
- */
-function realFolder(dir) {
-  try {
-    return realpathSync(dir);
-  } catch {
-    return dir;
-  }
-}
-
-/**
  * A gathered catalog as plain JSON and back, for a gather kept between runs
  * (persistedGather). A template's derived component names are read once and
  * stored as their value; `components` is stored by position in `all`, whose
@@ -151,10 +212,30 @@ function realFolder(dir) {
  */
 const GATHER_CODEC = {
   /**
+   * The shape a read-back gather needs: its candidates and components.
+   * @param {any} gathered
+   */
+  valid: gathered =>
+    gathered != null &&
+    Array.isArray(gathered.all) &&
+    Array.isArray(gathered.components) &&
+    gathered.all.every(
+      (/** @type {any} */ c) => c != null && typeof c === 'object',
+    ) &&
+    gathered.components.every((/** @type {any} */ c) => c != null),
+  /**
    * @param {any} gathered
    * @returns {any}
    */
   encode(gathered) {
+    // A catalog read from the store written at publish is kept as a
+    // reference to it: the run's stamps hold every file the store's check
+    // read, so a run that finds them unchanged reads the store as it is.
+    const reference = fromStore.get(gathered);
+    if (reference) {
+      const {all: _all, components: _components, ...rest} = gathered;
+      return {...rest, [FROM_STORE]: reference};
+    }
     const position = new Map(
       gathered.all.map((/** @type {any} */ c, /** @type {number} */ i) => [
         c,
@@ -190,6 +271,15 @@ const GATHER_CODEC = {
    * @returns {any}
    */
   decode(stored) {
+    const reference = stored[FROM_STORE];
+    if (reference) {
+      const {[FROM_STORE]: _, ...rest} = stored;
+      const value = storedCatalog(
+        keptStoredCatalog(reference.pm),
+        reference.domains,
+      );
+      return value && {...rest, ...value};
+    }
     const all = stored.all.map((/** @type {any} */ c) => {
       const stored = c.weakKeywords?.[DERIVED];
       if (stored === undefined) return c;
@@ -233,6 +323,56 @@ const GATHER_CODEC = {
   },
 };
 
+/** Every domain a catalog gathers, as candidates name them. */
+const DOMAINS = ['component', 'hook', 'doc', 'template', 'theme'];
+
+/**
+ * Gathered catalogs read from the catalog stored at publish, each with the
+ * package manager its docs spell commands for and the domains it holds.
+ * @type {WeakMap<object, {pm: string, domains: string[]}>}
+ */
+const fromStore = new WeakMap();
+
+/** The key a kept gather's reference to the stored catalog sits under. */
+const FROM_STORE = '\0fromStore';
+
+/**
+ * The catalog stored at publish, decoded, with only the candidates of
+ * `domains`; null when there is none or it does not decode to a catalog's
+ * shape.
+ * @param {unknown} encoded
+ * @param {string[]} domains
+ * @returns {{all: Candidate[], components: Candidate[]} | null}
+ */
+function storedCatalog(encoded, domains) {
+  if (encoded == null) return null;
+  try {
+    const value = GATHER_CODEC.decode(encoded);
+    if (!GATHER_CODEC.valid(value)) return null;
+    return {
+      all: value.all.filter((/** @type {Candidate} */ c) =>
+        domains.includes(c.domain),
+      ),
+      components: domains.includes('component') ? value.components : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A full gathered catalog (every domain) in the plain form the catalog stored
+ * at publish holds (scripts/generate-search-catalog.mjs): the kept gather's
+ * form, with each page template's derived component names read now, so the
+ * store names no file.
+ * @param {Awaited<ReturnType<typeof gatherCandidates>>} gathered
+ * @returns {unknown}
+ */
+export function encodeStoredCatalog(gathered) {
+  for (const c of gathered.all) void c.weakKeywords;
+  return GATHER_CODEC.encode(gathered);
+}
+
 /** The key a stored template's derived component names sit under. */
 const DERIVED = '\0derived';
 
@@ -264,7 +404,7 @@ export function gatherCandidatesReused(options) {
     gather = reusedWhileUnchanged(
       () =>
         persistedGather(
-          [realFolder(cwd), type ?? null],
+          [realDir(cwd), type ?? null],
           () => gatherCandidates({cwd, type}),
           GATHER_CODEC,
           // A gather that skipped Core (a failed install still in its
@@ -293,7 +433,7 @@ export function gatherCandidatesReused(options) {
  *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
  *   null when build's loader finds the file absent, unreadable, or the wrong
  *   shape.
- * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
+ * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData, ownEvidence?: boolean}} SearchCatalog
  */
 
 /** @type {SearchData | null} */
