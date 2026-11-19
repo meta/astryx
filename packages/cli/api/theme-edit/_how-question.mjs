@@ -14673,7 +14673,14 @@ export function draftAnswer(ctx, env, question) {
     const variants =
       C.variantValues(FAMILIES[holder]?.[0] ?? holder).variant ?? [];
     if (c.parts[0].when) continue;
-    if (variants.includes(lead0) && lead0 !== 'default')
+    // ("cards: transparent bottom border": a lead word with a side right
+    // after it is that side's line color, never a variant of the part.)
+    const sideColor = () =>
+      new RegExp(
+        `^(?:[^:]+:)?\\s*${lead0}\\s+(?:top|bottom|left|right)\\b`,
+        'i',
+      ).test(c.text);
+    if (variants.includes(lead0) && lead0 !== 'default' && !sideColor())
       c.parts = [{...c.parts[0], when: `variant:${lead0}`}];
     else if (
       c.state &&

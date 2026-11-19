@@ -474,4 +474,18 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    'reads a color word with a side after it as the line, never a variant',
+    async () => {
+      if (unbuilt) return;
+      expect(await first('cards: transparent bottom border')).toEqual([
+        "border-bottom '1px solid transparent' --on card",
+      ]);
+      expect(
+        (await first('cards: #ddd border, transparent bottom')).join('\n'),
+      ).toMatch(/^border-bottom '1px solid transparent' --on card$/m);
+    },
+    T,
+  );
 });
