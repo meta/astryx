@@ -154,6 +154,15 @@ const ROWS = [
       never: /--color-text-accent/,
     },
   ],
+  [
+    'links in tabs, which hold no link, are named, never written on the tab',
+    {
+      q: 'tabs: 14px text, blue links',
+      has: ['font-size 14px --on tab'],
+      never: /--color-text-accent/,
+      says: /tab holds no link/,
+    },
+  ],
 ];
 
 describe('long asks bind each clause to its own part', () => {

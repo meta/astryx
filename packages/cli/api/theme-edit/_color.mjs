@@ -151,9 +151,11 @@ export function colorOpacitiesIn(value) {
   const text = String(value ?? '');
   /** @type {Array<{index: number, typed: string, color: string | null}>} */
   const out = [];
-  // (A url() holds a path, `url(/img/white/24.png)`, never a color.)
+  // (A url() holds a path, `url(/img/white/24.png)`, never a color; so
+  // does a quoted string, an image-set() path or a bare quoted path,
+  // `"/img/red/50/a.png"`.)
   const urls = [
-    ...text.matchAll(/\burl\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\)/gi),
+    ...text.matchAll(/\burl\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\)|"[^"]*"|'[^']*'/gi),
   ].map(u => [u.index ?? 0, (u.index ?? 0) + u[0].length]);
   for (const m of text.matchAll(
     /(?<![\w#.])(#[0-9a-f]{3,8}|[a-z]+(?:-\d{2,3})?)(?=\/)/gi,
