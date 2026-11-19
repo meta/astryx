@@ -150,10 +150,9 @@ describe('a link color', () => {
 
 describe('a text size or weight on a part that holds its text', () => {
   it(
-    "goes into the one token that text reads: a banner's size, a code block's size, a top nav heading's weight",
+    "goes into the one token that text reads: a code block's size, a top nav heading's weight",
     async () => {
       for (const [prop, value, on, cls, tok] of [
-        ['font-size', '13px', 'banner', '.astryx-banner', '--text-label-size'],
         [
           'font-size',
           '12px',
@@ -191,6 +190,23 @@ describe('a text size or weight on a part that holds its text', () => {
         "set t --text-large-size 20px --on top-nav-heading",
         "set t --text-supporting-size 20px --on top-nav-heading",
       ]);
+    },
+    T,
+  );
+
+  it(
+    "goes into each line's token where the text sits in a column of its own parts (a banner's title and description)",
+    async () => {
+      fs.writeFileSync(file(), fresh);
+      const r = await set(['font-size', '13px', '--on', 'banner']);
+      expect(r.error).toBeUndefined();
+      expect(JSON.stringify(r)).toContain(
+        'the value goes into each: --text-label-size on banner, --text-supporting-size on banner',
+      );
+      expect(declsOn('.astryx-banner')).toContain('--text-label-size: 13px');
+      expect(declsOn('.astryx-banner')).toContain(
+        '--text-supporting-size: 13px',
+      );
     },
     T,
   );

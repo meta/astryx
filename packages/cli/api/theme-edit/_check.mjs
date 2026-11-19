@@ -127,6 +127,7 @@ import {
   partComponentDocs,
   colorPropTokens,
   innerPropTokens,
+  columnLineTokens,
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
@@ -7805,13 +7806,20 @@ function checkOne(
       // the value goes into it on the part (compileTheme), and the result
       // says so. With several (a top nav heading's title and subtitle
       // sizes), which one is meant is not known: the refusal names each.
+      // A text column's lines (a banner's title and description) each take
+      // it, since it means all of the part's text.
+      const column = (/** @type {string} */ t, /** @type {string[]} */ toks) =>
+        toks.length > 1 &&
+        columnLineTokens(ctx.C, t, prop).join() === toks.join();
       const oneEach =
-        prop !== 'color' && inner.every(([, toks]) => toks.length === 1);
+        prop !== 'color' &&
+        inner.every(([t, toks]) => toks.length === 1 || column(t, toks));
       if (inner.length && inner.length === partsOf(ctx, s).length && oneEach) {
         const said = inner
-          .map(
-            ([part, [tok]]) =>
-              `${part}'s text is drawn by elements inside it that set their own ${prop} from ${tok}, so the value goes into ${tok} on ${part}`,
+          .map(([part, toks]) =>
+            toks.length === 1
+              ? `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks[0]}, so the value goes into ${toks[0]} on ${part}`
+              : `${part}'s text is in parts inside it that set their own ${prop} from ${toks.join(' and ')}, so the value goes into each: ${toks.map(tok => `${tok} on ${part}`).join(', ')}`,
           )
           .join('; ');
         s.note = s.note ? `${s.note}; ${said}` : said;
