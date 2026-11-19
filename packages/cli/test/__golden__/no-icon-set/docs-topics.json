@@ -154,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "e0a2a3ca8c5e424d77bba6b0e13e87340bf2b6b4e45dbb08ed3fcd766460a93e",
+      "skeleton": "05e446f3356c50ba4225100bb95eb18d57eb4643d25f5879d0d40fc7acff1bef",
       "mentions": []
     },
     "icons": {
@@ -249,7 +249,7 @@
         "what-each-file-does",
         "further-reading"
       ],
-      "skeleton": "ef4e4158ed2cdf854f1136340b28822987012bda257287dff750fea105ec5d8d",
+      "skeleton": "af5541b78883db8a65d292340cecdaffa0c6b1052b77921ba0025a2ab51f75eb",
       "mentions": []
     },
     "theme": {
@@ -280,7 +280,7 @@
         "nesting-themes",
         "runtime-vs-built-themes"
       ],
-      "skeleton": "53e2a487ce24d173b2d3406be132f935fedc1520273dadc0a84d6cc94b8ba2d9",
+      "skeleton": "c2941d6fc4d91afea2972ff0934246160d80dfecfcbfbafa36a86e406cb0cb96",
       "mentions": []
     },
     "use-integrations": {
