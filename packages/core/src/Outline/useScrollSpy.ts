@@ -36,6 +36,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {scrollsPage} from '../utils/pageScroller';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
 import type {OutlineItem} from './types';
 
@@ -249,10 +250,12 @@ export function useScrollSpy({
    * (meaning the viewport).
    */
   const getScrollRoot = useCallback((): HTMLElement | null => {
-    return (
-      scrollContainerRef?.current ??
-      (rootRef.current == null ? null : scrollingAncestor(rootRef.current))
-    );
+    if (scrollContainerRef?.current != null) {
+      return scrollContainerRef.current;
+    }
+    const root = rootRef.current;
+    const ancestor = root == null ? null : scrollingAncestor(root);
+    return ancestor == null || scrollsPage(ancestor) ? null : ancestor;
   }, [rootRef, scrollContainerRef]);
 
   // Syncs a scroll listener on the scroll root and a window resize listener

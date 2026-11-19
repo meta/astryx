@@ -1083,6 +1083,95 @@ describe('Outline scroll scoping', () => {
   });
 });
 
+describe('Outline scroll spy, when <html> scrolls the page', () => {
+  const html = document.documentElement;
+  let removeHeadings: () => void;
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    // jsdom implements neither. The offset path scrolls through them.
+    Element.prototype.scrollBy = vi.fn();
+    window.scrollBy = vi.fn();
+    // With `html {overflow-y: scroll}`, the ancestor walk matches `<html>`.
+    // Its box moves up by the page's scroll. The scroll events go to the window.
+    html.style.overflowY = 'scroll';
+    Object.defineProperty(html, 'clientHeight', {
+      value: 800,
+      configurable: true,
+    });
+    Object.defineProperty(html, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    vi.spyOn(html, 'getBoundingClientRect').mockReturnValue({
+      top: -1000,
+    } as DOMRect);
+    removeHeadings = mountHeadings();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    html.style.overflowY = '';
+    Reflect.deleteProperty(html, 'clientHeight');
+    Reflect.deleteProperty(html, 'scrollHeight');
+    removeHeadings();
+  });
+
+  it('follows the page scroll', async () => {
+    const [intro, install, api] = items.map(
+      item => document.getElementById(item.id) as HTMLElement,
+    );
+    vi.spyOn(intro, 'getBoundingClientRect').mockReturnValue({
+      top: -500,
+    } as DOMRect);
+    const installRect = vi
+      .spyOn(install, 'getBoundingClientRect')
+      .mockReturnValue({top: 300} as DOMRect);
+    vi.spyOn(api, 'getBoundingClientRect').mockReturnValue({
+      top: 900,
+    } as DOMRect);
+
+    render(<Outline items={items} />);
+    installRect.mockReturnValue({top: -10} as DOMRect);
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
+    expect(screen.getByRole('link', {name: 'Installation'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+  });
+
+  it('lands below a fixed header and ends the navigation with the page scroll', async () => {
+    const user = userEvent.setup();
+    const install = document.getElementById('install') as HTMLElement;
+    vi.spyOn(install, 'getBoundingClientRect').mockReturnValue({
+      top: 400,
+    } as DOMRect);
+    const onNavigateEnd = vi.fn();
+
+    render(<Outline items={items} offset={48} onNavigateEnd={onNavigateEnd} />);
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 400 - 48,
+      behavior: 'smooth',
+    });
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onNavigateEnd).toHaveBeenCalledTimes(1);
+    expect(onNavigateEnd).toHaveBeenCalledWith('install');
+  });
+});
+
 describe('useOutlineFromDOM', () => {
   it('collects headings from DOM container', () => {
     function Demo() {
