@@ -5,7 +5,8 @@
  * role names in its own words is that status, any other is named;
  * tabular numbers; a word about a color before it; a highlight color no
  * part draws is named, never carried onto the part before; every list of
- * three pieces names what it did not take. Also near-black and tinted
+ * three pieces names what it did not take; two color-for pairs joined by
+ * "and" are each their own. Also near-black and tinted
  * grays. Every line offered is run.
  */
 
@@ -102,6 +103,23 @@ describe('long looks', () => {
     const lines = top(rs);
     expect(lines.join(' ')).not.toMatch(/#eab308/);
     expect(texts(rs)).toMatch(/not taken: [^:]*"highlights"/);
+  }, 240_000);
+
+  it('two color-for pairs joined by "and" each keep their own thing', async () => {
+    // (Each pair is its own: both statuses write, never the accent.)
+    const both = await how('q0', 'green for success and red for errors');
+    expect(top(both)).toEqual([
+      `set q0 success '#16a34a'`,
+      `set q0 danger '#dc2626'`,
+    ]);
+    expect(writes(both).join(' ')).not.toMatch(/ accent /);
+    // (A thing no status names in its own words is named, never dropped.)
+    const tasks = await how(
+      'q0',
+      'teal for done tasks and red for overdue tasks',
+    );
+    expect(top(tasks)[0]).toBe(`set q0 success '#0d9488'`);
+    expect(texts(tasks)).toMatch(/"red for overdue tasks"/);
   }, 240_000);
 
   it('near-black text and tinted grays', async () => {
