@@ -105,7 +105,7 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 // ============= DETERMINISTIC SERIES =============
@@ -547,7 +547,9 @@ function ActiveUsersTrend() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Holds the widest tick label ("1200K") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={56}
             unit="K"
           />
           <Tooltip

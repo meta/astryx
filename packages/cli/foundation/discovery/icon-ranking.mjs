@@ -62,8 +62,10 @@
  * name match on the whole id (or its plural or singular) comes before one on
  * a part of it, and a meaning
  * match whose query sits earlier among the icon's tags comes first (sets list
- * an icon's most telling tags first). Remaining ties keep id order, so the
- * same installation always answers the same way.
+ * an icon's most telling tags first). Remaining ties put first an icon whose
+ * id the query names in full: each word of the id is a query word, or its
+ * plural or singular. So for `plus add`, `plus` leads `folder-plus`. Then
+ * they keep id order, so the same installation always answers the same way.
  *
  * Ranking reads every icon of every searched set in each pass, and one
  * search makes up to four passes. Each set's icons, with the words they
@@ -73,7 +75,10 @@
  */
 
 import {ICON_EXPORT_NAME_RE, definitionsByIcon} from './icon-set-discovery.mjs';
-import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {
+  astryxDefinitionsByName,
+  replacedNamesOf,
+} from './icon-definition-discovery.mjs';
 import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -82,12 +87,16 @@ import {iconIdOf} from '../text/icon-id.mjs';
 /** @typedef {import('../../api/icon/icon.type.mjs').IconMatchEntry} IconMatchEntry */
 
 /**
- * The import line for one export.
+ * The import line for one export, under `local` when that name differs from
+ * the export's.
  * @param {string} exportName
  * @param {string} module
+ * @param {string} [local]
  */
-export function importLine(exportName, module) {
-  return `import {${exportName}} from '${module}';`;
+export function importLine(exportName, module, local = exportName) {
+  const binding =
+    local === exportName ? exportName : `${exportName} as ${local}`;
+  return `import {${binding}} from '${module}';`;
 }
 
 /**
@@ -182,6 +191,8 @@ function readyQuery(query) {
  * @property {IconSetIcon} icon
  * @property {string[]} definitions the definitions the set maps it to
  * @property {string[]} lowerDefinitions those names in lower case
+ * @property {Array<{name: string, definition: string, lower: string}>} replaced
+ *   the old names of those definitions: each answers with this icon
  * @property {Set<string>} parts its id parts
  * @property {string[]} tags its words that are neither its id nor an id part
  * @property {boolean[]} spacedWords for each word, whether it holds a space
@@ -193,14 +204,17 @@ function readyQuery(query) {
 /**
  * @param {IconSetIcon} icon
  * @param {string[]} definitions
+ * @param {Array<{name: string, definition: string}>} [replaced] the old
+ *   names of those definitions
  * @returns {ReadyIcon}
  */
-function readyIcon(icon, definitions) {
+function readyIcon(icon, definitions, replaced = []) {
   const parts = new Set(icon.id.split('-'));
   return {
     icon,
     definitions,
     lowerDefinitions: definitions.map(name => name.toLowerCase()),
+    replaced: replaced.map(each => ({...each, lower: each.name.toLowerCase()})),
     parts,
     tags: icon.words.filter(word => word !== icon.id && !parts.has(word)),
     spacedWords: icon.words.map(word => /\s/u.test(word)),
@@ -224,6 +238,18 @@ function matchReady(q, ready) {
       meaning: false,
       rank: 0,
       reason: `definition "${ready.definitions[at]}"`,
+    };
+  }
+  // The name of a definition another one replaced answers with the icon its
+  // successor draws.
+  const old = ready.replaced.find(each => each.lower === q.joined);
+  if (old) {
+    return {
+      tier: 'definition',
+      name: false,
+      meaning: false,
+      rank: 0,
+      reason: `definition "${old.definition}" (replaced "${old.name}")`,
     };
   }
   const tagAt = tags.indexOf(query);
@@ -332,8 +358,10 @@ function pluralPair(a, b) {
 const ICON_WORDS = new Set(['icon', 'icons']);
 
 /**
- * Words that phrase a query without naming anything: left out of a query of
- * several words that nothing answers as typed (`go home` asks for `home`).
+ * Words that phrase a query without naming anything, the words that only
+ * join others among them: left out of a query of several words that nothing
+ * answers as typed (`go home` asks for `home`, `card with a star` for
+ * `card star`).
  */
 const FILLER_WORDS = new Set([
   'a',
@@ -344,6 +372,8 @@ const FILLER_WORDS = new Set([
   'my',
   'of',
   'for',
+  'with',
+  'and',
   ...ICON_WORDS,
 ]);
 
@@ -713,7 +743,14 @@ function searchableIcons(set, kept) {
       definitions,
       name => astryx.get(name) ?? own.get(name),
     );
-    return {icon, definitions, ready: readyIcon(searchable, definitions)};
+    const replaced = definitions.flatMap(definition =>
+      replacedNamesOf(definition, set).map(name => ({name, definition})),
+    );
+    return {
+      icon,
+      definitions,
+      ready: readyIcon(searchable, definitions, replaced),
+    };
   });
   kept.set(set, list);
   return list;
@@ -748,6 +785,7 @@ function rankTerm(sets, term, searchable) {
       // Within an exact score and one set: a name match keeps whole id
       // before id part, a meaning match its tag position.
       rank: match.tier === 'exact' ? match.rank : 0,
+      whole: namesWholeId(icon.id, term),
       setIndex,
     };
   });
@@ -757,7 +795,22 @@ function rankTerm(sets, term, searchable) {
       b.entry.score - a.entry.score ||
       a.setIndex - b.setIndex ||
       a.rank - b.rank ||
+      Number(b.whole) - Number(a.whole) ||
       (a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0),
   );
   return found.map(({entry}) => entry);
+}
+
+/**
+ * Whether the query names every word of an icon's id: each id word is a
+ * query word, or its plural or singular.
+ * @param {string} id
+ * @param {string} term lower-case words
+ * @returns {boolean}
+ */
+function namesWholeId(id, term) {
+  const asked = term.split(' ');
+  return id
+    .split('-')
+    .every(part => asked.some(word => word === part || pluralPair(word, part)));
 }

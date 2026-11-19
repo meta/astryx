@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'userCircle',
+  group: 'people',
   description: "The signed-in user's avatar or account.",
   words: ['avatar', 'account', 'me'],
 };

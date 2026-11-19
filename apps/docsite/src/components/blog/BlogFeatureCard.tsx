@@ -22,6 +22,7 @@ import {AuthorByline} from './AuthorByline';
 import {BlogCoverArt} from './BlogCoverArt';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
 import {parseReleaseVersion} from '../../lib/blog/release';
+import {blogCoverUrl} from '../../lib/blog/coverImage';
 import css from './BlogCard.module.css';
 
 const styles = stylex.create({
@@ -80,7 +81,7 @@ export function BlogFeatureCard({
   const releaseVersion = parseReleaseVersion(post.title);
 
   const coverContent = post.coverImage ? (
-    <img src={post.coverImage} alt={post.coverAlt ?? ''} />
+    <img src={blogCoverUrl(post.coverImage)} alt={post.coverAlt ?? ''} />
   ) : releaseVersion ? (
     <ReleaseCoverArt
       version={releaseVersion}
