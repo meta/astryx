@@ -1120,8 +1120,9 @@ export function Item({
       {...restProps}
       {...rootControlProps}
       {...(rootControlProps != null ? disabledBagKeys : null)}
-      // A disabled link root drops its `href`, which made it a tab stop. It
-      // stays one unless the bag or the root sets a `tabIndex`.
+      // A disabled link root has no `href`, so it is not focusable by itself.
+      // It keeps the enabled focus order: the bag's `tabIndex`, else the
+      // root's, else 0.
       {...(isDisabled && rootControlProps != null
         ? {tabIndex: rootControlProps.tabIndex ?? restProps.tabIndex ?? 0}
         : null)}
