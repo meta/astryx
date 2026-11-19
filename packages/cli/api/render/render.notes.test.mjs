@@ -464,13 +464,13 @@ import '@astryxdesign/core/astryx.css';
     // A module reached by the JavaScript name of its TypeScript file says
     // format 3, which format 1 and 2 readers decline by name.
     put('formats-js/lib/rows.ts', "export const rows = ['North'];\n");
-    put('formats-js/page.tsx', "import {rows} from './lib/rows.js';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    put('formats-js/page.tsx', "import {rows} from './lib/rows.js';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     await render('formats-js/page.tsx', {cwd: dir, out: 'formats-js.html'});
     const three = read('formats-js.html');
     expect(readSourceBlock(three)).toMatchObject({found: true, source: {version: 3}});
     // An extensionless import of the same file stays format 1.
     put('formats-plain/lib/rows.ts', "export const rows = ['North'];\n");
-    put('formats-plain/page.tsx', "import {rows} from './lib/rows';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\n");
+    put('formats-plain/page.tsx', "import {rows} from './lib/rows';\nexport default function Page() {\n  return <p>{rows[0]}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n");
     await render('formats-plain/page.tsx', {cwd: dir, out: 'formats-plain.html'});
     expect(readSourceBlock(read('formats-plain.html'))).toMatchObject({found: true, source: {version: 1}});
     // A file without such a module stays format 1, which every earlier CLI opens.

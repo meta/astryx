@@ -249,6 +249,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/places.tsx', {cwd: dir, out: 'places.html'});

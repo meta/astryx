@@ -2928,7 +2928,7 @@ describe('render(): a page outside a project', () => {
     fs.writeFileSync(path.join(tree, 'fmt.ts'), "export const fmt = (value: string): string => `ts:${value}`;\n");
     fs.writeFileSync(
       path.join(tree, 'page.tsx'),
-      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\n",
+      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
     expect(run.status).toBe(0);
@@ -2947,7 +2947,7 @@ describe('render(): a page outside a project', () => {
       'parts/Kpi.tsx':
         "import {fmt} from './fmt.js';\nexport const loadLater = () => import('./later.js');\nexport function Kpi({label, value}: {label: string; value: string}) {\n  return <p>{label}: {fmt(value)}</p>;\n}\n",
       'page.tsx':
-        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\n",
+        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     };
     for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tree, name), text);
     const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
@@ -3501,7 +3501,7 @@ describe('render(): a page outside a project', () => {
     const exportOf = async (name, spec) => {
       fs.writeFileSync(
         path.join(page, `${name}.jsx`),
-        `import {label} from '${spec}';\nexport default function Page() {\n  return <p>{label}</p>;\n}\n`,
+        `import {label} from '${spec}';\nexport default function Page() {\n  return <p>{label}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n`,
       );
       const {renderPage} = await import('../../foundation/render/render-page.mjs');
       try {
