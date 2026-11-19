@@ -2332,7 +2332,7 @@ try {
   // The page's script is built first: it compiles every module the page
   // can load, a lazily imported one included, and their styles join the
   // stylesheet below.
-  /** @type {{code: string, modules: number} | null} */
+  /** @type {{code: string, modules: number, astryx: boolean} | null} */
   let script = null;
   if (workerData.buildScript) {
     reach("building the page's script");
@@ -2453,6 +2453,9 @@ try {
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
+    // Whether the script's module graph holds an Astryx module; null when no
+    // script was built. The stylesheets it imports are read by the render.
+    astryx: script ? script.astryx : null,
   });
 } catch (e) {
   if (e !== null) classify(e);
