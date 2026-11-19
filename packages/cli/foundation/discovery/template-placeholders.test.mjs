@@ -15,6 +15,8 @@ import {
   DEFAULT_PLACEHOLDER_LOOK,
   fillTemplatePlaceholders,
   meaningWithFallbacks,
+  placeholderMeaningsIn,
+  templatePlaceholderProblems,
   PLACEHOLDER_MODULE,
   placeholderLook,
   placeholderMeaning,
@@ -258,5 +260,115 @@ describe('meaning fallbacks', () => {
     expect(meaningWithFallbacks('verified')).toEqual(['verified', 'success']);
     expect(meaningWithFallbacks('delete')).toEqual(['delete']);
     expect(meaningWithFallbacks('notAMeaning')).toEqual(['notAMeaning']);
+  });
+});
+
+describe('templatePlaceholderProblems', () => {
+  const definitions = astryxDefinitionsByName();
+  const check = (/** @type {string} */ source, declared = {}) =>
+    templatePlaceholderProblems(
+      [{id: 'pages/demo', source, declared}],
+      definitions,
+    );
+
+  it('finds nothing wrong in good placeholder imports', () => {
+    expect(
+      check(
+        "import {DeleteIcon} from '@astryxdesign/template-icons';\nimport {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';\n",
+      ),
+    ).toEqual([]);
+  });
+
+  it('names a type-only or side-effect import, which a copy never fills', () => {
+    expect(
+      check("import type {DeleteIcon} from '@astryxdesign/template-icons';\n"),
+    ).toEqual([expect.stringMatching(/type-only import .* is never filled/u)]);
+    expect(check("import '@astryxdesign/template-icons';\n")).toEqual([
+      expect.stringMatching(/side-effect import .* is never filled/u),
+    ]);
+    expect(
+      check("import {type DeleteIcon} from '@astryxdesign/template-icons';\n"),
+    ).toEqual([expect.stringMatching(/imported as a type/u)]);
+  });
+
+  it('reads an aliased placeholder as the icon it draws', async () => {
+    const {parsedComponents} = await import('./template-adapter.mjs');
+    expect(
+      parsedComponents(
+        "import {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';\nexport default () => <StarSolid />;\n",
+      ),
+    ).toEqual(
+      parsedComponents(
+        "import {StarIcon} from '@heroicons/react/24/solid';\nexport default () => <StarIcon />;\n",
+      ),
+    );
+  });
+
+  it('names an unknown meaning, with its fix', () => {
+    const [problem] = check(
+      "import {DeletIcon} from '@astryxdesign/template-icons';\n",
+    );
+    expect(problem).toMatch(/DeletIcon names no icon meaning\. Fix:/u);
+  });
+
+  it('names a path that is not a variant, with its fix', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons/32/solid';\n",
+    );
+    expect(problem).toMatch(/is not a variant\. Fix:/u);
+  });
+
+  it('names a meaning the look does not draw, with its fix', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons/lucide';\n",
+    );
+    expect(problem).toMatch(
+      /has no lucide icon in the template icon table\. Fix:/u,
+    );
+  });
+
+  it('names an icons declaration left beside placeholder imports', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons';\n",
+      {
+        TrashIcon: 'delete',
+      },
+    );
+    expect(problem).toMatch(/still declares icons\. Fix:/u);
+  });
+
+  it('reads the meanings a source imports', () => {
+    expect(
+      placeholderMeaningsIn(
+        "import {DeleteIcon, CloseIcon} from '@astryxdesign/template-icons';\nimport {DeleteIcon as D2} from '@astryxdesign/template-icons/20/solid';\n",
+      ),
+    ).toEqual(['delete', 'close']);
+  });
+});
+
+describe('the fill without a parse', () => {
+  it('gives every bundled template the same copy as the parsed fill', async () => {
+    const {fillParsed} = await import('./template-placeholders.mjs');
+    const root = path.join(CLI_DIR, 'assets/templates');
+    /** @param {string} dir @returns {string[]} */
+    const tsx = dir =>
+      fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry =>
+        entry.isDirectory()
+          ? tsx(path.join(dir, entry.name))
+          : entry.name.endsWith('.tsx')
+            ? [path.join(dir, entry.name)]
+            : [],
+      );
+    const differ = [];
+    for (const file of tsx(root)) {
+      const source = fs.readFileSync(file, 'utf8');
+      if (!source.includes('@astryxdesign/template-icons')) continue;
+      if (
+        JSON.stringify(fillTemplatePlaceholders(source)) !==
+        JSON.stringify(fillParsed(source))
+      )
+        differ.push(path.relative(root, file));
+    }
+    expect(differ).toEqual([]);
   });
 });

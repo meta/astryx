@@ -4,8 +4,9 @@
  * @file The icon definitions the bundled templates use (AST-084 FR15), and
  * the ones an icon set leaves unmapped.
  *
- * A bundled page or block template names, in its descriptor's `icons`, the
- * icon definition each icon it imports draws. A copied template renders a
+ * A bundled page or block template names, in its descriptor's `icons` or in
+ * its placeholder imports (template-placeholders.mjs), the icon definition
+ * each icon it draws. A copied template renders a
  * placeholder for a definition the project's sets do not map, so an icon-set
  * author needs to know which definitions templates use beyond the built-in
  * ones. Each definition counts the templates that use it, once per template.
@@ -25,7 +26,11 @@ import {
   astryxDefinitionsByName,
   currentDefinitionName,
 } from './icon-definition-discovery.mjs';
-import {meaningWithFallbacks} from './template-placeholders.mjs';
+import * as fs from 'node:fs';
+import {
+  meaningWithFallbacks,
+  placeholderMeaningsIn,
+} from './template-placeholders.mjs';
 
 /**
  * One icon definition templates use.
@@ -40,7 +45,9 @@ let cached = null;
 /**
  * Count the definitions some templates declare in `icons`, most used first,
  * then by name.
- * @param {Array<{icons?: Record<string, unknown>}>} templates
+ * @param {Array<{icons?: Record<string, unknown>, placeholderMeanings?: string[]}>} templates
+ *   each template's declared `icons`, and the meanings its placeholder
+ *   imports name
  * @param {Set<string> | Map<string, unknown>} known the definitions that count
  * @returns {TemplateMeaning[]}
  */
@@ -49,10 +56,11 @@ export function countTemplateMeanings(templates, known) {
   const counts = new Map();
   for (const template of templates) {
     const icons = template.icons;
-    if (icons == null || typeof icons !== 'object') continue;
+    const declared =
+      icons != null && typeof icons === 'object' ? Object.values(icons) : [];
     // A declared definition that another one replaced counts as its successor.
     const used = new Set(
-      Object.values(icons)
+      [...declared, ...(template.placeholderMeanings ?? [])]
         .filter(
           /** @returns {value is string} */
           value => typeof value === 'string',
@@ -87,9 +95,25 @@ export function countTemplateMeanings(templates, known) {
  */
 export function templateIconMeanings() {
   cached ??= discoverCoreTemplates().then(templates =>
-    countTemplateMeanings(templates, astryxDefinitionsByName()),
+    countTemplateMeanings(
+      templates.map(template => ({
+        icons: template.icons,
+        placeholderMeanings: readPlaceholderMeanings(template.filePath),
+      })),
+      astryxDefinitionsByName(),
+    ),
   );
   return cached;
+}
+
+/** @param {string | undefined} file */
+function readPlaceholderMeanings(file) {
+  if (!file) return [];
+  try {
+    return placeholderMeaningsIn(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return [];
+  }
 }
 
 /**
