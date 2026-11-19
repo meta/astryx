@@ -251,7 +251,8 @@ const ROWS = [
     'an undo takes back only the change of what it names',
     {
       q: 'Make the cards rounder. Reset the card shadows.',
-      says: /^(?![\s\S]*taken back by its undo)(?![\s\S]*not used)/,
+      has: ['corners more --on card'],
+      says: /sets nothing for shadow on card/,
     },
   ],
   [

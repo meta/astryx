@@ -91,7 +91,6 @@ describe('writes nothing', () => {
     'yes because neon green links are SO professional',
     'had we gone with serif headings',
     'after the review, square the buttons',
-    'accent red; also undo the corners',
   ])(
     '%s',
     async (q, test) => {
@@ -114,6 +113,8 @@ describe('still writes', () => {
     // (A focus ring draws no shadow: "no shadows" after it is the theme's.)
     ['visible thick focus ring, no shadows', '--shadow-low none'],
     ['boutons arrondis, sans ombre', 'box-shadow none --on button'],
+    // (An undo with nothing to take back is named; the rest is written.)
+    ['accent red; also undo the corners', "accent '#dc2626'"],
   ])(
     '%s',
     async (q, line, test) => {
