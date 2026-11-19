@@ -176,8 +176,17 @@ describe('a button that acts, or whose press the scan cannot judge', () => {
     ['a data attribute a script may look for', '<Button label="Go" data-action="go" />'],
     ['a link inside it', '<Button label="Go"><a href="/go">Go</a></Button>'],
     ['an app component inside it', '<Button label="Go"><Label /></Button>'],
+    ['children the scan cannot read', '<Button label="Start">{children}</Button>'],
+    ['an element prop the scan cannot read', '<Button label="Read" endContent={more} />'],
+    ['content from a call', '<Button label="Go">{renderIcon()}</Button>'],
   ])('%s', (_, body) => {
     expect(onPage(body)).toEqual([]);
+  });
+
+  it('text, a choice between texts, and an icon variable are content', () => {
+    expect(onPage('<Button label="Go">{"Go now"}</Button>')).toEqual(['page.tsx:6 Go']);
+    expect(onPage('<Button label="Go">{busy ? "Saving" : "Save"}</Button>')).toEqual(['page.tsx:6 Go']);
+    expect(onPage('<Button label="Edit" icon={PencilIcon} />', "import {PencilIcon} from 'lucide-react';")).toEqual(['page.tsx:6 Edit']);
   });
 });
 

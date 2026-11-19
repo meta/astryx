@@ -8,7 +8,8 @@
  * @input Template source text
  * @output Its parsed tree, node visits, names, and module scope
  * @position packages/cli/foundation/discovery — read by template-icons, by
- *   the demo-content replacement in template-adapter, and by template-needs
+ *   the demo-content replacement in template-adapter, by template-needs, and
+ *   by doctor's button-actions scan
  */
 
 import * as path from 'node:path';

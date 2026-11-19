@@ -371,6 +371,19 @@ describe('the button-actions check', () => {
         'src/App.tsx': ["import Banner from '#hero';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
       });
       expect(viaImports?.status).toBe('pass');
+      // A fallback list as the key's target.
+      const viaFallback = await fresh({
+        'package.json': JSON.stringify({name: 'app', private: true, imports: {'#hero': ['./src/Hero.tsx']}, dependencies: {'@astryxdesign/core': '*'}}),
+        'src/Hero.tsx': HERO,
+        'src/App.tsx': ["import Banner from '#hero';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
+      });
+      expect(viaFallback?.status).toBe('pass');
+      // A wrapper whose content a page passes in, such as a link.
+      const wrapper = await fresh({
+        'src/CTA.tsx': ["import {Button} from '@astryxdesign/core';", 'export function CTA({children}: {children: unknown}) {', '  return <Button label="Start" variant="primary">{children}</Button>;', '}', ''].join('\n'),
+        'src/App.tsx': ["import {CTA} from './CTA';", 'export default function App() {', '  return <CTA><a href="/start">Start</a></CTA>;', '}', ''].join('\n'),
+      });
+      expect(wrapper?.status).toBe('pass');
     },
     SLOW,
   );
@@ -390,6 +403,7 @@ describe('the button-actions check', () => {
         'src/App.test.tsx': app('<Button label="In a test" />'),
         'src/App.stories.tsx': app('<Button label="In a story" />'),
         'src/App.cy.tsx': app('<Button label="In a Cypress test" />'),
+        'src/App.fixture.tsx': app('<Button label="In a fixture file" />'),
         'src/__fixtures__/Demo.tsx': app('<Button label="In a fixture" />'),
         'tests/host.tsx': app('<Button label="In a test folder" />'),
       });

@@ -84,6 +84,7 @@ import {
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {existingFile, pathsFor, projectMapsImport, resolvePath} from '../../foundation/render/ts-paths.mjs';
+import {packageImportTarget} from '../../foundation/discovery/package-exports.mjs';
 import {
   resolveIconModule,
   splitSpecifier,
@@ -409,7 +410,7 @@ export function findIconPlaceholders(projectDir) {
  * Test, story and fixture files: code that shows or checks a button, not a
  * page that a person uses. The check reads none of them.
  */
-const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|cy|stories|story)\.(?:[cm]?[jt]sx?|mdx)$/;
+const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|cy|fixture|stories|story)\.(?:[cm]?[jt]sx?|mdx)$/;
 
 /**
  * Folders that usually hold tests, stories or fixtures, though an app may
@@ -648,11 +649,14 @@ export function findButtonsWithoutAction(projectDir) {
   return {found, files: files.length, incomplete: false};
 }
 
+/** The conditions a bundler reads a package.json `imports` key under. */
+const BUNDLER_CONDITIONS = ['types', 'import', 'module', 'browser', 'require', 'node'];
+
 /**
  * The module of the app's own code that a path alias or a package.json
  * `imports` key maps an import to: the file the importing module's tsconfig
  * `paths` resolve it to, or the file the nearest package.json's `imports`
- * names for it (an exact key, or a `*` key). Null for any other import.
+ * names for it. Null for any other import.
  * @param {string} specifier
  * @param {string} file the importing module
  * @returns {string | null}
@@ -661,34 +665,8 @@ function ownImportTarget(specifier, file) {
   if (specifier.startsWith('#')) {
     const root = findPackageRoot(path.dirname(file));
     const imports = root ? readPackageJson(path.join(root, 'package.json'))?.imports : null;
-    if (!root || imports == null || typeof imports !== 'object') return null;
-    /**
-     * @param {unknown} target
-     * @returns {string | null}
-     */
-    const named = target => {
-      if (typeof target === 'string') return target;
-      if (target && typeof target === 'object') {
-        for (const condition of ['types', 'import', 'module', 'browser', 'default', 'require', 'node']) {
-          /** @type {string | null} */
-          const value = named(/** @type {Record<string, unknown>} */ (target)[condition]);
-          if (value) return value;
-        }
-      }
-      return null;
-    };
-    /** @type {string | null} */
-    let target = named(imports[specifier]);
-    if (!target) {
-      for (const [key, value] of Object.entries(imports)) {
-        const star = key.indexOf('*');
-        if (star < 0 || !specifier.startsWith(key.slice(0, star)) || !specifier.endsWith(key.slice(star + 1))) continue;
-        const part = specifier.slice(star, specifier.length - (key.length - star - 1));
-        target = named(value)?.replace('*', part) ?? null;
-        if (target) break;
-      }
-    }
-    if (!target || !/^\.\//.test(target)) return null;
+    const target = root ? packageImportTarget(imports, specifier, BUNDLER_CONDITIONS) : null;
+    if (!root || !target?.startsWith('./')) return null;
     return existingFile(path.join(root, target)) ?? path.join(root, target);
   }
   return resolvePath(pathsFor(file), specifier);

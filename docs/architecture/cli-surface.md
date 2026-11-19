@@ -420,21 +420,22 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   The check does not report a button that it cannot judge: one with props
   spread in, a ref, an id, a tooltip, a disabled or loading state, or a prop
   it does not know; one that holds content that may act, such as an HTML
-  control, a custom element or another package's component other than an icon
-  (an export named like `PencilIcon`); one inside an element, or a prop of an
-  element, that it does not trust; or one in a component that the app refers
-  to in a way the scan cannot follow, such as through `lazy` or `import()`
-  (directly or through a module that passes its exports on), a list of
-  components, a prop, a namespace read as a value, a renamed re-export, a
-  `require()`, a module path only a bundler resolves, or the package name of a
-  workspace member (a package.json in a folder of the project, installed or
-  not); one in a module that another module may load by a path the scan cannot
-  read (a computed `import()` or `require()` path, `import.meta.glob` or
-  `require.context`, which may load any module in the folder the path starts
-  in (for a path joined with `+`, the folder its first part names): the
-  loading module's own folder when the scan reads none of the path, the
-  project folder for a root path (`/src/…`), or any module when the path
-  starts with an alias, while a glob of data, style or image files, or a
+  control, a custom element, another package's component other than an icon
+  (an export named like `PencilIcon`), or content the scan cannot read
+  (`{children}`, or an element prop that holds a variable or a call); one
+  inside an element, or a prop of an element, that it does not trust; or one
+  in a component that the app refers to in a way the scan cannot follow, such
+  as through `lazy` or `import()` (directly or through a module that passes
+  its exports on), a list of components, a prop, a namespace read as a value,
+  a renamed re-export, a `require()`, a module path only a bundler resolves,
+  or the package name of a workspace member (a package.json in a folder of the
+  project, installed or not); one in a module that another module may load by
+  a path the scan cannot read (a computed `import()` or `require()` path,
+  `import.meta.glob` or `require.context`, which may load any module in the
+  folder the path starts in (for a path joined with `+`, the folder its first
+  part names): the loading module's own folder when the scan reads none of the
+  path, the project folder for a root path (`/src/…`), or any module when the
+  path starts with an alias, while a glob of data, style or image files, or a
   tool's config file beside a package.json (`next.config.js`), loads no
   component; an MDX or Astro page, or a module that does not parse, counts as
   loading by such a path); or one that an MDX or Astro page names. A module

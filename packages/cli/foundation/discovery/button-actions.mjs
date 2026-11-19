@@ -862,6 +862,17 @@ function missingAction(path, context) {
  * @param {ScanContext} context
  */
 function holdsActingContent(path, context) {
+  // Content the scan cannot read (`{children}`, an element prop that holds a
+  // variable or a call) may be a link or a control, as a wrapper passes in.
+  const opening = path.node.openingElement;
+  for (const attribute of opening.attributes) {
+    if (attribute.type !== 'JSXAttribute' || !ELEMENT_PROPS.has(attributeName(attribute))) continue;
+    if (attribute.value?.type === 'JSXExpressionContainer' && !plainContent(attribute.value.expression, path, context)) return true;
+  }
+  for (const child of path.node.children) {
+    if (child.type === 'JSXSpreadChild') return true;
+    if (child.type === 'JSXExpressionContainer' && !plainContent(child.expression, path, context)) return true;
+  }
   let acting = false;
   path.traverse({
     JSXElement(/** @type {any} */ inner) {
@@ -884,6 +895,44 @@ function holdsActingContent(path, context) {
     },
   });
   return acting;
+}
+
+/** The props of a button that hold content: what it shows beside its label. */
+const ELEMENT_PROPS = new Set(['children', 'endContent', 'icon']);
+
+/**
+ * Whether an expression in a button's content is plain content the scan can
+ * read: text, a number, nothing, an element (its own elements are read on
+ * their own), an icon a package exports (`PencilIcon`), or a choice between
+ * such content.
+ * @param {any} expression
+ * @param {any} path the button's JSXElement path
+ * @param {ScanContext} context
+ * @returns {boolean}
+ */
+function plainContent(expression, path, context) {
+  switch (expression?.type) {
+    case 'JSXEmptyExpression':
+    case 'StringLiteral':
+    case 'NumericLiteral':
+    case 'BooleanLiteral':
+    case 'NullLiteral':
+    case 'TemplateLiteral':
+    case 'JSXElement':
+    case 'JSXFragment':
+      return true;
+    case 'Identifier': {
+      if (expression.name === 'undefined') return true;
+      const imported = importOf(path.scope.getBinding(expression.name));
+      return imported != null && !ownModule(imported.source, context.isOwnCode) && ICON_EXPORT_NAME_RE.test(imported.imported);
+    }
+    case 'ConditionalExpression':
+      return plainContent(expression.consequent, path, context) && plainContent(expression.alternate, path, context);
+    case 'LogicalExpression':
+      return plainContent(expression.right, path, context);
+    default:
+      return false;
+  }
 }
 
 /**
