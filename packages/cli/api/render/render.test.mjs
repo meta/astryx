@@ -87,6 +87,134 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
+const LATER_TEXT_PAGE = `import {useState} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import {Heading, Text} from '@astryxdesign/core/Text';
+
+function Settings() {
+  return (
+    <div>
+      <Heading level={1}>Settings</Heading>
+      <Heading level={2}>Appearance</Heading>
+    </div>
+  );
+}
+
+export default function Page() {
+  const [view, setView] = useState('home');
+  return (
+    <div>
+      <Button label="Settings" onClick={() => setView('settings')} />
+      <Banner status="info" title="What changed">Three fields moved to the settings page.</Banner>
+      <Badge>
+        <Text>Finalized</Text>
+      </Badge>
+      <StatCard title="Q3">
+        <Text>Revenue grew 12%</Text>
+      </StatCard>
+      <ui.Box title="Q4">
+        <Text>Costs fell 3%</Text>
+      </ui.Box>
+      {view === 'settings' ? <Settings /> : <Text>Home</Text>}
+    </div>
+  );
+}
+
+function StatCard({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+function Box({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+const ui = {Box};
+`;
+
+describe('render(): text a component did not draw', () => {
+  /** @type {import('./render.type.mjs').RenderWarning[]} */
+  let dropped;
+
+  beforeAll(async () => {
+    put('later-text.tsx', LATER_TEXT_PAGE);
+    const result = /** @type {any} */ (await render('later-text.tsx', {cwd: dir}));
+    dropped = result.data.warnings.filter(
+      (/** @type {any} */ w) => w.code === 'dropped-children',
+    );
+  }, 60_000);
+
+  it('names the component whose docs list no children, not the text inside it', () => {
+    expect(dropped[0].message).toBe(
+      '<Badge> on line 22 did not render the text "Finalized" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    );
+  });
+
+  it('still warns when a component of the page around the text drops it, by name or as a member', () => {
+    expect(dropped.slice(1).map(w => w.message)).toEqual([
+      '<Text> on line 26 did not render the text "Revenue grew 12%" it was given; it takes that text through a prop (often label=), so check its props.',
+      '<Text> on line 29 did not render the text "Costs fell 3%" it was given; it takes that text through a prop (often label=), so check its props.',
+    ]);
+  });
+
+  it('stays silent for text a later paint shows: a collapsed Banner body, an inactive view', () => {
+    const text = dropped.map(w => w.message).join('\n');
+    expect(text).not.toContain('Three fields moved');
+    expect(text).not.toContain('Appearance');
+  });
+});
+
+describe('render(): text dropped in another file of the page', () => {
+  it('names that file, and not the page itself', async () => {
+    put(
+      'split/parts.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+
+export function Note() {
+  return (
+    <div>
+      <Text>Seen</Text>
+      <Badge>
+        <Text>Beta</Text>
+      </Badge>
+    </div>
+  );
+}
+`,
+    );
+    put(
+      'split/page.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+import {Note} from './parts';
+
+export default function Page() {
+  return (
+    <div>
+      <Text>Here</Text>
+      <Badge>
+        <Text>Alpha</Text>
+      </Badge>
+      <Note />
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('split/page.tsx', {cwd: dir}));
+    const messages = result.data.warnings
+      .filter((/** @type {any} */ w) => w.code === 'dropped-children')
+      .map((/** @type {any} */ w) => w.message)
+      .sort();
+    expect(messages).toEqual([
+      '<Badge> on line 8 of parts.tsx did not render the text "Beta" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+      '<Badge> on line 9 did not render the text "Alpha" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    ]);
+  }, 60_000);
+});
+
 describe('render(): page to one HTML file', () => {
   /** @type {import('./render.type.mjs').RenderPageResponse} */
   let result;
@@ -143,8 +271,9 @@ describe('render(): page to one HTML file', () => {
   it('warns when a component drops the text it was given', () => {
     const dropped = result.data.warnings.filter(w => w.code === 'dropped-children');
     expect(dropped).toHaveLength(1);
-    expect(dropped[0].message).toContain('ListItem');
-    expect(dropped[0].message).toContain('label=');
+    expect(dropped[0].message).toContain('<ListItem> on line 16');
+    expect(dropped[0].message).toContain('ListItem takes no children');
+    expect(dropped[0].message).toContain('astryx component ListItem');
   });
 
   it('gives the page back byte for byte', async () => {

@@ -346,6 +346,31 @@ function findFamilyDoc(srcDir, name) {
  */
 export function familyMember(docs, name) {
   if (!docs || docs.name === name || docs.name === `XDS${name}`) return null;
+  return componentsEntry(docs, name);
+}
+
+/**
+ * The part of a loaded doc that documents `name`: the doc itself when it
+ * lists its props at its top, else the entry its `components` gives `name`
+ * (a family member's, or the doc's own when it keeps its props there, as
+ * Link's doc does); null when the doc does not document `name`.
+ * @param {any} docs - a loaded component doc
+ * @param {string} name - bare component name
+ * @returns {any}
+ */
+export function documentedEntry(docs, name) {
+  if (!docs) return null;
+  const own = docs.name === name || docs.name === `XDS${name}`;
+  if (own && Array.isArray(docs.props)) return docs;
+  return componentsEntry(docs, name);
+}
+
+/**
+ * @param {any} docs
+ * @param {string} name
+ * @returns {any}
+ */
+function componentsEntry(docs, name) {
   const members = Array.isArray(docs.components) ? docs.components : [];
   return (
     members.find(
