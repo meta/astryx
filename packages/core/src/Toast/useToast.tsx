@@ -139,8 +139,8 @@ function generateToastId(): string {
  */
 export function useToast(): ShowToastFn {
   const contextFromProvider = use(ToastContext);
-  // The fallback viewport renders outside this tree. A host page can rewrite
-  // `<html>`.
+  // The fallback viewport renders outside this tree, and a host page can
+  // rewrite `<html>`. So the toast takes its caller's Theme.
   const callerTheme = use(ThemeSourceContext);
 
   const showToast = useCallback(

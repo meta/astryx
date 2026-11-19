@@ -17,6 +17,7 @@ applies_to:
     packages/core/src/theme/themeRegistry.ts,
     packages/core/src/AppShell/AppShell.tsx,
     packages/core/src/Toast/useToast.tsx,
+    packages/core/src/Toast/ToastViewport.tsx,
   ]
 verified_by:
   [
@@ -90,7 +91,7 @@ across. Each Theme publishes its current theme and mode as a store, and
 `useToast` passes the nearest one to a toast that it shows into the fallback
 viewport. The toast draws under that Theme and follows a change to its theme or
 mode while the Theme is mounted. After the Theme unmounts, the toast keeps the
-last theme and mode. A host page that rewrites `<html>` does not change it. A
+last theme and mode. A host page that rewrites `<html>` does not change its theme. A
 toast shown with no Theme around its caller follows `<html>`. An in-place
 `uniqueID` overwrite takes the new toast's Theme when both toasts have one;
 between a toast with a Theme and one without, the card keeps drawing as it did:

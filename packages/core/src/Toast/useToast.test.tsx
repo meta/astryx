@@ -265,6 +265,37 @@ describe('useToast fallback viewport theme mode', () => {
     expect(newestMediaAttr(scope)).toBe('dark');
   });
 
+  it('draws a toast shown from outside any Theme under <html>, with no scope of its own', async () => {
+    function ShowOutside() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => toast({body: 'outside any Theme', isAutoHide: false})}>
+          Trigger Outside
+        </button>
+      );
+    }
+    document.documentElement.setAttribute('data-astryx-theme', 'host-page');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    render(<ShowOutside />);
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Outside'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('outside any Theme')).toBeInTheDocument();
+    });
+    const fallback = document.querySelector(
+      '[data-astryx-toast-fallback]',
+    ) as HTMLElement;
+    expect(fallback).toHaveAttribute('data-astryx-theme', 'host-page');
+    expect(fallback).toHaveAttribute('data-theme', 'dark');
+    // The nearest theme scope is the fallback container, which mirrors <html>.
+    expect(
+      screen.getByText('outside any Theme').closest('[data-astryx-theme]'),
+    ).toBe(fallback);
+  });
+
   it('follows a theme or mode change of its caller while the toast shows', async () => {
     const first = defineTheme({name: 'fallback-first', tokens: {}});
     const second = defineTheme({name: 'fallback-second', tokens: {}});
