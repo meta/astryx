@@ -455,10 +455,35 @@ const SMALLEST_READABLE_TEXT = 10;
 const DEFAULT_TEXT_SIZE = 16;
 
 /**
+ * @param {string | undefined} style an element's `style` attribute
+ * @param {string} property a CSS property name
+ * @returns {string | undefined} the property's value in the style, trimmed
+ */
+const styleValue = (style, property) =>
+  new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, 'i').exec(style ?? '')?.[1].trim();
+
+/**
+ * The width an SVG drawing fills on a phone when it scales to its box, or
+ * null when it keeps a fixed width. A width in `style` wins over the `width`
+ * attribute. A drawing with no width, or `auto`, fills its box; a percentage
+ * width fills that share of it; a percentage `max-width` shrinks a wider
+ * drawing to its box. Any other width is fixed.
+ * @param {Record<string, string>} attrs the `svg` element's attributes
+ * @returns {number | null}
+ */
+function phoneDrawingWidth(attrs) {
+  const maxWidth = fraction(styleValue(attrs.style, 'max-width'));
+  if (maxWidth) return PHONE_DRAWING_WIDTH * Math.min(1, maxWidth);
+  const width = styleValue(attrs.style, 'width') ?? attrs.width?.trim();
+  if (width == null || width === '' || width === 'auto') return PHONE_DRAWING_WIDTH;
+  const share = fraction(width);
+  return share ? PHONE_DRAWING_WIDTH * Math.min(1, share) : null;
+}
+
+/**
  * SVG drawings whose text gets too small on a phone. A drawing with a viewBox
- * and no fixed width scales to fill its box, and its text scales with it: on
- * a phone the text shows at its own size times the box width over the
- * viewBox width.
+ * that scales to its box scales its text with it: on a phone the text shows
+ * at its own size times the drawing's width there over the viewBox width.
  * @param {string} markup the page's server markup
  * @returns {{count: number, px: number} | null} how many drawings show text
  *   under 10 px on a phone, and the smallest such size, rounded; null when
@@ -467,7 +492,7 @@ const DEFAULT_TEXT_SIZE = 16;
 export function smallSvgText(markup) {
   let count = 0;
   let smallest = Infinity;
-  /** @type {{units: number, sizes: number[], hasText: boolean, depth: number} | null} */
+  /** @type {{units: number, drawn: number, sizes: number[], hasText: boolean, depth: number} | null} */
   let open = null;
   for (const token of scanHtml(markup)) {
     if (token.kind === 'start') {
@@ -487,13 +512,12 @@ export function smallSvgText(markup) {
       const units = Number(
         /^\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/.exec(attrs.viewbox ?? '')?.[1],
       );
-      // A drawing with a fixed width keeps its size instead of scaling.
-      const fixed = attrs.width != null && attrs.width.trim() !== '100%';
-      if (!(units > PHONE_DRAWING_WIDTH) || fixed) continue;
+      const drawn = phoneDrawingWidth(attrs);
+      if (drawn == null || !(units > drawn)) continue;
       const size =
         Number(/^\s*([\d.]+)(?:px)?\s*$/.exec(attrs['font-size'] ?? '')?.[1]) ||
         Number(/font-size:\s*([\d.]+)px/.exec(attrs.style ?? '')?.[1]);
-      open = {units, sizes: size > 0 ? [size] : [], hasText: false, depth: 0};
+      open = {units, drawn, sizes: size > 0 ? [size] : [], hasText: false, depth: 0};
     } else if (open && token.kind === 'end' && token.tag === 'svg') {
       if (open.depth > 0) {
         open.depth -= 1;
@@ -501,7 +525,7 @@ export function smallSvgText(markup) {
       }
       if (open.hasText) {
         const textSize = open.sizes.length > 0 ? Math.min(...open.sizes) : DEFAULT_TEXT_SIZE;
-        const px = (textSize * PHONE_DRAWING_WIDTH) / open.units;
+        const px = (textSize * open.drawn) / open.units;
         if (px < SMALLEST_READABLE_TEXT) {
           count += 1;
           smallest = Math.min(smallest, px);

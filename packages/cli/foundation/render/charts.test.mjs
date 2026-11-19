@@ -190,6 +190,16 @@ describe('smallSvgText', () => {
     expect(smallSvgText('<svg width="24" height="24" viewBox="0 0 24 24"><path d="M0 0h24"></path></svg>')).toBeNull();
   });
 
+  it('reads the width a style gives the drawing', () => {
+    const text = '<text font-size="13">Jan</text>';
+    // A pixel width that a percentage max-width caps, or a percentage width, scales.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="960" style="max-width:100%;height:auto"', text))).toEqual({count: 1, px: 5});
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="80%"', text))).toEqual({count: 1, px: 4});
+    // A pixel width in the style keeps the drawing's size, even with no width attribute.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" style="width:960px"', text))).toBeNull();
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="100%" style="width: 960px"', text))).toBeNull();
+  });
+
   it('counts each drawing once, nested drawings included', () => {
     const page =
       drawing('viewBox="0 0 960 300"', '<svg viewBox="0 0 10 10"><text>a</text></svg><text font-size="13">Jan</text>') +
