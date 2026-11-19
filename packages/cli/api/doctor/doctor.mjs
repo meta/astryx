@@ -1677,8 +1677,8 @@ const PROPS_NAMED = 8;
 /**
  * The props the project's own source gives Core components that the
  * component does not take (see `findUnknownCoreProps`): each with its file,
- * line and component, and the documented prop the name is closest to. A
- * prop a component does not take does nothing, and unless the build
+ * line and component, and a documented prop with the same words when there
+ * is one. A prop a component does not take does nothing, and unless the build
  * type-checks, no build step reports it.
  * When the project has no TypeScript to read Core's types with, the check
  * says it did not run.

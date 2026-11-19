@@ -3,7 +3,7 @@
 /**
  * @file Doctor's `core-props` check in an app on the repository's own Core:
  * it names each prop the app gives a Core component that the component does
- * not take, with the documented prop the name is closest to; it does not
+ * not take, with a documented prop that has the same words; it does not
  * report an HTML or ARIA attribute, a prop Core's types take that its docs
  * leave out, a generic component's props, another component's props, or a
  * test file's; and without TypeScript it says it did not run.
@@ -85,7 +85,7 @@ function app(names, ...lines) {
 
 describe('doctor core-props', () => {
   it(
-    'names each prop a Core component does not take, with the prop the name is closest to',
+    'names each prop a Core component does not take, with a documented prop that has the same words',
     async () => {
       const check = await propsCheck({
         'src/App.tsx': app(
@@ -202,6 +202,15 @@ describe('doctor core-props', () => {
       ]) {
         const other = await propsCheck({[config]: text, 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
         expect(other?.status, config).toBe('info');
+      }
+      // React's own injected import, and a config that only names
+      // styled-components (an alias), compile JSX as React does.
+      for (const [config, text] of [
+        ['vite.config.js', "export default {esbuild: {jsxInject: \"import React from 'react'\"}};\n"],
+        ['webpack.config.js', "module.exports = {resolve: {alias: {'styled-components': 'styled-components/dist/x.js'}}};\n"],
+      ]) {
+        const same = await propsCheck({[config]: text, 'src/App.tsx': app('TabList', '<TabList selectedID="a" />')});
+        expect(same?.status, config).toBe('warn');
       }
       // A build config that names React's runtime is React's.
       const react = await propsCheck({

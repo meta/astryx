@@ -374,13 +374,13 @@ const BUILD_CONFIG =
 /**
  * A build setting that compiles JSX other than as React does: a runtime
  * (`jsxImportSource`, `importSource`) other than `react`; a classic factory
- * (`jsxFactory`, `pragma`) other than `React.createElement`, or one injected
- * (`jsxInject`); or a transform that compiles a `css` prop, from emotion,
- * styled-components or Compiled, as a Babel or SWC plugin or a Next.js
- * compiler option.
+ * (`jsxFactory`, `pragma`) other than `React.createElement`; or a transform
+ * that compiles a `css` prop: emotion's css-prop preset, the styled-components
+ * Babel or SWC plugin or Next.js's `styledComponents` compiler option, or
+ * Compiled's Babel plugin or bundler loader.
  */
 const BUILD_JSX_RUNTIME =
-  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|\bjsxInject\b|@emotion\/babel|styled-components|\bstyledComponents\b|@compiled\//;
+  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|@emotion\/babel-preset-css-prop|(?:babel-plugin|@swc\/plugin)-styled-components|\bstyledComponents['"]?\s*:\s*(?!false\b)|@compiled\/(?:babel-plugin|webpack-loader|parcel-config|vite-plugin)/;
 
 /**
  * The first build config that compiles JSX other than as React does, in the
@@ -443,8 +443,8 @@ const NOT_PAGE_CODE =
  * @property {number} column
  * @property {string} component
  * @property {string} prop
- * @property {string | null} suggestion the documented prop the name is
- *   closest to, when one is close
+ * @property {string | null} suggestion a documented prop with the same
+ *   words, when there is one
  */
 
 /**
