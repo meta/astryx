@@ -248,7 +248,9 @@ export function importParams(params) {
  * cut.
  * @param {string} file the stylesheet's own path
  * @param {string} css its text
- * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
+ * @param {{warnings: RenderWarning[], carried: Set<string>, importers: Map<string, Set<string>>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
+ *   `importers`: each project stylesheet an `@import` names, with every
+ *   sheet that imports it
  *   `included`: stylesheet files already in the page (Core's, say), never
  *   inlined twice; `packageSheets`: package stylesheets this pulled in
  * @returns {string}
@@ -301,6 +303,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
+    if (!fromPackage) ctx.importers.set(target, (ctx.importers.get(target) ?? new Set()).add(file));
     if (seen.has(target) || ctx.included.has(target)) {
       rule.remove();
       return;
@@ -1339,6 +1342,8 @@ export async function renderPage(entry, options = {}) {
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
+  /** Each project stylesheet an `@import` names, with every sheet that imports it. @type {Map<string, Set<string>>} */
+  const cssImporters = new Map();
   try {
     markup = inlineAssets(markup, 'html', ctx);
     // React adds `<link rel="preload">` hints for images it renders; in one
@@ -1395,6 +1400,7 @@ export async function renderPage(entry, options = {}) {
         const own = expandImports(file, text, {
           warnings,
           carried: carriedCss,
+          importers: cssImporters,
           included,
           packageSheets,
           served,
@@ -1565,9 +1571,29 @@ export async function renderPage(entry, options = {}) {
    * @type {string[]}
    */
   const uncarried = [...(/** @type {string[]} */ (message.uncarried ?? []))];
+  // With a package that node_modules links into the carried folder, a sheet
+  // another pulls in is carried only when a carried sheet imports it: the
+  // linked package's own stylesheets are the package's (the worker carries
+  // only the files the page reaches by a path).
+  const linkedRoots = /** @type {string[]} */ (message.linkedRoots ?? []);
+  /** @type {Set<string>} */
+  const importedByCarried = new Set();
+  if (linkedRoots.length > 0) {
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const [sheet, from] of cssImporters) {
+        if (importedByCarried.has(sheet)) continue;
+        if ([...from].some(f => files.includes(f) || importedByCarried.has(f))) {
+          importedByCarried.add(sheet);
+          grew = true;
+        }
+      }
+    }
+  }
   for (const sheet of carriedCss) {
     if (path.relative(scope, sheet).split(path.sep).includes('node_modules'))
       continue;
+    if (linkedRoots.length > 0 && !importedByCarried.has(sheet)) continue;
     if (!isInside(sheet, scope)) {
       if (!uncarried.includes(sheet)) uncarried.push(sheet);
       continue;
@@ -1639,6 +1665,9 @@ export async function renderPage(entry, options = {}) {
           path.relative(named, f).split(path.sep).join('/'),
         )),
   );
+  // A linked package's modules the file does not carry may still name images
+  // the script draws later: those images are carried and shown the same way.
+  carriedText.push(...(/** @type {string[]} */ (message.linkedModules ?? [])));
   for (const file of carriedText) {
     let text;
     try {

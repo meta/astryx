@@ -625,6 +625,277 @@ export default function Page() {
     expect(again.type).toBe('render.page');
   }, 60_000);
 
+  /**
+   * An ES module package of three files: `src/index.js` re-exports a badge
+   * that imports its label by a relative path.
+   * @param {string} at the package folder, from the test folder
+   * @param {string} name
+   */
+  const putLinkedPackage = (at, name) => {
+    put(`${at}/package.json`, JSON.stringify({name, version: '1.0.0', type: 'module', exports: {'.': './src/index.js'}}));
+    put(`${at}/src/index.js`, "export {Badge} from './parts/badge.js';\n");
+    put(`${at}/src/parts/badge.js`, "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nexport function Badge() { return jsx('strong', {children: label}); }\n");
+    put(`${at}/src/parts/label.js`, `export const label = '${name} badge text';\n`);
+  };
+  /** @param {string} link the link, from the test folder @param {string} target the folder it names, from the test folder */
+  const linkFolder = (link, target) => {
+    fs.mkdirSync(path.dirname(path.join(dir, link)), {recursive: true});
+    fs.symlinkSync(path.join(dir, target), path.join(dir, link), 'junction');
+  };
+  /**
+   * Render a page, give the file back inside the same project, and render the
+   * restored page again: the same markup both times.
+   * @param {string} page the page, from the test folder
+   */
+  const roundTrip = async page => {
+    const first = /** @type {any} */ (await render(page, {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, page.replace(/\.tsx$/, '.html')), 'utf8');
+    const restored = path.join(path.dirname(page), 'restored', path.basename(page)).split(path.sep).join('/');
+    const back = /** @type {any} */ (await render(page.replace(/\.tsx$/, '.html'), {cwd: dir, reverse: true, out: restored}));
+    await render(restored, {cwd: dir});
+    const again = fs.readFileSync(path.join(dir, restored.replace(/\.tsx$/, '.html')), 'utf8');
+    return {first, back, markup: renderedMarkupOf(html), againMarkup: renderedMarkupOf(again)};
+  };
+
+  it('treats a package linked from a folder in the project as a package: the file carries the page, and gives it back exactly', async () => {
+    // `npm link`: node_modules links to a folder that the project holds.
+    put('npm-link/package.json', '{"name":"npm-link","private":true}');
+    putLinkedPackage('npm-link/vendor/badge', '@acme/linked');
+    linkFolder('npm-link/node_modules/@acme/linked', 'npm-link/vendor/badge');
+    put('npm-link/page.tsx', "import {Badge} from '@acme/linked';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    // A `file:` dependency, installed as a link to its folder.
+    put('file-dep/package.json', JSON.stringify({name: 'file-dep', private: true, dependencies: {'@acme/local': 'file:./libs/local'}}));
+    putLinkedPackage('file-dep/libs/local', '@acme/local');
+    linkFolder('file-dep/node_modules/@acme/local', 'file-dep/libs/local');
+    put('file-dep/page.tsx', "import {Badge} from '@acme/local';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    for (const [page, name] of [['npm-link/page.tsx', '@acme/linked'], ['file-dep/page.tsx', '@acme/local']]) {
+      const {first, back, markup, againMarkup} = await roundTrip(page);
+      expect(first.data.files).toEqual(['page.tsx']);
+      expect(markup).toContain(`${name} badge text`);
+      expect(back.data.exact).toBe(true);
+      expect(back.data.files).toEqual([path.join(path.dirname(page), 'restored/page.tsx').split(path.sep).join('/')]);
+      expect(againMarkup).toBe(markup);
+    }
+  }, 120_000);
+
+  it('carries the files of a linked folder that the page imports by a relative path, as its own', async () => {
+    put('rel-link/package.json', '{"name":"rel-link","private":true}');
+    putLinkedPackage('rel-link/vendor/badge', '@acme/rel');
+    put('rel-link/vendor/badge/src/parts/badge.css', '.rel-badge { letter-spacing: 4px; }');
+    put(
+      'rel-link/vendor/badge/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'rel-badge', children: label}); }\n",
+    );
+    linkFolder('rel-link/node_modules/@acme/rel', 'rel-link/vendor/badge');
+    put('rel-link/page.tsx', "import {Badge} from './vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('rel-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.css', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/rel badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('carries the files of a linked folder that the page imports through a path alias', async () => {
+    put('alias-link/package.json', '{"name":"alias-link","private":true}');
+    put('alias-link/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}}}));
+    putLinkedPackage('alias-link/vendor/badge', '@acme/aliased');
+    linkFolder('alias-link/node_modules/@acme/aliased', 'alias-link/vendor/badge');
+    put('alias-link/page.tsx', "import {Badge} from '@/vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('alias-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/aliased badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+    // Outside the project, the file still gives back every file the page imports.
+    fs.copyFileSync(path.join(dir, 'alias-link/page.html'), path.join(dir, 'alias-link-moved.html'));
+    const moved = /** @type {any} */ (await render('alias-link-moved.html', {cwd: dir, reverse: true, out: 'alias-link-moved/page.tsx'}));
+    expect(moved.data.missing ?? []).toEqual([]);
+    expect(moved.data.files).toEqual(expect.arrayContaining(['alias-link-moved/vendor/badge/src/index.js']));
+  }, 120_000);
+
+  it('carries the stylesheets of a linked folder that a carried module reaches after the package loaded', async () => {
+    put('late-link/package.json', '{"name":"late-link","private":true}');
+    putLinkedPackage('late-link/vendor/kit', '@acme/late');
+    put('late-link/vendor/kit/src/parts/badge.css', '.late-badge { letter-spacing: 5px; }');
+    put('late-link/vendor/kit/src/parts/label.css', '.late-label { word-spacing: 6px; }');
+    put(
+      'late-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'late-badge late-label', children: label}); }\n",
+    );
+    put('late-link/vendor/kit/src/parts/label.js', "import './label.css';\nexport const label = '@acme/late badge text';\n");
+    linkFolder('late-link/node_modules/@acme/late', 'late-link/vendor/kit');
+    // The package loads first, by its name; then the page's own module reaches
+    // two of its files by their paths.
+    put('late-link/own.js', "import './vendor/kit/src/parts/badge.css';\nimport {label} from './vendor/kit/src/parts/label.js';\nexport const own = `own ${label}`;\n");
+    put(
+      'late-link/page.tsx',
+      "import {Badge} from '@acme/late';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('late-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['own.js', 'page.tsx', 'vendor/kit/src/parts/badge.css', 'vendor/kit/src/parts/label.css', 'vendor/kit/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('own @acme/late badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it("carries a linked folder's stylesheet that a carried stylesheet imports, whichever imported it first", async () => {
+    put('share-link/package.json', '{"name":"share-link","private":true}');
+    putLinkedPackage('share-link/vendor/kit', '@acme/share');
+    put('share-link/vendor/kit/src/parts/tokens.css', '.share-badge { letter-spacing: 7px; }');
+    put('share-link/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.share-badge { word-spacing: 1px; }");
+    put('share-link/vendor/kit/src/parts/more.css', '.share-more { letter-spacing: 8px; }');
+    put('share-link/vendor/kit/src/parts/theme.css', "@import './more.css';\n");
+    put(
+      'share-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'share-badge share-more', children: label}); }\n",
+    );
+    linkFolder('share-link/node_modules/@acme/share', 'share-link/vendor/kit');
+    // The package's own stylesheet imports tokens.css first; then the page's
+    // own stylesheet imports it too, and the page reaches theme.css by its path.
+    put('share-link/app.css', "@import './vendor/kit/src/parts/tokens.css';\n");
+    put('share-link/own.js', "import './app.css';\nimport './vendor/kit/src/parts/theme.css';\nexport const own = 'own';\n");
+    put(
+      'share-link/page.tsx',
+      "import {Badge} from '@acme/share';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('share-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['app.css', 'own.js', 'page.tsx', 'vendor/kit/src/parts/more.css', 'vendor/kit/src/parts/theme.css', 'vendor/kit/src/parts/tokens.css'].sort(),
+    );
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('leaves out a project file that only a linked package imports, as one of the package', async () => {
+    put('reach-out/package.json', '{"name":"reach-out","private":true}');
+    putLinkedPackage('reach-out/vendor/kit', '@acme/reach');
+    put('reach-out/shared/util.js', "export const suffix = 'from shared';\n");
+    put(
+      'reach-out/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport {suffix} from '../../../../shared/util.js';\nexport function Badge() { return jsx('strong', {children: `${label} ${suffix}`}); }\n",
+    );
+    linkFolder('reach-out/node_modules/@acme/reach', 'reach-out/vendor/kit');
+    put('reach-out/page.tsx', "import {Badge} from '@acme/reach';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('reach-out/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(first.data.notCarried ?? []).toEqual([]);
+    expect(markup).toContain('@acme/reach badge text from shared');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('treats a workspace package that another linked package links in as a package too', async () => {
+    put('ws-nest/package.json', JSON.stringify({name: 'ws-nest', private: true, workspaces: ['packages/*']}));
+    putLinkedPackage('ws-nest/packages/utils', '@acme/nest-utils');
+    putLinkedPackage('ws-nest/packages/ui', '@acme/nest-ui');
+    put(
+      'ws-nest/packages/ui/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from '@acme/nest-utils/src/parts/label.js';\nexport function Badge() { return jsx('strong', {children: `ui ${label}`}); }\n",
+    );
+    put(
+      'ws-nest/packages/utils/package.json',
+      JSON.stringify({name: '@acme/nest-utils', version: '1.0.0', type: 'module', exports: {'.': './src/index.js', './src/parts/label.js': './src/parts/label.js'}}),
+    );
+    // pnpm links a workspace dependency into the package's own node_modules.
+    linkFolder('ws-nest/node_modules/@acme/nest-ui', 'ws-nest/packages/ui');
+    linkFolder('ws-nest/packages/ui/node_modules/@acme/nest-utils', 'ws-nest/packages/utils');
+    put('ws-nest/src/page.tsx', "import {Badge} from '@acme/nest-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('ws-nest/src/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(markup).toContain('ui @acme/nest-utils badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it("carries an image that only a linked package's module names, for the script to draw later", async () => {
+    put('late-img/package.json', '{"name":"late-img","private":true}');
+    put('late-img/public/pics/late.png', PNG);
+    putLinkedPackage('late-img/vendor/kit', '@acme/late-img');
+    put(
+      'late-img/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {useEffect, useState} from 'react';\nexport function Badge() {\n  const [on, setOn] = useState(false);\n  useEffect(() => setOn(true), []);\n  return on ? jsx('img', {src: '/pics/late.png', alt: 'later'}) : jsx('span', {children: 'before the script'});\n}\n",
+    );
+    linkFolder('late-img/node_modules/@acme/late-img', 'late-img/vendor/kit');
+    put('late-img/page.tsx', "import {Badge} from '@acme/late-img';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back} = await roundTrip('late-img/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
+    const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
+    // The script draws the image from the file's own data, not from its path.
+    expect(html.slice(html.lastIndexOf('<script>'))).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
+    expect(back.data.exact).toBe(true);
+  }, 120_000);
+
+  it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
+    put('link-assets/package.json', '{"name":"link-assets","private":true}');
+    putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
+    put('link-assets/vendor/kit/src/parts/logo.png', PNG);
+    put('link-assets/vendor/kit/src/parts/data.json', '{"count": 7}');
+    put('link-assets/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.kit-badge { letter-spacing: 3px; }");
+    put('link-assets/vendor/kit/src/parts/tokens.css', '.kit-badge { word-spacing: 2px; }');
+    put(
+      'link-assets/vendor/kit/src/parts/badge.js',
+      "import {jsx, jsxs} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport logo from './logo.png';\nimport data from './data.json';\nimport './badge.css';\nexport function Badge() { return jsxs('strong', {className: 'kit-badge', children: [jsx('img', {src: logo, alt: ''}), label, ' ', data.count]}); }\n",
+    );
+    linkFolder('link-assets/node_modules/@acme/kit', 'link-assets/vendor/kit');
+    put('link-assets/page.tsx', "import {Badge} from '@acme/kit';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('link-assets/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx', 'vendor/kit/src/parts/logo.png']);
+    const html = fs.readFileSync(path.join(dir, 'link-assets/page.html'), 'utf8');
+    expect(html).toMatch(/\.kit-badge ?\{ ?letter-spacing: ?3px/);
+    expect(html).toMatch(/word-spacing: ?2px/);
+    expect(markup).toContain('@acme/kit badge text 7');
+    expect(markup).toContain('data:image/png;base64,');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('treats a workspace package linked inside the project as a package, and keeps the layouts that work today', async () => {
+    // A workspace whose root is the project: its package is linked in node_modules.
+    put('ws-root/package.json', JSON.stringify({name: 'ws-root', private: true, workspaces: ['packages/*']}));
+    putLinkedPackage('ws-root/packages/ui', '@acme/ws-ui');
+    linkFolder('ws-root/node_modules/@acme/ws-ui', 'ws-root/packages/ui');
+    put('ws-root/src/page.tsx', "import {Badge} from '@acme/ws-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // A pnpm workspace app: the package is outside the app's project.
+    put('ws-app/pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n  - 'packages/*'\n");
+    putLinkedPackage('ws-app/packages/ui', '@acme/app-ui');
+    put('ws-app/apps/web/package.json', JSON.stringify({name: 'web', private: true, dependencies: {'@acme/app-ui': 'workspace:*'}}));
+    linkFolder('ws-app/apps/web/node_modules/@acme/app-ui', 'ws-app/packages/ui');
+    put('ws-app/apps/web/page.tsx', "import {Badge} from '@acme/app-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // The pnpm store layout: node_modules links into node_modules/.pnpm.
+    put('pnpm-store/package.json', '{"name":"pnpm-store","private":true}');
+    putLinkedPackage('pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored', '@acme/stored');
+    linkFolder('pnpm-store/node_modules/@acme/stored', 'pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored');
+    put('pnpm-store/page.tsx', "import {Badge} from '@acme/stored';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // A CommonJS package and an ES module package, installed as folders.
+    put('cjs-pkg/package.json', '{"name":"cjs-pkg","private":true}');
+    put('cjs-pkg/node_modules/acme-cjs/package.json', JSON.stringify({name: 'acme-cjs', version: '1.0.0', main: './lib/index.js'}));
+    put('cjs-pkg/node_modules/acme-cjs/lib/index.js', "exports.Badge = require('./badge.js').Badge;\n");
+    put('cjs-pkg/node_modules/acme-cjs/lib/badge.js', "const {jsx} = require('react/jsx-runtime');\nexports.Badge = function Badge() { return jsx('strong', {children: 'acme-cjs badge text'}); };\n");
+    put('cjs-pkg/page.tsx', "import {Badge} from 'acme-cjs';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('esm-pkg/package.json', '{"name":"esm-pkg","private":true}');
+    putLinkedPackage('esm-pkg/node_modules/@acme/esm', '@acme/esm');
+    put('esm-pkg/page.tsx', "import {Badge} from '@acme/esm';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    for (const [page, text] of [
+      ['ws-root/src/page.tsx', '@acme/ws-ui badge text'],
+      ['ws-app/apps/web/page.tsx', '@acme/app-ui badge text'],
+      ['pnpm-store/page.tsx', '@acme/stored badge text'],
+      ['cjs-pkg/page.tsx', 'acme-cjs badge text'],
+      ['esm-pkg/page.tsx', '@acme/esm badge text'],
+    ]) {
+      const {first, back, markup, againMarkup} = await roundTrip(page);
+      expect(first.data.files).toEqual(['page.tsx']);
+      expect(markup).toContain(text);
+      expect(back.data.exact).toBe(true);
+      expect(againMarkup).toBe(markup);
+    }
+  }, 180_000);
+
   it('uses an explicit --title', async () => {
     const r = /** @type {any} */ (await render('page.tsx', {cwd: dir, out: 'titled.html', title: 'Q3 <report>'}));
     expect(r.data.output).toBe('titled.html');
