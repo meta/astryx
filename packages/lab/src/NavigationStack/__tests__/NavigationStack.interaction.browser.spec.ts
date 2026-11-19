@@ -1227,8 +1227,14 @@ test("a push from rest after a heavy commit starts on the engine's clock and nev
   // engines start at the first frame after the task, as before. Either way,
   // the first frame that moves shows no more of the spring than the time
   // since the frame before it allows, so the push never skips into its curve.
-  // A mouse click is an input task in every engine, as a tap is.
-  const {width} = await openStack(page, 'settings');
+  // A mouse click is an input task in every engine, as a tap is, so the
+  // test needs no touch path and Firefox runs it too.
+  await openStory(page, storybook(), 'lab-navigationstack--settings');
+  const stackBox = await page.getByTestId('navigation-stack').boundingBox();
+  if (stackBox == null) {
+    throw new Error('no stack');
+  }
+  const width = stackBox.width;
   await page.evaluate(() => {
     const observer = new MutationObserver(() => {
       if (

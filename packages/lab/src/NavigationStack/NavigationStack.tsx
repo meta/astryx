@@ -775,9 +775,11 @@ type TransitionClock = {at?: number; start?: 'next-frame' | 'presented'};
  * frame skips into its curve after a heavy commit on iOS. A page cannot
  * detect late commits as a capability, so this is a narrow engine
  * workaround. Read it on the client, at transition time.
- * Remove it when WebKit applies commits on time: re-check at each Safari
- * major version, when the WebKit busy-thread fixture passes with
- * `next-frame`. A capability probe in the animator can replace it.
+ * Reproduced on iOS Safari. Linux WebKit does not show the late commit, so
+ * its fixture guards only that the start stays correct for the time that
+ * passed. Remove it when WebKit applies commits on time: re-check at each
+ * Safari major version on iOS. A capability probe in the animator can
+ * replace it.
  */
 function appliesCommitsLate(view: Window | null | undefined): boolean {
   const userAgent = view?.navigator.userAgent ?? '';
