@@ -34,9 +34,10 @@ record of its colors: the same input always gives the same tokens.
 
 The Palette Generator Lab compares candidate recipes, complete families, modes,
 anchors, and existing themes, then lets an author copy candidate JSON. The
-versioned OKLCH recipe is the visual basis for supported generation. A later
-current authority—AST-018 only if amended and accepted—owns the shape and
-lifecycle of accepted palette data and any first-class palette/theme integration.
+versioned OKLCH recipe is the visual basis for supported generation. This
+record owns the opt-in palette input (FR19). A later current authority—AST-018
+only if amended and accepted—owns the shape and lifecycle of accepted palette
+data for themes that keep a committed palette.
 
 The Astryx CLI theme-authoring workflow exposes the pure
 `generateTonalPalette()` authoring API and the
