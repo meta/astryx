@@ -45,7 +45,8 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {string} coreDir - The folder of the installed Core package.
  * @property {string} coreVersion
  * @property {string} coreKey - The Core version plus a fingerprint of its stylesheet.
- * @property {string} cacheDir - node_modules/.cache/astryx-theme/<coreKey>
+ * @property {string | null} cacheDir - node_modules/.cache/astryx-theme/<coreKey>;
+ *   null under Yarn Plug'n'Play, which has no node_modules to keep it in
  * @property {any} core - Core's theme module.
  * @property {NodeJS.Require} req - Resolves packages from the project.
  * @property {ProjectTarget[]} targets
@@ -115,7 +116,7 @@ export function themeCacheRoot(dir) {
  * to its workspace root (or, outside a workspace, the repository root).
  * @param {string} dir
  */
-export function plugAndPlayAbove(dir) {
+function plugAndPlayAbove(dir) {
   const root = findDeclaredWorkspaceRoot(dir);
   for (let d = path.resolve(dir); ; d = path.dirname(d)) {
     if (fs.existsSync(path.join(d, '.pnp.cjs'))) return true;
@@ -123,6 +124,26 @@ export function plugAndPlayAbove(dir) {
       return false;
     if (path.dirname(d) === d) return false;
   }
+}
+
+/**
+ * Refuse a Yarn Plug'n'Play app: it has no node_modules for the editor to
+ * read Core from, or to keep its locks and cache in. Its .pnp.cjs sits at
+ * the app or at the workspace root above it.
+ * @param {string} dir the app folder, or a folder in it
+ */
+export function refusePlugAndPlay(dir) {
+  if (!plugAndPlayAbove(dir)) return;
+  throw new AstryxError(
+    "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
+    [
+      {
+        name: 'yarn config set nodeLinker node-modules',
+        reason: 'do this first, then yarn install',
+      },
+    ],
+    ERROR_CODES.ERR_PROJECT_REQUIRED,
+  );
 }
 
 /**
@@ -380,23 +401,27 @@ export async function openProject(cwd) {
   }
   const coreKey = `${coreVersion}-${fingerprint}`;
   const core = await import(pathToFileURL(themeFile).href);
-  const cacheDir = path.join(
-    themeCacheRoot(key) ??
-      path.join(
-        nodeModulesRoot(key) ?? key,
-        'node_modules',
-        '.cache',
-        'astryx-theme',
-      ),
-    coreKey,
-  );
+  // A Plug'n'Play app is read (a preview app with no theme reads it), but
+  // nothing is cached: it has no node_modules to keep the cache in.
+  const cacheDir = plugAndPlayAbove(key)
+    ? null
+    : path.join(
+        themeCacheRoot(key) ??
+          path.join(
+            nodeModulesRoot(key) ?? key,
+            'node_modules',
+            '.cache',
+            'astryx-theme',
+          ),
+        coreKey,
+      );
   // Reading every component doc takes a second; it is fixed per Core install.
-  const docsFile = path.join(cacheDir, 'docs.json');
+  const docsFile = cacheDir && path.join(cacheDir, 'docs.json');
   /** @type {{version: number, targets: import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
-    const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
-    if (cached.version === DOCS_VERSION) docs = cached;
+    const cached = docsFile && JSON.parse(fs.readFileSync(docsFile, 'utf8'));
+    if (cached?.version === DOCS_VERSION) docs = cached;
   } catch {
     // Not cached yet.
   }
@@ -409,12 +434,13 @@ export async function openProject(cwd) {
       vars: await collectThemingVars(path.join(coreDir, 'src')),
       components: await readComponents(coreDir),
     }));
-    try {
-      fs.mkdirSync(cacheDir, {recursive: true});
-      fs.writeFileSync(docsFile, JSON.stringify(docs));
-    } catch {
-      // A read-only node_modules: read the docs again next time.
-    }
+    if (cacheDir && docsFile)
+      try {
+        fs.mkdirSync(cacheDir, {recursive: true});
+        fs.writeFileSync(docsFile, JSON.stringify(docs));
+      } catch {
+        // A read-only node_modules: read the docs again next time.
+      }
   }
   const {components, vars} = docs;
   // The value Core writes for each state a target lists: a state that names
