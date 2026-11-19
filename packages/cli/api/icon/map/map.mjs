@@ -43,13 +43,13 @@ export async function iconMap(definition, icon, options = {}) {
   // (spec:AST-042 FR5).
   refuseIgnoredPairs(
     {
-      'a definition': passed(definition),
+      'a meaning': passed(definition),
       'an icon': passed(icon),
       '--remove': passed(remove),
       '--pairs': passed(pairs),
     },
     [
-      ['--pairs', 'a definition'],
+      ['--pairs', 'a meaning'],
       ['--pairs', 'an icon'],
       ['--pairs', '--remove'],
       ['--remove', 'an icon'],
@@ -67,7 +67,7 @@ export async function iconMap(definition, icon, options = {}) {
         'Name the icon meaning to map',
         [
           {
-            name: 'astryx docs cli/experimental/icon-definitions',
+            name: 'astryx docs cli/experimental/icon-meanings',
             reason: 'every icon meaning',
           },
         ],
@@ -100,7 +100,7 @@ export async function iconMap(definition, icon, options = {}) {
               name => ({name, reason: 'a known icon meaning'}),
             ),
             {
-              name: `astryx experimental icon new-definition ${definition} --set ${set.name}`,
+              name: `astryx experimental icon new-meaning ${definition} --set ${set.name}`,
               reason: 'add it as your own meaning',
             },
           ],

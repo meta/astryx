@@ -24,7 +24,7 @@ const COVERED_ELSEWHERE = new Set(['icons.doc.mjs']);
 
 const ICON_GUIDES = new Set([
   'icon-sets.doc.mjs',
-  'icon-definitions.doc.mjs',
+  'icon-meanings.doc.mjs',
   'icon-set-files.doc.mjs',
   'template-icons.doc.mjs',
 ]);

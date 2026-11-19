@@ -294,7 +294,7 @@ function readIconSet(root, name, owner) {
     const current = currentDefinitionName(name, ownDefinitions);
     if (current == null) {
       throw new Error(
-        `${label} data file is invalid: map "${name}" (icon "${id}") is not an icon meaning. Declare it in definitions/${name}.doc.mjs, or use an Astryx icon meaning (astryx docs cli/experimental/icon-definitions).`,
+        `${label} data file is invalid: map "${name}" (icon "${id}") is not an icon meaning. Declare it in definitions/${name}.doc.mjs, or use an Astryx icon meaning (astryx docs cli/experimental/icon-meanings).`,
       );
     }
     replacedKeys.push({key: name, definition: current});

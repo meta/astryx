@@ -8,7 +8,7 @@
  * package and manifest plumbing (resolve the package, load its manifest, the
  * receipt shape, name grammar) that every `integration add <kind>` command
  * and the icon authoring writes (`experimental icon new-set`,
- * `new-definition`) need. `theme add` and `theme build` write through the
+ * `new-meaning`) need. `theme add` and `theme build` write through the
  * same transaction. Side-effect-free outside of {@link applyWrites}.
  */
 

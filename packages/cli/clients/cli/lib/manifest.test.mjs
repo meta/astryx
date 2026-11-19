@@ -74,7 +74,7 @@ const CLI_LAYER_TYPES = {
   'experimental icon map': ['icon.search'],
   'experimental icon use': ['icon.search'],
   'experimental icon new-set': ['icon.search'],
-  'experimental icon new-definition': ['icon.search'],
+  'experimental icon new-meaning': ['icon.search'],
 };
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});

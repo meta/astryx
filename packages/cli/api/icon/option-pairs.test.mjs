@@ -29,7 +29,7 @@ import {doc as iconCommand} from '../../clients/cli/commands/experimental-icon.d
 import {doc as addCommand} from '../../clients/cli/commands/experimental-icon-add.doc.mjs';
 import {doc as mapCommand} from '../../clients/cli/commands/experimental-icon-map.doc.mjs';
 import {doc as newSetCommand} from '../../clients/cli/commands/experimental-icon-new-set.doc.mjs';
-import {doc as newDefinitionCommand} from '../../clients/cli/commands/experimental-icon-new-definition.doc.mjs';
+import {doc as newDefinitionCommand} from '../../clients/cli/commands/experimental-icon-new-meaning.doc.mjs';
 import {doc as useCommand} from '../../clients/cli/commands/experimental-icon-use.doc.mjs';
 import {doc as iconFn} from './icon.doc.mjs';
 import {doc as addFn} from './iconAdd.doc.mjs';
@@ -123,21 +123,21 @@ const CASES = {
     },
     refused: [
       ['query', '--list'],
-      ['query', '--definitions'],
+      ['query', '--meanings'],
       ['query', '--all-icons'],
       ['--list', '--set'],
       ['--list', '--limit'],
-      ['--list', '--definitions'],
+      ['--list', '--meanings'],
       ['--list', '--all-icons'],
-      ['--limit', '--definitions'],
+      ['--limit', '--meanings'],
       ['--limit', '--all-icons'],
-      ['--definitions', '--all-icons'],
+      ['--meanings', '--all-icons'],
     ],
     composes: [
       ['query', '--set'],
       ['query', '--limit'],
       ['--set', '--all-icons'],
-      ['--set', '--definitions'],
+      ['--set', '--meanings'],
     ],
   },
   'experimental icon add': {
@@ -160,11 +160,11 @@ const CASES = {
     },
     refused: [
       ['export', '--all'],
-      ['--definition', '--new-definition'],
-      ['--definition', '--description'],
-      ['--definition', '--words'],
-      ['--definition', '--all'],
-      ['--new-definition', '--all'],
+      ['--meaning', '--new-meaning'],
+      ['--meaning', '--description'],
+      ['--meaning', '--words'],
+      ['--meaning', '--all'],
+      ['--new-meaning', '--all'],
       ['--description', '--all'],
       ['--words', '--all'],
       ['--default', '--all'],
@@ -199,14 +199,14 @@ const CASES = {
       'options.pairs': 'close=close',
     },
     refused: [
-      ['definition', '--pairs'],
+      ['meaning', '--pairs'],
       ['icon', '--remove'],
       ['icon', '--pairs'],
       ['--remove', '--pairs'],
     ],
     composes: [
-      ['definition', 'icon'],
-      ['definition', '--remove'],
+      ['meaning', 'icon'],
+      ['meaning', '--remove'],
       ['--set', '--pairs'],
     ],
   },
@@ -260,7 +260,7 @@ const CASES = {
       ['--adapter', '--description'],
     ],
   },
-  'experimental icon new-definition': {
+  'experimental icon new-meaning': {
     command: newDefinitionCommand,
     fn: newDefinitionFn,
     call: iconNewDefinition,

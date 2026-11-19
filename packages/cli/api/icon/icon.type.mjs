@@ -263,7 +263,7 @@
  */
 
 /**
- * `astryx --json experimental icon add <Export> --from <module> --definition <name>`.
+ * `astryx --json experimental icon add <Export> --from <module> --meaning <name>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconAddResponse
  * @property {'icon.add'} type
@@ -321,7 +321,7 @@
  */
 
 /**
- * `astryx --json experimental icon --definitions`.
+ * `astryx --json experimental icon --meanings`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconDefinitionsResponse
  * @property {'icon.definitions'} type
@@ -411,7 +411,7 @@
  */
 
 /**
- * `astryx --json experimental icon new-definition <name>`.
+ * `astryx --json experimental icon new-meaning <name>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconNewDefinitionResponse
  * @property {'icon.newDefinition'} type

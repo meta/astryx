@@ -65,7 +65,7 @@ function proseOf(value, out = []) {
         .replace(/`[^`]*`/g, '')
         .replace(/--[\w-]+/g, '')
         // A command name is typed, not read.
-        .replace(/\bicon new-definition\b/g, '')
+        .replace(/\bicon new-meaning\b/g, '')
         .replace(/<[\w-]+>/g, '')
         .replace(/\S*\/\S*/g, '')
         .replace(/\b(?:options|data)\.\w+/g, ''),

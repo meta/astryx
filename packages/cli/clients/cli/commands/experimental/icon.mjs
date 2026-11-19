@@ -49,7 +49,7 @@ import {doc as iconUseCommand} from '../experimental-icon-use.doc.mjs';
 import {doc as iconMapCommand} from '../experimental-icon-map.doc.mjs';
 import {doc as iconAddCommand} from '../experimental-icon-add.doc.mjs';
 import {doc as iconNewSetCommand} from '../experimental-icon-new-set.doc.mjs';
-import {doc as iconNewDefinitionCommand} from '../experimental-icon-new-definition.doc.mjs';
+import {doc as iconNewDefinitionCommand} from '../experimental-icon-new-meaning.doc.mjs';
 import {doc as iconFn} from '../../../../api/icon/icon.doc.mjs';
 import {doc as iconUseFn} from '../../../../api/icon/iconUse.doc.mjs';
 import {doc as iconMapFn} from '../../../../api/icon/iconMap.doc.mjs';
@@ -444,7 +444,7 @@ export function registerExperimentalIcon(group, program) {
     fn: iconFn,
     action: async (
       /** @type {string[] | string | undefined} */ words,
-      /** @type {{list?: boolean, set?: string, limit?: string, allIcons?: boolean, definitions?: boolean}} */ options,
+      /** @type {{list?: boolean, set?: string, limit?: string, allIcons?: boolean, meanings?: boolean}} */ options,
     ) => {
       const query = Array.isArray(words) ? words.join(' ') : words;
       // Number(), not parseInt(): the API refuses `1.5` and `5abc`.
@@ -459,7 +459,7 @@ export function registerExperimentalIcon(group, program) {
           set: options.set,
           limit,
           allIcons: options.allIcons ?? false,
-          definitions: options.definitions ?? false,
+          definitions: options.meanings ?? false,
         });
       } catch (e) {
         const err =
@@ -704,9 +704,9 @@ export function registerExperimentalIcon(group, program) {
             cwd: process.cwd(),
             from: /** @type {string} */ (options.from),
             set: setOf(options),
-            definition: /** @type {string | undefined} */ (options.definition),
+            definition: /** @type {string | undefined} */ (options.meaning),
             newDefinition: /** @type {string | undefined} */ (
-              options.newDefinition
+              options.newMeaning
             ),
             description: /** @type {string | undefined} */ (
               options.description
@@ -779,7 +779,7 @@ export function registerExperimentalIcon(group, program) {
                   ]
                 : []),
               text(
-                `All icon meanings: ${cli} docs cli/experimental/icon-definitions`,
+                `All icon meanings: ${cli} docs cli/experimental/icon-meanings`,
               ),
             );
             return;
@@ -801,7 +801,7 @@ export function registerExperimentalIcon(group, program) {
   });
 
   /**
-   * Print a new-set or new-definition receipt: what it wrote and where.
+   * Print a new-set or new-meaning receipt: what it wrote and where.
    * @param {string} what `icon set` or `icon definition`
    */
   const printNew =

@@ -2,7 +2,7 @@
 
 /**
  * @file Icon-set authoring commands end to end (AST-084): `experimental icon
- * new-set --from`, `experimental icon new-definition`, `experimental icon add`, `icon
+ * new-set --from`, `experimental icon new-meaning`, `experimental icon add`, `icon
  * map`, and `experimental icon use`, driving the real program over an icon-set package
  * that wraps a small component library and an app that installs it.
  */
@@ -390,7 +390,7 @@ describe('icon add', () => {
       name: 'delete',
       source: 'astryx',
       command:
-        'astryx experimental icon add Bin --from @acme/glyph-library --set outline --definition delete',
+        'astryx experimental icon add Bin --from @acme/glyph-library --set outline --meaning delete',
     });
     expect(dataOf('outline').icons).toEqual([]);
   });
@@ -403,7 +403,7 @@ describe('icon add', () => {
       'Bin',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'delete',
     ];
     const first = await json(args);
@@ -439,7 +439,7 @@ describe('icon add', () => {
       'Bin',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     const args = [
@@ -500,7 +500,7 @@ describe('icon add', () => {
     ).toContain("export {Cross as BinSolidIcon} from '@acme/glyph-library';");
   });
 
-  it("adds the set's own meaning with --new-definition, refusing one Astryx has", async () => {
+  it("adds the set's own meaning with --new-meaning, refusing one Astryx has", async () => {
     const added = await json([
       'experimental',
       'icon',
@@ -508,7 +508,7 @@ describe('icon add', () => {
       'Cross',
       '--from',
       '@acme/glyph-library',
-      '--new-definition',
+      '--new-meaning',
       'crossOut',
       '--description',
       'Cross something out.',
@@ -547,7 +547,7 @@ describe('icon add', () => {
       'Cross',
       '--from',
       '@acme/glyph-library',
-      '--new-definition',
+      '--new-meaning',
       'close',
       '--description',
       'x',
@@ -556,11 +556,11 @@ describe('icon add', () => {
     ]);
     expect(refused.code).toBe(1);
     expect(refused.body.suggestions).toContainEqual(
-      expect.objectContaining({name: '--definition close'}),
+      expect.objectContaining({name: '--meaning close'}),
     );
   });
 
-  it('--new-definition that cannot write its meaning leaves the generated module, its types, and the set data unchanged', async () => {
+  it('--new-meaning that cannot write its meaning leaves the generated module, its types, and the set data unchanged', async () => {
     const set = path.join(pkg, 'icon-sets', 'outline');
     const first = await json([
       'experimental',
@@ -569,7 +569,7 @@ describe('icon add', () => {
       'Bin',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(first.code).toBe(0);
@@ -588,7 +588,7 @@ describe('icon add', () => {
       'Cross',
       '--from',
       '@acme/glyph-library',
-      '--new-definition',
+      '--new-meaning',
       'crossOut',
       '--description',
       'Cross something out.',
@@ -610,7 +610,7 @@ describe('icon add', () => {
       'Bim',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(missing.code).toBe(1);
@@ -624,7 +624,7 @@ describe('icon add', () => {
       'Bin',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'trashCan',
     ]);
     expect(unknown.code).toBe(1);
@@ -639,7 +639,7 @@ describe('icon add', () => {
       '--from',
       '@acme/glyph-library/rocket',
       '--default',
-      '--definition',
+      '--meaning',
       'rocket',
     ]);
     expect(rocket.code).toBe(0);
@@ -650,7 +650,7 @@ describe('icon add', () => {
       'glyphData',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'activity',
     ]);
     expect(refused.code).toBe(1);
@@ -677,7 +677,7 @@ describe('icon add', () => {
       'glyphData',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'activity',
     ]);
     expect(adapted.code).toBe(0);
@@ -698,7 +698,7 @@ describe('icon add', () => {
   });
 });
 
-describe('experimental icon map and new-definition', () => {
+describe('experimental icon map and new-meaning', () => {
   beforeEach(async () => {
     await runCli(
       [
@@ -746,7 +746,7 @@ describe('experimental icon map and new-definition', () => {
     expect(unknown.code).toBe(1);
     expect(unknown.body.suggestions).toContainEqual(
       expect.objectContaining({
-        name: 'astryx experimental icon new-definition orbit --set outline',
+        name: 'astryx experimental icon new-meaning orbit --set outline',
       }),
     );
     const noIcon = await json([
@@ -766,7 +766,7 @@ describe('experimental icon map and new-definition', () => {
     const {code, body} = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'crossOut',
       '--description',
       'Cross something out.',
@@ -784,7 +784,7 @@ describe('experimental icon map and new-definition', () => {
     const again = await json([
       'experimental',
       'icon',
-      'new-definition',
+      'new-meaning',
       'crossOut',
       '--description',
       'x',
@@ -1069,14 +1069,14 @@ describe('a library of icon data, through the adapter', () => {
         '@acme/glyph-data',
         ...(definition === 'view'
           ? [
-              '--new-definition',
+              '--new-meaning',
               'peek',
               '--description',
               'Peek.',
               '--words',
               'peek',
             ]
-          : ['--definition', definition]),
+          : ['--meaning', definition]),
       ]);
       expect(added.code, name).toBe(0);
     }
@@ -1226,7 +1226,7 @@ describe('the library prefix ignores constants', () => {
       'glyphTrash',
       '--from',
       '@acme/glyph-data',
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(added.code).toBe(0);
@@ -1290,7 +1290,7 @@ describe('module resolution', () => {
       'Bin',
       '--from',
       '@acme/glyph-library',
-      '--definition',
+      '--meaning',
       'delete',
     ]);
     expect(added.code).toBe(0);
@@ -1794,7 +1794,7 @@ describe('blind run 4 fixes', () => {
       'CheckDouble',
       '--from',
       './src/icons/check-double.js',
-      '--definition',
+      '--meaning',
       'checkDouble',
     ]);
     expect(added.code).toBe(0);
@@ -1804,8 +1804,8 @@ describe('blind run 4 fixes', () => {
     });
   });
 
-  it('--definitions lists every meaning, marking built-ins', async () => {
-    const {code, body} = await json(['experimental', 'icon', '--definitions']);
+  it('--meanings lists every meaning, marking built-ins', async () => {
+    const {code, body} = await json(['experimental', 'icon', '--meanings']);
     expect(code).toBe(0);
     expect(body.type).toBe('icon.definitions');
     const close = body.data.definitions.find(
@@ -1813,7 +1813,7 @@ describe('blind run 4 fixes', () => {
     );
     expect(close).toMatchObject({builtIn: true});
     expect(close.words).toContain('x');
-    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    const text = await runCli(['experimental', 'icon', '--meanings'], pkg);
     expect(text.stdout).toMatch(
       /^- close \[built-in(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
     );
@@ -1945,7 +1945,7 @@ describe('blind run 5 fixes', () => {
       'CheckDouble',
       '--from',
       './art/check-double.js',
-      '--definition',
+      '--meaning',
       'checkDouble',
     ]);
     expect(added.code).toBe(0);
@@ -1957,7 +1957,7 @@ describe('blind run 5 fixes', () => {
     expect(added.body.data.note).toContain(
       './art/check-double.js is not in package.json "files", so it would not be published; set "files" to `["index.js","icon-sets","astryx.integration.mjs","art"]`.',
     );
-    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    const text = await runCli(['experimental', 'icon', '--meanings'], pkg);
     expect(text.stdout).toMatch(
       /^- activity \[optional(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
     );
@@ -2010,7 +2010,7 @@ describe('blind run 6 fixes', () => {
       'CheckDouble',
       '--from',
       './src/icons/check-double.js',
-      '--definition',
+      '--meaning',
       'checkDouble',
     ]);
     expect(added.body.data.note).toContain(
@@ -2558,7 +2558,7 @@ describe('add --variant --all after the id rule changes', () => {
   });
 });
 
-describe('--set through the CLI selects the set add, map, and new-definition edit', () => {
+describe('--set through the CLI selects the set add, map, and new-meaning edit', () => {
   beforeEach(async () => {
     for (const set of ['one', 'two']) {
       await json([
@@ -2599,7 +2599,7 @@ describe('--set through the CLI selects the set add, map, and new-definition edi
         '--from',
         '@acme/glyph-library/rocket',
         '--default',
-        '--definition',
+        '--meaning',
         'delete',
         '--set',
         set,
@@ -2607,11 +2607,11 @@ describe('--set through the CLI selects the set add, map, and new-definition edi
       'rocket',
     ],
     [
-      'new-definition',
+      'new-meaning',
       set => [
         'experimental',
         'icon',
-        'new-definition',
+        'new-meaning',
         'binIt',
         '--description',
         'Put something in the bin.',
@@ -2901,8 +2901,8 @@ describe('a refresh changes only the icons the refreshed module supplies', () =>
     ];
     expect((await json(args)).code).toBe(0);
     for (const add of [
-      ['Spark', '--from', './art/spark.js', '--definition', 'sparkles'],
-      ['Rocket', '--from', '@acme/other-library', '--definition', 'rocket'],
+      ['Spark', '--from', './art/spark.js', '--meaning', 'sparkles'],
+      ['Rocket', '--from', '@acme/other-library', '--meaning', 'rocket'],
     ]) {
       const added = await json(['experimental', 'icon', 'add', ...add]);
       expect(added.code, JSON.stringify(added.body)).toBe(0);
@@ -2990,7 +2990,7 @@ describe('a refresh changes only the icons the refreshed module supplies', () =>
       'Spark',
       '--from',
       './art/spark.js',
-      '--definition',
+      '--meaning',
       'sparkles',
     ]);
     const added = await json([
@@ -3123,7 +3123,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf(glyph, 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         definition,
       ]);
       expect(added.code, JSON.stringify(added.body)).toBe(0);
@@ -3318,7 +3318,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('X', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'close',
       ],
     ]);
@@ -3359,7 +3359,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('Search', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'search',
       ],
       [
@@ -3369,7 +3369,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '@acme/weight-icons',
         '--id',
         'clock',
-        '--definition',
+        '--meaning',
         'clock',
       ],
       [
@@ -3378,7 +3378,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('X', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'close',
       ],
     ]);
@@ -3446,7 +3446,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('X', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'close',
       ],
     ]);
@@ -3497,7 +3497,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('X', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'close',
       ],
       // Moves, and has the id and export of the root's Close glyph.
@@ -3507,7 +3507,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('Search', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'search',
       ],
       // Reads the root export the icon before it moves to: stays.
@@ -3517,7 +3517,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath('SearchAlt'),
         '--default',
-        '--definition',
+        '--meaning',
         'upload',
       ],
       // The root's own Clock glyph, read from the root.
@@ -3528,7 +3528,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '@acme/weight-icons',
         '--id',
         'clock',
-        '--definition',
+        '--meaning',
         'clock',
       ],
       // Reads the root export the icon before it reads: stays.
@@ -3538,7 +3538,7 @@ describe('a refresh from a library root over icons added one per file', () => {
         '--from',
         subpath(fileOf('Clock', 'Outline')),
         '--default',
-        '--definition',
+        '--meaning',
         'stop',
       ],
     ]);
@@ -3604,7 +3604,7 @@ describe('a refresh from a library root over icons added one per file', () => {
           '@acme/weight-icons',
           '--id',
           'dismiss',
-          '--definition',
+          '--meaning',
           'close',
         ],
       ],
@@ -3612,7 +3612,7 @@ describe('a refresh from a library root over icons added one per file', () => {
     [
       'an icon read from one file, with a variant read from another',
       [
-        ['add', 'XIcon', '--from', xFile, '--default', '--definition', 'close'],
+        ['add', 'XIcon', '--from', xFile, '--default', '--meaning', 'close'],
         [
           'add',
           'XIcon',
@@ -3633,7 +3633,7 @@ describe('a refresh from a library root over icons added one per file', () => {
           '--from',
           xFile,
           '--default',
-          '--definition',
+          '--meaning',
           'close',
         ],
       ],
@@ -3647,7 +3647,7 @@ describe('a refresh from a library root over icons added one per file', () => {
           '--from',
           xFile,
           '--default',
-          '--definition',
+          '--meaning',
           'close',
         ],
       ],
@@ -3661,7 +3661,7 @@ describe('a refresh from a library root over icons added one per file', () => {
           '--from',
           searchFile,
           '--default',
-          '--definition',
+          '--meaning',
           'close',
         ],
         [
@@ -3670,7 +3670,7 @@ describe('a refresh from a library root over icons added one per file', () => {
           '--from',
           xFile,
           '--default',
-          '--definition',
+          '--meaning',
           'search',
         ],
       ],
@@ -3684,10 +3684,10 @@ describe('a refresh from a library root over icons added one per file', () => {
           '--from',
           xFile,
           '--default',
-          '--definition',
+          '--meaning',
           'close',
         ],
-        ['add', 'XIcon', '--from', xFile, '--default', '--definition', 'error'],
+        ['add', 'XIcon', '--from', xFile, '--default', '--meaning', 'error'],
       ],
     ],
   ];
@@ -3822,7 +3822,7 @@ describe('a refresh from a library root keeps what it does not rewrite', () => {
       'export const Spark = props => null;\n',
     );
     for (const add of [
-      ['Spark', '--from', './art/spark.js', '--definition', 'sparkles'],
+      ['Spark', '--from', './art/spark.js', '--meaning', 'sparkles'],
       [
         'Cross',
         '--from',
@@ -3877,7 +3877,7 @@ describe('a refresh from a library root keeps what it does not rewrite', () => {
       'CrossAlt',
       '--from',
       '@acme/glyph-library/cross-alt',
-      '--definition',
+      '--meaning',
       'error',
     ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);
@@ -3932,14 +3932,14 @@ describe('a refresh from a library root keeps what it does not rewrite', () => {
         '@acme/glyph-library/cross',
         '--id',
         'dismiss',
-        '--definition',
+        '--meaning',
         'close',
       ],
       [
         'CrossAlt',
         '--from',
         '@acme/glyph-library/cross-alt',
-        '--definition',
+        '--meaning',
         'error',
       ],
     ]) {

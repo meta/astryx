@@ -2,7 +2,7 @@
 
 /**
  * @file Icon definition groups (AST-084 FR4, FR6): `experimental icon
- * --definitions` names each definition's group, the finder names a match's
+ * --meanings` names each definition's group, the finder names a match's
  * related definitions (only the first match in text), the answer with no set
  * names them for each definition, and a definition's docs page names its
  * group's other members with their routes. Groups never change ranking.
@@ -90,14 +90,14 @@ describe('definitionRelatives', () => {
   });
 });
 
-describe('experimental icon --definitions names the group', () => {
+describe('experimental icon --meanings names the group', () => {
   it(
     'JSON has `group` only when a meaning names one; text shows it',
     async () => {
       const cwd = writeIconSetProject(path.join(tmp, 'definitions'), {
         packages: [],
       });
-      const body = await json(['experimental', 'icon', '--definitions'], cwd);
+      const body = await json(['experimental', 'icon', '--meanings'], cwd);
       /** @type {Map<string, any>} */
       const byName = new Map(
         body.data.definitions.map((/** @type {any} */ each) => [
@@ -109,7 +109,7 @@ describe('experimental icon --definitions names the group', () => {
       expect(byName.get('userAdd').group).toBe('people');
       expect(byName.get('home')).not.toHaveProperty('group');
 
-      const text = await runCli(['experimental', 'icon', '--definitions'], cwd);
+      const text = await runCli(['experimental', 'icon', '--meanings'], cwd);
       expect(text.stdout).toMatch(
         /- notificationOff \[optional, group notifications[,\]]/u,
       );
@@ -192,7 +192,7 @@ describe("a meaning's docs page names its group", () => {
     async () => {
       const cwd = writeIconSetProject(path.join(tmp, 'docs'), {packages: []});
       const res = await runCli(
-        ['docs', 'cli/experimental/icon-definitions/user-add'],
+        ['docs', 'cli/experimental/icon-meanings/user-add'],
         cwd,
       );
       expect(res.code).toBe(0);
@@ -201,19 +201,19 @@ describe("a meaning's docs page names its group", () => {
         /^Group \| `people`: `user`, `userCircle`, `userRemove`, `users`\s*$/u,
       );
       expect(res.stdout).toContain(
-        `${formatCliCommand('docs cli/experimental/icon-definitions/user-remove')}\``,
+        `${formatCliCommand('docs cli/experimental/icon-meanings/user-remove')}\``,
       );
       const json = JSON.parse(
         (
           await runCli(
-            ['docs', 'cli/experimental/icon-definitions/user-add', '--json'],
+            ['docs', 'cli/experimental/icon-meanings/user-add', '--json'],
             cwd,
           )
         ).stdout,
       );
       expect(JSON.stringify(json)).toContain('"Group"');
       const home = await runCli(
-        ['docs', 'cli/experimental/icon-definitions/home'],
+        ['docs', 'cli/experimental/icon-meanings/home'],
         cwd,
       );
       expect(home.stdout).not.toContain('Group');

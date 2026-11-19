@@ -479,7 +479,7 @@ describe('every entry point that names a set reports it the same way (FR17)', ()
         }),
     ],
     [
-      'new-definition --set',
+      'new-meaning --set',
       'authored',
       (dir, set) =>
         iconNewDefinition('binIt', {
