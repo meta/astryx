@@ -3526,19 +3526,20 @@ export const BORDER_TO_COLOR = 'var(--border-width) solid transparent';
  * @param {string} part
  */
 function borderSetToNone(ctx, data, s, part) {
-  return [...(data?.settings ?? [])]
-    .reverse()
-    .find(
-      (/** @type {any} */ x) =>
-        x.source === 'property' &&
-        /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
-          String(x.thing),
-        ) &&
-        /^\s*(?:none|hidden|0(?:px|rem|em)?)\b/i.test(String(x.value)) &&
-        (!x.when || !s.when || x.when === s.when) &&
-        (!x.state || x.state === s.state) &&
-        partsOf(ctx, x).includes(part),
-    );
+  return [...(data?.settings ?? [])].reverse().find(
+    (/** @type {any} */ x) =>
+      x.source === 'property' &&
+      /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
+        String(x.thing),
+      ) &&
+      // (A whole none or zero token: "0.5px" is a width.)
+      /^\s*(?:none|hidden|0(?:px|rem|em)?)(?=\s|$)/i.test(String(x.value)) &&
+      // (A none set for one look hides only that look: a color for every
+      // button still shows on the others.)
+      (!x.when || x.when === s.when) &&
+      (!x.state || x.state === s.state) &&
+      partsOf(ctx, x).includes(part),
+  );
 }
 
 /**
@@ -3549,7 +3550,8 @@ function borderSetToNone(ctx, data, s, part) {
  * border width, so the part keeps one size in every state and the color
  * has a line to show on. Null when the setting is no border color, its
  * parts draw a border there, or the theme itself sets their border to none
- * (set refuses that conflict). Set and how both write it before the color.
+ * (set saves the color with a note that it does not show, and undoing
+ * that none brings the border). Set and how both write it before the color.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data

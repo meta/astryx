@@ -6,8 +6,9 @@
  * tab, a primary button, a banner), a border color, one color or one per
  * side, brings the border it needs: a transparent one at rest, as wide as
  * the theme's border width, written in the same change and named in the
- * result, so one undo takes back both. A border the theme itself sets to
- * none there is refused instead. Whether a part draws a border is read
+ * result, so one undo takes back both. Where the theme itself sets that
+ * border to none, the color is saved with a note that it does not show;
+ * undoing the none, or setting the color again, brings the border. Whether a part draws a border is read
  * one way for set and how: drawsLine, by the variant asked, with a side
  * cleared only on the first or last child still drawn on the others.
  */
@@ -165,6 +166,14 @@ describe('a border color on a part that draws no border', () => {
       expect(note).toContain('undo u border --on tab');
       expect(note).toContain('undo u border-bottom-color --on tab');
       expect(note).not.toContain('added a');
+      // (The note's "to show it" command: the border comes back, and the
+      // built stylesheet draws the color on it.)
+      await themeEditUndo('u', {cwd, thing: 'border', on: 'tab'});
+      const built = fs.readFileSync(path.join(cwd, 'themes/u/u.css'), 'utf8');
+      expect(built).toMatch(
+        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;/,
+      );
+      expect(built).toContain('border-bottom-color: #999999;');
       // (A part Core draws a border on, an input, the same: saved, and
       // said not to show.)
       await themeEditSet('u', 'border', 'none', {cwd, on: 'inputs'});
@@ -175,7 +184,36 @@ describe('a border color on a part that draws no border', () => {
       expect(inputs.data.notes.join('\n')).toContain(
         'border-color on inputs does not show: u sets border none on inputs',
       );
-      for (let k = 0; k < 4; k++) await themeEditUndo('u', {cwd});
+      for (let k = 0; k < 3; k++) await themeEditUndo('u', {cwd});
+    },
+    T,
+  );
+});
+
+describe('a border none read exactly', () => {
+  it(
+    'reads 0.5px as a width and a none for one look as that look only',
+    async () => {
+      await themeEditSet('u', 'border-width', '0.5px', {cwd, on: 'tab'});
+      const thin = await themeEditSet('u', 'border-color', '#999999', {
+        cwd,
+        on: 'tab',
+      });
+      expect(thin.data.notes.join('\n')).not.toContain('sets border-width');
+      await themeEditUndo('u', {cwd});
+      await themeEditUndo('u', {cwd});
+      await themeEditSet('u', 'border', 'none', {
+        cwd,
+        on: 'button',
+        when: 'variant:primary',
+      });
+      const all = await themeEditSet('u', 'border-color', '#999999', {
+        cwd,
+        on: 'button',
+      });
+      expect(all.data.notes.join('\n')).not.toContain('sets border none');
+      await themeEditUndo('u', {cwd});
+      await themeEditUndo('u', {cwd});
     },
     T,
   );
