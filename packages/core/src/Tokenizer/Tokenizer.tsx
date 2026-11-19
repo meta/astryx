@@ -73,7 +73,7 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {warnOnce} from '../utils/devWarning';
+import {devPropError, warnOnce} from '../utils/devWarning';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {SizeValue} from '../utils/types';
@@ -131,6 +131,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
 import {isRenderable} from '../utils/isRenderable';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -1067,6 +1071,13 @@ export function Tokenizer<T extends SearchableItem>({
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TokenizerProps<T> | TokenizerAcceptedProps<T>): React.JSX.Element {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(value)) {
+    throw devPropError(
+      'Tokenizer',
+      'value',
+      'must be an array of the selected items, for example value={selected} with onChange={setSelected} and useState([]).',
+    );
+  }
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Tokenizer', restProps, {
     containerXstyle,
