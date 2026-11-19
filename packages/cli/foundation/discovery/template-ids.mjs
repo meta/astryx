@@ -21,6 +21,7 @@ import {nameLines} from '../fs/kept-tree.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {BLOCKS_DIR, PAGES_DIR} from './name-roots.mjs';
 import {foldEntryName} from './entry-name-files.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 /**
  * Released compatibility suffixes, in precedence order. Stable 0.6.0
@@ -69,6 +70,8 @@ export {BLOCKS_DIR, PAGES_DIR};
 export function listTemplates() {
   /** @type {string[]} */
   const all = [];
+  // Core's templates show only in a run whose base is Core.
+  if (currentNonCoreBase()) return all;
   if (fs.existsSync(PAGES_DIR)) {
     all.push(
       ...listDirEntries(PAGES_DIR)
@@ -83,11 +86,12 @@ export function listTemplates() {
  * The ids of Core's templates that `keep` accepts, read from file names: each
  * page folder, and each block doc that has its same-stem source. Discovery
  * gives Core's templates exactly these ids. Only a kept block's source is
- * looked for.
+ * looked for. None in a run whose base is not Core.
  * @param {(id: string) => boolean} [keep]
  * @returns {string[]}
  */
 export function coreTemplateIds(keep = () => true) {
+  if (currentNonCoreBase()) return [];
   const ids = listTemplates().filter(keep);
   /** @param {string} dir */
   const walk = dir => {

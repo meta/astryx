@@ -16,7 +16,6 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 16,
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    border: '1px solid var(--color-border-default)',
   },
   demoArea: {
     display: 'flex',
@@ -30,7 +29,6 @@ const styles = stylex.create({
     justifyContent: 'center',
     width: 200,
     height: 96,
-    border: '1px dashed var(--color-border-default)',
     borderRadius: 8,
   },
   contextRow: {
@@ -471,7 +469,9 @@ const viewportStyles = stylex.create({
   surface: {
     boxSizing: 'border-box',
     backgroundColor: 'var(--color-background-surface)',
-    border: '2px solid var(--color-border-accent, #6366f1)',
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border-accent, #6366f1)',
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
@@ -490,7 +490,7 @@ const viewportStyles = stylex.create({
   tall: {
     blockSize: 2000,
     inlineSize: 200,
-    background:
+    backgroundImage:
       'repeating-linear-gradient(to bottom, transparent 0 39px, var(--color-border-default) 39px 40px)',
   },
   explicitWidth: (width: number) => ({width}),

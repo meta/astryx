@@ -31,14 +31,25 @@
  * `warnings` are defects the theme author should fix. `notices` are advisories
  * about a correct theme — most of them cannot be fixed in a theme file at all,
  * so folding them into `warnings` makes a clean build look dirty.
- * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[]}} data
+ * `base`, on a `--family` build only, is the theme the family's root extends
+ * that the family does not select: `package` is the installed package it comes
+ * from, a requirement of the outputs (null for a local base), and `export` the
+ * name the root imports it by (null for a theme the root's file defines).
+ * `settingIssues` lists each component setting of the page rules the browser
+ * does not show as written (also among `warnings`, except one a generated
+ * file writes: that file gets one entry in `notices`), with the rule that
+ * wins and the fix; onDark, onLight and adaptation rules are not read.
+ * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], settingIssues: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
 /**
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE'}} data
+ * `settingIssues`, present when there are any, is the build receipt's
+ * list of settings the browser does not show as written; `notices`, one per
+ * generated file whose settings do not show.
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE', settingIssues?: Array<import('./build/setting-effects.mjs').SettingIssueEntry & {line: number | null, file?: string}>, notices?: string[]}} data
  *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
@@ -139,7 +150,31 @@
  * how its wiring changes, with `line` the provider's opening JSX (passing
  * the mode when it takes one and an added theme has one color mode). No
  * receipt reads app source.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
+ * `copy` is present when `theme add` was given a shared theme (a folder, a
+ * `.tgz` archive, or an https URL to one) instead of a slug: `from` as it
+ * was given, `folder` where the theme sat in it, `outputDir` and `files`
+ * the copy in the app's local themes root, `installed` the Astryx package
+ * specs installed for what the theme imports, `installRan` false when the
+ * package manager was not run for them because an integration's install
+ * guidance leaves the step to the builder, named in `installRetryCommand`
+ * (absent otherwise), `installCommand` the command
+ * that installs the other packages it imports that the app lacks (never run
+ * for the theme; null when there are none), `installGuidance` the line a
+ * loaded integration gives for adding them, shown instead of
+ * `installCommand`, `installError` why the Astryx
+ * install did not run or failed and `installRetryCommand` the command that
+ * installs those Astryx packages, `previousDefault` the app's default before
+ * the add (`theme use` it before `theme remove` undoes the add), `written` every file the add wrote (the
+ * copy, its receipt, the generated module, and `package.json` and its
+ * lockfile when it installed), and `config` the module, the default and the
+ * dependencies it added.
+ * `undo` is present when `theme remove` removed a theme `theme add` copied
+ * from a shared theme: `removed` the files of the copy it deleted, `kept`
+ * those changed since the add (left as they are), `uninstalled` the packages
+ * the add installed that no theme still in the record is owned by or
+ * imports, and `uninstallError`
+ * why that uninstall failed.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}, copy?: {from: string, folder: string, outputDir: string, files: string[], installed: string[], installRan?: false, installCommand: string | null, installGuidance?: string, installError?: string, installRetryCommand?: string, previousDefault?: string, written: string[], config: {module: string, default: string, dependencies: string[]}}, undo?: {removed: string[], kept: string[], uninstalled: string[], uninstallError?: string}}} data
  */
 
 /**
@@ -151,8 +186,9 @@
  * `package` is the source selector; bundled themes retain `@astryxdesign/cli`.
  * `missingPackages` names the packages the fork imports that the app does not
  * declare (empty when none); `installCommand` installs them, and is null when
- * none are missing or the package manager is undetermined.
- * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null}} data
+ * none are missing, when the package manager is undetermined, or when no
+ * package.json holds the folder.
+ * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null, installGuidance?: string}} data
  */
 
 /**
@@ -232,6 +268,11 @@
 
 /**
  * @typedef {object} TonalPaletteGenerationInput
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
+ * run: astryx-oklch-v1 when none is named, so a request or config made
+ * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
+ * follow the vibrancy and the seed's own chroma. New palettes name v2 (the
+ * theme editor records it); a config pins its recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).
@@ -253,7 +294,7 @@
  * @typedef {object} TonalPaletteCandidate
  * @property {1} schemaVersion
  * @property {'candidate'} status
- * @property {'astryx-oklch-v1'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {'#000000'} black Exact solid black for theme authoring outside a tonal family.
  * @property {'#ffffff'} white Exact solid white for theme authoring outside a tonal family.
  * @property {number[]} stops Canonical order for iterating the palette's stop lookup maps.
@@ -295,7 +336,7 @@
 /**
  * The request as the generator resolved it, with every default filled in.
  * @typedef {object} TonalPaletteNormalizedRequest
- * @property {'astryx-oklch-v1'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
@@ -312,7 +353,7 @@
  * its request without rerunning generation.
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
- * @property {'astryx-oklch-v1'} recipe Recipe that produced the candidate.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe Recipe that produced the candidate.
  * @property {'palette-generator-v1'} generatorVersion Generator
  * implementation that ran the recipe.
  * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
@@ -331,7 +372,7 @@
  * astryx --json theme palette generate <config>
  * @typedef {object} ThemePaletteGenerateResponse
  * @property {'theme.palette.generate'} type
- * @property {{recipe: 'astryx-oklch-v1', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
+ * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
  */
 
 // Make this a module so the @typedefs above are importable as types via

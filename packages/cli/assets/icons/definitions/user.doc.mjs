@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'user',
+  group: 'people',
   description: "A person or the current user's profile.",
   words: ['person', 'profile', 'account'],
 };

@@ -97,9 +97,14 @@ function bindingNames(pattern) {
 
 /** @param {string} [name] @param {string} [reason] @param {string} [field] @returns {never} */
 function registryError(name, reason = '', field = 'icons') {
+  throw registryFailure(name, reason, field);
+}
+
+/** The refusal registryError throws. @param {string} [name] @param {string} [reason] @param {string} [field] @returns {AstryxError & {packageTheme?: string}} */
+function registryFailure(name, reason = '', field = 'icons') {
   if (field === 'componentIcons') {
     const value = name ? `\`componentIcons: ${name}\`` : 'componentIcons';
-    throw new AstryxError(
+    return new AstryxError(
       `Theme sets ${value} but the build cannot carry it. ` +
         (reason ? `${reason} ` : '') +
         'A built theme carries names, null, and requests made of static values, ' +
@@ -109,7 +114,7 @@ function registryError(name, reason = '', field = 'icons') {
     );
   }
   const registry = name ? `\`icons: ${name}\`` : 'an icon registry';
-  throw new AstryxError(
+  return new AstryxError(
     `Theme sets ${registry} but no import for the registry was found. ` +
       'The generated module cannot preserve inline registries because they ' +
       'may contain React elements, which cannot be serialized. ' +
@@ -771,8 +776,24 @@ export async function resolveIconImports(
     const result = new Map();
     for (const item of node.properties) {
       if (item.type === 'SpreadElement' || item.type === 'SpreadProperty') {
-        for (const [key, value] of await fields(module, item.argument))
-          result.set(key, value);
+        /** @type {Map<string, any>} */
+        let spread;
+        try {
+          spread = await fields(module, item.argument);
+        } catch (error) {
+          // A spread of a package's theme copies its icon registry, which a
+          // package cannot be inspected for: said as what the file does,
+          // with the form that builds.
+          const from = /** @type {any} */ (error)?.packageTheme;
+          if (from && item.argument?.type === 'Identifier')
+            throw new AstryxError(
+              `The theme spreads ${from} (\`...${from}\`), a theme from a package: a spread copies its icon registry, which the build cannot carry from a package. Extend it instead: extends: ${from}.`,
+              undefined,
+              ERROR_CODES.ERR_THEME_INVALID,
+            );
+          throw error;
+        }
+        for (const [key, value] of spread) result.set(key, value);
         continue;
       }
       const key = item.computed
@@ -797,11 +818,16 @@ export async function resolveIconImports(
   /** @param {RegistryReference} ref @returns {Promise<Map<string, any>>} */
   async function referenceFields(ref) {
     const target = await importedExport(ref);
-    if (!target)
-      invalidRegistry(
+    if (!target) {
+      const error = registryFailure(
         ref.binding.localName,
         'A package configuration cannot be inspected for inherited registries.',
+        field,
       );
+      // Named for a spread of it, which words its own refusal.
+      error.packageTheme = ref.binding.localName;
+      throw error;
+    }
     return guarded(
       `${target.module.filename}:fields-export:${target.name}`,
       async () => {

@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/charts/src/Chart.test.tsx,
+    packages/charts/src/marks/marks.test.tsx,
     apps/storybook/stories/charts/Chart.stories.tsx,
   ]
 modules: []
@@ -54,7 +55,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Does not own / non-goals**
 
-- Mark-specific geometry or rendering; each series definition owns those details.
+- Mark-specific geometry or rendering beyond FR9's default curve; each series definition owns those details.
 - Axis, grid, legend, or tooltip presentation beyond their placement in the root.
 - Product-specific interpretation, summary, or analysis of the supplied data.
 
@@ -76,16 +77,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 Draft requirements identify their basis so observed code is not mistaken for an intentional decision.
 
-| ID  | Candidate invariant                                                                                                                                                            | Basis                                                       | Draft review state |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- | ------------------ |
-| FR1 | Chart MUST reserve its configured height while width is zero, then recompute plot geometry after container resizes.                                                            | current implementation and `Chart measurement gate` tests   | verify             |
-| FR2 | All series, axes, grid lines, tooltips, and interactions MUST consume one shared scale set derived from the current data, domains, baseline, and measured plot size.           | README, implementation, and package tests                   | verify             |
-| FR3 | Paint order MUST remain grid → clipped series → axes → pointer layer → interactions → built-in tooltip → children.                                                             | current implementation and render-delegation tests          | verify             |
-| FR4 | Primary series without a static color MUST receive deterministic colors from the active theme palette; utility marks MUST NOT consume palette or legend slots.                 | implementation, palette test, and browser evidence          | verify             |
-| FR5 | Pointer movement MUST be normalized into plot coordinates and dispatch the nearest x-position; leaving the plot MUST clear the pointer state.                                  | current implementation and tooltip browser evidence         | verify             |
-| FR6 | `legend=true` MUST derive items from primary series; legend and tooltip config objects MUST enable their surfaces while overriding supported options.                          | current implementation and focused tests                    | verify             |
-| FR7 | The chart MUST expose a named `role="img"`; a supplied subtitle MUST be its description; datasets up to 100 row×series cells MUST also be mirrored in a visually hidden table. | current implementation, WCAG 1.1.1, and accessibility tests | verify             |
-| FR8 | Root DOM props and `ref` MUST reach the root container while Chart's own SVG name and description remain authoritative.                                                        | shared BaseProps convention and focused regression test     | verify             |
+| ID  | Candidate invariant                                                                                                                                                                                    | Basis                                                       | Draft review state |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- | ------------------ |
+| FR1 | Chart MUST reserve its configured height while width is zero, then recompute plot geometry after container resizes.                                                                                    | current implementation and `Chart measurement gate` tests   | verify             |
+| FR2 | All series, axes, grid lines, tooltips, and interactions MUST consume one shared scale set derived from the current data, domains, baseline, and measured plot size.                                   | README, implementation, and package tests                   | verify             |
+| FR3 | Paint order MUST remain grid → clipped series → axes → pointer layer → interactions → built-in tooltip → children.                                                                                     | current implementation and render-delegation tests          | verify             |
+| FR4 | Primary series without a static color MUST receive deterministic colors from the active theme palette; utility marks MUST NOT consume palette or legend slots.                                         | implementation, palette test, and browser evidence          | verify             |
+| FR5 | Pointer movement MUST be normalized into plot coordinates and dispatch the nearest x-position; leaving the plot MUST clear the pointer state.                                                          | current implementation and tooltip browser evidence         | verify             |
+| FR6 | `legend=true` MUST derive items from primary series; legend and tooltip config objects MUST enable their surfaces while overriding supported options.                                                  | current implementation and focused tests                    | verify             |
+| FR7 | The chart MUST expose a named `role="img"`; a supplied subtitle MUST be its description; datasets up to 100 row×series cells MUST also be mirrored in a visually hidden table.                         | current implementation, WCAG 1.1.1, and accessibility tests | verify             |
+| FR8 | Root DOM props and `ref` MUST reach the root container while Chart's own SVG name and description remain authoritative.                                                                                | shared BaseProps convention and focused regression test     | verify             |
+| FR9 | `line()` and `area()` MUST join points with straight segments unless the series passes `curve`; `curve: 'monotone'` opts it into a smooth curve. `band()` MUST join its bounds with straight segments. | owner decision (straight by default); marks tests           | decided            |
 
 ### Allowed variation
 

@@ -20,6 +20,7 @@ import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
+  docText,
   emit,
   section,
   text,
@@ -29,6 +30,7 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -37,7 +39,11 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
+
+/** Component docs print as Markdown: doc text whose commands show with the project's runner. */
+const MARKDOWN = {lang: 'markdown'};
 
 /**
  * The api layer's component() widens its return to `{type: string, data: unknown}`,
@@ -130,6 +136,9 @@ function componentDetailBlocks(
   const propsCommand = requestedName
     ? `component ${requestedName}${scope} --props`
     : null;
+  const fullCommand = requestedName
+    ? `component ${requestedName}${scope} --detail full`
+    : null;
   switch (result.type) {
     case 'component.detail': {
       /** @type {import('../formatters/index.mjs').Block[]} */
@@ -143,12 +152,15 @@ function componentDetailBlocks(
               formatBrief(result.data, resolvedName, result.data.import, {
                 themeData,
               }),
+              MARKDOWN,
             )
           : detail === 'compact'
             ? code(
                 formatCompact(result.data, resolvedName, result.data.import, {
                   propsCommand,
+                  fullCommand,
                 }),
+                MARKDOWN,
               )
             : code(
                 formatFull(result.data, {
@@ -156,6 +168,7 @@ function componentDetailBlocks(
                   importHint: result.data.import,
                   propsCommand,
                 }),
+                MARKDOWN,
               ),
       );
       return out;
@@ -163,7 +176,7 @@ function componentDetailBlocks(
     case 'component.detail.props':
       return [
         record({package: result.package}),
-        code(formatProps({props: result.data}, resolvedName)),
+        code(formatProps({props: result.data}, resolvedName), MARKDOWN),
       ];
     case 'component.detail.source':
     case 'component.detail.showcase':
@@ -182,8 +195,17 @@ function componentDetailBlocks(
         out.push(
           section('Showcase'),
           record(
-            {...showcase, displayName: owned(showcase, showcase.displayName)},
-            {fields: ['displayName', 'description']},
+            {
+              ...showcase,
+              displayName: owned(
+                showcase,
+                markNotReady(showcase.displayName, showcase.isReady),
+              ),
+            },
+            {
+              fields: ['displayName', 'description'],
+              format: {description: docText},
+            },
           ),
         );
       }
@@ -191,8 +213,11 @@ function componentDetailBlocks(
         out.push(
           section('Examples'),
           records(
-            examples.map(block => ({...block, name: owned(block, block.name)})),
-            {fields: ['name', 'description']},
+            examples.map(block => ({
+              ...block,
+              name: owned(block, markNotReady(block.name, block.isReady)),
+            })),
+            {fields: ['name', 'description'], format: {description: docText}},
           ),
         );
       }
@@ -201,7 +226,11 @@ function componentDetailBlocks(
           section(
             `Related: ${related.length} blocks that use ${result.data.component}`,
           ),
-          list(related.map(block => owned(block, block.name))),
+          list(
+            related.map(block =>
+              owned(block, markNotReady(block.name, block.isReady)),
+            ),
+          ),
         );
       }
       if (!showcase && examples.length === 0 && related.length === 0) {
@@ -232,10 +261,10 @@ export function registerComponent(program) {
       const lang = program.opts().lang || null;
       const detailSource = program.getOptionValueSource('detail');
       const isListView = options.list || options.category || !names?.length;
-      // Default detail level is full for single-component view, brief for list views.
-      // (List views are scannable name lists; users can opt into compact/full.)
+      // A component read defaults to the short answer (compact), which names
+      // the commands that print the rest; list views default to brief.
       let detail = program.opts().detail || 'full';
-      if (isListView && detailSource === 'default') detail = 'brief';
+      if (detailSource === 'default') detail = isListView ? 'brief' : 'compact';
       const json = program.opts().json || false;
 
       const validDetails = ['full', 'compact', 'brief'];
@@ -317,7 +346,10 @@ export function registerComponent(program) {
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
         [
-          `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
+          // The example is a Core import, so a run on another base leaves it out.
+          currentNonCoreBase()
+            ? 'Import from the path shown'
+            : `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
           `Usage: ${run} component <name> [name...]`,
         ].join('\n'),
       );
@@ -357,6 +389,7 @@ export function registerComponent(program) {
                     categories: Object.keys(result.data.components),
                   }),
                 ),
+                MARKDOWN,
               ),
             );
             break;

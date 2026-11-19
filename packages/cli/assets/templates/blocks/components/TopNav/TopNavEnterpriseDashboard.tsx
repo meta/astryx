@@ -12,8 +12,10 @@ import {
   DocumentTextIcon,
   BellIcon,
 } from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function TopNavEnterpriseDashboard() {
+  const showToast = useToast();
   return (
     <TopNav
       label="Main navigation"
@@ -42,18 +44,22 @@ export default function TopNavEnterpriseDashboard() {
       endContent={
         <>
           <Button
+            onClick={() => showToast({body: 'Demo: search would open here'})}
             label="Search"
             variant="ghost"
             icon={<Icon icon="search" color="inherit" />}
             isIconOnly
           />
           <Button
+            onClick={() =>
+              showToast({body: 'Demo: your notifications would open here'})
+            }
             label="Notifications"
             variant="ghost"
             icon={<Icon icon={BellIcon} />}
             isIconOnly
           />
-          <Button label="Upgrade" variant="primary" />
+          <Button href={'#'} label="Upgrade" variant="primary" />
         </>
       }
     />

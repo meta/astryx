@@ -38,6 +38,8 @@ export async function iconDefinitions({cwd, set: selector}) {
         builtIn: doc.builtIn === true,
         description: doc.description,
         words: doc.words,
+        ...(doc.group ? {group: doc.group} : {}),
+        ...(doc.replaces ? {replaces: doc.replaces} : {}),
         templates: templates.get(doc.name) ?? 0,
         ...(checked
           ? {

@@ -64,8 +64,16 @@ inputs:
 
 outputs:
   spec_only:
-    description: The PR changes only spec records.
+    description: >-
+      The PR changes only spec records, or only the recorded Node test times
+      (times_only): the knowledge lane.
     value: ${{ steps.scope.outputs.spec_only }}
+  times_only:
+    description: >-
+      The PR changes only the recorded Node test times. It takes the knowledge
+      lane, and its test join still requires every test owner's outcome, so
+      the Node leg plan's check gates it (spec:AST-030 FR13).
+    value: ${{ steps.scope.outputs.times_only }}
   docsite_only:
     description: The PR changes only the docsite.
     value: ${{ steps.scope.outputs.docsite_only }}
@@ -158,6 +166,7 @@ runs:
 
           const everything = {
             spec_only: 'false',
+            times_only: 'false',
             docsite_only: 'false',
             tooling_only: 'false',
             lab_only: 'false',
