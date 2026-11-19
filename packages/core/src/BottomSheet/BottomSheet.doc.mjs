@@ -91,7 +91,10 @@ export const docs = {
   },
   theming: {
     container: true,
-    targets: [{className: 'astryx-bottom-sheet', visualProps: []}],
+    targets: [
+      {className: 'astryx-bottom-sheet', visualProps: []},
+      {className: 'astryx-bottom-sheet-handle'},
+    ],
     derived: [{property: 'padding', expand: 'container'}],
   },
   description:

@@ -955,7 +955,6 @@
             "description": "<text>",
             "words": [
               "<text>",
-              "<text>",
               "<text>"
             ]
           },
@@ -1362,8 +1361,6 @@
             "name": "textCase",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1967,7 +1964,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 2
+              "templates": 1
             },
             {
               "definition": "<text>",

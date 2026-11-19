@@ -18,6 +18,8 @@ import {
   npmCommand,
   resolveLatestRelease,
   runNpm,
+  npmEnvironment,
+  readNpmNoProxy,
   tryLock,
   endRecordedInstall,
   isReleaseInstall,
@@ -155,6 +157,155 @@ describe('ensureRelease', () => {
       expect('reason' in result && result.reason).toMatch(reason);
       expect(cachedRelease('0.6.8', cacheDir)).toBeNull();
     }
+  });
+
+  it('remembers a failed install for its registry only, and names that registry', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    const offline = fakeNpm({outcome: 'offline'});
+    const online = fakeNpm();
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      return (registry.startsWith('http://127.0.0.1') ? offline : online).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    expect('reason' in again && again.reason).toBe(
+      "the registry http://127.0.0.1:9/ could not be reached; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes",
+    );
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+    expect(fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'))).toBe(false);
+  });
+
+  it("reads the @astryxdesign scope's registry first: changing only that registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let scoped = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=${scoped}\nregistry=https://registry.npmjs.org/\n`, stderr: ''};
+      }
+      installs.push(args);
+      return fakeNpm({outcome: scoped.startsWith('http://127.0.0.1') ? 'offline' : 'ok'}).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    // npm's error names no address and the two settings differ: no registry is named.
+    expect('reason' in first && first.reason).toBe('the registry could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    scoped = 'https://astryx.example/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("with a scope registry set, names the registry npm's error names, and changing only npm's registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=https://astryx.example/\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      if (registry.startsWith('http://127.0.0.1')) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'npm error code ECONNREFUSED\nnpm error request to http://127.0.0.1:9/react failed, reason: connect ECONNREFUSED',
+        };
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("names the registry from npm's timeout and 404 forms, and none when npm names none and the settings differ", () => {
+    const cases = /** @type {const} */ ([
+      ['npm error code ETIMEDOUT\nnpm error network timeout at: https://deps.example/react', 'the registry https://deps.example/ could not be reached'],
+      ['npm error code E404\nnpm error 404 Not Found - GET https://deps.example/react - Not found', 'the registry https://deps.example/ does not have it'],
+      ['npm error code ENOTFOUND\nnpm error network request failed', 'the registry could not be reached'],
+    ]);
+    for (const [stderr, reason] of cases) {
+      const cacheDir = tempDir('cache');
+      /** @type {import('./cache.mjs').runNpm} */
+      const run = args =>
+        args[0] === 'config'
+          ? {status: 0, stdout: '@astryxdesign:registry=https://astryx.example/\nregistry=https://deps.example/\n', stderr: ''}
+          : {status: 1, stdout: '', stderr};
+      const result = ensureRelease('0.6.8', {cacheDir, run});
+      expect('reason' in result && result.reason).toBe(reason);
+    }
+  });
+
+  it('a failure without a registry error (the install time limit) still records the settings, and a registry change retries it', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'https://slow.example/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      installs.push(args);
+      if (registry === 'https://slow.example/') {
+        return /** @type {any} */ ({status: null, signal: null, stdout: '', stderr: '', error: Object.assign(new Error('timed out'), {code: 'ETIMEDOUT'})});
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toMatch(/did not finish within/);
+    const record = JSON.parse(fs.readFileSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'), 'utf8'));
+    expect(record.registries).toEqual({scoped: null, registry: 'https://slow.example/'});
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in again && again.reason).toMatch(/or at once when npm's registry changes$/);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it('a record without registry settings (an older CLI wrote it) waits out its time and says nothing about registry changes', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(releasesDir(cacheDir), {recursive: true});
+    fs.writeFileSync(
+      path.join(releasesDir(cacheDir), '.failed-0.6.8.json'),
+      `${JSON.stringify({at: Date.now(), reason: 'the registry could not be reached', failures: 1})}\n`,
+    );
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: '@astryxdesign:registry=undefined\nregistry=https://registry.npmjs.org/\n', stderr: ''};
+      installs.push(args);
+      return fakeNpm().run(args, opts);
+    };
+    const result = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(0);
+    expect('reason' in result && result.reason).toBe(
+      'the registry could not be reached; last tried 1 minute ago, tried again after 2 minutes',
+    );
   });
 
   it("refuses a release this computer's Node cannot run", () => {
@@ -1014,6 +1165,79 @@ const waitFor = async (done, ms) => {
   }
   return done();
 };
+
+describe("npm's own noproxy setting", () => {
+  /** npm as a script that answers `config get noproxy` with `answer`. */
+  const npmAnswering = (/** @type {string} */ answer, status = 0) => ({
+    command: process.execPath,
+    prefix: [
+      '-e',
+      `process.stdout.write(${JSON.stringify(answer)}); process.exit(${status});`,
+    ],
+    shell: /** @type {const} */ (false),
+  });
+
+  it('is read from npm, and is none when npm sets none or cannot say', () => {
+    expect(readNpmNoProxy(npmAnswering('localhost,127.0.0.1,::1\n'))).toBe(
+      'localhost,127.0.0.1,::1',
+    );
+    expect(readNpmNoProxy(npmAnswering('\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('null\n'))).toBeNull();
+    expect(readNpmNoProxy(npmAnswering('localhost', 1))).toBeNull();
+  });
+
+  it('replaces a NO_PROXY that names the registry, so npm uses the proxy it is configured with', () => {
+    const shell = {
+      PATH: '/usr/bin',
+      NO_PROXY: 'localhost,.example.net',
+      no_proxy: 'localhost,.example.net',
+      npm_config_proxy: 'http://proxy.example:8080',
+    };
+    expect(npmEnvironment(shell, 'localhost')).toEqual({
+      ...shell,
+      NO_PROXY: 'localhost',
+      no_proxy: 'localhost',
+    });
+    // Nothing set in npm, or the same list: the shell's stands.
+    expect(npmEnvironment(shell, null)).toBe(shell);
+    expect(
+      npmEnvironment(
+        {NO_PROXY: 'localhost', no_proxy: 'localhost'},
+        'localhost',
+      ),
+    ).toEqual({NO_PROXY: 'localhost', no_proxy: 'localhost'});
+  });
+
+  it('reaches the npm runNpm starts, through the guard it runs under', () => {
+    const shell = {
+      NO_PROXY: process.env.NO_PROXY,
+      no_proxy: process.env.no_proxy,
+    };
+    process.env.NO_PROXY = '.example.net';
+    process.env.no_proxy = '.example.net';
+    try {
+      const result = runNpm(['view'], {
+        timeoutMs: 30_000,
+        noProxy: 'localhost',
+        npm: {
+          command: process.execPath,
+          prefix: [
+            '-e',
+            'process.stdout.write(`${process.env.NO_PROXY}|${process.env.no_proxy}`);',
+          ],
+          shell: false,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('localhost|localhost');
+    } finally {
+      for (const [name, value] of Object.entries(shell)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+});
 
 describe('runNpm time limit', () => {
   it('ends a package manager that ignores SIGTERM, leaving no process behind', async () => {

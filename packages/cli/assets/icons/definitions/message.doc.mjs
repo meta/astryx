@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'message',
   description: 'A chat message or comment.',
-  words: ['chat', 'comment', 'conversation'],
+  words: ['chat', 'comment'],
 };

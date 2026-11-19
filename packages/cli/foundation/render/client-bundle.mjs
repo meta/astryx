@@ -17,9 +17,13 @@ import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
+import {SOURCE_TYPE} from './source-block.mjs';
 
 /** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
+
+/** The module the page's script reads a carried file from. */
+export const CARRIED_MODULE = 'astryx:carried';
 
 /** An address that leaves the file: another site, mail or a phone call. */
 export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
@@ -32,7 +36,9 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * event: the file cancels the browser's own submission and fires the event
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
- * site's address submits as the browser submits it. Enter in a form's only text field
+ * site's address submits as the browser submits it. A link to a place in the
+ * page (`#id`) is moved by VIEWER_MOVES, which runs in the script's first
+ * module. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
  */
@@ -76,7 +82,321 @@ document.addEventListener('keydown', event => {
 });
 }`;
 
-/** The namespace of the page's own files in the build. */
+/**
+ * The move to a place in the page (`#id`) in a frame whose address is not
+ * the document's own, as in a `srcdoc` viewer frame. It runs in the script's
+ * first module, before any of the page's own modules, so its click listeners
+ * see a click after the listeners of the frame that hosts the file and before
+ * the page's.
+ */
+export const VIEWER_MOVES = `{
+// Whether a click on this link is one the file moves itself: a link to a
+// place in the page, in a frame whose address is not the document's own.
+const movesInFile = (event, link) => {
+  const href = link.getAttribute('href').trim();
+  return (
+    href.startsWith('#') &&
+    !link.hasAttribute('target') &&
+    !link.hasAttribute('download') &&
+    event.button === 0 &&
+    !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) &&
+    document.baseURI.split('#')[0] !== location.href.split('#')[0]
+  );
+};
+// The browser moves to the place against the frame's own address, so it
+// scrolls, sets :target, fires hashchange, moves focus and adds a history
+// entry as in a tab. The same address again is replaced, which a browser also
+// treats as a move to the place, never a load of the file again.
+const moveTo = link => {
+  const place = new URL(link.getAttribute('href').trim(), location.href).href;
+  if (place !== location.href) location.href = place;
+  else location.replace(place);
+};
+// The move is decided after every click listener the page has, even one it
+// adds later: a capture listener on the window, which runs first, adds a
+// listener for this click that runs last and is removed once it decides. A page that stops the click on its way (a
+// card's handler that calls stopPropagation) has the browser's own move held
+// at that point, and the file decides once every handler has run: it moves
+// unless the page cancelled the click, by preventDefault, \`returnValue =
+// false\` or an onclick handler that returns false.
+//
+// This runs before any of the page's own modules. A cancel made before the
+// click reaches this script's listener on the window, or before it reaches its
+// marker on the document, comes from the frame that hosts the file (a viewer
+// that scrolls to the place itself and leaves the address alone), not from the
+// page: it holds the browser's own move, and the file still moves, so a page
+// that routes on its address sees the new place. A viewer may add its document
+// listener from a DOMContentLoaded listener, after this script ran, so the
+// marker goes on the document at that point: after the viewer's listener, and
+// before the listeners the page adds once it is mounted. A cancel from the
+// page's own listeners keeps the page's way. A click listener the page adds on
+// the document or the window while the document loads (from its modules, an
+// \`import()\` or a promise callback) comes before that marker too, so it runs
+// marked as the page's while it handles the click.
+const add = EventTarget.prototype.addEventListener;
+const pastHost = new WeakSet();
+const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
+if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
+else markPastHost();
+let inPage = 0;
+// The page's modules load until the document has loaded: this capture listener
+// on the window runs before any listener a viewer adds on the document for the
+// same event, and after every module and promise callback that ran while the
+// document was still loading (an \`import()\` included).
+let loading = document.readyState === 'loading';
+if (loading) add.call(window, 'DOMContentLoaded', () => {
+  loading = false;
+}, {capture: true, once: true});
+// One wrapper per click handler. Once a handler has one, every later click add
+// and remove of it uses that wrapper, so a handler added at load and again
+// once mounted registers once, as in a tab. Only \`click\` is wrapped.
+const asPage = new WeakMap();
+for (const target of [document, window]) {
+  const remove = target.removeEventListener;
+  target.addEventListener = function (type, listener, options) {
+    if (type !== 'click' || !listener) return add.call(this, type, listener, options);
+    let marked = asPage.get(listener);
+    if (!marked) {
+      if (!loading) return add.call(this, type, listener, options);
+      marked = function (event) {
+        inPage += 1;
+        try {
+          return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event);
+        } finally {
+          inPage -= 1;
+        }
+      };
+      asPage.set(listener, marked);
+    }
+    return add.call(this, type, marked, options);
+  };
+  target.removeEventListener = function (type, listener, options) {
+    return remove.call(this, type, (type === 'click' && listener && asPage.get(listener)) || listener, options);
+  };
+}
+add.call(window, 'click', event => {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!link || !movesInFile(event, link)) return;
+  const cancel = Event.prototype.preventDefault;
+  let cancelled = false;
+  let hostHeld = event.defaultPrevented;
+  let stopped = false;
+  let decided = false;
+  // An onclick handler's \`return false\` cancels without calling
+  // preventDefault, so each one on the click's way is read as it returns.
+  const onclicks = event.composedPath().flatMap(node => {
+    const handler = node.onclick;
+    if (typeof handler !== 'function') return [];
+    const read = function (...args) {
+      const result = handler.apply(this, args);
+      if (result === false) cancelled = true;
+      return result;
+    };
+    node.onclick = read;
+    return [[node, handler, read]];
+  });
+  const restore = () => {
+    for (const [node, handler, read] of onclicks) if (node.onclick === read) node.onclick = handler;
+  };
+  const decide = () => {
+    if (decided) return;
+    decided = true;
+    window.removeEventListener('click', last);
+    restore();
+    if (cancelled || (event.defaultPrevented && !hostHeld && !stopped)) return;
+    cancel.call(event);
+    moveTo(link);
+  };
+  const byHost = () =>
+    event.eventPhase === Event.CAPTURING_PHASE && event.currentTarget === document && !pastHost.has(event);
+  event.preventDefault = function () {
+    if (!inPage && byHost()) hostHeld = true;
+    else cancelled = true;
+    return cancel.call(this);
+  };
+  const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
+  Object.defineProperty(event, 'returnValue', {
+    get() {
+      return returnValue.get.call(this);
+    },
+    set(value) {
+      if (!value) this.preventDefault();
+    },
+  });
+  for (const name of ['stopPropagation', 'stopImmediatePropagation']) {
+    const stop = Event.prototype[name];
+    event[name] = function () {
+      stop.call(this);
+      if (decided || stopped) return;
+      stopped = true;
+      cancel.call(event);
+      setTimeout(decide);
+    };
+  }
+  // The old way to stop a click, \`cancelBubble = true\`, stops it the same way.
+  const bubble = Object.getOwnPropertyDescriptor(Event.prototype, 'cancelBubble');
+  Object.defineProperty(event, 'cancelBubble', {
+    get() {
+      return bubble.get.call(this);
+    },
+    set(value) {
+      if (value) this.stopPropagation();
+    },
+  });
+  const last = later => {
+    // A click the page dispatches while this one is still on its way (a
+    // handler that clicks another element first) leaves it waiting.
+    if (later === event) decide();
+    else if (event.eventPhase === Event.NONE && !decided) {
+      decided = true;
+      window.removeEventListener('click', last);
+      restore();
+    }
+  };
+  window.addEventListener('click', last);
+}, true);
+}`;
+
+/**
+ * Storage for a page in a viewer that blocks it. A frame without
+ * allow-same-origin has an opaque origin, where touching `localStorage` or
+ * `sessionStorage` throws. Then the page gets an in-memory storage for each
+ * one that acts as the browser's does: its methods, and its items read,
+ * written, listed and deleted as properties (`localStorage.theme`,
+ * `Object.keys(localStorage)`). What it saves lasts until the page closes.
+ * A file opened from disk or on a real origin keeps its real storage. This
+ * runs as the script's first module, before any of the page's own modules.
+ */
+export const VIEWER_STORAGE = `for (const name of ['localStorage', 'sessionStorage']) {
+  let usable = true;
+  try {
+    window[name].getItem('');
+  } catch {
+    usable = false;
+  }
+  if (usable) continue;
+  const items = new Map();
+  const methods = {
+    get length() {
+      return items.size;
+    },
+    key: index => [...items.keys()][index] ?? null,
+    getItem: key => (items.has(String(key)) ? items.get(String(key)) : null),
+    setItem: (key, value) => {
+      items.set(String(key), String(value));
+    },
+    removeItem: key => {
+      items.delete(String(key));
+    },
+    clear: () => {
+      items.clear();
+    },
+  };
+  const storage = new Proxy(methods, {
+    get: (target, key, receiver) =>
+      key in target || typeof key !== 'string' ? Reflect.get(target, key, receiver) : items.get(key),
+    set: (target, key, value) => {
+      if (typeof key === 'string' && !(key in target)) items.set(key, String(value));
+      return true;
+    },
+    has: (target, key) => (typeof key === 'string' && items.has(key)) || key in target,
+    deleteProperty: (target, key) => {
+      if (typeof key === 'string' && !(key in target)) items.delete(key);
+      return true;
+    },
+    ownKeys: () => [...items.keys()],
+    getOwnPropertyDescriptor: (target, key) =>
+      typeof key === 'string' && items.has(key)
+        ? {value: items.get(key), writable: true, enumerable: true, configurable: true}
+        : undefined,
+  });
+  try {
+    Object.defineProperty(window, name, {configurable: true, enumerable: true, get: () => storage});
+  } catch {
+    // A window that refuses the property keeps the storage it has.
+  }
+}`;
+
+/**
+ * Copying for a page in a viewer that blocks the Clipboard API. It falls
+ * back to the copy command where Core's clipboard hook does: when the frame's
+ * permissions policy refuses clipboard-write, when `writeText` refuses the
+ * write (NotAllowedError), and also when the frame leaves `navigator.clipboard`
+ * out or `writeText` throws at once. The copy command runs only in a click or
+ * a key press, as in the hook. A write that resolves copied the text; a
+ * failed fallback rejects with the browser's own refusal, or NotAllowedError,
+ * so the page's own error path runs. `readText` rejects with NotAllowedError,
+ * as a browser does. The hook's helpers are private to Core and run only in
+ * pages that use the hook; this runs in the file's script before any of the
+ * page's modules, for every page.
+ */
+export const VIEWER_CLIPBOARD = `{
+const refused = message => new DOMException(message, 'NotAllowedError');
+const copy = text =>
+  new Promise((resolve, reject) => {
+    if (navigator.userActivation?.isActive === false) {
+      reject(refused('The copy command runs only in a click or a key press.'));
+      return;
+    }
+    let written = false;
+    const write = event => {
+      if (event.clipboardData == null) return;
+      event.clipboardData.setData('text/plain', String(text));
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      written = true;
+    };
+    window.addEventListener('copy', write, true);
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    } finally {
+      window.removeEventListener('copy', write, true);
+    }
+    if (copied && written) resolve();
+    else reject(refused('The browser did not copy the text.'));
+  });
+const policy = document.permissionsPolicy ?? document.featurePolicy;
+const writeAllowed = () =>
+  typeof policy?.allowsFeature === 'function' ? policy.allowsFeature('clipboard-write') : true;
+const clipboard = navigator.clipboard;
+if (clipboard == null) {
+  const fallback = {
+    writeText: copy,
+    readText: () => Promise.reject(refused('This frame does not let a page read the clipboard.')),
+  };
+  try {
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, enumerable: true, get: () => fallback});
+  } catch {
+    // A navigator that refuses the property keeps what it has.
+  }
+} else if (typeof clipboard.writeText === 'function') {
+  const writeText = clipboard.writeText;
+  try {
+    clipboard.writeText = function (text) {
+      if (!writeAllowed()) return copy(text);
+      let asked;
+      try {
+        asked = writeText.call(this, text);
+      } catch {
+        return copy(text);
+      }
+      return Promise.resolve(asked).catch(error =>
+        error instanceof DOMException && error.name === 'NotAllowedError'
+          ? copy(text).catch(() => Promise.reject(error))
+          : Promise.reject(error),
+      );
+    };
+  } catch {
+    // A clipboard that refuses the property keeps its own writeText.
+  }
+}
+}`;
+
+/** The namespace of the module that fills in what a viewer's frame blocks (storage and the clipboard) and moves a link to a place in the page. */
+const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
 /** The namespace of the module that mounts the page. */
@@ -115,6 +435,23 @@ function locatedFile(file) {
 const loaderFor = file =>
   /\.[cm]?tsx$/.test(file) ? 'tsx' : /\.[cm]?ts$/.test(file) ? 'ts' : 'jsx';
 
+/**
+ * Reads a carried file from the page's embedded source, once, by its
+ * SHA-256, as a data: URI with the `prefix` it needs (`data:image/png;base64`).
+ */
+const CARRIED_SOURCE = `let files;
+export function carried(sha256, prefix) {
+  if (files === undefined) {
+    files = new Map();
+    // The CLI writes its source block last, as readSourceBlock reads it.
+    const blocks = document.querySelectorAll('script[type="${SOURCE_TYPE}"]');
+    const block = blocks[blocks.length - 1];
+    for (const file of block ? JSON.parse(block.textContent).files : []) files.set(file.sha256, file.base64);
+  }
+  return prefix + ',' + (files.get(sha256) ?? '');
+}
+`;
+
 /** Files a package may import for their address; the page's own are inlined before esbuild sees them. */
 const ASSET_LOADERS = Object.fromEntries(
   [
@@ -145,11 +482,15 @@ export class BundleError extends Error {
    * @param {Record<string, unknown>} [detail]
    * @param {unknown} [compile] the error of one of the page's own files that
    *   does not compile, which the render reports as a static import's
+   * @param {{source: string, line: number, names: string[], module?: string}} [missingExport]
+   *   a named import or a package subpath that its module does not export:
+   *   the page's file that imports it, the line, the names and the module
    */
-  constructor(message, detail = {}, compile = undefined) {
+  constructor(message, detail = {}, compile = undefined, missingExport = undefined) {
     super(message);
     this.detail = detail;
     this.compile = compile;
+    this.missingExport = missingExport;
   }
 }
 
@@ -204,10 +545,11 @@ export async function bundleForBrowser({
   describe,
   oneCopy = [],
 }) {
-  // A page whose script throws, in render or in an effect (a frame that
-  // blocks storage, say), keeps its first paint: React would empty the root.
+  // A page whose script throws, in render or in an effect (a cookie write in
+  // a frame that blocks cookies, say), keeps its first paint: React would
+  // empty the root.
   const mount =
-    `import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `import 'astryx:viewer';import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
     `${IN_A_VIEWER}` +
     `const root = document.getElementById(${JSON.stringify(ROOT_ID)});const painted = root.innerHTML;` +
     `class FirstPaint extends Component {constructor(props) {super(props);this.state = {failed: false};}` +
@@ -263,7 +605,19 @@ export async function bundleForBrowser({
     name: 'astryx-page',
     setup(/** @type {any} */ setupBuild) {
       build = setupBuild;
+      // An image the page imports comes from the embedded source, which
+      // carries it already, so the script holds no copy of its own.
+      build.onResolve({filter: /^astryx:carried$/}, () => ({
+        path: 'carried',
+        namespace: 'astryx-carried',
+      }));
+      build.onLoad({filter: /.*/, namespace: 'astryx-carried'}, () => ({
+        contents: CARRIED_SOURCE,
+        loader: 'js',
+      }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
+      build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_MOVES}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',
@@ -331,6 +685,30 @@ export async function bundleForBrowser({
       throw new BundleError(first.text, {}, first.detail.compile);
     }
     const located = first.location?.file ? locatedFile(first.location.file) : null;
+    // A named import its module does not export, in one of the page's own
+    // files: refused as a build refuses it. The worker names the file and
+    // the module, as for the same import on the server.
+    const noExport = /^No matching export in "[^"]+" for import "([^"]+)"$/.exec(first.text);
+    if (noExport && located && isPageFile(located)) {
+      throw new BundleError(first.text, {}, undefined, {
+        source: located,
+        line: first.location.line,
+        names: [noExport[1]],
+      });
+    }
+    // A package subpath the package's `exports` do not list, likewise.
+    const notes = (first.notes ?? []).map((/** @type {any} */ note) => note.text).join('\n');
+    const unexported = /^Could not resolve "[^"]+"$/.test(first.text)
+      ? /The path "([^"]+)" is not exported by package "([^"]+)"/.exec(notes)
+      : null;
+    if (unexported && located && isPageFile(located)) {
+      throw new BundleError(first.text, {}, undefined, {
+        source: located,
+        line: first.location.line,
+        names: [unexported[1]],
+        module: unexported[2],
+      });
+    }
     const where = located ? `${describe(located)}:${first.location.line}: ` : '';
     // A message that leads with a file's absolute path names it as the page does.
     const text = stripVTControlCharacters(first.text).replace(

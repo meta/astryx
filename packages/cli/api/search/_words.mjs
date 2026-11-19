@@ -93,6 +93,8 @@ function singulars(w) {
  */
 export function sameWord(a, b) {
   if (a === b) return true;
+  // Every form of a word keeps its first letter (see someForm).
+  if (a.charCodeAt(0) !== b.charCodeAt(0)) return false;
   const forms = wordForms(a);
   return someForm(b, form => forms.has(form));
 }
@@ -125,7 +127,11 @@ export function termWords(term) {
  * @returns {boolean}
  */
 export function sameTermWord(t, w) {
-  return w === t.term || someForm(w, form => t.forms.has(form));
+  if (w === t.term) return true;
+  // Every form of a word keeps its first letter (see someForm), so a word
+  // that starts with another letter shares no form with the term.
+  if (w.charCodeAt(0) !== t.term.charCodeAt(0)) return false;
+  return someForm(w, form => t.forms.has(form));
 }
 
 /**
@@ -188,6 +194,25 @@ export function startsATermWordOf(t, text) {
   // This runs for each word of each entry a query is scored against. Index
   // loops cost less here than `some` with a callback or `for...of`, in a
   // short run that does not optimize them.
+  const words = wordsOf(text);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    for (let j = 0; j < t.starts.length; j++) {
+      if (w.startsWith(t.starts[j])) return true;
+    }
+    if (sameTermWord(t, w)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a term is one of a text's words, or the start of one, however
+ * short against the whole text: `avata` in AvatarGroupInteractive.
+ * @param {TermWords} t
+ * @param {string} text - The name or keyword as authored.
+ * @returns {boolean}
+ */
+export function isOrStartsAWordOf(t, text) {
   const words = wordsOf(text);
   for (let i = 0; i < words.length; i++) {
     const w = words[i];

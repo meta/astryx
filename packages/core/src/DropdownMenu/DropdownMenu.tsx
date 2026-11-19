@@ -728,7 +728,9 @@ function DropdownMenuBottomSheet({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [currentItems, isOpen]);
+    // Re-run only on open or a sub-menu change. A new `items` array from a
+    // parent render must not move focus.
+  }, [currentSubmenu, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {

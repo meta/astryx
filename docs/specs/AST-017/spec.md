@@ -313,7 +313,10 @@ one removal merged ahead of the decision to allow it.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
   options MUST appear in generated help and the machine-readable manifest; help
-  leaves out the ones the run's base does not serve and counts them, and the
+  leaves out the ones the run's base does not serve and counts them. An
+  option's text in help also leaves out a part that names a command or option
+  the run's base does not serve: on a base without layout skeletons, the
+  `template --list` text does not name `--skeleton`. The
   manifest lists every command and every command's option with `available`;
   the global options, which every base serves, carry none (`spec:AST-114`
   FR7).
@@ -426,7 +429,9 @@ one removal merged ahead of the decision to allow it.
   codemod is supplied when a mechanical migration would materially reduce caller
   work. This exception never covers a change to stable defaults, stable runtime or
   accessibility behavior, ordinary import paths, non-experimental props, or stable
-  CLI commands and machine schemas; those changes follow FR1–FR8. A released stable
+  CLI commands and machine schemas; those changes follow FR1–FR8. The discover
+  listing of experimental icon-set packages that FR27 names is part of the
+  experimental surface: a change to it uses `[experimental]`. A released stable
   surface cannot be retroactively demoted to experimental.
 - **FR23 — Promotion creates a stable contract deliberately.** Promotion is an
   owner-approved change that removes the experimental marker, exposes the settled
@@ -480,16 +485,38 @@ one removal merged ahead of the decision to allow it.
   `experimental.iconSets` is an opt-in, as setting `experimental.iconSet` is
   (`spec:AST-084/DEC-13`). Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
-  One named exception: stable theme help and docs, one theme line of the agent
+  Named exceptions follow; stable output names no experimental surface any
+  of them does not name. First, stable theme help and docs, one theme line of the agent
   docs block, one line of `init`'s next steps (beside, never instead of, its
   existing steps), and one line in each of the `theme eject` and
   `theme palette generate` results MAY point at the experimental theme editor
   (`experimental theme editor`, `experimental theme preview`) as the way to make
   and change a theme, and `experimental theme preview app <dir>` as the starter
   app that shows a theme when there is no app yet, phrased for theme work only
-  and labeled experimental each time; no other experimental surface may be
-  named, and the
-  exception ends when the theme editor graduates or is removed.
+  and labeled experimental each time; these lines name no other experimental
+  surface, and this exception ends when the theme editor graduates or is
+  removed. Another named
+  exception covers the command that writes a page as one HTML file: the
+  answer to an unknown top-level word that asks for it (`export`, `render`,
+  `share`, `bundle`, `snapshot`, `standalone`) MAY suggest
+  `experimental export`, labeled experimental, and never runs it, because
+  people and agents who type those words mean that command; the exception
+  ends when the command graduates or is removed. The same exception covers
+  the command that turns such a file back into its page: the answer to an
+  unknown top-level word that asks for it (`import`, `back`, `restore`,
+  `unrender`, `reverse`) MAY suggest `experimental import`, labeled
+  experimental, and never runs it; it ends when the export exception ends.
+  A further named exception: `astryx discover` may list experimental icon-set
+  packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
+  text, the install line, the opt-in command
+  (`astryx experimental icon use <package>/<set>`), and, when the catalog lists
+  the set's definitions, how many of the CLI's icon definitions it maps
+  (`definitions: N/M`, in text only); it is marked `[experimental]` in text
+  and `experimental: true` in JSON (on a package entry, `experimentalFields`
+  names its icon-set field). The set's icons and definitions themselves, and
+  every other command, `astryx search` and its discover line included, stay
+  behind the icon feature gate. This exception ends when icon
+  sets graduate or are removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

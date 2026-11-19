@@ -18,8 +18,10 @@
 import {
   formatCliCommand,
   getCliInvocation,
+  prefixCliCommands,
 } from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {definitionCoverageText} from '../../../../foundation/text/definition-coverage.mjs';
 import {logger} from '../../../../api/logger.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {
@@ -56,7 +58,6 @@ import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
-import {noIconSetNext} from '../../../../foundation/text/icon-set-next.mjs';
 
 /**
  * The lowest search score of a whole-word match: an exact name or meaning
@@ -230,7 +231,9 @@ export function registerExperimentalIcon(group, program) {
                 list(others.map(each => `${each.name}: ${each.description}`)),
               ]
             : []),
-          text(`[next] ${noIconSetNext(command => formatCliCommand(command))}`),
+          text(
+            `[next] ${prefixCliCommands(result.data.next, getCliInvocation())}`,
+          ),
         );
         return answered;
       }
@@ -330,7 +333,7 @@ export function registerExperimentalIcon(group, program) {
         ? [
             text(
               sets.length === 0
-                ? `[next] ${noIconSetNext(command => formatCliCommand(command))}`
+                ? `[next] ${prefixCliCommands(next, getCliInvocation())}`
                 : `[warn] ${next}`,
             ),
           ]
@@ -341,7 +344,7 @@ export function registerExperimentalIcon(group, program) {
               sets.map(({coverage, ...set}) => ({
                 ...set,
                 builtIn: `${coverage.builtIn.mapped}/${coverage.builtIn.total}`,
-                definitions: `${coverage.astryx.mapped}/${coverage.astryx.total}`,
+                definitions: definitionCoverageText(coverage.astryx),
                 own: coverage.own,
                 missing: coverage.builtIn.missing,
               })),
