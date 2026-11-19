@@ -286,9 +286,10 @@ const LINKED_ROOTS = linkedPackageRoots();
 const inLinkedPackage = file => LINKED_ROOTS.length > 0 && LINKED_ROOTS.some(root => file.startsWith(root));
 
 /**
- * The files of linked packages that a carried file imports by a relative
- * path (`./vendor/badge/src/index.js`): the page reaches them as its own
- * files, so the file carries them.
+ * The files of linked packages that a carried file imports by their path, a
+ * relative one (`./vendor/badge/src/index.js`) or a path alias
+ * (`@/vendor/badge/src/index.js`): the page reaches them as its own files,
+ * so the file carries them.
  * @type {Set<string>}
  */
 const linkedReachedAsOwn = new Set();
@@ -297,13 +298,13 @@ const linkedReachedAsOwn = new Set();
 const isCarried = file => isLocal(file) && (!inLinkedPackage(file) || linkedReachedAsOwn.has(file));
 
 /**
- * Whether a file that `importer` imports by a relative path is carried: a
+ * Whether a file that `importer` imports by its path is carried: a
  * file of the page's own, or one a carried module reaches by its path. A
  * linked package's own modules import their files as a package does.
  * @param {string} file
  * @param {string} importer
  */
-function carriesRelative(file, importer) {
+function carriesByPath(file, importer) {
   if (!inLinkedPackage(file)) return true;
   if (!isCarried(importer)) return false;
   linkedReachedAsOwn.add(file);
@@ -311,16 +312,18 @@ function carriesRelative(file, importer) {
 }
 
 /**
- * Note each linked package file that a carried module imports by a relative
- * path, before that file loads. Only a page with a linked package does this.
+ * Note each linked package file that a carried module imports by its path
+ * (relative or through a path alias), before that file loads. Only a page
+ * with a linked package does this.
  * @param {string} source
  * @param {string} filename
  */
 function noteLinkedFilesReached(source, filename) {
   if (LINKED_ROOTS.length === 0 || !isCarried(filename)) return;
   for (const spec of importSpecifiers(source, filename)) {
-    if (!spec.startsWith('.')) continue;
-    const target = importedFile(spec.split('?')[0], filename);
+    const raw = spec.split('?')[0];
+    if (!raw.startsWith('.') && !isAliased(raw)) continue;
+    const target = importedFile(raw, filename);
     if (target && path.isAbsolute(target) && inLinkedPackage(target)) linkedReachedAsOwn.add(target);
   }
 }
@@ -840,7 +843,7 @@ function pagePlugin(filename, browser = false) {
               /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
               throw err;
             }
-            if (carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
+            if (carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
             // The text is the module's default export, as Vite gives it, to
             // every way of importing it.
             const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
@@ -868,7 +871,7 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.json$/i.test(bare) && (bare.startsWith('.') || path.isAbsolute(bare))) {
           const file = path.resolve(dir, bare);
-          if (fs.existsSync(file) && carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
+          if (fs.existsSync(file) && carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
         }
         if (/\.(css|scss|sass|less)$/i.test(bare) && (/\.module\.[a-z]+$/i.test(bare) || p.node.specifiers.length > 0)) {
           // CSS Modules (any stylesheet imported as a value) give class names
@@ -923,7 +926,7 @@ function pagePlugin(filename, browser = false) {
             }
             // Each importer decides: a linked package may import the
             // stylesheet first, and a carried module reach it later.
-            if (fs.existsSync(file) && carriesRelative(file, filename) && !localFiles.includes(file)) localFiles.push(file);
+            if (fs.existsSync(file) && carriesByPath(file, filename) && !localFiles.includes(file)) localFiles.push(file);
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
@@ -1986,8 +1989,9 @@ try {
       // linked package module that compiled as a package before a carried
       // module reached it by its path also gets its stylesheets and text
       // imports (`?raw`, `?inline`) carried here.
-      const reachedAsOwn = target !== null && isLocal(target) && carriedModule && raw.startsWith('.') && inLinkedPackage(target);
-      const carried = target !== null && (isCarried(target) || (reachedAsOwn && carriesRelative(target, file)));
+      const reachedAsOwn =
+        target !== null && isLocal(target) && carriedModule && (raw.startsWith('.') || isAliased(raw)) && inLinkedPackage(target);
+      const carried = target !== null && (isCarried(target) || (reachedAsOwn && carriesByPath(target, file)));
       const kept =
         target !== null &&
         (/\.([cm]?[jt]sx?|json)$/i.test(target) || (reachedAsOwn && (/\.css$/i.test(target) || /[?&](raw|inline)\b/.test(spec))));
@@ -2017,6 +2021,7 @@ try {
     assets: [...assetsInlined],
     files: localFiles,
     uncarried: outsideFiles,
+    linkedRoots: LINKED_ROOTS,
     aliasImports,
     texts,
     fnTexts,

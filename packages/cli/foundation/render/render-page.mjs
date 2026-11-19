@@ -246,7 +246,9 @@ function importParams(params) {
  * cut.
  * @param {string} file the stylesheet's own path
  * @param {string} css its text
- * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
+ * @param {{warnings: RenderWarning[], carried: Map<string, string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
+ *   `carried`: each stylesheet an `@import` pulled in, with the sheet that
+ *   imports it
  *   `included`: stylesheet files already in the page (Core's, say), never
  *   inlined twice; `packageSheets`: package stylesheets this pulled in
  * @returns {string}
@@ -306,7 +308,7 @@ function expandImports(file, css, ctx) {
     seen.add(target);
     ctx.included.add(target);
     if (fromPackage) ctx.packageSheets.push(url.replace(/^~/, ''));
-    else ctx.carried.add(target);
+    else ctx.carried.set(target, file);
     const from = target;
     let inner = expandImports(from, fs.readFileSync(from, 'utf8'), {
       ...ctx,
@@ -1196,8 +1198,8 @@ export async function renderPage(entry, options = {}) {
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
     rewrites: /** @type {Map<string, string>} */ (new Map()),
   };
-  /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
-  const carriedCss = new Set();
+  /** Stylesheets pulled in by another's `@import`, each with the sheet that imports it. @type {Map<string, string>} */
+  const carriedCss = new Map();
   try {
     markup = inlineAssets(markup, 'html', ctx);
     // React adds `<link rel="preload">` hints for images it renders; in one
@@ -1406,9 +1408,22 @@ export async function renderPage(entry, options = {}) {
    * @type {string[]}
    */
   const uncarried = [...(/** @type {string[]} */ (message.uncarried ?? []))];
-  for (const sheet of carriedCss) {
+  // A package that node_modules links into the carried folder is a package:
+  // a stylesheet that only its own stylesheets import is the package's.
+  const linkedRoots = /** @type {string[]} */ (message.linkedRoots ?? []);
+  /** The first sheet of the `@import` chain that pulled `sheet` in. @param {string} sheet */
+  const importChainStart = sheet => {
+    let at = sheet;
+    for (let hops = 0; carriedCss.has(at) && hops <= carriedCss.size; hops++) at = /** @type {string} */ (carriedCss.get(at));
+    return at;
+  };
+  for (const sheet of carriedCss.keys()) {
     if (path.relative(scope, sheet).split(path.sep).includes('node_modules'))
       continue;
+    if (linkedRoots.length > 0) {
+      const start = importChainStart(sheet);
+      if (!files.includes(start) && linkedRoots.some(root => start.startsWith(root))) continue;
+    }
     if (!isInside(sheet, scope)) {
       if (!uncarried.includes(sheet)) uncarried.push(sheet);
       continue;

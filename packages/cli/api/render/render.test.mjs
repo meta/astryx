@@ -568,6 +568,26 @@ export default function Page() {
     expect(againMarkup).toBe(markup);
   }, 120_000);
 
+  it('carries the files of a linked folder that the page imports through a path alias', async () => {
+    put('alias-link/package.json', '{"name":"alias-link","private":true}');
+    put('alias-link/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}}}));
+    putLinkedPackage('alias-link/vendor/badge', '@acme/aliased');
+    linkFolder('alias-link/node_modules/@acme/aliased', 'alias-link/vendor/badge');
+    put('alias-link/page.tsx', "import {Badge} from '@/vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('alias-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/aliased badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+    // Outside the project, the file still gives back every file the page imports.
+    fs.copyFileSync(path.join(dir, 'alias-link/page.html'), path.join(dir, 'alias-link-moved.html'));
+    const moved = /** @type {any} */ (await render('alias-link-moved.html', {cwd: dir, reverse: true, out: 'alias-link-moved/page.tsx'}));
+    expect(moved.data.missing ?? []).toEqual([]);
+    expect(moved.data.files).toEqual(expect.arrayContaining(['alias-link-moved/vendor/badge/src/index.js']));
+  }, 120_000);
+
   it('carries the stylesheets of a linked folder that a carried module reaches after the package loaded', async () => {
     put('late-link/package.json', '{"name":"late-link","private":true}');
     putLinkedPackage('late-link/vendor/kit', '@acme/late');
@@ -600,7 +620,8 @@ export default function Page() {
     putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
     put('link-assets/vendor/kit/src/parts/logo.png', PNG);
     put('link-assets/vendor/kit/src/parts/data.json', '{"count": 7}');
-    put('link-assets/vendor/kit/src/parts/badge.css', '.kit-badge { letter-spacing: 3px; }');
+    put('link-assets/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.kit-badge { letter-spacing: 3px; }");
+    put('link-assets/vendor/kit/src/parts/tokens.css', '.kit-badge { word-spacing: 2px; }');
     put(
       'link-assets/vendor/kit/src/parts/badge.js',
       "import {jsx, jsxs} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport logo from './logo.png';\nimport data from './data.json';\nimport './badge.css';\nexport function Badge() { return jsxs('strong', {className: 'kit-badge', children: [jsx('img', {src: logo, alt: ''}), label, ' ', data.count]}); }\n",
@@ -611,6 +632,7 @@ export default function Page() {
     expect(first.data.files).toEqual(['page.tsx', 'vendor/kit/src/parts/logo.png']);
     const html = fs.readFileSync(path.join(dir, 'link-assets/page.html'), 'utf8');
     expect(html).toMatch(/\.kit-badge ?\{ ?letter-spacing: ?3px/);
+    expect(html).toMatch(/word-spacing: ?2px/);
     expect(markup).toContain('@acme/kit badge text 7');
     expect(markup).toContain('data:image/png;base64,');
     expect(back.data.exact).toBe(true);
