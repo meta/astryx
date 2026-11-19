@@ -208,6 +208,23 @@ function mockPrimaryPointer(pointer: 'coarse' | 'fine') {
   );
 }
 
+function mockTouchPointer() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches:
+        query === '(pointer: coarse)' || query === '(any-pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 // A touch screen whose user asked for reduced motion.
 function mockReducedMotionOnTouch() {
   vi.stubGlobal(
@@ -2010,6 +2027,82 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('none');
       act(() => reconciliationFrames.splice(0).forEach(frame => frame(0)));
       expect(sheet.style.transition).toBe('');
+    });
+
+    it('keeps a touch detent stable through toolbar movement and re-resolves it after a small-viewport resize', () => {
+      const observers = mockResizeObserverInstances();
+      mockTouchPointer();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Release notes"
+          snapPoints={SNAP_POINTS}
+          height="tall">
+          Content
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const probe = [
+        ...document.body.querySelectorAll<HTMLElement>('div'),
+      ].find(element => element.style.blockSize === '100svh');
+      if (probe == null) {
+        throw new Error('small viewport probe not found');
+      }
+      let smallViewportHeight = 800;
+      const probeSpy = vi
+        .spyOn(probe, 'getBoundingClientRect')
+        .mockImplementation(() => rect({top: 0, bottom: smallViewportHeight}));
+      vi.spyOn(sheet, 'getBoundingClientRect').mockImplementation(() =>
+        rect({
+          top: 0,
+          bottom: sheet.style.height
+            ? Number.parseFloat(sheet.style.height)
+            : 784,
+        }),
+      );
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      try {
+        act(() => {
+          sheetObserver?.callback(
+            [resizeEntry(784, 736)],
+            sheetObserver as unknown as ResizeObserver,
+          );
+        });
+
+        // With a touch reserve of 320px, the p50 visible detent is 400px.
+        // The fully-open visible height is 464px, so the settled offset is
+        // 64px and its layout height is the visible detent plus the reserve.
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 64});
+        fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 64});
+        fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+        const settledHeight = sheet.style.height;
+        expect(settledHeight).not.toBe('');
+
+        // The layout viewport changes as browser chrome moves, but the small
+        // viewport and therefore the fractional detent do not.
+        act(() => {
+          window.innerHeight = 1000;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(sheet.style.height).toBe(settledHeight);
+        expect(sheet.style.getPropertyValue('--_sheet-reserve')).toBe('320px');
+
+        // A real small-viewport change re-resolves the same fractional stop.
+        act(() => {
+          smallViewportHeight = 600;
+          window.innerHeight = 600;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(sheet.style.height).not.toBe(settledHeight);
+      } finally {
+        probeSpy.mockRestore();
+      }
     });
 
     it('keeps its detents when the keyboard shrinks the visual viewport', () => {
