@@ -512,6 +512,17 @@ works on is `spec:AST-040` FR9's.
     place that differ, the block and the skill both present without both
     being saved, and a project skill named `astryx`, and scans no skill
     folder in the home folder or a settings folder.
+    `astryx init --to <places> --once` writes a copy saved nowhere, so no
+    later run touches it, and refuses the block and any place already
+    saved. `astryx init --remove` (`--remove-agents` is the same option)
+    removes the skill from every place the project saves, or with `--to`
+    from the places named, drops each from what is saved, and removes the
+    block when no `--to` is given or `--to` names `agents-md`; folders saved
+    for this computer stay unless `--to` names them. A skill file Astryx did
+    not write is kept, a linked skill folder's included; an unedited Astryx
+    file is the place's own, through a link too, and a folder saved for this
+    computer where every file was kept is not saved. In the project, linked
+    copy folders share one file, written and removed once.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -561,8 +572,9 @@ works on is `spec:AST-040` FR9's.
     own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
     schedule while the file is there, an edited file kept, and never writes
     it again once it is deleted; `astryx init --to <folder>` writes it
-    again. Doctor's computer-level text check names these folders, which
-    are missing and which are from another release, also while the
+    again, and `astryx init --remove --to <folder>` removes it and forgets
+    the folder. Doctor's computer-level text check names these folders,
+    which are missing and which are from another release, also while the
     computer-level text is turned off.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and

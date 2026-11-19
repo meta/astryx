@@ -61,7 +61,7 @@
  * @property {string} path The file, relative to the folder the command ran in.
  * @property {string} place The place, as astryx.config saves it: `skills` or `./<folder>`.
  * @property {'current' | 'would-create' | 'would-update' | 'created' | 'updated' | 'kept'} action
- * @property {'edited' | 'not-astryx' | 'pair-kept' | 'not-written'} [reason] Only on `kept`: a person edited it since Astryx wrote it, Astryx did not write it, (`pair-kept`) another copy of the same place is a person's, so the copies are left as they are together, or (`not-written`) `--apply` could not write a copy of the place, so none was written.
+ * @property {'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill' | 'not-written'} [reason] Only on `kept`: a person edited it since Astryx wrote it, Astryx did not write it, (`pair-kept`) another copy of the same place is a person's, so the copies are left as they are together, (`computer-skill`) it is the computer-level skill reached through the place, or (`not-written`) `--apply` could not write a copy of the place, so none was written.
  */
 
 /**

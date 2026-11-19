@@ -644,7 +644,7 @@ async function prepareSkillRefresh(plan, skillPlaces, {installedVersion, apply, 
   // A kept file stays on its old text: say so, as init does.
   for (const row of summary.skills ?? []) {
     if (row.action === 'kept') {
-      logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, 'delete it, then run init, to get the current text')}`);
+      logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, 'delete it, then run init, to get the current text', cwd)}`);
     }
   }
   if (plan.noBlock && total > 0) {
@@ -795,7 +795,7 @@ function applySkillRefresh(plan) {
         if (row.action.startsWith('would-')) {
           row.action = 'kept';
           row.reason = 'not-written';
-          logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, '')}`);
+          logger.log(`[skip] Astryx skill: ${row.path} ${keptText(row.reason, '', plan.cwd)}`);
         }
       }
       continue;
