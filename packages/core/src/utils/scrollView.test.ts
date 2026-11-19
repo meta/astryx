@@ -97,4 +97,11 @@ describe('touchActionAllowsPan', () => {
     expect(touchActionAllowsPan(control, 'x')).toBe(false);
     expect(touchActionAllowsPan(control, 'y')).toBe(true);
   });
+
+  it('stops before a boundary, so a box at or above it does not count', () => {
+    const control = setup({box: 'none'});
+    const box = control.parentElement as HTMLElement;
+    expect(touchActionAllowsPan(control, 'y')).toBe(false);
+    expect(touchActionAllowsPan(control, 'y', box)).toBe(true);
+  });
 });

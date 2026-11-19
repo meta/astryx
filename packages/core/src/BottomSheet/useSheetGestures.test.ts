@@ -14,7 +14,7 @@ import {act, renderHook} from '@testing-library/react';
 import {useState} from 'react';
 import {rubberBand} from '../motion/rubberBand';
 import {
-  forbidsVerticalPan,
+  leavesNoPan,
   isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
@@ -176,20 +176,30 @@ describe('isInsideNestedLayer', () => {
   });
 });
 
-/** jsdom has no `touch-action`, so these cases read it from this map. */
+/** jsdom has no `touch-action`, so these cases read it from this map; `afterEach` restores it. */
+let restoreTouchAction: (() => void) | null = null;
 function stubTouchAction(values: Map<Element, string>) {
+  restoreTouchAction?.();
   const original = window.getComputedStyle.bind(window);
-  return vi
+  const spy = vi
     .spyOn(window, 'getComputedStyle')
     .mockImplementation((element, pseudo) => {
       const style = original(element, pseudo);
       const touchAction = values.get(element);
       return touchAction == null ? style : {...style, touchAction};
     });
+  restoreTouchAction = () => {
+    spy.mockRestore();
+    restoreTouchAction = null;
+  };
 }
 
-describe('forbidsVerticalPan', () => {
-  it('is true under an element whose touch-action excludes a vertical pan, and false under auto, manipulation and pan-y', () => {
+afterEach(() => {
+  restoreTouchAction?.();
+});
+
+describe('leavesNoPan', () => {
+  it('is true under content that allows no one-finger pan, and false where a pan on either axis is allowed', () => {
     const body = document.createElement('div');
     const menu = document.createElement('div');
     const row = document.createElement('div');
@@ -197,12 +207,12 @@ describe('forbidsVerticalPan', () => {
     body.append(menu);
     document.body.append(body);
     const values = new Map<Element, string>();
-    const spy = stubTouchAction(values);
-    for (const [value, forbids] of [
+    stubTouchAction(values);
+    for (const [value, leaves] of [
       ['pinch-zoom', true],
       ['none', true],
-      ['pan-x', true],
-      ['pan-x pinch-zoom', true],
+      ['pan-x', false],
+      ['pan-x pinch-zoom', false],
       ['pan-y', false],
       ['pan-y pinch-zoom', false],
       ['pan-down', false],
@@ -210,14 +220,19 @@ describe('forbidsVerticalPan', () => {
       ['auto', false],
     ] as const) {
       values.set(menu, value);
-      expect(forbidsVerticalPan(row, body), value).toBe(forbids);
+      expect(leavesNoPan(row, body), value).toBe(leaves);
     }
+    // Values intersect up to the body: pan-x inside pan-y leaves no pan.
+    values.set(menu, 'pan-y');
+    values.set(row, 'pan-x');
+    expect(leavesNoPan(row, body)).toBe(true);
+    values.delete(row);
     // The body's own touch-action, and the sheet surface above it, do not count.
     values.delete(menu);
     values.set(body, 'pinch-zoom');
-    expect(forbidsVerticalPan(row, body)).toBe(false);
-    expect(forbidsVerticalPan(null, body)).toBe(false);
-    spy.mockRestore();
+    expect(leavesNoPan(row, body)).toBe(false);
+    expect(leavesNoPan(null, body)).toBe(false);
+    expect(leavesNoPan(body, body)).toBe(false);
     body.remove();
   });
 });
@@ -1421,10 +1436,12 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
     });
 
-    it('leaves a finger to a menu inside the body whose touch-action forbids the vertical pan, and still drags under a pan-y element (spec:AST-094 FR18)', () => {
+    it('leaves a finger to a menu inside the body that allows no one-finger pan, and still drags under pan-y and pan-x content (spec:AST-094 FR18)', () => {
       for (const [value, drags] of [
         ['pinch-zoom', false],
         ['pan-y pinch-zoom', true],
+        // The date pickers' month scroller hands vertical drags to the sheet.
+        ['pan-x', true],
       ] as const) {
         const {hook} = setup({snapHeights: () => [200]});
         const el = makeScroller({
@@ -1433,7 +1450,7 @@ describe('useSheetGestures', () => {
           scrollHeight: 200,
         });
         const menu = document.createElement('div');
-        const spy = stubTouchAction(new Map([[menu, value]]));
+        stubTouchAction(new Map([[menu, value]]));
         const row = document.createElement('div');
         menu.append(row);
         el.append(menu);
@@ -1460,7 +1477,6 @@ describe('useSheetGestures', () => {
         act(() => {
           fire('touchend', 50);
         });
-        spy.mockRestore();
         el.parentElement?.remove();
       }
     });

@@ -289,7 +289,7 @@ test('a pull up on the body of a sheet whose content fits stretches it on every 
   await expect(dialog).toBeVisible();
 });
 
-test('a finger on content whose touch-action forbids the vertical pan leaves the sheet still; a pan-y element still pulls it (spec:AST-094 FR18)', async ({
+test('a finger on content that allows no one-finger pan leaves the sheet still; pan-y and pan-x content still pull it (spec:AST-094 FR18)', async ({
   page,
 }) => {
   const {dialog, sheet, rest} = await openStory(
@@ -322,6 +322,9 @@ test('a finger on content whose touch-action forbids the vertical pan leaves the
   await declare('pinch-zoom');
   expect(await pullUp(page, sheet, rest, point, 100)).toBeLessThan(2);
   await declare('pan-y pinch-zoom');
+  expect(await pullUp(page, sheet, rest, point, 100)).toBeGreaterThan(20);
+  // The date pickers' month scroller declares pan-x: vertical drags are the sheet's.
+  await declare('pan-x');
   expect(await pullUp(page, sheet, rest, point, 100)).toBeGreaterThan(20);
   await expect(dialog).toBeVisible();
 });

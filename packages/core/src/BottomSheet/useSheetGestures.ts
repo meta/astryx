@@ -71,6 +71,7 @@ import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
 import {sheet} from '../motion/uikit/sheet';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -267,32 +268,23 @@ export function isInsideNestedLayer(
 }
 
 /**
- * Whether an element between `target` and the body forbids the vertical pan
- * through its own `touch-action`, as a menu whose rows fit does with
- * `pinch-zoom`. A pan recognizer leaves a touch there to the element that
- * declared it. The body and the sheet's own surfaces above it do not count.
+ * Whether the content between `target` and the body leaves no one-finger pan
+ * to the browser, as a menu whose rows fit does with `pinch-zoom`. A pan
+ * recognizer leaves such a touch to that content. Content that allows a pan
+ * on either axis (`pan-x` on the date pickers' month scroller) does not
+ * count, nor do the body and the sheet's own surfaces above it.
  */
-export function forbidsVerticalPan(
+export function leavesNoPan(
   target: EventTarget | null,
   body: HTMLElement,
 ): boolean {
-  for (
-    let element = target instanceof Element ? target : null;
-    element != null && element !== body;
-    element = element.parentElement
-  ) {
-    // An engine without `touch-action` reports no value: that is `auto`.
-    const touchAction = getComputedStyle(element).touchAction ?? '';
-    if (
-      touchAction !== '' &&
-      touchAction !== 'auto' &&
-      touchAction !== 'manipulation' &&
-      !/\bpan-(y|up|down)\b/.test(touchAction)
-    ) {
-      return true;
-    }
+  if (!(target instanceof Element) || target === body) {
+    return false;
   }
-  return false;
+  return (
+    !touchActionAllowsPan(target, 'x', body) &&
+    !touchActionAllowsPan(target, 'y', body)
+  );
 }
 
 /**
@@ -1719,7 +1711,7 @@ export function useSheetGestures({
       if (
         !touch ||
         isInsideNestedLayer(event.target, body) ||
-        forbidsVerticalPan(event.target, body)
+        leavesNoPan(event.target, body)
       ) {
         touchDragRef.current = null;
         return;

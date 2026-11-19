@@ -52,11 +52,12 @@ export function parseTouchAction(value: string): AllowedPans {
 
 /**
  * Whether `touch-action` on `element` and on every box above it leaves a pan
- * on `axis` to the browser.
+ * on `axis` to the browser. With `boundary`, the walk stops before it.
  */
 export function touchActionAllowsPan(
   element: Element,
   axis: keyof AllowedPans,
+  boundary?: Node,
 ): boolean {
   const view = element.ownerDocument.defaultView;
   if (view == null) {
@@ -64,7 +65,7 @@ export function touchActionAllowsPan(
   }
   for (
     let node: Node | null = element;
-    node != null;
+    node != null && node !== boundary;
     node = parentAcrossShadow(node)
   ) {
     if (
