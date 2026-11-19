@@ -56,6 +56,7 @@ import {
   familyOf,
   wordTable,
   onlyMeans,
+  AUTO_SPREAD,
 } from './_tables.mjs';
 import {
   commitTheme,
