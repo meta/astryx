@@ -103,7 +103,7 @@ const SOURCE_BLOCK =
  * The page's script, which the render puts after the embedded source. It
  * holds no closing script tag of its own: the render escapes that.
  */
-const PAGE_SCRIPT = /<script>[\s\S]*?<\/script>/u;
+const PAGE_SCRIPT = /<script(?: type="module")?>[\s\S]*?<\/script>/u;
 
 /**
  * The page that the renderer renders for a tile: the template inside the

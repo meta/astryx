@@ -139,14 +139,18 @@ const moveTo = link => {
 const add = EventTarget.prototype.addEventListener;
 const pastHost = new WeakSet();
 const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
-if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
+// The file's script runs before DOMContentLoaded whether it is a classic
+// script (the document still loading) or a module script (parsed, so
+// readyState is already 'interactive').
+const beforeLoaded = document.readyState !== 'complete';
+if (beforeLoaded) add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
 else markPastHost();
 let inPage = 0;
 // The page's modules load until the document has loaded: this capture listener
 // on the window runs before any listener a viewer adds on the document for the
 // same event, and after every module and promise callback that ran while the
 // document was still loading (an \`import()\` included).
-let loading = document.readyState === 'loading';
+let loading = beforeLoaded;
 if (loading) add.call(window, 'DOMContentLoaded', () => {
   loading = false;
 }, {capture: true, once: true});
@@ -701,8 +705,9 @@ export function scriptSafe(code) {
  *   `builtin` tells a Node built-in; `describe` names a file for a message;
  *   `oneCopy` names the packages every module, a package's too, takes from
  *   the one copy `packageDir` names (React outside a project).
- * @returns {Promise<{code: string, modules: number, astryx: boolean}>} `astryx`:
- *   the build's module graph holds a module an Astryx package owns
+ * @returns {Promise<{code: string, modules: number, astryx: boolean, module: boolean}>}
+ *   `astryx`: the build's module graph holds a module an Astryx package owns;
+ *   `module`: the script runs the same as a module script ({@link runsAsModule})
  */
 export async function bundleForBrowser({
   esbuild,
@@ -828,6 +833,8 @@ export async function bundleForBrowser({
   };
   /** @type {any} */
   let result;
+  /** @type {boolean} */
+  let module;
   try {
     result = await esbuild.build({
       entryPoints: ['astryx:mount'],
@@ -848,6 +855,7 @@ export async function bundleForBrowser({
       logLevel: 'silent',
       plugins: [plugin],
     });
+    module = await runsAsModule(esbuild, scriptSafe(result.outputFiles[0].text), result.metafile);
   } catch (e) {
     const first = /** @type {any} */ (e)?.errors?.[0];
     if (!first) throw e;
@@ -912,7 +920,54 @@ export async function bundleForBrowser({
     Object.keys(result.metafile?.inputs ?? {}),
     entry,
   );
-  return {code, modules, astryx};
+  return {code, modules, astryx, module};
+}
+
+/** A script's own strict-mode directive, after any comments. */
+const STRICT_DIRECTIVE = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*(['"])use strict\1/;
+
+/** The code files that can be other than an ES module. */
+const SCRIPT_FILE = /\.(?:js|cjs|jsx|ts|cts|tsx)$/i;
+
+/**
+ * Whether the bundled script runs the same as a module script, which a
+ * browser parses as a module and runs in strict mode. esbuild's module parse
+ * must accept it (it refuses a `with` statement), and every file in it that
+ * is not an ES module (a CommonJS file, a package's or the page's own) must
+ * ask for strict mode itself:
+ * one that does not can write an undeclared name or set a property on a
+ * primitive, which throws in strict mode. The script must not read
+ * `document.currentScript`, which a module script does not set. Else the file
+ * keeps a classic script.
+ * @param {any} esbuild
+ * @param {string} code
+ * @param {any} metafile
+ * @returns {Promise<boolean>}
+ */
+async function runsAsModule(esbuild, code, metafile) {
+  // A module script has no `document.currentScript` (it is null), so code
+  // that reads it while it loads keeps a classic script.
+  if (/\bcurrentScript\b/.test(code)) return false;
+  // The files esbuild kept any of, with each one's module format.
+  const kept = Object.entries(/** @type {any} */ (Object.values(metafile?.outputs ?? {})[0])?.inputs ?? {});
+  for (const [name, inOutput] of kept) {
+    if (!(inOutput.bytesInOutput > 0) || !SCRIPT_FILE.test(name) || metafile.inputs[name]?.format === 'esm') continue;
+    let head;
+    try {
+      const file = locatedFile(name);
+      if (file === null) continue;
+      head = fs.readFileSync(file, 'utf8').slice(0, 4096);
+    } catch {
+      return false;
+    }
+    if (!STRICT_DIRECTIVE.test(head)) return false;
+  }
+  try {
+    await esbuild.transform(code, {format: 'esm', loader: 'js', logLevel: 'silent'});
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

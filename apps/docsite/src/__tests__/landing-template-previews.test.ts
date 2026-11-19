@@ -177,6 +177,18 @@ export default function Page() {
     }
   }, 120_000);
 
+  it("leaves out the page's script, a module script or a classic one", () => {
+    for (const tag of ['<script type="module">', '<script>']) {
+      const html = RENDERED.replace(
+        '</body>',
+        `${tag}document.title="drawn"</script></body>`,
+      );
+      const out = previewMarkup(html);
+      expect(out, tag).not.toContain('<script');
+      expect(out, tag).not.toContain('drawn');
+    }
+  });
+
   it('keeps the image URLs of the rendered page and loads them at low priority', () => {
     expect(markup).toContain(
       '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',

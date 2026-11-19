@@ -971,9 +971,11 @@ const CARRIED_PRELUDE =
  *   paint (default `rewrites`): a whole value is read only where the script's
  *   value is the same, so a srcset that lists an https candidate, which the
  *   script keeps as written, is never read whole
+ * @param {boolean} [strict] the script is a module script, so it parses in
+ *   strict mode
  * @returns {string}
  */
-export function withCarriedPaths(script, rewrites, carried, srcsets = new Set(), painted = rewrites) {
+export function withCarriedPaths(script, rewrites, carried, srcsets = new Set(), painted = rewrites, strict = false) {
   const inline = inlineCarried(script, rewrites);
   const tokens = carriedTokens(script, rewrites, carried, srcsets, painted);
   if (tokens.length === 0) return inline;
@@ -995,7 +997,8 @@ export function withCarriedPaths(script, rewrites, carried, srcsets = new Set(),
       `${/[\w$]/.test(all[offset - 1] ?? '') ? ' ' : ''}${k === undefined ? `${CARRIED_VALUES}[${i}]` : `${CARRIED_CANDIDATE}(${i},${k})`}`,
     );
   try {
-    new vm.Script(read);
+    // A module script parses in strict mode, so the reads must too.
+    new vm.Script(strict ? `"use strict";${read}` : read);
     return read;
   } catch {
     return inline;
@@ -2197,6 +2200,7 @@ export async function renderPage(entry, options = {}) {
   const used = classesIn(markup);
   /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
+  const scriptIsModule = script !== null && message.scriptIsModule === true;
   // https images the page's files name as literals that the first paint may
   // not show (the next view, a feed after a click): fetched the same way, so
   // the script draws them from the same carried data.
@@ -2643,7 +2647,7 @@ export async function renderPage(entry, options = {}) {
     if (read) reads.push(read);
     else sinks.push([url, fetched.uri]);
   }
-  let pageScriptText = script === null ? null : withCarriedPaths(script, localRewrites, ctx.carried ?? new Map(), ctx.srcsets, ctx.rewrites);
+  let pageScriptText = script === null ? null : withCarriedPaths(script, localRewrites, ctx.carried ?? new Map(), ctx.srcsets, ctx.rewrites, scriptIsModule);
   // The values the first paint carries are read once, before the sinks and
   // the page's script that use them.
   let prelude = reads.length > 0 ? CARRIED_PRELUDE : '';
@@ -2796,7 +2800,12 @@ export async function renderPage(entry, options = {}) {
           const bytes = imageBytes.get(sha);
           return bytes ? `${prefix},${bytes.toString('base64')}` : null;
         });
-  const scriptTag = pageScript ? `<script>${pageScript}</script>\n` : '';
+  // A module script runs once the document is parsed, so a browser that
+  // reaches it before its first paint paints the markup first. A classic
+  // script at the end of the body would run before that paint on a page small
+  // enough to arrive at once. A script that would not run the same in strict
+  // mode (a CommonJS package that does not ask for it) stays classic.
+  const scriptTag = pageScript ? `<script${scriptIsModule ? ' type="module"' : ''}>${pageScript}</script>\n` : '';
   let html;
   let block;
   if (options.output) {
