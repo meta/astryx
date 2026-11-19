@@ -76,7 +76,7 @@ owns response fields and compatibility.
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
   misspelled. Such a root, when the order places it below that part, moves
-  directly before the part, whatever its band; nothing else moves. Among matches of the first
+  directly before the part, whatever its band; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or
