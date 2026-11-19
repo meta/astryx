@@ -104,6 +104,9 @@ export function rideKeyboard(
   const start = transition.predicted
     ? transition.start
     : Math.min(transition.start, timelineTime() ?? transition.start);
+  // A ride that starts before the report's time holds the element still until
+  // that time. So the element starts to move at the report.
+  const hold = (transition.start - start) / 1000;
   // Under Reduce Motion nothing travels. The animator's default cross-fades
   // the element to its new place on a touch screen, and elsewhere moves it at
   // once. An entrance lands it at once and fades it in.
@@ -111,7 +114,7 @@ export function rideKeyboard(
     ? {at: start, crossfadeAs: 'entrance' as const}
     : {at: start};
   const {curve} = transition;
-  const span = curve.durationMs / 1000;
+  const duration = curve.durationMs / 1000 + hold;
   const progress = keyboardProgress(curve);
   const followsEdge = 'followsEdge' in curve && curve.followsEdge === true;
   const edge = Math.abs(transition.to - transition.from);
@@ -125,16 +128,17 @@ export function rideKeyboard(
     const own = followsEdge
       ? edgeProgress(progress, edge, Math.abs(target - from), rising)
       : progress;
-    const at = (t: number) => from + (target - from) * own(t);
+    const at = (t: number) =>
+      from + (target - from) * own(Math.max(0, t - hold));
     curves[property] = {
-      duration: span,
+      duration,
       at,
       velocity: t => {
-        if (t >= span) {
+        if (t >= duration) {
           return 0;
         }
         const a = Math.max(0, t - 0.001);
-        const b = Math.min(span, t + 0.001);
+        const b = Math.min(duration, t + 0.001);
         return (at(b) - at(a)) / (b - a);
       },
     };

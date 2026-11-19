@@ -292,6 +292,49 @@ describe('rideKeyboard', () => {
     }
   });
 
+  it('holds the element still until the report when the ride starts at an earlier frame', () => {
+    const slide = transition({curve: uikitKeyboardSchedule.showCurve});
+    type Played = [
+      Record<string, {duration: number; at: (t: number) => number}>,
+      unknown,
+    ];
+    try {
+      // The report is dated 13 ms after the frame that dispatches it.
+      Object.defineProperty(document, 'timeline', {
+        configurable: true,
+        value: {currentTime: 987},
+      });
+      const early = standInAnimator();
+      rideKeyboard(early as unknown as Animator, {y: -300}, slide);
+      Object.defineProperty(document, 'timeline', {
+        configurable: true,
+        value: {currentTime: 1000},
+      });
+      const onTime = standInAnimator();
+      rideKeyboard(onTime as unknown as Animator, {y: -300}, slide);
+      const [earlyCurves, earlyOptions] = early.play.mock
+        .calls[0] as unknown as Played;
+      const [onTimeCurves] = onTime.play.mock.calls[0] as unknown as Played;
+      // The ride still starts at the frame, so a long task cannot hold it.
+      expect(earlyOptions).toEqual({at: 987});
+      // Until the report the element stays where it is.
+      expect(earlyCurves.y.at(0.012)).toBeCloseTo(0, 6);
+      // From the report it moves as a ride that starts there.
+      for (const t of [0.02, 0.1, 0.2]) {
+        expect(earlyCurves.y.at(0.013 + t)).toBeCloseTo(
+          onTimeCurves.y.at(t),
+          6,
+        );
+      }
+      expect(earlyCurves.y.duration).toBeCloseTo(
+        onTimeCurves.y.duration + 0.013,
+        6,
+      );
+    } finally {
+      Reflect.deleteProperty(document, 'timeline');
+    }
+  });
+
   it('keeps the start of a predicted hide after a blur, which starts ahead of the frame on purpose', () => {
     const hide = transition({
       kind: 'hide',
