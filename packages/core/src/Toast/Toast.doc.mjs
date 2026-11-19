@@ -53,6 +53,13 @@ export const docs = {
       default: '5000',
     },
     {
+      name: 'isExiting',
+      type: 'boolean',
+      description:
+        'Whether the toast is leaving: it plays its exit motion and stops responding to swipes. The toast viewport sets it while a toast leaves; set it only when you render Toast yourself.',
+      default: 'false',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description:
@@ -93,7 +100,10 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-toast', visualProps: ['type']}],
+    targets: [
+      {className: 'astryx-toast', visualProps: ['type']},
+      {className: 'astryx-toast-close'},
+    ],
     vars: [
       {
         name: '--_toast-slide-y',

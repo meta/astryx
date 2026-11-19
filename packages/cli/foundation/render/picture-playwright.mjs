@@ -23,6 +23,7 @@ import {
   PICTURE_TAKEN,
   PICTURE_WINDOW,
   SETTLE_ANIMATIONS,
+  AWAIT_QUIET,
   eachAtOnce,
 } from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
@@ -58,13 +59,25 @@ try {
             route.abort('blockedbyclient'),
         );
         await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
+        // The page draws until it is quiet (a chart's drawing over frames
+        // ends).
+        await page.evaluate(AWAIT_QUIET);
         // An overlay drawn open plays its opening animation (a fade-in) as
         // the page loads: it is run to its end, and a looping one held at a
         // frame a person sees (SETTLE_ANIMATIONS), before the picture.
         // Playwright's own animations: 'disabled' would put a looping one
         // back at its first frame, where a skeleton is faint.
         await page.evaluate(SETTLE_ANIMATIONS);
+        // A whole-page picture makes the page see a resize; a part that
+        // redraws on it (a responsive chart) would start over and be
+        // pictured empty. The page's script is held while it is taken.
+        const held = await (async () => {
+          const cdp = await page.context().newCDPSession(page);
+          await cdp.send('Emulation.setScriptExecutionDisabled', {value: true});
+          return cdp;
+        })().catch(() => null);
         await page.screenshot({path: png, fullPage: true, animations: 'allow'});
+        await held?.send('Emulation.setScriptExecutionDisabled', {value: false}).catch(() => {});
         // The fonts the picture drew its text in, for the editor's note.
         const fonts = await (async () => {
           const cdp = await page.context().newCDPSession(page);

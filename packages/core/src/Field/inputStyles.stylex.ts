@@ -127,7 +127,8 @@ export const inputStatusBorderStyles = stylex.create({
 });
 
 /**
- * Status hover shadow styles for input wrappers.
+ * Status hover shadow styles for input wrappers. Each keeps the base focus
+ * ring.
  * Keyed by InputStatusType.
  */
 export const inputStatusHoverShadowStyles = stylex.create({
@@ -138,6 +139,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-warning'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   error: {
@@ -147,6 +152,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-error'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   success: {
@@ -156,6 +165,10 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-success'],
         },
+      // This boxShadow replaces the base one whole, so it keeps the base
+      // focus ring: the status border does not change on focus, and the ring
+      // is the only sign of keyboard focus.
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
 });

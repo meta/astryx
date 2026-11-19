@@ -66,6 +66,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -1047,6 +1052,13 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
+  if (process.env.NODE_ENV !== 'production' && typeof code !== 'string') {
+    throw devPropError(
+      'CodeBlock',
+      'code',
+      'must be a string, for example <CodeBlock code="const a = 1;" language="ts" />. CodeBlock does not read children.',
+    );
+  }
   const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably

@@ -116,6 +116,24 @@ describe('ChatComposerDrawer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('rounds its top corners and its tuck with the composer corner', () => {
+    render(
+      <ChatComposerDrawer data-testid="drawer">
+        <span>Drawer content</span>
+      </ChatComposerDrawer>,
+    );
+
+    // The composer sets --_chat-composer-radius, which a theme replaces through
+    // `chat-composer` borderRadius; outside a composer it is unset.
+    const corner = 'var(--_chat-composer-radius,var(--radius-chat))';
+    const style = getComputedStyle(screen.getByTestId('drawer'));
+    const read = (value: string) => value.replace(/\s+/g, '');
+    expect(read(style.borderStartStartRadius)).toBe(corner);
+    expect(read(style.borderStartEndRadius)).toBe(corner);
+    expect(read(style.marginBottom)).toBe(`calc(-1*${corner})`);
+    expect(read(style.paddingBottom)).toBe(`calc(var(--spacing-3)+${corner})`);
+  });
+
   it('does not expose collapsedSummary when count is omitted', () => {
     render(
       <ChatComposerDrawer collapsedSummary={<span>Files ready</span>}>

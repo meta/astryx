@@ -11,6 +11,7 @@
 
 import {
   astryxIconDefinitions,
+  discoverListsIconSet,
   iconLookExport,
   iconSetKey,
   importLine,
@@ -66,10 +67,12 @@ export async function iconSetIcons({cwd, set}) {
  */
 export async function iconSearch(query, {cwd, set, limit}) {
   const {sets, withdrawn, choice} = await loadIconSets(cwd);
+  const noSet = sets.length === 0 && withdrawn.length === 0;
   return rankIconSets(sets, withdrawn, query, {
     set,
     limit,
     looks: projectLooks(choice),
+    discoverListsPacks: noSet && (await discoverListsIconSet(cwd)),
   });
 }
 
@@ -97,11 +100,17 @@ export function projectLooks(choice) {
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
- * @param {{set?: string, limit: number, looks?: Record<string, string>}} options
- *   `looks`: the look each set draws, by `<package>/<set>`
+ * @param {{set?: string, limit: number, looks?: Record<string, string>, discoverListsPacks?: boolean}} options
+ *   `looks`: the look each set draws, by `<package>/<set>`;
+ *   `discoverListsPacks`: discover lists an icon set the project could add
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
-export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
+export function rankIconSets(
+  sets,
+  withdrawn,
+  query,
+  {set, limit, looks = {}, discoverListsPacks = false},
+) {
   let searched = sets;
   if (set != null) {
     searched = setsNamed(sets, set);
@@ -109,7 +118,7 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
   }
   // A withdrawn set is installed: `--list` says why it cannot be used.
   if (sets.length === 0 && withdrawn.length === 0) {
-    return noIconSet(query, limit);
+    return noIconSet(query, limit, discoverListsPacks);
   }
   const ranked = rankIcons(searched, query, {words: true});
   // A word start (`start` for `star`) answers only when nothing matches a
@@ -161,9 +170,10 @@ function inLook(match, sets, looks) {
  * by name with no set), and how to get a set.
  * @param {string} query
  * @param {number} limit
+ * @param {boolean} discoverListsPacks
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
-function noIconSet(query, limit) {
+function noIconSet(query, limit, discoverListsPacks) {
   const found = definitionMatches(query).map(match => match.doc);
   const ordered = [
     ...found.filter(doc => doc.builtIn),
@@ -181,7 +191,7 @@ function noIconSet(query, limit) {
         builtIn: doc.builtIn === true,
         description: doc.description,
       })),
-      next: noIconSetNext(),
+      next: noIconSetNext(discoverListsPacks),
     },
   };
 }

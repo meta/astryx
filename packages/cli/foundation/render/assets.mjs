@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Local files as data: URIs for `astryx experimental render`, so the
+ * @file Local files as data: URIs for `astryx experimental export`, so the
  * rendered page needs nothing beside it.
  *
  * @position foundation/render — used by page-worker.mjs and render-page.mjs

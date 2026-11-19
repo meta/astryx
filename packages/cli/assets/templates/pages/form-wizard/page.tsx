@@ -172,6 +172,13 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 // difference between the zones — most visibly on the last step, where the
 // primary button's label grows from "Next" to "Create workspace".
 const footerZone: CSSProperties = {flexBasis: 0};
+// The actions keep their full labels: when Back and Next no longer fit beside
+// the counter, the zone moves to its own line, and on a narrower screen the
+// two buttons stack inside it instead of being cut.
+const footerActionsZone: CSSProperties = {
+  flexBasis: 0,
+  minWidth: 'fit-content',
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -392,7 +399,7 @@ export default function FormWizardPage() {
         // stepper and the fields below it share one content line.
         <LayoutHeader hasDivider={false}>
           <VStack gap={isNarrow ? 3 : 5}>
-            <HStack gap={3} vAlign="center">
+            <HStack wrap="wrap" gap={3} vAlign="center">
               <StackItem size="fill">
                 <Heading level={1}>Create workspace</Heading>
               </StackItem>
@@ -441,7 +448,7 @@ export default function FormWizardPage() {
         // this region, so a card here would be a border inside a border — and
         // its own padding would push every field off the content line the
         // title and stepper sit on.
-        <LayoutContent>
+        <LayoutContent role="main">
           {step === 0 && (
             <VStack gap={5}>
               <VStack gap={1}>
@@ -823,7 +830,7 @@ export default function FormWizardPage() {
       }
       footer={
         <LayoutFooter>
-          <HStack gap={3} vAlign="center">
+          <HStack wrap="wrap" gap={3} vAlign="center">
             {/* Skip belongs at the far end from the button it competes with.
                 Sitting next to Next it reads as a second way forward and
                 collects mis-clicks; alone on the opposite edge it reads as
@@ -843,8 +850,8 @@ export default function FormWizardPage() {
             <Text type="supporting" color="secondary">
               {step + 1} of {STEPS.length}
             </Text>
-            <StackItem size="fill" style={footerZone}>
-              <HStack gap={3} hAlign="end">
+            <StackItem size="fill" style={footerActionsZone}>
+              <HStack wrap="wrap" gap={3} hAlign="end">
                 <Button
                   label="Back"
                   variant="secondary"
