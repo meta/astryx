@@ -997,3 +997,29 @@ describe('mapTemplateIcons with placeholder imports (FR22)', () => {
     );
   });
 });
+
+describe('mapTemplateIcons with a meaning that falls back (FR23)', () => {
+  it("draws the fallback's icon when no set maps the meaning", () => {
+    const source = [
+      "import {CheckBadgeIcon} from '@heroicons/react/24/outline';",
+      'export const a = <CheckBadgeIcon />;',
+      '',
+    ].join('\n');
+    const withSuccess = /** @type {any} */ ({
+      ...SET,
+      data: {...SET.data, map: {...SET.data.map, success: 'home'}},
+    });
+    const result = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'verified'},
+    );
+    const today = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'success'},
+    );
+    expect(result.source).toBe(today.source);
+    expect(result.icons?.placeholder).toEqual([]);
+  });
+});

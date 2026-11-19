@@ -35,9 +35,10 @@ export const DEFAULT_PLACEHOLDER_LOOK = '24/outline';
  * @property {string} module the placeholder package
  * @property {Record<string, string>} looks each look and the library module
  *   that draws it
- * @property {Record<string, {heroicons?: string, lucide?: string}>} meanings
+ * @property {Record<string, {heroicons?: string, lucide?: string, fallback?: string}>} meanings
  *   each icon definition and the library export that draws it: `heroicons` in
- *   the Heroicons looks, `lucide` in the lucide look
+ *   the Heroicons looks, `lucide` in the lucide look. `fallback` names the
+ *   broader meaning an icon set draws when it maps no icon for this one
  */
 
 /** @type {PlaceholderTable | null} */
@@ -96,6 +97,27 @@ export function placeholderSource(meaning, look, table = placeholderTable()) {
   const library = Object.hasOwn(table.looks, look) ? table.looks[look] : null;
   const icon = look === 'lucide' ? entry?.lucide : entry?.heroicons;
   return entry && library && icon ? {module: library, export: icon} : null;
+}
+
+/**
+ * The meanings an icon set tries for a meaning, in order: the meaning, then
+ * each fallback the table names for it. A set that maps no icon for a
+ * meaning draws the icon of its fallback, so a meaning that refines another
+ * (`verified` refines `success`) never makes a set draw less than before.
+ * @param {string} meaning
+ * @param {PlaceholderTable} [table]
+ * @returns {string[]}
+ */
+export function meaningWithFallbacks(meaning, table = placeholderTable()) {
+  const chain = [meaning];
+  for (;;) {
+    const current = chain[chain.length - 1];
+    const next = Object.hasOwn(table.meanings, current)
+      ? table.meanings[current].fallback
+      : undefined;
+    if (!next || chain.includes(next)) return chain;
+    chain.push(next);
+  }
 }
 
 /** @param {string} module @param {string[]} specifiers */
