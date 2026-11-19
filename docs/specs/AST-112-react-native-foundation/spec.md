@@ -767,10 +767,9 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-082` FR5, FR6, FR10, FR15, FR16, and FR19, and `spec:AST-093`,
   which name `@astryxdesign/native` as the home of the platform contracts, the
   Swift and Kotlin bindings, the `shared` condition, and `defineNativeTheme`,
-  move those to the shared contracts (DEC-19). `@astryxdesign/core` exports
-  `defineNativeTheme` and the platform-prop conditions, built from the
-  contracts, and the generated Swift and Kotlin ship inside each platform
-  package (OQ3).
+  move the platform contracts and the `shared` condition to the shared
+  contracts (DEC-19). Where the non-contract parts live after the deprecation
+  is OQ8.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
   the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency, no peer dependency outside Astryx other than React and React Native, and no dependency on these packages from core or the CLI.
 
@@ -1057,3 +1056,8 @@ React Native lab under `./unstable/*` and moves to `./navigation` when web's
   start?** (`human-api`) Options: in the React Native lab under `./unstable/*`,
   graduating once it has a Core contract; or in Core's Lab package with a core
   contract first.
+- **OQ8 — Where do `@astryxdesign/native`'s non-contract parts live after its
+  deprecation?** (`human-api`) The native theme definition
+  (`defineNativeTheme`) and the Swift binding need a published home once the
+  contracts move into `packages/contracts` (DEC-19). Options: a new
+  published native package; `@astryxdesign/core`; or each platform package.
