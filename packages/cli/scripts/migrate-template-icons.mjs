@@ -296,7 +296,10 @@ async function main() {
   /** @type {Map<string, Record<string, string>>} */
   const docs = new Map();
   const left = [];
-  let moved = 0;
+  /** @type {string[]} */
+  const errors = [];
+  /** @type {Array<{file: string, migrated: string, descriptor: string | null, declared: Record<string, string>}>} */
+  const planned = [];
   for (const file of roots.flatMap(templateSources)) {
     const rel = path.relative(TEMPLATES, file);
     const descriptor = descriptorOf(file);
@@ -307,16 +310,26 @@ async function main() {
       ? (iconsProperty(descriptorSource)?.entries ?? {})
       : {};
     const source = fs.readFileSync(file, 'utf-8');
-    const migrated = migrateTemplateSource(rel, source, declared, table);
-    if (migrated == null) continue;
-    if (check) {
-      left.push(rel);
-      continue;
+    try {
+      const migrated = migrateTemplateSource(rel, source, declared, table);
+      if (migrated == null) continue;
+      if (check) left.push(rel);
+      else planned.push({file, migrated, descriptor, declared});
+    } catch (error) {
+      errors.push(/** @type {Error} */ (error).message);
     }
+  }
+  // Every template is checked before any file is written, so a stopped run
+  // leaves the tree as it was.
+  if (errors.length > 0) {
+    console.error(errors.join('\n'));
+    process.exit(1);
+  }
+  for (const {file, migrated, descriptor, declared} of planned) {
     fs.writeFileSync(file, await format(migrated, file));
     if (descriptor) docs.set(descriptor, declared);
-    moved++;
   }
+  const moved = planned.length;
   for (const descriptor of [...docs.keys()].sort()) {
     const sharedBy = templateSources(path.dirname(descriptor)).filter(
       file => descriptorOf(file) === descriptor,
