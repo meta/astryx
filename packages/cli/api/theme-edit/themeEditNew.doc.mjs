@@ -2,6 +2,8 @@
 
 /** @file FunctionDoc for `themeEditNew()` / `astryx experimental theme editor new`. */
 
+import {NAME_RULE} from './_name-rule.mjs';
+
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
 export const doc = {
   type: 'function',
@@ -12,7 +14,9 @@ export const doc = {
   displayName: 'themeEditNew()',
   summary: 'Start a theme in themes/<theme>/, optionally on a built-in theme.',
   description:
-    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (build them again with `astryx experimental theme compile themes/<theme>/<theme>.theme.ts`, which checks the editor settings first), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it the theme starts from Astryx defaults. `settings` takes any `set` dial by name ({accent: "#7c3aed", font: "inter", corners: "round", vibrancy: "60"}): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is lowercase letters, digits and dashes. Experimental: it may change or be removed in a patch release.',
+    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (build them again with `astryx experimental theme compile themes/<theme>/<theme>.theme.ts`, which checks the editor settings first), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it the theme starts from Astryx defaults. `settings` takes any `set` dial by name ({accent: "#7c3aed", font: "inter", corners: "round", vibrancy: "60"}): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is ' +
+    NAME_RULE +
+    '. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditNew(theme: string, options?: object): Promise<object>',
   keywords: [
@@ -26,8 +30,7 @@ export const doc = {
     {
       name: 'theme',
       type: 'string',
-      description:
-        'The theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most, not a name Windows reserves (con, prn, aux, nul, com1-com9, lpt1-lpt9).',
+      description: `The theme name: ${NAME_RULE}.`,
       required: true,
     },
     {
@@ -63,7 +66,7 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase letters, digits and dashes, or `settings` names something that is not a dial',
+      when: `the name breaks the theme-name rule (${NAME_RULE}), or \`settings\` names something that is not a dial`,
     },
     {
       code: 'ERR_FILE_EXISTS',

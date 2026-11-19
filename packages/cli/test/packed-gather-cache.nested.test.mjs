@@ -131,17 +131,23 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       // catalog with discovery read back inside it.
       run(['template', '--list'], {tmp, cwd: other.dir, json: false});
       const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
+      expect(kept.size).toBe(hasModuleHooks ? 1 : 0);
       searchAt(tmp);
       const catalogs = entries(tmp);
-      const inodes = () =>
-        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
-      const warm = inodes();
-      expect(catalogs.size).toBeGreaterThan(0);
-      // The warm path hits: the same answer from the same files.
-      searchAt(tmp);
-      expect(inodes()).toEqual(warm);
-      expect(templatesEntries(tmp)).toEqual(kept);
+      if (hasModuleHooks) {
+        const inodes = () =>
+          new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+        const warm = inodes();
+        expect(catalogs.size).toBeGreaterThan(0);
+        // The warm path hits: the same answer from the same files.
+        searchAt(tmp);
+        expect(inodes()).toEqual(warm);
+        expect(templatesEntries(tmp)).toEqual(kept);
+      } else {
+        // The documented fallback on Node 22.13 gathers fresh each run.
+        expect(catalogs.size).toBe(0);
+        expect(templatesEntries(tmp).size).toBe(0);
+      }
       // A template added: the next search sees it, as a fresh one does.
       template('gate-fixture-extra', 'Gate fixture extra block for ledgers.');
       const added = searchAt(tmp);

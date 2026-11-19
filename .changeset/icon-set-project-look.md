@@ -1,7 +1,0 @@
----
-'@astryxdesign/cli': patch
----
-
-[experimental] Icon sets: a project picks one look for every icon. `astryx experimental icon use <main> --variant <variant>` writes `experimental.iconVariant` beside `experimental.iconSet`, in one write, and refuses a variant the main set does not declare; without `--variant` it removes the key. Each set in the list draws its variant of that name, or its default look when it declares none, and the receipt (`icon.use`) adds `variant`, `previousVariant`, `looks`, and `themeMap`. A copied template imports each icon in that look where its set has it, reports the look as `icons.variant`, and moves an icon a template imports from the main set's own library, or from a listed set in another look (`by: 'variant'`), to that look. A set's generated module also writes a theme map for each other look an icon draws (`themeIconsFilled`), and `integration check` holds it to `map`. `astryx doctor` fails when the main set does not declare the variant, and `experimental icon --list` shows the variant and each set's look. A CLI before 0.7.16 refuses an astryx.config that sets `experimental.iconVariant`, so `use` warns when the project's CLI range admits one. An icon-set package whose generated module an earlier CLI wrote, and whose icons draw a look other than the default, fails `integration check` until it runs `experimental icon add --variant <variant> --from <module> --all` again; the finding names that run. Projects that do not set `experimental.iconSet` see no change.
-
-@josephfarina

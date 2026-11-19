@@ -158,6 +158,14 @@ export const docs = {
               'Your `cliCommand` is not one line of plain text of at most 120 characters, so it is ignored. Fix the value; the rest of the manifest still loads.',
             ],
             [
+              '`install-guidance` warns: `Loaded integrations give different install guidance`',
+              "Two packages the app loads set different `installGuidance` values, so the CLI prints the package manager's install command. Agree on one line, or remove the package that does not belong.",
+            ],
+            [
+              '`invalid_install_guidance`',
+              'Your `installGuidance` is not one line of plain text of at most 240 characters, so it is ignored. Fix the value; the rest of the manifest still loads.',
+            ],
+            [
               '`{@command upgrade}` runs none of your codemods',
               'The app must list your package in `integrations` in `astryx.config`, or pass `--integration @acme/astryx-widgets`. It runs a codemod folder only when its version is after `--from` and at most the installed `@astryxdesign/core`.',
             ],

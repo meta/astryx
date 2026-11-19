@@ -429,7 +429,11 @@ describe('astryx-oklch-v1 palette generator', () => {
       const dark = darkChromaTaper =>
         generateTonalPalette({families: prototypeFamily, darkChromaTaper})
           .palette.constructor.dark;
-      const edge = dark({edgeMultiplier: 0.5, throughStop: 25, recoverAtStop: 60});
+      const edge = dark({
+        edgeMultiplier: 0.5,
+        throughStop: 25,
+        recoverAtStop: 60,
+      });
       const standard = dark(undefined);
       expect(edge[25]).toMatch(/^#[0-9a-f]{6}$/);
       expect(chroma(edge[25]) / chroma(standard[25])).toBeCloseTo(0.5, 1);

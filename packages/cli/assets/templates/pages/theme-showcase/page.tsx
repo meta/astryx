@@ -11,24 +11,24 @@
 
 import {type CSSProperties, useRef, useState} from 'react';
 import {
-  Plus,
-  Search,
-  Tag,
-  Folder,
-  MapPin,
-  List,
-  LayoutGrid,
-  ShoppingBag,
-  Banknote,
-  Mic,
-  CreditCard,
-  Lock,
-  X,
-  Download,
-  Smartphone,
-  Wallet,
-  User,
-} from 'lucide-react';
+  AddIcon,
+  SearchIcon,
+  TagIcon,
+  FolderIcon,
+  LocationIcon,
+  ListIcon,
+  AppsIcon,
+  ShoppingBagIcon,
+  MoneyIcon,
+  MicrophoneIcon,
+  CreditCardIcon,
+  LockIcon,
+  CloseIcon,
+  DownloadIcon,
+  MobileIcon,
+  WalletIcon,
+  UserIcon,
+} from '@astryxdesign/template-icons/lucide';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {DialogHeader, useImperativeDialog} from '@astryxdesign/core/Dialog';
 import {
@@ -72,6 +72,9 @@ import {
   useChatNewMessages,
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 // StackItem has no wrapping basis; Stack has no body variant.
 // LayoutContent has no height cap; keep the message viewport bounded.
@@ -228,7 +231,7 @@ function ShowcaseNavigation() {
                 tooltip="Search"
                 variant="ghost"
                 isIconOnly
-                icon={<Icon icon={Search} size="md" />}
+                icon={<Icon icon={SearchIcon} size="md" />}
                 href="#"
               />
               <Button
@@ -236,7 +239,7 @@ function ShowcaseNavigation() {
                 tooltip="Account"
                 variant="ghost"
                 isIconOnly
-                icon={<Icon icon={User} size="md" />}
+                icon={<Icon icon={UserIcon} size="md" />}
                 href="#"
               />
               <Button
@@ -244,7 +247,7 @@ function ShowcaseNavigation() {
                 tooltip="Cart"
                 variant="ghost"
                 isIconOnly
-                icon={<Icon icon={ShoppingBag} size="md" />}
+                icon={<Icon icon={ShoppingBagIcon} size="md" />}
                 href="#"
               />
             </HStack>
@@ -525,7 +528,7 @@ function CheckoutCard() {
                 onChange={() => setPayment('card')}
                 padding={3}>
                 <VStack gap={1} hAlign="center">
-                  <Icon icon={CreditCard} size="md" />
+                  <Icon icon={CreditCardIcon} size="md" />
                   <Text type="supporting" weight="bold" justify="center">
                     Card
                   </Text>
@@ -537,7 +540,7 @@ function CheckoutCard() {
                 onChange={() => setPayment('apple')}
                 padding={3}>
                 <VStack gap={1} hAlign="center">
-                  <Icon icon={Smartphone} size="md" />
+                  <Icon icon={MobileIcon} size="md" />
                   <Text type="supporting" weight="bold" justify="center">
                     Apple Pay
                   </Text>
@@ -549,7 +552,7 @@ function CheckoutCard() {
                 onChange={() => setPayment('google')}
                 padding={3}>
                 <VStack gap={1} hAlign="center">
-                  <Icon icon={Wallet} size="md" />
+                  <Icon icon={WalletIcon} size="md" />
                   <Text type="supporting" weight="bold" justify="center">
                     Google Pay
                   </Text>
@@ -563,7 +566,7 @@ function CheckoutCard() {
             value={cardNumber}
             onChange={setCardNumber}
             startIcon={
-              isMobile ? undefined : <Icon icon={CreditCard} size="sm" />
+              isMobile ? undefined : <Icon icon={CreditCardIcon} size="sm" />
             }
             size="lg"
           />
@@ -617,7 +620,7 @@ function CheckoutCard() {
           variant="primary"
           size="lg"
           label="Pay now"
-          icon={<Icon icon={Lock} size="sm" />}
+          icon={<Icon icon={LockIcon} size="sm" />}
           onClick={() => setShowPaymentPreview(true)}
         />
       </VStack>
@@ -632,6 +635,7 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 function ChatCard() {
+  const showToast = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const {lock, isLocked, scrollIfLocked} = useChatStreamScroll({scrollRef});
   const {contentRef} = useChatNewMessages({isLocked, onResize: scrollIfLocked});
@@ -667,7 +671,14 @@ function ChatCard() {
                   isIconOnly
                   label="Export conversation"
                   tooltip="Export conversation"
-                  icon={<Icon icon={Download} size="sm" />}
+                  icon={<Icon icon={DownloadIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the conversation would export here',
+                      uniqueID: 'export-chat',
+                    })
+                  }
                 />
                 <Button
                   variant="ghost"
@@ -675,7 +686,14 @@ function ChatCard() {
                   isIconOnly
                   label="Close chat"
                   tooltip="Close chat"
-                  icon={<Icon icon={X} size="sm" />}
+                  icon={<Icon icon={CloseIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the chat would close here',
+                      uniqueID: 'close-chat',
+                    })
+                  }
                 />
               </HStack>
             </HStack>
@@ -707,7 +725,14 @@ function ChatCard() {
                     isIconOnly
                     label="Attach"
                     tooltip="Attach"
-                    icon={<Icon icon={Plus} size="sm" />}
+                    icon={<Icon icon={AddIcon} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: a file picker would open here',
+                        uniqueID: 'attach',
+                      })
+                    }
                   />
                 }
                 sendActions={
@@ -717,7 +742,14 @@ function ChatCard() {
                     isIconOnly
                     label="Voice input"
                     tooltip="Voice input"
-                    icon={<Icon icon={Mic} size="sm" />}
+                    icon={<Icon icon={MicrophoneIcon} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: voice input would start here',
+                        uniqueID: 'voice',
+                      })
+                    }
                   />
                 }
               />
@@ -899,7 +931,9 @@ function LatestActivityCard() {
                   startContent={
                     <Center width={32} height={32}>
                       <Icon
-                        icon={item.kind === 'refund' ? Banknote : ShoppingBag}
+                        icon={
+                          item.kind === 'refund' ? MoneyIcon : ShoppingBagIcon
+                        }
                         size="sm"
                         color="secondary"
                       />
@@ -1028,7 +1062,7 @@ function ItemCell({
 }) {
   const thumbnailSrc = row.imageKey ? images[row.imageKey] : undefined;
   return (
-    <HStack gap={3} vAlign="center">
+    <HStack gap={3} vAlign="center" wrap="wrap">
       <StackItem>
         <VStack width={40}>
           {thumbnailSrc ? (
@@ -1044,7 +1078,9 @@ function ItemCell({
           )}
         </VStack>
       </StackItem>
-      <StackItem size="fill">
+      {/* The basis holds the longest product word, so in a narrow column the
+          name moves under the thumbnail instead of breaking inside a word. */}
+      <StackItem size="fill" style={{flexBasis: '7em'}}>
         <VStack gap={0}>
           <Text type="body" weight="bold">
             {row.name}
@@ -1069,18 +1105,61 @@ function TagsCell({row}: {row: InventoryRow}) {
 }
 
 function ActionsCell() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
-    <MoreMenu
-      label="Row actions"
-      size="sm"
-      items={[
-        {label: 'Edit'},
-        {label: 'Duplicate'},
-        {label: 'Move to…'},
-        {type: 'divider'},
-        {label: 'Delete'},
-      ]}
-    />
+    <>
+      <MoreMenu
+        label="Row actions"
+        size="sm"
+        // Demo only: replace these toasts with the calls that perform each action.
+        items={[
+          {
+            label: 'Edit',
+            onClick: () =>
+              showToast({
+                body: 'Demo: edit would happen here',
+                uniqueID: 'row-edit',
+              }),
+          },
+          {
+            label: 'Duplicate',
+            onClick: () =>
+              showToast({
+                body: 'Demo: duplicate would happen here',
+                uniqueID: 'row-duplicate',
+              }),
+          },
+          {
+            label: 'Move to…',
+            onClick: () =>
+              showToast({
+                body: 'Demo: moving the item would happen here',
+                uniqueID: 'row-move-to',
+              }),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            onClick: () =>
+              confirm.show({
+                title: 'Delete this item?',
+                description: "This demo won't delete anything.",
+                actionLabel: 'Delete',
+                onAction: () => {
+                  confirm.hide();
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the item would be deleted here',
+                    uniqueID: 'row-delete',
+                  });
+                },
+              }),
+          },
+        ]}
+      />
+      {confirm.element}
+    </>
   );
 }
 
@@ -1091,6 +1170,7 @@ function InventoryCard({
   images: Record<string, string>;
   inventory: InventoryRow[];
 }) {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
@@ -1134,7 +1214,14 @@ function InventoryCard({
             label="Add item"
             variant="primary"
             size="sm"
-            icon={<Icon icon={Plus} size="sm" />}
+            icon={<Icon icon={AddIcon} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: a new item form would open here',
+                uniqueID: 'add-item',
+              })
+            }
           />
         </HStack>
         <Divider variant="subtle" />
@@ -1151,7 +1238,7 @@ function InventoryCard({
                 placeholder="Type and hit enter…"
                 value={query}
                 onChange={setQuery}
-                startIcon={<Icon icon={Search} size="sm" />}
+                startIcon={<Icon icon={SearchIcon} size="sm" />}
                 width={240}
               />
               <HStack gap={2} wrap="wrap" vAlign="center">
@@ -1160,7 +1247,7 @@ function InventoryCard({
                   isLabelHidden
                   placeholder="Categories"
                   size="sm"
-                  startIcon={<Icon icon={Folder} size="sm" />}
+                  startIcon={<Icon icon={FolderIcon} size="sm" />}
                   value={category}
                   hasClear
                   onChange={setCategory}
@@ -1172,7 +1259,7 @@ function InventoryCard({
                   isLabelHidden
                   placeholder="Locations"
                   size="sm"
-                  startIcon={<Icon icon={MapPin} size="sm" />}
+                  startIcon={<Icon icon={LocationIcon} size="sm" />}
                   value={location}
                   hasClear
                   onChange={setLocation}
@@ -1183,7 +1270,7 @@ function InventoryCard({
                   isLabelHidden
                   placeholder="Tags"
                   size="sm"
-                  startIcon={<Icon icon={Tag} size="sm" />}
+                  startIcon={<Icon icon={TagIcon} size="sm" />}
                   value={tag}
                   hasClear
                   onChange={setTag}
@@ -1204,7 +1291,14 @@ function InventoryCard({
                 isIconOnly
                 label="List view"
                 tooltip="List view"
-                icon={<List size={18} />}
+                icon={<ListIcon size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the list view would show here',
+                    uniqueID: 'list-view',
+                  })
+                }
               />
               <Button
                 variant="ghost"
@@ -1212,7 +1306,14 @@ function InventoryCard({
                 isIconOnly
                 label="Grid view"
                 tooltip="Grid view"
-                icon={<LayoutGrid size={18} />}
+                icon={<AppsIcon size={18} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the grid view would show here',
+                    uniqueID: 'grid-view',
+                  })
+                }
               />
             </HStack>
           </HStack>
@@ -1231,7 +1332,7 @@ function InventoryCard({
             columns={[
               {
                 key: 'select',
-                header: '',
+                header: <VisuallyHidden>Select</VisuallyHidden>,
                 width: pixel(64),
                 renderCell: row => (
                   <CheckboxInput
@@ -1245,7 +1346,7 @@ function InventoryCard({
               {
                 key: 'item',
                 header: 'Item',
-                width: proportional(3, {minWidth: 80}),
+                width: proportional(3, {minWidth: 160}),
                 renderCell: row => <ItemCell row={row} images={images} />,
               },
               {
@@ -1269,7 +1370,7 @@ function InventoryCard({
               },
               {
                 key: 'actions',
-                header: '',
+                header: <VisuallyHidden>Actions</VisuallyHidden>,
                 width: pixel(64),
                 align: 'end',
                 renderCell: () => <ActionsCell />,

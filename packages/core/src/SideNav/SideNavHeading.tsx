@@ -94,6 +94,10 @@ const styles = stylex.create({
     justifyContent: 'center',
     paddingInline: 0,
   },
+  // The plain collapsed heading keeps root's inline padding and only centres.
+  rootCollapsedCentered: {
+    justifyContent: 'center',
+  },
   interactive: {
     cursor: {
       default: 'pointer',
@@ -602,7 +606,7 @@ export function SideNavHeading({
           data-testid={testId}
           {...mergeProps(
             themeProps('side-nav-heading'),
-            stylex.props(styles.root, styles.rootCollapsed, xstyle),
+            stylex.props(styles.root, styles.rootCollapsedCentered, xstyle),
             className,
             style,
           )}

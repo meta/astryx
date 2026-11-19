@@ -33,24 +33,27 @@ import {
 
 // Node's compile cache keeps the compiled form of the CLI's modules between
 // runs, so a run skips most of their compiling. It lives in a folder of the
-// user's own in the system temp folder (node-compile-cache-<uid>). It is used
-// only once that folder exists, so a machine's first run just makes it and a
-// one-off run never pays to write the cache; and only while it is a real
-// folder the user owns that no one else can reach, since a shared folder
+// user's own in the system temp folder (node-compile-cache-<uid>). A machine's
+// first run makes that folder and writes the cache at once, so the next run
+// (most often the same session's next command) reads it. It is used only
+// while it is a real folder the user owns that no one else can reach, since a shared folder
 // could hold planted cache files (foundation/env/private-dir.mjs, the check
 // the kept search catalogs use too). Where the system has no user ids
 // (Windows), ownership cannot be checked, so the cache stays off.
-// NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
-// cannot read or write is skipped, and nothing about it is printed.
+// NODE_DISABLE_COMPILE_CACHE turns it off. A compile cache Node already uses
+// (NODE_COMPILE_CACHE) is left as it is, and no folder of the CLI's is made.
+// It is best effort: a cache Node cannot read or write is skipped, and
+// nothing about it is printed.
 try {
   const uid = currentUid();
-  if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
+  if (
+    !process.env.NODE_DISABLE_COMPILE_CACHE &&
+    uid != null &&
+    !nodeModule.getCompileCacheDir?.()
+  ) {
     const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
-    if (!existsSync(cacheDir)) {
-      mkdirSync(cacheDir, {mode: 0o700});
-    } else if (isPrivateDir(cacheDir)) {
-      nodeModule.enableCompileCache?.(cacheDir);
-    }
+    if (!existsSync(cacheDir)) mkdirSync(cacheDir, {mode: 0o700});
+    if (isPrivateDir(cacheDir)) nodeModule.enableCompileCache?.(cacheDir);
   }
 } catch {
   // A run without the cache is the same run, only slower.
