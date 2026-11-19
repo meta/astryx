@@ -351,7 +351,7 @@ export const docs = {
     },
     {
       name: 'placement',
-      type: 'LayerPlacement',
+      type: "'above' | 'below' | 'start' | 'end'",
       description:
         'Position of the popup relative to the trigger. Omit it to place the selected option over the trigger, kept inside the viewport; with hasSearch, the popup then opens below the trigger. Set it for explicit layer positioning, such as placement="above" for a toolbar fixed to the bottom.',
     },
