@@ -4877,9 +4877,10 @@ export function draftAnswer(ctx, env, question) {
     // a color for a thing a status role names, in the words its own dial
     // gives for it (success: done, valid, positive; danger: errors,
     // destructive), is that role's color. Any other thing is named as not
-    // taken.
+    // taken. The thing ends where the next color and its thing start
+    // ("green for success and red for errors"): each pair is its own.
     .replace(
-      /(?<![\w#-])((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+for\s+(?:the\s+|all\s+)?((?:[a-z]+\s+){0,2}[a-z]+)/gi,
+      /(?<![\w#-])((?:(?!(?:and|or)\b)[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+for\s+(?:the\s+|all\s+)?((?:(?!(?:and|or)\b|[a-z]+\s+for\b)[a-z]+\s+){0,2}(?!(?:and|or)\b|[a-z]+\s+for\b)[a-z]+)/gi,
       (m, color, thing, at, whole) => {
         if (!colorsIn(String(color).toLowerCase()).length) return m;
         // (A part said in or before the color, "make the delete button red
