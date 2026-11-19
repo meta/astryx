@@ -13,7 +13,10 @@
  */
 
 import * as path from 'node:path';
-import {findComponentReadme} from '../discovery/component-discovery.mjs';
+import {
+  documentedEntry,
+  findComponentReadme,
+} from '../discovery/component-discovery.mjs';
 import {loadComponentDoc} from '../discovery/component-loader.mjs';
 
 const CORE = '@astryxdesign/core';
@@ -61,19 +64,9 @@ async function takesChildren(coreDir, name) {
   if (!docPath) return null;
   try {
     const doc = await loadComponentDoc(path.resolve(docPath));
-    // A doc lists a component's props at its top, or in the entry its
-    // `components` gives the component (Stack's doc for VStack; Link's own).
-    const own = [
-      doc,
-      ...(Array.isArray(doc?.components) ? doc.components : []),
-    ].find(
-      (/** @type {any} */ e) =>
-        (e?.name === name || e?.name === `XDS${name}`) &&
-        Array.isArray(e.props) &&
-        e.props.length > 0,
-    );
-    if (!own) return null;
-    return own.props.some((/** @type {any} */ p) => p?.name === 'children');
+    const props = documentedEntry(doc, name)?.props;
+    if (!Array.isArray(props) || props.length === 0) return null;
+    return props.some((/** @type {any} */ p) => p?.name === 'children');
   } catch {
     return null;
   }

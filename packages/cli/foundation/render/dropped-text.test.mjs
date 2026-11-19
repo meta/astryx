@@ -39,7 +39,15 @@ describe('dropperOf', () => {
   });
 
   it('reads a component documented in its family doc', async () => {
+    expect(await takes(at('VStack'))).toBe(true);
+  });
+
+  it('reads a doc that keeps its own props in its components entry', async () => {
     expect(await takes(at('Link'))).toBe(true);
+    expect(await takes(at('Item'))).toBe(false);
+    expect(await dropperOf([at('Text'), at('Item')], takes)).toMatchObject({
+      name: 'Item',
+    });
   });
 
   it("cannot say when a component around the text is the page's own or another package's", async () => {

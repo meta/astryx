@@ -165,6 +165,56 @@ describe('render(): text a component did not draw', () => {
   });
 });
 
+describe('render(): text dropped in another file of the page', () => {
+  it('names that file, and not the page itself', async () => {
+    put(
+      'split/parts.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+
+export function Note() {
+  return (
+    <div>
+      <Text>Seen</Text>
+      <Badge>
+        <Text>Beta</Text>
+      </Badge>
+    </div>
+  );
+}
+`,
+    );
+    put(
+      'split/page.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+import {Note} from './parts';
+
+export default function Page() {
+  return (
+    <div>
+      <Text>Here</Text>
+      <Badge>
+        <Text>Alpha</Text>
+      </Badge>
+      <Note />
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('split/page.tsx', {cwd: dir}));
+    const messages = result.data.warnings
+      .filter((/** @type {any} */ w) => w.code === 'dropped-children')
+      .map((/** @type {any} */ w) => w.message)
+      .sort();
+    expect(messages).toEqual([
+      '<Badge> on line 8 of parts.tsx did not render the text "Beta" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+      '<Badge> on line 9 did not render the text "Alpha" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    ]);
+  }, 60_000);
+});
+
 describe('render(): page to one HTML file', () => {
   /** @type {import('./render.type.mjs').RenderPageResponse} */
   let result;
