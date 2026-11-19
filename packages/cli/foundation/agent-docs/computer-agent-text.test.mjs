@@ -92,6 +92,18 @@ const isLinkToFolder = at =>
   fs.lstatSync(at).isSymbolicLink() &&
   fs.realpathSync(at) === fs.realpathSync(FOLDER());
 
+describe('the computer text defers to a project\'s own Astryx text', () => {
+  it('says so right after its opening sentence, and names no command', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    const line =
+      "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.";
+    expect(text).toContain(
+      `Astryx, a design system and UI library, is available on this computer.\n${line}\n`,
+    );
+    expect(line).not.toMatch(/`astryx /u);
+  });
+});
+
 describe('renderComputerAgentText', () => {
   it('a skill named astryx with a one-sentence when-to-use description, in strict YAML', () => {
     {
