@@ -2422,6 +2422,15 @@ export function partLexicon(ctx) {
         real ? {on: real} : {on: key, missing: `${key} ${sub}`},
       ]);
     }
+    // A part's items said by what each one is ("pagination pages", "the
+    // pagination's page buttons", "pager cells"): its `-item` part.
+    if (keys.has(`${key}-item`))
+      subParts.push([
+        new RegExp(
+          `\\b${key}s?(?:'s)?\\s+(?:cells?|pages?|page (?:buttons?|numbers?))\\b`,
+        ),
+        {on: `${key}-item`},
+      ]);
   }
   // A part's own piece said after a name of the part ("the empty state
   // icon", "the popover arrow", "sheet titles", "the alert title", "the
@@ -15509,7 +15518,131 @@ export function draftAnswer(ctx, env, question) {
     },
   );
   addRunLooks(clauses, Object.keys(HUES));
+  /** Clauses a strip's answer writes, after the strip's own. @type {Set<Clause>} */
+  const absorbed = new Set();
+  /**
+   * "pagination pages in one bordered strip", "joined page buttons": a row
+   * of controls drawn as one strip. Read from the parts, not a list of
+   * components: the controls are the part whose ends Core reflects
+   * (`first` and `last` states), the row is the smallest part of the same
+   * component that holds them, and a cell beside them in the row is a part
+   * of that component there that takes a control's size (a pager's
+   * ellipsis). The row draws the border, corners (and a shadow when one is
+   * said) with no gap; each cell draws a separator after it, the end cells
+   * the row's corners just inside its border, and the last none.
+   * @param {Clause} c
+   * @returns {Draft | null}
+   */
+  const joinedStrip = c => {
+    if (
+      !/\b(?:(?:one|a single|single)\s+(?:[a-z]+\s+)?(?:strip|bar|block)|joined|connected)\b/.test(
+        noMode(c.text),
+      ) ||
+      c.neg
+    )
+      return null;
+    const targets = [...TARGET.values()];
+    for (const subject of c.parts) {
+      const component = TARGET.get(one(subject.on))?.component;
+      if (!component) continue;
+      const own = targets.filter(t => t.component === component);
+      const item = own.find(
+        t => t.states.includes('first') && t.states.includes('last'),
+      )?.key;
+      if (!item) continue;
+      const contains = (/** @type {string} */ k) =>
+        /** @type {string[]} */ (C.MAP[k]?.contains ?? []);
+      const row = own
+        .filter(t => t.key !== item && contains(t.key).includes(item))
+        .sort(
+          (a, b) => contains(a.key).length - contains(b.key).length,
+        )[0]?.key;
+      if (!row) continue;
+      // ("… strip with 3px corners and a soft shadow, #dddddd lines"): the
+      // clauses after it that say how the strip looks, naming no part
+      // outside this component (a part carried to them from the strip's
+      // subject included), are the strip's, written in its answer.
+      const after = [];
+      for (let i = clauses.indexOf(c) + 1; i < clauses.length; i++) {
+        const x = clauses[i];
+        if (
+          x.neg ||
+          x.parts.some(p => TARGET.get(one(p.on))?.component !== component) ||
+          !/^(?:with|and|,)?$/.test(String(x.joint ?? '').trim()) ||
+          !/\b(?:shadows?|lines?|borders?|separators?|dividers?|corners?|radius|rounded|edges?)\b/.test(
+            x.text,
+          )
+        )
+          break;
+        after.push(x);
+      }
+      const said = [c, ...after];
+      const words = said.map(x => noMode(x.text)).join(', ');
+      const cells = contains(row).filter(
+        k =>
+          k !== item &&
+          own.some(t => t.key === k) &&
+          (C.partReads(k, 'size') ?? []).some(r =>
+            /^--size-element-/.test(r.token),
+          ),
+      );
+      // Every line is the border token, so a line color said is that
+      // token on the row, reaching its cells, in the mode it is said for.
+      const lineColor = said.flatMap(x => x.colors)[0];
+      const line = '1px solid var(--color-border)';
+      // A length said with corners is the strip's radius; the end cells'
+      // corners sit just inside its border.
+      const cornerLength = said.find(x =>
+        /\b(?:corners?|radius|rounded)\b/.test(x.text),
+      )?.lengths[0];
+      const outer = cornerLength ?? 'var(--radius-element)';
+      const px = /^(\d*\.?\d+)px$/.exec(String(outer));
+      const inner = px
+        ? `${Math.max(0, Number(px[1]) - 1)}px`
+        : `calc(${outer} - 1px)`;
+      const mode = modeOf(c);
+      const steps = [
+        ...(lineColor
+          ? [set('--color-border', lineColor, {on: row, ...mode})]
+          : []),
+        set('gap', '0', {on: row}),
+        set('border', line, {on: row}),
+        set('border-radius', outer, {on: row}),
+        ...(/\bshadows?\b/.test(words)
+          ? [set('box-shadow', 'var(--shadow-low)', {on: row})]
+          : []),
+        set('border-radius', '0', {on: item}),
+        set('border', '0', {on: item}),
+        set('border-inline-end', line, {on: item}),
+        set('border-start-start-radius', inner, {on: item, state: 'first'}),
+        set('border-end-start-radius', inner, {on: item, state: 'first'}),
+        set('border-start-end-radius', inner, {on: item, state: 'last'}),
+        set('border-end-end-radius', inner, {on: item, state: 'last'}),
+        set('border-inline-end', '0', {on: item, state: 'last'}),
+        ...cells.map(k => set('border-inline-end', line, {on: k})),
+      ];
+      // (A strip is its border, its corners and no gap, and its shadow when
+      // one is said: those are what the ask changes.)
+      const drawn = ['border', 'corners', 'spacing'];
+      if (/\bshadows?\b/.test(words)) drawn.push('shadow');
+      for (const x of after) absorbed.add(x);
+      for (const k of [row, item, ...cells]) seenPart(k);
+      for (const a of drawn) seenAspect(a);
+      return {
+        intent: {
+          ...intentOf(c, []),
+          typed: said.flatMap(x => [...x.colors, ...x.lengths]),
+          families: [...new Set(drawn.flatMap(a => ASPECT_FAMILIES[a]))],
+        },
+        text: `${component} as one strip: ${row} draws the border and corners with no gap between its controls; each ${item} draws a separator after it${cells.length ? ` (and ${cells.join(', ')}, a cell of the row too)` : ''}, and the first and last take the row's corners, the last with no separator${after.length ? ` (with ${after.map(x => `"${x.text.trim()}"`).join(', ')})` : ''}`,
+        options: [steps],
+        sequence: true,
+      };
+    }
+    return null;
+  };
   for (const c of clauses) {
+    if (absorbed.has(c)) continue;
     clauseNow = c;
     settleSubject();
     {
@@ -15544,6 +15677,13 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} ${c.unbound}`,
       });
       continue;
+    }
+    {
+      const strip = joinedStrip(c);
+      if (strip) {
+        push(strip);
+        continue;
+      }
     }
     // An element its place has no part of its own for: nothing is written,
     // and the answer says why.

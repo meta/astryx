@@ -162,6 +162,10 @@ export const doc = {
       cli: 'astryx experimental theme editor how "rounder cards without shadows"',
     },
     {
+      label: 'Asks how understands: a row of controls in one strip',
+      cli: 'astryx experimental theme editor how "pagination pages in one bordered strip with 3px corners"',
+    },
+    {
       label: 'Asks how understands: value questions',
       cli: 'astryx experimental theme editor how "what is the padding of buttons"',
     },
@@ -175,7 +179,7 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: 'The examples labeled "Asks how understands" list the kinds of ask a question in plain words can be, each with examples it answers with commands: a dial for the whole theme, a part\'s property by an amount or a value, a direction (lighter, darker, bigger, smaller, with or without a reference), a comparison with another part, one variant made to look like another (ghost buttons look like the default button), everything except some parts or keeping a part, a prohibition (never …), one mode (in dark mode), a removal (no shadow, remove …, or a part\'s own piece such as a code block\'s copy button or an alert\'s icon, which is then not drawn), several changes in one ask, and a question about a value. An ask of another kind may still be answered; one it cannot answer says so and points here.',
+      text: "The examples labeled \"Asks how understands\" list the kinds of ask a question in plain words can be, each with examples it answers with commands: a dial for the whole theme, a part's property by an amount or a value, a direction (lighter, darker, bigger, smaller, with or without a reference), a comparison with another part, one variant made to look like another (ghost buttons look like the default button), everything except some parts or keeping a part, a prohibition (never …), one mode (in dark mode), a removal (no shadow, remove …, or a part's own piece such as a code block's copy button or an alert's icon, which is then not drawn), several changes in one ask, a row of controls drawn as one joined strip, and a question about a value. An ask of another kind may still be answered; one it cannot answer says so and points here.",
     },
     {
       type: 'prose',
