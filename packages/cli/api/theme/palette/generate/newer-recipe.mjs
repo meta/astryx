@@ -40,19 +40,20 @@ export function newerRecipe(recipe) {
  * The refusal for a config a newer CLI made, keeping the code of every
  * palette generation refusal. The step it names fits where the CLI runs (see
  * `cliUpdateStep`): in a project, its CLI and Core together, then the codemod
- * run. That command stays bare (`astryx …`), in the text and as its own
- * suggestion, so the CLI names its own command for a person and a JSON reader
- * gets the bare command.
+ * run. That command is its own bare suggestion (`astryx …`) and never part of
+ * the message, so the CLI prints it with its own command name for a person
+ * and a JSON reader gets it bare.
  * @param {{recipe: string, file: string, cwd?: string}} options
  * @returns {AstryxError}
  */
 export function newerRecipeRefusal({recipe, file, cwd = process.cwd()}) {
   const step = cliUpdateStep({cwd});
-  const where = step.folder ? ` in ${step.folder}` : '';
+  // A command that starts `astryx` is a suggestion only: the CLI prints it
+  // with the command name its picker chooses, and a message never could.
   const then = step.runs
     ? `Run the command again with the newest CLI: ${step.install}`
     : step.upgrade
-      ? `Update the CLI: ${step.install}, then run ${step.upgrade}${where}; then run the command again`
+      ? `Update the CLI and bring the project's code to it with the commands below, in order${step.folder ? `, in ${step.folder}` : ''}; then run the command again`
       : `Update the CLI, then run the command again: ${step.install}`;
   return new AstryxError(
     `${file} was made with a newer Astryx CLI: its colors use the ${recipe} recipe, and this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. ${then}. Nothing was changed.`,
