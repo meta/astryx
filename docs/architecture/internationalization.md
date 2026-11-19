@@ -227,30 +227,29 @@ for all 30 shipped locales plus `pseudo`.
   takes a translator: translation comes only from a provider. The rule covers
   INV22 factories. Per-message options are the factory mechanism; the
   external-runtime adapter (INV14) stays a separate, broader decision.
-- **INV3b — A component takes a prop for each string callers reword.** Some
-  Astryx-owned strings are words a product changes to suit its context: an
-  empty-search message, a confirm, cancel, or dismiss action, a field
-  placeholder, a select-all option. A component takes a flat optional prop for
-  each such string, named for the string with the suffix Core already uses
-  (`cancelLabel`, `dismissLabel`, `closeButtonLabel`, `emptySearchText`,
-  `placeholder`). It resolves the string as the prop, else the catalog message:
-  an absent prop gives the catalog message, translated under a provider and
-  English without one; a given prop replaces it in every locale. A string that
-  belongs to one entry of a config list, such as a chat trigger's
-  `emptySearchText` or `menuLabel`, takes that entry's own field in place of a
-  component prop, resolved the same way. A component takes no `labels` object,
-  which is the factory shape (INV3a). A string callers
-  do not reword, such as a navigation word, a count, or an assistive status,
-  stays catalog-only. The prop rewords a catalog message the component owns
-  and renders in its own anatomy; it does not pass a caller's value through to
-  a child the caller composes, which `architecture:public-component-api` INV18
-  governs. The provider's `overrides` change Astryx wording for a whole
-  subtree. They are an escape hatch for an application that rewords Astryx
-  everywhere, not the way to reword one component: a component record,
-  document, or example that tells callers to reword its strings through
-  `overrides`, or to wrap one component in a provider to do so, does not
-  conform. A component whose callers need to reword a string gets a prop for
-  it.
+- **INV3b — A component takes a prop for each string callers reword.** When
+  callers need to reword an Astryx-owned string a component renders, such as
+  an empty-search message or a confirm, cancel, or dismiss action, the
+  component takes a flat optional prop for that string, named with the suffix
+  Core already uses (`cancelLabel`, `dismissLabel`, `closeButtonLabel`,
+  `emptySearchText`, `placeholder`). The component's record decides which of
+  its strings callers reword; a string it does not name, such as a navigation
+  word, a count, or an assistive status, stays catalog-only. The component
+  resolves the string as the prop, else the catalog message: an absent prop
+  gives the catalog message, translated under a provider and English without
+  one; a given prop replaces it in every locale. A string that belongs to one
+  entry of a config list, such as a chat trigger's `emptySearchText` or
+  `menuLabel`, takes that entry's own field in place of a component prop,
+  resolved the same way. A component takes no `labels` object, which is the
+  factory shape (INV3a). The prop rewords a catalog message for a part the
+  component renders in its own anatomy; it does not pass a caller's value
+  through to a child the caller composes, which
+  `architecture:public-component-api` INV18 governs. The provider's
+  `overrides` change Astryx wording for a whole subtree. They are an escape
+  hatch for an application that rewords Astryx everywhere, not the way to
+  reword one component: a component record, document, or example that tells
+  callers to reword its strings through `overrides`, or to wrap one component
+  in a provider to do so, does not conform.
   INV3b gap: the Chat trigger menu's `emptySearchText` falls back to fixed
   English, not a catalog message.
 - **INV4 — Runtime locale changes are live.** Re-rendering the provider with a new
@@ -478,8 +477,8 @@ formatter, and DOM-direction boundaries.
 **Decider:** `nynexman4464`, `2026-11-18`
 
 A component takes a flat prop for each string callers reword, and its default
-comes from the catalog. A component with many such strings takes many props;
-the owner weighed that cost and kept the props: an empty-search message is
+comes from the catalog. A component with many such strings takes many props,
+and that cost is accepted: an empty-search message is
 "exactly the kind of thing that gets customized a lot. Like you'd say 'no
 results' generically, but for searching posts you might say 'no posts found'",
 and "These are the kinds of things that are hard to predict, so we should have
@@ -497,7 +496,7 @@ instances of one component differently, and it asks the caller to supply a
 translation per locale for a one-off change.
 
 Rejected: rewording one component through provider `overrides`; a `labels`
-object on a component (INV3a); a `resolveLabel` helper in place of `??`.
+object on a component (INV3a).
 
 ## Verification
 
@@ -512,7 +511,7 @@ callers remain conformance work and do not relax INV1a, INV8, INV9, or INV10.
 | INV2, INV13, INV14 | export drift checks, public i18n tests, compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A parallel/replacement runtime lands without migration, or client hooks claim server behavior                                                                                                                                                                                                                                                                                 |
 | INV3–INV5          | resolver and provider rerender tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | no-provider output depends on the host, locale swaps stay stale, fallback order changes, or malformed-locale behavior is described as graceful                                                                                                                                                                                                                                |
 | INV3a              | factory unit tests: a flat option or `labels` key replaces its message, including under a provider, and outside a provider its absence announces or shows shipped English; wrapper tests: under a non-English provider its absence gives the translation. Evidence gap: no factory test covers a `labels` key, or a flat option under a provider, yet                                                                                                                                                                           | a factory announces or shows Astryx text that no option or `labels` key can replace, groups more than one string outside one `labels` object, takes a translator, ignores a given string, or gives something other than the catalog message when it is absent                                                                                                                 |
-| INV3b              | component tests: a given prop replaces its catalog message, and its absence gives the catalog message, translated under a non-English provider; public-API review of each new Astryx-owned string a caller rewords, and of component docs and examples                                                                                                                                                                                                                                                                          | A string callers reword that is offered only through provider `overrides`, a `labels` object on a component, a given prop that does not replace the message, or an absent prop that shows anything but the catalog message                                                                                                                                                    |
+| INV3b              | component tests: a given prop replaces its catalog message, and its absence gives the catalog message, translated under a non-English provider; public-API review of each new Astryx-owned string a caller rewords, and of component docs and examples. Evidence gap: a provider-backed test of the absent prop covers only Selector, MultiSelector and Banner; Popover `closeButtonLabel`, AlertDialog `cancelLabel`, CommandPalette `emptySearchText` and the chat trigger fields have none                                   | A string callers reword that is offered only through provider `overrides`, a `labels` object on a component, a given prop that does not replace the message, or an absent prop that shows anything but the catalog message                                                                                                                                                    |
 | INV6               | `check:i18n-catalog`, key-format lint, and focused mutation tests                                                                                                                                                                                                                                                                                                                                                                                                                                                               | stale/malformed keys, malformed ICU, or source/translation runtime-contract drift passes CI                                                                                                                                                                                                                                                                                   |
 | INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests; per-module English resolution-parity test (every key each Core module names, in every shipped locale’s fallback path, its own map versus the whole catalog); import-cost check (component bundles carry only the English they name; public paths keep the whole catalog)                                                                                                                                            | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape, a key a module names resolves differently from the whole catalog, a component bundle carries the whole catalog, or a public path stops resolving a shipped key |
 | INV16              | build-plugin unit and real-build tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                                                                                                                                                                                |

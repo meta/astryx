@@ -22,8 +22,8 @@ const currencies = [
 export default function InternationalizationProviderOverrides() {
   const [region, setRegion] = useState<string | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
-  // The provider sits at the app root, so the override rewords every Selector
-  // below it. One Selector rewords its own text through its prop.
+  // In an app, render one provider at the root. Its overrides then apply to
+  // every Selector below it.
   return (
     <InternationalizationProvider
       locale="en"
@@ -34,7 +34,7 @@ export default function InternationalizationProviderOverrides() {
       }}>
       <VStack gap={4}>
         <Selector
-          controlStyle={{width: 300}}
+          width={300}
           label="Billing region"
           options={regions}
           value={region}
@@ -42,7 +42,7 @@ export default function InternationalizationProviderOverrides() {
           hasClear
         />
         <Selector
-          controlStyle={{width: 300}}
+          width={300}
           label="Currency"
           placeholder="Pick a currency"
           options={currencies}

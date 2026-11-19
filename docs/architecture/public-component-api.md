@@ -219,7 +219,10 @@ guidance owns the process used to propose and test APIs.
   to compose or render a slot not described in the anatomy; and slots must have
   components. Config objects are fine: plain data that describes actions or options (for example the `{label, icon, onActivate}` entries passed to `createSwipe`) is not a slot. 'Slots must have components' applies to rendered content slots, places that accept arbitrary nodes; such a slot must be a part named in the component's anatomy, and the caller fills it with a component. This extends INV3's rule that a parent does not duplicate a
   composed child's state; a slot's styling follows INV15 and
-  `architecture:component-theming-surface`. See
+  `architecture:component-theming-surface`. A prop that rewords a catalog
+  message for a part the component renders in its own anatomy, such as
+  Popover's `closeButtonLabel`, follows `architecture:internationalization`
+  INV3b, not this invariant. See
   [Slots and composition](../contributing/api-conventions.md#slots-and-composition).
 - **INV19 — Resource cost is weighed against the feature.** Balance resource load against feature
   functionality and cross-platform concerns. If a feature has a large resource
