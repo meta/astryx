@@ -736,3 +736,71 @@ describe('CircularProgress', () => {
     });
   });
 });
+
+describe('CircularProgress neutral and disabled colors', () => {
+  // The disabled text role sits close to the track's own color, so a neutral
+  // or disabled ring fills with the secondary text role on the muted
+  // background, which reaches 3:1 in every bundled theme and mode.
+  it.each([[{variant: 'neutral'} as const], [{isDisabled: true} as const]])(
+    'draws %o in secondary text on the muted background',
+    props => {
+      const {container} = render(
+        <CircularProgress value={60} label="Progress" {...props} />,
+      );
+      const strokes = Array.from(container.querySelectorAll('*')).map(
+        element => getComputedStyle(element).stroke,
+      );
+      const uses = (token: string) =>
+        strokes.some(stroke => stroke.includes(token));
+      expect(uses('--color-background-muted')).toBe(true);
+      expect(uses('--color-text-secondary')).toBe(true);
+      expect(uses('--color-track')).toBe(false);
+      expect(uses('--color-text-disabled')).toBe(false);
+    },
+  );
+});
+
+describe('CircularProgress disabled treatment', () => {
+  // A disabled ring is exempt from the contrast floor but must read as
+  // quieter than a live neutral ring, so it dims as a whole.
+  function ringOf(container: HTMLElement): HTMLElement {
+    return container.querySelector('[role="progressbar"]')
+      ?.parentElement as HTMLElement;
+  }
+
+  it('dims a disabled ring and leaves a neutral one at full opacity', () => {
+    const {container: off} = render(
+      <CircularProgress value={60} label="Off" isDisabled />,
+    );
+    const {container: live} = render(
+      <CircularProgress value={60} label="Live" variant="neutral" />,
+    );
+    expect(getComputedStyle(ringOf(off)).opacity).toBe('0.5');
+    expect(getComputedStyle(ringOf(live)).opacity).not.toBe('0.5');
+  });
+});
+
+describe('CircularProgress track', () => {
+  // A theme's status muted roles can be opaque tints of the status color, so
+  // every variant draws on the one muted track, as ProgressBar does.
+  it.each(['accent', 'success', 'warning', 'error'] as const)(
+    'draws a %s ring on the muted track',
+    variant => {
+      const {container} = render(
+        <CircularProgress value={60} label="Progress" variant={variant} />,
+      );
+      const strokes = Array.from(container.querySelectorAll('*')).map(
+        element => getComputedStyle(element).stroke,
+      );
+      expect(
+        strokes.some(stroke => stroke.includes('--color-background-muted')),
+      ).toBe(true);
+      expect(
+        strokes.some(
+          stroke =>
+            stroke.includes(`-muted)`) && !stroke.includes('background-muted'),
+        ),
+      ).toBe(false);
+    },
+  );
+});

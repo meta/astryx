@@ -480,7 +480,7 @@ export const DIALS = wordTable({
           : []),
         `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ]).join(', ') +
-      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round), and gives the chat radius (--radius-chat: a composer, its drawer, message bubbles) back to the container radius, so it follows it. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',

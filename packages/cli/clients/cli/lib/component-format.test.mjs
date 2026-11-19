@@ -154,6 +154,45 @@ describe('formatFull sub-component rendering', () => {
   });
 });
 
+describe('a read scoped to one family member', () => {
+  const docs = {
+    name: 'VStack',
+    description: 'Family description.',
+    props: [{name: 'gap', type: 'number', description: 'Space between items.'}],
+    components: [
+      {
+        name: 'VStack',
+        description: 'Vertical stack.',
+        props: [
+          {name: 'gap', type: 'number', description: 'Space between items.'},
+        ],
+      },
+    ],
+  };
+
+  it('prints its props once in full output', () => {
+    const out = formatFull(docs);
+    expect(out.match(/^- `gap`: /gm)).toHaveLength(1);
+    expect(out).toContain('### VStack\n\nVertical stack.');
+    expect(out).not.toContain('for props and usage');
+  });
+
+  it('still prints the props of other members', () => {
+    const out = formatFull({
+      ...docs,
+      components: [
+        ...docs.components,
+        {
+          name: 'StackItem',
+          description: 'One item.',
+          props: [{name: 'size', type: 'string', description: 'Item size.'}],
+        },
+      ],
+    });
+    expect(out).toContain('### StackItem\n\nOne item.\n\n- `size`:');
+  });
+});
+
 describe('formatFull theming override keys', () => {
   // Regression guard: the `defineTheme` component-override key is the stable
   // class name with the `astryx-` prefix stripped — `generateThemeRules`
