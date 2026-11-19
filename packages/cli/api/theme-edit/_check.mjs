@@ -5166,13 +5166,19 @@ function checkOne(
       const variant = Object.entries(record?.attrs ?? {}).find(
         ([, vals]) => Array.isArray(vals) && vals.includes(rest),
       )?.[0];
-      if (holder && (STATE_WORDS.includes(rest) || TARGET.get(holder)?.states?.includes(rest)))
+      if (
+        holder &&
+        (STATE_WORDS.includes(rest) ||
+          TARGET.get(holder)?.states?.includes(rest))
+      )
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
           `"${s.on}" is not a part name; it is ${holder} when ${rest}, set on ${holder} --state ${rest}.`,
           {
             didYouMean: [holder],
-            run: [setLine(slug, thing, v, {...s, on: holder, state: rest}, unset)],
+            run: [
+              setLine(slug, thing, v, {...s, on: holder, state: rest}, unset),
+            ],
           },
         );
       if (holder && variant)
@@ -5181,7 +5187,15 @@ function checkOne(
           `"${s.on}" is not a part name; it is ${holder} with ${variant} ${rest}, set on ${holder} --when ${variant}:${rest}.`,
           {
             didYouMean: [holder],
-            run: [setLine(slug, thing, v, {...s, on: holder, when: `${variant}:${rest}`}, unset)],
+            run: [
+              setLine(
+                slug,
+                thing,
+                v,
+                {...s, on: holder, when: `${variant}:${rest}`},
+                unset,
+              ),
+            ],
           },
         );
       const held = record?.contains ?? [];
@@ -7827,7 +7841,9 @@ function checkOne(
     const textParts = COLOR_PROP_PARTS;
     // A text, heading or link color is written as the text color tokens
     // its color prop reads, on that part alone (compileTheme), so it shows.
-    const propTokens = partsOf(ctx, s).map(t => colorPropTokens(ctx, t, s.when));
+    const propTokens = partsOf(ctx, s).map(t =>
+      colorPropTokens(ctx, t, s.when),
+    );
     // (A value that is no color is refused below, with the nearest color.)
     const propColor =
       prop === 'color' &&
