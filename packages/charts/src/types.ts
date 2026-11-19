@@ -73,6 +73,13 @@ export interface SeriesContext {
   width: number;
   /** Height of the plot area */
   height: number;
+  /**
+   * Per-chart token for SVG `url(#…)` ids a mark defines (e.g. an area fill
+   * gradient). Unique per <Chart> instance and already sanitized, so two
+   * charts over the same key never share a def. Set by the chart root;
+   * absent when a mark renders outside one.
+   */
+  chartId?: string;
 }
 
 /**

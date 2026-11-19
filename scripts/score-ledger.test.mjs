@@ -381,6 +381,7 @@ describe('the canonical component predicate', () => {
       byPackage.set(item.package, names);
     }
     expect(byPackage.get('charts')).toEqual([
+      'AreaChart',
       'Chart',
       'ChartAxis',
       'ChartGrid',
