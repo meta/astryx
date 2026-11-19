@@ -521,7 +521,7 @@ export interface DeriveStatusInput {
   /** Page, surface, card (opaque hex). */
   grounds: (m: Mode) => string[];
   /** The text the theme draws on a role's fill in a mode, preferred first (white or near-black). */
-  inks: (m: Mode, role: string) => Array<Stop & {family: string}>;
+  inks: (m: Mode, role: string) => (Stop & {family: string})[];
   /** The accent fill in a mode, kept apart from. */
   accent: (m: Mode) => string | null;
   wanted?: (token: string) => boolean;
@@ -564,7 +564,7 @@ export function deriveStatusColors({
     const w = STATUS_ROLES[id];
     const fam = palette[id];
     if (!w || !fam) continue;
-    const at = (m: Mode, stop: number) => ({stop, color: String(fam[m][stop])});
+    const at = (m: Mode, stop: number) => ({stop, color: fam[m][stop]});
     const fails: string[] = [];
     /**
      * The stop nearest `start` that reads at `needs` on every color in `bg`.
