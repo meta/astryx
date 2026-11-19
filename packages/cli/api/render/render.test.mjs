@@ -79,9 +79,10 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
-  // Every render starts a new page process, which compiles the same modules
-  // again. One compile cache for this file lets each later process reuse that
-  // work. A forked process takes this environment.
+  // Each render starts a new page process. render() stops it as soon as it
+  // answers, so each process saves only part of its compiled code. One cache
+  // for this file keeps those parts for later processes. A forked process
+  // takes this environment.
   previousCompileCache = process.env.NODE_COMPILE_CACHE;
   compileCache = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-compile-'));
   process.env.NODE_COMPILE_CACHE = compileCache;
@@ -94,10 +95,13 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(() => {
-  removeLinkedFixture(dir);
-  if (previousCompileCache === undefined) delete process.env.NODE_COMPILE_CACHE;
-  else process.env.NODE_COMPILE_CACHE = previousCompileCache;
-  fs.rmSync(compileCache, {recursive: true, force: true});
+  try {
+    removeLinkedFixture(dir);
+  } finally {
+    if (previousCompileCache === undefined) delete process.env.NODE_COMPILE_CACHE;
+    else process.env.NODE_COMPILE_CACHE = previousCompileCache;
+    fs.rmSync(compileCache, {recursive: true, force: true});
+  }
 });
 
 describe('render(): page to one HTML file', () => {
