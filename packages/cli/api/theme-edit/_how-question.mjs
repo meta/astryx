@@ -1019,11 +1019,15 @@ function ownWords(k) {
 
 /**
  * What may follow a side joined by "and" in a corner ask ("on top and
- * bottom", "… and bottom of cards", "… and right corners"): the end of the
- * phrase or a corner word. A part name that starts with a side word ("top
- * nav", "bottom sheet") is never that side.
+ * bottom", "… and bottom of cards", "… and right corners", "… and bottom
+ * too", "… and bottom in dark mode", "… and bottom 4px"): the end of the
+ * phrase, a corner word, a scope word or a length, also after "side",
+ * "edge" or "one". A part name that starts with a side word ("top nav") is
+ * never that side, and a new look after "side" ("and right side padding
+ * 12px") is its own ask.
  */
-const JOINED_SIDE_ENDS = String.raw`(?=\s*(?:$|[;.,!?]|\b(?:corners?|sides?|edges?|ones?|of|on|for)\b))`;
+const SIDE_TAIL = String.raw`(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d)`;
+const JOINED_SIDE_ENDS = String.raw`(?=\s*(?:${SIDE_TAIL}|\b(?:sides?|edges?|ones?)\b\s*${SIDE_TAIL}))`;
 
 /**
  * The corners of a box a clause names, as the logical longhands' keys
@@ -3651,7 +3655,7 @@ function clausesOf(q, partWords, words = null) {
         // A font stack ("Georgia, serif") is one value, not two asks.
         // Two sides of a corner ask joined by "and" ("rounded on top and
         // bottom") are one ask, as a corner except is.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:$|[;.,!?]|\b(?:corners?|sides?|edges?|ones?|of|on|for)\b)))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d)|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
@@ -21705,18 +21709,24 @@ export function draftAnswer(ctx, env, question) {
           const named = on ? cornersNamed(c.text, on) : null;
           // (A corner ask said in the negative, "no rounding on the bottom
           // corners", squares those corners: never rounder.)
+          // (Square said as a word, in the negative, or as taking the
+          // rounding away: "take the rounding off", "remove the rounding",
+          // "unrounded".)
           const square =
-            /\b(square[ds]?|sharp|squared off)\b/.test(c.text) ||
-            Boolean(c.neg);
-          // (A bare 0 for a corner, "the top-left corner 0", is square.)
-          const sidePx =
-            square ||
-            /\b(?:corners?|radius|radii)\s+(?:of\s+|to\s+|at\s+)?0(?:px)?(?![\d.])|(?<![\d.])0(?:px)?\s+(?:corners?|radius)\b/.test(
+            /\b(square[ds]?|sharp|squared off|unround\w*)\b/.test(c.text) ||
+            /\b(?:take|takes|taking|took)\s+(?:the\s+)?round\w*\s+off\b|\bround\w*\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?round\w*/.test(
               c.text,
-            )
+            ) ||
+            Boolean(c.neg);
+          // (A bare 0 is square: "the top-left corner 0", "the top corners
+          // of tabs to 0". A pill is the pill token's round ends.)
+          const sidePx =
+            square || /(?<![\w.-])0(?:px|rem|em)?(?![\w.%-])/.test(c.text)
               ? '0'
-              : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ??
-                null);
+              : /\bpill(?:s|[- ]shaped)?\b/.test(c.text)
+                ? 'var(--radius-full)'
+                : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ??
+                  null);
           const sideWords = (/** @type {string[]} */ ks) => {
             const NAME = /** @type {Record<string, string>} */ ({
               'start-start': 'top-left',
