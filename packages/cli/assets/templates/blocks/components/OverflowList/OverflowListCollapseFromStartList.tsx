@@ -25,7 +25,7 @@ export default function OverflowListCollapseFromStartList() {
               size="sm"
               onClick={() =>
                 showToast({
-                  body: `Demo: the ${overflowItems.length} hidden steps would show here`,
+                  body: `Demo: the ${overflowItems.length} hidden ${overflowItems.length === 1 ? 'step' : 'steps'} would show here`,
                 })
               }
             />

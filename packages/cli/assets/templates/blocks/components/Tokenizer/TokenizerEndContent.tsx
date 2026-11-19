@@ -48,7 +48,7 @@ export default function TokenizerEndContent() {
               size="sm"
               onClick={() =>
                 showToast({
-                  body: `Demo: ${value.length} team members would be applied here`,
+                  body: `Demo: ${value.length} ${value.length === 1 ? 'team member' : 'team members'} would be applied here`,
                 })
               }
             />

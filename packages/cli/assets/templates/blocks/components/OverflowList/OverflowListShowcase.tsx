@@ -53,7 +53,7 @@ export default function OverflowListShowcase() {
             size="sm"
             onClick={() =>
               showToast({
-                body: `Demo: the ${overflowItems.length} hidden actions would show here`,
+                body: `Demo: the ${overflowItems.length} hidden ${overflowItems.length === 1 ? 'action' : 'actions'} would show here`,
               })
             }
           />

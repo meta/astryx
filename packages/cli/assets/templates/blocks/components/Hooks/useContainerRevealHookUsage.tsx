@@ -12,14 +12,9 @@ import {Item} from '@astryxdesign/core/Item';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {useToast} from '@astryxdesign/core/Toast';
-import {mergeProps} from '@astryxdesign/core/utils';
 import {PencilIcon, TrashIcon} from '@heroicons/react/24/outline';
 
 const styles = stylex.create({
-  actions: {
-    display: 'flex',
-    gap: 4,
-  },
   intro: {
     paddingInline: 12,
     paddingBottom: 8,
@@ -44,11 +39,7 @@ function FileRow({
       label={name}
       description="Edited 2 hours ago"
       endContent={
-        <span
-          {...mergeProps(
-            getContentRevealProps(),
-            stylex.props(styles.actions),
-          )}>
+        <Stack direction="horizontal" gap={1} {...getContentRevealProps()}>
           <Button
             label={`Edit ${name}`}
             variant="ghost"
@@ -65,7 +56,7 @@ function FileRow({
             icon={<Icon icon={TrashIcon} size="sm" />}
             onClick={() => onDelete(name)}
           />
-        </span>
+        </Stack>
       }
       {...getContainerProps()}
     />
