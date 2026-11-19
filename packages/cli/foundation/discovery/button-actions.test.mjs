@@ -118,6 +118,12 @@ describe('a button with no action', () => {
     expect(onPage(body)).toEqual(expected);
   });
 
+  it("an icon inside the button is content, as Core's components are", () => {
+    expect(onPage('<Button label="Edit" icon={<PencilIcon />} />', "import {PencilIcon} from 'lucide-react';")).toEqual([
+      'page.tsx:6 Edit',
+    ]);
+  });
+
   it('a # link opens the first page in an app that routes by the hash', () => {
     const scan = scanButtonActions(page('<Button label="Home" href="#" />\n<Button label="Docs" href="" />'), {
       isOwnCode: () => false,
@@ -181,10 +187,16 @@ describe('what is around the button', () => {
     ['an element with a click handler', '<div onClick={open}><Button label="Open" /></div>'],
     ['an element with a widget role', '<div role="button"><Button label="Open" /></div>'],
     ['a component of the app named like a provider', '<AppProvider><Button label="Open" /></AppProvider>'],
+    ["a Provider read off a namespace import of the app's own module", '<UI.Provider><Button label="Open" /></UI.Provider>', "import * as UI from './ui';"],
+    ["a Provider read off a default import of the app's own module", '<UI.Provider><Button label="Open" /></UI.Provider>', "import UI from './ui';"],
     ['a disabled ButtonGroup', "<ButtonGroup isDisabled><Button label=\"Copy\" /></ButtonGroup>", "import {ButtonGroup} from '@astryxdesign/core/ButtonGroup';"],
     ['a disabled InputGroup', "<InputGroup isDisabled><Button label=\"Go\" /></InputGroup>", "import {InputGroup} from '@astryxdesign/core/InputGroup';"],
     ['a disabled fieldset', '<fieldset disabled><Button label="Send" /></fieldset>'],
     ['inert content', '<div inert><Button label="Open" /></div>'],
+    ['a custom element', '<clipboard-copy value="x"><Button label="Copy" /></clipboard-copy>'],
+    ['a built-in element a script extends', '<div is="copy-target"><Button label="Copy" /></div>'],
+    ['a custom element inside the button', '<Button label="Copy"><clipboard-copy value="x" /></Button>'],
+    ['a package link inside the button', '<Button label="Pricing"><Link to="/pricing">Pricing</Link></Button>', "import {Link} from 'react-router-dom';"],
     ['an element with a role the scan cannot read', '<div role={kind}><Button label="Open" /></div>'],
     ['an element with spread props', '<div {...rest}><Button label="Open" /></div>'],
     ['a Card that acts', '<Card onClick={select}><Button label="View" /></Card>'],

@@ -50,7 +50,10 @@ import {builtinModules, createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {
   buttonsWithoutAction,
+  loadFolder,
+  routesByHash,
   scanButtonActions,
+  specifierStem,
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
@@ -91,6 +94,8 @@ import {
   CLI_ROOT,
   findProjectCoreDir,
   findInstalledPackage,
+  findPackageRoot,
+  isInside,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {
@@ -217,6 +222,9 @@ export const SOURCE_EXTENSIONS = new Set([
   '.cts',
 ]);
 
+/** The folders the source walk skips as a build's output, at a package's root. */
+const ROOT_OUTPUT_DIRS = new Set(['build', 'coverage', 'dist']);
+
 const SKIP_DIRS = new Set([
   '.git',
   '.next',
@@ -241,6 +249,21 @@ export function readTextFileIfExists(file) {
   }
 }
 
+/** A module path of only `.` and `..`, with an optional `index`: `'..'`, `'./index'`. */
+const FOLDER_PATH = /['"`](?:\.{1,2}\/)*\.{1,2}(?:\/(?:index(?:\.[cm]?[jt]sx?)?)?)?['"`]/;
+
+/** A page in a format that renders components but is not a script: MDX or Astro. */
+const MARKUP_PAGE = /\.(?:mdx|astro)$/u;
+
+/**
+ * A load in a module's text: `import(…)`, `require(…)`, `require.context(…)`
+ * or `import.meta.glob(…)`, with the start of its path when the path is
+ * written in quotes (the quote, then the text before any `${` or glob
+ * character).
+ */
+const TEXT_LOAD =
+  /(?:\bimport\s*\(|\brequire(?:\.context)?\s*\(|\bimport\.meta\.glob(?:Eager)?\s*\(\s*\[?)\s*(?:(['"`])([^'"`$*?{[]*))?/g;
+
 /** As many source files as doctor lists in a project. */
 const SOURCE_FILE_LIMIT = 5000;
 
@@ -249,8 +272,12 @@ const SOURCE_FILE_LIMIT = 5000;
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
- * @param {{stylesheets?: boolean, pages?: boolean}} [options] - also list
- *   `.css` files, and `.html` pages
+ * @param {{stylesheets?: boolean, pages?: boolean, markup?: boolean, outputAtRootsOnly?: boolean, skippedLinks?: string[]}} [options] - also list
+ *   `.css` files, `.html` pages, and `.mdx` and `.astro` pages; with
+ *   `outputAtRootsOnly`, skip a `build`, `dist` or `coverage` folder only in
+ *   a folder with a package.json, where a build writes its output, and read
+ *   one anywhere else (an app route named `build`); `skippedLinks` collects
+ *   each linked folder or source file the walk does not follow
  */
 export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
@@ -266,10 +293,26 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
       continue;
     }
     for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue;
       const file = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        if (options.skippedLinks && !SKIP_DIRS.has(entry.name)) {
+          let linkedFolder = false;
+          try {
+            linkedFolder = fs.statSync(file).isDirectory();
+          } catch {
+            // A link that resolves to nothing holds no module.
+          }
+          if (linkedFolder || SOURCE_EXTENSIONS.has(path.extname(entry.name)) || MARKUP_PAGE.test(entry.name)) {
+            options.skippedLinks.push(file);
+          }
+        }
+        continue;
+      }
       if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.astryx-')) {
+        const skipped =
+          SKIP_DIRS.has(entry.name) &&
+          !(options.outputAtRootsOnly === true && ROOT_OUTPUT_DIRS.has(entry.name) && !fs.existsSync(path.join(dir, 'package.json')));
+        if (!skipped && !entry.name.startsWith('.astryx-')) {
           queue.push(file);
         }
       } else if (
@@ -279,7 +322,8 @@ export function listProjectSourceFiles(root, generatedModule, options = {}) {
           (options.stylesheets === true &&
             path.extname(entry.name) === '.css') ||
           (options.pages === true &&
-            /^\.html?$/u.test(path.extname(entry.name))))
+            /^\.html?$/u.test(path.extname(entry.name))) ||
+          (options.markup === true && MARKUP_PAGE.test(entry.name)))
       ) {
         files.push(file);
       }
@@ -329,7 +373,7 @@ export function findIconPlaceholders(projectDir) {
  * Test, story and fixture files: code that shows or checks a button, not a
  * page that a person uses. The check reads none of them.
  */
-const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|stories|story)\.[cm]?[jt]sx?$/;
+const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(test|spec|cy|stories|story)\.(?:[cm]?[jt]sx?|mdx)$/;
 
 /**
  * Folders that usually hold tests, stories or fixtures, though an app may
@@ -339,39 +383,10 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(tes
 const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 
 /**
- * An import of a router or history that keeps the route in the URL hash:
- * React Router's `HashRouter` and `createHashRouter`, or a `createHashHistory`
- * (TanStack Router, `history`).
+ * A bare module path a module imports, re-exports, or loads (`from 'x'`,
+ * `import('x')`, `require('x')`), as the capture.
  */
-const HASH_ROUTING_IMPORT = /\bimport\s*(?:type\s+)?\{[^}]*\b(?:HashRouter|createHashRouter|createHashHistory)\b[^}]*\}\s*from\s*['"][^'"]+['"]/;
-
-/** A namespace import (`import * as RR from 'react-router-dom'`), whose name is the capture. */
-const NAMESPACE_IMPORT = /\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*['"][^'"]+['"]/g;
-
-/**
- * Whether a module's text routes by the URL hash: it imports a hash router or
- * a hash history by name, or reads one from a namespace it imports
- * (`<RR.HashRouter>` from `import * as RR from 'react-router-dom'`).
- * @param {string} text
- */
-function routesByHash(text) {
-  if (HASH_ROUTING_IMPORT.test(text)) return true;
-  for (const [, name] of text.matchAll(NAMESPACE_IMPORT)) {
-    if (new RegExp(`\\b${escapeRegExp(name)}\\.(?:HashRouter|createHashRouter|createHashHistory)\\b`).test(text)) return true;
-  }
-  return false;
-}
-
-
-/**
- * The name another module imports a module by: its file name without the
- * extension, or its folder's name for an `index` file.
- * @param {string} file
- */
-function moduleStem(file) {
-  const base = path.basename(file).replace(/\.[cm]?[jt]sx?$/, '');
-  return base === 'index' ? path.basename(path.dirname(file)) : base;
-}
+const BARE_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./#][^'"]*)['"]/g;
 
 /** @param {string} text */
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -387,9 +402,15 @@ const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * @returns {{found: import('../../foundation/discovery/button-actions.mjs').ButtonFinding[], files: number, incomplete: boolean}}
  */
 export function findButtonsWithoutAction(projectDir) {
-  const listed = listProjectSourceFiles(projectDir, '');
+  /** @type {string[]} */
+  const skippedLinks = [];
+  const listed = listProjectSourceFiles(projectDir, '', {markup: true, outputAtRootsOnly: true, skippedLinks});
   const relative = (/** @type {string} */ file) => path.relative(projectDir, file).split(path.sep).join('/');
-  const files = listed.filter(file => !TEST_FILE.test(relative(file)));
+  const kept = listed.filter(file => !TEST_FILE.test(relative(file)));
+  // An MDX or Astro page is not read, but one that names a component may
+  // render it anywhere.
+  const markup = kept.filter(file => MARKUP_PAGE.test(file));
+  const files = kept.filter(file => !MARKUP_PAGE.test(file));
   // A listing cut short may leave out a module that renders a component, so
   // the check cannot tell that nothing renders it.
   if (listed.length >= SOURCE_FILE_LIMIT) return {found: [], files: files.length, incomplete: true};
@@ -408,59 +429,166 @@ export function findButtonsWithoutAction(projectDir) {
     }
     return texts.get(file) ?? null;
   };
+  // Only a file that imports from Core and names a button is parsed for buttons.
+  const candidates = files.filter(file => {
+    if (TEST_FOLDER.test(relative(file))) return false;
+    const text = textOf(file);
+    return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
+  });
+  if (candidates.length === 0) return {found: [], files: files.length, incomplete: false};
   const declared = declaredPackages(projectDir);
   const ownName = readPackageJson(path.join(projectDir, 'package.json'))?.name;
-  /** @type {Map<string, boolean>} */
+  // The project's own packages, by name: a package.json in a folder of the
+  // project, as a workspace lists its members. One the app imports by name is
+  // its own code, whether it is installed yet or not.
+  /** @type {Map<string, string>} */
+  const localPackages = new Map();
+  /** @type {Set<string>} */
+  const walked = new Set();
+  for (const file of files) {
+    for (let dir = path.dirname(file); isInside(dir, projectDir) && !walked.has(dir); dir = path.dirname(dir)) {
+      walked.add(dir);
+      const name = readPackageJson(path.join(dir, 'package.json'))?.name;
+      if (typeof name === 'string' && !localPackages.has(name)) localPackages.set(name, dir);
+    }
+  }
+  /** @type {Map<string, {kind: 'member' | 'installed' | 'none', dir: string | null}>} */
   const installed = new Map();
+  // Where Node finds a package from a file: a workspace member is linked from
+  // node_modules to a folder of the project outside any node_modules.
+  const installedAs = (/** @type {string} */ name, /** @type {string} */ file) => {
+    const key = `${path.dirname(file)}\0${name}`;
+    let found = installed.get(key);
+    if (found == null) {
+      const local = localPackages.get(name);
+      const packageDir = local ?? findInstalledPackage(path.dirname(file), name, Infinity);
+      found = {kind: packageDir == null ? 'none' : 'installed', dir: null};
+      if (packageDir != null) {
+        try {
+          const dir = fs.realpathSync(packageDir);
+          if (isInside(dir, projectDir) && !path.relative(projectDir, dir).split(path.sep).includes('node_modules')) {
+            found = {kind: 'member', dir};
+          }
+        } catch {
+          // A package path that does not resolve is read as installed.
+        }
+      }
+      installed.set(key, found);
+    }
+    return found;
+  };
   // A bare module path is a package when Node has it, the project declares
   // it, or it is installed where Node looks; any other is one only a bundler
   // resolves, such as an alias with no tsconfig path. The project's own name
-  // (a package.json `exports` path to its own files) is its own code.
+  // (a package.json `exports` path to its own files) and a workspace member
+  // (a package linked to a folder of the project) are its own code.
   const knownPackage = (/** @type {string} */ specifier, /** @type {string} */ file) => {
     const {name} = splitSpecifier(specifier.replace(/^node:/, ''));
     if (name === ownName) return false;
-    if (specifier.startsWith('node:') || builtinModules.includes(name) || declared.has(name)) return true;
-    const key = `${path.dirname(file)}\0${name}`;
-    if (!installed.has(key)) installed.set(key, findInstalledPackage(path.dirname(file), name, Infinity) != null);
-    return installed.get(key) === true;
+    if (specifier.startsWith('node:') || builtinModules.includes(name)) return true;
+    const {kind} = installedAs(name, file);
+    if (kind === 'member') return false;
+    return declared.has(name) || kind === 'installed';
+  };
+  // The scan follows no package name to a member's files, so a member the app
+  // imports by its package name may render its components anywhere: their
+  // buttons are not judged.
+  /** @type {Set<string>} */
+  const importedMembers = new Set();
+  for (const file of files) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(BARE_MODULE)) {
+      const {name} = splitSpecifier(specifier);
+      const {kind, dir} = installedAs(name, file);
+      if (kind === 'member' && dir != null) importedMembers.add(dir);
+    }
+  }
+  const inImportedMember = (/** @type {string} */ file) => {
+    if (importedMembers.size === 0) return false;
+    let real = file;
+    try {
+      real = fs.realpathSync(file);
+    } catch {
+      // A file that does not resolve is read where it is listed.
+    }
+    return [...importedMembers].some(dir => isInside(real, dir));
   };
   // An app that routes by the URL hash opens its first page from a `#` link:
   // one that imports a hash router or a hash history.
-  const hashRouting = files.some(file => routesByHash(textOf(file) ?? ''));
+  const hashRouting = files.some(file => routesByHash(textOf(file) ?? '', {jsx: !/\.[cm]?ts$/.test(file)}));
   /** @type {Map<string, import('../../foundation/discovery/button-actions.mjs').ModuleScan | null>} */
   const scans = new Map();
   const scan = (/** @type {string} */ file) => {
     if (!scans.has(file)) {
-      const text = textOf(file);
+      const text = MARKUP_PAGE.test(file) ? null : textOf(file);
       scans.set(
         file,
         text == null
           ? null
           : scanButtonActions(text, {
               isOwnCode: specifier => projectMapsImport(specifier, file),
-              stem: moduleStem(file),
+              stem: specifierStem(file.split(path.sep).join('/')),
               hashRouting,
               knownPackage: specifier => knownPackage(specifier, file),
               jsx: !/\.[cm]?ts$/.test(file),
+              // `.` and `..` name the folder they read from.
+              stemOf: specifier =>
+                /^\.{1,2}(?:\/|$)/.test(specifier)
+                  ? specifierStem(path.resolve(path.dirname(file), specifier).split(path.sep).join('/'))
+                  : specifierStem(specifier),
             }),
       );
     }
     return scans.get(file) ?? null;
   };
-  // Only a file that imports from Core and names a button is parsed for buttons.
-  const withButtons = files.filter(file => {
-    if (TEST_FOLDER.test(relative(file))) return false;
-    const text = textOf(file);
-    return text != null && text.includes('@astryxdesign/core') && /\b(?:Icon)?Button\b/.test(text);
-  });
+  const withButtons = candidates.filter(file => !inImportedMember(file));
   // A module that renders a component, or refers to it in any other way,
-  // names it or the module that exports it.
+  // names it or the module that exports it; a path of only `.` and `..`
+  // (`'..'`, `'./index'`) names a folder without its name.
   const modulesNaming = (/** @type {string[]} */ names) => {
     const alternatives = names.map(escapeRegExp).join('|');
     const pattern = new RegExp(`\\b(?:${alternatives})\\b`);
-    return files.filter(file => pattern.test(textOf(file) ?? ''));
+    return [...files, ...markup].filter(file => {
+      const text = textOf(file) ?? '';
+      return pattern.test(text) || FOLDER_PATH.test(text);
+    });
   };
-  const found = buttonsWithoutAction({files: withButtons, scan, modulesNaming}).map(each => ({
+  // A module that loads modules by a path the scan cannot read may load any
+  // module in the folder the path starts in. An MDX or Astro page, or a
+  // module that does not parse, is read for its loads as text, and any path
+  // in it counts as one the scan cannot read.
+  /** @type {string[]} */
+  const loadedDirs = [];
+  let loadsAnything = false;
+  for (const file of [...files, ...markup]) {
+    // A tool's config file (`next.config.js`, beside a package.json) loads its
+    // own settings, never a component.
+    if (/\.config\.[cm]?[jt]s$/.test(file) && fs.existsSync(path.join(path.dirname(file), 'package.json'))) continue;
+    const text = textOf(file) ?? '';
+    if (!/\bimport\s*\(|\brequire\b|import\.meta\.glob/.test(text)) continue;
+    const read = scan(file);
+    /** @type {string[]} */
+    const folders = read
+      ? read.loads
+      : [...text.matchAll(TEXT_LOAD)]
+          .filter(([, quote, written]) => !quote || written === '' || /^\.{1,2}\//.test(written) || !knownPackage(written, file))
+          .map(([, quote, written]) => loadFolder(quote ? written : ''));
+    for (const folder of folders) {
+      if (folder === '*') loadsAnything = true;
+      // A root path starts in the project folder, or in the folder of the
+      // package that holds the module, as a bundler's root may be either.
+      else if (folder.startsWith('/')) {
+        loadedDirs.push(path.join(projectDir, folder));
+        const packageDir = findPackageRoot(path.dirname(file));
+        if (packageDir) loadedDirs.push(path.join(packageDir, folder));
+      } else loadedDirs.push(path.resolve(path.dirname(file), folder));
+    }
+  }
+  const loaded = (/** @type {string} */ file) =>
+    loadsAnything || loadedDirs.some(dir => isInside(file, dir));
+  // A linked folder or file the walk does not follow may render any
+  // component, so no component counts as one that nothing renders.
+  const complete = skippedLinks.length === 0;
+  const found = buttonsWithoutAction({files: withButtons, scan, modulesNaming, loaded, complete}).map(each => ({
     ...each,
     file: path.relative(projectDir, each.file).split(path.sep).join('/'),
   }));

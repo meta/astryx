@@ -79,6 +79,258 @@ function app(...lines) {
 
 describe('the button-actions check', () => {
   it(
+    "does not judge a workspace member's buttons when the app imports the member by its package name",
+    async () => {
+      /**
+       * @param {string} app the web app's App module
+       * @param {boolean} [linked] whether the install linked the member
+       */
+      const workspace = async (app, linked = true) => {
+        const root = fs.mkdtempSync(path.join(tmp, 'repo-'));
+        const files = {
+          'package.json': JSON.stringify({name: 'repo', private: true, workspaces: ['packages/*', 'apps/*'], dependencies: {'@astryxdesign/core': '*'}}),
+          'packages/ui/package.json': JSON.stringify({name: '@acme/ui', main: 'src/Hero.tsx'}),
+          'packages/ui/src/Hero.tsx': HERO,
+          'apps/web/package.json': JSON.stringify({name: 'web', private: true, dependencies: {'@acme/ui': '*'}}),
+          'apps/web/src/main.tsx': MAIN,
+          'apps/web/src/App.tsx': app,
+        };
+        for (const [rel, text] of Object.entries(files)) {
+          const file = path.join(root, rel);
+          fs.mkdirSync(path.dirname(file), {recursive: true});
+          fs.writeFileSync(file, text);
+        }
+        if (linked) {
+          fs.mkdirSync(path.join(root, 'node_modules/@acme'), {recursive: true});
+          fs.symlinkSync(path.join(root, 'packages/ui'), path.join(root, 'node_modules/@acme/ui'), 'dir');
+        }
+        const report = await runChecks({cwd: root});
+        return report.checks.find(check => check.id === 'button-actions');
+      };
+      // The app renders the member's Hero, under another name, inside a link.
+      const imported = await workspace(
+        ["import Banner from '@acme/ui';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
+      );
+      expect(imported?.status).toBe('pass');
+      // Before an install links it, the member is still the project's own package.
+      const notInstalled = await workspace(
+        ["import Banner from '@acme/ui';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
+        false,
+      );
+      expect(notInstalled?.status).toBe('pass');
+      // Nothing imports the member, so its Hero is a page, and its button does nothing.
+      const alone = await workspace(['export default function App() {', '  return null;', '}', ''].join('\n'));
+      expect(alone?.status).toBe('warn');
+      expect(alone?.message).toContain('packages/ui/src/Hero.tsx');
+    },
+    SLOW,
+  );
+
+  it(
+    'does not judge a component a module may load by a path the scan cannot read, or one an MDX or Astro page names',
+    async () => {
+      const page = (/** @type {string} */ body) => ['export default function App() {', `  ${body}`, '}', ''].join('\n');
+      // Each case starts from an empty app folder.
+      const fresh = (/** @type {Record<string, string>} */ files) => {
+        fs.rmSync(path.join(tmp, 'app'), {recursive: true, force: true});
+        return buttonCheck(files);
+      };
+      const loadedBy = async (/** @type {string} */ loader, /** @type {Record<string, string>} */ more = {}) =>
+        fresh({
+          'src/main.tsx': MAIN,
+          'src/sections/Hero.tsx': HERO,
+          'src/App.tsx': [loader, page('return null;')].join('\n'),
+          ...more,
+        });
+      // Nothing loads Hero, so it is a page, and its button does nothing.
+      expect((await loadedBy(''))?.status).toBe('warn');
+      expect((await loadedBy("const sections = import.meta.glob('./sections/*.tsx');"))?.status).toBe('pass');
+      expect((await loadedBy("import {lazy} from 'react';\nexport const load = (slug: string) => lazy(() => import(`./sections/${slug}`));"))?.status).toBe('pass');
+      expect((await loadedBy("const sections = require.context('./sections', true, /\\.tsx$/);"))?.status).toBe('pass');
+      expect((await loadedBy("const pick = (name: string) => import(name);"))?.status).toBe('pass');
+      const renamed = await fresh({
+        'src/main.tsx': MAIN,
+        'src/sections/Hero.tsx': HERO,
+        'src/App.tsx': ["const Banner = require('./sections/Hero').default;", page('return <a href="/start"><Banner /></a>;')].join('\n'),
+      });
+      expect(renamed?.status).toBe('pass');
+      // A load from one folder leaves the modules of another folder judged.
+      const elsewhere = await loadedBy("const sections = import.meta.glob('./sections/*.tsx');", {
+        'src/other/Promo.tsx': HERO.replace('function Hero', 'function Promo'),
+      });
+      expect(elsewhere?.status).toBe('warn');
+      expect(elsewhere?.message).toContain('src/other/Promo.tsx');
+      expect(elsewhere?.message).not.toContain('src/sections/Hero.tsx');
+      // An Astro or MDX page, and a module that does not parse, are read for
+      // their loads as text.
+      const astroGlob = await loadedBy('', {'src/pages/index.astro': "---\nconst sections = import.meta.glob('../sections/*.tsx');\n---\n<a href=\"/start\">{Object.keys(sections)}</a>\n"});
+      expect(astroGlob?.status).toBe('pass');
+      const unparsed = await loadedBy('', {'src/loader.ts': "@register\nclass Loader {}\nexport const load = (slug: string) => import(`./sections/${slug}`);\n"});
+      expect(unparsed?.status).toBe('pass');
+      // A root glob starts in the project folder; a glob of data files loads
+      // no component.
+      const rootGlob = await loadedBy("const sections = import.meta.glob('/src/sections/*.tsx');", {
+        'src/other/Promo.tsx': HERO.replace('function Hero', 'function Promo'),
+      });
+      expect(rootGlob?.message).toContain('src/other/Promo.tsx');
+      expect(rootGlob?.message).not.toContain('src/sections/Hero.tsx');
+      expect((await loadedBy("const strings = import.meta.glob('/src/sections/*.json');"))?.status).toBe('warn');
+      // A barrel in another folder that passes the component on, loaded by a glob.
+      const barrel = await fresh({
+        'src/main.tsx': MAIN,
+        'src/components/Hero.tsx': HERO.replace('export default function Hero', 'export function Hero'),
+        'src/demos/hero.ts': "export {Hero} from '../components/Hero';\n",
+        'src/App.tsx': [
+          "const demos = import.meta.glob('./demos/*.ts', {eager: true});",
+          'export default function App() {',
+          '  return <a href="/start">{Object.values(demos).flatMap(m => Object.values(m)).map(C => <C key="c" />)}</a>;',
+          '}',
+          '',
+        ].join('\n'),
+      });
+      expect(barrel?.status).toBe('pass');
+      // A TypeScript import of a module by `require`.
+      const importEquals = await fresh({
+        'src/main.tsx': MAIN,
+        'src/sections/Hero.tsx': HERO,
+        'src/App.tsx': ["import Banner = require('./sections/Hero');", page('return <a href="/start"><Banner.default /></a>;')].join('\n'),
+      });
+      expect(importEquals?.status).toBe('pass');
+      // A path joined with `+` starts in the folder its first part names.
+      expect((await loadedBy('', {'src/lib/load.ts': "export const load = (name: string) => import('../sections/' + name);\n"}))?.status).toBe('pass');
+      // An app module named like a config file is the app's own code.
+      expect((await loadedBy('', {'src/sections.config.ts': "export const sections = import.meta.glob('./sections/*.tsx', {eager: true});\n"}))?.status).toBe('pass');
+      // A tool's config file loads its settings, never a component.
+      const config = await loadedBy('', {'next.config.js': "const path = require('node:path');\nmodule.exports = require(path.join(__dirname, 'cfg.cjs'));\n"});
+      expect(config?.status).toBe('warn');
+      // A build script that loads by a computed path holds back only its own folder.
+      const script = await loadedBy('', {'scripts/build.cjs': "const path = require('node:path');\nmodule.exports = require(path.join(__dirname, 'cfg.cjs'));\n"});
+      expect(script?.status).toBe('warn');
+      // An MDX or Astro page that names the component may render it.
+      const mdx = await loadedBy('', {'src/pages/home.mdx': "import Hero from '../sections/Hero';\n\n<a href=\"/start\"><Hero /></a>\n"});
+      expect(mdx?.status).toBe('pass');
+      const astro = await loadedBy('', {'src/pages/index.astro': "---\nimport Hero from '../sections/Hero';\n---\n<a href=\"/start\"><Hero client:load /></a>\n"});
+      expect(astro?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'follows a module that imports a component and exports it again, and a nested component passed as a value',
+    async () => {
+      const fresh = (/** @type {Record<string, string>} */ files) => {
+        fs.rmSync(path.join(tmp, 'app'), {recursive: true, force: true});
+        return buttonCheck({'src/main.tsx': MAIN, ...files});
+      };
+      const named = HERO.replace('export default function Hero', 'export function Hero');
+      const viaLazy = await fresh({
+        'src/Hero.tsx': named,
+        'src/sections.ts': "import {Hero} from './Hero';\nexport {Hero};\n",
+        'src/App.tsx': [
+          "import {lazy} from 'react';",
+          "const Lazy = lazy(() => import('./sections').then(m => ({default: m.Hero})));",
+          'export default function App() {',
+          '  return <a href="/start"><Lazy /></a>;',
+          '}',
+          '',
+        ].join('\n'),
+      });
+      expect(viaLazy?.status).toBe('pass');
+      const viaNamespace = await fresh({
+        'src/Hero.tsx': named,
+        'src/sections.ts': "import {Hero} from './Hero';\nexport {Hero};\n",
+        'src/App.tsx': [
+          "import * as S from './sections';",
+          'export default function App() {',
+          '  return <a href="/start">{Object.values(S).map(C => <C key="c" />)}</a>;',
+          '}',
+          '',
+        ].join('\n'),
+      });
+      expect(viaNamespace?.status).toBe('pass');
+      const nested = await fresh({
+        'src/App.tsx': [
+          "import {Button} from '@astryxdesign/core';",
+          'export default function App() {',
+          '  function Row() {',
+          '    return <Button label="Open" />;',
+          '  }',
+          '  return <><Row /><a href="/start">{[1].map(Row)}</a></>;',
+          '}',
+          '',
+        ].join('\n'),
+      });
+      expect(nested?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'reads `.` and `..` as the folder they name, a route in a folder named build, and a linked folder',
+    async () => {
+      const fresh = (/** @type {Record<string, string>} */ files) => {
+        fs.rmSync(path.join(tmp, 'app'), {recursive: true, force: true});
+        return buttonCheck({'src/main.tsx': MAIN, ...files});
+      };
+      const named = HERO.replace('export default function Hero', 'export function Hero');
+      const parent = await fresh({
+        'src/sections/Hero.tsx': named,
+        'src/sections/index.ts': "export {Hero} from './Hero';\n",
+        'src/sections/list/List.tsx': [
+          "import * as Sections from '..';",
+          'export default function List() {',
+          '  return <>{Object.values(Sections).map(C => <a key="c" href="/x"><C /></a>)}</>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/App.tsx': ["import List from './sections/list/List';", 'export default function App() {', '  return <List />;', '}', ''].join('\n'),
+      });
+      expect(parent?.status).toBe('pass');
+      const own = await fresh({
+        'src/sections/Hero.tsx': named,
+        'src/sections/index.ts': "export {Hero} from './Hero';\n",
+        'src/sections/Lazy.tsx': [
+          "import {lazy} from 'react';",
+          "const Lazy = lazy(() => import('.').then(m => ({default: m.Hero})));",
+          'export default function Page() {',
+          '  return <a href="/x"><Lazy /></a>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/App.tsx': ["import Page from './sections/Lazy';", 'export default function App() {', '  return <Page />;', '}', ''].join('\n'),
+      });
+      expect(own?.status).toBe('pass');
+      // An app route in a folder named build is the app's own code.
+      const route = await fresh({
+        'src/components/PlanCard.tsx': named.replace(/Hero/g, 'PlanCard'),
+        'src/app/build/page.tsx': [
+          "import {PlanCard} from '../../components/PlanCard';",
+          'export default function Page() {',
+          '  return <a href="/checkout"><PlanCard /></a>;',
+          '}',
+          '',
+        ].join('\n'),
+        'src/App.tsx': ['export default function App() {', '  return null;', '}', ''].join('\n'),
+      });
+      expect(route?.status).toBe('pass');
+      // A linked folder the walk does not follow may render any component.
+      const outside = fs.mkdtempSync(path.join(tmp, 'outside-'));
+      fs.writeFileSync(path.join(outside, 'Shell.tsx'), "import Hero from '../app/src/sections/Hero';\nexport const Shell = () => <a href=\"/x\"><Hero /></a>;\n");
+      const linkedApp = await (async () => {
+        fs.rmSync(path.join(tmp, 'app'), {recursive: true, force: true});
+        fs.mkdirSync(path.join(tmp, 'app', 'src'), {recursive: true});
+        fs.symlinkSync(outside, path.join(tmp, 'app', 'src', 'shell'), 'dir');
+        return buttonCheck({'src/main.tsx': MAIN, 'src/sections/Hero.tsx': HERO, 'src/App.tsx': ['export default function App() {', '  return null;', '}', ''].join('\n')});
+      })();
+      expect(linkedApp?.status).toBe('pass');
+      // Without the link, Hero is a page, and its button does nothing.
+      const unlinked = await fresh({'src/sections/Hero.tsx': HERO, 'src/App.tsx': ['export default function App() {', '  return null;', '}', ''].join('\n')});
+      expect(unlinked?.status).toBe('warn');
+    },
+    SLOW,
+  );
+
+  it(
     'names each button that does nothing, by file, line and label',
     async () => {
       const check = await buttonCheck({
@@ -92,6 +344,7 @@ describe('the button-actions check', () => {
         ).replace("import {Button} from", "import {Button, IconButton} from"),
         'src/App.test.tsx': app('<Button label="In a test" />'),
         'src/App.stories.tsx': app('<Button label="In a story" />'),
+        'src/App.cy.tsx': app('<Button label="In a Cypress test" />'),
         'src/__fixtures__/Demo.tsx': app('<Button label="In a fixture" />'),
         'tests/host.tsx': app('<Button label="In a test folder" />'),
       });
@@ -156,12 +409,37 @@ describe('the button-actions check', () => {
         'src/App.tsx': app('<Button label="Home" href="#" />'),
       });
       expect(namespace?.status).toBe('pass');
-      // A name in a comment is not an import of a hash router.
+      // An app that listens for the hash to change itself routes by the hash.
+      const listener = await buttonCheck({
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\nwindow.addEventListener('hashchange', () => {});"),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(listener?.status).toBe('pass');
+      const handler = await buttonCheck({
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\nwindow.onhashchange = () => {};"),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(handler?.status).toBe('pass');
+      const wouter = await buttonCheck({
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\nimport {useHashLocation} from 'wouter/use-hash-location';\nexport const hook = useHashLocation;"),
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(wouter?.status).toBe('pass');
+      // A name in a comment is not an import of a hash router, nor is an import
+      // that is commented out.
       const comment = await buttonCheck({
-        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\n// No HashRouter here."),
+        'src/main.tsx': MAIN.replace("import App from './App';", "import App from './App';\n// No HashRouter here.\n// import {HashRouter} from 'react-router-dom';"),
         'src/App.tsx': app('<Button label="Home" href="#" />'),
       });
       expect(comment?.status).toBe('warn');
+      // A module that does not parse and names a hash router may use it (last:
+      // its file stays in the app folder).
+      const unparsed = await buttonCheck({
+        'src/main.tsx': MAIN,
+        'src/router.ts': "import {HashRouter} from 'react-router-dom';\n@register\nclass Routes {}\nexport {HashRouter};\n",
+        'src/App.tsx': app('<Button label="Home" href="#" />'),
+      });
+      expect(unparsed?.status).toBe('pass');
     },
     SLOW,
   );

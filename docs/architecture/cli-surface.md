@@ -397,27 +397,53 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   components. When the project has more source files than `doctor` reads, the
   check does not run and says so. The `button-actions` check warns for each
   `Button` or `IconButton` from `@astryxdesign/core` that has no `onClick`,
-  `clickAction`, `href`, or `submit` or `reset` type, or whose handler has an
-  empty body or whose link goes nowhere, and that nothing around it can act
-  on. A link goes nowhere when it is an empty link, a `javascript:` link, or
-  `#`, except in an app that routes by the URL hash, where `#` opens the first
-  page. Nothing acts on a button when each element around it is a Core layout
-  component, a React wrapper, a package's provider, a React context's
-  `Provider`, or HTML that holds no control and has no handler, link, widget
-  role or spread props, none of them disabled or inert, and when each place
-  the app renders the component that holds it is the same; relative imports,
-  path aliases and package.json `imports` are followed to the app's own code.
-  A component that nothing in the app renders or refers to, while its module
-  exports it, is a page or an entry point, and nothing is around it. The check
-  does not report a button that it cannot judge: one with props spread in, a
-  ref, an id, a tooltip, a disabled or loading state, or a prop it does not
-  know; one inside an element, or a prop of an element, that it does not
-  trust; or one in a component that the app refers to in a way the scan cannot
-  follow, such as through `lazy` or `import()` (directly or through a module
-  that passes its exports on), a list of components, a prop, a namespace read
-  as a value, a renamed re-export, or a module path only a bundler resolves.
-  The warning names each button's file, line and label, and never fails
-  `doctor`.
+  `clickAction`, `href`, or `submit` or `reset` type, or whose handler does
+  nothing (an empty body, or a body that only returns `null`, `undefined` or
+  `void 0`) or whose link goes nowhere, and that nothing around it can act on.
+  A link goes nowhere when it is an empty link, a `javascript:` link, or `#`,
+  except in an app that routes by the URL hash (it imports a hash router or a
+  hash history, or listens for `hashchange`), where `#` opens the first page.
+  Nothing acts on a button when each element around it is a Core layout
+  component, a React wrapper, a package's provider, an object's `Provider`,
+  such as a React context's (not one read off a namespace or default import of
+  the app's own module), or HTML that holds no control, that no script defines
+  (a custom element, or an element with an `is` attribute) and that has no
+  handler, link, widget role or spread props, none of them disabled or inert,
+  and when each place the app renders the component that holds it is the same;
+  relative imports (where `.` and `..` name the folder they read), path
+  aliases and package.json `imports` are followed to the app's own code. The
+  check reads a folder named `build`, `dist` or `coverage` except in a folder
+  with a package.json, where a build writes its output; when the walk skips a
+  linked folder or source file, no component counts as one that nothing
+  renders. A component that nothing in the app renders or refers to, while its
+  module exports it, is a page or an entry point, and nothing is around it.
+  The check does not report a button that it cannot judge: one with props
+  spread in, a ref, an id, a tooltip, a disabled or loading state, or a prop
+  it does not know; one that holds content that may act, such as an HTML
+  control, a custom element or another package's component other than an icon
+  (an export named like `PencilIcon`); one inside an element, or a prop of an
+  element, that it does not trust; or one in a component that the app refers
+  to in a way the scan cannot follow, such as through `lazy` or `import()`
+  (directly or through a module that passes its exports on), a list of
+  components, a prop, a namespace read as a value, a renamed re-export, a
+  `require()`, a module path only a bundler resolves, or the package name of a
+  workspace member (a package.json in a folder of the project, installed or
+  not); one in a module that another module may load by a path the scan cannot
+  read (a computed `import()` or `require()` path, `import.meta.glob` or
+  `require.context`, which may load any module in the folder the path starts
+  in (for a path joined with `+`, the folder its first part names): the
+  loading module's own folder when the scan reads none of the path, the
+  project folder for a root path (`/src/…`), or any module when the path
+  starts with an alias, while a glob of data, style or image files, or a
+  tool's config file beside a package.json (`next.config.js`), loads no
+  component; an MDX or Astro page, or a module that does not parse, counts as
+  loading by such a path); or one that an MDX or Astro page names. A module
+  that imports a component and exports it again under the same name passes it
+  on, as a re-export does, and so does a barrel that a module may load by such
+  a path; and a component that the module refers to other than by rendering it
+  is not judged in any scope. A hash router named only in a comment is not
+  hash routing. The warning names each button's file, line and label, and
+  never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

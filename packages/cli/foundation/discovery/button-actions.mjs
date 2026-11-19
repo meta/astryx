@@ -23,6 +23,7 @@
 
 import {parseTemplateSource, traverseTemplateSource} from './template-source-tree.mjs';
 import {importedName} from './template-icons.mjs';
+import {ICON_EXPORT_NAME_RE} from './icon-set-discovery.mjs';
 import {writtenString} from '../text/written-string.mjs';
 
 const CORE = '@astryxdesign/core';
@@ -369,19 +370,19 @@ function importOf(binding) {
  * it may go by), another binding (`other`), or an HTML element
  * (`intrinsic`).
  * @param {any} path a JSXElement path
- * @param {(specifier: string) => boolean} isOwnCode
+ * @param {{isOwnCode: (specifier: string) => boolean, stemOf: (specifier: string) => string | null}} context
  * @returns {Referent}
  */
-function referent(path, isOwnCode) {
+function referent(path, context) {
   const name = path.node.openingElement.name;
   if (name.type === 'JSXIdentifier') {
     if (/^[a-z]/.test(name.name) || name.name.includes('-')) {
       return {kind: 'intrinsic', tag: name.name};
     }
-    return bindingReferent(path, name.name, null, isOwnCode);
+    return bindingReferent(path, name.name, null, context);
   }
   if (name.type === 'JSXMemberExpression' && name.object.type === 'JSXIdentifier') {
-    return bindingReferent(path, name.object.name, name.property.name, isOwnCode);
+    return bindingReferent(path, name.object.name, name.property.name, context);
   }
   return {kind: 'other', names: []};
 }
@@ -390,14 +391,14 @@ function referent(path, isOwnCode) {
  * @param {any} path
  * @param {string} local
  * @param {string | null} member the property read off the binding, as in `NS.Card`
- * @param {(specifier: string) => boolean} isOwnCode
+ * @param {{isOwnCode: (specifier: string) => boolean, stemOf: (specifier: string) => string | null}} context
  * @returns {Referent}
  */
-function bindingReferent(path, local, member, isOwnCode) {
+function bindingReferent(path, local, member, context) {
   const binding = path.scope.getBinding(local);
   const imported = importOf(binding);
   if (imported && !imported.typeOnly) {
-    const own = ownModule(imported.source, isOwnCode);
+    const own = ownModule(imported.source, context.isOwnCode);
     if (member != null) {
       if (own) return {kind: 'own', names: [member]};
       // A member of a namespace or default import is the module's export of
@@ -406,7 +407,7 @@ function bindingReferent(path, local, member, isOwnCode) {
       return {kind: 'package', source: imported.source, name: whole ? member : `${imported.imported}.${member}`};
     }
     if (!own) return {kind: 'package', source: imported.source, name: imported.imported};
-    const stem = specifierStem(imported.source);
+    const stem = context.stemOf(imported.source);
     return {
       kind: 'own',
       names: imported.imported === 'default' ? [local, ...(stem ? [stem] : [])] : [imported.imported],
@@ -423,7 +424,7 @@ function bindingReferent(path, local, member, isOwnCode) {
  * file, the folder's name.
  * @param {string} specifier
  */
-function specifierStem(specifier) {
+export function specifierStem(specifier) {
   const parts = specifier.split('/').filter(part => part !== '' && part !== '.' && part !== '..');
   let last = parts.pop() ?? '';
   last = last.replace(/\.[cm]?[jt]sx?$/, '');
@@ -549,6 +550,9 @@ const ROUTERS = new Set(['react-router', 'react-router-dom']);
 /**
  * @typedef {object} ScanContext
  * @property {(specifier: string) => boolean} isOwnCode
+ * @property {(specifier: string) => string | null} stemOf the name of the
+ *   module a path imports, as `specifierStem` reads it, with `.` and `..`
+ *   read from the importing module's own folder
  * @property {boolean} hashRouting whether the app routes by the URL hash
  * @property {(specifier: string) => boolean} knownPackage whether a bare
  *   module path names a package the project declares or has installed
@@ -657,7 +661,7 @@ function routePage(attributePath, context) {
   if (attributeName(attributePath.node) !== 'element') return false;
   const element = attributePath.parentPath?.parentPath;
   if (element?.node.type !== 'JSXElement') return false;
-  const target = referent(element, context.isOwnCode);
+  const target = referent(element, context);
   return target.kind === 'package' && ROUTERS.has(target.source) && target.name === 'Route';
 }
 
@@ -668,7 +672,7 @@ function routePage(attributePath, context) {
  * @param {ScanContext} context
  */
 function isLayoutComponent(path, context) {
-  const target = referent(path, context.isOwnCode);
+  const target = referent(path, context);
   return (
     target.kind === 'package' &&
     ((isCore(target.source) && LAYOUT_COMPONENTS.has(target.name)) ||
@@ -676,21 +680,109 @@ function isLayoutComponent(path, context) {
   );
 }
 
+/** The routers and histories that keep the route in the URL hash. */
+const HASH_ROUTERS = new Set(['HashRouter', 'createHashRouter', 'createHashHistory', 'useHashLocation']);
+
+/**
+ * Whether a call or assignment listens for the URL hash to change:
+ * `addEventListener('hashchange', …)` on any target, or an `onhashchange`
+ * handler assigned to one.
+ * @param {any} node
+ */
+function listensForHash(node) {
+  if (node.type === 'CallExpression') {
+    const callee = node.callee;
+    const name = callee.type === 'MemberExpression' && !callee.computed ? callee.property.name : callee.type === 'Identifier' ? callee.name : null;
+    return name === 'addEventListener' && writtenString(node.arguments[0]) === 'hashchange';
+  }
+  if (node.type === 'AssignmentExpression') {
+    const target = node.left;
+    return (
+      (target.type === 'MemberExpression' && !target.computed && target.property.name === 'onhashchange') ||
+      (target.type === 'Identifier' && target.name === 'onhashchange')
+    );
+  }
+  return false;
+}
+
+/**
+ * Whether a module routes by the URL hash: it imports React Router's
+ * `HashRouter` or `createHashRouter`, a `createHashHistory` (TanStack Router,
+ * `history`) or wouter's `useHashLocation`, by name, or reads one from a
+ * namespace it imports (`RR.HashRouter` from
+ * `import * as RR from 'react-router-dom'`); or it listens for the hash to
+ * change itself (`addEventListener('hashchange', …)`, `onhashchange`). A name
+ * in a comment or a string is not an import.
+ * @param {string} source
+ * @param {{jsx?: boolean}} [options] `jsx: false` for a `.ts` module
+ * @returns {boolean}
+ */
+export function routesByHash(source, {jsx = true} = {}) {
+  if (!/\b(?:HashRouter|createHashRouter|createHashHistory|useHashLocation)\b|hashchange/.test(source)) return false;
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true, jsx});
+  } catch {
+    // A module that does not parse and names a hash router may use it.
+    return true;
+  }
+  /** @type {Set<string>} */
+  const namespaces = new Set();
+  for (const statement of file.program.body) {
+    if (statement.type !== 'ImportDeclaration') continue;
+    for (const specifier of statement.specifiers) {
+      if (specifier.type === 'ImportNamespaceSpecifier') namespaces.add(specifier.local.name);
+      else if (specifier.type === 'ImportSpecifier' && HASH_ROUTERS.has(importedName(specifier))) return true;
+    }
+  }
+  let found = false;
+  traverseTemplateSource(file, {
+    'MemberExpression|JSXMemberExpression'(/** @type {any} */ path) {
+      const {object, property, computed} = path.node;
+      if (computed || !namespaces.has(object.name) || !HASH_ROUTERS.has(property.name)) return;
+      found = true;
+      path.stop();
+    },
+    'CallExpression|AssignmentExpression'(/** @type {any} */ path) {
+      if (!listensForHash(path.node)) return;
+      found = true;
+      path.stop();
+    },
+  });
+  return found;
+}
+
+/**
+ * Whether an element is one the page's scripts define: a custom element
+ * (`<clipboard-copy>`, a tag with a hyphen) or a built-in element given an
+ * `is` attribute. Its behavior is code the scan does not read.
+ * @param {any} path a JSXElement path
+ * @param {string} tag
+ */
+function scriptedElement(path, tag) {
+  return (
+    tag.includes('-') ||
+    path.node.openingElement.attributes.some(
+      (/** @type {any} */ attribute) => attribute.type === 'JSXAttribute' && attributeName(attribute) === 'is',
+    )
+  );
+}
+
 /**
  * Whether an element renders its children in place and acts on no press: an
- * HTML element that holds no control, a Core layout component, a React
- * wrapper, a package's provider, or a context's `Provider`, none of them with
- * a prop that may act on a press.
+ * HTML element that holds no control and that no script defines, a Core
+ * layout component, a React wrapper, a package's provider, or a context's
+ * `Provider`, none of them with a prop that may act on a press.
  * @param {any} path a JSXElement path
  * @param {ScanContext} context
  */
 function rendersInPlace(path, context) {
-  const target = referent(path, context.isOwnCode);
+  const target = referent(path, context);
   /** @type {string} */
   let tag = '';
   if (target.kind === 'intrinsic') {
     tag = target.tag;
-    if (ACTING_ELEMENTS.has(tag)) return false;
+    if (ACTING_ELEMENTS.has(tag) || scriptedElement(path, tag)) return false;
   } else if (target.kind === 'package') {
     // A provider is trusted only from a package: a module path only a bundler
     // resolves may be the app's own code, which may wrap it in anything.
@@ -701,9 +793,20 @@ function rendersInPlace(path, context) {
     if (!layout) return false;
   } else {
     // A context's own Provider (`Theme.Provider`) renders what it holds as it
-    // is; a component of the app named like a provider may wrap it in anything.
+    // is; a component of the app named like a provider may wrap it in anything,
+    // and so may a `Provider` read off a namespace or default import of the
+    // app's own module (`UI.Provider` from `import * as UI from './ui'`).
     const name = path.node.openingElement.name;
     if (name.type !== 'JSXMemberExpression' || name.property.name !== 'Provider') return false;
+    if (name.object.type !== 'JSXIdentifier') return false;
+    const imported = importOf(path.scope.getBinding(name.object.name));
+    if (
+      imported &&
+      (imported.imported === '*' || imported.imported === 'default') &&
+      (ownModule(imported.source, context.isOwnCode) || !context.knownPackage(imported.source))
+    ) {
+      return false;
+    }
   }
   return !path.node.openingElement.attributes.some((/** @type {any} */ attribute) => actsOnPress(attribute, tag));
 }
@@ -761,9 +864,17 @@ function holdsActingContent(path, context) {
   path.traverse({
     JSXElement(/** @type {any} */ inner) {
       if (acting) return;
-      const target = referent(inner, context.isOwnCode);
-      if (target.kind === 'intrinsic' && ACTING_ELEMENTS.has(target.tag)) acting = true;
+      const target = referent(inner, context);
+      if (target.kind === 'intrinsic' && (ACTING_ELEMENTS.has(target.tag) || scriptedElement(inner, target.tag))) {
+        acting = true;
+      }
+      // Only Core's components and icons (a package export named like
+      // `PencilIcon`) are read as plain content: another package's, such as a
+      // router's `Link`, may act on a press.
       if (target.kind === 'own' || target.kind === 'local' || target.kind === 'other') acting = true;
+      if (target.kind === 'package' && !isCore(target.source) && !ICON_EXPORT_NAME_RE.test(target.name.split('.').pop() ?? '')) {
+        acting = true;
+      }
       if (inner.node.openingElement.attributes.some((/** @type {any} */ a) => actsOnPress(a, ''))) {
         acting = true;
       }
@@ -807,6 +918,10 @@ function holdsActingContent(path, context) {
  * @property {string | null} stem the module's name as another module imports it
  * @property {string[]} reexports the names of the modules whose exports this
  *   module passes on under the same names, as a barrel `index` does
+ * @property {string[]} loads the folders, relative to the module, that it
+ *   loads modules from by a path the scan cannot read (a computed `import()`
+ *   or `require()`, `import.meta.glob`, `require.context`); `*` when the
+ *   folder is not a plain relative path, so it may load any module
  */
 
 /**
@@ -865,7 +980,7 @@ function ownModule(specifier, isOwnCode) {
  * action of their own, the components of the app it renders, and the
  * components it exports. Null when the module does not parse.
  * @param {string} source
- * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean, knownPackage?: (specifier: string) => boolean, jsx?: boolean}} options
+ * @param {{isOwnCode: (specifier: string) => boolean, stem: string | null, hashRouting?: boolean, knownPackage?: (specifier: string) => boolean, jsx?: boolean, stemOf?: (specifier: string) => string | null}} options
  *   `isOwnCode` tells a path alias from a package; `stem` is the module's
  *   name as another module imports it (its file name, or its folder's for an
  *   `index` file); `hashRouting` says the app routes by the URL hash, so a
@@ -874,8 +989,10 @@ function ownModule(specifier, isOwnCode) {
  *   cannot follow (by default, every bare module path is a package); `jsx:
  *   false` reads a plain TypeScript module (`.ts`)
  * @returns {ModuleScan | null}
+ *   `stemOf` names the module an import path reads, `.` and `..` included
+ *   (the default reads the path alone)
  */
-export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false, knownPackage = () => true, jsx = true}) {
+export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false, knownPackage = () => true, jsx = true, stemOf = specifierStem}) {
   /** @type {any} */
   let file;
   try {
@@ -884,7 +1001,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
     return null;
   }
   /** @type {ScanContext} */
-  const context = {isOwnCode, hashRouting, knownPackage};
+  const context = {isOwnCode, hashRouting, knownPackage, stemOf};
   const mayBeOwn = (/** @type {string} */ specifier) => ownModule(specifier, isOwnCode) || !knownPackage(specifier);
   /** @type {ButtonUse[]} */
   const buttons = [];
@@ -894,6 +1011,49 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
   const exports = new Map();
   /** @type {string[]} */
   const reexports = [];
+  /** @type {Set<string>} */
+  const loads = new Set();
+  // A load by a path the scan can read names the module it loads; one by a
+  // path it cannot read may load any module in the folder the path starts in.
+  const loadFrom = (/** @type {any} */ source) => {
+    const written = writtenString(source);
+    if (written != null) {
+      if (mayBeOwn(written)) uses.push({local: null, names: [], module: stemOf(written), placement: 'blocked'});
+      return;
+    }
+    // A path joined with `+` starts with its first part.
+    let start = source;
+    while (start?.type === 'BinaryExpression' && start.operator === '+') start = start.left;
+    if (start !== source && writtenString(start) != null) {
+      const prefix = /** @type {string} */ (writtenString(start));
+      if (prefix === '' || /^\.{0,2}\//.test(prefix)) loads.add(loadFolder(prefix));
+      else if (mayBeOwn(prefix)) loads.add('*');
+      return;
+    }
+    if (source?.type === 'TemplateLiteral') {
+      const prefix = source.quasis[0]?.value.cooked ?? '';
+      if (prefix === '' || /^\.{1,2}\//.test(prefix)) loads.add(loadFolder(prefix));
+      else if (mayBeOwn(prefix)) loads.add('*');
+      return;
+    }
+    if (source != null) loads.add('./');
+  };
+  // An export of a binding the module imports from the app's own code passes
+  // that module's export on: under the same name, as a barrel does; under
+  // another name, or for a default or namespace import, the scan cannot
+  // match it to the component.
+  const passOn = (/** @type {any} */ path, /** @type {string} */ local, /** @type {string} */ exported) => {
+    const imported = importOf(path.scope.getBinding(local));
+    if (!imported || imported.typeOnly || !mayBeOwn(imported.source)) return;
+    const fromStem = stemOf(imported.source);
+    if (imported.imported === '*' || imported.imported === 'default') {
+      uses.push({local: null, names: fromStem ? [fromStem] : [], module: fromStem, placement: 'blocked'});
+    } else if (exported === imported.imported) {
+      if (fromStem && !reexports.includes(fromStem)) reexports.push(fromStem);
+    } else {
+      uses.push({local: null, names: [imported.imported], placement: 'blocked'});
+    }
+  };
   const exportAs = (/** @type {string} */ local, /** @type {string} */ name) => {
     const names = exports.get(local) ?? [];
     if (!names.includes(name)) names.push(name);
@@ -901,7 +1061,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
   };
   traverseTemplateSource(file, {
     JSXElement(/** @type {any} */ path) {
-      const target = referent(path, isOwnCode);
+      const target = referent(path, context);
       if (target.kind === 'package' && isCore(target.source) && BUTTONS.has(target.name)) {
         const missing = missingAction(path, context);
         if (!missing) return;
@@ -933,7 +1093,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
         if (specifier.importKind === 'type') continue;
         if (!unresolved && !referredToElsewhere(path.scope.getBinding(specifier.local.name))) continue;
         const imported = importOf(path.scope.getBinding(specifier.local.name))?.imported ?? '*';
-        const fromStem = specifierStem(from);
+        const fromStem = stemOf(from);
         uses.push(
           imported === '*'
             ? {local: null, names: [], module: fromStem, placement: 'blocked'}
@@ -946,21 +1106,44 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
       }
     },
     CallExpression(/** @type {any} */ path) {
-      const [specifier] = path.node.arguments;
-      if (path.node.callee.type !== 'Import' || specifier?.type !== 'StringLiteral') return;
-      if (!mayBeOwn(specifier.value)) return;
-      uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
+      const {callee, arguments: args} = path.node;
+      const [specifier] = args;
+      if (callee.type === 'Import' || (callee.type === 'Identifier' && callee.name === 'require' && !path.scope.getBinding('require'))) {
+        loadFrom(specifier);
+      } else if (isImportMetaGlob(callee)) {
+        const patterns = specifier?.type === 'ArrayExpression' ? specifier.elements : [specifier];
+        for (const pattern of patterns) {
+          const text = writtenString(pattern);
+          if (text == null) loads.add('./');
+          else if (!text.startsWith('!') && !NOT_A_MODULE.test(text)) loads.add(loadFolder(text.slice(0, text.search(/[*?{[]|$/))));
+        }
+      } else if (callee.type === 'MemberExpression' && !callee.computed && callee.object.type === 'Identifier' && callee.object.name === 'require' && callee.property.name === 'context') {
+        const folder = writtenString(specifier);
+        loads.add(folder == null ? './' : loadFolder(folder.endsWith('/') ? folder : `${folder}/`));
+      }
     },
     ImportExpression(/** @type {any} */ path) {
-      const specifier = path.node.source;
-      if (specifier?.type !== 'StringLiteral' || !mayBeOwn(specifier.value)) return;
-      uses.push({local: null, names: [], module: specifierStem(specifier.value), placement: 'blocked'});
+      loadFrom(path.node.source);
+    },
+    TSImportEqualsDeclaration(/** @type {any} */ path) {
+      const reference = path.node.moduleReference;
+      if (reference.type === 'TSExternalModuleReference') loadFrom(reference.expression);
     },
     Program: {
       exit(/** @type {any} */ path) {
-        for (const [name, binding] of Object.entries(path.scope.bindings)) {
-          if (isComponentDeclaration(binding) && referredToElsewhere(binding)) {
-            uses.push({local: name, names: [name], placement: 'blocked'});
+        // A component in any scope, a nested one included, that the module
+        // refers to other than by rendering it may be rendered anywhere.
+        const scopes = new Set([path.scope]);
+        path.traverse({
+          Scopable(/** @type {any} */ inner) {
+            scopes.add(inner.scope);
+          },
+        });
+        for (const scope of scopes) {
+          for (const [name, binding] of Object.entries(scope.bindings)) {
+            if (isComponentDeclaration(binding) && referredToElsewhere(binding)) {
+              uses.push({local: name, names: [name], placement: 'blocked'});
+            }
           }
         }
       },
@@ -968,7 +1151,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
     ExportAllDeclaration(/** @type {any} */ path) {
       const from = path.node.source.value;
       if (!mayBeOwn(from)) return;
-      const fromStem = specifierStem(from);
+      const fromStem = stemOf(from);
       if (path.node.exported) {
         uses.push({local: null, names: [], module: fromStem, placement: 'blocked'});
       } else if (fromStem && !reexports.includes(fromStem)) {
@@ -981,7 +1164,10 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
       /** @type {string | null} */
       let local = null;
       if (declaration.type === 'FunctionDeclaration') local = declaration.id?.name ?? 'default';
-      else if (declaration.type === 'Identifier') local = declaration.name;
+      else if (declaration.type === 'Identifier') {
+        local = declaration.name;
+        passOn(path, declaration.name, 'default');
+      }
       else if (wrappedFunction(declaration)) local = 'default';
       if (local == null) return;
       for (const alias of [local, ...aliases]) exportAs(local, alias);
@@ -992,7 +1178,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
         // A re-export under another name, or of a module's default export,
         // goes by a name the scan cannot match to the component.
         if (!mayBeOwn(from.value)) return;
-        const fromStem = specifierStem(from.value);
+        const fromStem = stemOf(from.value);
         if (fromStem && !reexports.includes(fromStem)) reexports.push(fromStem);
         for (const specifier of specifiers ?? []) {
           if (specifier.type === 'ExportNamespaceSpecifier') {
@@ -1022,12 +1208,44 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
         if (specifier.type !== 'ExportSpecifier' || specifier.local.type !== 'Identifier') continue;
         const exported =
           specifier.exported.type === 'StringLiteral' ? specifier.exported.value : specifier.exported.name;
+        passOn(path, specifier.local.name, exported);
         exportAs(specifier.local.name, exported);
         if (exported === 'default' && stem) exportAs(specifier.local.name, stem);
       }
     },
   });
-  return {buttons, uses, exports, stem, reexports};
+  return {buttons, uses, exports, stem, reexports, loads: [...loads]};
+}
+
+/** A glob pattern for files that hold no component: data, styles or images. */
+const NOT_A_MODULE = /\.(?:json|css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|txt|ya?ml|md)$/;
+
+/**
+ * Whether a callee is Vite's `import.meta.glob` (or `globEager`).
+ * @param {any} callee
+ */
+function isImportMetaGlob(callee) {
+  return (
+    callee.type === 'MemberExpression' &&
+    !callee.computed &&
+    callee.object.type === 'MetaProperty' &&
+    callee.object.meta.name === 'import' &&
+    callee.object.property.name === 'meta' &&
+    (callee.property.name === 'glob' || callee.property.name === 'globEager')
+  );
+}
+
+/**
+ * The folder a load path starts in: the part of a relative or root path
+ * (`/src/…`, from the project folder) up to its last `/`; the loading
+ * module's own folder (`./`) for a path the scan reads none of, as a bundler
+ * loads it; or `*` for a path alias or other bare path.
+ * @param {string} prefix the part of the path before what the scan cannot read
+ */
+export function loadFolder(prefix) {
+  if (prefix === '') return './';
+  if (!/^\.{0,2}\//.test(prefix)) return '*';
+  return prefix.slice(0, prefix.lastIndexOf('/') + 1);
 }
 
 /**
@@ -1057,9 +1275,12 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
  *   text names any of the names, which may render a component that goes by one
  * @param {boolean} [app.complete] false when the scan did not list every
  *   module of the app; then no component counts as one that nothing renders
+ * @param {(file: string) => boolean} [app.loaded] whether a module may load
+ *   the file by a path the scan cannot read; then its components may be
+ *   rendered anywhere
  * @returns {ButtonFinding[]}
  */
-export function buttonsWithoutAction({files, scan, modulesNaming, complete = true}) {
+export function buttonsWithoutAction({files, scan, modulesNaming, complete = true, loaded = () => false}) {
   /** @type {Map<string, boolean>} */
   const known = new Map();
   /** @type {Set<string>} */
@@ -1073,6 +1294,8 @@ export function buttonsWithoutAction({files, scan, modulesNaming, complete = tru
    */
   const passedOnBy = stem => {
     const found = new Set([stem]);
+    /** @type {string[]} */
+    const barrels = [];
     const queue = [stem];
     while (queue.length > 0) {
       const next = /** @type {string} */ (queue.shift());
@@ -1080,11 +1303,12 @@ export function buttonsWithoutAction({files, scan, modulesNaming, complete = tru
         const barrel = scan(other);
         if (barrel?.stem && barrel.reexports.includes(next) && !found.has(barrel.stem)) {
           found.add(barrel.stem);
+          barrels.push(other);
           queue.push(barrel.stem);
         }
       }
     }
-    return found;
+    return {stems: found, barrels};
   };
 
   /**
@@ -1103,16 +1327,19 @@ export function buttonsWithoutAction({files, scan, modulesNaming, complete = tru
     visiting.add(key);
     const own = scan(file);
     const names = own?.exports.get(component) ?? [];
+    const shared = names.filter(name => name !== 'default');
+    const passed = names.length > 0 && own?.stem ? passedOnBy(own.stem) : {stems: new Set(), barrels: []};
+    const moduleNames = passed.stems;
+    // A module that may be loaded by a path the scan cannot read, or a barrel
+    // that passes the component on and may be, may render it anywhere.
     /** @type {Array<{file: string, placement: Placement}>} */
-    const places = [];
+    const places = loaded(file) || passed.barrels.some(loaded) ? [{file, placement: 'blocked'}] : [];
     for (const use of own?.uses ?? []) {
       const here =
         use.local === component ||
         (use.local == null && use.names.some(name => name === component || names.includes(name)));
       if (here && !sameComponent(use.placement, component)) places.push({file, placement: use.placement});
     }
-    const shared = names.filter(name => name !== 'default');
-    const moduleNames = names.length > 0 && own?.stem ? passedOnBy(own.stem) : new Set();
     const lookFor = [...new Set([...shared, ...moduleNames])];
     if (lookFor.length > 0) {
       for (const other of modulesNaming(lookFor)) {
