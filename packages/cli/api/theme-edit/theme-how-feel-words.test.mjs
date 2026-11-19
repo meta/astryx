@@ -108,6 +108,8 @@ describe('a feel word said for the whole theme', () => {
       'avoid anything busy',
       'bold headings without being loud',
       'keep it from looking busy',
+      'tone down the busy look',
+      'steer clear of loud',
     ]) {
       const sets = (await answer(ask)).sets;
       expect(sets.join(' '), ask).not.toMatch(/spacing compact|type display/);
@@ -116,9 +118,8 @@ describe('a feel word said for the whole theme', () => {
       'headings bold',
     );
     // (A feel word said of a color, a status or the accent, describes it.)
-    expect((await answer('bright red errors')).sets.join(' ')).not.toMatch(
-      /vibrancy/,
-    );
+    for (const ask of ['bright red errors', 'a bright accent'])
+      expect((await answer(ask)).sets.join(' '), ask).not.toMatch(/vibrancy/);
   }, 240_000);
 
   it("said of a part or of one thing, it is that one's", async ctx => {

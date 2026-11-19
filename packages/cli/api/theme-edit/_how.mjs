@@ -1555,17 +1555,19 @@ function colorBlindPieces(q) {
       .replace(/\bcolou?r[- ]?blind\w*(?:[- ](?:friendly|safe|proof))?/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
-    return /\b(?:darker|lighter|bolder|brighter|#[0-9a-f]{3,8}|red|green|blue|amber|yellow|orange|purple|teal|\d+px|icons?|borders?|bold)\b/i.test(
-      left,
-    )
-      ? left
-      : 'status colors';
+    // (What is left is a change unless it is only words about the ask
+    // itself: "color-blind friendly statuses", "a color-blind safe
+    // palette".)
+    const said = left
+      .replace(
+        /\b(?:make|makes|making|it|its|this|that|the|a|an|be|is|are|please|our|my|your|theme|app|site|ui|friendly|safe|proof|accessible|people|users?|readers?|staff|folks|viewers?|visitors?|for|with|to|so|also|and|status(?:es)?|colou?rs?|palette|statuses|can|tell|apart|them)\b/gi,
+        '',
+      )
+      .replace(/[^\w#]+/g, '');
+    return said ? left : 'status colors';
   };
   const kept = blind.map(own);
-  if (
-    blind.length === pieces.length &&
-    kept.every(x => x === 'status colors')
-  )
+  if (blind.length === pieces.length && kept.every(x => x === 'status colors'))
     return {blind: true, rest: ''};
   const rest = blind
     .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
