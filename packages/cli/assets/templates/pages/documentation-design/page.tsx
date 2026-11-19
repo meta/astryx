@@ -507,7 +507,12 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
 
   const EXAMPLE_PREVIEWS: Record<string, React.ReactNode[]> = {
     button: [
-      <HStack key="semantics" gap={3} vAlign="center">
+      <HStack
+        key="semantics"
+        gap={3}
+        vAlign="center"
+        hAlign="center"
+        wrap="wrap">
         <Button label="Flat" variant="ghost" />
         <Button label="Default" variant="secondary" />
         <Button label="Primary" variant="primary" />
@@ -573,10 +578,12 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">{getComponentName(activeNav)}</Text>
+              <Text as="h1" type="display-1">
+                {getComponentName(activeNav)}
+              </Text>
               <Text type="supporting" color="secondary">
                 March 30, 2026 · Updated 5:40 p.m. PST
               </Text>
@@ -650,13 +657,15 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                 return (
                   <Card key={i} padding={0}>
                     <Section padding={3} variant="transparent">
-                      <HStack gap={3} vAlign="center">
+                      {/* On a narrow screen the actions move under the title
+                          instead of running past the card. */}
+                      <HStack gap={3} vAlign="center" wrap="wrap">
                         <StackItem size="fill">
                           <Text type="body" weight="medium">
                             {example.title}
                           </Text>
                         </StackItem>
-                        <HStack gap={1} vAlign="center">
+                        <HStack gap={1} vAlign="center" wrap="wrap">
                           <Button
                             label="Open in Craft"
                             variant="ghost"
@@ -687,6 +696,7 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                     <Section variant="muted" padding={3} dividers={['top']}>
                       <VStack gap={3}>
                         <TabList
+                          aria-label={`${example.title} details`}
                           value={activeTab}
                           onChange={value =>
                             setExampleTabs(prev => ({

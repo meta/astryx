@@ -458,7 +458,7 @@ export default function SimpleTableTemplate() {
               onClick: () =>
                 // Demo only: replace this toast with the call that sends the invite.
                 showToast({
-                  body: `Invite resent to ${member.email}`,
+                  body: `Demo: the invite would be resent to ${member.email} here`,
                   uniqueID: `resend-${member.id}`,
                 }),
             },
@@ -495,7 +495,7 @@ export default function SimpleTableTemplate() {
         header={
           <LayoutHeader hasDivider padding={4}>
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center">
+              <HStack wrap="wrap" gap={3} vAlign="center">
                 <StackItem size="fill">
                   <Heading level={1}>Members</Heading>
                 </StackItem>
@@ -547,7 +547,7 @@ export default function SimpleTableTemplate() {
                             onClick: () =>
                               // Demo only: replace this toast with the export call.
                               showToast({
-                                body: `Exported ${pluralize(selectionState.selectedKeys.size, 'member')}`,
+                                body: `Demo: ${pluralize(selectionState.selectedKeys.size, 'member')} would be exported here`,
                                 uniqueID: 'export-members',
                               }),
                           },

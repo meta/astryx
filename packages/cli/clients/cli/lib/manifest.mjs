@@ -66,7 +66,9 @@ export const GLOBAL_MODE = Object.freeze({
  * Envelopes the CLI layer builds itself, so the wrapped FunctionDoc cannot
  * declare them: `manifest` wraps no API function, `theme build` batches several
  * `themeBuild()` receipts, and `theme add` with no slug (or `--list`) answers
- * with `themeListAvailable()`'s `theme.list` instead of calling `themeAdd()`.
+ * with `themeListAvailable()`'s `theme.list` instead of calling `themeAdd()`,
+ * and an `experimental icon` subcommand typed alone may answer the search's
+ * `icon.search` instead of calling its own function.
  * manifest.test.mjs fails once the wrapped FunctionDoc declares one of these, so
  * the list only shrinks.
  * @type {Record<string, string[]>}
@@ -79,6 +81,12 @@ const CLI_LAYER_RESPONSE_TYPES = {
   'experimental theme': ['help'],
   'experimental theme editor': ['help'],
   'experimental theme preview': ['help'],
+  // An icon subcommand typed alone answers the icon search for its name.
+  'experimental icon add': ['icon.search'],
+  'experimental icon map': ['icon.search'],
+  'experimental icon use': ['icon.search'],
+  'experimental icon new-set': ['icon.search'],
+  'experimental icon new-definition': ['icon.search'],
 };
 
 /**

@@ -59,6 +59,7 @@ system_specs:
     spec:AST-061/DEC-6,
     spec:AST-061/DEC-9,
     spec:AST-061/FR6,
+    spec:AST-061/FR11,
     spec:AST-064/DEC-6,
     spec:AST-036/DEC-12,
   ]
@@ -604,11 +605,10 @@ or a status token readable at any reading width, and a floor on the text box
 means the same amount of content at every density without Markdown restating
 Table's own spacing.
 
-Markdown applies this to its own default Table part, over Table's released
-wrap-mode defaults, rather than changing those defaults. Table's wrap mode is a
-released contract for data-driven tables, and Markdown already owns the styling
-of the part it renders; narrowing the change to that part leaves every other
-Table caller untouched.
+Table's children-mode wrapping columns already follow their content and
+scroll when they do not fit (`component:Table` FR24, DEC-6). Markdown adds, on
+its own default Table part, the per-column floors on the text box, visible
+overflow, and header labels that wrap instead of truncating.
 
 The nested Table's Scroll region stays the single owner of the table's
 horizontal overflow, name, and conditional keyboard focusability, so
@@ -617,9 +617,7 @@ duplicated. Two nested scroll containers around one table produce a focus stop
 that never scrolls and a second region with the same name, and the column
 floors are not observable while an outer container absorbs the overflow.
 
-Rejected: changing Table's wrap-mode defaults instead, which would move a
-released behavior for every data-driven caller to fix one part's layout;
-widening columns by measuring rendered text, which adds an observer and a
+Rejected: widening columns by measuring rendered text, which adds an observer and a
 reflow to a purely declarative path; and adding a prop or option for column
 sizing, which would make a default-path defect into a caller's decision.
 

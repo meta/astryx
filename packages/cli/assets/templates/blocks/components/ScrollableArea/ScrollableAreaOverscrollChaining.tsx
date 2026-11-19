@@ -68,7 +68,7 @@ function FileGrid({
 
 export default function ScrollableAreaOverscrollChaining() {
   return (
-    <Card width={400} padding={0}>
+    <Card width={400} maxWidth="100%" padding={0}>
       <ScrollableArea
         axis="block"
         role="region"

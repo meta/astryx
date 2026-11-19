@@ -465,7 +465,7 @@ function InvoiceCard() {
               <StackItem size="fill">
                 <Text type="body">New customer code: NEW15</Text>
               </StackItem>
-              <Text type="body">– {fmt(DISCOUNT)}</Text>
+              <Text type="body">−&nbsp;{fmt(DISCOUNT)}</Text>
             </HStack>
           </MetadataListItem>
           <MetadataListItem label="Shipping">
@@ -606,10 +606,17 @@ function TimelineSection() {
 // ─── Right Panel ────────────────────────────────────────────────────────────
 // Renders as a fixed-width side panel on desktop, and as a plain stacked section
 // on mobile (so it flows below the content instead of squishing beside it).
-function PanelContent() {
+// Under the narrow layout's "Order details" heading its sections sit a level
+// deeper.
+function PanelContent({sectionLevel = 2}: {sectionLevel?: 2 | 3}) {
   return (
     <VStack gap={4}>
-      <Collapsible trigger={<Heading level={4}>Notes</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Notes
+          </Heading>
+        }>
         <Text type="body">
           Customer is a repeat buyer — 3rd order this quarter. Prefers snow and
           oat glazes. Requested gift wrapping for the mug set. Ships to a
@@ -619,7 +626,12 @@ function PanelContent() {
           </Link>
         </Text>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Customer</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Customer
+          </Heading>
+        }>
         <MetadataList>
           <MetadataListItem label="Name">Jane Doe</MetadataListItem>
           <MetadataListItem label="Address">
@@ -632,7 +644,12 @@ function PanelContent() {
           </MetadataListItem>
         </MetadataList>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Fraud Analysis</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={sectionLevel}>
+            Fraud Analysis
+          </Heading>
+        }>
         <VStack gap={1}>
           <ProgressBar
             label="Risk level"
@@ -695,7 +712,7 @@ export default function DetailPage2Template() {
             {isNarrow && (
               <VStack gap={4}>
                 <Heading level={2}>Order details</Heading>
-                <PanelContent />
+                <PanelContent sectionLevel={3} />
               </VStack>
             )}
           </VStack>

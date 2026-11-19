@@ -27,9 +27,12 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
+import {definitionCoverageText} from '../../../foundation/text/definition-coverage.mjs';
+import {defaultVariantText} from '../../../foundation/text/default-variant.mjs';
 import {
   answersQueries,
   discover as discoverApi,
+  iconSetCoverageOf,
   OFFICIAL_SOURCE_NAME,
 } from '../../../api/discover/discover.mjs';
 import {isValidSemver} from '../../../foundation/env/semver.mjs';
@@ -64,6 +67,7 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'skills',
   'iconSets',
 ];
 
@@ -168,6 +172,38 @@ function withDocSections(entry, run) {
     ),
   };
 }
+
+/**
+ * An icon set's item page as the text view shows it: how many of the CLI's
+ * icon definitions it maps, of how many, as `definitions`, the label
+ * `experimental icon --list` prints it under. Where icon features are on, that line
+ * stands for the definitions themselves, which `--json` lists. The JSON
+ * carries no count.
+ * @template {object} T
+ * @param {T} data
+ * @param {{mapped: number, total: number} | null} coverage
+ * @returns {T | Record<string, unknown>}
+ */
+function withIconSetCoverage(data, coverage) {
+  if (!coverage) return data;
+  /** @type {Record<string, unknown>} */
+  const shown = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key === 'definitions') continue;
+    if (key === 'installed')
+      shown.definitions = definitionCoverageText(coverage);
+    shown[key] = value;
+  }
+  return shown;
+}
+
+/**
+ * Icon set names as text, marked experimental (spec:AST-017 FR27).
+ * @param {string[]} names
+ * @param {(names: string[]) => string} [shown] how the list is summarized
+ */
+const experimentalNames = (names, shown = n => n.join(', ')) =>
+  `${shown(names)} [experimental]`;
 
 /**
  * Record options that summarize each item list to its first names.
@@ -285,12 +321,22 @@ function pinNote(install, shown, source) {
  * @param {string} run how to invoke the CLI
  * @param {string} [note] what the command installs, when the page shows
  *   another version
+ * @param {string[]} [iconSets] icon set names the item adds; once the package
+ *   is installed, `experimental icon use` picks one
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function addBlocks(install, themes, addsOther, run, note) {
+function addBlocks(install, themes, addsOther, run, note, iconSets = []) {
   /** @type {import('../formatters/index.mjs').Block[]} */
   const blocks = [section('Add it'), code(install)];
   if (note) blocks.push(text(note));
+  if (iconSets.length > 0) {
+    blocks.push(
+      text('Then use its icon set:'),
+      code(
+        iconSets.map(set => `${run} experimental icon use ${set}`).join('\n'),
+      ),
+    );
+  }
   if (themes.length > 0) {
     blocks.push(
       text(
@@ -311,6 +357,9 @@ function addBlocks(install, themes, addsOther, run, note) {
   return blocks;
 }
 
+/** A whole scoped package name, `@scope/name`. */
+const SCOPED_NAME = /^@[^/\s]+\/[^/\s]+$/;
+
 /**
  * @param {import('commander').Command} program
  */
@@ -319,10 +368,21 @@ export function registerDiscover(program) {
     fn: discoverFn,
     action:
       /**
-       * @param {string | undefined} query
+       * @param {string[] | string | undefined} words
        * @param {{components?: boolean, type?: string, installed?: boolean, available?: boolean, limit?: string}} options
        */
-      async (query, options) => {
+      async (words, options) => {
+        // The query is variadic, as search's is: `astryx discover bar chart`
+        // is one query, "bar chart". A scoped package name and one word after
+        // it name an item: `astryx discover @acme/charts BarChart` opens
+        // `@acme/charts/BarChart`.
+        const query = Array.isArray(words)
+          ? words.length > 0
+            ? words.join(
+                words.length === 2 && SCOPED_NAME.test(words[0]) ? '/' : ' ',
+              )
+            : undefined
+          : words;
         rejectEmptyArgument('query', query, 'astryx discover');
         const detail = program.opts().detail || 'full';
         const json = program.opts().json || false;
@@ -419,7 +479,13 @@ export function registerDiscover(program) {
                 available.length > 0
                   ? records(available, {
                       ...listOpts,
-                      format: {...listOpts.format, description: firstSentence},
+                      omit: ['experimentalFields'],
+                      format: {
+                        ...listOpts.format,
+                        description: firstSentence,
+                        iconSets: (/** @type {string[]} */ names) =>
+                          experimentalNames(names, listOpts.format?.iconSets),
+                      },
                     })
                   : text(
                       !sources.some(s => s.status !== 'failed')
@@ -429,6 +495,20 @@ export function registerDiscover(program) {
                           : 'Nothing new to add: this project has every integration its sources list.',
                     ),
               );
+              // `<package>/<set>`, so the command picks the set even when two
+              // packages ship one of that name.
+              const iconSets = available.flatMap(entry =>
+                Array.isArray(entry.iconSets)
+                  ? entry.iconSets.map(set => `${entry.package}/${set}`)
+                  : [],
+              );
+              if (iconSets.length > 0) {
+                blocks.push(
+                  text(
+                    `Then use an icon set it adds: ${run} experimental icon use <set>, for example ${run} experimental icon use ${iconSets[0]}`,
+                  ),
+                );
+              }
             }
             blocks.push(...sourceNotes(sources));
             if (!queries) {
@@ -478,8 +558,11 @@ export function registerDiscover(program) {
             /** @type {import('../formatters/index.mjs').Block[]} */
             const blocks = [
               record(withDocSections(d, run), {
-                omit: ['versions', 'install'],
-                format: {description: firstSentence},
+                omit: ['versions', 'install', 'experimentalFields'],
+                format: {
+                  description: firstSentence,
+                  iconSets: experimentalNames,
+                },
               }),
             ];
             if (d.versions && d.versions.length > 0) {
@@ -556,8 +639,24 @@ export function registerDiscover(program) {
 
           case 'discover.item': {
             const d = result.data;
+            const shown =
+              d.kind === 'icon-set'
+                ? {...d, default: defaultVariantText(d.default)}
+                : d;
             emit(
-              record(d, {omit: ['install']}),
+              record(withIconSetCoverage(shown, iconSetCoverageOf(result)), {
+                omit: ['install', 'experimental'],
+                // An icon set is experimental (spec:AST-017 FR27): its name
+                // carries the mark, as in the list.
+                ...(d.experimental
+                  ? {
+                      format: {
+                        name: (/** @type {string} */ name) =>
+                          `${name} [experimental]`,
+                      },
+                    }
+                  : {}),
+              }),
               // A doc that adds sections to another package's topic says how
               // to read each one.
               ...(d.kind === 'doc' && d.sections
@@ -576,6 +675,7 @@ export function registerDiscover(program) {
                     d.kind !== 'theme',
                     run,
                     pinNote(d.install, d.version, d.source),
+                    d.kind === 'icon-set' ? [`${d.package}/${d.name}`] : [],
                   )
                 : []),
               text(`Its package: ${run} discover ${d.package}`),
@@ -603,7 +703,7 @@ export function registerDiscover(program) {
                     m.kind && m.kind !== 'component' ? m.kind : '',
                     m.installed === false ? 'not installed' : '',
                   ].filter(Boolean);
-                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}`;
+                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}${m.experimental ? ' [experimental]' : ''}`;
                 }),
               ),
             );

@@ -27,6 +27,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
+import {
+  oldTranspileCacheDir,
+  transpiledCacheDir,
+} from '../../foundation/env/user-dirs.mjs';
+import {SUBFOLDERS} from '../../foundation/fs/jiti-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -52,10 +57,13 @@ import {
   formatCliCommand,
   getCliInvocation,
   guessCliInvocation,
+  quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {
   chooseDeclaredCliCommand,
+  chooseDeclaredValue,
   declaredCliCommandsOf,
+  declaredValuesOf,
 } from '../../foundation/env/cli-command.mjs';
 import {
   findConfigPath,
@@ -76,6 +84,7 @@ import {
   guideEntry,
   overlayLanguages,
   projectTree,
+  templateLinkProblems,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
@@ -88,6 +97,8 @@ import {
 import {
   checkAppThemes,
   checkThemes,
+  moduleSpecifiers,
+  stringValues,
   themeImportWiring,
   withProviderWiring,
 } from './theme-checks.mjs';
@@ -109,10 +120,15 @@ import {
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
+  packageInstallCommand,
+  packageInstallStep,
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
+  findIconImports,
   findIconPlaceholders,
+  findUnknownCoreProps,
+  iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
@@ -126,8 +142,14 @@ import {
   isLocalThemeOwner,
   readThemeState,
   builtTargetOf,
+  listProjectSourceFiles,
+  readTextFile,
+  doctorStylesheetImports,
+  doctorStylesheetAtRules,
+  builtProjectRoot,
+  readSkillPlaces,
 } from './_adapter.mjs';
-import {checkBuilt} from './built-checks.mjs';
+import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {
@@ -143,6 +165,9 @@ import {
  * @property {string} label - Human-readable check name.
  * @property {DoctorStatus} status
  * @property {string} message - One-line result summary.
+ * @property {string} [brief] - A short form of a long message, which text
+ *   output prints in its place. It names the command that prints the whole
+ *   message.
  * @property {string} [fix] - Actionable remediation, present when not 'pass'.
  *
  * @typedef {object} DoctorReport
@@ -162,6 +187,8 @@ import {
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
+ * @property {import('./_adapter.mjs').SkillPlacesReport|null} [skillPlaces]
+ *   The project's skill places, or null when they could not be read.
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]|null} [integrations]
  *   Every integration the project loaded, or null when the project could not be
  *   read at all.
@@ -181,14 +208,23 @@ import {
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
- * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
- *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ * @property {{sets: Array<{name: string, package: string, replacedKeys?: Array<{key: string, definition: string}>}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
+ *   The project's icon sets (AST-084 FR17), or null when they could not be
+ *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
- *   the CLI writes for a missing icon, read only in a project that sets
- *   `experimental.iconSet`; null otherwise.
+ *   the CLI writes for a missing icon, read only where the icon feature gate
+ *   is on; null otherwise.
  *   Experimental: may change or be removed in a patch release.
+ * @property {Array<{file: string, imports: Array<{line: number, module: string, export: string, why: 'unlisted'|'earlier'|'unresolved', set: string|null, definitions: string[], replacement: {set: string, module: string, export: string}|null}>}>|null} [iconImports]
+ *   Each file in the project's own source with icon imports that do not
+ *   match its icon sets, read only when the placeholders are; null otherwise.
+ *   Experimental: may change or be removed in a patch release.
+ * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ *   The props the project's own source gives Core components that they do
+ *   not take, with how many props it read, or why it checked none; null when
+ *   the project reads no Core or the scan failed.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.
@@ -329,6 +365,34 @@ export function checkNodeVersion(ctx) {
 }
 
 /**
+ * An install step as fix text: the line in backticks, then its note.
+ * @param {{line: string, note: string | null}} step
+ */
+function stepText({line, note}) {
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
+ * The fix text for peers to install: the project's integration guidance when
+ * it gives one, followed by the versions the peers need, else one install
+ * command with each range.
+ * @param {string} cwd
+ * @param {string[]} names every peer to install, by name
+ * @param {string[]} targets the same peers, each with its range when it has one
+ * @returns {string}
+ */
+function peerInstallText(cwd, names, targets) {
+  const {installGuidance} = packageInstallCommand(names, cwd);
+  if (installGuidance) {
+    const versioned = targets.filter(t => !names.includes(t));
+    return versioned.length
+      ? `\`${installGuidance}\`, at these versions: ${versioned.join(', ')}`
+      : `\`${installGuidance}\``;
+  }
+  return stepText(packageInstallStep(targets, cwd));
+}
+
+/**
  * Check 2 — @astryxdesign/core is installed and resolvable from the project.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
@@ -354,8 +418,237 @@ export function checkCoreInstalled(ctx) {
       : {
           fix: install
             ? `Install the project's dependencies: \`${install}\`.`
-            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+            : `Install the design system: ${stepText(packageInstallStep(['@astryxdesign/core'], ctx.cwd))}.`,
         }),
+  };
+}
+
+/** Core's component styles, the stylesheet an Astryx app imports once. */
+const CORE_STYLESHEET = '@astryxdesign/core/astryx.css';
+
+/** Config files a build that compiles Core from source names its plugin in. */
+const SOURCE_BUILD_CONFIGS = [
+  {stem: 'next.config', plugin: 'withAstryx()'},
+  {stem: 'vite.config', plugin: 'astryxStylex()'},
+];
+
+/** The extensions those config files take. */
+const CONFIG_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
+
+/** The PostCSS config files PostCSS reads in JSON. */
+const POSTCSS_JSON_CONFIGS = ['.postcssrc', '.postcssrc.json'];
+
+/** @param {string} name */
+function namesBuildPackage(name) {
+  return (
+    name === '@astryxdesign/build' || name.startsWith('@astryxdesign/build/')
+  );
+}
+
+/**
+ * Every string in a JSON value, object keys included.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function jsonStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(jsonStrings);
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) => [
+      key,
+      ...jsonStrings(child),
+    ]);
+  }
+  return [];
+}
+
+/**
+ * The PostCSS config file that loads a plugin of `@astryxdesign/build`, which
+ * compiles Core's styles into the stylesheet's `@stylex;` rule, or null. A
+ * JavaScript or TypeScript config names it as a string (an import, a
+ * `require()` or a `plugins` key); a JSON config, or `package.json`'s
+ * `postcss` field, as a key or a value.
+ * @param {string} root
+ * @returns {string | null}
+ */
+function postcssConfigLoadingBuild(root) {
+  for (const extension of CONFIG_EXTENSIONS) {
+    const name = `postcss.config${extension}`;
+    for (const config of [name, `.postcssrc${extension}`]) {
+      let source;
+      try {
+        source = readTextFile(path.join(root, config));
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if ([...stringValues(source)].some(namesBuildPackage)) return config;
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const config of [...POSTCSS_JSON_CONFIGS, 'package.json']) {
+    let value;
+    try {
+      value = JSON.parse(readTextFile(path.join(root, config)));
+    } catch {
+      continue;
+    }
+    const postcss = config === 'package.json' ? value?.postcss : value;
+    if (jsonStrings(postcss).some(namesBuildPackage)) return config;
+  }
+  return null;
+}
+
+/**
+ * How an app compiles Core's styles from its source with
+ * `@astryxdesign/build`, so it loads no `astryx.css`: a `next.config` or
+ * `vite.config` that imports the build's plugin (`withAstryx()`,
+ * `astryxStylex()`), a stylesheet with the `@astryx;` rule the Next.js
+ * PostCSS plugin writes the compiled rules into, or one with the `@stylex;`
+ * rule while the PostCSS config loads the build's plugin. An `@stylex;` rule
+ * alone is the app's own StyleX, which still needs Core's prebuilt styles.
+ * Null when it does none of these.
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function sourceBuildSetup(root) {
+  for (const {stem, plugin} of SOURCE_BUILD_CONFIGS) {
+    for (const extension of CONFIG_EXTENSIONS) {
+      const file = path.join(root, `${stem}${extension}`);
+      let source;
+      try {
+        source = readTextFile(file);
+      } catch {
+        continue;
+      }
+      if (!source.includes('@astryxdesign/build')) continue;
+      try {
+        if (
+          [...moduleSpecifiers(source)].some(
+            specifier =>
+              specifier === '@astryxdesign/build' ||
+              specifier.startsWith('@astryxdesign/build/'),
+          )
+        ) {
+          return `${plugin} in ${stem}${extension}`;
+        }
+      } catch {
+        // A config that does not parse names no plugin.
+      }
+    }
+  }
+  for (const file of listProjectSourceFiles(root, '', {stylesheets: true})) {
+    if (!file.endsWith('.css')) continue;
+    let css;
+    try {
+      css = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!/@(?:astryx|stylex)\s*;/iu.test(css)) continue;
+    const rules = doctorStylesheetAtRules(css);
+    const where = path.relative(root, file) || file;
+    if (rules.has('astryx')) return `the \`@astryx;\` rule in ${where}`;
+    if (rules.has('stylex')) {
+      const config = postcssConfigLoadingBuild(root);
+      if (config) {
+        return `the \`@stylex;\` rule in ${where}, with @astryxdesign/build in ${config}`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * {@link sourceBuildSetup} for a project folder, or null without one.
+ * @param {string | null} root
+ * @returns {string | null}
+ */
+function sourceBuildOf(root) {
+  return root ? sourceBuildSetup(root) : null;
+}
+
+/**
+ * The first project file that loads Core's component styles: a stylesheet
+ * that `@import`s them, a module that imports them, or a page that links
+ * them. Each is read as a syntax tree or its tags, so comments never count.
+ * @param {string} root
+ * @returns {{file: string | null, unparsed: number}}
+ */
+function coreStylesheetLoad(root) {
+  let unparsed = 0;
+  for (const file of listProjectSourceFiles(root, '', {
+    stylesheets: true,
+    pages: true,
+  })) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    if (!source.includes('astryx.css')) continue;
+    if (file.endsWith('.css')) {
+      if (doctorStylesheetImports(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+      continue;
+    }
+    if (/\.html?$/u.test(file)) {
+      if (linksCoreStylesheet(source)) return {file, unparsed};
+      continue;
+    }
+    try {
+      if (moduleSpecifiers(source).has(CORE_STYLESHEET)) {
+        return {file, unparsed};
+      }
+    } catch {
+      unparsed += 1;
+    }
+  }
+  return {file: null, unparsed};
+}
+
+/**
+ * The app loads Core's component styles. Without them, Astryx components
+ * render unstyled, and nothing else fails: the build passes and the page
+ * loads. An app that loads none but compiles Core's styles from source is
+ * not checked. Read from the project's own source, stylesheets and pages,
+ * never run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreStylesheets(ctx) {
+  if (!ctx.coreDir) return null;
+  const root = projectRootOf(ctx);
+  const label = "Core's component styles loaded";
+  const {file, unparsed} = coreStylesheetLoad(root);
+  if (file) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'pass',
+      message: `${path.relative(root, file) || file} loads ${CORE_STYLESHEET}, Core's component styles.`,
+    };
+  }
+  const setup = sourceBuildSetup(root);
+  if (setup) {
+    return {
+      id: 'core-stylesheets',
+      label,
+      status: 'info',
+      message: `Not checked: this app compiles Core's styles from source (${setup}), so it does not need ${CORE_STYLESHEET}.`,
+    };
+  }
+  return {
+    id: 'core-stylesheets',
+    label,
+    status: 'warn',
+    message: `Found nothing in project source, stylesheets or pages that imports or links ${CORE_STYLESHEET}, Core's component styles. Without them, Astryx components render unstyled.${unparsed ? ` ${unparsed} source file(s) that name it could not be parsed.` : ''}`,
+    fix: "Import Core's stylesheets once, in the app's global stylesheet: `@import '@astryxdesign/core/reset.css';` then `@import '@astryxdesign/core/astryx.css';`. Or import both in the app's entry module, reset.css first.",
   };
 }
 
@@ -665,8 +958,8 @@ export function checkImplicitIntegrations(ctx) {
       'themes',
       'docs',
       'codemods',
-      // An experimental root counts only in a project that opts in.
-      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+      // An experimental root counts only where icon features are on.
+      ...(ctx.iconSets ? ['iconSets'] : []),
     ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
@@ -868,6 +1161,21 @@ export function checkAgentDocs(ctx) {
       ? `${refusal} Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.`
       : initFix;
 
+  // A project that keeps its Astryx guidance as a skill (astryx.config
+  // `skills.to` without `agents-md`): its agent files are its own text, and
+  // the skill-places check judges its skill files.
+  const places = ctx.skillPlaces?.places ?? ['agents-md'];
+  if (ctx.skillPlaces && !places.includes('agents-md')) {
+    const astryx = ctx.skillPlaces.files.filter(
+      file => file.state === 'current' || file.state === 'differs' || file.state === 'edited',
+    );
+    return {
+      id: 'agent-docs',
+      label: 'AI agent docs',
+      status: astryx.length > 0 ? 'pass' : 'info',
+      message: `The project keeps its Astryx guidance as a skill (astryx.config skills.to: ${places.join(', ')})${astryx.length > 0 ? `, in ${astryx.map(file => file.path).join(', ')}` : ''}; the skill-places check reports whether each file is there and current.`,
+    };
+  }
   if (present.length === 0) {
     return {
       id: 'agent-docs',
@@ -948,6 +1256,149 @@ export function checkAgentDocs(ctx) {
 }
 
 /**
+ * The project's skill places (astryx.config `skills.to`): each file of a
+ * saved `skills` or folder place against this release's project skill, a
+ * project that holds both the block and the skill (agents read Astryx twice),
+ * and a project skill named `astryx`, the computer-level skill's name, which
+ * an agent shows in place of one of the two. Left out of a project that keeps
+ * only the AGENTS.md block and has no project skill.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkSkillPlaces(ctx) {
+  const report = ctx.skillPlaces;
+  if (!report) return null;
+  const blockOnly = report.places.length === 1 && report.places[0] === 'agents-md';
+  if (
+    blockOnly &&
+    report.skillFiles.length === 0 &&
+    report.plainNamed.length === 0 &&
+    report.skillProblems.length === 0
+  ) {
+    return null;
+  }
+  const base = {id: 'skill-places', label: 'Astryx skill places'};
+  const init = (/** @type {string} */ args) => `\`${formatCliCommand(`astryx init ${args}`.trim(), ctx.cwd)}\``;
+  const saved = report.places.join(',');
+  if (report.renderError) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The Astryx skill could not be rendered, so its files were not checked: ${firstLine(report.renderError)}`,
+      fix: `Fix what the message names, then run ${init('')}.`,
+    };
+  }
+  if (report.plainNamed.length > 0) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `${report.plainNamed.join(', ')} ${report.plainNamed.length === 1 ? 'is a project skill' : 'are project skills'} named \`astryx\`, the name of the computer-level skill, so an agent that has both shows only one, and Claude Code shows the computer one.`,
+      fix: `Delete ${report.plainNamed.length === 1 ? 'it' : 'them'}; ${init('--to skills')} writes the project skill as \`astryx-project\`.`,
+    };
+  }
+  const leftOutNote =
+    report.skillProblems.length > 0
+      ? ` Skills left out: ${report.skillProblems.map(problem => `${problem.package}: ${problem.message}`).join(' ')}`
+      : '';
+  const savesBlock = report.places.includes('agents-md');
+  const savesSkill = report.places.some(place => place !== 'agents-md');
+  // Both saved is the person's choice: the note in the pass line says so.
+  const doubled =
+    report.blockFiles.length > 0 && report.skillFiles.length > 0 && !(savesBlock && savesSkill);
+  if (doubled) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The Astryx guidance is here twice: as the block in ${report.blockFiles.join(', ')} and as the skill in ${report.skillFiles.join(', ')}, so agents read it twice.`,
+      fix: savesSkill
+        ? `The project saves ${saved}: remove the Astryx block from ${report.blockFiles.join(', ')} by hand, or run ${init('--to agents-md')} to keep only the block (it removes the skill copies).`
+        : `The project saves agents-md: delete ${report.skillFiles.join(', ')}, or run ${init('--to skills')} to keep only the skill (it removes the block).`,
+    };
+  }
+  // The two copies of a place are one skill: one a person's own and the other
+  // Astryx's means agents read two different texts.
+  // Grouped by place and skill: the project skill and each integration skill
+  // have copies of their own.
+  /** @param {{place: string, skill?: string}} file */
+  const copiesOf = file => `${file.place}\0${file.skill ?? ''}`;
+  const splitKeys = [...new Set(report.files.map(copiesOf))].filter(key => {
+    const states = report.files.filter(file => copiesOf(file) === key).map(file => file.state);
+    return (
+      states.some(state => state === 'edited' || state === 'foreign') &&
+      states.some(state => state === 'current' || state === 'differs' || state === 'absent')
+    );
+  });
+  if (splitKeys.length > 0) {
+    const files = report.files.filter(file => splitKeys.includes(copiesOf(file)));
+    const names = splitKeys.map(key => {
+      const [place, skill] = key.split('\0');
+      return skill ? `${skill} in ${place}` : place;
+    });
+    return {
+      ...base,
+      status: 'warn',
+      message: `The copies of ${names.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : 'Astryx\'s'})`).join(', ')}, so agents read different texts.`,
+      fix: 'Make the copies the same: copy your file over the other, or delete both and run ' + init('') + '.',
+    };
+  }
+  if (report.linkedOut.length > 0) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `Not checked: ${report.linkedOut.join(' ')}`,
+      fix: `Make each folder a real folder inside the project, or choose another place with ${init('--to <places>')}.`,
+    };
+  }
+  const missing = report.files.filter(file => file.state === 'absent');
+  const stale = report.files.filter(file => file.state === 'differs');
+  const kept = report.files.filter(file => file.state === 'edited' || file.state === 'foreign');
+  const leftoverNote =
+    report.leftovers.length > 0
+      ? ` Skills Astryx wrote for an integration this project no longer has: ${report.leftovers.join(', ')}; \`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` or ${init('')} removes them.`
+      : '';
+  const keptNote =
+    kept.length > 0
+      ? ` Kept as they are (edited, or not written by Astryx): ${kept.map(file => file.path).join(', ')}.`
+      : '';
+  const bothNote =
+    report.blockFiles.length > 0 && report.skillFiles.length > 0
+      ? ` The project saves both the block and the skill (${saved}), so agents that read both get it twice.`
+      : '';
+  const codexNote = report.computerSkill && report.skillsFolderFiles.length > 0
+    ? ' This computer also has the computer-level `astryx` skill, so Codex lists both skills.'
+    : '';
+  if (missing.length > 0 || stale.length > 0 || report.leftovers.length > 0) {
+    const missingNote =
+      missing.length > 0 ? ` An Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.` : '';
+    const staleNote =
+      stale.length > 0 ? ` The Astryx skill is from another release in ${stale.map(file => file.path).join(', ')}.` : '';
+    return {
+      ...base,
+      status: 'warn',
+      message: `${(missingNote + staleNote).trim()}${keptNote}${leftoverNote}${codexNote}${leftOutNote}`,
+      fix: `Run ${init('')}: it writes every saved place again, and is the refresh after an integration changes (\`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` also refreshes them after an Astryx update).${leftOutNote ? ' For a skill left out, its package fixes the `skill` its note names.' : ''}`,
+    };
+  }
+  const current = report.files.filter(file => file.state === 'current');
+  if (leftOutNote) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `${leftOutNote.trim()}${keptNote}${codexNote}`,
+      fix: 'Its package fixes the `skill` each note names; until then agents get no line or skill for it.',
+    };
+  }
+  return {
+    ...base,
+    status: kept.length > 0 && current.length === 0 ? 'info' : 'pass',
+    message:
+      current.length > 0
+        ? `The Astryx skill matches this release in ${current.map(file => file.path).join(', ')}.${keptNote}${leftoverNote}${bothNote}${codexNote}`
+        : `Saved places: ${report.places.join(', ')}.${keptNote}${bothNote}${codexNote}`,
+  };
+}
+
+/**
  * Check 8 — @astryxdesign/core peer dependencies are satisfied by installed packages.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
@@ -1018,7 +1469,14 @@ export function checkPeerDeps(ctx) {
       label: '@astryxdesign/core peer dependencies',
       status: 'warn',
       message: `Peer dependency issues — ${problems.join('; ')}.`,
-      fix: `Install compatible peers: \`npm install ${targets.join(' ')}\`.`,
+      fix: `Install compatible peers: ${peerInstallText(
+        ctx.cwd,
+        [
+          ...missing.map(spec => spec.replace(/^(@?[^@]+)@.*$/, '$1')),
+          ...mismatched.map(m => m.name),
+        ],
+        targets,
+      )}.`,
     };
   }
 
@@ -1152,9 +1610,10 @@ export function checkIntegrationCoreRange(ctx) {
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
- * other installed set that was withdrawn, with why.
- * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
- * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * other installed set that was withdrawn, with why, and for each `map` key
+ * of an installed set that names a replaced definition.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project where the
+ * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
@@ -1164,12 +1623,16 @@ export function checkIconSets(ctx) {
   const label = 'Icon sets';
   if (state == null) return null;
   const {sets, withdrawn, choice} = state;
-  // Only a project that opts in with `experimental.iconSet` gets the check.
-  if (!choice.configured) return null;
-  const list = [
-    {selector: choice.configured, status: choice.status, reason: choice.reason},
-    ...(choice.backups ?? []),
-  ];
+  const list = choice.configured
+    ? [
+        {
+          selector: choice.configured,
+          status: choice.status,
+          reason: choice.reason,
+        },
+        ...(choice.backups ?? []),
+      ]
+    : [];
   const installFix =
     'Install the package that ships the set, or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the installed sets).';
   const missing = list.filter(each => each.status === 'missing');
@@ -1211,8 +1674,8 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
-          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
           ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
@@ -1247,6 +1710,23 @@ export function checkIconSets(ctx) {
       fix: 'Run `astryx integration check` in the package that ships the set, or install its module.',
     };
   }
+  // A `map` key that names a replaced definition still maps its successor,
+  // so nothing breaks; the set's own package renames the key.
+  const renamed = sets.flatMap(set =>
+    (set.replacedKeys ?? []).map(
+      each =>
+        `${set.package}/${set.name} maps "${each.key}", which "${each.definition}" replaced`,
+    ),
+  );
+  if (renamed.length > 0) {
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `${renamed.join(' | ')}. Each entry maps the definition that replaced it.`,
+      fix: 'In the package that ships the set, rename each map key to the definition that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
+    };
+  }
   return {
     id,
     label,
@@ -1263,22 +1743,36 @@ export function checkIconSets(ctx) {
  */
 function iconUseCommandOf(choice, variant) {
   return iconUseCommand(
-    /** @type {string} */ (choice.configured),
+    /** @type {string} */ (choice.configured ?? choice.set?.name),
     (choice.backups ?? []).map(each => each.selector),
     variant,
   );
 }
 
 /**
+ * The main set the placeholder fixes name: the one `experimental.iconSet`
+ * names, else the only installed set; null when no main set is decided or
+ * icon features are off. The placeholder check, and the source scan it
+ * reads, run only when there is one.
+ * @param {DoctorContext['iconSets']} iconSets
+ * @returns {string | null}
+ */
+export function placeholderMainSet(iconSets) {
+  return iconSets?.choice.configured ?? iconSets?.choice.set?.name ?? null;
+}
+
+/**
  * The placeholder component for a missing icon, still in the project's own
  * source (AST-084): each file and the meanings it stands for, with the commands that give each a
- * real icon. Only a project that sets `experimental.iconSet` gets the check.
+ * real icon. Only a project where the icon feature gate is on, and whose
+ * main set is decided, gets the check.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
 export function checkIconPlaceholders(ctx) {
   const choice = ctx.iconSets?.choice;
-  if (!choice?.configured || ctx.iconPlaceholders == null) return null;
+  const main = placeholderMainSet(ctx.iconSets);
+  if (!choice || !main || ctx.iconPlaceholders == null) return null;
   const id = 'icon-placeholders';
   const label = 'Placeholder icons';
   const found = ctx.iconPlaceholders;
@@ -1290,7 +1784,6 @@ export function checkIconPlaceholders(ctx) {
       message: 'No copied code uses the placeholder for a missing icon.',
     };
   }
-  const main = choice.configured;
   const meanings = [
     ...new Set(found.flatMap(each => each.meanings ?? [])),
   ].sort();
@@ -1313,6 +1806,159 @@ export function checkIconPlaceholders(ctx) {
     status: 'warn',
     message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
     fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
+  };
+}
+
+/** How many props the warning names before it counts the rest. */
+const PROPS_NAMED = 8;
+
+/**
+ * The props the project's own source gives Core components that the
+ * component does not take (see `findUnknownCoreProps`): each with its file,
+ * line and component, and a documented prop with the same words when there
+ * is one. A prop a component does not take does nothing, and unless the build
+ * type-checks, no build step reports it.
+ * When the project has no TypeScript to read Core's types with, the check
+ * says it did not run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreProps(ctx) {
+  const scan = ctx.coreProps;
+  if (scan == null) return null;
+  const id = 'core-props';
+  const label = 'Core props';
+  if (scan.skipped) return {id, label, status: 'info', message: `Not checked: ${scan.skipped}`};
+  const count = scan.found.length;
+  if (count === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `No prop was found that a Core component does not take (${scan.uses} prop${scan.uses === 1 ? '' : 's'} read).`,
+    };
+  }
+  const named = scan.found
+    .slice(0, PROPS_NAMED)
+    .map(
+      use =>
+        `${use.file}:${use.line} ${use.component} has no \`${use.prop}\`${use.suggestion ? ` (did you mean \`${use.suggestion}\`?)` : ''}`,
+    );
+  const rest = count - named.length;
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${count} prop${count === 1 ? '' : 's'} a Core component does not take: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
+    fix: 'Give each component a prop it takes: `astryx component <Name>` lists them. A prop the component does not take does nothing.',
+  };
+}
+
+/**
+ * The icon imports in the project's own source that do not match its icon
+ * sets (AST-084): each file and import, with the icon of the list that draws
+ * the same meaning. An import from a set the list leaves out, or from a set
+ * later in the list than one that draws the same meaning, still renders, so
+ * the check warns, as for a placeholder. An icon-named import of a package
+ * that does not resolve and that package.json does not declare (a set the
+ * project uninstalled) breaks the build, so the check fails, as `icon-sets`
+ * fails for a set the list names that is not installed. Only a project where
+ * the icon feature gate is on, and whose main set is decided, gets the check.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconImports(ctx) {
+  const choice = ctx.iconSets?.choice;
+  const main = choice?.configured ?? choice?.set?.name;
+  if (!choice || !main || ctx.iconImports == null) return null;
+  const id = 'icon-imports';
+  const label = 'Icon imports';
+  const found = ctx.iconImports;
+  if (found.length === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message:
+        'Every icon import in your code comes from the set your list picks for it.',
+    };
+  }
+  const missing = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why === 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  const other = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why !== 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  /**
+   * Each file once, its imports grouped by the module they come from and the
+   * module that replaces them: `file (from → to: Old → New, …; from: Old
+   * (why), …)`.
+   * @param {typeof other} rows
+   */
+  const byFile = rows => {
+    /** @type {Map<string, Map<string, string[]>>} */
+    const files = new Map();
+    for (const row of rows) {
+      const groups = files.get(row.file) ?? new Map();
+      const group = row.replacement
+        ? `${row.module} → ${row.replacement.module}`
+        : row.module;
+      const names = groups.get(group) ?? [];
+      const name = row.replacement
+        ? `${row.export} → ${row.replacement.export}`
+        : row.why === 'unresolved'
+          ? row.export
+          : `${row.export} (${row.definitions.length > 0 ? `no set in your list has "${row.definitions.join('", "')}"` : 'its set maps it to no Astryx meaning'})`;
+      if (!names.includes(name)) names.push(name);
+      groups.set(group, names);
+      files.set(row.file, groups);
+    }
+    return [...files]
+      .map(
+        ([file, groups]) =>
+          `${file} (${[...groups]
+            .map(([group, names]) => `${group}: ${names.join(', ')}`)
+            .join('; ')})`,
+      )
+      .join(', ');
+  };
+  /** @param {number} n @param {string} what */
+  const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
+  /** @param {typeof other} rows */
+  const fileCount = rows => new Set(rows.map(row => row.file)).size;
+  const parts = [];
+  if (missing.length > 0) {
+    parts.push(
+      `${count(missing.length, 'icon import')} in ${count(fileCount(missing), 'file')} name a package that is not installed, so the build fails: ${byFile(missing)}.`,
+    );
+  }
+  if (other.length > 0) {
+    const sets = [...new Set(other.map(row => row.set))].join(', ');
+    parts.push(
+      `${count(other.length, 'icon import')} in ${count(fileCount(other), 'file')} come from ${sets}, not the set your list (experimental.iconSet) picks for that meaning: ${byFile(other)}.`,
+    );
+  }
+  const fixes = [];
+  if (missing.length > 0) {
+    fixes.push(
+      'Replace each import of a package that is not installed with the icon `astryx experimental icon <meaning>` prints; or install that package again, and doctor names the icon of your list that draws the same meaning.',
+    );
+  }
+  if (other.length > 0) {
+    fixes.push(
+      `Import each icon named after → from the module named after →. An icon with no → needs a set in your list that has its meaning, or your own choice of icon: \`${iconUseCommand(main, [...(choice.backups ?? []).map(each => each.selector), '<set>'], choice.variant)}\`.`,
+    );
+  }
+  return {
+    id,
+    label,
+    status: missing.length > 0 ? 'fail' : 'warn',
+    message: parts.join(' '),
+    fix: fixes.join(' '),
   };
 }
 
@@ -1373,6 +2019,35 @@ export function checkPackageManager(ctx) {
   };
 }
 
+const TWIN_PROVIDER_FIX =
+  'Both manifests declare the same `providerId`. If they are one ' +
+  'integration installed under two names, keep one of the two ' +
+  'dependencies; if they are different integrations, give each its ' +
+  'own `providerId` in astryx.integration.*.';
+const NAMED_PROVIDER_FIX =
+  'Give each integration its own `providerId` in astryx.integration.*. ' +
+  "A renamed package may keep its predecessor's ID only when the " +
+  'predecessor is no longer installed.';
+
+/**
+ * The fix for a set of provider conflicts: the two-case advice for conflicts
+ * where both manifests declare the ID, the rename advice for the rest, and
+ * both, each named, when the project has some of each.
+ * @param {ReadonlyArray<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} conflicts
+ * @returns {string}
+ */
+function providerConflictFix(conflicts) {
+  const twins = conflicts.filter(
+    integration => integration.__providerConflict?.bothDeclare,
+  ).length;
+  if (twins === conflicts.length) return TWIN_PROVIDER_FIX;
+  if (twins === 0) return NAMED_PROVIDER_FIX;
+  return (
+    `Where both manifests declare the ID: ${TWIN_PROVIDER_FIX} ` +
+    `For the other conflicts: ${NAMED_PROVIDER_FIX}`
+  );
+}
+
 /**
  * Check 6b — every contributing integration owns its provider identity.
  *
@@ -1413,10 +2088,7 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix:
-        'Give each integration its own `providerId` in astryx.integration.*. ' +
-        "A renamed package may keep its predecessor's ID only when the " +
-        'predecessor is no longer installed.',
+      fix: providerConflictFix(conflicts),
     };
   }
 
@@ -1715,9 +2387,10 @@ export async function checkDocsTree(_ctx, options = {}) {
         }
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
-      // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names. A run whose base is not
-      // Core leaves Core's docs out; a link to one of them is not a problem.
+      // typed fields, reference and workflow blocks, and inline links, a
+      // template description's included. A reference block also includes all
+      // it names. A run whose base is not Core leaves Core's docs out; a link
+      // to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
@@ -1728,6 +2401,7 @@ export async function checkDocsTree(_ctx, options = {}) {
       const absent = target =>
         CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
       problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
+      problems.push(...(await templateLinkProblems(catalog, {absent})));
       problems.push(
         ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
@@ -1888,6 +2562,46 @@ export function checkCliCommand(ctx) {
   };
 }
 
+/**
+ * Install guidance: whether the loaded integrations agree on how this app
+ * adds a dependency. Left out when none gives any.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkInstallGuidance(ctx) {
+  const id = 'install-guidance';
+  const label = 'Install guidance';
+  const {
+    value: guidance,
+    conflict,
+    declared,
+  } = chooseDeclaredValue(
+    declaredValuesOf(ctx.integrations ?? [], 'installGuidance'),
+  );
+  if (conflict) {
+    const claims = declared
+      .map(entry => `${entry.package} (\`${entry.value}\`)`)
+      .join(', ');
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `Loaded integrations give different install guidance: ${claims}. Neither is used, so install steps use the package manager's command.`,
+      fix: 'Remove the integration that does not belong here, or have every package give the same `installGuidance` in its astryx.integration manifest.',
+    };
+  }
+  if (guidance) {
+    const packages = declared.map(entry => entry.package).join(', ');
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `Install steps follow the installGuidance of ${packages}: \`${guidance}\`.`,
+    };
+  }
+  return null;
+}
+
 /* ── outside a project: the computer ─────────────────────────────────── */
 
 /**
@@ -1903,6 +2617,8 @@ export function checkCliCommand(ctx) {
  *   the person's choices about the computer-level agent text
  * @property {string | null} [agentTextCommand] the command the skill file
  *   tells agents to run, or null
+ * @property {Array<{path: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}>} [agentTextFolders]
+ *   each folder outside a project that `init --to <folder>` saved
  * @property {string | null} [agentTextInstall] the install step the skill
  *   file records for when that command is not found, or null
  * @property {string} [cwd] the folder doctor runs in, for the printed fix
@@ -2151,11 +2867,30 @@ export function checkComputerAgentText(ctx) {
     label: 'Computer-level agent text',
     status: /** @type {const} */ ('info'),
   };
+  const folders =
+    ctx.agentTextFolders ??
+    (state ? state.folders : []);
+  const staleFolders = folders.filter(f => f.state === 'differs');
+  const deletedFolders = folders.filter(f => f.state === 'absent');
+  const keptFolders = folders.filter(f => f.state === 'edited' || f.state === 'foreign');
+  const folderNote =
+    (folders.length > 0
+      ? ` Also in the folders \`init --to\` saved: ${folders.map(f => f.path).join(', ')}.`
+      : '') +
+    (staleFolders.length > 0
+      ? ` From another release there: ${staleFolders.map(f => f.path).join(', ')}; the CLI installed for the computer refreshes them after its next upgrade, and \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one now.`
+      : '') +
+    (deletedFolders.length > 0
+      ? ` Deleted there, so not refreshed: ${deletedFolders.map(f => f.path).join(', ')}; \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one again.`
+      : '') +
+    (keptFolders.length > 0
+      ? ` Kept as they are (edited, or not written by Astryx): ${keptFolders.map(f => f.path).join(', ')}.`
+      : '');
   if (!settings.install) {
     return {
       ...base,
       message:
-        'The computer-level agent text is turned off (`astryx init --user --remove-agents`), so the CLI installed for the computer does not write it.',
+        `The computer-level agent text is turned off (\`astryx init --user --remove-agents\`), so the CLI installed for the computer does not write it.${folderNote}`,
       fix: `To turn it back on, run \`${formatCliCommand('astryx init --user', ctx.cwd)}\`.`,
     };
   }
@@ -2181,6 +2916,7 @@ export function checkComputerAgentText(ctx) {
     .filter(l => l.state === 'absent' || l.state === 'differs')
     .map(home);
   const linkNote =
+    folderNote +
     (linked.length > 0 ? ` Linked into: ${linked.join(', ')}.` : '') +
     (copied.length > 0 ? ` Copied into: ${copied.join(', ')}.` : '') +
     (skipped.length > 0
@@ -2375,19 +3111,81 @@ async function runComputerChecks(cwd) {
  * Where `search` and `build` keep their gathered catalog between runs, how
  * much it holds, and the most it and jiti's transpile cache hold; and, in a
  * run under Yarn Plug'n'Play's loader, that the run keeps none
- * (runsUnderPnp). Left out of a checkout, which keeps none.
+ * (runsUnderPnp). Left out of a checkout, which keeps none. The brief names
+ * only the folder, its entries and size, the command that prints the whole
+ * message, and the command that removes the kept folders.
+ * @param {Pick<DoctorContext, 'cwd'>} ctx
  * @returns {DoctorCheck | null}
  */
-export function checkGatherCache() {
+export function checkGatherCache(ctx) {
   const summary = gatherCacheSummary();
   if (summary == null) return null;
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const entries = `${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}`;
+  const kept = [summary.dir];
+  if (isDirectory(summary.transpiledDir)) kept.push(summary.transpiledDir);
   return {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies of transpiled
+ * code, which this CLI never reads, and the command that removes it. Found by
+ * one stat, never a listing: that folder can hold so many files that reading
+ * it takes minutes.
+ * @param {import('../../foundation/env/user-dirs.mjs').UserDirOptions} [options]
+ * @returns {DoctorCheck | null}
+ */
+export function checkOldTranspileCache(options) {
+  const dir = oldTranspileCacheDir(options);
+  try {
+    if (!fs.lstatSync(dir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const remove = removeFolderCommand(dir, options?.platform);
+  return {
+    id: 'old-transpile-cache',
+    label: 'Old transpile cache',
+    status: 'info',
+    message: `An earlier Astryx CLI left transpiled copies in ${dir}. This CLI keeps its copies in ${transpiledCacheDir(options)} and never reads the old folder.`,
+    fix: `To remove it, run: ${remove}. An earlier CLI that still runs on this computer makes it again.`,
+  };
+}
+
+/**
+ * The command that removes one or more folders and all they hold:
+ * PowerShell's on Windows, a POSIX shell's elsewhere, each path quoted as
+ * each shell reads it.
+ * @param {string | string[]} dirs
+ * @param {string} [platform]
+ * @returns {string}
+ */
+export function removeFolderCommand(dirs, platform = process.platform) {
+  const folders = (Array.isArray(dirs) ? dirs : [dirs]).map(dir =>
+    quoteCommandArgument(dir, platform),
+  );
+  return platform === 'win32'
+    ? `Remove-Item -Recurse -Force -LiteralPath ${folders.join(', ')}`
+    : `rm -rf ${folders.join(' ')}`;
+}
+
+/**
+ * Whether a path is a folder, by one stat.
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isDirectory(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2399,6 +3197,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
@@ -2408,11 +3207,16 @@ export const SYNC_CHECKS = [
   checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
+  checkIconImports,
+  checkCoreProps,
   checkAgentDocs,
+  checkSkillPlaces,
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkInstallGuidance,
   checkGatherCache,
+  () => checkOldTranspileCache(),
 ];
 
 /**
@@ -2423,6 +3227,7 @@ export const SYNC_CHECKS = [
  */
 const CORE_CHECKS = new Set([
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkVersionAlignment,
   checkPeerDeps,
 ]);
@@ -2447,6 +3252,7 @@ export async function runChecks(options = {}) {
       ...checkBuilt(built, {
         cwd,
         packages: builtIntegrationPackages(built, cwd),
+        sourceBuild: sourceBuildOf(builtProjectRoot(built, cwd)),
       }),
     ];
     const summary = {pass: 0, warn: 0, fail: 0, info: 0};
@@ -2486,7 +3292,7 @@ export async function runChecks(options = {}) {
   let configuredIntegrations = null;
   /** @type {string|null} */
   let projectError = null;
-  /** @type {DoctorContext['iconSets']} */
+  /** @type {Awaited<ReturnType<import('../../foundation/config/project.mjs').Project['iconSets']>> | null} */
   let iconSets = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
@@ -2584,7 +3390,9 @@ export async function runChecks(options = {}) {
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
       try {
-        iconSets = await project.iconSets();
+        iconSets = iconFeatureGate(project).on
+          ? await project.iconSets()
+          : null;
       } catch {
         iconSets = null;
       }
@@ -2596,11 +3404,20 @@ export async function runChecks(options = {}) {
     }
   }
 
+  /** @type {DoctorContext['skillPlaces']} */
+  let skillPlaces = null;
+  try {
+    skillPlaces = await readSkillPlaces(cwd);
+  } catch {
+    // Unreadable places leave the skill-places check out.
+  }
+
   /** @type {DoctorContext} */
   const ctx = {
     cwd,
     nodeVersion: process.versions.node,
     coreDir,
+    skillPlaces,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
     addedThemePackages: addedThemePackages(cwd),
@@ -2617,6 +3434,8 @@ export async function runChecks(options = {}) {
     iconSets,
     // Set after the docs checks, below.
     iconPlaceholders: null,
+    iconImports: null,
+    coreProps: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -2636,13 +3455,26 @@ export async function runChecks(options = {}) {
       checkDocsProgressiveDisclosure(ctx),
     ),
   ];
-  // Only a project that names an icon set scans its source for placeholders.
-  if (iconSets?.choice.configured) {
+  // Only a project where icon features are on and a main set is decided
+  // scans its source for placeholders: no other project gets the check.
+  if (iconSets && placeholderMainSet(iconSets)) {
     try {
-      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.iconPlaceholders = findIconPlaceholders(projectDir);
+      ctx.iconImports = findIconImports(projectDir, iconSets);
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;
+    }
+  }
+
+  // The props scan reads the app's source, Core's docs, and Core's types
+  // with the project's TypeScript; a scan that fails leaves the check out.
+  if (readsCore) {
+    try {
+      ctx.coreProps = await findUnknownCoreProps(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      ctx.coreProps = null;
     }
   }
 
