@@ -181,32 +181,6 @@ describe('a saved setting and how far it reaches', () => {
     ).toEqual(expect.arrayContaining(['text-area']));
   }, 240_000);
 
-  it('a part setting saved with no record keeps its part, and its family is offered', async ctx => {
-    if (needBases(ctx)) return;
-    await themeEditNew('fam', {cwd, like: 'neutral'});
-    await themeEditSet(
-      'fam',
-      'background-image',
-      'linear-gradient(#ffffff, #e6e6e6)',
-      {
-        cwd,
-        on: 'button',
-      },
-    );
-    const data = saved('fam');
-    delete data.reached;
-    save('fam', data);
-    const r = /** @type {any} */ (
-      await themeEditSet('fam', 'corners', '4px', {cwd})
-    );
-    // (It keeps the reach it was saved with; the rest of its family is
-    // offered with the line that takes it.)
-    const offered = /** @type {any[]} */ (r.data.offered ?? []);
-    expect(offered).toHaveLength(1);
-    expect(offered[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
-    expect(offered[0].run).toMatch(/--on button$/);
-  }, 240_000);
-
   it('a family setting an earlier editor saved keeps its own part; its family is offered', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('rel', {cwd, like: 'neutral'});
@@ -256,6 +230,32 @@ describe('a saved setting and how far it reaches', () => {
         o.setting.startsWith('border-radius'),
       ),
     ).toBe(true);
+  }, 240_000);
+
+  it('a part setting saved with no record keeps its part, and its family is offered', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('fam', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'fam',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {
+        cwd,
+        on: 'button',
+      },
+    );
+    const data = saved('fam');
+    delete data.reached;
+    save('fam', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('fam', 'corners', '4px', {cwd})
+    );
+    // (It keeps the reach it was saved with; the rest of its family is
+    // offered with the line that takes it.)
+    const offered = /** @type {any[]} */ (r.data.offered ?? []);
+    expect(offered).toHaveLength(1);
+    expect(offered[0].parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(offered[0].run).toMatch(/--on button$/);
   }, 240_000);
 
   it('an input setting saved with no record keeps the members it matched; the rest are offered', async ctx => {
@@ -398,5 +398,37 @@ describe('a saved setting and how far it reaches', () => {
     expect(said.data.offered?.length).toBe(1);
     const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
     expect(u.data.offered ?? []).toEqual([]);
+  }, 240_000);
+
+  it('--only says which saved setting it replaces and that the rest of the group goes back', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('rep', {cwd, like: 'neutral'});
+    await themeEditSet('rep', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    const r = /** @type {any} */ (
+      await themeEditSet('rep', 'border-color', '#0000ff', {
+        cwd,
+        on: 'text-input',
+        only: true,
+      })
+    );
+    expect(r.data.replaced?.value).toBe('#ff0000');
+    expect(r.data.notes.join('\n')).toMatch(
+      /replaces border-color = #ff0000 on text-input: the rest of the group goes back to the base theme's value/,
+    );
+    const back = /** @type {any} */ (
+      await themeEditSet('rep', 'border-color', '#ff0000', {
+        cwd,
+        on: 'text-input',
+      })
+    );
+    expect(back.data.notes.join('\n')).toMatch(/it reaches the group again/);
+    expect(
+      saved('rep').settings.filter(
+        (/** @type {any} */ x) => x.thing === 'border-color',
+      ),
+    ).toHaveLength(1);
   }, 240_000);
 });

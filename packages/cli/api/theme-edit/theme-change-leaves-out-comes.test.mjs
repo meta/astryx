@@ -59,9 +59,7 @@ describe('a border width set for the whole theme', () => {
       );
     const [buttons, dividers] = r.data.leftOut;
     // (A small box that only draws its own text keeps its own, offered.)
-    expect(buttons.run).toContainEqual(
-      expect.stringMatching(/ --on tooltip$/),
-    );
+    expect(buttons.run).toContainEqual(expect.stringMatching(/ --on tooltip$/));
     // A button's frame is the buttons dial's: framed in the variants that
     // draw a box (the button's ghost keeps none), as show's missed list does.
     expect(buttons.run).toContainEqual(
