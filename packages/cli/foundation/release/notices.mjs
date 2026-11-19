@@ -856,8 +856,11 @@ export function cliUpdateStep({
     stateDir,
   });
   const current = lag?.current ?? projectRelease(root)?.version ?? self.version;
+  // The newest known release can read the recipe only when it is newer than
+  // the CLI that refused; otherwise the step installs `latest`.
+  const newer = lag != null && isBehind(self.version, lag.newest);
   return {
-    install: lag?.install ?? projectInstall(target, root, 'latest'),
+    install: newer ? lag.install : projectInstall(target, root, 'latest'),
     upgrade: `astryx upgrade --from ${current} --apply`,
     folder: target.moved ? root : null,
     runs: false,

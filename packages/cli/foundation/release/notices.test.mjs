@@ -557,6 +557,24 @@ describe('cliUpdateStep', () => {
     ).toBe('npm install @astryxdesign/core@latest @astryxdesign/cli@latest');
   });
 
+  it('installs the latest release when the newest known one is not newer than the CLI that ran', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const stateDir = checked('0.7.3');
+    for (const version of ['0.7.3', '0.7.4']) {
+      expect(
+        cliUpdateStep({
+          cwd: app,
+          self: {version, root: path.join(app, 'cli')},
+          stateDir,
+        }).install,
+      ).toBe(
+        'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+      );
+    }
+  });
+
   it("from a tool folder inside a project, runs in the project's folder", () => {
     const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
     writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
