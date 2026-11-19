@@ -13,11 +13,18 @@
  *           be driven directly (jsdom has no SVG geometry for the real one).
  */
 
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {describe, it, expect, vi, type Mock} from 'vitest';
 import {render, act, within} from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {scaleLinear, scaleBand} from 'd3-scale';
-import {MediaTheme, Theme, defineTheme} from '@astryxdesign/core';
+import {
+  InternationalizationProvider,
+  MediaTheme,
+  Theme,
+  defineTheme,
+} from '@astryxdesign/core';
 import {ChartTooltip} from './ChartTooltip';
 import {ChartProvider} from './ChartContext';
 import {bar} from './marks/bar';
@@ -763,5 +770,112 @@ describe('ChartTooltip lifecycle', () => {
     unmount();
     expect(card()).toBeNull();
     expect(harness.handlers.size).toBe(0);
+  });
+});
+
+describe('ChartTooltip empty values', () => {
+  const englishCatalog = JSON.parse(
+    readFileSync(join(__dirname, '../../core/locales/en.json'), 'utf8'),
+  ) as Record<string, {defaultMessage: string}>;
+  const NO_DATA = englishCatalog['@astryx.chart.noData'].defaultMessage;
+
+  const leafTexts = () =>
+    Array.from(card().querySelectorAll('*'))
+      .filter(el => el.children.length === 0 && el.textContent !== '')
+      .map(el => el.textContent);
+
+  const twoSeries = [
+    makeSeries(),
+    makeSeries({
+      key: 'profit',
+      dataKeys: ['profit'],
+      label: 'Profit',
+      _uid: '1:profit',
+    }),
+  ];
+  const twoSeriesResolved = new Map([
+    ['0:sales', SALES_POINTS],
+    ['1:profit', SALES_POINTS],
+  ]);
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ])(
+    'shows the catalog phrase for a %s value of a single series',
+    (_name, empty) => {
+      const harness = makeHarness({
+        data: [DATA[0], {month: 'Feb', sales: empty, profit: 2}, DATA[2]],
+      });
+      renderTooltip(harness);
+      harness.dispatch(hoverAt(1));
+      expect(leafTexts()).toEqual(['Feb', NO_DATA]);
+    },
+  );
+
+  it('shows the catalog phrase in the row of the series with no value', () => {
+    const harness = makeHarness({
+      data: [DATA[0], {month: 'Feb', sales: 7, profit: null}, DATA[2]],
+      resolved: twoSeriesResolved,
+    });
+    renderTooltip(harness, {series: twoSeries});
+    harness.dispatch(hoverAt(1));
+    expect(leafTexts()).toEqual(['Feb', 'Sales', '7', 'Profit', NO_DATA]);
+  });
+
+  it('shows the catalog phrase as the heading for an empty x value', () => {
+    const harness = makeHarness({
+      data: [DATA[0], {month: null, sales: 7, profit: 2}, DATA[2]],
+    });
+    renderTooltip(harness);
+    harness.dispatch(hoverAt(1));
+    expect(leafTexts()).toEqual([NO_DATA, '7']);
+  });
+
+  it.each([
+    ['NaN', Number.NaN, 'NaN'],
+    ['Infinity', Number.POSITIVE_INFINITY, 'Infinity'],
+    ['-Infinity', Number.NEGATIVE_INFINITY, '-Infinity'],
+    ['0', 0, '0'],
+  ])('keeps the String text of the present value %s', (_name, value, text) => {
+    const harness = makeHarness({
+      data: [DATA[0], {month: 'Feb', sales: value, profit: 2}, DATA[2]],
+    });
+    renderTooltip(harness);
+    harness.dispatch(hoverAt(1));
+    expect(leafTexts()).toEqual(['Feb', text]);
+  });
+
+  it('keeps an empty string value as a blank', () => {
+    const harness = makeHarness({
+      data: [DATA[0], {month: 'Feb', sales: '', profit: 2}, DATA[2]],
+      resolved: twoSeriesResolved,
+    });
+    renderTooltip(harness, {series: twoSeries});
+    harness.dispatch(hoverAt(1));
+    expect(leafTexts()).toEqual(['Feb', 'Sales', 'Profit', '2']);
+  });
+
+  it('translates the phrase for the provider locale', () => {
+    const harness = makeHarness({
+      data: [DATA[0], {month: null, sales: null, profit: 2}, DATA[2]],
+    });
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {'@astryx.chart.noData': {defaultMessage: 'Aucune donnée'}},
+        }}>
+        <ChartProvider value={harness.ctx}>
+          <svg ref={harness.ctx.svgRef}>
+            <g>
+              <ChartTooltip series={[makeSeries()]} />
+            </g>
+          </svg>
+        </ChartProvider>
+      </InternationalizationProvider>,
+    );
+    harness.dispatch(hoverAt(1));
+    expect(leafTexts()).toEqual(['Aucune donnée', 'Aucune donnée']);
   });
 });
