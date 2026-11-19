@@ -116,9 +116,23 @@ const styles = stylex.create({
     borderCollapse: 'collapse',
     borderSpacing: '0',
     tableLayout: 'fixed',
+    // Fixed layout sets the columns, so a wrap cell's long token may break at
+    // any letter to stay inside its cell, flex rows inside the cell included.
+    // Only wrap cells read this (`wrapStyles`); panel and empty rows do not.
+    '--_table-cell-word-break': 'break-word',
+    // A heading wraps like the body cells (`headerOverflowStyles`). Set here
+    // too, so a table nested in a children-mode table does not inherit nowrap.
+    '--_table-header-white-space': 'normal',
   },
   tableAutoLayout: {
     tableLayout: 'auto',
+    // Automatic layout sizes each column from its longest word. A word-break
+    // inherited from an ancestor, such as a chat bubble, would shrink that
+    // word to one letter, so the table sets its own.
+    wordBreak: 'normal',
+    '--_table-cell-word-break': 'normal',
+    // Each column grows to keep its heading on one line.
+    '--_table-header-white-space': 'nowrap',
   },
   /**
    * Inline flex row that keeps the header label and any "after" slot content

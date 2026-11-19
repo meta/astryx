@@ -35,7 +35,7 @@ import {
   MAX_ASSET_BYTES,
   RenderAssetError,
 } from './assets.mjs';
-import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
+import {classesIn, cutCss, cutFontFaces, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID, imageSinks} from './client-bundle.mjs';
 import {remoteImages} from './remote-images.mjs';
@@ -43,14 +43,19 @@ import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
-import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
-import {isServedPackage, resolveServed} from './served-packages.mjs';
-import {CHART_CSS} from './charts.mjs';
+import {aliasOnly, assetRefsOf, fileNamed} from './embedded-imports.mjs';
+import {isServedPackage, packageOf as specPackageOf, resolveServed} from './served-packages.mjs';
+import {CHART_CSS, smallSvgText} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
 import {childrenReader, dropperOf} from './dropped-text.mjs';
 import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
+import {packageOf} from '../doc-compiler/source.mjs';
+import {declaredColorModes} from '../discovery/color-modes.mjs';
+import {alphaOf, parseColor, relativeLuminance} from '../color/css-color.mjs';
+import {installedPackageOf} from './package-resolve-hooks.mjs';
+import {moduleExportSource, resolvePackageModule} from '../discovery/module-exports.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -59,7 +64,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'unknown-prop-value' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -75,6 +80,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {string[]} [notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back (each also has a warning); present only when there are some.
+ * @property {{component: string, prop: string, value: string, file: string, line: number}[]} [propValues] - Each string the page's own files give a Core component's prop, for the caller to check against the component's docs.
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
@@ -186,19 +192,30 @@ const escapeHtml = s =>
  * @param {string} markup
  */
 function rootThemeAttrs(markup) {
+  const attrs = rootThemeElement(markup);
+  if (!attrs) return '';
+  return ['data-astryx-theme', 'data-theme']
+    .filter(a => attrs.has(a))
+    .map(
+      a =>
+        ` ${a}="${escapeHtml(String(attrs.get(a))).replace(/"/g, '&quot;')}"`,
+    )
+    .join('');
+}
+
+/**
+ * The attributes of the outermost element a theme marks: the root Theme's
+ * own. Null for a page with no theme.
+ * @param {string} markup
+ * @returns {Map<string, string> | null}
+ */
+function rootThemeElement(markup) {
   for (const t of scanHtml(markup)) {
     if (t.kind !== 'start') continue;
     const attrs = new Map(t.attrs.map(([name, value]) => /** @type {[string, string]} */ ([name, value])));
-    if (!attrs.has('data-astryx-theme')) continue;
-    return ['data-astryx-theme', 'data-theme']
-      .filter(a => attrs.has(a))
-      .map(
-        a =>
-          ` ${a}="${escapeHtml(String(attrs.get(a))).replace(/"/g, '&quot;')}"`,
-      )
-      .join('');
+    if (attrs.has('data-astryx-theme')) return attrs;
   }
-  return '';
+  return null;
 }
 
 /** @param {string} s */
@@ -243,6 +260,148 @@ export function importParams(params) {
 }
 
 /**
+ * Where a stylesheet's `@import` of `url` leads, read the way a render inlines
+ * it: a relative one from the importing sheet's folder, a package one
+ * (`@scope/pkg/x.css`) by Node resolution from the importing sheet.
+ * @param {string} url the import's address, as written
+ * @param {string} file the importing stylesheet's path
+ * @param {ServedSet | null} served
+ * @returns {{kind: 'remote'} | {kind: 'preprocessed'} | {kind: 'missing'} | {kind: 'sheet', target: string, fromPackage: boolean}}
+ */
+function resolveImport(url, file, served) {
+  if (/^([a-z]+:)?\/\//i.test(url)) return {kind: 'remote'};
+  if (/\.(scss|sass|less)$/i.test(url)) return {kind: 'preprocessed'};
+  const relative = path.resolve(path.dirname(file), url);
+  if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
+    return fs.existsSync(relative)
+      ? {kind: 'sheet', target: relative, fromPackage: false}
+      : {kind: 'missing'};
+  }
+  const target = resolveServed(url.replace(/^~/, ''), file, served);
+  return target ? {kind: 'sheet', target, fromPackage: true} : {kind: 'missing'};
+}
+
+/**
+ * Whether one of the stylesheets a page brings in is an Astryx package's, or
+ * reaches one through its `@import`s, followed as {@link expandImports}
+ * follows them. A stylesheet counts by the package that holds its file, as a
+ * module counts in the page's script; an import that resolves to no file
+ * counts by the package it names.
+ * @param {string[]} files the page's own stylesheets and the package
+ *   stylesheets its script imports
+ * @param {ServedSet | null} served
+ * @returns {boolean}
+ */
+function reachesAstryxSheet(files, served) {
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} file @returns {boolean} */
+  const visit = file => {
+    if (seen.has(file)) return false;
+    seen.add(file);
+    if (packageOf(file).startsWith('@astryxdesign/')) return true;
+    /** @type {import('postcss').Root} */
+    let root;
+    try {
+      const css = fs.readFileSync(file, 'utf8');
+      if (!/@import/i.test(css)) return false;
+      root = postcss.parse(css, {from: file});
+    } catch {
+      return false;
+    }
+    let found = false;
+    root.walkAtRules(/^import$/i, rule => {
+      const url = importParams(rule.params)?.url;
+      if (found || !url) return;
+      const to = resolveImport(url, file, served);
+      if (to.kind === 'sheet') found = visit(to.target);
+      else if (to.kind === 'missing') found = /^@astryxdesign\//.test(url.replace(/^~/, ''));
+    });
+    return found;
+  };
+  return files.some(visit);
+}
+
+/**
+ * A stylesheet's text as an `@import` brings it in: inside the import's
+ * `supports()`, media and `layer()` conditions.
+ * @param {{layer: string | null, supports: string | null, media: string}} parsed
+ *   the import's parts, as {@link importParams} reads them
+ * @param {string} css
+ * @returns {string}
+ */
+function underImportConditions(parsed, css) {
+  let inner = css;
+  if (parsed.supports)
+    inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
+  if (parsed.media) inner = `@media ${parsed.media}{${inner}}`;
+  if (parsed.layer !== null)
+    inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
+  return inner;
+}
+
+/**
+ * The stylesheets a page brings in, with every stylesheet their `@import`s
+ * reach, followed as {@link expandImports} follows them: each one's file and
+ * text, and for a package's stylesheet the package and the file that names
+ * it.
+ * @param {(ThemeSheet & {css: string})[]} sheets
+ * @param {ServedSet | null} served
+ * @returns {(ThemeSheet & {css: string})[]}
+ */
+function sheetsWithImports(sheets, served) {
+  /** @type {(ThemeSheet & {css: string})[]} */
+  const out = [];
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /**
+   * @param {ThemeSheet & {css: string}} sheet its own text
+   * @param {(css: string) => string} scope wraps a text in every condition
+   *   of the `@import` chain that brought the sheet in
+   */
+  const visit = (sheet, scope) => {
+    if (seen.has(sheet.file)) return;
+    seen.add(sheet.file);
+    out.push({...sheet, css: scope(sheet.css)});
+    if (!/@import/i.test(sheet.css)) return;
+    /** @type {import('postcss').Root} */
+    let root;
+    try {
+      root = postcss.parse(sheet.css, {from: sheet.file});
+    } catch {
+      return;
+    }
+    root.walkAtRules(/^import$/i, rule => {
+      const parsed = importParams(rule.params);
+      const url = parsed?.url;
+      if (!parsed || !url) return;
+      const to = resolveImport(url, sheet.file, served);
+      if (to.kind !== 'sheet') return;
+      /** @type {string} */
+      let css;
+      try {
+        css = fs.readFileSync(to.target, 'utf8');
+      } catch {
+        return;
+      }
+      // Each import's conditions scope the sheet's rules, inside those of
+      // the imports before it, as the file inlines them: a sheet imported
+      // for one scheme, at any depth, counts as such.
+      /** @param {string} text */
+      const inner = text => scope(underImportConditions(parsed, text));
+      visit(
+        to.fromPackage
+          ? {file: to.target, css, pkg: specPackageOf(url.replace(/^~/, '')), from: sheet.file}
+          : {file: to.target, css},
+        inner,
+      );
+    });
+  };
+  for (const sheet of sheets) visit(sheet, text => text);
+  return out;
+}
+
+/**
  * Inline a stylesheet's own `@import`s, so a stylesheet pulled in that way is
  * part of the file: a relative one from the importing sheet's folder
  * (carried when it is the project's own), a package one (`@scope/pkg/x.css`)
@@ -274,7 +433,8 @@ function expandImports(file, css, ctx) {
     const parsed = importParams(rule.params);
     if (!parsed || !parsed.url) return;
     const {url} = parsed;
-    if (/^([a-z]+:)?\/\//i.test(url)) {
+    const to = resolveImport(url, file, ctx.served);
+    if (to.kind === 'remote') {
       ctx.warnings.push({
         code: 'remote-asset',
         message: `${path.basename(file)} imports ${url}, which a sandboxed page cannot load, so it is left out; save it beside the stylesheet and import it instead.`,
@@ -282,7 +442,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    if (/\.(scss|sass|less)$/i.test(url)) {
+    if (to.kind === 'preprocessed') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.`,
@@ -290,17 +450,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    const relative = path.resolve(path.dirname(file), url);
-    /** @type {string | null} */
-    let target;
-    let fromPackage = false;
-    if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
-      target = fs.existsSync(relative) ? relative : null;
-    } else {
-      target = resolveServed(url.replace(/^~/, ''), file, ctx.served);
-      fromPackage = target !== null;
-    }
-    if (!target) {
+    if (to.kind === 'missing') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, which was not found, so its styles are missing.`,
@@ -308,6 +458,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
+    const {target, fromPackage} = to;
     if (!fromPackage) ctx.importers.set(target, (ctx.importers.get(target) ?? new Set()).add(file));
     if (seen.has(target) || ctx.included.has(target)) {
       rule.remove();
@@ -332,11 +483,7 @@ function expandImports(file, css, ctx) {
       return `url(${q}${rebased.startsWith('.') ? rebased : `./${rebased}`}${q})`;
     });
     // The import's conditions still scope what it brings in.
-    if (parsed.supports)
-      inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
-    if (parsed.media) inner = `@media ${parsed.media}{${inner}}`;
-    if (parsed.layer !== null)
-      inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
+    inner = underImportConditions(parsed, inner);
     try {
       rule.replaceWith(postcss.parse(inner, {from}).nodes);
     } catch (e) {
@@ -908,14 +1055,7 @@ export function assetRef(ref, at) {
   if (!clean) return null;
   if (NOT_A_LOAD.test(clean)) return null;
   if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean, url: decodeAttr(ref).trim()};
-  /** @type {string} */
-  let named;
-  try {
-    named = decodeURIComponent(clean);
-  } catch {
-    // A % that starts no escape is the character itself.
-    named = clean;
-  }
+  const named = fileNamed(clean);
   if (!isAssetPath(named)) return null;
   const publicDir = path.join(at.root, 'public');
   const found = named.startsWith('/')
@@ -1244,10 +1384,208 @@ function installedVersion(name, dir, setDirs) {
 const SCHEME_CSS =
   ':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}';
 
+/** The tokens that set a page's own surface and text colors. */
+const PAGE_COLOR_TOKEN = /^--color-(background-(body|surface)|text-primary)$/;
+
+/** A page color token that sets the page's background, not its text. */
+const BACKGROUND_TOKEN = /^--color-background-/;
+
+/**
+ * A condition that applies a rule in one scheme only: a
+ * `prefers-color-scheme` query (`not` forms included), a `data-theme` or
+ * scheme attribute, or a `.light`/`.dark` class, in a selector or an
+ * at-rule around it.
+ */
+const MODE_CONDITION = /prefers-color-scheme|\[data-(?:theme|astryx-scheme)="(?:light|dark)"\]|\.(?:light|dark)(?![\w-])/;
+
+/**
+ * A selector or condition without its `:not(...)` groups.
+ * @param {string} text
+ */
+const withoutNegations = text => text.replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '');
+
+/**
+ * A stylesheet with every `data-*` attribute selector written one way,
+ * `[data-x="v"]`, however it was quoted (`[data-x='v']`, `[data-x=v]`)
+ * or flagged (`[data-x="V" i]`).
+ * @param {string} text
+ */
+const withQuotedAttributes = text =>
+  text.replace(/\[\s*(data-[\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]'"]+))\s*(?:([iIsS])\s*)?\]/g, (_, attr, dq, sq, bare, flag) => {
+    const value = dq ?? sq ?? bare;
+    // A value matches case-sensitively unless the `i` flag says otherwise.
+    return `[${attr}="${flag === 'i' || flag === 'I' ? value.toLowerCase() : value}"]`;
+  });
+
+/**
+ * The one color mode the page's root theme draws in, or null when it draws
+ * in both (or the page has no theme). The theme module's `colorModes`
+ * export says it when the module has one. Else the page and text colors the
+ * stylesheets the page imports set on the theme's root say it: a light page with
+ * dark text draws in light only, a dark page with light text in dark only.
+ * A theme that sets neither (its fonts, its accent), sets a `light-dark()`
+ * color, one the color reader cannot fix (a `var()`) or a translucent
+ * page color, or sets any page or text color under a light or dark condition,
+ * draws in both, as the reader's scheme decides.
+ * @param {string} markup
+ * @param {'light' | 'dark' | 'both' | null} declared the theme module's
+ *   `colorModes`, as {@link declaredColorModes} reads it
+ * @param {string[]} sheets the text of the stylesheets the page imports
+ * @returns {'light' | 'dark' | null}
+ */
+export function oneColorModeOf(markup, declared, sheets) {
+  if (declared === 'light' || declared === 'dark') return declared;
+  if (declared === 'both') return null;
+  const name = rootThemeElement(markup)?.get('data-astryx-theme');
+  if (!name) return null;
+  const root = `[data-astryx-theme="${name}"]`;
+  /** @type {{background: boolean, value: string}[]} */
+  const colors = [];
+  let conditional = false;
+  for (const sheet of sheets) {
+    const text = withQuotedAttributes(sheet);
+    if (!text.includes(root)) continue;
+    /** @type {any} */
+    let tree;
+    try {
+      tree = postcss.parse(text);
+    } catch {
+      return null;
+    }
+    tree.walkDecls(PAGE_COLOR_TOKEN, (/** @type {any} */ decl) => {
+      /** The selectors and at-rule conditions around the declaration. */
+      const contexts = [];
+      for (let at = decl.parent; at && at.type !== 'root'; at = at.parent) {
+        contexts.push(at.type === 'rule' ? at.selector : `@${at.name} ${at.params}`);
+      }
+      // A media surface fixes its own mode; it says nothing of the theme's. A
+      // rule that only keeps out of media surfaces (`:not(… [data-astryx-media]
+      // …)`) still counts.
+      if (contexts.some(context => withoutNegations(context).includes('data-astryx-media'))) return;
+      // A page color set for one scheme only, anywhere in the theme's sheet,
+      // makes the theme follow the viewer.
+      if (contexts.some(context => MODE_CONDITION.test(context))) {
+        conditional = true;
+        return;
+      }
+      const rule = decl.parent;
+      if (rule?.type !== 'rule' || contexts.slice(1).some(context => !context.startsWith('@'))) return;
+      const selector = rule.selector.trim();
+      // Only the theme's own root sets the page's colors: its attribute, or
+      // `:scope` in an @scope that starts there (its `to (...)` limit names
+      // no root).
+      const scope =
+        rule.parent?.type === 'atrule' && rule.parent.name === 'scope'
+          ? rule.parent.params.split(/\)\s*to\s*\(/)[0].replace(/^\s*\(\s*|\s*\)\s*$/g, '')
+          : null;
+      if (selector === root || (selector === ':scope' && scope === root)) {
+        colors.push({background: BACKGROUND_TOKEN.test(decl.prop), value: decl.value});
+      }
+    });
+  }
+  if (conditional || colors.length === 0) return null;
+  /** @type {Set<'light' | 'dark'>} */
+  const modes = new Set();
+  for (const {background, value} of colors) {
+    const rgb = parseColor(value);
+    // A color the reader cannot fix (a var(), light-dark()), or a page color
+    // that shows what is behind it, leaves the reader's scheme to decide.
+    // Text is light or dark by its own color, whatever its alpha.
+    if (!rgb || (background && alphaOf(value) < 1)) return null;
+    const lightColor = relativeLuminance(rgb) > 0.18;
+    // A light page, or dark text, is a light theme's.
+    modes.add(background === lightColor ? 'light' : 'dark');
+  }
+  return modes.size === 1 ? [...modes][0] : null;
+}
+
+/**
+ * A stylesheet the page imports: its file, and for a package's stylesheet
+ * the package name and the file that imports it.
+ * @typedef {{file: string, pkg?: string, from?: string}} ThemeSheet
+ */
+
+/**
+ * The `colorModes` the module of the page's root theme declares, read
+ * without running it. The module sits beside the theme's stylesheet: a
+ * package's entry (or its `./built` entry) when the page imports the
+ * package's stylesheet, or a module with the stylesheet's name beside it.
+ * Only a module that names the root theme counts.
+ * @param {string} markup
+ * @param {ThemeSheet[]} sheets the stylesheets the page imports
+ * @param {(specifier: string, from: string) => string | null} resolve the
+ *   module file a bare specifier names from a file
+ * @returns {'light' | 'dark' | 'both' | null}
+ */
+function rootThemeColorModes(markup, sheets, resolve) {
+  const name = rootThemeElement(markup)?.get('data-astryx-theme');
+  if (!name) return null;
+  /** @type {Set<string>} */
+  const candidates = new Set();
+  for (const {file, pkg, from} of sheets) {
+    const base = file.replace(/\.css$/i, '');
+    for (const ext of ['.js', '.mjs', '.ts', '.tsx']) candidates.add(base + ext);
+    // The package by the name the page imports it as, as `theme add` finds
+    // it (a linked package's real path holds no node_modules); else the
+    // installed package folder that holds the file.
+    let pkgName = pkg ?? null;
+    let at = from ?? file;
+    if (!pkgName) {
+      const pkgDir = installedPackageOf(file);
+      if (!pkgDir) continue;
+      try {
+        pkgName = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'))?.name ?? null;
+      } catch {
+        continue;
+      }
+      at = file;
+    }
+    if (typeof pkgName !== 'string' || pkgName === '@astryxdesign/core') continue;
+    // The built entry first, which `theme add` reads and which carries the
+    // export, then the package's own.
+    for (const specifier of [`${pkgName}/built`, pkgName]) {
+      const target = resolve(specifier, at);
+      if (target) candidates.add(target);
+    }
+  }
+  const named = new RegExp(`name:\\s*["']${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`);
+  for (const file of candidates) {
+    if (!isFileAt(file)) continue;
+    // The module must hold the root theme: its name, as a built theme
+    // writes it, in the module or in the file its colorModes come from.
+    const holds = [file, moduleExportSource(file, 'colorModes')].some(f => {
+      if (!f) return false;
+      try {
+        return named.test(fs.readFileSync(f, 'utf8'));
+      } catch {
+        return false;
+      }
+    });
+    if (!holds) continue;
+    // A module that holds the theme but declares no modes (a package's
+    // source entry, beside its built one that does) leaves the next to say.
+    const declared = declaredColorModes(file);
+    if (declared !== null) return declared;
+  }
+  return null;
+}
+
+/**
+ * The page's scheme rules. A page that draws in one mode keeps that scheme
+ * whatever the viewer's, and paints the theme's own page color on the
+ * document, so a viewer of the other scheme never shows its own canvas
+ * behind the theme's text. It adds no specificity: a page's own unlayered
+ * `html` rule still wins, but a rule inside `@layer` does not.
+ * @param {'light' | 'dark' | null} mode
+ */
+function schemeCssFor(mode) {
+  return mode ? `:where(:root){color-scheme:${mode};background-color:var(--color-background-body)}` : SCHEME_CSS;
+}
+
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0]}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -1270,6 +1608,9 @@ const SCHEME_CSS =
  *   and reaches no network. The render fetches each https image the page
  *   names, once, so the file carries it (remote-images.mjs; `remoteImages`:
  *   the fetch and its time limits, for tests).
+ *   `cutFontFaces` drops each font face that no character in the page, its
+ *   stylesheet or its script reaches (css-cut.mjs), for a file whose text is
+ *   known (export); a page a person types into keeps every face.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -1332,17 +1673,28 @@ export async function renderPage(entry, options = {}) {
   };
   const hasCore = addSheet('@astryxdesign/core/reset.css');
   if (hasCore) addSheet('@astryxdesign/core/astryx.css');
+  /** The package stylesheets the page's modules import. @type {string[]} */
+  const scriptSheets = [];
+  let scriptNamesAstryx = false;
+  /** The text of the stylesheets the page imports itself: its theme's, and its own. @type {string[]} */
+  const themeSheets = [];
+  /** Those package stylesheets: each file, and the package and importer it came by. @type {ThemeSheet[]} */
+  const themeSheetFiles = [];
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (
     message.packageCss ?? []
   )) {
-    if (sheets.includes(spec)) continue;
     const file = resolveServed(spec, from, served);
+    if (file) scriptSheets.push(file);
+    else if (spec.startsWith('@astryxdesign/')) scriptNamesAstryx = true;
+    if (sheets.includes(spec)) continue;
     try {
       if (!file) throw new Error('not found');
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
+      themeSheets.push(/** @type {string} */ (sheetText.at(-1)));
+      themeSheetFiles.push({file, pkg: specPackageOf(spec), from});
     } catch {
       warnings.push({
         code: 'missing-asset',
@@ -1363,6 +1715,24 @@ export async function renderPage(entry, options = {}) {
         ? '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.'
         : '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
     });
+  }
+
+  // A page that uses nothing from Astryx is not what the command makes: its
+  // own app's build shares it. Its script's module graph (local components,
+  // re-exports and lazy imports included) and the stylesheets it brings in
+  // decide, before any stylesheet is expanded, any asset inlined, any image
+  // fetched or anything written. A markup-only render builds no script and
+  // is not checked.
+  const ownSheets = /** @type {{file: string}[]} */ (message.importedCss ?? []).map(({file}) => file);
+  if (
+    message.astryx === false &&
+    !scriptNamesAstryx &&
+    !reachesAstryxSheet([...ownSheets, ...scriptSheets], served)
+  ) {
+    throw new RenderError(
+      'ERR_RENDER_NOT_ASTRYX',
+      `${path.basename(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
+    );
   }
 
   // The https images the page names, fetched once so the file carries them.
@@ -1423,7 +1793,7 @@ export async function renderPage(entry, options = {}) {
     for (const {tag, ref} of embeddedLoads(markup)) {
       warnings.push({
         code: 'remote-asset',
-        message: `The page renders a <${tag}> that loads ${ref}, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.`,
+        message: `The page renders a <${tag}> that loads ${ref}, which a sandboxed page cannot reach and which loads from outside the file; remove it from the page.`,
       });
     }
   } catch (e) {
@@ -1491,42 +1861,68 @@ export async function renderPage(entry, options = {}) {
     const included = new Set(sheetFiles);
     /** @type {string[]} */
     const packageSheets = [];
-    /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
-    const sheet = async (file, text) => {
+    /**
+     * A stylesheet's rules cut to the page, with its own imports expanded,
+     * and the warnings that expanding them gave.
+     * @param {string} file @param {string} text
+     * @returns {{file: string, cut: string, expandWarnings: RenderWarning[]}}
+     */
+    const sheet = (file, text) => {
+      /** @type {RenderWarning[]} */
+      const expandWarnings = [];
       try {
         const own = expandImports(file, text, {
-          warnings,
+          warnings: expandWarnings,
           carried: carriedCss,
           importers: cssImporters,
           included,
           packageSheets,
           served,
         });
-        return await inlineWithRemote(cutCss(own, kept, {states}), 'css', {
-          ...ctx,
-          dir: path.dirname(file),
-        });
+        return {file, cut: cutCss(own, kept, {states}), expandWarnings};
       } catch (e) {
-        if (e instanceof RenderAssetError || e instanceof RenderError) throw e;
-        const reason =
-          /** @type {any} */ (e)?.reason ??
-          (e instanceof Error ? e.message : String(e));
-        throw new RenderError(
-          'ERR_RENDER_COMPILE',
-          `${path.relative(dir, file).split(path.sep).join('/')} is not valid CSS: ${reason}`,
-        );
+        warnings.push(...expandWarnings);
+        throw invalidSheet(e, file);
       }
     };
-    for (const [i, text] of sheetText.entries()) {
-      css += await sheet(sheetFiles[i], text);
-    }
+    /** @param {unknown} e @param {string} file */
+    const invalidSheet = (e, file) => {
+      if (e instanceof RenderAssetError || e instanceof RenderError) return e;
+      const reason =
+        /** @type {any} */ (e)?.reason ??
+        (e instanceof Error ? e.message : String(e));
+      return new RenderError(
+        'ERR_RENDER_COMPILE',
+        `${path.relative(dir, file).split(path.sep).join('/')} is not valid CSS: ${reason}`,
+      );
+    };
+    const parts = sheetText.map((text, i) => sheet(sheetFiles[i], text));
     for (const {
       file,
       css: text,
     } of /** @type {{file: string, css: string}[]} */ (
       message.importedCss ?? []
     )) {
-      css += await sheet(file, text);
+      parts.push(sheet(file, text));
+    }
+    // The font faces the page draws with are known from the whole
+    // stylesheet, the markup and the script; the cut runs before the files
+    // are read, so a face it drops is never read, counted or warned about.
+    const stylesheet = [...parts.map(part => part.cut), message.css ?? ''].join(
+      '\n',
+    );
+    const drawn = markup + (script ?? '');
+    for (const {file, cut, expandWarnings} of parts) {
+      warnings.push(...expandWarnings);
+      try {
+        css += await inlineWithRemote(
+          options.cutFontFaces ? cutFontFaces(cut, drawn, stylesheet) : cut,
+          'css',
+          {...ctx, dir: path.dirname(file)},
+        );
+      } catch (e) {
+        throw invalidSheet(e, file);
+      }
     }
     for (const spec of packageSheets)
       if (!sheets.includes(spec)) sheets.push(spec);
@@ -1622,6 +2018,14 @@ export async function renderPage(entry, options = {}) {
       message: script
         ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
         : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+    });
+  }
+  // Text inside a drawing that scales to its box shrinks with it on a phone.
+  const smallText = smallSvgText(markup);
+  if (smallText) {
+    warnings.push({
+      code: 'chart-size',
+      message: `${smallText.count === 1 ? 'An SVG drawing scales' : `${smallText.count} SVG drawings scale`} to fit ${smallText.count === 1 ? 'its' : 'their'} box with text inside, so on a 375 px phone that text shows at about ${smallText.px} px. Put the labels in HTML beside the drawing, or draw the chart with recharts in a ResponsiveContainer, which keeps its text size.`,
     });
   }
   if (message.chartsAlone) {
@@ -1773,7 +2177,7 @@ export async function renderPage(entry, options = {}) {
     } catch {
       continue;
     }
-    for (const ref of assetRefsOf(text, file)) {
+    for (const {written: ref, file: name} of assetRefsOf(text, file)) {
       const how = `named in ${path.relative(dir, file).split(path.sep).join('/')}`;
       /** @param {string} f */
       const local = f => isInside(f, named) && isFileAt(f);
@@ -1785,12 +2189,12 @@ export async function renderPage(entry, options = {}) {
       } else {
         // The file the module names beside it, which a restore lays out
         // where the module's own folder finds it.
-        const beside = path.resolve(path.dirname(file), ref);
+        const beside = path.resolve(path.dirname(file), name);
         if (local(beside)) carryAsset(beside, how);
         // A stylesheet's url() is its own folder's file, which its inlined
         // rules already carry; only a module's string reaches the script.
         if (/\.css$/i.test(file)) continue;
-        shown = path.resolve(dir, ref);
+        shown = path.resolve(dir, name);
         if (!local(shown)) shown = null;
       }
       if (!shown) continue;
@@ -1920,7 +2324,32 @@ export async function renderPage(entry, options = {}) {
       ? decodeAttr(heading)
       : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
-  const style = `<style>${SCHEME_CSS}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const importedSheets = /** @type {{file: string, css: string}[]} */ (message.importedCss ?? []);
+  // The theme editor shows each mode itself, so its markup-only pages keep
+  // both schemes; a written file shows the theme's one mode.
+  // The theme's stylesheet may come through the page's own CSS, by an
+  // `@import` that the file inlines.
+  const modeSheets = options.markupOnly
+    ? []
+    : sheetsWithImports(
+        [
+          ...themeSheetFiles.map((sheet, i) => ({...sheet, css: themeSheets[i]})),
+          ...importedSheets.map(sheet => ({file: sheet.file, css: sheet.css})),
+        ],
+        served,
+      );
+  const mode = options.markupOnly ? null : oneColorModeOf(
+    markup,
+    rootThemeColorModes(markup, modeSheets, (specifier, from) => {
+      try {
+        return resolveServed(specifier, from, served) ?? resolvePackageModule(specifier, from);
+      } catch {
+        return resolvePackageModule(specifier, from);
+      }
+    }),
+    modeSheets.map(sheet => sheet.css),
+  );
+  const style = `<style>${schemeCssFor(mode)}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
   // With a script, the markup sits in the one element the script draws into,
   // which takes no box of its own.
   const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
@@ -2033,7 +2462,7 @@ export async function renderPage(entry, options = {}) {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<meta name="color-scheme" content="light dark">' +
+      `<meta name="color-scheme" content="${mode ?? 'light dark'}">` +
       `<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
       `${block}\n${endNote(facts)}\n${scriptTag}</body></html>\n`;
   } else {
@@ -2041,7 +2470,7 @@ export async function renderPage(entry, options = {}) {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<meta name="color-scheme" content="light dark">' +
+      `<meta name="color-scheme" content="${mode ?? 'light dark'}">` +
       `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
       `${block}${scriptTag}</body></html>\n`;
   }
@@ -2062,6 +2491,7 @@ export async function renderPage(entry, options = {}) {
     ]).size,
     warnings,
     ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
+    propValues: message.propValues ?? [],
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
     ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),

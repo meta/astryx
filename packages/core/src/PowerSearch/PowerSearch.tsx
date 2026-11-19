@@ -120,6 +120,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -604,6 +609,20 @@ export function PowerSearch({
   presentation = 'adaptive',
   ...rest
 }: PowerSearchProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearch',
+      'config',
+      'is required: the fields people can filter by, for example config={{fields: [...]}}.',
+    );
+  }
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(filters)) {
+    throw devPropError(
+      'PowerSearch',
+      'filters',
+      'must be an array of the applied filters, for example filters={filters} with onChange={setFilters} and useState([]).',
+    );
+  }
   const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
