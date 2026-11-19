@@ -4891,7 +4891,9 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
           structuredClone(data),
           read.thing,
           read.value,
-          read.flags,
+          // A set line is checked the way it runs: a typed box shorthand as
+          // its sides.
+          sub === 'set' ? {...read.flags, sides: true} : read.flags,
           sub === 'undo',
         );
         return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))

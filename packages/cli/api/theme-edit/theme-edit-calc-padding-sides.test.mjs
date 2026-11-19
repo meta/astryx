@@ -277,4 +277,52 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'offers the working line when the part name is wrong',
+    async () => {
+      /** @type {any} */
+      let error = null;
+      try {
+        await themeEditSet('t', 'padding', '5px 0', {
+          cwd,
+          on: 'dropdown-menus',
+        });
+      } catch (e) {
+        error = e;
+      }
+      expect(error).not.toBeNull();
+      expect(
+        (error.suggestions ?? []).map((/** @type {any} */ x) => x.name),
+      ).toContainEqual(
+        expect.stringMatching(/ set t padding '5px 0' --on dropdown-menu$/),
+      );
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'offers the line for a theme named in other letters as one that runs',
+    async () => {
+      /** @type {any} */
+      let error = null;
+      try {
+        await themeEditSet('T', 'padding', '5px 0', {
+          cwd,
+          on: 'dropdown-menu',
+        });
+      } catch (e) {
+        error = e;
+      }
+      expect(error).not.toBeNull();
+      const line = (error.suggestions ?? []).find((/** @type {any} */ x) =>
+        / set t padding '5px 0' --on dropdown-menu$/.test(x.name),
+      );
+      expect(line?.reason).toBeDefined();
+      expect(line.reason).not.toMatch(/still needs a fix/);
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
 });
