@@ -65,7 +65,10 @@ const styles = stylex.create({
     touchAction: 'manipulation',
   },
   filledDisabled: {
-    color: colorVars['--color-text-disabled'],
+    color: {
+      default: colorVars['--color-text-disabled'],
+      '@media (forced-colors: active)': 'GrayText',
+    },
   },
   glyph: {
     display: 'block',
