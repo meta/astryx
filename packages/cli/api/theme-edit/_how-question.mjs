@@ -13904,7 +13904,7 @@ export function draftAnswer(ctx, env, question) {
         // (A light color is the light mode's, as a plain light fill is: on
         // the dark page its text would not read.)
         const rgb = parseColor(String(c.colors[0]));
-        if (!c.mode && rgb && relLum(rgb) > 0.5) c.mode = 'light';
+        if (!c.mode && rgb && luminance(hex(rgb.slice(0, 3))) > 0.5) c.mode = 'light';
         c.colors = [`color-mix(in srgb, ${c.colors[0]} 80%, transparent)`];
         c.text = `${said} background ${c.colors[0]}`
           .replace(/\s+/g, ' ')
