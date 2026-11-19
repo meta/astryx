@@ -554,9 +554,9 @@ export const butterTheme = defineTheme({
         '--color-text-secondary': LIFTED_ON_PAGE,
       },
     },
-    // TopNav uses Butter's blue accent: the heading and the selected item are
-    // the full brand blue; unselected items (default + hover) use a lighter
-    // blue. Dark mode keeps the theme's butter-yellow accent.
+    // TopNav uses Butter's blue accent in light mode. The heading is the brand
+    // blue. Every item takes the next deeper stop, so its text reads at 4.5:1
+    // when pressed. Dark mode keeps the theme's butter-yellow accent.
     'top-nav-heading': {
       // The heading text is an inner span that reads --color-text-primary, so
       // redirect that token (not just `color`) to the brand blue so the text
@@ -570,8 +570,9 @@ export const butterTheme = defineTheme({
       base: {
         color: lightDark(accent.light[35], withAlpha(yellow.dark[90], 'cc')),
       },
-      // Selected item: a darker Blue stop in light mode and full Butter Yellow
-      // in dark mode, with no pill background. Weight + color carry emphasis.
+      // Selected item: no pill background. In light mode it keeps the items'
+      // Accent Light 35, so weight alone marks it; in dark mode full Butter
+      // Yellow marks it too.
       selected: {
         color: lightDark(accent.light[35], yellow.dark[90]),
         backgroundColor: 'transparent',

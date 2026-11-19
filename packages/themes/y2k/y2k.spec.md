@@ -15,6 +15,7 @@ verified_by:
     packages/themes/y2k/src/y2kPalettes.test.ts,
     scripts/generate-y2k-palette-refs.test.mjs,
     scripts/check-secondary-text-contrast.test.mjs,
+    scripts/check-text-contrast-by-role.test.mjs,
   ]
 package: '@astryxdesign/theme-y2k'
 source_theme: packages/themes/y2k/src/y2kTheme.ts
@@ -23,6 +24,7 @@ references:
     architecture:theme-authoring-contract,
     architecture:theme-tokens,
     architecture:theme-compilation,
+    spec:AST-020,
   ]
 ---
 
@@ -95,6 +97,12 @@ claim; contextual component evidence remains authoritative.
 Light secondary text (`--color-text-secondary`, Neutral Light 35) measures
 5.14:1 on the Periwinkle body (`--color-background-body`) and 7.78:1 on the
 surface and card.
+
+Secondary text on an unselected TopNav item uses Neutral Light 30 (`#4f453b`)
+in light mode, the stop selected rows use. It reads at 5.15:1 on the pressed fill over the Periwinkle body and
+7.68:1 over the surface, and at 5.65:1 or more at rest and hovered, so it meets
+the 4.5:1 of WCAG 2.2 SC 1.4.3 for normal text, the baseline `spec:AST-020`
+FR1 sets.
 
 The dark neutral border audit suppresses each border and checks whether another
 visible cue still identifies the component or state:

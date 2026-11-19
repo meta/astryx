@@ -14,6 +14,7 @@ verified_by:
     packages/themes/butter/src/butterColorMapping.test.ts,
     packages/themes/butter/src/butterPalettes.test.ts,
     scripts/generate-butter-palette-refs.test.mjs,
+    scripts/check-text-contrast-by-role.test.mjs,
   ]
 package: '@astryxdesign/theme-butter'
 source_theme: packages/themes/butter/src/butterTheme.ts
@@ -22,6 +23,7 @@ references:
     architecture:theme-authoring-contract,
     architecture:theme-tokens,
     architecture:theme-compilation,
+    spec:AST-020,
   ]
 ---
 
@@ -91,20 +93,26 @@ Butter-specific mapping and rendered-component evidence covers light and dark
 semantic and categorical states. A palette stop alone is not an accessibility
 claim; contextual component evidence remains authoritative.
 
-Butter's maintained Badge, Banner, FieldStatus, and TopNav text pairings use
-named palette stops that clear normal-text AA in their rendered contexts:
+Butter's maintained Badge, Banner, FieldStatus, TopNav, link, and Button label
+text pairings use named palette stops that clear normal-text AA in their
+rendered contexts:
 
 - info Badge, Banner title, Banner body, and FieldStatus text use Neutral Light
   15 on Accent Light 55 at 4.85:1;
 - error Badge, Banner title, Banner body, and FieldStatus text use Neutral Light
   15 on Red Light 60 at 5.02:1;
 - the neutral Badge uses Accent Light 35 on exact Butter Yellow at 5.49:1;
-- light-mode TopNav items use Accent Light 40 at 5.01:1 or Accent Light 35
-  at 6.20:1 on the warm navigation surface; and
+- in light mode, accent text and links (`--color-text-accent`), the
+  secondary and ghost Button labels, and TopNav items use Accent Light 35, one
+  stop deeper than the Accent Light 40 fill and border: 6.20:1 on the body and
+  6.48:1 on the surface at rest, 4.54:1 or more hovered or pressed, and 4.64:1
+  on the accent tint under a selected row, a dropzone, or a numbered citation;
+  and
 - success and warning states retain their darker Neutral Light 15 text.
 
 These checks cover normal-sized text in each named component state; every pairing
-clears the 4.5:1 normal-text threshold. The same visible status icon and text
+clears the 4.5:1 normal-text threshold of WCAG 2.2 SC 1.4.3, the baseline
+`spec:AST-020` FR1 sets. The same visible status icon and text
 label identify semantic states independently of color.
 
 ## Build and artifact contract
