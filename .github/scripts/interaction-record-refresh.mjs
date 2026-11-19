@@ -26,13 +26,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {openOrRefresh, percent} from './node-record-refresh.mjs';
+import {coverage, openOrRefresh, percent} from './node-record-refresh.mjs';
 import {DURATIONS, isInteractionSpec} from './playwright-legs.mjs';
 
 export const BRANCH = 'ci/interaction-durations-refresh';
 export const TITLE = 'ci: refresh the recorded interaction test times';
 /** Below this share of timed spec files, the refresh warns. */
 export const MIN_TIMED_SHARE = 0.9;
+
+/**
+ * How many of the interaction spec files the record times under one key
+ * (the Node refresh's `coverage`, at this record's own bar).
+ * @param {string[]} specs
+ * @param {Record<string, number>} recorded
+ */
+export function specCoverage(specs, recorded) {
+  return coverage(specs, recorded, {minShare: MIN_TIMED_SHARE});
+}
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -66,24 +76,13 @@ function medianOf(values) {
 }
 
 /**
- * How many of the interaction spec files the record times under one key.
- * @param {string[]} specs
- * @param {Record<string, number>} recorded
- */
-export function coverageOf(specs, recorded) {
-  const timed = specs.filter(file => typeof recorded[file] === 'number').length;
-  const share = specs.length ? timed / specs.length : 1;
-  return {total: specs.length, timed, share, low: share < MIN_TIMED_SHARE};
-}
-
-/**
  * The early warning for a record that times too few spec files, or nothing.
  * @param {string} key
- * @param {ReturnType<typeof coverageOf>} coverage
+ * @param {ReturnType<typeof specCoverage>} covered
  */
-export function earlyWarning(key, {total, timed, share, low}) {
-  if (!low) return '';
-  return `Early warning: the ${key} record times ${timed} of ${total} interaction spec files (${percent(share)}), under nine in ten. Each untimed spec is costed at the mean time a test, so its legs can run past the time they planned.`;
+export function earlyWarning(key, {total, recorded, share, fresh}) {
+  if (fresh) return '';
+  return `Early warning: the ${key} record times ${recorded} of ${total} interaction spec files (${percent(share)}), under nine in ten. Each untimed spec is costed at the other browser's time, else at its tests times the mean time a test, so its legs can run past the time they planned.`;
 }
 
 /**
@@ -118,10 +117,10 @@ function trackedSpecs() {
 }
 
 function coverageLine(key, durations, specs) {
-  const coverage = coverageOf(specs, durations[key] ?? {});
+  const covered = specCoverage(specs, durations[key] ?? {});
   return {
-    line: `${key}: ${coverage.timed} of ${coverage.total} spec files timed (${percent(coverage.share)})`,
-    warning: earlyWarning(key, coverage),
+    line: `${key}: ${covered.recorded} of ${covered.total} spec files timed (${percent(covered.share)})`,
+    warning: earlyWarning(key, covered),
   };
 }
 

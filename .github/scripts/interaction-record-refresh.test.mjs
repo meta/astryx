@@ -16,10 +16,10 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 import {
   BRANCH,
-  coverageOf,
   earlyWarning,
   medianTimes,
   prBody,
+  specCoverage,
 } from './interaction-record-refresh.mjs';
 import {openOrRefresh} from './node-record-refresh.mjs';
 
@@ -36,21 +36,21 @@ const workflow = yaml.parse(
 const job = workflow.jobs.refresh;
 const step = name => job.steps.find(each => each.name === name);
 
-describe('coverageOf and earlyWarning', () => {
+describe('specCoverage and earlyWarning', () => {
   const specs = Array.from({length: 10}, (_, i) => `s${i}.spec.ts`);
 
   it('warns under nine in ten timed spec files', () => {
     const recorded = Object.fromEntries(specs.slice(0, 8).map(s => [s, 1]));
-    const coverage = coverageOf(specs, recorded);
-    expect(coverage).toMatchObject({total: 10, timed: 8, low: true});
-    expect(earlyWarning('interaction-chromium', coverage)).toContain(
+    const covered = specCoverage(specs, recorded);
+    expect(covered).toMatchObject({total: 10, recorded: 8, fresh: false});
+    expect(earlyWarning('interaction-chromium', covered)).toContain(
       'times 8 of 10 interaction spec files (80%)',
     );
   });
 
   it('stays quiet at nine in ten', () => {
     const recorded = Object.fromEntries(specs.slice(0, 9).map(s => [s, 1]));
-    expect(earlyWarning('k', coverageOf(specs, recorded))).toBe('');
+    expect(earlyWarning('k', specCoverage(specs, recorded))).toBe('');
   });
 });
 
