@@ -1104,11 +1104,11 @@ const CVD_ALIKE = 0.06;
  * tell apart: their colors as that vision sees them sit closer than
  * CVD_ALIKE. `fills` holds opaque hex by role.
  * @param {Record<string, string>} fills
- * @returns {Array<{a: string; b: string; vision: 'red-weak' | 'green-weak'}>}
+ * @returns {{a: string; b: string; vision: 'red-weak' | 'green-weak'}[]}
  */
 export function cvdClashes(fills) {
   /**
-   * @type {Array<{a: string; b: string; vision: 'red-weak' | 'green-weak'}>}
+   * @type {{a: string; b: string; vision: 'red-weak' | 'green-weak'}[]}
    */
   const out = [];
   const roles = Object.keys(fills).filter(r =>
@@ -1117,7 +1117,7 @@ export function cvdClashes(fills) {
   for (const [
     vision,
     M,
-  ] of /** @type {Array< ['red-weak' | 'green-weak', ReadonlyArray<ReadonlyArray<number>>] >} */ (
+  ] of /** @type {[ 'red-weak' | 'green-weak', ReadonlyArray<ReadonlyArray<number>>, ][]} */ (
     Object.entries(CVD)
   )) {
     // Weak, not absent: partway from normal vision to the full matrix.

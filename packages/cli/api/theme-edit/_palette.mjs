@@ -2186,7 +2186,8 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
           const L = me.L + sign * d;
           if (L < 0.15 || L > 0.95) return null;
           const to = oklchClampedHex(L, me.C, me.H);
-          if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT)) return null;
+          if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT))
+            return null;
           const role = who === 1 ? c.b : c.a;
           const pair = {
             [c.a]: role === c.a ? to : c.colors[0],
