@@ -61,7 +61,10 @@ import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {
   composeEventHandlers,
   getInputARIA,
@@ -471,6 +474,7 @@ export function Typeahead<T extends SearchableItem>({
   const descriptionId = useId();
   const statusMessageId = useId();
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
@@ -809,12 +813,10 @@ export function Typeahead<T extends SearchableItem>({
                   // FormLayout default hides the visible marker (component:FormLayout
                   // FR5, AR2).
                   aria-required={isEffectivelyRequired || rest['aria-required']}
-                  // An error status is exposed on the combobox as on every other field
-                  // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-                  // aria-required / aria-invalid still applies.
-                  aria-invalid={
-                    status?.type === 'error' || rest['aria-invalid']
-                  }
+                  // The field's own status decides (WCAG 4.1.2; spec:AST-020 FR9).
+                  // Without one, a group error marks the combobox invalid.
+                  // Otherwise a caller's own aria-invalid applies.
+                  aria-invalid={isMemberInvalid || rest['aria-invalid']}
                   onChangeQuery={onChangeQuery}
                   onOpenChange={handleOpenChange}
                   menu={menu}
