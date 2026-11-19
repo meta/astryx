@@ -21028,7 +21028,7 @@ export function draftAnswer(ctx, env, question) {
             return {
               text: c.neg
                 ? `no stripe on the ${p} rows of ${parityOn}`
-                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}; add --state striped to stripe only the tables the app marks isStriped`,
+                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}. On a table with hover the stripe covers Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
               options: [steps],
               sequence: steps.length > 1,
             };
@@ -21091,7 +21091,7 @@ export function draftAnswer(ctx, env, question) {
             !paritiesSaid(q).length
           )
             return {
-              text: `stripes on every data-driven table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them)`,
+              text: `stripes on every data-driven table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them). On a table with hover the stripe covers Core's hover color; add --state striped to stripe only the tables the app marks isStriped`,
               options: [
                 [
                   set('background-color', `var(${stripe})`, {
