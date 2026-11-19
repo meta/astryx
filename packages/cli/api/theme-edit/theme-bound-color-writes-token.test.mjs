@@ -97,9 +97,13 @@ describe('a part in a container', () => {
     120_000,
   );
 
-  it('a container that does not hold the token is said, never a theme-wide write', async () => {
+  // (The side nav holds no link: its links are its nav items, whose own
+  // text takes the color, never the theme-wide link token.)
+  it('links in a container that holds only nav items are those items, never a theme-wide write', async () => {
     const rs = await how('ne', 'make links in the sidebar green');
-    expect(writes(rs)).toEqual([]);
+    expect(writes(rs)).toEqual([
+      "set ne color '#16a34a' --on side-nav-item --mode dark",
+    ]);
   }, 120_000);
 });
 
