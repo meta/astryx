@@ -985,6 +985,73 @@ test.describe('a single row’s minimum width', () => {
     expect(during).toBe(6);
     expect(after).toBe(6);
   });
+  test('a list in a theme whose gap step draws wider than the default publishes a width that holds its drawn gaps', async ({
+    page,
+  }) => {
+    // Matcha draws spacing step 2 at 12 px, where the default table says 8 px.
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--scaled-row&viewMode=story&globals=astryxTheme:matcha`,
+    );
+    await page
+      .locator('[data-testid="scaled-wide"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.addStyleTag({
+      content: '[data-testid="scaled-frame"] { transform: none !important; }',
+    });
+    // A row resize makes the list measure again, now unscaled.
+    await page.evaluate(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-wide"]',
+      );
+      if (row != null) {
+        row.style.width = '699px';
+      }
+    });
+    await page.waitForTimeout(300);
+    const read = await page.evaluate(() => {
+      const list = document.querySelector<HTMLElement>(
+        '[data-testid="scaled-wide"] .astryx-overflow-list',
+      );
+      if (list == null) {
+        return null;
+      }
+      const items = [...list.children] as HTMLElement[];
+      const gap = Number.parseFloat(getComputedStyle(list).columnGap);
+      const itemsWidth = items.reduce(
+        (sum, item) => sum + item.getBoundingClientRect().width,
+        0,
+      );
+      // Each item's own width, from a copy sized to its content.
+      const short = items.filter(item => {
+        const copy = item.cloneNode(true) as HTMLElement;
+        copy.style.width = 'max-content';
+        copy.style.flex = 'none';
+        list.parentElement?.parentElement?.appendChild(copy);
+        const own = Number.parseFloat(getComputedStyle(copy).width);
+        copy.remove();
+        return own - Number.parseFloat(getComputedStyle(item).width) > 0.005;
+      }).length;
+      return {
+        count: items.length,
+        gap,
+        listWidth: list.getBoundingClientRect().width,
+        needed: itemsWidth + gap * Math.max(0, items.length - 1),
+        short,
+      };
+    });
+    test.info().annotations.push({
+      type: 'matcha-gap',
+      description: JSON.stringify(read),
+    });
+    expect(read).not.toBeNull();
+    expect(read?.gap).toBe(12);
+    expect(read?.count).toBe(6);
+    expect(read?.short).toBe(0);
+    expect(read?.listWidth ?? 0).toBeGreaterThanOrEqual(
+      (read?.needed ?? 0) - 0.01,
+    );
+  });
   test('a list under a scale never narrows an item below its text, across fractional item widths', async ({
     page,
   }) => {

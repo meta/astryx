@@ -652,7 +652,7 @@ export function useOverflowInternal(
         const bounds = inlineBoundsOf(
           children.map(exact),
           hasIndicator ? exact(allChildren[allChildren.length - 1]) : 0,
-          gap,
+          gapPx,
           minVisibleItems,
           collapseFrom,
           maxVisibleItems,
