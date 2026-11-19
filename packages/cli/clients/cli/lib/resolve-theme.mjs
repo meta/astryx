@@ -104,7 +104,7 @@ function resolvedThemeData(mod, specifier) {
  * `package.json#astryx.theme` when there is no generated module.
  *
  * @param {string} [cwd] Working directory (defaults to process.cwd())
- * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
+ * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null, slug?: string|null}|null>}
  */
 export async function resolveTheme(cwd = process.cwd()) {
   // The theme API loads on first use: a command's JSON output never needs it.
@@ -117,7 +117,9 @@ export async function resolveTheme(cwd = process.cwd()) {
       );
       return null;
     }
-    return resolvedThemeData(loaded.module, loaded.specifier);
+    const data = resolvedThemeData(loaded.module, loaded.specifier);
+    // The recorded slug is the name theme commands take for this theme.
+    return data && {...data, slug: loaded.slug};
   }
 
   // No generated module: keep the released package-field lookup byte-for-byte in

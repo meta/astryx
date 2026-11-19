@@ -317,6 +317,8 @@ describe('resolveTheme source precedence', () => {
     writeGeneratedRecord(dir);
 
     expect((await resolveTheme(dir))?.name).toBe('ocean');
+    // The recorded slug names the theme for theme commands.
+    expect((await resolveTheme(dir))?.slug).toBe('ocean');
   });
 
   it('uses the built shorthand for a proven single-theme package', async () => {

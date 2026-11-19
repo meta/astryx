@@ -8,7 +8,10 @@
 
 import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 import {findCoreDir} from '../../../foundation/fs/paths.mjs';
-import {resolveImportPath} from '../../../foundation/discovery/component-discovery.mjs';
+import {
+  CORE_PACKAGE,
+  resolveImportPath,
+} from '../../../foundation/discovery/component-discovery.mjs';
 import {
   formatFull,
   formatCompact,
@@ -167,6 +170,11 @@ function componentDetailBlocks(
                   themeData,
                   importHint: result.data.import,
                   propsCommand,
+                  // The theme editor reads Core's parts only.
+                  realValues:
+                    result.package === CORE_PACKAGE
+                      ? {theme: themeData?.slug ?? null}
+                      : null,
                 }),
                 MARKDOWN,
               ),

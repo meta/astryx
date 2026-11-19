@@ -388,6 +388,9 @@ function formatTargetsTable(docs, themeData) {
  * @param {string|null} [options.importHint] - Import path hint (e.g. '@astryxdesign/core/Button')
  * @param {string|null} [options.propsCommand] - The `component … --props` command
  *   that prints this read's props whole; without it, descriptions print whole
+ * @param {{theme: string | null} | null} [options.realValues] - Print the
+ *   `experimental theme editor show <theme> --on <part>` line for the first
+ *   theming target, naming the project's theme when one resolves
  */
 export function formatFull(docs, options = {}) {
   /** @type {string[]} */
@@ -507,6 +510,14 @@ export function formatFull(docs, options = {}) {
         sections.push(
           `Override in defineTheme: \`components: {${entries.join(', ')}}\`\n`,
         );
+        // Agents search this output for these property words; the line
+        // names them so a search finds the lookup.
+        if (options.realValues) {
+          const theme = options.realValues.theme ?? '<theme>';
+          sections.push(
+            `Real values in your theme (padding, radius, color, height, size, with each token per mode): \`${getCliInvocation()} experimental theme editor show ${theme} --on ${targetKey(exampleTargets[0])}\`\n`,
+          );
+        }
       }
     }
 

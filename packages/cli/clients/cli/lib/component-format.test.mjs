@@ -608,3 +608,34 @@ describe('a doc with returns (a hook)', () => {
     expect(out).not.toContain('## Returns');
   });
 });
+
+describe('real-values line', () => {
+  const docs = {
+    name: 'Button',
+    description: 'An action.',
+    props: [],
+    theming: {targets: [{className: 'astryx-button', visualProps: ['size']}]},
+  };
+
+  it('names the project theme and the first part when given', () => {
+    expect(formatFull(docs, {realValues: {theme: 'brand'}})).toMatch(
+      /^Real values in your theme \(padding, radius, color, height, size, with each token per mode\): `.+ experimental theme editor show brand --on button`$/m,
+    );
+  });
+
+  it('keeps the placeholder when no theme resolves', () => {
+    expect(formatFull(docs, {realValues: {theme: null}})).toContain(
+      'experimental theme editor show <theme> --on button`',
+    );
+  });
+
+  it('prints nothing without the option or without a theming target', () => {
+    expect(formatFull(docs)).not.toContain('Real values');
+    expect(
+      formatFull(
+        {name: 'Box', description: 'A box.', props: []},
+        {realValues: {theme: 'brand'}},
+      ),
+    ).not.toContain('Real values');
+  });
+});
