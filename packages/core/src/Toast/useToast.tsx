@@ -30,12 +30,11 @@ const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
 
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
 
-// The fallback container is a detached tree with no ThemeContext. A toast
-// shown from inside a Theme draws under that Theme (ToastRow). For a toast
-// shown with no Theme around it, this mirrors <html>'s theme attributes onto
-// the container (live via MutationObserver) for the theme's @scope'd CSS to
-// reach it. It's a lifetime-of-app singleton that's never torn down, so
-// there's nothing to disconnect — this returns void.
+// The fallback container is a separate tree with no ThemeContext. A toast
+// shown from inside a Theme draws under that Theme (CallerTheme). For other
+// toasts, this copies the theme attributes of <html> to the container, so the
+// theme's scoped CSS reaches them. The container lives as long as the app, so
+// the observer stays connected.
 function syncRootThemeAttrs(container: HTMLElement): void {
   const sync = () => {
     let mirroredMode: string | null = null;

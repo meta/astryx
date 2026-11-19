@@ -604,9 +604,9 @@ export function ToastViewport({
         ? {
             ...entry,
             rowKey: overwritten.rowKey ?? overwritten.id,
-            // The new toast's Theme when both have one. Between a toast with
-            // a Theme and one without, the card keeps the way it drew, so it
-            // stays mounted and focus stays.
+            // Adding or removing a Theme changes the row's tree, which
+            // remounts the card and loses focus. So between a toast with a
+            // Theme and one without, the card keeps its first Theme, or none.
             callerTheme:
               entry.callerTheme != null && overwritten.callerTheme != null
                 ? entry.callerTheme
