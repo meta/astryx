@@ -370,8 +370,9 @@ This record does not own:
 - `derivedVarRegistry.ts` owns checked mappings from guaranteed public properties
   to private component variables. A style key's pseudo-class blocks (`:hover`)
   lower like its resting rule (derived variables, `replaces`, container
-  padding) at the root, in adaptations and on media surfaces; a pseudo-element
-  block (`::before`) is another box and is written as authored.
+  padding) at the root, in adaptations and on media surfaces, after the
+  boundary check (INV13) reads their declarations as authored; a
+  pseudo-element block (`::before`) is another box and is written as authored.
 - Component `.doc.mjs` `theming.derived[]` mirrors those mappings;
   `theming.vars[]` distinguishes reviewed public semantic variables from private
   implementation variables.
