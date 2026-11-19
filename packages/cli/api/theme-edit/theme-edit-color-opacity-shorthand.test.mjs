@@ -92,6 +92,9 @@ describe('the reader', () => {
       '4px / 2px',
       'rgb(0 0 0 / 5%)',
       'black/500',
+      // (A path in a url() is never a color.)
+      'url(/img/white/24)',
+      'url(/a/white/24/x.png) no-repeat',
     ])
       expect(read(v)).toEqual([]);
   });

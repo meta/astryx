@@ -10826,6 +10826,25 @@ export function draftAnswer(ctx, env, question) {
       if (side && p.on === 'top-nav-item') p.on = 'side-nav-item';
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
     }
+  // ("sidebar: #111827 background, white links"): links said of a part that
+  // holds no link, only nav items, are those items, whose own text color
+  // is set on them.
+  for (const c of clauses) {
+    const holder = c.container;
+    if (!holder || !C.MAP[holder]) continue;
+    const holds = C.MAP[holder].contains ?? [];
+    const holdsLink =
+      holds.includes('link') ||
+      (holds.includes('text') && (C.MAP.text?.contains ?? []).includes('link'));
+    if (holdsLink) continue;
+    const item = holds.find(
+      x => /-item$/.test(x) && Object.hasOwn(C.MAP[x]?.at ?? {}, 'color'),
+    );
+    if (!item || !c.parts.some(p => p.on === 'link')) continue;
+    for (const p of c.parts) if (p.on === 'link') p.on = item;
+    delete c.container;
+    delete c.placeStrict;
+  }
   // "table row dividers", "the lines between table rows": the lines a
   // table draws between its rows (its cells' borders), never the Divider
   // part; their color is the row's border color.
@@ -29570,6 +29589,41 @@ export function draftAnswer(ctx, env, question) {
       if (filled.has(on) || !C.MAP[one(on)] || C.MAP[one(on)]?.media) continue;
       if (inks.some(st => st.value !== inks[0].value)) continue;
       const ink = parseColor(String(inks[0].value ?? ''));
+      // (A part inside a holder this answer fills, a sidebar's items on its
+      // #111827, sits on that fill in both modes: measured there, unless
+      // the part is also drawn in another holder with a fill of its own,
+      // the phone menu the items move into, where the color reaches too.)
+      /** @param {string} holder */
+      const onlyThere = holder =>
+        !Object.entries(C.MAP).some(
+          ([h, x]) =>
+            h !== holder &&
+            (x.contains ?? []).includes(one(on)) &&
+            !(x.contains ?? []).includes(holder) &&
+            !(C.MAP[holder]?.contains ?? []).includes(h) &&
+            Object.keys(x.at ?? {}).some(a => /^background/.test(a)),
+        );
+      const holderFill = result
+        .flatMap(x => x.options.flat())
+        .find(
+          st =>
+            st.on &&
+            !st.mode &&
+            !st.state &&
+            /^background(?:-color)?$/.test(st.thing) &&
+            (C.MAP[one(String(st.on))]?.contains ?? []).includes(one(on)) &&
+            onlyThere(one(String(st.on))) &&
+            parseColor(String(st.value ?? '')) != null,
+        );
+      if (
+        ink &&
+        holderFill &&
+        ratio(
+          ink,
+          /** @type {number[]} */ (parseColor(String(holderFill.value))),
+        ) >= 3
+      )
+        continue;
       // (The fill the part shows under that text: its look's own, a primary
       // button's accent, else the page or surface it is drawn on.)
       // (A look the part data reads no fill of its own for, a ghost

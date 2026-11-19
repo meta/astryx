@@ -143,6 +143,15 @@ const ROWS = [
       says: /"gray background #e3e3e3" names no part/i,
     },
   ],
+  [
+    'links in a sidebar that holds no link are its nav items, kept readable in the phone menu',
+    {
+      q: 'sidebar: #111827 background, white links',
+      // (Dark mode only: the items also sit in the light phone menu.)
+      has: ["color '#ffffff' --on side-nav-item --mode dark"],
+      never: /--color-text-accent/,
+    },
+  ],
 ];
 
 describe('long asks bind each clause to its own part', () => {
