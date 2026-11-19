@@ -274,7 +274,6 @@ const menuStyles = stylex.create({
   },
   popover: {
     minWidth: '160px',
-    marginBlock: spacingVars['--spacing-1'],
   },
 });
 
@@ -745,6 +744,9 @@ function BreadcrumbMenuTrigger({
         {
           placement: 'below',
           alignment: 'start',
+          // The layer's own clearance: the layer runtime measures it as the
+          // entrance's room to the trigger and keeps it through a flip.
+          offset: spacingVars['--spacing-1'],
           xstyle: menuStyles.popover,
         },
       )}

@@ -49,7 +49,9 @@
  *
  * With `{check: true}`, it compiles the same outputs in memory but writes
  * nothing: it compares each generated file against what is on disk (ignoring
- * only the volatile `@generated` `Command:` line) and returns a
+ * the `@generated` header's volatile `Command:` line, the release its `CLI:`
+ * line names, and the command a built module's built-by line names) and
+ * returns a
  * `theme.build.check` receipt listing any stale or missing outputs. This is
  * the CI guard for committed, generated theme CSS: the source of truth is
  * `<theme>.ts`, and `theme build --check` fails when the committed
@@ -152,6 +154,7 @@ import {
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 import {selfContainedImports} from './self-contained.mjs';
+import {importSpecifier} from './import-specifier.mjs';
 import {THEME_BUILD_MARKER} from '../../../foundation/config/theme-build-header.mjs';
 import {generatedMark} from '../../theme-edit/_marks.mjs';
 
@@ -683,8 +686,9 @@ function readPkgVersion(dir) {
 /**
  * Resolve the CLI and core package versions recorded in generated headers.
  * These are stable (unlike a timestamp): identical inputs produce byte-identical
- * output, so rebuilds don't churn git and `theme build --check` stays a pure
- * content-drift signal.
+ * output, so rebuilds don't churn git. `theme build --check` ignores the CLI
+ * version (normalizeThemeBuildForCompare), so it stays a content-drift signal
+ * whichever CLI release answers.
  * @param {string} cwd - Consumer cwd, used to locate the installed core.
  * @returns {{cli: string, core: string}}
  */
@@ -848,27 +852,101 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
 }
 
 /**
- * Normalize generated file content for staleness comparison by dropping the
- * volatile `Command:` line of the `@generated` header (it embeds the
- * invocation, e.g. an explicit --out). Everything else — including the rest of
- * the header and all real content — is compared verbatim. Used only by
- * `--check`: a differing command must NOT report a file as stale, but any real
- * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content. CRLF
- * line endings read as LF.
+ * Generated file content without the volatile `Command:` line of the
+ * `@generated` header (it embeds the invocation, e.g. an explicit --out).
+ * CRLF line endings read as LF, since a checkout may turn line endings into
+ * CRLF.
+ * @param {string} content
+ * @returns {string}
+ */
+export function withoutBuildCommandLine(content) {
+  return content
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter(line => !headerText(line).startsWith('Command:'))
+    .join('\n');
+}
+
+/** @param {string} line */
+function headerText(line) {
+  return line.replace(/^\s*\*?\s?/, '');
+}
+
+/**
+ * The line of a built module's doc comment that names the command that built
+ * it (`<name> theme — built by \`<command> theme build\``). The command
+ * depends on how the CLI was started: the package manager, or a tool that
+ * runs the CLI for its users.
+ */
+export const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
+
+/** The `@generated` header's line that names the CLI release that built it. */
+export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
+
+/**
+ * `lines` with the command in a built module's built-by line as
+ * `<command>`, when exactly one line is a built-by line; otherwise unchanged,
+ * so a second or a malformed line stays significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withBuiltByCommandPlaceholder(lines) {
+  if (lines.filter(line => BUILT_BY_LINE.test(line)).length !== 1) return lines;
+  return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
+}
+
+/**
+ * The index of the line that closes a file's first comment, the header a
+ * build writes, or -1 when the file does not start with a comment.
+ * @param {string[]} lines
+ * @returns {number}
+ */
+export function generatedHeaderEnd(lines) {
+  if (lines[0] !== '/*' && lines[0] !== '/**') return -1;
+  return lines.indexOf(' */', 1);
+}
+
+/**
+ * `lines` with the release in the header's `CLI:` line as `<version>`, when
+ * the header ({@link generatedHeaderEnd}) holds exactly one; otherwise
+ * unchanged, so a missing or second line, or one outside the header, stays
+ * significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withCliReleasePlaceholder(lines) {
+  const close = generatedHeaderEnd(lines);
+  if (close === -1) return lines;
+  const header = lines.slice(1, close);
+  if (header.filter(line => CLI_VERSION_LINE.test(line)).length !== 1) {
+    return lines;
+  }
+  return lines.map((line, index) =>
+    index < close ? line.replace(CLI_VERSION_LINE, '$1<version>$3') : line,
+  );
+}
+
+/**
+ * Normalize generated file content for staleness comparison: without the
+ * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
+ * that the header's one `CLI:` line names as `<version>`
+ * ({@link withCliReleasePlaceholder}), and with the command in a built
+ * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * answers, and the command that starts it, depend on how the CLI was started
+ * (a global install, a tool that runs it, or the project's own copy) and
+ * change with each update, so the same outputs built another way are not
+ * stale. A header with no `CLI:` line or with two stays significant.
+ * Everything else, the `Core:` line and all real content included, is compared
+ * verbatim. Used only by `--check`: any real content drift reports a file as
+ * stale.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  // A checkout may turn line endings into CRLF; the text is the same.
-  return content
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter(line => {
-      const t = line.replace(/^\s*\*?\s?/, '');
-      return !t.startsWith('Command:');
-    })
-    .join('\n');
+  return withCliReleasePlaceholder(
+    withBuiltByCommandPlaceholder(withoutBuildCommandLine(content).split('\n')),
+  ).join('\n');
 }
 
 /**
@@ -1848,28 +1926,6 @@ function toIdentifier(name) {
     )
     .replace(/[-.]+/g, '');
   return /^\d/.test(id) ? `_${id}` : id || '_';
-}
-
-/**
- * Import specifier for install/scaffold instructions, from a file directly
- * in the project's src/ (the file the printed snippet says it is relative
- * to; callers pass the output folder from the outputs' project root): an output
- * under src/ is `./themes/gothic/gothic`, one beside src/ is
- * `../themes/gothic/gothic`.
- * @param {string} relDir the output folder, relative to the outputs' project root
- * @param {string} base
- * @returns {string}
- */
-export function importSpecifier(relDir, base) {
-  // An import specifier always uses `/`. On Windows the cwd-relative dir comes
-  // from path.relative with `\`, which would print `./\themes\ocean/ocean`.
-  const normalized = relDir === '.' ? '.' : relDir.split(path.sep).join('/');
-  const fromSrc = path.posix.relative('src', normalized.replace(/\/+$/, ''));
-  if (!fromSrc) return `./${base}`;
-  // Only a parent step (`..` or `../…`), never a folder named like `..cache`.
-  return fromSrc === '..' || fromSrc.startsWith('../')
-    ? `${fromSrc}/${base}`
-    : `./${fromSrc}/${base}`;
 }
 
 /**
@@ -6322,7 +6378,8 @@ async function themeBuildInternal(
 
   // Check mode: compare generated content against what's on disk instead of
   // writing. A file is "stale" if it's missing or its content differs once the
-  // volatile @generated `Command:` line is ignored. Returns a
+  // @generated header's `Command:` line, the release its `CLI:` line names, and
+  // the command a built module's built-by line names are ignored. Returns a
   // receipt listing stale/missing outputs so callers (CI) can fail on drift.
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);

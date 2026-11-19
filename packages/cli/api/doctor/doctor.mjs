@@ -84,6 +84,7 @@ import {
   guideEntry,
   overlayLanguages,
   projectTree,
+  templateLinkProblems,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
@@ -1830,6 +1831,35 @@ export function checkPackageManager(ctx) {
   };
 }
 
+const TWIN_PROVIDER_FIX =
+  'Both manifests declare the same `providerId`. If they are one ' +
+  'integration installed under two names, keep one of the two ' +
+  'dependencies; if they are different integrations, give each its ' +
+  'own `providerId` in astryx.integration.*.';
+const NAMED_PROVIDER_FIX =
+  'Give each integration its own `providerId` in astryx.integration.*. ' +
+  "A renamed package may keep its predecessor's ID only when the " +
+  'predecessor is no longer installed.';
+
+/**
+ * The fix for a set of provider conflicts: the two-case advice for conflicts
+ * where both manifests declare the ID, the rename advice for the rest, and
+ * both, each named, when the project has some of each.
+ * @param {ReadonlyArray<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} conflicts
+ * @returns {string}
+ */
+function providerConflictFix(conflicts) {
+  const twins = conflicts.filter(
+    integration => integration.__providerConflict?.bothDeclare,
+  ).length;
+  if (twins === conflicts.length) return TWIN_PROVIDER_FIX;
+  if (twins === 0) return NAMED_PROVIDER_FIX;
+  return (
+    `Where both manifests declare the ID: ${TWIN_PROVIDER_FIX} ` +
+    `For the other conflicts: ${NAMED_PROVIDER_FIX}`
+  );
+}
+
 /**
  * Check 6b — every contributing integration owns its provider identity.
  *
@@ -1870,10 +1900,7 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix:
-        'Give each integration its own `providerId` in astryx.integration.*. ' +
-        "A renamed package may keep its predecessor's ID only when the " +
-        'predecessor is no longer installed.',
+      fix: providerConflictFix(conflicts),
     };
   }
 
@@ -2172,9 +2199,10 @@ export async function checkDocsTree(_ctx, options = {}) {
         }
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
-      // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names. A run whose base is not
-      // Core leaves Core's docs out; a link to one of them is not a problem.
+      // typed fields, reference and workflow blocks, and inline links, a
+      // template description's included. A reference block also includes all
+      // it names. A run whose base is not Core leaves Core's docs out; a link
+      // to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
@@ -2185,6 +2213,7 @@ export async function checkDocsTree(_ctx, options = {}) {
       const absent = target =>
         CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
       problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
+      problems.push(...(await templateLinkProblems(catalog, {absent})));
       problems.push(
         ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );

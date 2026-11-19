@@ -26,7 +26,7 @@ import {
 /**
  * Build the `template.show` envelope for an already-resolved template.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean}}} [options]
+ * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}}} [options]
  *   `iconSets`: the project's icon sets; without them the template's icons
  *   are unchanged. `components`: how `astryx component` reads the
  *   project's components; without it `componentsToRead` is empty.
