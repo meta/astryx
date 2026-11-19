@@ -86,14 +86,28 @@ describe('a whole-theme border width', () => {
     if (needBases(ctx)) return;
     await themeEditNew('n', {cwd, like: 'neutral'});
     const r = await themeEditSet('n', '--border-width', '2px', {cwd});
-    const keep = /** @type {string} */ (
-      r.data.notes.join(' ').match(/`([^`]*border none --on (\S+))`/)?.[2] ?? ''
-    );
+    const framed = /** @type {string} */ (
+      r.data.notes.join(' ').match(/no border of their own \(([^)]*)\)/)?.[1] ??
+        ''
+    )
+      .split(', ')
+      .filter(Boolean);
+    const m = r.data.notes
+      .join(' ')
+      .match(/`[^`]*border none --on (\S+)( --only)?`/);
+    const keep = m?.[1] ?? '';
     expect(keep).not.toBe('');
-    await themeEditSet('n', 'border', 'none', {cwd, on: keep});
+    // (The line keeps that one surface borderless, the others framed.)
+    await themeEditSet('n', 'border', 'none', {
+      cwd,
+      on: keep,
+      ...(m?.[2] ? {only: true} : {}),
+    });
     expect(rulesOf(cssOf('n'), keep)).not.toMatch(
       /border: var\(--border-width\) solid/,
     );
+    for (const p of framed.filter(x => x !== keep))
+      expect(rulesOf(cssOf('n'), p), p).toMatch(FRAME);
     await themeEditNew('z', {cwd, like: 'neutral'});
     const zero = await themeEditSet('z', '--border-width', '0px', {cwd});
     expect(zero.data.notes.join(' ')).not.toMatch(/also frames/);

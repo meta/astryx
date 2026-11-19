@@ -5263,6 +5263,23 @@ export function placementHolds(ctx, data, s) {
 }
 
 /**
+ * Whether a placement (`mode:drawer`) puts a part's text on a ground the
+ * part's text never sits on outside it: a true placement on another
+ * ground, never a visual prop drawn on the same page (a heading's level).
+ * @param {any[]} pairs the part's census texts
+ * @param {(p: any) => Set<string>} placementsOf
+ * @param {string} v axis:value
+ */
+function onOtherGround(pairs, placementsOf, v) {
+  const outside = new Set(
+    pairs.filter(x => !placementsOf(x).has(v)).map(x => x.bg?.target),
+  );
+  return pairs.some(
+    x => placementsOf(x).has(v) && x.bg?.target && !outside.has(x.bg.target),
+  );
+}
+
+/**
  * The settings that keep a part's held variants (`hold`) at Core's look:
  * the same property, in each held variant, at the value Core draws it with
  * there (a top nav link's color in the phone menu, where a color set for
@@ -5318,23 +5335,6 @@ export function holdCopies(ctx, data, s) {
       });
   }
   return out;
-}
-
-/**
- * Whether a placement (`mode:drawer`) puts a part's text on a ground the
- * part's text never sits on outside it: a true placement on another
- * ground, never a visual prop drawn on the same page (a heading's level).
- * @param {any[]} pairs the part's census texts
- * @param {(p: any) => Set<string>} placementsOf
- * @param {string} v axis:value
- */
-function onOtherGround(pairs, placementsOf, v) {
-  const outside = new Set(
-    pairs.filter(x => !placementsOf(x).has(v)).map(x => x.bg?.target),
-  );
-  return pairs.some(
-    x => placementsOf(x).has(v) && x.bg?.target && !outside.has(x.bg.target),
-  );
 }
 
 /**
@@ -6293,6 +6293,51 @@ function reachedPartsOf(ctx, s) {
 }
 
 /**
+ * The parts drawn as a setting's part that the part's rule does not reach:
+ * the part draws the property through a variable of its own, and the part
+ * drawn as it reads another variable of its own and none of the part's, so
+ * the part's variable never sets it there. Parts that read the part's
+ * variable, or none, take the part's rule on its element.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing' | 'source'>} s
+ * @returns {string[]}
+ */
+export function missedDrawnAs(ctx, s) {
+  if (!s.on || s.source !== 'property') return [];
+  /** @type {Record<string, any>} */
+  const MAP = /** @type {any} */ (ctx).C?.MAP ?? {};
+  const prop = kebab(String(s.thing));
+  /** A part's values for the property and its longhands (padding-top). @param {string} part */
+  const valuesOf = part =>
+    Object.entries(MAP[part]?.at ?? {})
+      .filter(([k]) => k === prop || k.startsWith(`${prop}-`))
+      .flatMap(([, byCond]) => Object.values(byCond ?? {}));
+  /** The variables a part's own values for the property read. @param {string} part */
+  const varsOf = part =>
+    new Set(
+      valuesOf(part).flatMap(v =>
+        [...String(v).matchAll(/var\(\s*(--astryx-[\w-]+)/g)].map(m => m[1]),
+      ),
+    );
+  const own = [...varsOf(String(s.on))];
+  if (!own.length) return [];
+  return Object.keys(MAP).filter(
+    p =>
+      p !== s.on &&
+      ctx.project.target.has(p) &&
+      (MAP[p]?.drawnAs ?? []).includes(s.on) &&
+      valuesOf(p).length > 0 &&
+      // (A part that reads a variable of its own, and none of the part's,
+      // draws the property its own way. One that reads no such variable
+      // draws through the part's element, where the part's variable
+      // reaches it: a clickable card with no padding of its own takes the
+      // card's.)
+      varsOf(p).size > 0 &&
+      !own.some(v => varsOf(p).has(v)),
+  );
+}
+
+/**
  * The parts the build writes an entry on for a setting: those it writes
  * (writtenPartsOf), less a member drawn on another member's element that it
  * writes too (a clickable card on its card, a toggle button on its button).
@@ -6457,9 +6502,78 @@ function drawnAlike(ctx, s, member, exact = false) {
       );
     return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
   };
+  // (A one-line height reaches only members drawn one line tall: a
+  // multi-line field grows with its rows, so a text input's height would
+  // shut a text area to one line.)
+  if (oneLineSizeMisses(ctx, s, member)) return false;
   const a = rest(s.on);
   const b = rest(member);
   return a == null || b == null || a === b;
+}
+
+/** The properties that size a part's height, as one line. */
+const ONE_LINE_SIZE = /^(?:min-|max-)?(?:height|block-size)$/;
+
+/**
+ * Whether a part is drawn one line tall: it, or a part inside it that
+ * draws its box (a selector's control), draws a fixed height at rest (a
+ * text input's control height), not one its rows set (a text area grows
+ * with its text).
+ * @param {{C?: any}} ctx @param {string} part
+ */
+function drawnOneLine(ctx, part) {
+  /** @param {string} t */
+  const fixed = t => {
+    const at = /** @type {any} */ (ctx).C?.MAP?.[t]?.at ?? {};
+    return ['height', 'min-height', 'block-size', 'min-block-size'].some(p =>
+      Object.values(at[p] ?? {}).some(
+        v =>
+          !/^(?:auto|none|initial|unset|fit-content|0(?:px)?)$/.test(
+            String(v).trim(),
+          ),
+      ),
+    );
+  };
+  if (fixed(part)) return true;
+  const inner = /** @type {any} */ (ctx).project
+    ? cornerParts(/** @type {Ctx} */ (ctx), part)
+    : [];
+  return inner.some(t => t !== part && fixed(t));
+}
+
+/**
+ * Whether a part is a multi-line field: it, or a piece of it (a text
+ * area's control), can be resized to more rows. A part the census holds no
+ * drawing for is not one.
+ * @param {{C?: any}} ctx @param {string} part
+ */
+function drawnMultiLine(ctx, part) {
+  const map = /** @type {any} */ (ctx).C?.MAP ?? {};
+  return Object.entries(map).some(
+    ([p, m]) =>
+      (p === part || p.startsWith(`${part}-`)) &&
+      Object.values(/** @type {any} */ (m)?.at?.resize ?? {}).some(
+        v => !/^\s*none\s*$/.test(String(v)),
+      ),
+  );
+}
+
+/**
+ * Whether a height set on a part drawn one line tall misses a member of its
+ * family that is a multi-line field (a text area beside a text input):
+ * the member keeps its own height, and the result names it.
+ * @param {{C?: any}} ctx
+ * @param {{on?: string | null, thing?: string}} s
+ * @param {string} member
+ */
+export function oneLineSizeMisses(ctx, s, member) {
+  return Boolean(
+    s.on &&
+    member !== s.on &&
+    ONE_LINE_SIZE.test(kebab(String(s.thing ?? ''))) &&
+    drawnOneLine(ctx, String(s.on)) &&
+    drawnMultiLine(ctx, member),
+  );
 }
 
 /**
@@ -17744,7 +17858,14 @@ export function stateSlot(
   values = {},
   census = [],
 ) {
-  const pieces = state ? String(state).split('+') : [];
+  // A part that marks its chosen one as active (a pagination dot) takes a
+  // selected look in that state: no :selected pseudo-class exists, so the
+  // look would never show. An asked active stays the press it names.
+  const chosen = (/** @type {string} */ p) =>
+    p === 'selected' && !own.includes(p) && own.includes('active')
+      ? 'active'
+      : p;
+  const pieces = state ? String(state).split('+').map(chosen) : [];
   // (A state the part shows from an element it rides, which Core's theme
   // takes no style key for there (a list item's Item marks it selected):
   // written as the attribute Core marks, inside the plain rule.)

@@ -186,9 +186,18 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
       "set d border '1px solid #4d4d4d' --on dialog",
       "set d box-shadow '0 3px 7px #4d4d4d' --on dialog",
     ]);
-    // (A shadow alone, or a removal, stays the dialog's.)
-    expect(await first('no shadow on dialogs', 'd')).not.toEqual(
-      expect.arrayContaining([expect.stringMatching(/--on overlays/)]),
+    const r = await themeEditSet('d', 'box-shadow', '0 3px 7px #4d4d4d', {
+      cwd,
+      on: 'dialog',
+    });
+    expect(r.data.group?.name).toBe('overlays');
+    expect(r.data.parts).toEqual(
+      expect.arrayContaining([
+        'drawer',
+        'bottom-sheet',
+        'popover',
+        'hover-card',
+      ]),
     );
   }, 240_000);
 

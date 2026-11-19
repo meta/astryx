@@ -1908,7 +1908,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
  *   its own (a fill at rest in some variant, or a pressed state), never a
  *   selectable item;
  * - `overlays`: an Overlay component's own surface, filled with the
- *   surface or popover color;
+ *   surface or popover color, or another component's own floating box
+ *   filled with the popover color under a shared shadow (a menu);
  * - `option-rows`: a row (a <div> or <li>) clear at rest that is
  *   highlighted as you move through a list, or pressed without being
  *   selectable;
@@ -1991,12 +1992,24 @@ export function familyRoles(
       (rest.some(v => !CLEAR.test(v)) || states.some(st => /pressed/i.test(st)))
     )
       out['button-like'].push(key);
-    if (
-      comp?.category === 'Overlay' &&
+    // (A floating surface of another kind of component, a menu's box,
+    // filled with the popover color and lifted by a shared shadow, is an
+    // overlay too.)
+    const floats =
       own &&
       values(key, 'background-color', cond => !/[\s:[]/.test(cond)).some(v =>
-        /--color-background-(?:surface|popover)\b/.test(v),
-      )
+        /--color-background-popover\b/.test(v),
+      ) &&
+      values(key, 'box-shadow', cond => !/[\s:[]/.test(cond)).some(v =>
+        /--shadow-/.test(v),
+      );
+    if (
+      (comp?.category === 'Overlay' &&
+        own &&
+        values(key, 'background-color', cond => !/[\s:[]/.test(cond)).some(v =>
+          /--color-background-(?:surface|popover)\b/.test(v),
+        )) ||
+      floats
     )
       out.overlays.push(key);
     if (
