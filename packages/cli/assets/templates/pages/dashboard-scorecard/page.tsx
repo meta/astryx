@@ -111,7 +111,7 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 // Short tick labels ("6M", "350K") fit the fixed gutter with a small font up to
