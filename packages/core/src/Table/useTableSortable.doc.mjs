@@ -62,6 +62,11 @@ const sortedUsers = useMemo(() => {
   status: 'blocked' | 'active' | 'done';
   tags: string[];
 }
+const columns: TableColumn<Task>[] = [
+  {key: 'title', header: 'Title'},
+  {key: 'status', header: 'Status', sortable: true},
+  {key: 'tags', header: 'Tags', sortable: true, renderCell: task => task.tags.join(', ')},
+];
 const statusRank = {blocked: 0, active: 1, done: 2};
 const collator = useCollator({numeric: true});
 
