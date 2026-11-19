@@ -874,8 +874,9 @@ its first line, and its result lists each such setting (`widened`, additive
 in the JSON result) with the parts it now also reaches and the command that
 keeps it on its own part; a setting named on a group gets no such command, as
 it follows the group's members. Each growth is named once; the record then
-holds the new reach. A setting with no record yet is recorded as it reaches,
-with no message. `set … --only` on a setting the theme holds replaces the
+holds the new reach. A setting with no record yet is recorded as it reaches;
+the parts it reaches past what the editor that saved it gave it are named
+once the same way. `set … --only` on a setting the theme holds replaces the
 group version, so the look leaves the rest of the group, and a set without
 `--only` replaces the `--only` version. `only` stays part of a setting's
 identity, so a theme saved with both versions still opens and builds as it
