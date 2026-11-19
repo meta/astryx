@@ -72,6 +72,8 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {isStatusButtonPress} from '../hooks/statusButtonPress';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {devPropError, warnOnce} from '../utils/devWarning';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
@@ -1491,7 +1493,14 @@ export function Tokenizer<T extends SearchableItem>({
   // busy state during this render, which is exactly the re-render the store
   // exists to avoid.
   const hasClearButton = hasClear && !isDisabled && value.some(canRemoveItem);
-  const hasStaticEndLane = Boolean(endContent || hasClearButton);
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status,
+      statusVariant,
+      isInGroup: !!inputGroup,
+    });
+  const hasStaticEndLane =
+    Boolean(endContent || hasClearButton) || isRenderable(statusIcon);
   const [isFocusedWithin, setIsFocusedWithin] = useState(false);
   const isTruncated =
     !isFocusedWithin && tokenOverflowBehavior !== 'none' && value.length > 0;
@@ -1550,8 +1559,9 @@ export function Tokenizer<T extends SearchableItem>({
         // Redirect to the input so the user doesn't have to tab through
         // every token remove button. A press on a token's own control, and
         // the menu returning focus to the token that opened it, keep focus
-        // where they put it. A disabled grouped track that takes focus keeps
-        // it: it is the keyboard path to its hidden tokens.
+        // where they put it. The status info-tip keeps focus from a press or
+        // Shift+Tab, as it does on TextInput. A disabled grouped track that
+        // takes focus keeps it: it is the keyboard path to its hidden tokens.
         // In a grouped row, a move to the input also scrolls the strip to its
         // end before the press releases, so a press on a token's remove
         // button keeps its focus too. A finger's tap on a remove button with
@@ -1560,6 +1570,7 @@ export function Tokenizer<T extends SearchableItem>({
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
+          !isStatusButtonPress(e.target, statusTooltipDescribedBy) &&
           !(
             readModality() === 'pointer' &&
             (findTokenControl(e.target) != null ||
@@ -1581,6 +1592,7 @@ export function Tokenizer<T extends SearchableItem>({
       readModality,
       findTokenControl,
       wasKeyboardDown,
+      statusTooltipDescribedBy,
     ],
   );
 
@@ -1854,8 +1866,12 @@ export function Tokenizer<T extends SearchableItem>({
     (event: React.MouseEvent) => {
       // The click has run, so a menu opened from it has read the control.
       pressedTokenControlRef.current = null;
-      // A click on a custom token's own control leaves focus on that control.
-      if (findTokenControl(event.target) != null) {
+      // A click on a custom token's own control or on the status info-tip
+      // leaves focus on that control.
+      if (
+        findTokenControl(event.target) != null ||
+        isStatusButtonPress(event.target, statusTooltipDescribedBy)
+      ) {
         return;
       }
       if (!isDisabled) {
@@ -1871,7 +1887,13 @@ export function Tokenizer<T extends SearchableItem>({
         }
       }
     },
-    [isDisabled, isLayerMode, layer, findTokenControl],
+    [
+      isDisabled,
+      isLayerMode,
+      layer,
+      findTokenControl,
+      statusTooltipDescribedBy,
+    ],
   );
 
   // Inside an InputGroup no Field renders the local description or status —
@@ -1883,7 +1905,12 @@ export function Tokenizer<T extends SearchableItem>({
     inputLabelId,
     [
       !inputGroup && description ? descriptionId : null,
-      localStatus?.message ? statusMessageId : null,
+      // The tooltip variant renders no message box; the info-tip's tooltip
+      // describes the input instead.
+      localStatus?.message && statusVariant !== 'tooltip'
+        ? statusMessageId
+        : null,
+      statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
@@ -2149,6 +2176,7 @@ export function Tokenizer<T extends SearchableItem>({
             }}
           />
         )}
+        {statusIcon}
       </EndLane>
     </div>
   );
@@ -2354,11 +2382,12 @@ export function Tokenizer<T extends SearchableItem>({
               />
             ),
           )}
-          {isRenderable(endContent) && (
+          {(isRenderable(endContent) || isRenderable(statusIcon)) && (
             <div
               ref={sheetLaneMergedRef}
               {...stylex.props(styles.endSection, endSectionSizeStyles[size])}>
               {endContent}
+              {statusIcon}
             </div>
           )}
         </div>
