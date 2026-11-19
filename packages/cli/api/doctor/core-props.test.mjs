@@ -257,6 +257,15 @@ describe('doctor core-props', () => {
         'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
       });
       expect(merged?.status).toBe('pass');
+      // A declaration that adds the prop through a global type that another
+      // file of the project declares.
+      const globalType = await propsCheck({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx'}, include: ['src']}),
+        'src/global.d.ts': 'interface AppExtras {\n  selectedID?: string;\n}\n',
+        'src/tab-ids.d.ts': "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps extends AppExtras {}\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(globalType?.status).toBe('pass');
       // A string index on what JSX gives every component makes JSX take every name.
       const everyName = await propsCheck({
         'src/every-name.d.ts': "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicAttributes {\n      [name: string]: unknown;\n    }\n  }\n}\n",

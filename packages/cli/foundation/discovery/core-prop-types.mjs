@@ -56,21 +56,22 @@ function queryText(components, sources) {
 const unreadable = (ts, type) => (type.flags & ts.TypeFlags.Any) !== 0;
 
 /**
- * The compiler options of a config, as TypeScript's own config reader gives
- * them to a program through `extends`: module resolution included (`paths`,
+ * A config as TypeScript's own config reader gives it to a program through
+ * `extends`: its compiler options, module resolution included (`paths`,
  * `baseUrl` and the folder `paths` resolve from, `moduleResolution`,
- * `customConditions`, `rootDirs` and the rest). The read hands them to
- * TypeScript's program, so they come from the reader that program trusts.
- * Null with no config, or one TypeScript cannot read.
+ * `customConditions`, `rootDirs` and the rest), and the files it includes,
+ * which may declare global types that a file that augments Core uses. The
+ * read hands both to TypeScript's program, so they come from the reader that
+ * program trusts. Null with no config, or one TypeScript cannot read.
  * @param {any} ts
  * @param {string | undefined} configFile
- * @returns {Record<string, unknown> | null}
+ * @returns {{options: Record<string, unknown>, fileNames: string[]} | null}
  */
-function configCompilerOptions(ts, configFile) {
+function readConfig(ts, configFile) {
   if (!configFile) return null;
   try {
     const parsed = ts.getParsedCommandLineOfConfigFile(configFile, {}, {...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {}});
-    return parsed?.options ?? null;
+    return parsed ? {options: parsed.options, fileNames: parsed.fileNames ?? []} : null;
   } catch {
     return null;
   }
@@ -132,9 +133,11 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
   const strings = (/** @type {unknown} */ list) =>
     Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : undefined;
   // The pages' config as TypeScript reads it, so every import of a file that
-  // augments Core resolves as it does for the project; a page with no config
-  // gets a bundler's resolution.
-  const fromConfig = configCompilerOptions(ts, configFile);
+  // augments Core resolves as it does for the project, and every global type
+  // the project declares is there; a page with no config, or a config that
+  // sets neither `module` nor `moduleResolution`, gets a bundler's resolution.
+  const config = readConfig(ts, configFile);
+  const fromConfig = config?.options ?? null;
   const options = fromConfig
     ? {
         ...fromConfig,
@@ -168,7 +171,8 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
     path.resolve(name) === file ? ts.createSourceFile(file, text, language, true) : getSourceFile.call(host, name, language, ...rest);
   host.fileExists = (/** @type {string} */ name) => path.resolve(name) === file || fileExists.call(host, name);
   host.readFile = (/** @type {string} */ name) => (path.resolve(name) === file ? text : readFile.call(host, name));
-  const program = ts.createProgram({rootNames: [file, ...augmentations], options, host});
+  const rootNames = [...new Set([file, ...augmentations, ...(config?.fileNames ?? [])])];
+  const program = ts.createProgram({rootNames, options, host});
   const checker = program.getTypeChecker();
   /** @type {Map<string, any>} */
   const aliases = new Map();
