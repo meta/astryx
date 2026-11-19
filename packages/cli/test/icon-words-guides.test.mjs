@@ -19,9 +19,6 @@ import {
   loadTopicModule,
 } from '../foundation/discovery/docs-discovery.mjs';
 
-/** The icons guide is held to these words by icon-words.test.mjs. */
-const COVERED_ELSEWHERE = new Set(['icons.doc.mjs']);
-
 const ICON_GUIDES = new Set([
   'icon-sets.doc.mjs',
   'icon-definitions.doc.mjs',
@@ -89,7 +86,6 @@ describe('icon words in guides', () => {
     const found = [];
     for (const file of builtinGuideFiles()) {
       const base = path.basename(file);
-      if (COVERED_ELSEWHERE.has(base)) continue;
       const rules = ICON_GUIDES.has(base)
         ? [...RETIRED_EVERYWHERE, ...RETIRED_IN_ICON_GUIDES]
         : RETIRED_EVERYWHERE;
