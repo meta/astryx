@@ -7597,6 +7597,23 @@ async function changeOnce(
     notes.push(
       `${keptForText.join(', ')} ${keptForText.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing}: this would make text there unreadable, so the change does not reach ${keptForText.length > 1 ? 'them' : 'it'}; to give it anyway: ${keptForText.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, keep: undefined}, String(s.value))}\``).join(', ')}`,
     );
+  // (An effect set on a member of a family stays on that member; the
+  // family's line is named, so a frame said as a border and a shadow can
+  // give the family both.)
+  const effectFamily =
+    sub === 'set' &&
+    s.on &&
+    !s.only &&
+    !s.note &&
+    s.source === 'property' &&
+    !groupsOf(ctx)[s.on] &&
+    !reachGroupOf(ctx, s)
+      ? reachGroupOf(ctx, {...s, thing: 'color'})
+      : null;
+  if (effectFamily)
+    notes.push(
+      `${s.thing} stays on ${s.on}: an effect reaches its family (${effectFamily}) only when --on names it; for the family: \`${P} set ${slug} ${setArgs({...s, on: effectFamily, only: undefined}, String(s.value))}\``,
+    );
   if (onlyLine && parts.length > 1)
     notes.push(
       `reaches ${s.on}'s family (${group}), the parts drawn alike: ${parts.join(', ')}; for ${s.on} alone: \`${onlyLine}\``,
