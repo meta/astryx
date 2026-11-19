@@ -459,6 +459,10 @@ describe('per-side border asks', () => {
           '\n',
         ),
       ).toMatch(/^border-color '#dddddd #dddddd transparent' --on tab/m);
+      // (One answer: "transparent" is a side there, never a fill.)
+      expect(
+        await said('tabs border-color #dddddd #dddddd transparent'),
+      ).not.toMatch(/nothing is written/);
     },
     T,
   );
@@ -510,6 +514,26 @@ describe('per-side border asks', () => {
         "border-width 'var(--border-width)' --on button",
         'border-style dotted --on button',
         "border-color '#eee #eee #ddd' --on button",
+      ]);
+      // (A named look whose only line is a group seam, the secondary
+      // button's, draws none standing alone.)
+      expect(
+        await first('secondary buttons with a dotted #eee #eee #ddd border'),
+      ).toEqual([
+        "border-width 'var(--border-width)' --on button --when variant:secondary",
+        'border-style dotted --on button --when variant:secondary',
+        // (Both modes: the secondary look's own dark line would be its
+        // text color.)
+        "border-color '#eee #eee #ddd' --on button --when variant:secondary",
+      ]);
+      // (With a width the line is drawn in every mode: the colors go to
+      // both, never the secondary look's text color in dark mode.)
+      expect(
+        await first('secondary buttons with a 2px #eee #eee #ddd border'),
+      ).toEqual([
+        'border-width 2px --on button --when variant:secondary',
+        'border-style solid --on button --when variant:secondary',
+        "border-color '#eee #eee #ddd' --on button --when variant:secondary",
       ]);
     },
     T,

@@ -3564,8 +3564,8 @@ function seamOnly(C, part, when) {
 /**
  * Whether Core draws a line around a part where it is asked: in the look
  * said, else the part's default look, at rest or in the state said. A side
- * cleared on the first child, a seam with the sibling before it, counts
- * only when a look is said.
+ * cleared on the first child, a seam with the sibling before it, is never a
+ * line around the part: a secondary button standing alone draws none.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} part
  * @param {string | null | undefined} state
@@ -3576,7 +3576,7 @@ export function drawsLineAround(ctx, part, state, when) {
   const line =
     drawsLine(ctx.C, [part], 'border', null, look) ||
     (!!state && drawsLine(ctx.C, [part], 'border', state, look));
-  return line && (!!when || !seamOnly(ctx.C, part, look));
+  return line && !seamOnly(ctx.C, part, look);
 }
 
 /** A border color: one color, one per side, or one side's. */

@@ -3149,10 +3149,16 @@ function aspectsOf(text) {
       ).test(c))
   )
     add('text');
+  // ("border-color #dddddd #dddddd transparent": a side of a per-side
+  // color run said transparent is that side's line, never a fill.)
+  const seeThroughSide = (sideColorsIn(c) ?? []).some(
+    x => x.toLowerCase() === 'transparent',
+  );
   if (
-    /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?|stripes|striped|zebra|transparent)\b/.test(
+    /\b(background|bg|fill(ed)?|gradient|glossy|tint(ed)?|stripes|striped|zebra)\b/.test(
       c,
-    )
+    ) ||
+    (!seeThroughSide && /\btransparent\b/.test(c))
   )
     add('background');
   return a;
@@ -29754,12 +29760,11 @@ export function draftAnswer(ctx, env, question) {
               looksDrawn.some(
                 w =>
                   (w || !looksDrawn.some(Boolean)) &&
-                  !drawsLine(
-                    C,
-                    FAMILIES[lineOn] ?? [one(lineOn)],
-                    'border',
-                    st.state,
-                    w || undefined,
+                  // (A look whose only line is a group seam, a secondary
+                  // button's, draws none around itself: its dark border
+                  // is its text color.)
+                  !(FAMILIES[lineOn] ?? [one(lineOn)]).every(m =>
+                    drawsLineAround(ctx, m, st.state, w || undefined),
                   ),
               )
             ) {
