@@ -519,7 +519,7 @@ export function addMatchingCore(cwd, name) {
     : null;
   // The guidance names the same version the command would add.
   const guidance = installGuidanceFor(
-    [release ? `${name}@${release}` : name],
+    [release ? releaseSpec(name, release) : name],
     cwd,
   );
   if (guidance != null) return guidance;

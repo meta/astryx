@@ -309,9 +309,10 @@ function installSpecs(packages, cwd) {
       return ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p;
     }),
     // Guidance names the bare packages, so the integration's own rule picks
-    // versions; a package released with Core is named at its release.
+    // versions; a package released with Core is named at its release, a
+    // range quoted as in the command.
     guided: packages.map((p, i) =>
-      matched[i] ? `${p}@${matched[i].release}` : p,
+      matched[i] ? releaseSpec(p, matched[i].release) : p,
     ),
     exact: matched.length > 0 && matched.every(m => m?.exact === true),
   };

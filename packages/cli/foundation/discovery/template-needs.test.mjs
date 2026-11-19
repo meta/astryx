@@ -18,6 +18,7 @@ import {
 } from './template-needs.mjs';
 import {_resetHostedRun, activateHostedRun} from '../runtime/package-root.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {recordDeclaredSettings} from '../env/cli-command.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
 
@@ -476,6 +477,20 @@ describe('installCommandFor names a package Astryx releases with Core at the pro
     ).installCommand;
     expect(crafted).toBe(`npm install ${theme}@${CLI_VERSION}`);
     expect(crafted).not.toContain('INJECTED');
+  });
+
+  it("quotes a declared Core range in an integration's install guidance", () => {
+    const ranged = app({'@astryxdesign/core': '>=0.7.0 <0.8.0'});
+    recordDeclaredSettings(ranged, [
+      {name: '@acme/a', installGuidance: 'acme add {packages}'},
+    ]);
+    try {
+      expect(installCommandFor([theme], ranged).installGuidance).toBe(
+        `acme add "${theme}@>=0.7.0 <0.8.0"`,
+      );
+    } finally {
+      recordDeclaredSettings(ranged, []);
+    }
   });
 
   it('leaves any other package to the package manager, and saves nothing exactly beside it', () => {
