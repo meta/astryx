@@ -235,8 +235,11 @@ for all 30 shipped locales plus `pseudo`.
   (`cancelLabel`, `dismissLabel`, `closeButtonLabel`, `emptySearchText`,
   `placeholder`). It resolves the string as the prop, else the catalog message:
   an absent prop gives the catalog message, translated under a provider and
-  English without one; a given prop replaces it in every locale. A component
-  takes no `labels` object, which is the factory shape (INV3a). A string callers
+  English without one; a given prop replaces it in every locale. A string that
+  belongs to one entry of a config list, such as a chat trigger's
+  `emptySearchText` or `menuLabel`, takes that entry's own field in place of a
+  component prop, resolved the same way. A component takes no `labels` object,
+  which is the factory shape (INV3a). A string callers
   do not reword, such as a navigation word, a count, or an assistive status,
   stays catalog-only. The prop rewords a catalog message the component owns
   and renders in its own anatomy; it does not pass a caller's value through to
