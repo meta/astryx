@@ -162,12 +162,18 @@ const fmt = (n: number) => `$${n.toFixed(2)}`;
 
 const fullWidth: CSSProperties = {width: '100%'};
 // Form column flex-basis so the two checkout columns share width evenly.
-const formColBasis: CSSProperties = {flexBasis: 0};
+// The min widths let the two columns wrap on a narrow first paint, before
+// script picks the stacked layout; on desktop both columns are wider.
+const formColBasis: CSSProperties = {
+  flexBasis: 0,
+  minWidth: 'min(100%, 320px)',
+};
 // Space the Order Summary content below its collapsible trigger title.
 const summaryContent: CSSProperties = {paddingBlockStart: 'var(--spacing-2)'};
 // Order-summary column: sticky beside the form on desktop.
 const summarySticky: CSSProperties = {
   flexBasis: 0,
+  minWidth: 'min(100%, 300px)',
   position: 'sticky',
   top: 'var(--spacing-4)',
   alignSelf: 'flex-start',
@@ -295,6 +301,7 @@ export default function PaymentFormPage() {
 
                 <Stack
                   direction={isMobile ? 'vertical' : 'horizontal'}
+                  wrap={isMobile ? 'nowrap' : 'wrap'}
                   gap={8}
                   vAlign="start">
                   <StackItem
