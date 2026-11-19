@@ -549,16 +549,18 @@ export function makeCompiler(project, parts) {
     const kidTokens =
       reads.length || g !== 'font'
         ? []
-      : [
-          ...new Set(
-            kids.flatMap(c =>
-              partReads(c, /** @type {string} */ (g))
-                .filter(r => kindOf(r.token) === kindOf(token))
-                .map(r => r.token),
+        : [
+            ...new Set(
+              kids.flatMap(c =>
+                partReads(c, /** @type {string} */ (g))
+                  .filter(r => kindOf(r.token) === kindOf(token))
+                  .map(r => r.token),
+              ),
             ),
-          ),
-        ].slice(0, 3);
-    run.push(...kidTokens.map(t => `${P} set ${theme} ${t} ${v} --on ${target}`));
+          ].slice(0, 3);
+    run.push(
+      ...kidTokens.map(t => `${P} set ${theme} ${t} ${v} --on ${target}`),
+    );
     if (direct && !kidTokens.length)
       run.push(
         `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
