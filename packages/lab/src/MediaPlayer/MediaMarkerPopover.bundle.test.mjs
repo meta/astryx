@@ -1,12 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file MediaPlayerLazyParts.bundle.test.mjs
+ * @file MediaMarkerPopover.bundle.test.mjs
  * @input The Lab MediaPlayer entry, bundled with the size report's options
- * @output Proof that a page with the media parts or presets loads no
- *   DropdownMenu or Popover module up front: the speed menu and a marker's
- *   popover load on demand
- * @position Size check for two optional features
+ * @output Proof that a page with the timeline or a preset loads no Popover
+ *   component up front: a marker's popover loads on demand
+ * @position Size check for an optional feature
  *   (`architecture:component-import-boundaries` INV10). esbuild runs in a
  *   child process, outside the test's DOM environment
  */
@@ -70,25 +69,18 @@ function modulesOf(exportName) {
   return JSON.parse(run.stdout);
 }
 
-const isDropdownMenu = file => file.includes('/core/src/DropdownMenu/');
-const isPopover = file => file.includes('/core/src/Popover/');
+// The Popover component and its surface. The speed menu still loads up front
+// and brings the shared usePopover hook, which is not counted here.
+const isPopover = file => file.endsWith('/core/src/Popover/Popover.tsx');
 
-describe('the speed menu and the marker popover load on demand', () => {
-  for (const page of [
-    'MediaPlaybackRate',
-    'MediaTimeSlider',
-    'VideoPlayer',
-    'AudioPlayer',
-  ]) {
-    it(`a page with ${page} loads no DropdownMenu or Popover module up front`, () => {
-      const {eager} = modulesOf(page);
-      expect(eager.filter(isDropdownMenu)).toEqual([]);
-      expect(eager.filter(isPopover)).toEqual([]);
+describe('the marker popover loads on demand', () => {
+  for (const page of ['MediaTimeSlider', 'VideoPlayer', 'AudioPlayer']) {
+    it(`a page with ${page} loads no Popover component up front`, () => {
+      expect(modulesOf(page).eager.filter(isPopover)).toEqual([]);
     });
   }
 
-  it('the speed menu and the marker popover still load when needed', () => {
-    expect(modulesOf('MediaPlaybackRate').all.some(isDropdownMenu)).toBe(true);
+  it('the marker popover still loads when a marker opens', () => {
     expect(modulesOf('MediaTimeSlider').all.some(isPopover)).toBe(true);
   });
 });

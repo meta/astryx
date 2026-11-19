@@ -147,15 +147,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// The speed menu and a marker's popover load on demand. Waits for both, so a
-// press reaches the loaded menu or popover rather than its fallback button.
-async function loadLazyParts() {
-  await act(async () => {
-    await import('./MediaRateMenu');
-    await import('./MediaMarkerPopover');
-  });
-}
-
 describe('VideoPlayer', () => {
   it('renders a named, focusable group around the native video without its controls', () => {
     const {player, video} = renderVideoPlayer({poster: '/poster.jpg'});
@@ -551,10 +542,12 @@ describe('MediaTimeSlider', () => {
     const playback = fakePlayback(container.querySelector('video')!, {
       duration: 60,
     });
-    await loadLazyParts();
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('textbox', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('textbox', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{PageUp}');
     expect(playback.getCurrentTime()).toBe(20);
@@ -581,10 +574,12 @@ describe('MediaTimeSlider', () => {
     );
     const video = container.querySelector('video')!;
     const playback = fakePlayback(video, {duration: 60});
-    await loadLazyParts();
     await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
     expect(playback.getCurrentTime()).toBe(20);
-    const reply = screen.getByRole('button', {name: 'Reply', hidden: true});
+    const reply = await screen.findByRole('button', {
+      name: 'Reply',
+      hidden: true,
+    });
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{ArrowLeft}jl5{ArrowUp}{ArrowDown}mk');
     expect(playback.getCurrentTime()).toBe(20);
@@ -803,7 +798,6 @@ describe('MediaPlaybackRate', () => {
     const playback = fakePlayback(container.querySelector('audio')!, {
       duration: 600,
     });
-    await loadLazyParts();
     await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
     expect(
       screen.getByRole('menuitemradio', {name: '1×', hidden: true}),

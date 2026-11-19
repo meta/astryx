@@ -13,8 +13,6 @@
  */
 
 import {
-  lazy,
-  Suspense,
   use,
   useCallback,
   useMemo,
@@ -29,9 +27,15 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
+import {
+  DropdownMenu,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from '@astryxdesign/core/DropdownMenu';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
+import {createModuleLoader} from '@astryxdesign/core/internal/module-loader';
 import {Slider} from '@astryxdesign/core/Slider';
 import {Theme, ThemeContext} from '@astryxdesign/core/theme';
 import {
@@ -62,11 +66,12 @@ import {
 } from './MediaPlayerContext';
 import {useMediaIcon} from './mediaIcons';
 
-// The speed menu and a marker's popover are optional, so each loads on
-// demand: a page that uses neither loads no DropdownMenu or Popover code.
-// While a chunk loads, its button shows without its menu or popover.
-const LazyMediaRateMenu = lazy(async () => import('./MediaRateMenu'));
-const LazyMediaMarkerPopover = lazy(async () => import('./MediaMarkerPopover'));
+// A marker's popover is optional, so its module loads on intent: a timeline
+// with no marker content loads no Popover code. A failed load is not kept, so
+// the next press asks again, and the marker still jumps to its time.
+const markerPopover = createModuleLoader(
+  async () => import('./MediaMarkerPopover'),
+);
 
 /** Control height on the shared element-size scale: 28, 32, or 36px. */
 export type MediaControlSize = 'sm' | 'md' | 'lg';
@@ -705,19 +710,63 @@ function MarkerButton({
   // The popover shows page content, such as a comment thread, so it takes
   // the page's theme instead of the media surface's.
   const pageTheme = use(ThemeContext);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [LoadedPopover, setLoadedPopover] = useState(
+    () => markerPopover.loaded()?.default ?? null,
+  );
+  const [isOpen, setIsOpen] = useState(false);
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setIsOpen(next);
+      onOpenChange(next);
+    },
+    [onOpenChange],
+  );
+  const loadPopover = (openOnLoad: boolean) => {
+    void markerPopover.load().then(
+      module => {
+        setLoadedPopover(() => module.default);
+        if (openOnLoad) {
+          setOpen(true);
+        }
+      },
+      () => {},
+    );
+  };
   const button = (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={marker.label}
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
       data-media-marker=""
-      onClick={onPress}
+      onClick={() => {
+        onPress();
+        // Once loaded, the popover's own handler on this button toggles it.
+        // A press before then opens it when it lands.
+        if (LoadedPopover == null) {
+          loadPopover(true);
+        }
+      }}
+      onPointerEnter={() => {
+        if (LoadedPopover == null) {
+          loadPopover(false);
+        }
+      }}
+      onFocus={() => {
+        if (LoadedPopover == null) {
+          loadPopover(false);
+        }
+      }}
       {...focusOutlineProps.focusVisible(styles.markerButton)}>
       <span aria-hidden {...stylex.props(styles.markerDot)} />
     </button>
   );
-  const popover = (
-    <Suspense fallback={button}>
-      <LazyMediaMarkerPopover
+  const popover =
+    LoadedPopover != null ? (
+      <LoadedPopover
+        anchorRef={buttonRef}
         label={marker.label}
         content={
           <div
@@ -727,19 +776,24 @@ function MarkerButton({
           </div>
         }
         width={MARKER_POPOVER_WIDTH}
-        onOpenChange={onOpenChange}>
-        {button}
-      </LazyMediaMarkerPopover>
-    </Suspense>
+        isOpen={isOpen}
+        onOpenChange={setOpen}
+      />
+    ) : null;
+  const parts = (
+    <>
+      {button}
+      {popover}
+    </>
   );
   return (
     <div {...stylex.props(styles.markerAnchor(x))}>
       {pageTheme != null ? (
         <Theme theme={pageTheme.theme} mode={pageTheme.mode}>
-          {popover}
+          {parts}
         </Theme>
       ) : (
-        popover
+        parts
       )}
     </div>
   );
@@ -1387,27 +1441,31 @@ function RateMenu({
     state => state.playbackRate,
   );
   const text = useRateLabel();
-  const button = {
-    label: text.label(rate),
-    'aria-label': text.name(rate),
-    tooltip: text.tooltip,
-    variant: 'ghost' as const,
-    size,
-    xstyle: styles.rateLabel,
-    ...themeProps('media-playback-rate-button'),
-  };
   return (
-    <Suspense fallback={<Button {...button} />}>
-      <LazyMediaRateMenu
-        rates={rates}
-        rate={rate}
-        groupLabel={text.tooltip}
-        optionLabel={text.label}
-        button={button}
-        onChange={value => store.actions.setPlaybackRate(value)}
-        onOpenChange={isOpen => holdControls('menu', isOpen)}
-      />
-    </Suspense>
+    <DropdownMenu
+      button={{
+        label: text.label(rate),
+        'aria-label': text.name(rate),
+        tooltip: text.tooltip,
+        variant: 'ghost',
+        size,
+        xstyle: styles.rateLabel,
+        ...themeProps('media-playback-rate-button'),
+      }}
+      onOpenChange={isOpen => holdControls('menu', isOpen)}>
+      <DropdownMenuRadioGroup
+        label={text.tooltip}
+        value={String(rate)}
+        onChange={value => store.actions.setPlaybackRate(Number(value))}>
+        {rates.map(option => (
+          <DropdownMenuRadioItem
+            key={option}
+            value={String(option)}
+            label={text.label(option)}
+          />
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenu>
   );
 }
 
