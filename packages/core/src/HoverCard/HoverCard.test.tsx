@@ -49,8 +49,18 @@ import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
 import {useFocusTrap} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {subscribeInput} from '../utils/inputStream';
 
 // Store original matches to restore later
+// A tap leaves the shared input stream's last pointer as touch; the next
+// case's mouse events must not read as a tap's compatibility events.
+afterEach(() => {
+  __resetInteractionModalityForTest();
+  const release = subscribeInput(window, 'pointerover', () => {});
+  fireEvent.pointerOver(document.body, {pointerType: 'mouse'});
+  release();
+});
+
 const originalMatches = HTMLElement.prototype.matches;
 
 // Track popover open state per element
@@ -1663,6 +1673,241 @@ describe('HoverCard', () => {
       fireEvent.mouseEnter(element);
       fireEvent.click(element);
     };
+
+    it('opens nothing when a tap elsewhere leaves the trigger under the finger', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+
+      // The finger presses another control, and the layout then puts the
+      // trigger where the finger lifted.
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+      // iOS then sends compatibility mouse events there, and no pointer
+      // events to the trigger.
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.mouseOver(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.mouseMove(trigger);
+      // Chromium also focuses a tapped button; that focus is the tap's too.
+      fireEvent.focusIn(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // A mouse that arrives later still hovers.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('opens on focus that script moves after a tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+
+      // The tap's handler moves focus to the trigger; no finger reached it.
+      fireEvent.focusIn(screen.getByText('Ruby Cheung'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('opens on focus that a later tap moves by script after a tap left the trigger under the finger', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      const trigger = screen.getByText('Ruby Cheung');
+      const tapElsewhere = () => {
+        fireEvent.pointerOver(pill, {pointerType: 'touch'});
+        fireEvent.pointerDown(pill, {pointerType: 'touch'});
+        fireEvent.pointerUp(pill, {pointerType: 'touch'});
+      };
+      // The first tap leaves the trigger under the finger.
+      tapElsewhere();
+      fireEvent.mouseOver(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.focusIn(trigger);
+      fireEvent.focusOut(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // The next tap lands elsewhere: the trigger hears its compatibility
+      // mouseleave, and the tap's handler moves focus to the trigger.
+      tapElsewhere();
+      fireEvent.mouseLeave(trigger);
+      fireEvent.focusIn(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('opens on keyboard focus after an earlier tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+
+      // A navigation key since the tap makes the next focus a keyboard one.
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      fireEvent.focusIn(screen.getByText('Ruby Cheung'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('closes a mouse-opened card on the compatibility mouseleave of a tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            delay={0}
+            hideDelay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerOver(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      });
+    });
+
+    it('opens nothing on a mouse arrival when the device has no pointer that can hover', async () => {
+      const noHover = (query: string) => ({
+        matches: query === '(any-hover: none)',
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      });
+      // A window whose input stream has heard no pointer yet: a phone's tap
+      // that mounted the trigger under the finger before anything listened.
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      const frameWindow = frame.contentWindow!;
+      Object.defineProperty(frameWindow, 'matchMedia', {
+        configurable: true,
+        value: noHover,
+      });
+      const onOpenChange = vi.fn();
+      const view = render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          touchTrigger="none"
+          delay={0}>
+          Ruby Cheung
+        </HoverCard>,
+        {container: frameWindow.document.body},
+      );
+      fireEvent.mouseEnter(view.getByText('Ruby Cheung'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+      view.unmount();
+      frame.remove();
+
+      // Once a mouse announces itself, it hovers, whatever the media query
+      // says (Chromium reports no hover pointer under touch emulation).
+      const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: noHover,
+      });
+      try {
+        const onMouseOpen = vi.fn();
+        render(
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onMouseOpen}
+            touchTrigger="none"
+            delay={0}>
+            Ruby Cheung
+          </HoverCard>,
+        );
+        const trigger = screen.getByText('Ruby Cheung');
+        fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() => {
+          expect(onMouseOpen).toHaveBeenCalledWith(true);
+        });
+      } finally {
+        if (original == null) {
+          Reflect.deleteProperty(window, 'matchMedia');
+        } else {
+          Object.defineProperty(window, 'matchMedia', original);
+        }
+      }
+    });
 
     it('opens on a tap when the trigger performs no action', async () => {
       const onOpenChange = vi.fn();

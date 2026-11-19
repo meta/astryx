@@ -10,6 +10,7 @@
  */
 
 import {
+  afterEach,
   describe,
   it,
   expect,
@@ -33,12 +34,22 @@ import {Item} from '../Item/Item';
 import {Token} from '../Token/Token';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {subscribeInput} from '../utils/inputStream';
 import userEvent from '@testing-library/user-event';
 import {IconButton} from '../IconButton/IconButton';
 import {Toolbar} from '../Toolbar/Toolbar';
 import {TestIcon} from '../__tests__/TestIcon';
 
 // Store original matches to restore later
+// A tap leaves the shared input stream's last pointer as touch; the next
+// case's mouse events must not read as a tap's compatibility events.
+afterEach(() => {
+  __resetInteractionModalityForTest();
+  const release = subscribeInput(window, 'pointerover', () => {});
+  fireEvent.pointerOver(document.body, {pointerType: 'mouse'});
+  release();
+});
+
 const originalMatches = HTMLElement.prototype.matches;
 
 // Track popover open state per element
@@ -458,6 +469,76 @@ describe('Tooltip', () => {
       fireEvent.pointerUp(element, {pointerType: 'touch'});
       fireEvent.click(element);
     };
+
+    it('opens nothing when a tap elsewhere leaves the trigger under the finger', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip
+            content="Tooltip text"
+            onOpenChange={onOpenChange}
+            touchTrigger="none"
+            delay={0}>
+            Abbreviation
+          </Tooltip>
+          <button type="button">Composer pill</button>
+        </>,
+      );
+
+      // The finger presses another control, and the layout then puts the
+      // trigger where the finger lifted.
+      const pill = screen.getByRole('button', {name: 'Composer pill'});
+      fireEvent.pointerOver(pill, {pointerType: 'touch'});
+      fireEvent.pointerDown(pill, {pointerType: 'touch'});
+      fireEvent.pointerUp(pill, {pointerType: 'touch'});
+      // iOS then sends compatibility mouse events there, and no pointer
+      // events to the trigger.
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.mouseOver(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.mouseMove(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // A mouse that arrives later still hovers.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('closes a mouse-opened tooltip on the compatibility mouseleave of a tap elsewhere', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip
+            content="Tooltip text"
+            onOpenChange={onOpenChange}
+            delay={0}
+            hideDelay={0}>
+            Abbreviation
+          </Tooltip>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerOver(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerOver(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      });
+    });
 
     it('opens on a tap after React discards a render that controls it', async () => {
       // A transition that suspends for good: React renders it, then keeps the

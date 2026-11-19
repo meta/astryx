@@ -29,7 +29,7 @@ import {
   type LayerPlacement,
 } from '../Layer/useLayer';
 import {
-  useTouchTrigger,
+  useTouchTriggerInternal,
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -359,7 +359,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     handlePointerEnter,
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
-  } = useTouchTrigger({
+    isTouchHover,
+    handleMouseArrival,
+    handleMouseDeparture,
+  } = useTouchTriggerInternal({
     touchTrigger,
     isEnabled,
     isControlled: isOpen !== undefined,
@@ -400,20 +403,21 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — without this a hover card opens on every
     // tap of its trigger and has nothing to close it.
-    if (isTouchPointerRef.current) {
+    if (handleMouseArrival()) {
       return;
     }
     scheduleShow();
-  }, [isTouchPointerRef, scheduleShow]);
+  }, [handleMouseArrival, scheduleShow]);
 
   const handleMouseLeave = useCallback(() => {
     // On touch the synthesized mouseleave arrives with the next tap elsewhere,
     // which the outside-tap dismissal already handles.
+    handleMouseDeparture();
     if (isTouchPointerRef.current) {
       return;
     }
     scheduleHide();
-  }, [isTouchPointerRef, scheduleHide]);
+  }, [handleMouseDeparture, isTouchPointerRef, scheduleHide]);
 
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
@@ -706,7 +710,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.
-            if (isTouchPointerRef.current) {
+            if (isTouchHover()) {
               return;
             }
             isHoveringContentRef.current = true;
@@ -750,6 +754,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       clearTimeouts,
       scheduleHide,
       popoverXstyle,
+      isTouchHover,
       isTouchPointerRef,
     ],
   );

@@ -111,6 +111,94 @@ describe('interactionModality', () => {
     expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
   });
 
+  it("switches each document's focus rings off after a pointer press and on after a navigation key", async () => {
+    const pageDocument = document.implementation.createHTMLDocument();
+    const secondDocument = document.implementation.createHTMLDocument();
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    tracker.__startInteractionModalityTrackingForTest();
+    tracker.__trackInteractionModalityInForTest(secondDocument);
+    const ring = (target: Document) =>
+      target.documentElement.style.getPropertyValue('--_focus-ring');
+    // No input yet: no override, so the rings read their keyboard default.
+    expect(ring(pageDocument)).toBe('');
+    pageDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(pageDocument)).toBe('0');
+    expect(ring(secondDocument)).toBe('');
+    // Option+Tab moves focus in Safari, so it shows the rings again.
+    pageDocument.dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'Tab', altKey: true}),
+    );
+    expect(ring(pageDocument)).toBe('');
+    // A modifier press leaves the modality alone.
+    expect(tracker.getInteractionModality(pageDocument)).toBe('pointer');
+    // Any key that makes the modality keyboard shows them, typing included.
+    pageDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(pageDocument)).toBe('0');
+    const field = pageDocument.createElement('input');
+    pageDocument.body.append(field);
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'a', bubbles: true, composed: true}),
+    );
+    expect(ring(pageDocument)).toBe('');
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring(secondDocument)).toBe('0');
+    expect(ring(pageDocument)).toBe('');
+  });
+
+  it('shows the rings for focus that comes back from a child frame or another window with no press here', async () => {
+    // A document with its own window, so the window's blur reaches the store.
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const pageDocument = host.contentDocument as Document;
+    const pageWindow = pageDocument.defaultView as Window;
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    tracker.__startInteractionModalityTrackingForTest();
+    const ring = () =>
+      pageDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    const first = pageDocument.createElement('button');
+    const frame = pageDocument.createElement('iframe');
+    const next = pageDocument.createElement('button');
+    pageDocument.body.append(first, frame, next);
+    const focusIn = (target: Element) =>
+      target.dispatchEvent(new FocusEvent('focusin', {bubbles: true}));
+    const leaveWindow = (activeElement: Element) => {
+      vi.spyOn(pageDocument, 'activeElement', 'get').mockReturnValue(
+        activeElement,
+      );
+      pageWindow.dispatchEvent(new FocusEvent('blur'));
+      vi.restoreAllMocks();
+    };
+
+    try {
+      // A press on the page, then focus into a frame and back out by keyboard.
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      expect(ring()).toBe('0');
+      leaveWindow(frame);
+      focusIn(next);
+      expect(ring()).toBe('');
+
+      // A press that brings focus back from the frame keeps the rings off.
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      leaveWindow(frame);
+      pageDocument.dispatchEvent(new Event('pointerdown'));
+      focusIn(first);
+      expect(ring()).toBe('0');
+
+      // The window giving focus back to the element it left is a restore.
+      leaveWindow(first);
+      focusIn(first);
+      expect(ring()).toBe('0');
+      // Focus that comes back to another element moved by keyboard.
+      leaveWindow(first);
+      focusIn(next);
+      expect(ring()).toBe('');
+    } finally {
+      host.remove();
+    }
+  });
+
   it("releases a second document's listeners with its last consumer", async () => {
     const secondDocument = document.implementation.createHTMLDocument();
     const tracker = await loadTracker();
@@ -130,10 +218,66 @@ describe('interactionModality', () => {
 
     releaseSecond();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['keydown', 'pointerdown'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
+  });
+
+  it('keeps hearing a second window across a release and hold in one commit', async () => {
+    const host = document.createElement('iframe');
+    document.body.append(host);
+    const secondDocument = host.contentDocument as Document;
+    const secondWindow = secondDocument.defaultView as Window;
+    const tracker = await loadTracker();
+    const ring = () =>
+      secondDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    const first = secondDocument.createElement('button');
+    const next = secondDocument.createElement('button');
+    secondDocument.body.append(first, next);
+    try {
+      let release = tracker.__trackInteractionModalityInForTest(secondDocument);
+      secondDocument.dispatchEvent(new Event('pointerdown'));
+      expect(ring()).toBe('0');
+
+      // An object-ref consumer releases and holds again after a commit.
+      release();
+      release = tracker.__trackInteractionModalityInForTest(secondDocument);
+      await Promise.resolve();
+      expect(ring()).toBe('0');
+
+      // Focus leaves the window, then comes back by keyboard to another
+      // element: the rings show on that first stop.
+      vi.spyOn(secondDocument, 'activeElement', 'get').mockReturnValue(first);
+      secondWindow.dispatchEvent(new FocusEvent('blur'));
+      vi.restoreAllMocks();
+      next.dispatchEvent(new FocusEvent('focusin', {bubbles: true}));
+      expect(ring()).toBe('');
+      release();
+    } finally {
+      host.remove();
+    }
+  });
+
+  it("drops a second document's ring override with its last consumer, but not across a release and hold in one commit", async () => {
+    const secondDocument = document.implementation.createHTMLDocument();
+    const tracker = await loadTracker();
+    const ring = () =>
+      secondDocument.documentElement.style.getPropertyValue('--_focus-ring');
+    let release = tracker.__trackInteractionModalityInForTest(secondDocument);
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(ring()).toBe('0');
+
+    // An object-ref consumer releases and holds again after every commit.
+    release();
+    release = tracker.__trackInteractionModalityInForTest(secondDocument);
+    await Promise.resolve();
+    expect(ring()).toBe('0');
+
+    // The last release drops it, so keyboard focus there still rings.
+    release();
+    await Promise.resolve();
+    expect(ring()).toBe('');
   });
 
   it("tracks a hook consumer's object-ref document until its last consumer unmounts", async () => {
@@ -171,7 +315,7 @@ describe('interactionModality', () => {
     // The last component in that document unmounts: tracking there stops.
     second.unmount();
     expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
-      ['keydown', 'pointerdown'],
+      ['focusin', 'keydown', 'pointerdown'],
     );
     secondDocument.dispatchEvent(new Event('pointerdown'));
     expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
@@ -208,6 +352,7 @@ describe('interactionModality', () => {
     elementRef.current = secondDocument.createElement('div');
     rerender();
     expect(firstRemove.mock.calls.map(([type]) => type).sort()).toEqual([
+      'focusin',
       'keydown',
       'pointerdown',
     ]);
@@ -321,6 +466,7 @@ describe('interactionModality', () => {
       expect(remove).not.toHaveBeenCalled();
       await frame.render(h(Fragment, null));
       expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
+        'focusin',
         'keydown',
         'pointerdown',
       ]);

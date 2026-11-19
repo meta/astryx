@@ -199,11 +199,11 @@ describe('TimeInput', () => {
           ring: {
             borderColor: {
               default: colorVars['--color-border-emphasized'],
-              ':focus-within': colorVars['--color-accent'],
+              ':focus-within': `color-mix(in srgb, ${colorVars['--color-accent']} calc(var(--_focus-ring, 1) * 100%), ${colorVars['--color-border-emphasized']})`,
             },
             boxShadow: {
               default: 'none',
-              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+              ':focus-within': `inset 0px 0px 0px calc(2px * var(--_focus-ring, 1)) ${colorVars['--color-accent-muted']}`,
             },
           },
         }).ring,

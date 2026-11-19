@@ -66,6 +66,7 @@ import {
   isTextEntrySincePointer,
   useInteractionModalityTrackingFor,
 } from '../utils/interactionModality';
+import {getLastPointerType, subscribeInput} from '../utils/inputStream';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -299,6 +300,23 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * rules as a tap it sees, and arms the outside dismissal when it opens.
    */
   answerTap: (tapEvent: Event | null) => void;
+  /**
+   * Whether a mouse arrival on the trigger now comes from a finger, not a
+   * hovering pointer: the trigger's own pointer is a finger, the document's
+   * last pointer was a finger (a tap's compatibility mouse events also reach
+   * a trigger that moved under the finger), or, before the page has heard
+   * any pointer, the device has no pointer that can hover. Gate hover-opening on it; a leave keeps the trigger's own
+   * pointer check, so a mouse-opened layer still closes.
+   */
+  isTouchHover: () => boolean;
+  /**
+   * Call on the trigger's mouse arrival; returns `isTouchHover()`. A finger's
+   * arrival on a trigger with no pointer of its own makes the focus that tap
+   * gives it touch in `isTouchInteraction()`.
+   */
+  handleMouseArrival: () => boolean;
+  /** Call on the trigger's mouse departure: the tap that arrived has ended. */
+  handleMouseDeparture: () => void;
 }
 
 /**
@@ -337,6 +355,34 @@ export function useTouchTrigger(
  *
  * @internal
  */
+/**
+ * Whether the trigger's device has no pointer that can hover, as on a phone:
+ * every mouse event there is a tap's compatibility event.
+ */
+function windowOf(trigger: Element | null): Window | null {
+  return (
+    trigger?.ownerDocument.defaultView ??
+    (typeof window === 'undefined' ? null : window)
+  );
+}
+
+/**
+ * The last pointer type the shared input stream heard in the trigger's
+ * window: a mouse or pen sends `pointerover` before its `mouseover`, and a
+ * tap's compatibility mouse events have no pointer of their own.
+ */
+function lastPointerTypeAt(trigger: Element | null): string | null {
+  const view = windowOf(trigger);
+  return view == null ? null : getLastPointerType(view);
+}
+
+function ignorePointer(): void {}
+
+function hasNoHoverPointer(trigger: Element | null): boolean {
+  const view = trigger?.ownerDocument.defaultView;
+  return view?.matchMedia?.('(any-hover: none)').matches === true;
+}
+
 export function useTouchTriggerInternal(
   options: UseTouchTriggerOptions,
   /**
@@ -459,11 +505,82 @@ export function useTouchTriggerInternal(
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
-  const isTouchInteraction = useCallback(
-    () =>
-      isTouchPointerRef.current && isTextEntrySincePointer(triggerRef.current),
-    [triggerRef],
+
+  // Syncs the shared input stream: while a hover trigger is mounted, the
+  // stream hears `pointerover` and `pointerdown` in its window, so it knows
+  // the last pointer's type. A trigger that moves to another window
+  // subscribes there.
+  const pointerStreamRef = useRef<{
+    view: Window;
+    release: () => void;
+  } | null>(null);
+  useEffect(() => {
+    const view = windowOf(triggerRef.current);
+    const held = pointerStreamRef.current;
+    if (held?.view === view) {
+      return;
+    }
+    held?.release();
+    pointerStreamRef.current = null;
+    if (view == null) {
+      return;
+    }
+    const releaseOver = subscribeInput(view, 'pointerover', ignorePointer);
+    const releaseDown = subscribeInput(view, 'pointerdown', ignorePointer);
+    pointerStreamRef.current = {
+      view,
+      release: () => {
+        releaseOver();
+        releaseDown();
+      },
+    };
+  });
+  // Releases the stream subscription on unmount.
+  useEffect(
+    () => () => {
+      pointerStreamRef.current?.release();
+      pointerStreamRef.current = null;
+    },
+    [],
   );
+  // A finger's compatibility arrival on a trigger that saw no pointer of its
+  // own: a tap moved the trigger under the finger.
+  const isFingerArrivalRef = useRef(false);
+
+  // Focus a finger press gave the trigger, with no navigation key since. A
+  // focus that script moves after a tap elsewhere is not one.
+  const isTouchInteraction = useCallback(() => {
+    const trigger = triggerRef.current;
+    const isFingerArrival =
+      isFingerArrivalRef.current && lastPointerTypeAt(trigger) === 'touch';
+    return (
+      (isTouchPointerRef.current || isFingerArrival) &&
+      isTextEntrySincePointer(trigger)
+    );
+  }, [triggerRef]);
+
+  const isTouchHover = useCallback(() => {
+    if (isTouchPointerRef.current) {
+      return true;
+    }
+    const trigger = triggerRef.current;
+    const lastPointerType = lastPointerTypeAt(trigger);
+    // A pointer the page has heard decides. Before any, a device with no
+    // pointer that can hover sends only a tap's compatibility events.
+    return lastPointerType == null
+      ? hasNoHoverPointer(trigger)
+      : lastPointerType === 'touch';
+  }, [triggerRef]);
+
+  const handleMouseArrival = useCallback(() => {
+    const isFinger = isTouchHover();
+    isFingerArrivalRef.current = isFinger && !isTouchPointerRef.current;
+    return isFinger;
+  }, [isTouchHover]);
+
+  const handleMouseDeparture = useCallback(() => {
+    isFingerArrivalRef.current = false;
+  }, []);
 
   const handlePointerEnter = useCallback((event: PointerEvent) => {
     // Only a finger is hoverless on arrival. A pen in detection range hovers
@@ -471,6 +588,7 @@ export function useTouchTriggerInternal(
     // hover path and leave a stylus user with no tooltip at all. A pen that
     // presses is a tap, and `handlePointerDown` still reads it as one.
     isTouchPointerRef.current = event.pointerType === 'touch';
+    isFingerArrivalRef.current = false;
   }, []);
 
   // A tap's `click` runs this after a commit. It reads that commit's props
@@ -525,6 +643,7 @@ export function useTouchTriggerInternal(
     (event: PointerEvent): boolean => {
       const isTouch = TOUCH_POINTER_TYPES.has(event.pointerType);
       isTouchPointerRef.current = isTouch;
+      isFingerArrivalRef.current = false;
       if (!isTouch || isControlled) {
         tapRecognizer.forget();
         return false;
@@ -567,5 +686,8 @@ export function useTouchTriggerInternal(
     clearTapOpen: disarmOutsideDismiss,
     armOutsideDismiss,
     answerTap,
+    isTouchHover,
+    handleMouseArrival,
+    handleMouseDeparture,
   };
 }

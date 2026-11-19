@@ -396,6 +396,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     clearTapOpen,
     armOutsideDismiss,
     answerTap,
+    handleMouseArrival,
+    handleMouseDeparture,
   } = useTouchTriggerInternal(
     {
       touchTrigger,
@@ -516,17 +518,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     // A tap synthesizes mouseenter. On touch the tap path owns the decision,
     // so hover must not also fire — including the tap that just opened the
     // tooltip, which would otherwise be double-handled.
-    if (isTouchPointerRef.current) {
+    if (handleMouseArrival()) {
       return;
     }
     scheduleShow();
-  }, [isTouchPointerRef, scheduleShow]);
+  }, [handleMouseArrival, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
+      handleMouseDeparture();
       if (isTouchPointerRef.current) {
         return;
       }
@@ -542,7 +545,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       scheduleHide();
     },
-    [isTouchPointerRef, layerId, scheduleHide],
+    [handleMouseDeparture, isTouchPointerRef, layerId, scheduleHide],
   );
 
   // Under `auto`, whether focus counts is decided when it arrives, and a
