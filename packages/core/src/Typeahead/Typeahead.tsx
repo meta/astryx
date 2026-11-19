@@ -689,8 +689,7 @@ export function Typeahead<T extends SearchableItem>({
       isInGroup: !!inputGroup,
     });
 
-  // Click wrapper to focus input or enter edit mode. A click on the status
-  // info-tip leaves focus on it.
+  // A click on the status info-tip leaves focus on it, so its tip can open.
   const handleWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (

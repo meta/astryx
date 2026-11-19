@@ -197,7 +197,11 @@ one pending load per module, caches a success, and resets after a failure.
   a plugin, that is off by default, and that is not part of a family contract
   every member carries. A field's `status`, with its on-field status icon, is
   such a contract (`family:input-fields` FR8), so every field that takes it
-  loads the icon with the field, as TextInput does. An optional feature adds at most 0.3 KB gzip (KB as the
+  loads the icon with the field, as TextInput does. Each such field draws the
+  icon with the shared `useInputStatusIcon` hook. A field that moves focus to
+  its input on a press anywhere in it (Tokenizer, Typeahead) tells a press on
+  the status info-tip from other presses with Core's internal
+  `hooks/statusButtonPress`, so the tip keeps focus. An optional feature adds at most 0.3 KB gzip (KB as the
   boundary check prints it, 1,024 bytes) of
   first-load JavaScript to a page that renders its component without it, the
   same wiring allowance as INV7. A larger feature takes INV7's route (its own
