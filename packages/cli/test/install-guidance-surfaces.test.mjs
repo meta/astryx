@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {recordDeclaredSettings} from '../foundation/env/cli-command.mjs';
+import {CLI_VERSION} from '../test-utils/release-fixtures.mjs';
 import {
   addMatchingCore,
   projectAddCommand,
@@ -110,16 +111,20 @@ describe('install guidance on every add step', () => {
       coreDir: null,
       configPath: null,
     });
+    // With no Core, Core is named at the release of the CLI that answers.
     expect(checkCoreInstalled(ctx).fix).toBe(
-      'Install the design system: `pnpm add @astryxdesign/core`.',
+      `Install the design system: \`pnpm add @astryxdesign/core@${CLI_VERSION}\`.`,
     );
     expect(coreUnavailableMessage(dir, new Error('missing'))).toContain(
-      '`pnpm add @astryxdesign/core`',
+      `\`pnpm add @astryxdesign/core@${CLI_VERSION}\``,
     );
     recordDeclaredSettings(dir, [
       {name: '@acme/platform', installGuidance: GUIDANCE},
     ]);
-    const line = GUIDANCE.replace('{packages}', '@astryxdesign/core');
+    const line = GUIDANCE.replace(
+      '{packages}',
+      `@astryxdesign/core@${CLI_VERSION}`,
+    );
     expect(checkCoreInstalled(ctx).fix).toBe(
       `Install the design system: \`${line}\`.`,
     );

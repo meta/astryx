@@ -66,7 +66,11 @@ import {
   isGlobalCopy,
   projectRootOf,
 } from './choose.mjs';
-import {installsPackage, readReleaseFacts} from './project.mjs';
+import {
+  CORE_PACKAGE_NAME,
+  installsPackage,
+  readReleaseFacts,
+} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
@@ -560,17 +564,20 @@ function coreRelease(facts) {
 
 /**
  * The release at which the project a run in `cwd` belongs to adds `name`, and
- * whether it saves it exactly, when Astryx releases `name` with Core
- * ({@link releasedWithCorePackages}): such a package names Core's exact
- * release as its peer, so it is added at the project's Core release, as
- * {@link addMatchingCore} names it. Null for any other package, which the
- * package manager adds at the version it picks.
+ * whether it saves it exactly, when `name` is Core or a package Astryx
+ * releases with Core ({@link releasedWithCorePackages}). Each such package
+ * names Core's exact release as its peer, so Core and those packages are
+ * added at one release, the project's Core release, as {@link addMatchingCore}
+ * names a theme. Null for any other package, which the package manager adds
+ * at the version it picks.
  * @param {string} cwd
  * @param {string} name
  * @returns {{release: string, exact: boolean} | null}
  */
 export function coreMatchedAdd(cwd, name) {
-  if (!releasedWithCorePackages().has(name)) return null;
+  if (name !== CORE_PACKAGE_NAME && !releasedWithCorePackages().has(name)) {
+    return null;
+  }
   const {facts} = projectFacts(cwd);
   const release = coreRelease(facts);
   return {release, exact: savesExactly(facts, release)};
