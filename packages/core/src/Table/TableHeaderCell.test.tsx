@@ -11,10 +11,14 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {cleanup, render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Table} from './Table';
 import {TableHeaderCell} from './TableHeaderCell';
+import {TableHeader} from './TableHeader';
+import {TableBody} from './TableBody';
+import {TableRow} from './TableRow';
+import {TableCell} from './TableCell';
 import type {TableColumn} from './types';
 
 // =============================================================================
@@ -93,6 +97,24 @@ function headerCellDeclarations(container: HTMLElement): string[] {
   const th = container.querySelector('thead th');
   expect(th).not.toBeNull();
   return cssDeclarationsOf(th as Element);
+}
+
+/** A children-mode Table with one header cell and one body cell. */
+function renderChildrenMode(textOverflow?: 'wrap' | 'truncate') {
+  return render(
+    <Table textOverflow={textOverflow}>
+      <TableHeader>
+        <TableRow>
+          <TableHeaderCell>Jobs</TableHeaderCell>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow>
+          <TableCell>9,804</TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>,
+  );
 }
 
 // =============================================================================
@@ -311,5 +333,26 @@ describe('TableHeaderCell', () => {
     expect(th).toHaveClass('astryx-table-header-cell');
     expect(th).toHaveClass('custom-header');
     expect(th.style.width).toBe('10px');
+  });
+
+  it('caps a header cell at zero width only when the table truncates', () => {
+    // Under truncate, header and body cells share the zero cap, so the
+    // columns keep to the table's box. Under wrap, the header has no cap, so a
+    // children-mode table takes the width its content needs and scrolls.
+    const truncating = renderChildrenMode('truncate').container;
+    expect(headerCellDeclarations(truncating)).toContain('max-width: 0');
+    expect(
+      cssDeclarationsOf(truncating.querySelector('tbody td') as Element),
+    ).toContain('max-width: 0');
+    cleanup();
+
+    const wrapping = renderChildrenMode().container;
+    expect(headerCellDeclarations(wrapping)).not.toContain('max-width: 0');
+    expect(headerCellDeclarations(wrapping)).toContain(
+      'text-overflow: ellipsis',
+    );
+    expect(
+      cssDeclarationsOf(wrapping.querySelector('tbody td') as Element),
+    ).not.toContain('max-width: 0');
   });
 });
