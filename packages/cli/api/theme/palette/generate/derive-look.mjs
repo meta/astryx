@@ -27,6 +27,7 @@ import {
   hexToOklch,
   maxOklchChroma,
   oklchClampedHex,
+  ratioDown,
 } from './color.mjs';
 import {perceptualDelta} from './generator.mjs';
 
@@ -104,6 +105,7 @@ import {perceptualDelta} from './generator.mjs';
  * @property {string[]} why
  */
 
+export {ratioDown};
 /** A shade of a family: its stop and color. */
 /**
  * The stops a category fill may take, by mode: it is also a card's tint, so
@@ -279,15 +281,6 @@ function hueLean(accent, neutral) {
   const a = toward(accent, 0.15, LEAN_TO_ACCENT);
   const n = toward(neutral, 0.1, LEAN_TO_NEUTRAL);
   return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
-}
-/**
- * A contrast ratio to two decimals, cut down and never rounded up, so a
- * pair just under the bar never prints as meeting it.
- * @param {number} ratio
- * @returns {number}
- */
-export function ratioDown(ratio) {
-  return Math.floor(ratio * 100 + 1e-9) / 100;
 }
 /**
  * Where a look's card tints start, `[light, dark]`: a strong or dark

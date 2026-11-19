@@ -242,7 +242,7 @@ describe('derived look colors', () => {
   });
 });
 
-describe('an unreadable tint\'s ratio', () => {
+describe("an unreadable tint's ratio", () => {
   it('is cut down, never rounded up to the bar', () => {
     expect(ratioDown(4.497)).toBe(4.49);
     expect(ratioDown(4.497)).toBeLessThan(4.5);
