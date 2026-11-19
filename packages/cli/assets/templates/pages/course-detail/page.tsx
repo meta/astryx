@@ -121,7 +121,18 @@ const INSTRUCTOR = {
   ],
   bio: 'Gabriela spent nine years building retrieval systems at scale before language models landed on her desk. She has shipped the exact pipeline this course teaches — twice, in production, with the scars to prove which parts matter.',
 };
-const MODULES = [
+type Lesson = {
+  title: string;
+  duration: string;
+  badge?: 'Preview' | 'Project';
+};
+type CourseModule = {
+  id: string;
+  title: string;
+  meta: string;
+  lessons: Lesson[];
+};
+const MODULES: CourseModule[] = [
   {
     id: 'foundations',
     title: 'Foundations and tooling',
@@ -137,7 +148,11 @@ const MODULES = [
         duration: '18 min',
         badge: 'Preview',
       },
-      {title: 'Tokens, temperature, and the cost dial', duration: '18 min'},
+      {
+        title: 'Tokens, temperature, and the cost dial',
+        duration: '18 min',
+        badge: 'Preview',
+      },
     ],
   },
   {
@@ -302,8 +317,8 @@ const PREVIEW_LESSONS = [
     note: 'Free preview',
   },
   {
-    title: 'Chunking strategies that survive real documents',
-    length: '21 min',
+    title: 'Tokens, temperature, and the cost dial',
+    length: '18 min',
     note: 'Free preview',
   },
 ];
@@ -1131,6 +1146,7 @@ function FaqSection() {
   );
 }
 function ClosingBand() {
+  const showToast = useToast();
   return (
     <Section padding={6}>
       <Card padding={6}>
@@ -1150,6 +1166,13 @@ function ClosingBand() {
                 variant="primary"
                 size="lg"
                 icon={<Icon icon={PlayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: lesson one would play here',
+                    uniqueID: 'closing-lesson-one',
+                  })
+                }
               />
               <Button
                 label="Apply to teach"
@@ -1161,6 +1184,13 @@ function ClosingBand() {
                     size="sm"
                     xstyle={rtlStyles.mirror}
                   />
+                }
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the teaching application would open here',
+                    uniqueID: 'closing-teach',
+                  })
                 }
               />
             </HStack>
