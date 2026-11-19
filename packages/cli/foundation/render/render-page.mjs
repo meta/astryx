@@ -51,6 +51,7 @@ import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
 import {childrenReader, dropperOf} from './dropped-text.mjs';
 import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
+import {packageOf} from '../doc-compiler/source.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -243,6 +244,69 @@ export function importParams(params) {
 }
 
 /**
+ * Where a stylesheet's `@import` of `url` leads, read the way a render inlines
+ * it: a relative one from the importing sheet's folder, a package one
+ * (`@scope/pkg/x.css`) by Node resolution from the importing sheet.
+ * @param {string} url the import's address, as written
+ * @param {string} file the importing stylesheet's path
+ * @param {ServedSet | null} served
+ * @returns {{kind: 'remote'} | {kind: 'preprocessed'} | {kind: 'missing'} | {kind: 'sheet', target: string, fromPackage: boolean}}
+ */
+function resolveImport(url, file, served) {
+  if (/^([a-z]+:)?\/\//i.test(url)) return {kind: 'remote'};
+  if (/\.(scss|sass|less)$/i.test(url)) return {kind: 'preprocessed'};
+  const relative = path.resolve(path.dirname(file), url);
+  if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
+    return fs.existsSync(relative)
+      ? {kind: 'sheet', target: relative, fromPackage: false}
+      : {kind: 'missing'};
+  }
+  const target = resolveServed(url.replace(/^~/, ''), file, served);
+  return target ? {kind: 'sheet', target, fromPackage: true} : {kind: 'missing'};
+}
+
+/**
+ * Whether one of the stylesheets a page brings in is an Astryx package's, or
+ * reaches one through its `@import`s, followed as {@link expandImports}
+ * follows them. A stylesheet counts by the package that holds its file, as a
+ * module counts in the page's script; an import that resolves to no file
+ * counts by the package it names.
+ * @param {string[]} files the page's own stylesheets and the package
+ *   stylesheets its script imports
+ * @param {ServedSet | null} served
+ * @returns {boolean}
+ */
+function reachesAstryxSheet(files, served) {
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} file @returns {boolean} */
+  const visit = file => {
+    if (seen.has(file)) return false;
+    seen.add(file);
+    if (packageOf(file).startsWith('@astryxdesign/')) return true;
+    /** @type {import('postcss').Root} */
+    let root;
+    try {
+      const css = fs.readFileSync(file, 'utf8');
+      if (!/@import/i.test(css)) return false;
+      root = postcss.parse(css, {from: file});
+    } catch {
+      return false;
+    }
+    let found = false;
+    root.walkAtRules(/^import$/i, rule => {
+      const url = importParams(rule.params)?.url;
+      if (found || !url) return;
+      const to = resolveImport(url, file, served);
+      if (to.kind === 'sheet') found = visit(to.target);
+      else if (to.kind === 'missing') found = /^@astryxdesign\//.test(url.replace(/^~/, ''));
+    });
+    return found;
+  };
+  return files.some(visit);
+}
+
+/**
  * Inline a stylesheet's own `@import`s, so a stylesheet pulled in that way is
  * part of the file: a relative one from the importing sheet's folder
  * (carried when it is the project's own), a package one (`@scope/pkg/x.css`)
@@ -274,7 +338,8 @@ function expandImports(file, css, ctx) {
     const parsed = importParams(rule.params);
     if (!parsed || !parsed.url) return;
     const {url} = parsed;
-    if (/^([a-z]+:)?\/\//i.test(url)) {
+    const to = resolveImport(url, file, ctx.served);
+    if (to.kind === 'remote') {
       ctx.warnings.push({
         code: 'remote-asset',
         message: `${path.basename(file)} imports ${url}, which a sandboxed page cannot load, so it is left out; save it beside the stylesheet and import it instead.`,
@@ -282,7 +347,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    if (/\.(scss|sass|less)$/i.test(url)) {
+    if (to.kind === 'preprocessed') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.`,
@@ -290,17 +355,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    const relative = path.resolve(path.dirname(file), url);
-    /** @type {string | null} */
-    let target;
-    let fromPackage = false;
-    if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
-      target = fs.existsSync(relative) ? relative : null;
-    } else {
-      target = resolveServed(url.replace(/^~/, ''), file, ctx.served);
-      fromPackage = target !== null;
-    }
-    if (!target) {
+    if (to.kind === 'missing') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, which was not found, so its styles are missing.`,
@@ -308,6 +363,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
+    const {target, fromPackage} = to;
     if (!fromPackage) ctx.importers.set(target, (ctx.importers.get(target) ?? new Set()).add(file));
     if (seen.has(target) || ctx.included.has(target)) {
       rule.remove();
@@ -1328,12 +1384,17 @@ export async function renderPage(entry, options = {}) {
   };
   const hasCore = addSheet('@astryxdesign/core/reset.css');
   if (hasCore) addSheet('@astryxdesign/core/astryx.css');
+  /** The package stylesheets the page's modules import. @type {string[]} */
+  const scriptSheets = [];
+  let scriptNamesAstryx = false;
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (
     message.packageCss ?? []
   )) {
-    if (sheets.includes(spec)) continue;
     const file = resolveServed(spec, from, served);
+    if (file) scriptSheets.push(file);
+    else if (spec.startsWith('@astryxdesign/')) scriptNamesAstryx = true;
+    if (sheets.includes(spec)) continue;
     try {
       if (!file) throw new Error('not found');
       sheets.push(spec);
@@ -1359,6 +1420,24 @@ export async function renderPage(entry, options = {}) {
         ? '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.'
         : '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
     });
+  }
+
+  // A page that uses nothing from Astryx is not what the command makes: its
+  // own app's build shares it. Its script's module graph (local components,
+  // re-exports and lazy imports included) and the stylesheets it brings in
+  // decide, before any stylesheet is expanded, any asset inlined, any image
+  // fetched or anything written. A markup-only render builds no script and
+  // is not checked.
+  const ownSheets = /** @type {{file: string}[]} */ (message.importedCss ?? []).map(({file}) => file);
+  if (
+    message.astryx === false &&
+    !scriptNamesAstryx &&
+    !reachesAstryxSheet([...ownSheets, ...scriptSheets], served)
+  ) {
+    throw new RenderError(
+      'ERR_RENDER_NOT_ASTRYX',
+      `${path.basename(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
+    );
   }
 
   // The https images the page names, fetched once so the file carries them.

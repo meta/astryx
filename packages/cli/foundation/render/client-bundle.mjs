@@ -17,6 +17,7 @@ import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
+import {packageOf} from '../doc-compiler/source.mjs';
 import {SOURCE_TYPE} from './source-block.mjs';
 import {showsImage} from './image-attributes.mjs';
 import {formatSrcset, parseSrcset} from './srcset.mjs';
@@ -686,7 +687,8 @@ export function scriptSafe(code) {
  *   `builtin` tells a Node built-in; `describe` names a file for a message;
  *   `oneCopy` names the packages every module, a package's too, takes from
  *   the one copy `packageDir` names (React outside a project).
- * @returns {Promise<{code: string, modules: number}>}
+ * @returns {Promise<{code: string, modules: number, astryx: boolean}>} `astryx`:
+ *   the build's module graph holds a module an Astryx package owns
  */
 export async function bundleForBrowser({
   esbuild,
@@ -892,5 +894,41 @@ export async function bundleForBrowser({
   const modules = Object.values(output?.inputs ?? {}).filter(
     (/** @type {any} */ input) => input.bytesInOutput > 0,
   ).length;
-  return {code, modules};
+  const astryx = graphHoldsAstryx(
+    Object.keys(result.metafile?.inputs ?? {}),
+    entry,
+  );
+  return {code, modules, astryx};
+}
+
+/**
+ * Whether a build's module graph holds a module an Astryx package owns,
+ * other than the page itself. The owner is the package whose package.json
+ * holds the file, by its name: a workspace copy of Core counts as an
+ * installed one does, and a page inside an Astryx package's own folder
+ * counts the modules of that package it imports.
+ * @param {string[]} inputs the metafile's input keys
+ * @param {string} entry the page
+ * @returns {boolean}
+ */
+export function graphHoldsAstryx(inputs, entry) {
+  const page = path.resolve(entry);
+  return inputs.some(key => {
+    const file = inputFile(key);
+    if (!file || path.resolve(file) === page) return false;
+    return packageOf(file).startsWith('@astryxdesign/');
+  });
+}
+
+/**
+ * The file a metafile input names: a file-namespace path is relative to the
+ * build's working folder, a page file's is absolute after its namespace;
+ * the build's own virtual modules name no file.
+ * @param {string} key
+ * @returns {string | null}
+ */
+function inputFile(key) {
+  const named = /^([a-z][a-z-]+):(.+)$/.exec(key);
+  if (!named) return path.resolve(key);
+  return named[1] === PAGE ? named[2] : null;
 }
