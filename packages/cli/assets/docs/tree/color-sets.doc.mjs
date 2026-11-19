@@ -7,8 +7,7 @@ export default {
   type: 'namespace',
   name: 'color-sets',
   title: 'Colors',
-  summary:
-    'Choose colors for your data, and style the labels, axes, grids, and tooltips around it.',
+  summary: 'Choose colors for your data, labels, axes, grids, and tooltips.',
   placement: {parent: 'namespace:visualization', slot: 'references', order: 10},
   slots: {guides: {title: 'Reference', accepts: {kinds: ['generic']}}},
 };

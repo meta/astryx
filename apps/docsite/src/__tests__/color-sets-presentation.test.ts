@@ -44,8 +44,9 @@ describe('color-set presentation', () => {
     expect(source).toContain(
       "resolveThemeTokens(neutralTheme, {mode: 'dark'})",
     );
-    expect(source).toContain(
-      'Transparent fills blend with the light or dark surface.',
-    );
+    expect(source).toContain('they blend with its background');
+    expect(source).not.toContain("section.title === 'Sequential' &&");
+    expect(source).not.toContain("section.title === 'Semantic' &&");
+    expect(source).not.toContain("section.title === 'Heatmap' &&");
   });
 });

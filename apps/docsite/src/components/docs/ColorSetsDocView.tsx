@@ -58,18 +58,19 @@ const styles = stylex.create({
 
 const PURPOSE: Record<string, string> = {
   Categorical:
-    'Different categories, different colors. Keep each category’s color consistent across charts.',
+    'Use distinct colors to compare categories or named series, such as teams or product lines. Keep each category’s color consistent across charts.',
   Sequential:
-    'One measure, ordered from less to more. Choose a ramp and label the value ranges.',
-  Reference: 'A quieter color for a comparison or a labeled target line.',
+    'Use shades of one color to show low-to-high values, such as request counts or resource use. Label the ranges in the legend. The tables run from the darkest shade (5) to the lightest (1); gray changes between modes, while colored ramps stay the same.',
+  Reference:
+    'Use neutral or gray for a comparison, such as a target or the previous period. Label it so readers know what it represents.',
   Semantic:
-    'A named status: positive, warning, negative, or neutral. Always label what the color means.',
+    'Use color to show a defined status, such as positive, warning, or negative. Include a label so color is not the only cue. The warning yellow shown here is a choice to review for your chart, not an approved default.',
   Diverging:
-    'Two directions from a midpoint, such as above and below a target.',
+    'Use two color directions to show values above and below a midpoint, such as zero or a target. Label the midpoint and both sides.',
   Spectrum:
-    'A mixed-hue example with 10 positions but only 8 distinct colors. A single ramp is usually easier to read.',
+    'Use a mixed-hue scale only when the hues have a clear meaning for your chart. For a simple low-to-high measure, use a sequential ramp instead. This set has 10 positions but 8 distinct colors.',
   Heatmap:
-    'Fill strength shows patterns in a table or grid. Keep the exact values visible.',
+    'Use cell color to reveal patterns in a table or grid, such as differences in volume or intensity. Keep exact values available, and check transparent fills on the chart’s surface because they blend with its background.',
 };
 
 export function colorLabel(value: string, strength: number): string {
@@ -220,22 +221,6 @@ function SetSection({section}: {section: DocSection}) {
         {section.title}
       </Heading>
       <Text>{PURPOSE[section.title]}</Text>
-      {section.title === 'Sequential' && (
-        <Text type="supporting" color="secondary">
-          Shown dark → light (5 → 1). Gray changes in dark mode; the colored
-          ramps keep the same token values.
-        </Text>
-      )}
-      {section.title === 'Semantic' && (
-        <Text type="supporting" color="secondary">
-          Warning yellow is an example, not an approved default.
-        </Text>
-      )}
-      {section.title === 'Heatmap' && (
-        <Text type="supporting" color="secondary">
-          Transparent fills blend with the light or dark surface.
-        </Text>
-      )}
       {groups.map((group, index) => (
         <VStack key={index} gap={3}>
           {groups.length > 1 && <Heading level={3}>{group.title}</Heading>}
@@ -281,11 +266,6 @@ export function ColorSetsDocView({
   return (
     <DocPageLayout title={title} description={description}>
       <VStack gap={10}>
-        <Text type="supporting" color="secondary">
-          Shown in Neutral. Gray and neutral change between modes; colored data
-          tokens keep the same values. Reference, status, and multi-color scales
-          use these existing tokens, not separate token families.
-        </Text>
         {sets.map(section => (
           <SetSection key={section.id} section={section} />
         ))}
@@ -294,8 +274,10 @@ export function ColorSetsDocView({
             Chart styling
           </Heading>
           <Text>
-            Use data colors for series and reference lines. Use text, border,
-            and surface roles for the parts around them.
+            Use data colors for series and reference lines, and text, border,
+            and surface colors for the parts around them. The mappings below are
+            examples you can apply to your chart; they do not change component
+            defaults.
           </Text>
           {stylingSections
             .filter(section => section.id === 'map-chart-parts')
@@ -305,10 +287,6 @@ export function ColorSetsDocView({
             .map((block, i) => (
               <ContentBlockRenderer key={i} block={block} />
             ))}
-          <Text type="supporting" color="secondary">
-            These are example mappings, not changes to component defaults.
-            Tooltip shape uses the existing radius, spacing, and shadow roles.
-          </Text>
           <Collapsible trigger="Implementation details" defaultIsOpen={false}>
             <VStack gap={4}>
               {stylingSections.map(section => (
