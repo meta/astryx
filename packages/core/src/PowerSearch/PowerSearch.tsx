@@ -268,6 +268,11 @@ const sheetTriggerStyles = stylex.create({
     paddingBlock: 0,
     paddingInline: 0,
   },
+  // Holds the status icon without a box of its own, so the icon stays a
+  // direct item of the end lane.
+  statusIconSlot: {
+    display: 'contents',
+  },
   endSection: {
     display: 'flex',
     alignItems: 'center',
@@ -1449,20 +1454,24 @@ export function PowerSearch({
   // and taps, and an interactive control must not nest in a component
   // button, so a tap on it must not open the flow.
   const endLaneRef = useRef<HTMLDivElement>(null);
+  const statusIconRef = useRef<HTMLSpanElement>(null);
   const handleTriggerWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       // Tokens are display-only; a tap on them, the empty space around them or
       // the plain status icon opens the flow. The trigger button handles its
-      // own click, and an interactive control in the end lane (`endContent`'s
-      // controls, the status info-tip) handles its own.
+      // own click, and the rest of the end lane (the result count,
+      // `endContent`, the status info-tip) handles its own.
       const target = event.target;
-      if (
-        target instanceof Element &&
-        (triggerRef.current?.contains(target) ||
-          (endLaneRef.current?.contains(target) &&
-            hasInteractiveAncestor(target, event.currentTarget)))
-      ) {
-        return;
+      if (target instanceof Element) {
+        const isOnPlainStatusIcon =
+          statusIconRef.current?.contains(target) === true &&
+          !hasInteractiveAncestor(target, event.currentTarget);
+        if (
+          triggerRef.current?.contains(target) ||
+          (endLaneRef.current?.contains(target) && !isOnPlainStatusIcon)
+        ) {
+          return;
+        }
       }
       openSheet();
     },
@@ -1624,7 +1633,11 @@ export function PowerSearch({
                   </span>
                 )}
                 {endContent}
-                {statusIcon}
+                <span
+                  ref={statusIconRef}
+                  {...stylex.props(sheetTriggerStyles.statusIconSlot)}>
+                  {statusIcon}
+                </span>
               </div>
             )}
           </div>

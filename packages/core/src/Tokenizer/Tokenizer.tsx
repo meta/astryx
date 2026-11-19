@@ -479,6 +479,11 @@ const styles = stylex.create({
     position: 'relative',
     zIndex: 1,
   },
+  // Holds the sheet field's status icon without a box of its own, so the icon
+  // stays a direct item of the end lane.
+  statusIconSlot: {
+    display: 'contents',
+  },
   endSection: {
     position: 'absolute',
     // Match the field's inline padding (inputWrapperStyles.base uses
@@ -1463,7 +1468,15 @@ export function Tokenizer<T extends SearchableItem>({
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
   // `laneRef` publishes the lane's width, so token rows and the placeholder
-  // stop short of it.
+  // stop short of it. `sheetLaneRef` tells a tap in the lane from a tap on the
+  // field, and `sheetStatusIconRef` tells a tap on the plain status icon from
+  // a tap on `endContent`.
+  const sheetLaneRef = useRef<HTMLDivElement | null>(null);
+  const sheetLaneMergedRef = useMergedRefs<HTMLDivElement>(
+    laneRef,
+    sheetLaneRef,
+  );
+  const sheetStatusIconRef = useRef<HTMLSpanElement | null>(null);
   // A composing component can lock tokens (PowerSearch's read-only filters
   // and read-only field). No remove path removes a locked token.
   const isItemRemovable = use(TokenizerItemRemovableContext);
@@ -2173,17 +2186,20 @@ export function Tokenizer<T extends SearchableItem>({
     }
   };
   // A tap on a token, the placeholder, empty space or the plain status icon
-  // opens the sheet, as a tap on the trigger does. The trigger, `endContent`'s
-  // controls, the status info-tip and a custom token's controls handle their
-  // own clicks.
+  // opens the sheet, as a tap on the trigger does. The trigger, `endContent`,
+  // the status info-tip and a custom token's controls handle their own clicks.
   const handleSheetFieldClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const trigger = triggerRef.current;
     const target = event.target;
     if (trigger == null || !(target instanceof Element)) {
       return;
     }
+    const isInLane = sheetLaneRef.current?.contains(target) === true;
+    const isOnStatusIcon =
+      sheetStatusIconRef.current?.contains(target) === true;
     if (
       trigger.contains(target) ||
+      (isInLane && !isOnStatusIcon) ||
       hasInteractiveAncestor(target, event.currentTarget)
     ) {
       return;
@@ -2367,10 +2383,14 @@ export function Tokenizer<T extends SearchableItem>({
           )}
           {(isRenderable(endContent) || isRenderable(statusIcon)) && (
             <div
-              ref={laneRef}
+              ref={sheetLaneMergedRef}
               {...stylex.props(styles.endSection, endSectionSizeStyles[size])}>
               {endContent}
-              {statusIcon}
+              <span
+                ref={sheetStatusIconRef}
+                {...stylex.props(styles.statusIconSlot)}>
+                {statusIcon}
+              </span>
             </div>
           )}
         </div>
