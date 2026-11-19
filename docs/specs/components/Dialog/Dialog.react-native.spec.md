@@ -68,6 +68,7 @@ The library differs from this record in these places:
 - FR6 gap: a tap on the dim closes a `form` dialog until an input inside has
   reported an edit since the dialog opened.
 - FR8 gap: the close button is the small ghost icon button.
+- AR1 gap: a `required` dialog has the plain dialog role.
 - AR1 gap: when the dialog closes, the window returns screen-reader focus to
   the element that had it before the dialog opened, whatever happened to focus
   while it was open.
@@ -131,17 +132,19 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Representative states
 
-| State                                            | Required invariant                                                       | Allowed variation       |
-| ------------------------------------------------ | ------------------------------------------------------------------------ | ----------------------- |
-| a dialog opened from a sheet, iOS                | the dialog over the sheet                                                | the system's transition |
-| two dialogs asked for in one update              | each presents, the second over the first                                 | none                    |
-| `isHidden` while open                            | no window; the app takes touches                                         | none                    |
-| iOS phone portrait and landscape; a tablet       | the panel at the window's width less the gutter, up to 400               | none                    |
-| content taller than three quarters of the window | the body scrolls inside the panel                                        | none                    |
-| `fullscreen`                                     | the whole window, opaque, no dim; a slide, or a fade under Reduce Motion | none                    |
-| `info`, `form`, `required`                       | the paths of FR6                                                         | none                    |
-| iOS 26, Reduce Transparency on and off           | the opaque surface with the setting on; glass with it off                | the system glass        |
-| inline in a scrolling page                       | no window; a vertical swipe scrolls the page                             | none                    |
+| State                                                 | Required invariant                                                       | Allowed variation       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------- |
+| a dialog opened from a sheet, iOS                     | the dialog over the sheet                                                | the system's transition |
+| two dialogs asked for in one update                   | each presents, the second over the first                                 | none                    |
+| `isHidden` while open                                 | no window; the app takes touches                                         | none                    |
+| iOS phone portrait and landscape; a tablet            | the panel at the window's width less the gutter, up to 400               | none                    |
+| iOS: content taller than three quarters of the window | the body scrolls inside the panel                                        | none                    |
+| iOS: `fullscreen`                                     | the whole window, opaque, no dim; a slide, or a fade under Reduce Motion | none                    |
+| Android: content taller than Material's dialog        | the content scrolls inside it                                            | none                    |
+| Android: `fullscreen`                                 | Material's full-screen dialog and its own motion                         | none                    |
+| `info`, `form`, `required`                            | the paths of FR6                                                         | none                    |
+| iOS 26, Reduce Transparency on and off                | the opaque surface with the setting on; glass with it off                | the system glass        |
+| inline in a scrolling page                            | no window; a vertical swipe scrolls the page                             | none                    |
 
 ### Transformation and precedence order
 
@@ -164,8 +167,10 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ## Accessibility contract
 
-- **AR1 — Modal focus.** The panel has the dialog role and is modal for
-  VoiceOver, so nothing behind it is reachable. The window moves screen-reader
+- **AR1 — Modal focus.** The panel has the dialog role, and a `required`
+  dialog keeps core's alert-dialog role, which VoiceOver and TalkBack read as
+  an alert (`component:Drawer` FR15). The panel is modal for VoiceOver, so
+  nothing behind it is reachable. The window moves screen-reader
   focus into the dialog when it opens (`component:Dialog` FR1, AR1;
   `spec:AST-128` FR12). When the dialog closes, focus returns as
   `component:Dialog` FR4 and AR2 state.
