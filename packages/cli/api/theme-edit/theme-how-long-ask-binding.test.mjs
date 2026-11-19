@@ -254,6 +254,14 @@ const ROWS = [
     },
   ],
   [
+    'a style word said of the type is its likeness, never a color',
+    {
+      q: 'Charcoal-style bold system font, blue-purple selection',
+      never: /^accent '#333333'|^neutral '#333333'/,
+      says: /^(?![\s\S]*contradict)/,
+    },
+  ],
+  [
     'a size word of the part said before reaches it across a font clause',
     {
       q: "This is my React app, built with Astryx (the astryx command is installed). Make it look like Mac OS 9 Platinum: light platinum gray surfaces, pinstriped-feeling title bars, beveled gray buttons, Charcoal-style bold system font, small rounded corners, blue-purple selection. I am away, don't wait for answers.",

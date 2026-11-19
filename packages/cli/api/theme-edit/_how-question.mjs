@@ -5106,6 +5106,12 @@ export function draftAnswer(ctx, env, question) {
           : `${w}, `;
       },
     )
+    // ("Charcoal-style bold system font": a word said as a style of the
+    // type is the typeface's likeness, one word, never a color.)
+    .replace(
+      /\b([a-z]+)-(style|styled|like|esque)(?=\s+(?:[a-z-]+\s+){0,3}(?:fonts?|typefaces?|type|lettering)\b)/gi,
+      '$1$2',
+    )
     // ("sunny yellow highlights"): a highlight color with no part that
     // draws it is no part's fill; the color is named in the answer as not
     // taken, never carried onto the part before.
