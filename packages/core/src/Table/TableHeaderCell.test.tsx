@@ -355,4 +355,21 @@ describe('TableHeaderCell', () => {
       cssDeclarationsOf(wrapping.querySelector('tbody td') as Element),
     ).not.toContain('max-width: 0');
   });
+
+  it('gives each table layout its own word-break', () => {
+    // A children-mode table resets an inherited word-break so a column keeps
+    // its longest word; a data-mode table keeps breaking long tokens.
+    const children = renderChildrenMode().container;
+    expect(
+      cssDeclarationsOf(children.querySelector('table') as Element),
+    ).toContain('word-break: normal');
+    cleanup();
+
+    const data = render(<Table data={users} columns={columns} />).container;
+    const declarations = cssDeclarationsOf(
+      data.querySelector('table') as Element,
+    );
+    expect(declarations).toContain('word-break: break-word');
+    expect(declarations).not.toContain('word-break: normal');
+  });
 });

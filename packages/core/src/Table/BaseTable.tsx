@@ -112,9 +112,16 @@ const styles = stylex.create({
     borderCollapse: 'collapse',
     borderSpacing: '0',
     tableLayout: 'fixed',
+    // Fixed layout sets the columns, so a long token may break at any letter
+    // to stay inside its cell, flex rows inside the cell included.
+    wordBreak: 'break-word',
   },
   tableAutoLayout: {
     tableLayout: 'auto',
+    // Automatic layout sizes each column from its longest word. A word-break
+    // inherited from an ancestor, such as a chat bubble, would shrink that
+    // word to one letter, so the table sets its own.
+    wordBreak: 'normal',
   },
   /**
    * Inline flex row that keeps the header label and any "after" slot content
