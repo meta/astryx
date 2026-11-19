@@ -7496,7 +7496,12 @@ export function compileTheme(ctx, data, base) {
           )
         ) {
           const toks = innerPropTokens(ctx.C, t, kebab(s.thing));
+          // (Every line of a text column takes it: it means all of the
+          // part's text.)
+          const lines = columnLineTokens(ctx.C, t, kebab(s.thing));
           if (toks.length === 1) putComp(s, t, toks[0], s.value);
+          else if (lines.length && lines.join() === toks.join())
+            for (const tok of lines) putComp(s, t, tok, s.value);
         }
         if (kebab(s.thing) === 'color')
           for (const tok of colorTokensReached(ctx.C, t))
@@ -14213,7 +14218,52 @@ export function innerPropTokens(C, part, prop) {
     ]
       .filter(tok => !/disabled|placeholder|accent/.test(tok))
       .slice(0, 4);
+  if (!toks.length) toks = columnLineTokens(C, part, prop);
   return toks;
+}
+
+/**
+ * The tokens of the lines in a part's text column, when its text sits in one
+ * column part of its own that holds no text itself (a banner's message
+ * column: its title, --text-label-size, and description,
+ * --text-supporting-size), each line a leaf part of its own that sets the
+ * property. A text property set on the part goes into each of them there:
+ * it means all of the part's text. Empty for any other part.
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {string} prop
+ * @returns {string[]}
+ */
+export function columnLineTokens(C, part, prop) {
+  const rec = C.MAP[part];
+  if (!rec || rec.own?.[prop]) return [];
+  // (The column and its lines are the part's own named parts, each line a
+  // leaf: parts a story only happens to put inside it never count.)
+  const own = (/** @type {string} */ y) => y.startsWith(`${part}-`);
+  const column = (rec.contains ?? []).filter((/** @type {string} */ c) => {
+    const x = C.MAP[c];
+    const lines = [...(x?.contains ?? [])];
+    return (
+      own(c) &&
+      x &&
+      !x.own?.[prop] &&
+      !Object.keys(x.inside ?? {}).length &&
+      lines.length > 0 &&
+      lines.every(
+        y => own(y) && C.MAP[y]?.own?.[prop] && !C.MAP[y].contains?.length,
+      )
+    );
+  });
+  if (column.length !== 1) return [];
+  return [
+    ...new Set(
+      [...C.MAP[column[0]].contains].flatMap((/** @type {string} */ y) =>
+        Object.keys(C.MAP[y].own[prop].tokens ?? {}),
+      ),
+    ),
+  ]
+    .filter(tok => !/disabled|placeholder|accent/.test(tok))
+    .slice(0, 4);
 }
 
 /**
