@@ -4,9 +4,9 @@
  * A published CLI keeps the catalog `search` and `build` gather between runs
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
  * changed. This file: a kept catalog keeps the component list, template
- * discovery, an integration's themes, doctor's theme-wiring scan and docs
- * checks, finds an edit to any of them, and is skipped silently when its
- * folder cannot be used.
+ * discovery, an integration's themes, doctor's theme-wiring scan, Core-props
+ * scan and docs checks, finds an edit to any of them, and is skipped silently
+ * when its folder cannot be used.
  * Each case's answer from a kept catalog must equal a fresh gather's.
  */
 
@@ -537,6 +537,125 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       }
     },
     240_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps doctor's Core-props scan, and TypeScript, a new, deleted, edited or atomically saved page, a declaration and a config each show on the very next run",
+    () => {
+      const tmp = keptTmp('core-props');
+      const other = makeProject();
+      try {
+        const link = (
+          /** @type {string} */ name,
+          /** @type {string} */ target,
+        ) => {
+          const at = path.join(other.dir, 'node_modules', ...name.split('/'));
+          fs.mkdirSync(path.dirname(at), {recursive: true});
+          fs.symlinkSync(fs.realpathSync(target), at, 'dir');
+        };
+        link(
+          '@types/react',
+          path.join(REPO_ROOT, 'node_modules', '@types', 'react'),
+        );
+        const src = path.join(other.dir, 'src');
+        fs.mkdirSync(src, {recursive: true});
+        const page = path.join(src, 'App.tsx');
+        const app = (/** @type {string} */ element) =>
+          [
+            "import {CheckboxInput, TabList} from '@astryxdesign/core';",
+            'export default function App() {',
+            `  return ${element};`,
+            '}',
+            '',
+          ].join('\n');
+        fs.writeFileSync(page, app('<TabList selectedID="a" />'));
+        const props = (/** @type {string} */ at) => {
+          const result = run(['doctor'], {tmp: at, cwd: other.dir});
+          return JSON.parse(result.stdout).data.checks.find(
+            (/** @type {{id: string}} */ c) => c.id === 'core-props',
+          );
+        };
+        const scanEntries = () =>
+          fs.readdirSync(path.join(tmp, CACHE_NAME)).filter(name => {
+            const {value} = readKept(path.join(tmp, CACHE_NAME, name));
+            return Array.isArray(value?.found) && 'uses' in value;
+          });
+        const scanEntry = () => {
+          const kept = scanEntries();
+          expect(kept).toHaveLength(1);
+          return fs.statSync(path.join(tmp, CACHE_NAME, kept[0])).ino;
+        };
+        // Each change: the kept run scans again and answers as a fresh run
+        // does, and the run after it reads that answer back.
+        const scansAgain = () => {
+          const before = fs.existsSync(path.join(tmp, CACHE_NAME))
+            ? scanEntries().map(
+                name => fs.statSync(path.join(tmp, CACHE_NAME, name)).ino,
+              )
+            : [];
+          const answer = props(tmp);
+          expect(answer).toEqual(props(freshTmp()));
+          const kept = scanEntry();
+          expect(before).not.toContain(kept);
+          expect(props(tmp)).toEqual(answer);
+          expect(scanEntry()).toBe(kept);
+          return answer;
+        };
+        // No TypeScript: the check says it did not run.
+        expect(scansAgain().message).toContain(
+          'TypeScript is not installed in this project',
+        );
+        // TypeScript installed: the very next run checks the props.
+        link('typescript', path.join(REPO_ROOT, 'node_modules', 'typescript'));
+        expect(scansAgain().message).toContain(
+          'src/App.tsx:3 TabList has no `selectedID`',
+        );
+        // A new page, then the same page deleted.
+        const second = path.join(src, 'Other.tsx');
+        fs.writeFileSync(second, app('<CheckboxInput labelHidden />'));
+        expect(scansAgain().message).toContain(
+          'src/Other.tsx:3 CheckboxInput has no `labelHidden`',
+        );
+        fs.rmSync(second);
+        expect(scansAgain().message).not.toContain('src/Other.tsx');
+        // An edit in place that keeps the size and the modification time.
+        const {atime, mtime} = fs.statSync(page);
+        fs.writeFileSync(page, app('<TabList selectedXY="a" />'));
+        fs.utimesSync(page, atime, mtime);
+        expect(scansAgain().message).toContain(
+          'src/App.tsx:3 TabList has no `selectedXY`',
+        );
+        // A save that writes a copy and renames it over the page.
+        const copy = path.join(src, '.App.tsx.saving');
+        fs.writeFileSync(copy, app('<TabList selectedID="a" />'));
+        fs.renameSync(copy, page);
+        expect(scansAgain().message).toContain(
+          'src/App.tsx:3 TabList has no `selectedID`',
+        );
+        // A declaration that adds the prop to the component.
+        fs.writeFileSync(
+          path.join(src, 'tab-ids.d.ts'),
+          "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps {\n    selectedID?: string;\n  }\n}\n",
+        );
+        expect(scansAgain().status).toBe('pass');
+        // A config that compiles JSX with another runtime.
+        fs.writeFileSync(
+          path.join(other.dir, 'tsconfig.json'),
+          JSON.stringify({
+            compilerOptions: {
+              jsx: 'react-jsx',
+              jsxImportSource: '@emotion/react',
+            },
+          }),
+        );
+        expect(scansAgain().message).toMatch(
+          /^Not checked: the project compiles JSX with `@emotion\/react`/,
+        );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    300_000,
   );
 
   it.skipIf(!hasModuleHooks)(
