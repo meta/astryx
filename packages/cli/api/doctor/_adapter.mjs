@@ -437,13 +437,15 @@ const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 const notPageCode = file => TEST_FILE.test(file) || TEST_FOLDER.test(file);
 
 /**
- * A press listener a script may add through the DOM: `addEventListener` with
- * a press event (`'click'`, a pointer, mouse or touch press) or with an event
- * it names by a variable or an expression (`addEventListener(type, …)`), or
- * an `onclick`-style property (`el.onclick = …`).
+ * A press listener a script may add through the DOM: `addEventListener`
+ * (also called as `?.()`, `.call()` or `.apply()`) with a press event
+ * (`'click'`, a pointer, mouse or touch press) or with an event it names by a
+ * variable or an expression (`addEventListener(type, …)`); a library's `.on()`
+ * with a press event (`$(el).on('click', …)`); or an `onclick`-style property
+ * (`el.onclick = …`).
  */
 const DOM_PRESS_LISTENER =
-  /\baddEventListener\(\s*(?:['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)['"`]|`[^`]*\$\{|[^'"`\s])|\.on(?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\s*=(?!=)/;
+  /\baddEventListener\s*(?:\?\.\s*)?(?:\.(?:call|apply)\s*\(|\(\s*(?:['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)['"`]|`[^`]*\$\{|[^'"`\s]))|\.on\(\s*['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\b|\.on(?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\s*=(?!=)/;
 
 /**
  * A module path a module imports, re-exports, or loads that is not relative
@@ -849,7 +851,6 @@ function buildJsxRuntime(pages, projectDir) {
   }
   return null;
 }
-
 
 /**
  * @typedef {object} UnknownCoreProp

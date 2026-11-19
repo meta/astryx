@@ -451,11 +451,12 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   `Route` (one with an `element`, a `Component` or a `lazy` load) renders in
   that route's `Outlet`, which the check does not follow, so it is not judged.
   A hash router named only in a comment is not hash routing. When the app's
-  own code listens for a press through the DOM (`addEventListener` for a
-  click, or a pointer, mouse or touch press, or for an event that a variable
-  names, or an `onclick`-style property), doctor judges no button and reports
-  `info`, since a script may act on any button that way. The warning names
-  each button's file, line and label, and never fails `doctor`.
+  own code listens for a press through the DOM (`addEventListener`, also
+  called as `?.()`, `.call()` or `.apply()`, for a click, or a pointer, mouse
+  or touch press, or for an event that a variable names; a library's `.on()`
+  for such a press; or an `onclick`-style property), doctor judges no button
+  and reports `info`, since a script may act on any button that way. The
+  warning names each button's file, line and label, and never fails `doctor`.
 - **INV42 — `astryx doctor` warns on a prop a Core component does not take.**
   In a project on Core, `doctor` reads the app's own source as syntax trees
   and never runs it; it leaves out test, story and fixture files (`.test.`,

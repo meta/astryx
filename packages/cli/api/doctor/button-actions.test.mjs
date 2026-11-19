@@ -438,6 +438,15 @@ describe('the button-actions check', () => {
         'src/listen.ts': "const kind = 'click';\ndocument.addEventListener(`${kind}`, () => {});\n",
       });
       expect(template?.status).toBe('info');
+      for (const listen of [
+        "document.addEventListener?.('click', () => {});",
+        "document.addEventListener ('click', () => {});",
+        "EventTarget.prototype.addEventListener.call(document, 'click', () => {});",
+        "$(document).on('click', 'button', () => {});",
+      ]) {
+        const spelled = await fresh({'src/App.tsx': app('<Button label="Start" />'), 'src/listen.ts': `${listen}\n`});
+        expect(spelled?.status, listen).toBe('info');
+      }
       // A wrapper whose content a page passes in, such as a link.
       const wrapper = await fresh({
         'src/CTA.tsx': ["import {Button} from '@astryxdesign/core';", 'export function CTA({children}: {children: unknown}) {', '  return <Button label="Start" variant="primary">{children}</Button>;', '}', ''].join('\n'),
