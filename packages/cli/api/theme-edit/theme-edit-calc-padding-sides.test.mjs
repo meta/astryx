@@ -365,4 +365,23 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    "gives each side's own note, as a plain side set does",
+    async () => {
+      const plain = (
+        await themeEditSet('t', 'padding-inline', 'var(--spacng-3, 8px)', {
+          cwd,
+          on: 'dropdown-menu',
+        })
+      ).data.notes.find((/** @type {string} */ n) => n.includes('--spacng-3'));
+      expect(plain).toBeDefined();
+      await themeEditUndo('t', {cwd});
+      const notes = await set('4px var(--spacng-3, 8px)');
+      expect(notes).toContain(plain);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
 });

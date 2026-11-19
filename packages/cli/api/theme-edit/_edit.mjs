@@ -7356,7 +7356,12 @@ async function changeOnce(
         ? familyOf(s.on)
         : null
     : null;
-  if (s.note) notes.push(s.note);
+  // Every side written carries its own check's note, and the typed
+  // shorthand its note for the whole value.
+  for (const note of new Set(
+    [shorthand?.note, ...written.map(w => w.note)].filter(Boolean),
+  ))
+    notes.push(/** @type {string} */ (note));
   if (s.stateNote) notes.push(s.stateNote);
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
