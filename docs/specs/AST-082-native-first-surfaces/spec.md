@@ -509,11 +509,11 @@ theme decision into every call site. Amended: `Button` and `IconButton`'s
 `surface` prop is the one exception.
 
 Amended 2026-11-18 (**Decider:** `cixzhang`, `2026-11-18 13:08 PT`): `Button` and
-`IconButton` take a per-call-site `surface` prop (`plain` default, or `glass`) as a
-situational appearance choice. It is a platform prop in the iOS and Android
-contracts (FR3, FR5); the core and web contracts do not have it. An explicit
-`surface` decides that Button or IconButton's look. When `surface` is unset, the
-theme's native `material` intent and the platform's placement rule decide it.
+`IconButton` take a per-call-site `surface` prop (`plain` or `glass`) as a
+situational appearance choice. It is a platform prop in every native platform's
+contract (FR3, FR5); the core and web contracts do not have it. `surface` has no
+default: unset follows the theme's native `material` intent and the platform's
+placement rule; `plain` or `glass` overrides them.
 Where a platform or OS version has no system glass, `glass` draws that
 platform's chrome material, as the platform's record defines; Reduce
 Transparency and Increase Contrast apply as for any glass. Every other
