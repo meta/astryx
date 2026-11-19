@@ -172,7 +172,7 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前的图标或已渲染图标内容；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+      description: '标签文本前的图标或已渲染图标内容；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'labelTooltip',

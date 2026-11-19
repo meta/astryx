@@ -111,7 +111,7 @@ export const docsZh = {
   propDescriptions: {
     label: '标识该项的主标签文本。',
     description: '显示在标签下方的次要描述文本。',
-    icon: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+    icon: '显示在标签前的图标；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     value: '该项是否被勾选。受控，与 onChange 搭配使用。',
     onChange: '切换该项时以下一个勾选状态触发的回调。',
     isDisabled: '该项是否禁用。',

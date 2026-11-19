@@ -228,7 +228,7 @@ export const docsZh = {
       name: 'icon',
       type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
+        '内置含义或 SVG 组件。内置含义：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
       required: true,
     },
     {
@@ -249,7 +249,7 @@ export const docsZh = {
       name: 'variant',
       type: 'IconVariant',
       description:
-        "为语义图标名称请求当前主题的替代图稿，例如 'filled'。名称来自 IconVariantMap，由应用从 @astryxdesign/core/Icon 扩充；Astryx 本身不定义任何名称。只有当前主题在 iconVariants 中列出该变体时（对于主题继承来的条目，还需定义该条目的主题也列出它），主题的图标条目才会收到它；否则绘制常规图稿。直接传入的图标组件会忽略它。它只选择图稿：不会写入 DOM，也没有主题样式选择器。",
+        "为内置含义请求当前主题的替代图稿，例如 'filled'。名称来自 IconVariantMap，由应用从 @astryxdesign/core/Icon 扩充；Astryx 本身不定义任何名称。只有当前主题在 iconVariants 中列出该变体时（对于主题继承来的条目，还需定义该条目的主题也列出它），主题的图标条目才会收到它；否则绘制常规图稿。直接传入的图标组件会忽略它。它只选择图稿：不会写入 DOM，也没有主题样式选择器。",
     },
     {
       name: 'label',
@@ -278,7 +278,7 @@ export const docsZh = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        '指向渲染的 SVG 元素的 ref，适用于图标组件以及语义名称或命名空间名称。对于名称，它指向包装元素内的 <svg>；若解析出的图形没有 <svg>，则为 null。',
+        '指向渲染的 SVG 元素的 ref，适用于图标组件以及内置含义或命名空间键。对于名称，它指向包装元素内的 <svg>；若解析出的图形没有 <svg>，则为 null。',
     },
   ],
   theming: {

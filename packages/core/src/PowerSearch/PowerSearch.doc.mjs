@@ -406,7 +406,7 @@ export const docsZh = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        '在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
+        '在输入框开头（筛选 token 之前）显示的图标，转发给内部的 Tokenizer；可传内置含义（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'statusVariant',

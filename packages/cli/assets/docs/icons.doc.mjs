@@ -19,7 +19,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Components that accept an icon prop use IconType: either a built-in meaning by name or a direct SVG component. A name resolves through the theme icons: the drawings the active theme gives each name (its type is `IconRegistry`), else a registered or built-in drawing.',
+          text: 'Components that accept an icon prop use IconType: either a built-in meaning by name or a direct SVG component. A name resolves through the theme icons: the drawings the active theme gives each name (a complete set is typed `IconRegistry`), else a registered or built-in drawing.',
         },
         {
           type: 'table',
