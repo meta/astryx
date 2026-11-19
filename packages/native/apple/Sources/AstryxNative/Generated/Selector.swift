@@ -41,12 +41,6 @@ public enum SelectorIndicatorPosition: String, CaseIterable, Codable, Sendable {
   case start = "start"
   case end = "end"
 }
-public enum SelectorPlacement: String, CaseIterable, Codable, Sendable {
-  case above = "above"
-  case below = "below"
-  case start = "start"
-  case end = "end"
-}
 #if os(iOS)
 public enum SelectorMenuStyle: String, CaseIterable, Codable, Sendable {
   case popUp = "popUp"
@@ -77,11 +71,9 @@ public struct SelectorProps {
   public var status: SelectorStatus?
   public var statusVariant: SelectorStatusVariant?
   public var indicatorPosition: SelectorIndicatorPosition?
-  public var placement: SelectorPlacement?
-  public var isDefaultOpen: Bool?
   public var isLoading: Bool?
   public var menuStyle: SelectorMenuStyle?
-  public init(label: String, options: [SelectorOption], value: String? = nil, onChange: ((String) -> Void)? = nil, hasClear: Bool? = nil, hasSearch: Bool? = nil, searchPlaceholder: String? = nil, placeholder: String? = nil, size: SelectorSize? = nil, variant: SelectorVariant? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLabelHidden: Bool? = nil, description: String? = nil, labelTooltip: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SelectorStatus? = nil, statusVariant: SelectorStatusVariant? = nil, indicatorPosition: SelectorIndicatorPosition? = nil, placement: SelectorPlacement? = nil, isDefaultOpen: Bool? = nil, isLoading: Bool? = nil, menuStyle: SelectorMenuStyle? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, options: [SelectorOption], value: String? = nil, onChange: ((String) -> Void)? = nil, hasClear: Bool? = nil, hasSearch: Bool? = nil, searchPlaceholder: String? = nil, placeholder: String? = nil, size: SelectorSize? = nil, variant: SelectorVariant? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLabelHidden: Bool? = nil, description: String? = nil, labelTooltip: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SelectorStatus? = nil, statusVariant: SelectorStatusVariant? = nil, indicatorPosition: SelectorIndicatorPosition? = nil, isLoading: Bool? = nil, menuStyle: SelectorMenuStyle? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.options = options
     self.value = value
@@ -103,8 +95,6 @@ public struct SelectorProps {
     self.status = status
     self.statusVariant = statusVariant
     self.indicatorPosition = indicatorPosition
-    self.placement = placement
-    self.isDefaultOpen = isDefaultOpen
     self.isLoading = isLoading
     self.menuStyle = menuStyle
     self.base = base
@@ -132,8 +122,6 @@ public struct SelectorNode: Decodable, Equatable, Sendable {
     public var status: SelectorStatus?
     public var statusVariant: SelectorStatusVariant?
     public var indicatorPosition: SelectorIndicatorPosition?
-    public var placement: SelectorPlacement?
-    public var isDefaultOpen: Bool?
     public var isLoading: Bool?
     public var menuStyle: SelectorMenuStyle?
   }
@@ -170,8 +158,6 @@ public struct SelectorNode: Decodable, Equatable, Sendable {
       status: props.status,
       statusVariant: props.statusVariant,
       indicatorPosition: props.indicatorPosition,
-      placement: props.placement,
-      isDefaultOpen: props.isDefaultOpen,
       isLoading: props.isLoading,
       menuStyle: props.menuStyle,
       base: base ?? AstryxBaseProps()
@@ -209,11 +195,9 @@ public struct SelectorProps {
   public var status: SelectorStatus?
   public var statusVariant: SelectorStatusVariant?
   public var indicatorPosition: SelectorIndicatorPosition?
-  public var placement: SelectorPlacement?
-  public var isDefaultOpen: Bool?
   public var isLoading: Bool?
   public var menuStyle: SelectorMenuStyle?
-  public init(label: String, options: [SelectorOption], value: String? = nil, onChange: ((String) -> Void)? = nil, hasClear: Bool? = nil, hasSearch: Bool? = nil, searchPlaceholder: String? = nil, placeholder: String? = nil, size: SelectorSize? = nil, variant: SelectorVariant? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLabelHidden: Bool? = nil, description: String? = nil, labelTooltip: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SelectorStatus? = nil, statusVariant: SelectorStatusVariant? = nil, indicatorPosition: SelectorIndicatorPosition? = nil, placement: SelectorPlacement? = nil, isDefaultOpen: Bool? = nil, isLoading: Bool? = nil, menuStyle: SelectorMenuStyle? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, options: [SelectorOption], value: String? = nil, onChange: ((String) -> Void)? = nil, hasClear: Bool? = nil, hasSearch: Bool? = nil, searchPlaceholder: String? = nil, placeholder: String? = nil, size: SelectorSize? = nil, variant: SelectorVariant? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLabelHidden: Bool? = nil, description: String? = nil, labelTooltip: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SelectorStatus? = nil, statusVariant: SelectorStatusVariant? = nil, indicatorPosition: SelectorIndicatorPosition? = nil, isLoading: Bool? = nil, menuStyle: SelectorMenuStyle? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.options = options
     self.value = value
@@ -235,8 +219,6 @@ public struct SelectorProps {
     self.status = status
     self.statusVariant = statusVariant
     self.indicatorPosition = indicatorPosition
-    self.placement = placement
-    self.isDefaultOpen = isDefaultOpen
     self.isLoading = isLoading
     self.menuStyle = menuStyle
     self.base = base
@@ -264,8 +246,6 @@ public struct SelectorNode: Decodable, Equatable, Sendable {
     public var status: SelectorStatus?
     public var statusVariant: SelectorStatusVariant?
     public var indicatorPosition: SelectorIndicatorPosition?
-    public var placement: SelectorPlacement?
-    public var isDefaultOpen: Bool?
     public var isLoading: Bool?
     public var menuStyle: SelectorMenuStyle?
   }
@@ -302,8 +282,6 @@ public struct SelectorNode: Decodable, Equatable, Sendable {
       status: props.status,
       statusVariant: props.statusVariant,
       indicatorPosition: props.indicatorPosition,
-      placement: props.placement,
-      isDefaultOpen: props.isDefaultOpen,
       isLoading: props.isLoading,
       menuStyle: props.menuStyle,
       base: base ?? AstryxBaseProps()
