@@ -175,6 +175,27 @@ const FONTSOURCE_NAMES = new Set(
   FONTSOURCE_FAMILIES.map(name => name.toLowerCase().replace(/\s+/g, ' ')),
 );
 
+/** Fonts every system carries, said by name ("Arial-style font"). */
+const WEB_SAFE_FONTS = new Set([
+  'arial',
+  'helvetica',
+  'verdana',
+  'tahoma',
+  'georgia',
+  'times',
+  'courier',
+  'trebuchet',
+  'calibri',
+  'cambria',
+  'garamond',
+  'futura',
+  'palatino',
+  'consolas',
+  'menlo',
+  'monaco',
+  'segoe',
+]);
+
 const DESIGN_WORDS = [
   'leading',
   // A part's name, never a near miss of "radius".
@@ -5112,7 +5133,11 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\b([a-z]+)-(style|styled|like|esque)(?=\s+(?:[a-z-]+\s+){0,3}(?:fonts?|typefaces?|type|lettering)\b)/gi,
       (_m, /** @type {string} */ w, /** @type {string} */ tail) =>
-        new RegExp(`^(?:${FONT_NAMES})$`, 'i').test(w) ? w : `${w}${tail}`,
+        new RegExp(`^(?:${FONT_NAMES})$`, 'i').test(w) ||
+        FONTSOURCE_NAMES.has(w.toLowerCase()) ||
+        WEB_SAFE_FONTS.has(w.toLowerCase())
+          ? w
+          : `${w}${tail}`,
     )
     // ("sunny yellow highlights"): a highlight color with no part that
     // draws it is no part's fill; the color is named in the answer as not
@@ -27510,69 +27535,77 @@ export function draftAnswer(ctx, env, question) {
   // the rest of the ask is written.
   /** The clauses an undo in the same ask answered. @type {Set<unknown>} */
   const answeredByUndo = new Set();
-  {
-    const unmet = result.find(d => d.unmet);
-    // ("… make them a bit smaller. Undo the heading change.": an undo of a
-    // change said earlier in the same ask takes that change back here; the
-    // rest of the ask stands. Only a change of what the undo names, "Reset
-    // the card shadows" takes back a card shadow, never "cards rounder",
-    // and never a change said after it.)
+  // ("… make them a bit smaller. Undo the heading change.": an undo of a
+  // change said earlier in the same ask takes that change back here; the
+  // rest of the ask stands. Only a change of what the undo names: "Reset
+  // the card shadows" takes back a card shadow, never "cards rounder", and
+  // never a change said after it. Each undo is read in turn.)
+  for (const unmet of result.filter(d => d.unmet)) {
     const [, what, part] =
-      /^(.+?) on ([a-z0-9-]+)$/.exec(String(unmet?.unmet ?? '')) ?? [];
-    const undoAt = clauses.indexOf(
-      /** @type {any} */ (unmet ? draftClause.get(unmet) : null),
-    );
-    const undone = part
-      ? result.filter(d => {
-          const c = /** @type {any} */ (draftClause.get(d));
-          return (
-            d !== unmet &&
-            d.options.length &&
-            c &&
-            (undoAt < 0 || clauses.indexOf(c) < undoAt) &&
-            c.parts?.some(
-              (/** @type {{on: string}} */ p) =>
-                p.on === part || (FAMILIES[part] ?? []).includes(p.on),
-            ) &&
-            (what === 'everything' ||
-              c.aspects?.includes(what) ||
-              d.options
-                .flat()
-                .some(
-                  (/** @type {Step} */ st) =>
-                    st.thing === what || String(st.thing).includes(what),
-                ))
-          );
-        })
-      : [];
-    if (unmet && undone.length) {
-      const gone = new Set(
-        undone.flatMap(d => d.options.flat()).map(st => JSON.stringify(st)),
+      /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
+    const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
+    const undone = result.filter(d => {
+      const c = /** @type {any} */ (draftClause.get(d));
+      if (d === unmet || d.unmet || !d.options.length || !c) return false;
+      if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
+      // (Of the part the undo names; with no part, of the whole theme.)
+      const onPart = part
+        ? c.parts?.some(
+            (/** @type {{on: string}} */ p) =>
+              p.on === part || (FAMILIES[part] ?? []).includes(p.on),
+          )
+        : !c.parts?.length;
+      return (
+        onPart &&
+        (what === 'everything' ||
+          c.aspects?.includes(what) ||
+          d.options
+            .flat()
+            .some(
+              (/** @type {Step} */ st) =>
+                st.thing === what || String(st.thing).includes(what),
+            ))
       );
-      for (const d of result)
+    });
+    if (!undone.length) continue;
+    // (A whole answer that holds every line, "all of it, in order", loses
+    // each line taken back once; a later clause that says the change again
+    // keeps it.)
+    const gone = undone.flatMap(d => d.options[0] ?? []);
+    for (const d of result)
+      if (!draftClause.get(d) && d.options.length)
         d.options = d.options
-          .map(o => o.filter(st => !gone.has(JSON.stringify(st))))
+          .map(o => {
+            const left = [...o];
+            for (const st of gone) {
+              const k = left.findIndex(
+                x => JSON.stringify(x) === JSON.stringify(st),
+              );
+              if (k >= 0) left.splice(k, 1);
+            }
+            return left;
+          })
           .filter(o => o.length);
-      result.splice(
-        0,
-        result.length,
-        ...result.filter(d => d !== unmet && !undone.includes(d)),
-      );
-      for (const d of [unmet, ...undone]) {
-        const c = draftClause.get(/** @type {any} */ (d));
-        if (c) answeredByUndo.add(c);
-      }
-      result.push({
-        text: `the ${part} change said earlier in this ask is taken back by its undo, so it is not written`,
-        options: [],
-      });
-    } else if (unmet && result.some(d => d !== unmet && d.options.length)) {
-      // ("Make the cards rounder. Reset the card shadows.", with no card
-      // shadow set: the reset has nothing to take back, and says so; the
-      // rest of the ask is written.)
-      result.splice(result.indexOf(unmet), 1);
-      result.unshift(unmet);
+    result.splice(
+      0,
+      result.length,
+      ...result.filter(d => d !== unmet && !undone.includes(d)),
+    );
+    for (const d of [unmet, ...undone]) {
+      const c = draftClause.get(/** @type {any} */ (d));
+      if (c) answeredByUndo.add(c);
     }
+    result.push({
+      text: `the ${part ? `${part} ` : ''}change said earlier in this ask is taken back by its undo, so it is not written`,
+      options: [],
+    });
+  }
+  // ("Make the cards rounder. Reset the card shadows.", with no card
+  // shadow set: the reset has nothing to take back, and says so; the rest
+  // of the ask is written.)
+  for (const unmet of result.filter(d => d.unmet).reverse()) {
+    result.splice(result.indexOf(unmet), 1);
+    result.unshift(unmet);
   }
   // A confidence gate: a question, a "tell me", a "but not too" or a typo
   // read as a direction leaves how unsure which way to go; a wrong write is

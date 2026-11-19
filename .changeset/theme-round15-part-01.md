@@ -19,7 +19,7 @@
 - **Sarcasm shown by emphasis or a "yes because" reply:** "yes because neon green links are SO professional".
 - **A past hypothetical:** "had we gone with serif headings".
 - **A change timed to a later event:** "after the review, square the buttons".
-- **An ask that takes back a setting the theme doesn't have:** "accent red; also undo the corners" with no corners set. The answer says so, and asks for the rest on its own.
+- **An ask that takes back a setting the theme doesn't have:** "accent red; also undo the corners" with no corners set. The answer says there is nothing to take back, and writes the rest.
 
 Other fixes:
 
