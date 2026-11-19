@@ -105,9 +105,8 @@ describe('search ordering invariants', () => {
   }
 
   for (const [q, root, part] of [
-    ['title', 'Dialog', 'DialogHeader'],
-    ['page title', 'Dialog', 'DialogHeader'],
-    ['indicator', 'Field', 'FieldLabel'],
+    ['code layout', 'CodeBlock', 'Code'],
+    ['tab layout', 'TabList', 'Tab'],
   ]) {
     it(`keeps ${root} directly before ${part} for "${q}"`, async () => {
       const names = (await search(q, {cwd, limit: 20})).data.results.map(
@@ -116,6 +115,21 @@ describe('search ordering invariants', () => {
       const at = names.indexOf(root);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(names[at + 1]).toBe(part);
+    }, 60_000);
+  }
+
+  // A root whose only hit is a mention in its guidance stays in its own run.
+  for (const [q, root, part] of [
+    ['title', 'Dialog', 'DialogHeader'],
+    ['page title', 'Dialog', 'DialogHeader'],
+    ['indicator', 'Field', 'FieldLabel'],
+  ]) {
+    it(`keeps ${root} out of ${part}'s run for "${q}"`, async () => {
+      const names = (await search(q, {cwd, limit: 50})).data.results.map(
+        r => r.name,
+      );
+      expect(names.indexOf(part)).toBeGreaterThanOrEqual(0);
+      expect(names.indexOf(root)).toBeGreaterThan(names.indexOf(part));
     }, 60_000);
   }
 
