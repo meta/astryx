@@ -69,7 +69,6 @@ import {
   paletteToken,
   sameColor,
   shade,
-  grownFamilies,
 } from '../theme/palette/generate/mapping.mjs';
 import {isLookFamily} from '../theme/palette/generate/derive-look.mjs';
 /**

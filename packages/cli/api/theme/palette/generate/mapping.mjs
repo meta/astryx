@@ -14,8 +14,8 @@
  */
 import {
   compositeOver,
+  contrastRatio,
   hexToOklch,
-  luminance,
   normalizeColor,
   ratioDown,
 } from './color.mjs';
@@ -544,8 +544,7 @@ export const hex =
  * @returns {number}
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 /** A ratio cut down to two decimals, never rounded up past a need. */
 export const round = ratioDown;
