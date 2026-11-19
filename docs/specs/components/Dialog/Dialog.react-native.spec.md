@@ -238,7 +238,7 @@ and the theme's motion.
 | FR6      | Unit tests of each path for each purpose; emulator back checks; VoiceOver escape checks                                | `info`; `form`; `required`; a dialog over a dialog                                                                  | a path that closes where FR6 says it does not, a dim tap that closes a `form` dialog, or a back press that closes a lower window fails                                                                                                                                                       | `audit:react-native/Dialog/dismissal` |
 | FR7      | Unit tests and captures of the inline panel in a scrolling page                                                        | short and overflowing content; a narrow parent; closed                                                              | a window, a dim, a panel wider than its parent, or a body that takes a page swipe when it does not overflow fails                                                                                                                                                                            | `audit:react-native/Dialog/inline`    |
 | FR8, AR3 | Unit tests of DialogHeader; VoiceOver and TalkBack checks                                                              | a string and an element title; a subtitle; with and without `onOpenChange`; each `endContentEdgeCompensation`       | a title that is not a level-2 heading, a close button without `onOpenChange`, a close button other than the default size, or an unnamed close button fails                                                                                                                                   | `audit:react-native/Dialog/header`    |
-| AR1, AR2 | VoiceOver and TalkBack checks on devices                                                                               | open; close by each path; a required dialog; focus moved while open                                                 | focus left behind the dialog, focus returned against `component:Dialog` FR4, or a readable dim fails                                                                                                                                                                                         | `audit:react-native/Dialog/a11y`      |
+| AR1, AR2 | VoiceOver and TalkBack checks on devices                                                                               | open; close by each path; a required dialog; focus moved while open                                                 | focus left behind the dialog, focus returned against `component:Dialog` FR4, a `required` dialog read as a plain dialog, or a readable dim fails                                                                                                                                             | `audit:react-native/Dialog/a11y`      |
 
 ## Decision log
 
@@ -260,8 +260,9 @@ own overlays do.
 **Decider:** imdreamrunner, 2026-11-18
 
 A phone's window decides how wide a dialog can be, and it changes with every
-rotation and window size. The panel therefore takes the window less the
-gutter, up to core's default width and three quarters of the window's height.
+rotation and window size. On iOS, the panel therefore takes the window less
+the gutter, up to core's default width and three quarters of the window's
+height; on Android, Material's dialog sizes and places the container.
 `width`, `maxHeight` and `position` place and size a panel on a web page, so
 they stay on the web; `padding` keeps core's spacing steps.
 
