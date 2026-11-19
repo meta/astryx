@@ -140,9 +140,24 @@ describe("a bar's height", () => {
       expect(said(r)).not.toMatch(/saved without it/);
       expect(said(r)).not.toMatch(/reaches top-nav/);
       expect(built('top-nav')).not.toMatch(/calc\(48px/);
-      // (The saved --only is read back: show and a later set still run.)
-      await themeEditShow('b', {cwd});
+      // (The saved --only is read back as saved: after show and after a
+      // later set the nav still keeps its own height, and the entry its
+      // only.)
+      const kept = () =>
+        JSON.parse(
+          fs.readFileSync(themeFiles(cwd, 'b').settings, 'utf8'),
+        ).settings.find(
+          (/** @type {any} */ x) =>
+            x.on === 'app-shell-header' &&
+            x.thing === 'height' &&
+            x.value === '48px',
+        );
+      const shown = /** @type {any} */ (await themeEditShow('b', {cwd})).data;
+      expect(said(shown)).not.toMatch(/changes nothing there/);
+      expect(built('top-nav')).not.toMatch(/calc\(48px/);
       await themeEditSet('b', 'color', '#222222', {cwd, on: 'top-nav-item'});
+      expect(built('top-nav')).not.toMatch(/calc\(48px/);
+      expect(kept()).toEqual(expect.objectContaining({only: true}));
       await themeEditUndo('b', {cwd});
       await themeEditUndo('b', {cwd});
     },
@@ -150,7 +165,7 @@ describe("a bar's height", () => {
   );
 
   it(
-    'reaches only a bar, from a length: never a list\'s items, a menu\'s divider, a trigger or an avatar, nor a keyword height',
+    "reaches only a bar, from a length: never a list's items, a menu's divider, a trigger or an avatar, nor a keyword height",
     async () => {
       for (const [prop, value, on] of [
         ['padding', '12px', 'dropdown-menu'],

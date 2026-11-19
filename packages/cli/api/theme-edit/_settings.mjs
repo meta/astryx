@@ -2372,7 +2372,7 @@ function readMeaninglessOnly(data, notes) {
       typeof s.thing !== 'string' ||
       s.only !== true ||
       typeof s.on !== 'string' ||
-      onlyMeans(s.on) !== 'own'
+      onlyMeansFor(s) !== 'own'
     )
       continue;
     delete s.only;
@@ -2444,30 +2444,37 @@ export function entryDamage(s) {
 }
 
 /**
- * Whether `only` fits a setting, as `set --only` takes it and the settings
- * reader keeps it: it names one member of a group styled alike (a text
- * input of inputs), or a bar's height or vertical padding.
+ * What `only` means on a setting, the one rule `set --only`, the settings
+ * reader and the build follow: `member` where it keeps a change on one of
+ * the parts the change would reach (a member of a group styled alike, by
+ * {@link onlyMeans}; or a bar's height or vertical padding, which reaches
+ * the row the bar holds, see barReach); `own` where it changes nothing (a
+ * part styled on its own); `group` where it means nothing at all.
+ * @param {any} s
+ * @param {Record<string, any> | null} [map] the part map, when there is one
+ * @returns {'member' | 'own' | 'group'}
+ */
+export function onlyMeansFor(s, map = null) {
+  const part = onlyMeans(typeof s?.on === 'string' ? s.on : undefined);
+  if (part !== 'own') return part;
+  // (Read without the part map, a saved entry's part may be such a bar;
+  // with it, only a part holding one row is.)
+  return s.source === 'property' &&
+    typeof s.thing === 'string' &&
+    BAR_REACH_THINGS.test(propertySpelling(s.thing) ?? s.thing) &&
+    (map == null || barRows(map, s.on).length === 1)
+    ? 'member'
+    : 'own';
+}
+
+/**
+ * Whether `only` fits a setting: it keeps the change on one part
+ * ({@link onlyMeansFor}).
  * @param {any} s
  * @param {Record<string, any> | null} [map] the part map, when there is one
  */
 export function onlyFits(s, map = null) {
-  const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
-  if (
-    fam &&
-    !FAMILIES[s.on] &&
-    AUTO_SPREAD.includes(/** @type {string} */ (fam))
-  )
-    return true;
-  // A height or vertical padding on a bar: --only keeps it off the row the
-  // bar holds (barReach). Read without the part map (a saved entry), any
-  // part may be such a bar; with it, only a part holding one row is.
-  return (
-    s.source === 'property' &&
-    typeof s.thing === 'string' &&
-    BAR_REACH_THINGS.test(propertySpelling(s.thing) ?? s.thing) &&
-    typeof s.on === 'string' &&
-    (map == null || barRows(map, s.on).length === 1)
-  );
+  return onlyMeansFor(s, map) === 'member';
 }
 
 /**
