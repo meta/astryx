@@ -21,6 +21,7 @@ verified_by:
     packages/cli/foundation/discovery/template-icons-variant.test.mjs,
     packages/cli/foundation/integrations/icon-features.test.mjs,
     packages/cli/api/search/search.icons.test.mjs,
+    packages/cli/foundation/discovery/icon-definition-replaces.test.mjs,
     packages/cli/foundation/agent-docs/agent-docs.test.mjs,
   ]
 ---
@@ -166,7 +167,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   this feature. Where icon features are off, discover refuses
   `--type icon-set`. Where they are on, `icon-set` is a discover kind
   (FR17). `astryx search` reads icon sets only for an icon ask where icon
-  features are on (FR11), returns no experimental doc, and counts an icon set
+  features are on (FR11), returns no experimental doc other than the
+  shareable-page guides `spec:AST-017/FR27` names, and counts an icon set
   a saved discover copy lists for its discover line only where they are on
   (`spec:AST-051/FR13`).
   Where icon features are off, no stable doc names an experimental route, an
@@ -205,7 +207,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     and `themeMap` (FR12).
 
   A data file that fails this shape, repeats an `id`, maps a name that is
-  neither an Astryx definition nor one of the set's own, maps to a missing
+  neither an Astryx definition nor one of the set's own (nor a name one of
+  those replaced, FR4), maps to a missing
   icon, or names a variant the set does not declare is invalid, and the set
   is withdrawn from every surface.
 
@@ -219,7 +222,30 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   proposing it for every set is a pull request that copies its file into the
   CLI's folder. When names collide, Astryx's wins. The experimental
   `icon-definitions` namespace lists Astryx's definitions and, where icon
-  features are on, each installed set's own.
+  features are on, each installed set's own. A definition may name a
+  camelCase `group`: the family of related definitions it belongs to
+  (`notifications` for `notification`, `notificationActive`, and
+  `notificationOff`). A set's own definition may join an Astryx group or name
+  its own. Every Astryx group has two or more members. A group is information
+  only: no ranking reads it. A definition's docs page names its group and the
+  group's other members, each with the route that opens it.
+  A definition may also declare
+  `replaces`, the name of an older definition it takes the place of, within
+  its own folder. The old name is then not a definition, and it answers with
+  the definition that replaced it, through every later replacement, the way
+  a replaced docs topic's name answers with its replacement (one shared alias
+  chain). A replaced definition's file may stay, so the old names it carries
+  keep answering. One name has one successor, a built-in definition is never
+  replaced, a set's own definition never replaces an Astryx definition's
+  name, and every chain ends at a current definition. A set whose folder
+  breaks one of these is invalid; in Astryx's own folder the definitions
+  that break one are reported and the others read. `experimental icon
+--definitions` gives a definition that declares one its `replaces`, and its
+  docs page names it in a Replaces row. A set's `map` key that names a replaced definition
+  maps its successor (an entry the map has for the successor wins), and the
+  next `experimental icon map` write stores the successor's name, listing
+  each renamed key as `replacedKeys`; a template's `icons` value and a
+  definition named to `map` or `add` resolve the same way.
 - **FR5 — The directory is the boundary.** Discovery reads the descriptor,
   data file, and definitions statically, never runs the icon module, and
   rejects a path that escapes the package (`spec:AST-039/FR5`, FR6).
@@ -229,7 +255,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 - **FR6 — `astryx experimental icon <words>` ranks icons by meaning.** It
   answers `icon.search`, each match with its `set`, `id`, `package`, `module`,
   `export`, `import` line, `words`, `definitions`, `variants`, `reason`, and
-  `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
+  `score`, and `relatives` when the groups (FR4) of the definitions it draws
+  have other members: each such definition, Astryx's and its set's own, as
+  `{definition, description}` (the text answer names at most four, under the
+  first match only). The score is 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
   leads), 60 when the query starts one of its words, 40 for a partial match
   (three letters or more inside a word), 20 for a word match (below). A word's
@@ -259,23 +288,36 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   word names, then by `id`. Suggestions for a missing `<set>/<id>` (FR7) and
   the definitions that fit an icon (FR13) never include word matches. An
   icon also answers to
-  the name and words of every definition it draws. Equal scores are ordered by
+  the name and words of every definition it draws, and to the name of a
+  definition one of those replaced (FR4) as to its successor's name, with a
+  reason naming both. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
   an id part, and an exact meaning
-  match by its tag position; then by `id`. `--set` keeps one set and `--limit`
+  match by its tag position; then an icon whose id the query names in
+  full (each id word, or its plural or singular, is a query word); then by
+  `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
-  definition (`icon.definitions`), each with `templates`, the number of
+  definition (`icon.definitions`), each with its `group` when it names one
+  and `templates`, the number of
   bundled templates whose `icons` name it (FR9). When a set is known (the
   one `--set` names, else the project's main set, else the only set of the
   icon-set package the command runs in), the answer names it as `set` and
   each definition has `mapped`, whether that set's `map` names it. With a
   project look (FR8), a match from a set in the list names that look's
   `module`, `export`, and `import`, or, when its icon lacks the look, keeps
-  its own and names both looks as `look`. With no set installed, the answer
-  says so (`reason`), names the Astryx definitions that match
-  (`definitions`), built-in ones first, and says how to get a set (`next`).
+  its own and names both looks as `look`. A match whose set's `map` names it
+  for a definition also has `meaningImport`: its export, in the look it
+  draws, imported as the definition's name in PascalCase ending in `Icon`,
+  as a set names its exports (`import {TrashIcon as DeleteIcon} from '…'`;
+  no alias when the export has that name), so app code names the meaning
+  and keeps that name when another set draws it. Of several definitions,
+  the one the query ranks first names it, then a built-in one, then the
+  first by name. With no set installed, the answer says so (`reason`),
+  names the Astryx definitions that match (`definitions`), built-in ones
+  first, each with its `group` and `relatives` as a match has them, and
+  says how to get a set (`next`).
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component
@@ -407,7 +449,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   the same definition: a set draws one icon for each definition, so they
   would draw the same icon.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
-  `--type icon`, and returns no experimental doc, with or without the opt-in.
+  `--type icon`, and returns no experimental doc other than the
+  shareable-page guides `spec:AST-017/FR27` names, with or without the opt-in.
   Its `results` and `matchCount` never hold an icon. It reads icon sets only
   where icon features are on and the query asks for an icon (FR6), and then
   appends at most three icons in its own `icons` block. An `icon` or `icons`
@@ -514,7 +557,13 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     is built from, never the built file), the `react` and optional
     `@types/react` and `@astryxdesign/cli` peers it does not declare, and a
     `typecheck` script running `integration check --strict` when it has
-    none. `--variants` and `--default-variant` declare `variants` and
+    none. When the package's own package.json sets `"private": true` (the
+    field npm reads to refuse a publish), the receipt names none of these
+    publishing notes (peers, the script, the strict check's TypeScript, the
+    placeholder description), and its notes end with the
+    `experimental icon use <set>` step. No other signal, such as the
+    package's folder or how it is installed, changes the notes; every other
+    package gets them as above. `--variants` and `--default-variant` declare `variants` and
     `default`; `--display-name` and `--description` fill the descriptor.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a
@@ -631,6 +680,7 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   | `icon_builtin_definition_missing` | error    | a built-in definition is not in `map`                                              |
   | `icon_definition_unused`          | warning  | a definition the set declares is not in `map`                                      |
   | `icon_definition_shadowed`        | warning  | a definition the set declares has an Astryx definition's name                      |
+  | `icon_definition_replaced`        | warning  | a `map` key names a replaced definition; the message names the key to rename       |
   | `icon_module_not_public`          | error    | an icon is read from outside the package's public entry                            |
   | `icon_export_name`                | warning  | an export is not named `<Name>Icon`                                                |
   | `icon_not_component`              | error    | an export is a literal, not a component or adapter call                            |
@@ -712,7 +762,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   leaves one out, with the `use` command that adds it. With no list, it
   passes and names the installed sets and whether one is the project's set.
   It warns when another
-  installed set is withdrawn. Its pass message names the project's look.
+  installed set is withdrawn, and when an installed set's `map` keys a
+  replaced definition (FR4), naming the set, the key, and its successor. Its pass message names the project's look.
   Doctor's `icon-placeholders` check runs only where icon features are on
   and a main set is decided (named by `experimental.iconSet`, or the only
   installed set); with no main set there is no check and no scan. It reads
@@ -795,7 +846,8 @@ message}`) names each template or namespace doc that sets `stability`, and
   `IconSetDoc`, and every schema field and enum value, accepts
   `stability: 'experimental'`: help shows a marked command as
   `[experimental]`, stable tables leave out a marked field or value, search
-  leaves out a marked doc, and Doctor's doc counts leave marked docs out. A
+  leaves out a marked doc (apart from `spec:AST-017/FR27`'s shareable-page
+  guides), and Doctor's doc counts leave marked docs out. A
   namespace's `source.packages: 'all'` adopts a doc group from every package
   only on a CLI namespace marked experimental (the icon definitions); DEC-7
   owns that exception to `spec:AST-046/FR2`.
@@ -833,14 +885,14 @@ message}`) names each template or namespace doc that sets `stability`, and
 | --------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR0, FR11 | experimental-isolation tests against the output of the CLI without the feature            | help; the manifest; every stable docs topic and tree node, the `cli` listings, and every stable `cli` docs node; search for `delete`, `close`, `icon`, `trash can`, `search`, `experimental`, and `icon set`, with no set, and its `results` and `matchCount` with a set opted in; template printed and copied; discover with a malformed icon-set catalog entry and no set installed; with a set installed and no `experimental.iconSet`: discover lists it, Doctor and `doctor integration validate <package>` check it, search's `results` and `matchCount` answer as with no set and only an icon ask appends an `icons` block, and no command that prints the integration-issue nudge prints it for a valid set. Goldens hold identities, structure, counts, every `stability`, and every sentence or link that names an experimental surface, an icon set, or an icon definition, not prose; a discover catalog with no icon set, and one whose other kinds carry icon-set fields | a stable output gains a result, field, section, count, `stability`, or a sentence or link naming an experimental surface that the CLI without the feature lacks (apart from FR18's `stability` field and FR11's `icons` block); or a stable command gains an icon-set subcommand or kind; or discover output changes for a catalog that lists no icon set |
 | FR1–FR5   | descriptor, data-file, and definition parser and discovery tests                          | valid set; invalid data; definitions Astryx and the set both have                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | an invalid set answers, or a definition file is not read                                                                                                                                                                                                                                                                                                  |
-| FR6–FR8   | `experimental icon` text and JSON tests; `use --variant` tests                            | definition, name, and meaning matches; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name; `--definitions` in an icon-set package, in a project with a main set, with `--set`, and with no set; the `use` fix with a set written as `<package>/<set>` and with a name two packages ship; `use --variant` written beside the list in one write, removed without it, refused for a variant the main set lacks and for a main set with one look, and with a config it cannot write; a config that names a variant alone; `--list` with a variant; a phrase that no reading answers, a word carried only as a tag, equal word weights across two sets, an export name read split and as typed, and the callers that take no word matches                                                                                                                                                                                      | ranking or tie order changes, or a bare ambiguous name answers; or a variant is written without the list, one the main set lacks is written, or a failed write leaves one key written; or a word match reaches a caller that takes none                                                                                                                   |
+| FR6–FR8   | `experimental icon` text and JSON tests; `use --variant` tests                            | definition, name, and meaning matches; meaning imports; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name; `--definitions` in an icon-set package, in a project with a main set, with `--set`, and with no set; the `use` fix with a set written as `<package>/<set>` and with a name two packages ship; `use --variant` written beside the list in one write, removed without it, refused for a variant the main set lacks and for a main set with one look, and with a config it cannot write; a config that names a variant alone; `--list` with a variant; a phrase that no reading answers, a word carried only as a tag, equal word weights across two sets, an export name read split and as typed, and the callers that take no word matches                                                                                                                                                                     | ranking or tie order changes, or a bare ambiguous name answers; or a variant is written without the list, one the main set lacks is written, or a failed write leaves one key written; or a word match reaches a caller that takes none                                                                                                                   |
 | FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; a set that wraps the template's library, as the main set and as a backup; an undeclared icon; two different icons in one bundled template with one definition; no opt-in; a project variant: a mapped icon with and without the look, an icon from the main set's own library, mapped or only re-exported, with and without the look, an icon imported from a listed set in another look, a backup without the look                                                                                                                                                                                                                                                                                                                                                              | a name is guessed, an icon keeps a library import no set has or wraps, sets mix within one icon, or a project without the opt-in gets a rewrite; or a missing look moves an icon to another set                                                                                                                                                           |
 | FR12–FR14 | writer and command tests                                                                  | wrap and refresh; adapter; generated types and theme map; a receipt for a set that leaves template meanings unmapped and for one that maps them all; a dry run; the first wrap into a set with no icons; `--adapter` on a new set, on a set with no icons, and malformed or missing; `add --all` with more than ten missing; suggestions for an id with other words, a shared word, and `bank`; a look's theme map written once an icon draws the look, typed, an entry whose icon lacks the look, missing from an older module, other artwork, not exported by the entry                                                                                                                                                                                                                                                                                                                                                                                                               | a write is left half done, or the theme map drifts from `map`; or a look's theme map drifts from `map` and the icons' variants                                                                                                                                                                                                                            |
 | FR15      | `integration check` tests, with and without `--strict`                                    | every code; unmapped optional definitions; unmapped template meanings under `--strict`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                                                                                                                     |
 | FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4; `experimental.iconVariant` with a range from 0.7.12                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                                                                                                                |
 | FR17      | Doctor and discover tests, including `discover.icon-packs` (command tests)                | opted in; a placeholder in use, commented out, and quoted; no set installed and no `experimental.iconSet`; one set installed and no `experimental.iconSet`; two sets and no `experimental.iconSet`; invalid set and no `experimental.iconSet`; a variant the main set does not declare, and one for a main set with one look; icon imports from a backup an earlier set covers, an unlisted set, a wrapped library, the main set's own library, a package not installed (declared, default, namespace, type-only, `paths`/`baseUrl`-mapped, and re-exported variants), and the main set uninstalled; a pack a project could add, with and without definitions, with icon features on and off                                                                                                                                                                                                                                                                                            | a project with no set installed and no `experimental.iconSet` sees an icon-set check, issue, or kind; or a variant the main set lacks passes; or a pack a project could add is missing, unmarked, or shows its definitions with icon features off; or another stable command shows a set                                                                  |
 | FR19–FR20 | template mapping tests of the placeholder declaration; docs site loader and config tests  | the declaration's size, color, and labels; no data attributes; setting unset and set; a set that is not installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | the placeholder is announced without a name, or an unset build changes                                                                                                                                                                                                                                                                                    |
-| FR18      | docs tree, help, and search tests                                                         | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | a stable namespace adopts another package's doc, or a marked doc reaches search                                                                                                                                                                                                                                                                           |
+| FR18      | docs tree, help, and search tests                                                         | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | a stable namespace adopts another package's doc, or a marked doc other than `spec:AST-017/FR27`'s shareable-page guides reaches search                                                                                                                                                                                                                    |
 
 ## Decision log
 

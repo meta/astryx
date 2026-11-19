@@ -247,6 +247,12 @@ A control painted over code hides the reader's text, so a headerless block's con
 
 A reader sees a short snippet highlighted in its first render (PR1), with no product setup, for the languages people write most: the native set is the 11 families CodeBlock already knows plus C and C++, SQL, Rust, Kotlin, Swift, and Go, which together cover about 97% of fences that name a language in a large engineering Markdown corpus, inside a 4,608-byte budget every consumer pays. Every other language is opt in one language at a time: a product imports that language's module and passes it where the language goes, as `language` on CodeBlock or Lab's `DiffViewer`, or in `codeLanguages` on the surfaces that only see a fence's word or a file's name, so the value that names the language also carries what renders it, and a bundle holds only the languages it imports. A language the product writes itself is the same kind of value, made from its own tokenize function, so one concept covers every language and the separate `tokenizer` prop is deprecated; Astryx modules stay opaque so their grammar format stays internal. Rejected: a context provider (what renders a block would depend on where it sits, not on its props); language packs or grouped exports (a product would opt into languages it never shows); every family built in (every consumer pays for the long tail); a global registry (state shared across React roots and requests); loading grammars on demand (a block would paint plain, then recolour, and wait on the network).
 
+### DEC-5 — An over-long header title wraps
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+A title or language label too long for its header wraps, keeping its own spacing, and the header grows to fit it, so the whole file name and language stay readable and nothing sits under the header's controls. Rejected: an ellipsis (it cuts the language label and a file name's extension first).
+
 ## Open questions
 
 None.

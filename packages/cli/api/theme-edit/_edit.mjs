@@ -39,7 +39,6 @@ import {
   stateSpelling,
 } from './_normal.mjs';
 import {
-  AUTO_SPREAD,
   COMMON_STATES,
   CORNERS,
   CSS_PSEUDO_CLASSES,
@@ -57,6 +56,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -205,6 +205,7 @@ import {
   writeWhole,
   isGraySeed,
   seedOf,
+  seedsInEffect,
   isEditorTemp,
 } from './_palette.mjs';
 import {
@@ -2360,8 +2361,7 @@ function leftOutParts(ctx, slug, data, sub, s) {
       ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
     );
     /** @param {string} m */
-    const only = m =>
-      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
+    const only = m => (onlyMeans(m) === 'member' ? ' --only' : '');
     if (pills.length)
       out.push({
         note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
@@ -6742,6 +6742,24 @@ async function changeOnce(
             ? [s.thing, null]
             : null))
         : null;
+  // A color family whose fill the own source sets as a fixed color grows
+  // every shade from that color, not from the setting.
+  const sourceSeed =
+    sub === 'set' &&
+    PALETTE_DIALS.includes(s.thing) &&
+    !s.on &&
+    !s.mode &&
+    !s.when &&
+    !s.state
+      ? (seedsInEffect(cwd, slug, data).find(
+          f => f.dial === s.thing && f.source,
+        ) ?? null)
+      : null;
+  // Whether this change was compared with a readable last build.
+  const lastBuildCompared = !r.notes.some(
+    n =>
+      n.includes('could not be read') || n.includes('there was no last build'),
+  );
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
@@ -6849,15 +6867,12 @@ async function changeOnce(
     !ownOverToken &&
     !ownPartHits.length &&
     // With the last build unreadable or missing, nothing was compared.
-    !r.notes.some(
-      n =>
-        n.includes('could not be read') ||
-        n.includes('there was no last build'),
-    ) &&
+    lastBuildCompared &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
-    !ctx.unchecked
+    !ctx.unchecked &&
+    !sourceSeed
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
           // A mode's own setting under one the theme sets for every mode:
@@ -6885,13 +6900,14 @@ async function changeOnce(
           })(),
         ]
       : []),
-    // A card's content takes one radius from Core, whatever its corners.
+    // On a Core that gives a part's content one radius (its derived entry
+    // has no `corners`), that content takes the first corner for all four.
     ...(sub === 'set' &&
     s.source === 'property' &&
     s.thing === 'border-radius' &&
     s.on &&
     (ctx.derived?.[s.on] ?? []).some(
-      d => d.property === 'borderRadius' && d.vars?.length,
+      d => d.property === 'borderRadius' && d.vars?.length && !d.corners,
     ) &&
     /\s|\//.test(String(s.value).trim())
       ? [
@@ -7028,10 +7044,10 @@ async function changeOnce(
     );
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
-  const family = s.on && s.only ? familyOf(s.on) : null;
+  const family =
+    s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
-    AUTO_SPREAD.includes(family) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -7048,9 +7064,26 @@ async function changeOnce(
       (dialTokens.has(k) ||
         // A role font writes --font-family-<role>.
         (s.thing === 'font' && s.on && k === `--font-family-${s.on}`)) &&
-      !exactWins.some(x => x.thing === k),
+      !exactWins.some(x => x.thing === k) &&
+      k !== sourceSeed?.source,
   );
   const ownSet = new Set(ownSourceTokens(cwd, slug));
+  if (sourceSeed?.source) {
+    // Only a change compared with the last build can say nothing moved.
+    const unchangedOnScreen =
+      !ctx.unchecked &&
+      !r.unchanged &&
+      lastBuildCompared &&
+      !r.changed.length &&
+      !styled.length;
+    const shades =
+      s.thing === 'accent'
+        ? 'links, icons, the tints'
+        : 'text, icons, the tints';
+    notes.push(
+      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (${shades}) grows from its color, ${sourceSeed.seed}${sameColor(sourceSeed.seed, String(s.value)) ? '' : `, not from ${s.value}`}${unchangedOnScreen ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
+    );
+  }
   if (ownWins.length)
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; ${ownTakeOut(slug, s.thing, ownWins, data)}`,
@@ -7232,7 +7265,9 @@ async function changeOnce(
     );
   }
   if (s.thing === 'accent' && sub === 'set') {
-    notes.push(...infoClashNotes(data, base, slug, String(s.value)));
+    notes.push(
+      ...infoClashNotes(data, base, slug, sourceSeed?.seed ?? String(s.value)),
+    );
   }
   if (s.thing === 'vibrancy') {
     notes.push(
@@ -7333,7 +7368,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: r.changed,

@@ -41,8 +41,9 @@ import {readDocAsData} from '../../foundation/discovery/docs-discovery.mjs';
 export async function gatherDocs(cwd) {
   /** @type {Candidate[]} */
   const candidates = [];
-  // Experimental docs (spec:AST-017 FR27) are never search results: they are
-  // read on their own routes, so search answers as it would without them.
+  // Experimental docs (spec:AST-017 FR27) are read on their own routes, so
+  // search answers as it would without them; the CLI's own guides that set
+  // `searchable: true` are FR27's named exception, one entry each.
   const hidden = new Set(
     (await loadAuthoringSelfDocs()).loaded
       .filter(({doc}) => isExperimentalDoc(doc))
@@ -125,7 +126,9 @@ export async function gatherDocs(cwd) {
   for (const node of tree.nodes.values()) {
     // A flat topic is indexed above, as a topic.
     if (node.ref?.flatTopic) continue;
-    if (isExperimentalNode(tree, node)) continue;
+    const experimental = isExperimentalNode(tree, node);
+    // An experimental guide may still answer: read its doc to see.
+    if (experimental && node.kind !== 'generic') continue;
     // A tree hit names where it lives: its ancestors' titles, then its own.
     const path = [...tree.ancestors(node).map(a => a.title), node.title];
     if (node.kind === 'generic') {
@@ -143,17 +146,21 @@ export async function gatherDocs(cwd) {
       } catch {
         // As above: the owning commands report it.
       }
+      if (experimental && !isSearchableGuide(node, doc)) continue;
+      const found = topicCandidates(
+        node.route,
+        doc,
+        node.title,
+        node.summary,
+        path.join(' › '),
+        node.parent == null ? undefined : `astryx docs ${node.parent}`,
+        entry.package,
+        sectionPackage,
+      );
+      // A searchable experimental guide answers as one short entry, its
+      // topic, so its sections' text does not move other entries' ranks.
       candidates.push(
-        ...topicCandidates(
-          node.route,
-          doc,
-          node.title,
-          node.summary,
-          path.join(' › '),
-          node.parent == null ? undefined : `astryx docs ${node.parent}`,
-          entry.package,
-          sectionPackage,
-        ),
+        ...(experimental ? [{...found[0], _experimentalGuide: true}] : found),
       );
       continue;
     }
@@ -219,6 +226,22 @@ async function experimentalSectionKeys(extensions) {
     keys.push(...doc.sections.map(sectionKey));
   }
   return keys;
+}
+
+/**
+ * Is this experimental guide one that search returns (spec:AST-017 FR27): a
+ * CLI guide whose own doc sets `searchable: true` beside
+ * `stability: 'experimental'`? Another package's doc that sets it is still
+ * left out: FR27 governs the CLI's own experimental surfaces.
+ * @param {any} node a generic docs tree node
+ * @param {any} doc its lowered doc
+ */
+function isSearchableGuide(node, doc) {
+  return (
+    node.provider === '@astryxdesign/cli' &&
+    doc?.searchable === true &&
+    isExperimentalDoc(doc)
+  );
 }
 
 /**

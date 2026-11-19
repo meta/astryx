@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'paddingPerSide',
+  group: 'padding',
   description: 'Set the space inside an item one side at a time.',
   words: ['padding per side', 'individual padding'],
 };
