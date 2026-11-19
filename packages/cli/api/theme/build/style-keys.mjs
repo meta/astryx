@@ -497,8 +497,8 @@ export function partCustomPropertyProblem(name) {
  * The style keys a map of values to blocks stands for, as a part-level
  * `variants` map writes them inside a style block (`variant: {secondary:
  * {…}}`), or null when the value is not one: a named key that is no pseudo
- * key or at-rule, holding named blocks, none a pseudo key or at-rule, that
- * each hold a block. Core writes it as a
+ * key, at-rule or `selectors` block, holding blocks named by plain value
+ * words (no selector), that each hold a block. Core writes it as a
  * declaration the browser drops; a variant is a style key of its own here
  * (`'variant:secondary'`).
  * @param {string} key
@@ -506,11 +506,21 @@ export function partCustomPropertyProblem(name) {
  * @returns {string[] | null}
  */
 export function variantMapKeys(key, value) {
-  if (key === '' || /^[:@]/.test(key) || !isBlock(value)) return null;
+  // (A `selectors` block holds selectors, never values: `'&:hover': {…}`
+  // is the part's own hover, written as it is.)
+  if (
+    key === '' ||
+    key === 'selectors' ||
+    /^[:@&]/.test(key) ||
+    !isBlock(value)
+  )
+    return null;
   const entries = Object.entries(value);
+  // A value is one plain word (`secondary`, `sm`): a key with a selector's
+  // marks in it (`&:hover`, `[data-x]`, `> span`) is no value.
   if (
     entries.length === 0 ||
-    entries.some(([val]) => val === '' || /^[:@]/.test(val)) ||
+    entries.some(([val]) => !/^[\w-]+$/.test(val)) ||
     !entries.every(([, v]) => isBlock(v) && Object.keys(v).length > 0)
   )
     return null;
