@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {conditionalExportFile} from '../discovery/package-exports.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /** Packages every Astryx package runs with, besides its own scope. */
 const RUNTIME = ['react', 'react-dom', '@stylexjs/stylex'];
@@ -98,23 +99,21 @@ const IMPORT_CONDITIONS = ['import', 'node'];
 export function servedImportTarget(spec, servedDir) {
   const name = packageOf(spec);
   const subpath = spec === name ? '.' : `.${spec.slice(name.length)}`;
-  for (let dir = path.resolve(servedDir); ; dir = path.dirname(dir)) {
-    const packageDir = path.join(dir, 'node_modules', name);
-    /** @type {any} */
-    let pkg;
-    try {
-      pkg = JSON.parse(
-        fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
-      );
-    } catch {
-      if (path.dirname(dir) === dir) return null;
-      continue;
-    }
-    return conditionalExportFile(
-      pkg?.exports,
-      packageDir,
-      subpath,
-      IMPORT_CONDITIONS,
+  const found = findNodeModulesPackage(servedDir, name);
+  if (!found) return null;
+  /** @type {any} */
+  let pkg;
+  try {
+    pkg = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
     );
+  } catch {
+    return null;
   }
+  return conditionalExportFile(
+    pkg?.exports,
+    found.packageDir,
+    subpath,
+    IMPORT_CONDITIONS,
+  );
 }
