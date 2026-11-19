@@ -146,9 +146,10 @@ export function surfaceAnchorRect(
  * surface never covers it. It goes below when `surfaceHeight` fits between
  * the source, `gap` and the bottom gutter, else above when it fits under the
  * top gutter. Else it goes beside the source, at the inline end first, where
- * `surfaceWidth` fits there; it is capped to the room between the block
- * gutters. Else it takes the side with more room, capped to that room, and
- * scrolls the rest. Above or below, it centers on the source, or sits flush
+ * `surfaceWidth` fits there, aligned with the source's top or bottom so that
+ * it stays inside the block gutters, capped when neither holds it whole.
+ * Else it takes the side with more room, capped to that room, and scrolls
+ * the rest. Above or below, it centers on the source, or sits flush
  * with the source's edge when the source reaches the gutter at a side of the
  * viewport.
  */
@@ -190,19 +191,39 @@ export function surfacePlacement(
   const roomLeft = lifted.x - gap - gutter.inline;
   const roomEnd = isRtl ? roomLeft : roomRight;
   const roomStart = isRtl ? roomRight : roomLeft;
-  const blockRoom = viewport.height - gutter.top - gutter.bottom;
   // A cap is a pixel under its room, so rounding never puts the surface past
   // the gutter.
   const cap = (room: number) => Math.max(0, room - 1);
-  const beside = (side: 'start' | 'end'): SurfacePlacement =>
-    surfaceHeight > blockRoom
-      ? {side, alignment: 'start', maxBlockSize: cap(blockRoom)}
-      : {side, alignment: 'start'};
-  if (surfaceWidth <= roomEnd) {
-    return beside('end');
+  // Beside the source, the surface aligns with the source's top and runs
+  // down, or with its bottom and runs up: the one that holds it whole inside
+  // the gutters, else the one with more room, capped. An edge past a gutter
+  // aligns neither.
+  const fromTop = lifted.y >= gutter.top - epsilon ? bottom - lifted.y : -1;
+  const fromBottom =
+    lifted.y + lifted.height <= bottom + epsilon
+      ? lifted.y + lifted.height - gutter.top
+      : -1;
+  const beside = (side: 'start' | 'end'): SurfacePlacement | null => {
+    if (surfaceHeight <= fromTop) {
+      return {side, alignment: 'start'};
+    }
+    if (surfaceHeight <= fromBottom) {
+      return {side, alignment: 'end'};
+    }
+    if (fromTop < 0 && fromBottom < 0) {
+      return null;
+    }
+    return fromTop >= fromBottom
+      ? {side, alignment: 'start', maxBlockSize: cap(fromTop)}
+      : {side, alignment: 'end', maxBlockSize: cap(fromBottom)};
+  };
+  const besideEnd = surfaceWidth <= roomEnd ? beside('end') : null;
+  if (besideEnd != null) {
+    return besideEnd;
   }
-  if (surfaceWidth <= roomStart) {
-    return beside('start');
+  const besideStart = surfaceWidth <= roomStart ? beside('start') : null;
+  if (besideStart != null) {
+    return besideStart;
   }
   return roomBelow >= roomAbove
     ? {side: 'below', alignment, maxBlockSize: cap(roomBelow)}
