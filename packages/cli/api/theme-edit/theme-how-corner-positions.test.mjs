@@ -440,4 +440,32 @@ describe('the corners an ask names', () => {
         'end-end',
       ]);
   }, 240_000);
+
+  it('reads "round off" as rounding, a length before a look as that look\'s, and a part by any of its names', async ctx => {
+    if (needBases(ctx)) return;
+    expect(await writes('round off the top corners of tabs 6px')).toEqual([
+      'border-start-start-radius 6px --on tab',
+      'border-start-end-radius 6px --on tab',
+    ]);
+    const all = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'k'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set k /, ''));
+    // (The 2px is the border's, never the corners' radius.)
+    const border = await all('cards rounded on top and bottom 2px border');
+    expect(border.some(c => /radius 2px/.test(c))).toBe(false);
+    expect(border.some(c => /^border(?:-bottom)? '2px/.test(c))).toBe(true);
+    // ("right-click menus" is the context menu: "right" names no corner.)
+    expect(
+      cornersNamed('square corners on right-click menus', 'context-menu', [
+        /\bright[- ]click menus?\b/,
+      ]),
+    ).toBeNull();
+    expect(await all('square corners on right-click menus')).toEqual([
+      'corners square --on context-menu',
+    ]);
+  }, 240_000);
 });

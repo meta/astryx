@@ -1026,7 +1026,7 @@ function ownWords(k) {
  * never that side, and a new look after "side" ("and right side padding
  * 12px") is its own ask.
  */
-const SIDE_TAIL = String.raw`(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d)`;
+const SIDE_TAIL = String.raw`(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b))`;
 const JOINED_SIDE_ENDS = String.raw`(?=\s*(?:${SIDE_TAIL}|\b(?:sides?|edges?|ones?)\b\s*${SIDE_TAIL}))`;
 
 /**
@@ -1040,13 +1040,21 @@ const JOINED_SIDE_ENDS = String.raw`(?=\s*(?:${SIDE_TAIL}|\b(?:sides?|edges?|one
  * Null when it names none.
  * @param {string} text
  * @param {string | null} [part] the part (or group) the clause is about
+ * @param {RegExp[]} [names] the part's other names the clause can say
  * @returns {{corners: string[], only: boolean, except: boolean} | null}
  */
-export function cornersNamed(text, part = null) {
+export function cornersNamed(text, part = null, names = []) {
   let t = ` ${text.toLowerCase()} `;
   if (part)
     t = t.replace(
       new RegExp(`\\b${part.split('-').join('[\\s-]')}(?:e?s)?\\b`, 'g'),
+      ' ',
+    );
+  // (Every other name the clause can say the part by, "right-click menus"
+  // for the context menu, names no corner either.)
+  for (const re of names)
+    t = t.replace(
+      new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`),
       ' ',
     );
   t = t.replace(/\bupper\b/g, 'top').replace(/\blower\b/g, 'bottom');
@@ -3655,7 +3663,7 @@ function clausesOf(q, partWords, words = null) {
         // A font stack ("Georgia, serif") is one value, not two asks.
         // Two sides of a corner ask joined by "and" ("rounded on top and
         // bottom") are one ask, as a corner except is.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d)|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b))|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b)))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
@@ -5780,6 +5788,9 @@ export function draftAnswer(ctx, env, question) {
   /** A part's rest color read, with the project's tokens. @param {Array<{token: string, when: string[]}>} reads @param {string} [when] */
   const restRead = (reads, when) => restColorRead(reads, when, TOKENS);
   const lex = partLexicon(ctx);
+  /** The words a clause can say a part by, as the part reader matches them. @param {string} on */
+  const partNames = on =>
+    lex.parts.filter(([, x]) => x?.on === on).map(([re]) => re);
   // "make the blue a bit darker": a color named as the theme's own, with a
   // way, is the theme color whose hue it is (the accent when the accent is
   // blue), never a part.
@@ -16548,7 +16559,7 @@ export function draftAnswer(ctx, env, question) {
       const rung = dialRung(c.text);
       const someCorners =
         rung?.dial === 'corners' && c.parts[0]
-          ? cornersNamed(c.text, c.parts[0].on)
+          ? cornersNamed(c.text, c.parts[0].on, partNames(c.parts[0].on))
           : null;
       const r =
         someCorners && (someCorners.except || someCorners.corners.length < 4)
@@ -21706,7 +21717,7 @@ export function draftAnswer(ctx, env, question) {
         // and squares the others. When every corner is settled, one radius
         // of four is written.)
         {
-          const named = on ? cornersNamed(c.text, on) : null;
+          const named = on ? cornersNamed(c.text, on, partNames(on)) : null;
           // (A corner ask said in the negative, "no rounding on the bottom
           // corners", squares those corners: never rounder.)
           // (Square said as a word, in the negative, or as taking the
@@ -21714,7 +21725,7 @@ export function draftAnswer(ctx, env, question) {
           // "unrounded".)
           const square =
             /\b(square[ds]?|sharp|squared off|unround\w*)\b/.test(c.text) ||
-            /\b(?:take|takes|taking|took)\s+(?:the\s+)?round\w*\s+off\b|\bround\w*\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?round\w*/.test(
+            /\b(?:take|takes|taking|took|strip|strips)\s+(?:the\s+)?rounding\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?rounding\b/.test(
               c.text,
             ) ||
             Boolean(c.neg);
