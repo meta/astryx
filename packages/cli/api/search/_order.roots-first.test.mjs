@@ -167,6 +167,95 @@ describe('the order of matches', () => {
   });
 });
 
+describe("a root and its part's tie", () => {
+  /** @type {Candidate[]} */
+  const tied = [
+    all[0],
+    all[1],
+    {
+      domain: 'component',
+      name: 'Fizz',
+      keywords: ['spark'],
+      description: 'A fizz spark.',
+    },
+    {domain: 'component', name: 'Lamp', description: 'A lamp with fizz.'},
+    {domain: 'component', name: 'Ember', description: 'An ember fizz.'},
+    {
+      domain: 'template',
+      name: 'ZorbFizzBoard',
+      keywords: ['zorb', 'fizz', 'board'],
+      description: 'A board of zorb fizz.',
+      _kind: 'page',
+      prose: [],
+    },
+    {
+      domain: 'template',
+      name: 'ZorbCardBasic',
+      keywords: ['sample'],
+      description: 'A sample.',
+      _kind: 'block',
+      prose: [],
+    },
+    {
+      domain: 'template',
+      name: 'ZorbListTall',
+      keywords: ['sample'],
+      description: 'A sample.',
+      _kind: 'block',
+      prose: [],
+    },
+  ];
+  /** @param {string} query */
+  const orderedIn = query => {
+    const lexical = rankLexical(
+      query,
+      {limit: Number.MAX_SAFE_INTEGER},
+      searchView({
+        all: tied,
+        components: tied.filter(c => c.domain === 'component'),
+        searchedComponents: false,
+      }),
+    );
+    return {
+      lexical: lexical.data.results.map(r => [r.name, r.score]),
+      order: orderMatches(
+        entryTable(tied, {}),
+        tied.map((_, i) => i),
+        lexical,
+        query,
+        10,
+        new Map([['component:Zorb', 'ZorbList']]),
+      ).data.results.map(r => r.name),
+    };
+  };
+
+  it('lets nothing pass the part when the part ties with another match', () => {
+    const {lexical, order} = orderedIn('zorb fizz');
+    // Zorb ties with Fizz, ahead of it in name order.
+    expect(lexical.slice(1, 3)).toEqual([
+      ['Fizz', 108],
+      ['Zorb', 108],
+    ]);
+    expect(order.slice(0, 4)).toEqual([
+      'ZorbFizzBoard',
+      'ZorbList',
+      'Zorb',
+      'Fizz',
+    ]);
+  });
+
+  it("orders the tie below by the root's parts when the root leads", () => {
+    const {lexical, order} = orderedIn('zorb sample');
+    expect(lexical[0][0]).toBe('Zorb');
+    expect(order.slice(0, 4)).toEqual([
+      'ZorbList',
+      'Zorb',
+      'ZorbListTall',
+      'ZorbCardBasic',
+    ]);
+  });
+});
+
 /**
  * @param {[string, number][]} rows name and run
  */

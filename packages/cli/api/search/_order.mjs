@@ -15,12 +15,12 @@
  * query of one or two words, the matches on every word keep their lexical
  * order; and an integration's matches that scored the same keep theirs.
  * Below the first result, a block of one domain is ordered by fit (tiesByFit): a part of the first result, then rarer matched
- * words, then the lexical order. Before that, a family's root that the
- * lexical ranker marks as leading a part of its own family (rootLeadsOf) joins
- * the part's run and leads the part there (rootsFirst).
- * Then, among matches tied with the first result on score and on the query
- * words they matched, the one whose own name holds more query words leads
- * (tieByOwnName).
+ * words, then the lexical order. Before that, among matches tied with the
+ * first result on score and on the query words they matched, the one whose
+ * own name holds more query words leads (tieByOwnName). Last, a family's root
+ * that the lexical ranker marks as leading a part of its own family
+ * (rootLeadsOf) joins the part's run and moves just ahead of the part
+ * (rootsFirst), after the part's tie is ordered as one block.
  */
 
 import {entryOf} from './_entries.mjs';
@@ -138,13 +138,21 @@ export function orderMatches(table, order, lexical, query, limit, families) {
     ranked = keepLexical(ranked, it => (it.res.score ?? 0) >= FULL_COVERAGE);
   }
   ranked = integrationTies(ranked);
-  if (roots) ranked = rootsFirst(ranked, roots);
   if (ranked.length > 1 && !named(ranked[0])) {
     ranked = tieByOwnName(ranked, query, blockOf, families);
   }
   // Each whole tie is ordered by fit before the limit, so every limit shows
-  // the top of one answer.
-  const shown = tiesByFit(ranked, table, blockOf).slice(0, limit);
+  // the top of one answer. A root moves to its part only after that: placed
+  // first, it would split the part's tie, and the fit order would then miss
+  // the part. The fit order reads the parts of the result that leads once
+  // the roots move: a part's root, when the part comes first.
+  const head = ranked[0];
+  const headRoot = head && roots?.get(head.res);
+  const lead =
+    ranked.find(it => it.res === headRoot && it.band === head.band) ?? head;
+  ranked = tiesByFit(ranked, table, blockOf, lead);
+  if (roots) ranked = rootsFirst(ranked, roots);
+  const shown = ranked.slice(0, limit);
   const response = {
     ...lexical,
     data: {...lexical.data, results: shown.map(it => it.res)},
@@ -170,11 +178,13 @@ const PARTS_FIRST = 2;
  * @param {Item[]} ranked
  * @param {EntryTable} table
  * @param {(item: Item) => string} blockOf
+ * @param {Item} [lead] the result the answer leads with, when that is not
+ *   `ranked[0]`: a root that rootsFirst puts ahead of its part
  * @returns {Item[]}
  */
-function tiesByFit(ranked, table, blockOf) {
+function tiesByFit(ranked, table, blockOf, lead = ranked[0]) {
   if (ranked.length < 3) return ranked;
-  const first = nameWords(String(ranked[0].res.name ?? '')).map(fold);
+  const first = nameWords(String(lead.res.name ?? '')).map(fold);
   const {idf, rarest} = table.fields.desc;
   /** @param {Item} it */
   const related = it => {
