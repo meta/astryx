@@ -37,6 +37,7 @@ import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
+import {ReplacementAliases} from './replacement-aliases.mjs';
 import {
   sectionKey,
   sectionKeyErrors,
@@ -963,8 +964,8 @@ export class DocsCatalog {
   #contributions = null;
   /** @type {Promise<LinkableContributions> | null} */
   #contributionsLoaded = null;
-  /** @type {Map<string, string>} old topic name → the name that replaced it */
-  #aliases = new Map();
+  /** old topic names, each pointing at the topic that replaced it */
+  #aliases = new ReplacementAliases(name => name.toLowerCase());
   /** @type {Array<{namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>} */
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
@@ -1185,11 +1186,7 @@ export class DocsCatalog {
         extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
-        this.#aliases.set(replacedKey, replacementKey);
-        // A topic renamed twice keeps every name it has ever answered to.
-        for (const [from, to] of this.#aliases) {
-          if (to === replacedKey) this.#aliases.set(from, replacementKey);
-        }
+        this.#aliases.record(replacedKey, replacementKey);
       }
       return warning;
     }
@@ -1225,10 +1222,7 @@ export class DocsCatalog {
    * @returns {string[]}
    */
   aliasesOf(entry) {
-    const key = entry.name.toLowerCase();
-    return [...this.#aliases]
-      .filter(([, to]) => to === key)
-      .map(([from]) => from);
+    return this.#aliases.aliasesOf(entry.name);
   }
 
   /**
@@ -1239,17 +1233,8 @@ export class DocsCatalog {
    */
   resolve(name) {
     if (typeof name !== 'string') return undefined;
-    let key = name.toLowerCase();
-    // An alias chain is at most as long as the number of replacements, and a
-    // cycle can only come from a bug here; bound the walk either way.
-    for (let hops = 0; hops <= this.#aliases.size; hops++) {
-      const entry = this.#topics.get(key);
-      if (entry) return entry;
-      const next = this.#aliases.get(key);
-      if (next == null) return undefined;
-      key = next;
-    }
-    return undefined;
+    const key = this.#aliases.resolve(name, each => this.#topics.has(each));
+    return key == null ? undefined : this.#topics.get(key);
   }
 
   /** @returns {string[]} every topic name, in read order */

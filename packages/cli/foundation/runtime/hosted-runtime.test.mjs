@@ -393,7 +393,7 @@ export default function Page() {
 `,
     );
     const run = host({
-      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      argv: ['--json', 'experimental', 'export', 'page.jsx'],
       cwd,
     });
     expect(run.status).toBe(0);
@@ -464,7 +464,7 @@ export default function Page() {
   it('renders in a React app outside a project with the Core, React and React DOM of the set', () => {
     const root = reactFolder({react: '*', 'react-dom': '*'});
     const run = host({
-      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      argv: ['--json', 'experimental', 'export', 'page.jsx'],
       cwd: root,
     });
     expect(run.status).toBe(0);
@@ -483,7 +483,7 @@ export default function Page() {
       'react-dom': '*',
     });
     const run = host({
-      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      argv: ['--json', 'experimental', 'export', 'page.jsx'],
       cwd: root,
     });
     expect(JSON.parse(run.stdout).code).toBe('ERR_RENDER_MISSING_DEPENDENCY');

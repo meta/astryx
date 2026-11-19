@@ -24,17 +24,14 @@
  * `undefined` at runtime.
  */
 
-import type {DefinedTheme} from '../theme/defineTheme';
-import {getRegisteredTheme} from '../theme/themeRegistry';
 import {CheckboxIndicator} from './CheckboxIndicator';
 import {CheckIndicator} from './CheckIndicator';
 import {RadioIndicator} from './RadioIndicator';
-import type {
-  IndicatorComponent,
-  IndicatorMap,
-  IndicatorName,
-  IndicatorRegistry,
-} from './types';
+import {
+  getThemeIndicators,
+  type IndicatorRegistrySource,
+} from './themeIndicators';
+import type {IndicatorComponent, IndicatorMap, IndicatorName} from './types';
 
 /**
  * The indicator names Astryx ships a default for.
@@ -52,7 +49,7 @@ export type CoreIndicatorName = 'check' | 'checkbox' | 'radio';
  *
  * Typed per family (rather than as one widened component type) so a default
  * declared here has to accept the states its family passes — the same rule
- * {@link IndicatorRegistry} holds replacements to.
+ * `IndicatorRegistry` holds replacements to.
  */
 export const defaultIndicators: {
   [N in CoreIndicatorName]: IndicatorComponent<IndicatorMap[N]>;
@@ -62,20 +59,7 @@ export const defaultIndicators: {
   radio: RadioIndicator,
 };
 
-export type IndicatorRegistrySource = DefinedTheme | string | null | undefined;
-
-function getTheme(source: IndicatorRegistrySource): DefinedTheme | null {
-  if (source == null) {
-    return null;
-  }
-  return typeof source === 'string' ? getRegisteredTheme(source) : source;
-}
-
-function getThemeIndicators(
-  source: IndicatorRegistrySource,
-): IndicatorRegistry | null {
-  return getTheme(source)?.indicators ?? null;
-}
+export type {IndicatorRegistrySource};
 
 /**
  * Resolve an indicator component by name, preferring the theme's override and
