@@ -11,7 +11,7 @@
  *   generated copy
  */
 
-import {hexToOklch, luminance, normalizeColor} from './color';
+import {contrastRatio, hexToOklch, normalizeColor} from './color';
 import {
   PALETTE_BLACK,
   PALETTE_WHITE,
@@ -454,8 +454,7 @@ export function ratio(
   a: ReadonlyArray<number>,
   b: ReadonlyArray<number>,
 ): number {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 
 /** A color drawn at `alpha` over `under`, as the opaque color the eye sees. */

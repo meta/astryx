@@ -4433,7 +4433,7 @@ export function partsOf(ctx, s) {
         return Array.isArray(vals) && vals.map(String).includes(value);
       });
   };
-  if (fam && AUTO_SPREAD.includes(fam) && !s.only)
+  if (fam && onlyMeans(s.on) === 'member' && !s.only)
     return spread(
       FAMILIES[fam]
         .filter(has)

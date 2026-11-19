@@ -12,7 +12,7 @@
  *   settings. `themePalette()` runs it, and the CLI theme editor runs its
  *   generated copy
  */
-import {hexToOklch, luminance, normalizeColor} from './color.mjs';
+import {contrastRatio, hexToOklch, normalizeColor} from './color.mjs';
 import {
   PALETTE_BLACK,
   PALETTE_WHITE,
@@ -517,8 +517,7 @@ export const hex =
  * @returns {number}
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 /**
  * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
