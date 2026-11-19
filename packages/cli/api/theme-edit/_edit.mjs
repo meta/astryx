@@ -6624,31 +6624,35 @@ async function changeOnce(
         )
       : [];
   data.settings = data.settings.filter(x => !covered.includes(x));
-  // A shorthand set after its longhands on the same part replaces them.
-  const longhands =
-    sub === 'set' && s.source === 'property'
+  // A shorthand set after its longhands on the same part replaces them
+  // (each side a box shorthand is written as replaces its own).
+  const written = [s, ...sidesBeside];
+  /** @param {import('./_settings.mjs').Setting} w */
+  const longhandsOf = w =>
+    sub === 'set' && w.source === 'property'
       ? data.settings.filter(
           x =>
-            x !== s &&
+            !written.includes(x) &&
             x.source === 'property' &&
             // On the same part, or on a member of the group it is set on:
             // the later setting wins, whichever way Core writes it.
-            (x.on === s.on ||
-              (s.on != null &&
-                (groupsOf(ctx)[s.on] ?? []).includes(
+            (x.on === w.on ||
+              (w.on != null &&
+                (groupsOf(ctx)[w.on] ?? []).includes(
                   /** @type {string} */ (x.on),
                 ))) &&
-            x.when === s.when &&
-            x.state === s.state &&
+            x.when === w.when &&
+            x.state === w.state &&
             // A shorthand for one mode replaces longhands of that mode only:
             // a longhand set for both modes still holds the other mode.
-            (!s.mode || x.mode === s.mode) &&
+            (!w.mode || x.mode === w.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
-            (coversProperty(s.thing, x.thing) ||
-              coversProperty(logicalSide(s.thing), logicalSide(x.thing))),
+            (coversProperty(w.thing, x.thing) ||
+              coversProperty(logicalSide(w.thing), logicalSide(x.thing))),
         )
       : [];
+  const longhands = [...new Set(written.flatMap(longhandsOf))];
   // They go, as the note says: Core writes each side to its own variable,
   // where a later shorthand would not win over them (undo brings them back).
   data.settings = data.settings.filter(x => !longhands.includes(x));
@@ -7094,7 +7098,7 @@ async function changeOnce(
   );
   /** @type {string[]} */
   const notes = [
-    ...(shorthand
+    ...(shorthand && !r.unchanged
       ? [
           `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${[s, ...sidesBeside].map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} takes back all ${sidesBeside.length + 1}`,
         ]
@@ -7269,14 +7273,14 @@ async function changeOnce(
       : []),
     ...(longhands.length
       ? [
-          `${s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+          `${shorthand ? `${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))}` : s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
         ]
       : []),
     ...(r.unchanged
       ? [
           drawnAlready
             ? `no change: ${s.on} already draws ${drawnAlready.map(x => x.replace(/^[^:]*:\s*/, '')).join(', ')} at rest, so ${describe(s)} was not written; to change it, set another value`
-            : `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+            : `no change: ${shorthand ? `${describe({...s, thing: shorthand.thing, value: String(shorthand.value)})} (${written.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} is already set, so nothing was built and no undo step was added`,
         ]
       : []),
     // (A plain part rule whose value matches what the part draws today

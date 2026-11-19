@@ -111,4 +111,47 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'replaces a side set before it, as a plain side set does',
+    async () => {
+      await themeEditSet('t', 'padding-left', '9px', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      const notes = (await set('5px 0')).join('\n');
+      expect(notes).toContain(
+        "padding '5px 0' comes after padding-left on dropdown-menu, so it replaces them there",
+      );
+      expect(saved()).toEqual(['padding-block 5px', 'padding-inline 0']);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual(['padding-left 9px']);
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
+
+  it(
+    'says nothing of an undo when set again with no change',
+    async () => {
+      await set('5px 0');
+      const notes = (await set('5px 0')).join('\n');
+      expect(notes).not.toContain('takes back all');
+      expect(notes).toContain(
+        'no change: padding = 5px 0 on dropdown-menu (padding-block 5px, padding-inline 0) is already set',
+      );
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
+
+  it(
+    "lets each side's own check read its value",
+    async () => {
+      await set('5px 10%');
+      expect(saved()).toEqual(['padding-block 5px', 'padding-inline 10%']);
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
 });

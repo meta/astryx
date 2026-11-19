@@ -604,7 +604,7 @@ function changeBlocks(r) {
     unchanged && d.action === 'set'
       ? drawnAlready
         ? `[no change] ${d.theme}: ${describe(s)} already shows; nothing written`
-        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+        : `[ok] ${d.theme}: ${d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
         : `[ok] ${d.theme}: ${d.action === 'set' ? (d.asSides ? `${describe({...s, thing: d.asSides.thing, value: d.asSides.value})} (${d.asSides.sides.map(x => `${x.thing} ${x.value}`).join(', ')})` : `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}`) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
