@@ -620,11 +620,14 @@ they are separately named.
   (`architecture:knowledge-contracts` DEC-19). A Lab component's swizzle sample
   lives in the Lab package (`packages/lab/swizzle-samples.mjs`, which the CLI's
   swizzle proof imports), so adding one is a Lab path. A Lab-only change always
-  runs the swizzle proof's sample guard (`samples.test.mjs`, which checks by
-  name that every swizzle target has a sample or a `needsNoSample` entry, with
-  no browser), reading the Lab package's samples, so a new Lab component
-  without a sample fails its own pull request. The full render of every sample
-  stays on release checks. A component in a family folder keeps the full
+  runs, with no browser, the swizzle proof's sample guard (`samples.test.mjs`,
+  which checks by name that every swizzle target has a sample or a
+  `needsNoSample` entry, reading the Lab package's samples), the shadcn
+  registry generator's test (`generate-shadcn-registry.test.mjs`), and
+  `pnpm lab:sync --check`, which names each Lab component's missing route-lock
+  entry or sample; so a new Lab component without them fails its own pull
+  request. `pnpm lab:sync` writes those entries and a sample stub. The full
+  render of every sample stays on release checks. A component in a family folder keeps the full
   suite.
   The classifier reads those files' diffs as data and never runs them; a diff
   it cannot read, or a line naming anything else, makes the change mixed. A
@@ -759,7 +762,8 @@ classifier and join contract are complete. New surfaces may add lanes only throu
 FR10. New coverage joins its current surface owner; visual regression remains in
 the shared Storybook PR owner.
 
-FR26's Lab record folder and Lab-package swizzle samples are not built yet:
+FR26's Lab record folder, Lab-package swizzle samples, `pnpm lab:sync` and the
+Lab lane's three checks are not built yet:
 today the classifier reads a Lab component's `docs/specs/components/<Name>/`
 folder, and a sample line in `packages/cli/test/swizzle-proof/samples.mjs`, as a
 mixed change, so such a pull request runs the full suite.
