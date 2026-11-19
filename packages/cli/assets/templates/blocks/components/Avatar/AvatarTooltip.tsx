@@ -13,7 +13,7 @@ export default function AvatarTooltip() {
         <Text type="supporting" color="secondary">
           Hover or focus to reveal each name
         </Text>
-        <Stack direction="horizontal" gap={4} vAlign="center">
+        <Stack direction="horizontal" gap={4} vAlign="center" wrap="wrap">
           <Avatar
             src="/template-assets/DATA-Ana-Thomas.png"
             name="Ana Thomas"

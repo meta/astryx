@@ -29,7 +29,7 @@ const items = [
 
 export default function AspectRatioShowcase() {
   return (
-    <HStack gap={4} vAlign="start">
+    <HStack gap={4} vAlign="start" wrap="wrap">
       {items.map(({ratio, label, src, alt}) => (
         <VStack key={label} gap={2} hAlign="center">
           <AspectRatio
