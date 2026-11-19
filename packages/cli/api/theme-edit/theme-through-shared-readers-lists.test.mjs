@@ -92,7 +92,9 @@ describe('lists and excepts', () => {
       ).toEqual([
         "set n background-color '#2563eb' --on button --when variant:primary",
         "set n background-color '#2563eb' --on button --when variant:ghost",
-        "set n background-color '#dc2626' --on card",
+        "set n background-color '#dc2626' --on card --when variant:default",
+        "set n background-color '#dc2626' --on card --when variant:transparent",
+        "set n background-color '#dc2626' --on card --when variant:muted",
       ]);
       const kept = await answer(
         'make primary and ghost buttons blue except disabled ones',

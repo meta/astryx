@@ -135,6 +135,7 @@ import {
   savedStateRead,
   propertySpelling,
   modesOf,
+  dialNumber,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -1130,6 +1131,56 @@ function modeColorBelongs(ctx, data, token, value) {
   return best[1] >= 4.5 && worst[1] < 3 ? best[0] : null;
 }
 
+/**
+ * Words that name a dial together with the value they ask for: the word
+ * typed as the setting, the values typed for it, and the dial and value
+ * they mean (`shadows none` is `surfaces flat`; `dark-mode true` is `mode
+ * dark-only`). Registered as documented readings, so the line it offers
+ * passes the repair gate.
+ * @type {Array<{words: RegExp, values: string[], dial: string, value: string}>}
+ */
+const DIAL_VALUE_WORDS = [
+  {
+    words: /^(?:shadows?|elevation)$/,
+    values: ['none', 'off', 'no', '0', 'false', 'flat'],
+    dial: 'surfaces',
+    value: 'flat',
+  },
+  {
+    words: /^(?:dark|darkmode)$/,
+    values: ['true', 'yes', 'on', '1'],
+    dial: 'mode',
+    value: 'dark-only',
+  },
+  {
+    words: /^(?:light|lightmode)$/,
+    values: ['true', 'yes', 'on', '1'],
+    dial: 'mode',
+    value: 'light-only',
+  },
+];
+documentReadings(
+  DIAL_VALUE_WORDS.flatMap(x =>
+    x.values.map(w => /** @type {[string, string]} */ ([w, x.value])),
+  ),
+);
+
+/**
+ * The dial and value a word typed as the setting means with its value, by
+ * DIAL_VALUE_WORDS, or null.
+ * @param {string} word the setting as typed, lowercase
+ * @param {string} value
+ * @returns {{dial: string, value: string} | null}
+ */
+function dialValueOf(word, value) {
+  const w = word.replace(/[-_ ]?(?:colou?r|mode)$/, '') || word;
+  const typed = value.trim().toLowerCase();
+  const hit = DIAL_VALUE_WORDS.find(
+    x => x.words.test(w) && x.values.includes(typed),
+  );
+  return hit ? {dial: hit.dial, value: hit.value} : null;
+}
+
 /** A number or a size, which is never a font family. */
 const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
 
@@ -1158,9 +1209,10 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
- * @param {Array<{name: string, near: string, rung?: string}>} [notes] filled with each family kept as
+ * @param {Array<{name: string, near: string, rung?: string, words?: string}>} [notes] filled with each family kept as
  *   typed that is near a font a system ships (a family the editor does not
- *   know may be a real one: Corben is no typo of Corbel)
+ *   know may be a real one: Corben is no typo of Corbel), or whose last
+ *   words name a weight or style (`words`: Bodoni Moda Bold)
  * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
 function fontListProblem(value, ctx, presets = false, notes = []) {
@@ -1562,6 +1614,26 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       ) &&
       !(!knownFamily(ctx, name) && knownStart)
     ) {
+      // A family the editor does not know whose last words are a weight or
+      // style (Bodoni Moda Bold) may be a real family (Archivo Black): kept
+      // as typed, and said, with the lines for the family and its weight.
+      if (!knownFamily(ctx, name)) {
+        const w = tail.find(t => t.kind === 'weight')?.value;
+        notes.push({
+          name,
+          near: base,
+          words: tail.map(t => t.text).join(' '),
+          ...(w != null
+            ? {
+                rung: Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+                  Math.abs(Number(b[1]) - w) < Math.abs(Number(a[1]) - w)
+                    ? b
+                    : a,
+                )[0],
+              }
+            : {}),
+        });
+      }
       kept.push(name);
       continue;
     }
@@ -3219,6 +3291,48 @@ export function dividerParts(C) {
  */
 function lineRefusal(ctx, slug, s, prop, v) {
   const parts = partsOf(ctx, s);
+  // A border's color or width on a part whose line an element inside it
+  // draws, and whose own element draws no border (a divider): there is no
+  // border for it to color or widen. The line's own token is what reaches
+  // it: its color, or the border width its thickness reads.
+  if (
+    /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-(color|width)$/.test(
+      prop,
+    ) &&
+    parts.length &&
+    parts.every(
+      t =>
+        (ctx.C.MAP[t]?.line ?? []).length &&
+        !Object.keys(ctx.C.MAP[t]?.own ?? {}).some(
+          k =>
+            /^border(?:-[a-z-]+)?(?:-style)?$/.test(k) &&
+            !/radius|color|width/.test(k),
+        ),
+    )
+  ) {
+    const part = parts[0];
+    const lineProps = ctx.C.MAP[part]?.line ?? [];
+    const width = prop.endsWith('-width');
+    const toks = [
+      ...new Set(
+        lineProps.flatMap((/** @type {string} */ lp) =>
+          Object.keys(ctx.C.MAP[part]?.own?.[lp]?.tokens ?? {}),
+        ),
+      ),
+    ].filter(t => (width ? /^--border-width\b/.test(t) : /^--color-/.test(t)));
+    refuse(
+      E.ERR_THEME_NO_EFFECT,
+      `${part} draws no border: its line is drawn by an element inside it, so ${prop} on ${part} has no border to ${width ? 'widen' : 'color'}${toks.length ? `; the line reads ${toks.join(' and ')} for its ${width ? 'thickness' : 'color'}` : ''}.`,
+      {
+        run: toks.length
+          ? toks.map(
+              tok =>
+                `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode && !width ? ` --mode ${s.mode}` : ''}`,
+            )
+          : [`${HOW} ${part}`],
+      },
+    );
+  }
   const drawn = (/** @type {string} */ t) =>
     (ctx.C.MAP[t]?.line ?? []).includes(prop) ||
     (prop === 'background' &&
@@ -4286,18 +4400,62 @@ export function checkSetting(
       thing === 'font-family' ||
       thing.startsWith('--font-family'))
   ) {
-    /** @type {Array<{name: string, near: string, rung?: string}>} */
+    /** @type {Array<{name: string, near: string, rung?: string, words?: string}>} */
     const near = [];
     fontListProblem(value, ctx, thing === 'font', near);
     if (near.length)
       s.note = near
         .map(
           n =>
-            `"${n.name}" is kept as typed: the editor does not know that family, and a font a system ships is spelled near it; if that was meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}${n.rung && thing === 'font' ? ` and ${P} set ${slug} headings ${n.rung}` : ''}`,
+            `"${n.name}" is kept as typed: the editor does not know that family, and ${n.words ? `its last words (${n.words}) name a ${n.rung ? 'weight' : 'style'}` : 'a font a system ships is spelled near it'}; if ${n.words ? `${n.words} was` : 'that was'} meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}${n.rung && thing === 'font' ? ` and ${P} set ${slug} headings ${n.rung}` : ''}`,
         )
         .join('; ');
   }
   return s;
+}
+
+/**
+ * The part a value names beside the value (pasted from notes or typed as
+ * words): a label (`card: #eee`, `button = red`, `button:hover: red` with a
+ * state), `red on button`, or the part as the first or last word (`card
+ * 8px`, `button red`); the part as --on reads it (a plural is its part),
+ * with the value left and the state named. Null when no exact part or
+ * group is named.
+ * @param {any} ctx
+ * @param {string} text
+ * @returns {{on: string, value: string, state?: string} | null}
+ */
+function partInValue(ctx, text) {
+  /** The part a word names, or null. @param {string} w */
+  const partOf = w => {
+    const word = w.trim().toLowerCase().replace(/\s+/g, '-');
+    return (
+      [word, word.replace(/e?s$/, ''), word.replace(/s$/, '')].find(
+        x => x && (ctx.project.target.has(x) || FAMILIES[x]),
+      ) ?? null
+    );
+  };
+  const t = text.trim();
+  /** @type {Array<[string, string, string?]>} part words, value, state */
+  const readings = [];
+  const label =
+    /^([a-z][a-z -]*?)\s*(?::\s*([a-z][a-z-]*)\s*)?[:=]\s*(\S.*)$/i.exec(t);
+  if (label) readings.push([label[1], label[3], label[2]]);
+  const on = /^(\S.*?)\s+on\s+([a-z][a-z -]*)$/i.exec(t);
+  if (on) readings.push([on[2], on[1]]);
+  const words = t.split(/\s+/);
+  if (words.length > 1) {
+    readings.push([words[0], words.slice(1).join(' ')]);
+    readings.push([words[words.length - 1], words.slice(0, -1).join(' ')]);
+  }
+  for (const [part, value, state] of readings) {
+    const found = partOf(part);
+    if (!found || !value.trim()) continue;
+    const read = state ? stateSpelling(state) : undefined;
+    if (state && !STATE_WORDS.includes(/** @type {string} */ (read))) continue;
+    return {on: found, value: value.trim(), ...(read ? {state: read} : {})};
+  }
+  return null;
 }
 
 /**
@@ -4431,8 +4589,11 @@ function checkOne(
       refuse(E.ERR_MISSING_ARGUMENT, `--${k} was given no value.`, {
         run: [`${P} ${unset ? 'undo' : 'set'} --help`],
       });
-  // A value pasted over several lines is one value.
-  const v = normalValue(thing, value ?? '');
+  // A value pasted over several lines is one value; a dial's number typed
+  // with the dial's unit (`text-size 24px`) is that number.
+  const v = DIALS[thing]
+    ? dialNumber(thing, normalValue(thing, value ?? ''))
+    : normalValue(thing, value ?? '');
   // A var() that misspells a design token would read nothing.
   if (!unset) {
     const bad = unknownVarRef(v, TOKENS, thing, reads);
@@ -4948,19 +5109,33 @@ function checkOne(
         `"${s.state}" is not a state of ${s.on}: it names ${s.on} when it is not ${denied}, its rest look, which a setting with no --state gives.`,
         {run: [setLine(slug, thing, v, {...s, state: undefined}, unset)]},
       );
-    if (s.state && !statesHold(states, s.state))
+    if (s.state && !statesHold(states, s.state)) {
+      // A part drawn inside this one that has the state (a calendar's day
+      // is today; the calendar is not): that part's line, with the state.
+      const state = String(s.state);
+      const inner = meant
+        ? []
+        : [...ctx.project.target.keys()]
+            .filter(
+              k =>
+                k.startsWith(`${s.on}-`) &&
+                statesHold(partStates(ctx, k), state),
+            )
+            .slice(0, 3);
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
-        `"${s.state}" is not a state of ${s.on}. States: ${settableStates(ctx, slug, data, s.on).join(', ') || 'none'}.`,
+        `"${s.state}" is not a state of ${s.on}. States: ${settableStates(ctx, slug, data, s.on).join(', ') || 'none'}.${inner.length ? ` ${inner.join(', ')} ${inner.length > 1 ? 'have' : 'has'} it.` : ''}`,
         {
           ...(meant ? {didYouMean: [meant]} : {}),
           run: [
-            meant
-              ? setLine(slug, thing, v, {...s, state: meant}, unset)
-              : `${HOW} ${quoteCommandArgument(s.on)}`,
+            ...(meant
+              ? [setLine(slug, thing, v, {...s, state: meant}, unset)]
+              : inner.map(k => setLine(slug, thing, v, {...s, on: k}, unset))),
+            ...(meant ? [] : [`${HOW} ${quoteCommandArgument(s.on)}`]),
           ],
         },
       );
+    }
   }
   {
     // A fill or text color a part's own element never declares, which an
@@ -5629,12 +5804,26 @@ function checkOne(
       if (at >= 0 && stepped >= 0 && stepped < L.length) return L[stepped][0];
       // At the last rung that way, a step goes nowhere: refused as every
       // dial refuses it at its end, with the other way.
-      if (at >= 0)
+      if (at >= 0) {
+        // Past the last rung, an exact size still does it: the line for one
+        // step beyond this rung, as the dial writes sizes.
+        const beyond =
+          typeof L[at][1] === 'number'
+            ? Math.round(
+                /** @type {number} */ (L[at][1]) * (v === 'more' ? 1.15 : 0.87),
+              )
+            : null;
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${thing} is already at its ${v === 'more' ? 'largest' : 'smallest'} step, ${L[at][0]}${s.on ? ` on ${s.on}` : ''}, so "${v}" has nowhere to go.`,
-          {run: [setLine(slug, thing, v === 'more' ? 'less' : 'more', s)]},
+          `${thing} is already at its ${v === 'more' ? 'largest' : 'smallest'} step, ${L[at][0]}${s.on ? ` on ${s.on}` : ''}, so "${v}" has nowhere to go.${beyond ? ` An exact size goes past the rungs.` : ''}`,
+          {
+            run: [
+              setLine(slug, thing, v === 'more' ? 'less' : 'more', s),
+              ...(beyond ? [setLine(slug, thing, String(beyond), s)] : []),
+            ],
+          },
         );
+      }
       // A size between rungs steps to the next rung that way, never past it.
       const px =
         typeof cur === 'number'
@@ -6090,7 +6279,7 @@ function checkOne(
       )
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${v}".`,
+          `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${String(value ?? v).trim()}".`,
           (() => {
             // A rung in other letter case (Medium) or with px is that rung;
             // a CSS size keyword (x-large) is the size CSS gives it.
@@ -6123,7 +6312,9 @@ function checkOne(
                     Number(t) >= 10 &&
                     Number(t) <= 32
                       ? String(Number(t))
-                      : textSizePx(v);
+                      : // As typed, its unit kept (3px is the smallest size,
+                        // never a bare 3).
+                        textSizePx(String(value ?? v));
                   return {
                     run: [
                       size != null
@@ -6985,19 +7176,10 @@ function checkOne(
           // named.
           run: [
             ...(() => {
-              const label = /^\s*([a-z][a-z -]*?)\s*:\s*(\S.*)$/i.exec(
-                String(v ?? ''),
-              );
-              if (!label) return [];
-              const word = label[1].trim().toLowerCase().replace(/\s+/g, '-');
-              const on = [
-                word,
-                word.replace(/e?s$/, ''),
-                word.replace(/s$/, ''),
-              ].find(w => ctx.project.target.has(w) || FAMILIES[w]);
-              return on
+              const named = partInValue(ctx, String(v ?? ''));
+              return named
                 ? [
-                    `${P} set ${slug} ${prop} ${quoteCommandArgument(label[2].trim())} --on ${on}`,
+                    `${P} set ${slug} ${prop} ${quoteCommandArgument(named.value)} --on ${named.on}${named.state ? ` --state ${named.state}` : ''}`,
                   ]
                 : [];
             })(),
@@ -7643,21 +7825,9 @@ function checkOne(
   };
   const aliases = aliasesOf(lower);
   // A word that names a dial AND the value it asks for (`shadows none` is
-  // `surfaces flat`, `dark-mode true` is `mode dark-only`): that command.
-  const asDialValue = (() => {
-    const word = lower.replace(/[-_ ]?(?:colou?r|mode)$/, '') || lower;
-    const off = /^(none|off|no|0|false|flat)$/.test(
-      String(v).trim().toLowerCase(),
-    );
-    const on = /^(true|yes|on|1)$/.test(String(v).trim().toLowerCase());
-    if (/^(shadows?|elevation)$/.test(word) && off)
-      return {dial: 'surfaces', value: 'flat'};
-    if (/^(dark|darkmode)$/.test(word) && on)
-      return {dial: 'mode', value: 'dark-only'};
-    if (/^(light|lightmode)$/.test(word) && on)
-      return {dial: 'mode', value: 'light-only'};
-    return null;
-  })();
+  // `surfaces flat`, `dark-mode true` is `mode dark-only`): that command,
+  // from the one table of such words.
+  const asDialValue = dialValueOf(lower, String(v));
   if (!hint && !aliases.length && asDialValue && DIALS[asDialValue.dial])
     return refuse(
       E.ERR_THEME_UNKNOWN_THING,

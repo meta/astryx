@@ -646,13 +646,19 @@ describe('Selector', () => {
   });
 
   it.each([
-    ['below its anchor', 'marginBlockEnd'],
-    ['already flipped above its anchor', 'marginBlockStart'],
+    ['below its anchor', 'marginBlockEnd', null],
+    [
+      'already flipped above its anchor',
+      'marginBlockStart',
+      'self-block-start span-self-inline-end',
+    ],
   ])(
     "keeps the overlay out of the layer's viewport gutter, the layer %s",
-    async (_, gutterMargin) => {
+    async (_, gutterMargin, flippedArea) => {
       const restoreRects = mockSelectorRects();
-      // The layer keeps a 16 px gutter from the viewport's block end.
+      // The layer keeps a 16 px gutter from the viewport's block end. A flip
+      // moves it to the block-start margin and names the block-start side in
+      // the layer's position area.
       const realGetComputedStyle = window.getComputedStyle.bind(window);
       const styleSpy = vi
         .spyOn(window, 'getComputedStyle')
@@ -663,6 +669,13 @@ describe('Selector', () => {
             element.hasAttribute('popover')
           ) {
             Object.defineProperty(style, gutterMargin, {value: '16px'});
+            if (flippedArea != null) {
+              const read = style.getPropertyValue.bind(style);
+              Object.defineProperty(style, 'getPropertyValue', {
+                value: (name: string) =>
+                  name === 'position-area' ? flippedArea : read(name),
+              });
+            }
           }
           return style;
         });
@@ -862,6 +875,29 @@ describe('Selector', () => {
           spacingVars['--spacing-1'],
         );
       });
+    });
+
+    it('opens the selected-item overlay without a flush inside its commit', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const user = userEvent.setup();
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await screen.findByRole('listbox', {hidden: true});
+        // The list's resize report at registration runs inside the open's
+        // commit, where React cannot flush and warns.
+        expect(error.mock.calls.flat().join(' ')).not.toContain('flushSync');
+      } finally {
+        error.mockRestore();
+      }
     });
 
     it('stays flush in the default selected-item overlay', async () => {
@@ -2221,6 +2257,29 @@ describe('Selector', () => {
       expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
+    it('selects an option from a letter typed with AltGr (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          value="Kraków"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith('Łódź');
+    });
+
     it('puts the exact option first for a typed mark (INV17)', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -2346,6 +2405,27 @@ describe('Selector', () => {
       const search = screen.getByPlaceholderText('Search…');
       expect(search).toHaveValue('c');
       await waitFor(() => expect(search).toHaveFocus());
+    });
+
+    it('seeds a letter typed with AltGr on a closed hasSearch trigger (INV17)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          hasSearch
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(await screen.findByPlaceholderText('Search…')).toHaveValue('ł');
     });
 
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {

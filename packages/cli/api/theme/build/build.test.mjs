@@ -20,7 +20,6 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import nodeModule from 'node:module';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -37,6 +36,7 @@ import {
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 // `themeBuild` captures core's generator once at module load. Wrap the two
 // CSS-emitting exports in vi.fn (call-through by default) so the receipt tests
@@ -54,15 +54,13 @@ vi.mock('@astryxdesign/core/theme', async importActual => {
 
 vi.setConfig({testTimeout: 30000});
 
-// Node runs module hooks in the loading thread from 22.15. On an older Node
-// the CLI supports (its oldest is 22.13), a stylesheet that a base theme's
-// module imports from another folder fails the load, as a case below shows.
-const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
-
 let tmpDir;
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-'));
+  // The real path: macOS keeps the temp folder behind a link (/var is
+  // /private/var), and the files a theme imports are listed by real path.
+  tmpDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-')),
+  );
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
@@ -615,6 +613,88 @@ describe('themeBuild() — check mode', () => {
 
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
+  });
+
+  it('is up to date when another CLI release or command built the same outputs, and stale when the content or the Core differs', async () => {
+    const themeFile = path.join(tmpDir, 'release.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'release', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('release.mjs', {}, {cwd: tmpDir});
+    const outputs = ['release.css', 'release.js', 'release.d.ts'].map(name =>
+      path.join(tmpDir, name),
+    );
+    /** @param {RegExp} line @param {string} written */
+    const rewriteHeaders = (line, written) => {
+      for (const file of outputs) {
+        const before = fs.readFileSync(file, 'utf8');
+        const after = before.replace(line, written);
+        expect(after).not.toBe(before);
+        fs.writeFileSync(file, after);
+      }
+    };
+
+    // The header names the CLI release that built each output; a build with
+    // another release writes the same files apart from that line.
+    rewriteHeaders(
+      /CLI: @astryxdesign\/cli@\S+/,
+      'CLI: @astryxdesign/cli@0.0.1',
+    );
+    const otherCli = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCli?.data.upToDate).toBe(true);
+    expect(otherCli?.data.stale).toEqual([]);
+
+    // The built module names the command that built it; a tool that runs the
+    // CLI for its users writes its own command there.
+    const js = path.join(tmpDir, 'release.js');
+    const module = fs.readFileSync(js, 'utf8');
+    const byTool = module.replace(
+      /built by `[^`]*theme build`/,
+      'built by `acme astryx theme build`',
+    );
+    expect(byTool).not.toBe(module);
+    fs.writeFileSync(js, byTool);
+    const otherCommand = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCommand?.data.upToDate).toBe(true);
+
+    // Content drift still counts beside another release's header.
+    const css = path.join(tmpDir, 'release.css');
+    const built = fs.readFileSync(css, 'utf8');
+    fs.writeFileSync(css, built + '\n.injected{}\n');
+    const drifted = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(drifted?.data.stale).toEqual([
+      {path: 'release.css', reason: 'outdated'},
+    ]);
+    fs.writeFileSync(css, built);
+
+    rewriteHeaders(
+      /Core: @astryxdesign\/core@\S+/,
+      'Core: @astryxdesign/core@0.0.1',
+    );
+    const otherCore = await themeBuild(
+      'release.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+    expect(otherCore?.data.upToDate).toBe(false);
+    expect(otherCore?.data.stale.map(s => s.reason)).toEqual([
+      'outdated',
+      'outdated',
+      'outdated',
+    ]);
   });
 });
 
@@ -1317,7 +1397,9 @@ describe('themeBuild() — extends', () => {
 
         await expect(
           themeBuild('styled-child.mjs', {}, {cwd: extDir}),
-        ).rejects.toThrow(/Unknown file extension "\.css".*brand\.css/);
+        ).rejects.toThrow(
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later, or 23\.5 or later \(this is Node [\d.]+\)\. Nothing was written\./,
+        );
       },
     );
   });
@@ -1512,10 +1594,10 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(fs.existsSync(path.join(tmpDir, 'ocean.js'))).toBe(false);
   });
 
-  it('replaces a header-less output at its default path, as an output of a CLI before 0.6.7', async () => {
+  it('replaces a header-less output at its default path, as an output of a release that wrote no header', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'ocean.css'),
-      '/* Built by an older astryx theme build */\n[data-astryx-theme="ocean"] {}\n',
+      '@layer xds-theme {\n@scope ([data-xds-theme="ocean"]) to ([data-xds-theme]) {\n  :scope {}\n}\n}\n',
     );
     await expect(
       themeBuild('ocean.mjs', {}, {cwd: tmpDir}),
@@ -1538,7 +1620,7 @@ describe('themeBuild() — outputs it may replace', () => {
     }
     expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(error.message).toBe(
-      `${path.join('dist', 'o.css')} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another --out.`,
+      `${path.join('dist', 'o.css')} is a file this build did not write (it has no build header: your own file or another tool's), so the build does not replace it. Build to another place with --out, or move or rename ${path.join('dist', 'o.css')} and build again.`,
     );
     expect(error.suggestions).toEqual([
       {
@@ -1546,10 +1628,6 @@ describe('themeBuild() — outputs it may replace', () => {
           / theme build ocean\.mjs --out dist\/o-2\.css$/,
         ),
         reason: 'a path where no output of this build exists yet',
-      },
-      {
-        name: expect.stringMatching(/ theme build ocean\.mjs$/),
-        reason: 'write the outputs beside this source',
       },
     ]);
     expect(error.suggestions[0].name).not.toMatch(/\brm\b/);
@@ -2092,10 +2170,13 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
     }
     expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(error.message).not.toMatch(/[Dd]elete/);
-    const names = error.suggestions.map((/** @type {any} */ x) => x.name);
-    expect(names.join('\n')).toMatch(
-      / theme build other\.mjs --icons-specifier my-icons$/m,
-    );
+    // Any way forward keeps --icons-specifier and names a free --out path.
+    for (const name of error.suggestions.map(
+      (/** @type {any} */ x) => x.name,
+    )) {
+      expect(name).toContain('--icons-specifier my-icons');
+      expect(name).toContain('--out');
+    }
     expect(
       warn.mock.calls.filter(c => String(c[0]).includes('theme editor made')),
     ).toHaveLength(0);

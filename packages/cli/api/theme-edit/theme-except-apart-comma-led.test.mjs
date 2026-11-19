@@ -213,7 +213,9 @@ describe('except apart comma led', () => {
       const two = await answer('make cards rounder and red');
       expect(two.first).toEqual([
         'set n corners more --on card',
-        "set n background-color '#dc2626' --on card",
+        "set n background-color '#dc2626' --on card --when variant:default",
+        "set n background-color '#dc2626' --on card --when variant:transparent",
+        "set n background-color '#dc2626' --on card --when variant:muted",
       ]);
       const bold = await answer('make headings bold and red');
       expect(bold.first).toContain("set n color '#dc2626' --on heading");
