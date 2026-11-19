@@ -129,11 +129,15 @@ function npmList(dir) {
   return info.files.map((/** @type {{path: string}} */ f) => f.path).sort();
 }
 
-/** A stamp older than the store's settle time (gather-cache.mjs). */
-const settle = () => {
-  const until = Date.now() + 2100;
+/**
+ * Wait until a change made at `since` is older than the store's settle time
+ * (gather-cache.mjs SUMMARY_SETTLE_MS), so the next run stores what it asks.
+ * @param {number} since
+ */
+const settleSince = since => {
+  const until = since + 2100;
   while (Date.now() < until) {
-    // Waits out SUMMARY_SETTLE_MS, so the next run stores what it asks.
+    // Waits out SUMMARY_SETTLE_MS.
   }
 };
 
@@ -144,13 +148,20 @@ describe("npm's list, kept for a package's check of itself", () => {
     const tmp = keptTmp('npm-packed');
     /** The last answer the kept check gave. */
     let answer = {status: /** @type {number | null} */ (null), stdout: ''};
+    /** When the files last changed: the kept check waits until then settles. */
+    let changedAt = Date.now();
     /** Answers as a fresh check does, and keeps what npm lists. */
     const same = () => {
+      // The fresh check and npm's own list do not use the kept folder, so they
+      // run while the change settles. The kept check runs once it has.
+      const fresh = check(freshTmp(), dir);
+      const listed = npmList(dir);
+      settleSince(changedAt);
       answer = check(tmp, dir);
-      expect(answer).toEqual(check(freshTmp(), dir));
+      expect(answer).toEqual(fresh);
       expect(answer.status).not.toBeNull();
       const list = keptList(tmp);
-      expect(list?.paths.slice().sort()).toEqual(npmList(dir));
+      expect(list?.paths.slice().sort()).toEqual(listed);
       return /** @type {{paths: string[], ino: number}} */ (list).ino;
     };
     /** Answers as last time, from the kept list: the entry is not written. */
@@ -158,12 +169,12 @@ describe("npm's list, kept for a package's check of itself", () => {
       expect(check(tmp, dir)).toEqual(answer);
       expect(keptList(tmp)?.ino).toBe(ino);
     };
-    settle();
+    changedAt = Date.now();
     const first = same();
     readBack(first);
     // An edit inside a file, in place, keeps the list.
     fs.appendFileSync(path.join(dir, 'templates', 'card.tsx'), '// edited\n');
-    settle();
+    changedAt = Date.now();
     expect(same()).toBe(first);
     // So does a save that renames a new copy over the file, as many editors
     // save.
@@ -173,7 +184,7 @@ describe("npm's list, kept for a package's check of itself", () => {
       `${fs.readFileSync(card, 'utf8')}// saved\n`,
     );
     fs.renameSync(`${card}.tmp`, card);
-    settle();
+    changedAt = Date.now();
     expect(same()).toBe(first);
 
     /** @type {Array<[string, () => void]>} */
@@ -289,7 +300,7 @@ describe("npm's list, kept for a package's check of itself", () => {
     let previous = first;
     for (const [what, change] of changes) {
       change();
-      settle();
+      changedAt = Date.now();
       const ino = same();
       expect({what, rewritten: ino !== previous}).toEqual({
         what,
@@ -316,23 +327,27 @@ describe("npm's list, kept for a package's check of itself", () => {
     );
     fs.writeFileSync(path.join(dir, '.npmignore'), '*.log\n');
     const tmp = keptTmp('npm-packed-workspace');
+    let changedAt = Date.now();
+    // The fresh check and npm's own list run while the change settles.
     const same = () => {
-      expect(check(tmp, dir)).toEqual(check(freshTmp(), dir));
+      const fresh = check(freshTmp(), dir);
+      const listed = npmList(dir);
+      settleSince(changedAt);
+      expect(check(tmp, dir)).toEqual(fresh);
       const list = keptList(tmp);
-      expect(list?.paths.slice().sort()).toEqual(npmList(dir));
+      expect(list?.paths.slice().sort()).toEqual(listed);
       return list?.ino;
     };
-    settle();
     const first = same();
     expect(npmList(dir)).toContain('templates/img/hero.png');
     // The workspace root's ignore file.
     fs.writeFileSync(path.join(root, '.gitignore'), '*.png\n');
-    settle();
+    changedAt = Date.now();
     const second = same();
     expect(second).not.toBe(first);
     // An ignore file in a folder between the root and the package.
     fs.writeFileSync(path.join(root, 'packages', '.npmignore'), '*.tsx\n');
-    settle();
+    changedAt = Date.now();
     expect(same()).not.toBe(second);
   }, 180_000);
 
@@ -348,7 +363,7 @@ describe("npm's list, kept for a package's check of itself", () => {
       });
       return {status: result.status, stdout: result.stdout};
     };
-    settle();
+    const madeAt = Date.now();
     // A home no run has used: doctor makes no folder, and answers as a fresh
     // run does.
     const home = freshTmp();
@@ -356,7 +371,9 @@ describe("npm's list, kept for a package's check of itself", () => {
     expect(answer.status).not.toBeNull();
     expect(fs.existsSync(path.join(home, CACHE_NAME))).toBe(false);
     expect(answer).toEqual(validate(freshTmp()));
-    // integration check makes the folder and keeps the list there.
+    // integration check makes the folder and keeps the list there, once the
+    // new files have settled.
+    settleSince(madeAt);
     check(home, dir);
     const kept = keptList(home);
     expect(kept?.paths.slice().sort()).toEqual(npmList(dir));
@@ -380,10 +397,13 @@ describe("npm's list, kept for a package's check of itself", () => {
       path.join(bundling, 'node_modules', 'left-pad', 'package.json'),
       JSON.stringify({name: 'left-pad', version: '1.0.0'}),
     );
+    const madeAt = Date.now();
     for (const dir of [linked, bundling]) {
       const tmp = keptTmp(`npm-packed-not-kept-${path.basename(dir)}`);
-      settle();
-      expect(check(tmp, dir)).toEqual(check(freshTmp(), dir));
+      // The fresh answer is asked while the new files settle.
+      const fresh = check(freshTmp(), dir);
+      settleSince(madeAt);
+      expect(check(tmp, dir)).toEqual(fresh);
       expect(check(tmp, dir)).toEqual(check(freshTmp(), dir));
       expect(keptList(tmp)).toBeNull();
     }
@@ -398,11 +418,15 @@ describe("npm's list, kept for a package's check of itself", () => {
       },
     });
     const tmp = keptTmp('npm-packed-prepack');
-    settle();
+    const madeAt = Date.now();
+    // The fresh check and npm's own list run while the new files settle.
+    const fresh = check(freshTmp(), dir);
+    const listed = npmList(dir);
+    settleSince(madeAt);
     const kept = check(tmp, dir);
-    expect(kept).toEqual(check(freshTmp(), dir));
+    expect(kept).toEqual(fresh);
     const list = keptList(tmp);
-    expect(list?.paths.slice().sort()).toEqual(npmList(dir));
+    expect(list?.paths.slice().sort()).toEqual(listed);
     expect(list?.paths).not.toContain('templates/built.txt');
     expect(fs.existsSync(path.join(dir, 'templates', 'built.txt'))).toBe(false);
   }, 120_000);
@@ -411,10 +435,13 @@ describe("npm's list, kept for a package's check of itself", () => {
     fs.writeFileSync(userNpmrc(), '');
     const dir = makePackage();
     const tmp = keptTmp('npm-packed-error');
-    settle();
+    const madeAt = Date.now();
     // npm refuses a workspace the package does not have.
     const refused = {npm_config_workspace: 'nonexistent'};
-    expect(check(tmp, dir, refused)).toEqual(check(freshTmp(), dir, refused));
+    // The fresh answer is asked while the new files settle.
+    const fresh = check(freshTmp(), dir, refused);
+    settleSince(madeAt);
+    expect(check(tmp, dir, refused)).toEqual(fresh);
     expect(keptList(tmp)).toBeNull();
     // The same package keeps its list once npm answers.
     check(tmp, dir);
