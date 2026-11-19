@@ -84,6 +84,7 @@ import {
   selectedBoxes,
   dividerParts,
   drawsLine,
+  drawsLineAround,
   inheritedReach,
   settableStates,
   stateSynonym,
@@ -720,6 +721,16 @@ function sideColorsIn(text) {
     )
       j++;
     const run = written.slice(i, j + 1);
+    // (A color word that names the next look, "#dddddd white background",
+    // is that look's color, never a side of the run.)
+    while (
+      run.length &&
+      /^[a-z]+$/.test(run[run.length - 1][1]) &&
+      /^\s+(?:backgrounds?|bg|fills?|text|fonts?|colou?rs?|links?|headings?|titles?|labels?|icons?|accents?)\b/.test(
+        lower.slice(run[run.length - 1][0] + run[run.length - 1][1].length),
+      )
+    )
+      run.pop();
     if (run.length >= 2 && run.some(([, v]) => /^#|\(/.test(v)))
       return run.length > 4
         ? null
@@ -14654,7 +14665,10 @@ export function draftAnswer(ctx, env, question) {
     const colorValue = colorsIn(lead0).length > 0 || lead0 === 'transparent';
     // ("cards: transparent bottom border": a lead word with a side right
     // after it is that side's line color, never a variant of the part.)
+    // (Only a color word: "buttons: primary bottom border" names the
+    // primary buttons' bottom border.)
     const sideColor = () =>
+      (lead0 === 'transparent' || parseColor(lead0) != null) &&
       new RegExp(
         `^(?:[^:]+:)?\\s*${lead0}\\s+(?:top|bottom|left|right)\\b`,
         'i',
@@ -22660,9 +22674,19 @@ export function draftAnswer(ctx, env, question) {
                       ),
                     ]
                   : // (A style said alone, "border dashed #eee #eee #ddd",
-                    // is the line's style.)
+                    // is the line's style; on a part that draws no line
+                    // around itself, a button, the theme's border width
+                    // first, so the line shows.)
                     /\b(dashed|dotted|double|solid)\b/.test(c.text)
                     ? [
+                        ...(drawsLineAround(
+                          ctx,
+                          one(on),
+                          /** @type {any} */ (f).state,
+                          /** @type {any} */ (f).when,
+                        )
+                          ? []
+                          : [set('border-width', 'var(--border-width)', f)]),
                         set(
                           'border-style',
                           String(

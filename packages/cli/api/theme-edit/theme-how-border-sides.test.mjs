@@ -488,4 +488,41 @@ describe('per-side border asks', () => {
     },
     T,
   );
+
+  it(
+    "keeps a variant leading a part's list, a side after it",
+    async () => {
+      if (unbuilt) return;
+      expect(await first('buttons: primary bottom border #dddddd')).toEqual([
+        "border-bottom '1px solid #dddddd' --on button --when variant:primary",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'gives a style said alone a width on a part that draws no line',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        await first('buttons with a dotted #eee #eee #ddd border'),
+      ).toEqual([
+        "border-width 'var(--border-width)' --on button",
+        'border-style dotted --on button',
+        "border-color '#eee #eee #ddd' --on button",
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "never takes the next look's color word into a run",
+    async () => {
+      if (unbuilt) return;
+      expect(
+        (await first('cards border #dddddd white background')).join('\n'),
+      ).not.toMatch(/#dddddd white/);
+    },
+    T,
+  );
 });
