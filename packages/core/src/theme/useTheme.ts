@@ -68,9 +68,9 @@ export const ThemeContext = createSharedContext<ThemeContextValue | null>(
 ThemeContext.displayName = 'ThemeContext';
 
 /**
- * The nearest Theme's current value as a store that outlives a render. A
- * separate React root (the fallback toast viewport) subscribes to it, so it
- * follows the Theme while the Theme is mounted.
+ * The nearest Theme's current value as a store. A separate React root (the
+ * fallback toast viewport) subscribes to it and follows the Theme while the
+ * Theme is mounted.
  * @internal
  */
 export interface ThemeSource {

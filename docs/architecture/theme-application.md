@@ -93,7 +93,9 @@ mode while the Theme is mounted. After the Theme unmounts, the toast keeps the
 last theme and mode. A host page that rewrites `<html>` does not change it. A
 toast shown with no Theme around its caller follows `<html>`. An in-place
 `uniqueID` overwrite takes the new toast's Theme when both toasts have one;
-between a toast with a Theme and one without, the card keeps the way it drew.
+between a toast with a Theme and one without, the card keeps drawing as it did:
+under its first Theme, or following `<html>`. A Theme in `system` mode resolves
+the toast's scheme against the page root.
 
 `MediaTheme` marks a local surface as dark, light, automatically detected, or
 off. Compiled theme CSS uses that marker to switch surface tokens while keeping
