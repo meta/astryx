@@ -1050,12 +1050,18 @@ export interface KeepFieldAboveKeyboardOptions {
    * controls, focuses the field as a tap on the field does.
    */
   tapArea?: HTMLElement | null;
+  /**
+   * Whether the container takes a tap now, read when the tap arrives, as the
+   * container's own click rule reads its state. Defaults to always.
+   */
+  isTapAreaEnabled?: () => boolean;
 }
 
 function tapsField(
   touched: EventTarget | null,
   field: HTMLElement,
   tapArea: HTMLElement | null,
+  isTapAreaEnabled: () => boolean,
 ): boolean {
   if (!isElement(touched)) {
     return false;
@@ -1069,7 +1075,8 @@ function tapsField(
     tapArea != null &&
     tapArea.contains(touched) &&
     isTextEntryControl(field) &&
-    !hasInteractiveAncestor(touched, tapArea)
+    !hasInteractiveAncestor(touched, tapArea) &&
+    isTapAreaEnabled()
   );
 }
 
@@ -1162,7 +1169,11 @@ function revealWithin(
  */
 export function keepFieldAboveKeyboard(
   field: HTMLElement,
-  {offset = FIELD_OFFSET, tapArea = null}: KeepFieldAboveKeyboardOptions = {},
+  {
+    offset = FIELD_OFFSET,
+    tapArea = null,
+    isTapAreaEnabled = () => true,
+  }: KeepFieldAboveKeyboardOptions = {},
 ): () => void {
   const doc = field.ownerDocument;
   const win = doc.defaultView;
@@ -1180,7 +1191,7 @@ export function keepFieldAboveKeyboard(
   // field's padding or border is a tap on its container, not on the field.
   const stopTaps = claimTapFocus(tapArea ?? field, {
     claim: touched =>
-      tapsField(touched, field, tapArea) &&
+      tapsField(touched, field, tapArea, isTapAreaEnabled) &&
       doc.activeElement !== field &&
       placementOf(field, offset, win) != null
         ? field

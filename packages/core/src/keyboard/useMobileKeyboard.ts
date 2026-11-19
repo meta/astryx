@@ -91,6 +91,11 @@ export interface MobileKeyboardOptions {
    * other controls, focuses the field as a tap on the field does.
    */
   tapAreaRef?: RefObject<HTMLElement | null>;
+  /**
+   * Whether the tap area takes a tap now. It is read when the tap arrives,
+   * so a change re-attaches nothing. Defaults to always.
+   */
+  isTapAreaEnabled?: () => boolean;
 }
 
 /** What useMobileKeyboard returns. */
@@ -179,6 +184,7 @@ export function useMobileKeyboard(
     isOpen = true,
     isPageScrollLocked = false,
     tapAreaRef,
+    isTapAreaEnabled,
   }: MobileKeyboardOptions = {},
 ): MobileKeyboard {
   // The inset the keyboard takes at the end of the body's content, CSS px.
@@ -193,6 +199,7 @@ export function useMobileKeyboard(
   const isEnabledRef = useCommittedRef(isEnabled);
   const isExpandedRef = useCommittedRef(isExpanded);
   const isOpenRef = useCommittedRef(isOpen);
+  const isTapAreaEnabledRef = useCommittedRef(isTapAreaEnabled);
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
@@ -247,6 +254,7 @@ export function useMobileKeyboard(
         ? keepFieldAboveKeyboard(target, {
             offset,
             tapArea: tapArea === target ? null : tapArea,
+            isTapAreaEnabled: () => isTapAreaEnabledRef.current?.() ?? true,
           })
         : followKeyboard(target, {move, offset});
     },

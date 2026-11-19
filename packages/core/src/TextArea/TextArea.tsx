@@ -586,9 +586,11 @@ export function TextArea({
 
   const effectivelyDisabled = isDisabled || isBusy;
   // The container takes a first tap only while its own click focuses the
-  // field: not while disabled or busy.
+  // field: not while disabled or busy. The tap reads this when it arrives,
+  // so a busy change does not restart the keyboard path of a focused field.
   useMobileKeyboard(textareaRef, {
-    tapAreaRef: effectivelyDisabled ? undefined : containerRef,
+    tapAreaRef: containerRef,
+    isTapAreaEnabled: () => !effectivelyDisabled,
   });
 
   // Focus textarea when clicking anywhere on the wrapper (icons, padding, etc.)
