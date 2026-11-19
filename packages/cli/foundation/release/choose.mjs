@@ -425,13 +425,27 @@ export function matchedVersionOf(facts) {
 }
 
 /**
+ * The one version a declared dependency pins, such as `0.7.16`, `=0.7.16` or
+ * `v0.7.16`; null for a range or nothing.
+ * @param {string | null | undefined} spec
+ * @returns {string | null}
+ */
+export function pinnedVersion(spec) {
+  const trimmed = String(spec ?? '')
+    .trim()
+    .replace(/^=/, '')
+    .replace(/^v/, '');
+  return isReleaseVersion(trimmed) ? trimmed : null;
+}
+
+/**
  * @param {string} name
  * @param {string} spec
  * @returns {{version: string | null, range: {name: string, spec: string} | null}}
  */
 function exactOrRange(name, spec) {
-  const trimmed = spec.trim().replace(/^=/, '').replace(/^v/, '');
-  if (isReleaseVersion(trimmed)) return {version: trimmed, range: null};
+  const version = pinnedVersion(spec);
+  if (version) return {version, range: null};
   return {version: null, range: {name, spec}};
 }
 
@@ -607,11 +621,12 @@ const OUTSIDE = Object.freeze({
 });
 
 /** Options that take a value, so their value is not the command or topic. */
-const VALUE_OPTIONS = new Set(['--lang', '--detail', '--depth']);
+const VALUE_OPTIONS = new Set(['--lang', '--detail', '--depth', '--to']);
 
 /**
  * Is this run a command that acts on the computer rather than the folder it
- * runs in? `astryx init --user`, which writes the computer-level agent text,
+ * runs in? `astryx init --user` (or `--to user`), which writes the
+ * computer-level agent text,
  * and `astryx docs global[/…]`, the docs of global mode itself, which the copy
  * that started the run answers, so they are readable inside a project whose
  * release predates them (spec AST-081 FR8, FR9).
@@ -629,12 +644,32 @@ export function isComputerLevel(argv) {
     if (!arg.startsWith('-')) words.push(arg);
   }
   const [command, topic] = words;
-  if (command === 'init') return argv.includes('--user');
+  if (command === 'init') return argv.includes('--user') || onlyToUser(argv);
   return (
     command === 'docs' &&
     typeof topic === 'string' &&
     (topic === 'global' || topic.startsWith('global/'))
   );
+}
+
+/**
+ * Whether `init`'s `--to` names the computer alone (`--to user`, its
+ * `--user` spelling), so the copy that started the run answers it, as it
+ * answers `--user`.
+ * @param {string[]} argv arguments after `astryx`
+ * @returns {boolean}
+ */
+function onlyToUser(argv) {
+  /** @type {string[]} */
+  const names = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = /** @type {string} */ (argv[i]);
+    const value =
+      arg === '--to' ? argv[++i] : arg.startsWith('--to=') ? arg.slice(5) : null;
+    if (value != null) names.push(...value.split(',').map(each => each.trim()));
+  }
+  const named = names.filter(Boolean);
+  return named.length > 0 && named.every(name => name === 'user');
 }
 
 /**

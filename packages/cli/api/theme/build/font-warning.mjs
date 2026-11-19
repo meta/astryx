@@ -254,10 +254,11 @@ export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
  * @returns {string | null}
  */
 export function appleFaceGeneric(family) {
-  return (
-    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
-    null
-  );
+  const key = family.trim().replace(/\s+/g, ' ').toLowerCase();
+  // Only the table's own names: a word such as constructor is no face.
+  return Object.hasOwn(APPLE_FACE_GENERICS, key)
+    ? APPLE_FACE_GENERICS[key]
+    : null;
 }
 
 /**

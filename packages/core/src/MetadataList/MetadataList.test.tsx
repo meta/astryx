@@ -322,6 +322,26 @@ describe('MetadataListItem', () => {
     expect(wrapper?.querySelector('dt')).toBeInTheDocument();
     expect(wrapper?.querySelector('dd')).toBeInTheDocument();
   });
+
+  // `word-break: break-word` would let a row squeeze a value down to one
+  // character, breaking an amount or a word mid-way; `overflow-wrap` breaks
+  // only a word longer than its line.
+  it.each([
+    ['side by side', undefined],
+    ['stacked', {position: 'top' as const}],
+  ])('%s, the value breaks only words longer than its line', (_case, label) => {
+    const {container} = render(
+      <MetadataList label={label}>
+        <MetadataListItem label="Shipping">$0.00</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const value = container.querySelector('dd');
+    expect(value).not.toBeNull();
+    const style = getComputedStyle(value as Element);
+    expect(style.overflowWrap).toBe('break-word');
+    expect(style.wordBreak).not.toBe('break-word');
+  });
 });
 
 describe('MetadataListItem pass-through props', () => {

@@ -42,6 +42,7 @@ export const doc = {
     },
   ],
   outsideProject: 'same',
+  requires: ['themes.targets'],
   exitCodes: [
     {
       code: 0,

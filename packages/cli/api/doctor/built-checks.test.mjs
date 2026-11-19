@@ -9,6 +9,7 @@ import {checkBuilt, scanBuilt} from './built-checks.mjs';
 import {builtIntegrationPackages} from './_adapter.mjs';
 import {runChecks} from './doctor.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {renderThemeModule} from '../../foundation/config/theme-state.mjs';
 
 /** @type {string} */
 let dir;
@@ -27,11 +28,16 @@ function write(files) {
 /**
  * @param {string} target
  * @param {string[]} [packages]
- * @param {{fileLimit?: number}} [options]
+ * @param {{fileLimit?: number, sourceBuild?: string | null}} [options]
  */
 function check(target, packages = [], options = {}) {
-  const [usage, purity] = checkBuilt(target, {cwd: dir, packages, ...options});
-  return {usage, purity};
+  const checks = checkBuilt(target, {cwd: dir, packages, ...options});
+  const byId = (/** @type {string} */ id) => checks.find(c => c.id === id);
+  return {
+    usage: byId('built-astryx-usage'),
+    styles: byId('built-astryx-styles'),
+    purity: byId('built-astryx-purity'),
+  };
 }
 
 beforeEach(() => {
@@ -116,6 +122,131 @@ describe('built-astryx-usage', () => {
     expect(usage.status).toBe('fail');
     expect(usage.message).toContain('does not exist');
     expect(rest).toEqual([]);
+  });
+});
+
+describe('built-astryx-styles', () => {
+  // A theme's built stylesheet, which names the base layer in its layer order
+  // only, and Core's component styles in their layer.
+  const THEME_CSS =
+    '@layer reset,astryx-base,astryx-theme;@layer astryx-theme{:root{--astryx-color-text:black}}';
+  const CORE_CSS =
+    '@layer astryx-base{@property --x---_gap{syntax:"*";inherits:false}.x1a{display:flex}}';
+  // Core's script holds a base-layer rule as text it writes at run time.
+  const CORE_JS =
+    'function v(n){return`@layer astryx-base {\\n:root {\\n${n}\\n}\\n}`}var c="--astryx-space-1";';
+
+  it('warns about a build whose Astryx components have no Core stylesheet, with the imports to add', () => {
+    write({
+      'dist/index.html':
+        '<!doctype html><link rel="stylesheet" href="/assets/index.css"><script type="module" src="/assets/index.js"></script>',
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    const {usage, styles, purity} = check('dist');
+    expect(usage?.status).toBe('pass');
+    expect(styles).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('render unstyled'),
+      fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
+    });
+    expect(purity?.status).toBe('info');
+  });
+
+  it("passes a build that carries Core's component styles, in a stylesheet or a page", () => {
+    write({
+      'dist/assets/index.css': THEME_CSS + CORE_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(check('dist').styles).toMatchObject({
+      status: 'pass',
+      message: "Core's component styles are in assets/index.css.",
+    });
+    write({
+      'page/index.html': `<!doctype html><style>${CORE_CSS}</style><div>Hi</div>`,
+      'page/app.js': CORE_JS,
+    });
+    expect(check('page').styles?.status).toBe('pass');
+  });
+
+  it("passes a page that links Core's stylesheet, but not a link in a comment", () => {
+    const link =
+      '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@astryxdesign/core@0.7.16/dist/astryx.css" />';
+    write({
+      'dist/index.html': `<!doctype html><head>${link}</head><script type="module" src="/assets/index.js"></script>`,
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(check('dist').styles).toMatchObject({
+      status: 'pass',
+      message:
+        "index.html links @astryxdesign/core/astryx.css, Core's component styles.",
+    });
+    write({
+      'dist/index.html': `<!doctype html><head><!-- ${link} --></head><script type="module" src="/assets/index.js"></script>`,
+    });
+    expect(check('dist').styles?.status).toBe('warn');
+  });
+
+  it("counts a source file or stylesheet that imports Core's stylesheet before any build", () => {
+    write({
+      'app/src/index.css':
+        "@import '@astryxdesign/core/reset.css';\n@import '@astryxdesign/core/astryx.css';\n",
+      'app/src/App.tsx':
+        'import {Button} from \'@astryxdesign/core/Button\';\nexport default () => <Button label="Hi" />;\n',
+      'entry/src/main.tsx':
+        "import '@astryxdesign/core/astryx.css';\nimport {Button} from '@astryxdesign/core/Button';\nexport default () => <Button label=\"Hi\" />;\n",
+    });
+    expect(check('app').styles).toMatchObject({
+      status: 'pass',
+      message: expect.stringContaining(
+        'src/index.css imports @astryxdesign/core/astryx.css',
+      ),
+    });
+    expect(check('entry').styles?.message).toContain('src/main.tsx imports');
+  });
+
+  it("is not checked for an app that compiles Core's styles from source", async () => {
+    write({
+      'dist/index.html':
+        '<!doctype html><link rel="stylesheet" href="/assets/index.css">',
+      'dist/assets/index.css': THEME_CSS,
+      'dist/assets/index.js': CORE_JS,
+    });
+    expect(
+      check('dist', [], {sourceBuild: 'withAstryx() in next.config.mjs'})
+        .styles,
+    ).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('(withAstryx() in next.config.mjs)'),
+    });
+    // Output that carries the styles passes in any setup.
+    write({'dist/assets/index.css': THEME_CSS + CORE_CSS});
+    expect(
+      check('dist', [], {sourceBuild: 'withAstryx() in next.config.mjs'}).styles
+        ?.status,
+    ).toBe('pass');
+    write({'dist/assets/index.css': THEME_CSS});
+    // doctor reads the setup from the project that holds the path.
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'vite.config.ts':
+        "import {astryxStylex} from '@astryxdesign/build/vite';\nexport default {plugins: [...astryxStylex()]};\n",
+    });
+    const built = await runChecks({cwd: dir, built: 'dist'});
+    expect(
+      built.checks.find(c => c.id === 'built-astryx-styles'),
+    ).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('(astryxStylex() in vite.config.ts)'),
+    });
+  });
+
+  it('says it did not check output with no built stylesheet or page, and is left out when the output uses no Astryx', () => {
+    write({'dist/app.js': CORE_JS});
+    expect(check('dist').styles?.status).toBe('info');
+    write({'plain/index.html': '<div>no astryx</div>'});
+    expect(check('plain').styles).toBeUndefined();
   });
 });
 
@@ -211,6 +342,67 @@ describe('what a --built path counts', () => {
     expect(scan.componentUses).toBe(1);
     expect(scan.findings.map(f => f.message)).toContain(
       'imports the stylesheet `./page.css`: use component props and tokens',
+    );
+  });
+
+  it('reads the stylesheets a registered theme loads as theme wiring, and still flags a stray one', () => {
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': renderThemeModule(
+        [
+          {
+            slug: 'brand',
+            owner: './src/themes',
+            exportName: 'brandTheme',
+            module: './themes/brand/brand.js',
+            stylesheet: './themes/brand/brand.css',
+            fontStylesheet: './themes/brand/brand.fonts.css',
+          },
+        ],
+        'brand',
+        true,
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+      'src/themes/brand/brand.fonts.css': '\n',
+      'src/main.tsx':
+        "import './themes/brand/brand.css';\nimport './extra.css';\nexport const x = 1;\n",
+    });
+    const styling = scanBuilt(dir, [])
+      .findings.filter(f => f.category === 'Styling')
+      .map(f => `${f.file}:${f.message}`);
+    expect(styling).toEqual([
+      'src/main.tsx:imports the stylesheet `./extra.css`: use component props and tokens',
+    ]);
+  });
+
+  it('flags a stylesheet a person adds to the theme module', () => {
+    const module = renderThemeModule(
+      [
+        {
+          slug: 'brand',
+          owner: './src/themes',
+          exportName: 'brandTheme',
+          module: './themes/brand/brand.js',
+          stylesheet: './themes/brand/brand.css',
+        },
+      ],
+      'brand',
+      true,
+    );
+    write({
+      'package.json': JSON.stringify({name: 'app'}),
+      'src/astryx-themes.ts': module.replace(
+        'import "./themes/brand/brand.css";',
+        'import "./themes/brand/brand.css";\nimport "./extra.css";',
+      ),
+      'src/themes/brand/brand.css': ':root {}\n',
+    });
+    expect(
+      scanBuilt(dir, [])
+        .findings.filter(f => f.category === 'Styling')
+        .map(f => f.message),
+    ).toContain(
+      'imports the stylesheet `./extra.css`: use component props and tokens',
     );
   });
 

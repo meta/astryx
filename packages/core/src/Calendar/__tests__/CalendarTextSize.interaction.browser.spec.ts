@@ -6,7 +6,9 @@
  *   the element sizes stay put, as iOS Dynamic Type does
  * @output Real-browser evidence that a day button grows with its number, so
  *   a day's number stays inside its own tap target and never covers the day
- *   below, and that the default text size keeps the element sizes
+ *   below, that a weekday header grows with its name, that the calendar at
+ *   twice the text size fits a 390px container, and that the default text
+ *   size keeps the element sizes
  * @position Browser proof of Calendar FR2's size clause (AST-102 FR4)
  */
 
@@ -80,6 +82,135 @@ test('an enlarged day number stays inside its day button', async ({page}) => {
   for (const day of days) {
     expect(day.above, day.name).toBeLessThanOrEqual(1);
     expect(day.below, day.name).toBeLessThanOrEqual(1);
+  }
+});
+
+/** Each weekday header's box against its name's glyph box. */
+async function readWeekdays(page: Page) {
+  return page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="grid"] [role="columnheader"]',
+      ),
+    ].map(header => {
+      const range = document.createRange();
+      range.selectNodeContents(header);
+      const name = range.getBoundingClientRect();
+      const box = header.getBoundingClientRect();
+      return {
+        name: header.textContent ?? '',
+        left: box.left,
+        right: box.right,
+        width: box.width,
+        minWidth: parseFloat(getComputedStyle(header).minWidth),
+        nameLeft: name.left,
+        nameRight: name.right,
+      };
+    }),
+  );
+}
+
+test('at the default text size each weekday header keeps its element size', async ({
+  page,
+}) => {
+  await openCalendar(page);
+  const headers = await readWeekdays(page);
+  expect(headers.length).toBe(7);
+  for (const header of headers) {
+    expect(Math.round(header.width), header.name).toBe(
+      Math.round(header.minWidth),
+    );
+  }
+});
+
+test('an enlarged weekday name widens its column and never runs into the next', async ({
+  page,
+}) => {
+  await openCalendar(page);
+  await page.addStyleTag({
+    content: '[role="grid"] [role="columnheader"] { font-size: 24px; }',
+  });
+  const headers = await readWeekdays(page);
+  expect(headers.length).toBe(7);
+  for (const header of headers) {
+    expect(header.nameLeft, header.name).toBeGreaterThanOrEqual(
+      header.left - 0.5,
+    );
+    expect(header.nameRight, header.name).toBeLessThanOrEqual(
+      header.right + 0.5,
+    );
+  }
+  const sorted = [...headers].sort((a, b) => a.left - b.left);
+  for (let i = 1; i < sorted.length; i++) {
+    expect(sorted[i].nameLeft, sorted[i].name).toBeGreaterThanOrEqual(
+      sorted[i - 1].nameRight,
+    );
+  }
+});
+
+test('at twice the text size the calendar fits a 390px container', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await openCalendar(page);
+  // Doubles every text size inside the calendar, element sizes unchanged,
+  // the way a 200% text setting does.
+  await page.evaluate(() => {
+    const calendar = document.querySelector<HTMLElement>('.astryx-calendar');
+    if (!calendar) {
+      throw new Error('no calendar');
+    }
+    const sizes = [
+      calendar,
+      ...calendar.querySelectorAll<HTMLElement>('*'),
+    ].map(el => {
+      const style = getComputedStyle(el);
+      return [
+        el,
+        parseFloat(style.fontSize),
+        parseFloat(style.lineHeight),
+      ] as const;
+    });
+    for (const [el, fontSize, lineHeight] of sizes) {
+      el.style.fontSize = `${fontSize * 2}px`;
+      if (Number.isFinite(lineHeight)) {
+        el.style.lineHeight = `${lineHeight * 2}px`;
+      }
+    }
+  });
+  const fit = await page.evaluate(() => {
+    const calendar = document.querySelector<HTMLElement>('.astryx-calendar');
+    if (!calendar) {
+      throw new Error('no calendar');
+    }
+    const box = calendar.getBoundingClientRect();
+    const overflowing = [
+      calendar,
+      ...calendar.querySelectorAll<HTMLElement>('*'),
+    ]
+      .filter(el => el.getBoundingClientRect().right > 390 + 0.5)
+      .map(el => el.getAttribute('role') ?? el.tagName);
+    return {
+      left: box.left,
+      right: box.right,
+      scroll: calendar.scrollWidth - calendar.clientWidth,
+      page: document.documentElement.scrollWidth,
+      overflowing,
+    };
+  });
+  expect(fit.left).toBeGreaterThanOrEqual(0);
+  expect(fit.right).toBeLessThanOrEqual(390 + 0.5);
+  expect(fit.scroll).toBeLessThanOrEqual(0);
+  expect(fit.page).toBeLessThanOrEqual(390);
+  expect(fit.overflowing).toEqual([]);
+  // Each weekday name still sits inside its own header.
+  for (const header of await readWeekdays(page)) {
+    expect(header.nameLeft, header.name).toBeGreaterThanOrEqual(
+      header.left - 0.5,
+    );
+    expect(header.nameRight, header.name).toBeLessThanOrEqual(
+      header.right + 0.5,
+    );
   }
 });
 

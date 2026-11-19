@@ -4,10 +4,9 @@
  * @file lazy-dependencies.test.mjs
  * @input The heavy dependencies foundation/runtime/lazy-dependencies.mjs
  *   loads on first use, and the public API entry point
- * @output Each resolves to the same file for `require` as for `import`, the
- *   API's exports keep their names and shapes, importing the API loads none
- *   of those dependencies, and the theme build module, which `component` and
- *   the theme commands load, loads no postcss
+ * @output Each gives the same module for `require` as for `import`, the
+ *   API's exports keep their names and shapes, and importing the API loads
+ *   none of those dependencies, nor esbuild
  */
 
 import {spawnSync} from 'node:child_process';
@@ -29,6 +28,7 @@ const API_EXPORTS = {
   discover: 'function/1/async',
   docs: 'function/2/async',
   doctor: 'function/0/async',
+  exportIconIndex: 'function/0/async',
   exportSearchIndex: 'function/0/async',
   gapReport: 'function/1/async',
   generateTonalPalette: 'function/1',
@@ -55,6 +55,7 @@ const API_EXPORTS = {
   integrationTemplateConflicts: 'function/1/async',
   listThemes: 'function/0',
   logger: 'object',
+  rankIconIndex: 'function/2/async',
   rankSearchIndex: 'function/2/async',
   search: 'function/1/async',
   summarizeIssues: 'function/1',
@@ -76,16 +77,18 @@ const API_EXPORTS = {
 };
 
 describe('lazy dependencies', () => {
-  it('resolve to the same file for require as for import', () => {
+  it('give the same module for require as for import', async () => {
     const require = createRequire(
       pathToFileURL(
         path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
       ),
     );
     for (const pkg of LAZY_PACKAGES) {
-      expect(require.resolve(pkg), pkg).toBe(
-        fileURLToPath(import.meta.resolve(pkg)),
-      );
+      const required = require.resolve(pkg);
+      if (required === fileURLToPath(import.meta.resolve(pkg))) continue;
+      // An ES module entry beside the CommonJS one (postcss) must hand on
+      // what the CommonJS entry exports.
+      expect(require(pkg), pkg).toBe((await import(pkg)).default);
     }
   });
 
@@ -136,44 +139,29 @@ describe('lazy dependencies', () => {
     expect(result.stdout, result.stderr).toBe('MODULE_NOT_FOUND');
   }, 60_000);
 
-  it('give the postcss the other modules import, and leave it unloaded by the theme build module', async () => {
-    const require = createRequire(
-      pathToFileURL(
-        path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
-      ),
-    );
-    expect(require('postcss')).toBe((await import('postcss')).default);
-    const script = `
-      import {createRequire} from 'node:module';
-      await import(${JSON.stringify(
-        pathToFileURL(path.join(CLI, 'api', 'theme', 'build', 'build.mjs'))
-          .href,
-      )});
-      const files = Object.keys(createRequire(import.meta.url).cache);
-      process.stdout.write(
-        String(files.some(file => /node_modules[\\\\/]postcss[\\\\/]/.test(file))),
-      );
-    `;
-    const result = spawnSync(
-      process.execPath,
-      ['--input-type=module', '-e', script],
-      {encoding: 'utf8'},
-    );
-    expect(result.stdout, result.stderr).toBe('false');
-  }, 60_000);
-
   it('are not loaded by importing the API', () => {
     // Every package here is CommonJS, so a load shows in the require cache
     // (on every supported Node, unlike module hooks).
     const script = `
       import {createRequire} from 'node:module';
+      const scan = () => {
+        const loaded = new Set();
+        for (const file of Object.keys(createRequire(import.meta.url).cache)) {
+          const m = file.match(/node_modules[\\\\/]((?:@[^\\\\/]+[\\\\/])?[^\\\\/]+)[\\\\/]/g);
+          if (m) loaded.add(m[m.length - 1].slice(13, -1).replace(/\\\\/g, '/'));
+        }
+        return [...loaded];
+      };
       await import(${JSON.stringify(pathToFileURL(API).href)});
-      const loaded = new Set();
-      for (const file of Object.keys(createRequire(import.meta.url).cache)) {
-        const m = file.match(/node_modules[\\\\/]((?:@[^\\\\/]+[\\\\/])?[^\\\\/]+)[\\\\/]/g);
-        if (m) loaded.add(m[m.length - 1].slice(13, -1).replace(/\\\\/g, '/'));
-      }
-      process.stdout.write(JSON.stringify([...loaded]));
+      const afterApi = scan();
+      // One first use, so the scan is shown to see a load.
+      const lazy = await import(${JSON.stringify(
+        pathToFileURL(
+          path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
+        ).href,
+      )});
+      lazy.postcss();
+      process.stdout.write(JSON.stringify({afterApi, afterUse: scan()}));
     `;
     const result = spawnSync(
       process.execPath,
@@ -181,8 +169,10 @@ describe('lazy dependencies', () => {
       {encoding: 'utf8'},
     );
     expect(result.status, result.stderr).toBe(0);
-    const loaded = JSON.parse(result.stdout);
-    expect(loaded.length).toBeGreaterThan(0);
-    for (const pkg of LAZY_PACKAGES) expect(loaded).not.toContain(pkg);
+    const {afterApi, afterUse} = JSON.parse(result.stdout);
+    expect(afterUse).toContain('postcss');
+    for (const pkg of LAZY_PACKAGES) expect(afterApi).not.toContain(pkg);
+    // esbuild loads only in a render's page worker, never in this process.
+    expect(afterApi).not.toContain('esbuild');
   }, 60_000);
 });

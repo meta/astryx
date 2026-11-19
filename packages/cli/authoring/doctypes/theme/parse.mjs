@@ -14,45 +14,61 @@ import {formatZodError} from '../../_shared/errors.mjs';
 
 /** @typedef {import('./type.js').ThemeDoc} ThemeDoc */
 
-/** @param {string} field */
-const nonBlank = field =>
-  z.string().refine(value => value.trim() !== '', {
-    message: `${field} must not be blank`,
-    abort: true,
-  });
+function buildSchemas() {
+  /** @param {string} field */
+  const nonBlank = field =>
+    z.string().refine(value => value.trim() !== '', {
+      message: `${field} must not be blank`,
+      abort: true,
+    });
 
-const themeDocSchema = z
-  .object({
-    type: z.literal('theme'),
-    name: nonBlank('name').regex(
-      /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u,
-      'name must be lowercase kebab-case starting with a letter',
-    ),
-    displayName: nonBlank('displayName'),
-    // Blank is allowed, as the released catalog allowed it.
-    description: z.string(),
-    maintained: z.boolean(),
-  })
-  .strict();
+  const themeDocSchema = z
+    .object({
+      type: z.literal('theme'),
+      name: nonBlank('name').regex(
+        /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u,
+        'name must be lowercase kebab-case starting with a letter',
+      ),
+      displayName: nonBlank('displayName'),
+      // Blank is allowed, as the released catalog allowed it.
+      description: z.string(),
+      maintained: z.boolean(),
+    })
+    .strict();
 
-/** Zod skips `__proto__` when it looks for unknown keys. */
-const PROTO_KEY_ISSUE = {
-  code: /** @type {const} */ ('unrecognized_keys'),
-  keys: ['__proto__'],
-  path: [],
-  message: 'Unrecognized key: "__proto__"',
-};
+  /** Zod skips `__proto__` when it looks for unknown keys. */
+  const PROTO_KEY_ISSUE = {
+    code: /** @type {const} */ ('unrecognized_keys'),
+    keys: ['__proto__'],
+    path: [],
+    message: 'Unrecognized key: "__proto__"',
+  };
+
+  /**
+   * Compile-time drift lock: the sealed schema must infer exactly ThemeDoc.
+   *
+   * @typedef {import('../../_shared/contract.js').Expect<
+   *   import('../../_shared/contract.js').Equal<
+   *     z.infer<typeof themeDocSchema>,
+   *     ThemeDoc
+   *   >
+   * >} _ThemeDocDriftLock
+   */
+
+  return {nonBlank, themeDocSchema, PROTO_KEY_ISSUE};
+}
+
+/** @type {ReturnType<typeof buildSchemas> | undefined} */
+let builtSchemas;
 
 /**
- * Compile-time drift lock: the sealed schema must infer exactly ThemeDoc.
- *
- * @typedef {import('../../_shared/contract.js').Expect<
- *   import('../../_shared/contract.js').Equal<
- *     z.infer<typeof themeDocSchema>,
- *     ThemeDoc
- *   >
- * >} _ThemeDocDriftLock
+ * This parser's schemas, built when it first parses, not when this module
+ * loads: most runs load the module and never call it.
+ * @returns {ReturnType<typeof buildSchemas>}
  */
+function schemas() {
+  return (builtSchemas ??= buildSchemas());
+}
 
 /**
  * Validate an unknown value as a theme descriptor, or throw.
@@ -62,7 +78,7 @@ const PROTO_KEY_ISSUE = {
  * @returns {ThemeDoc}
  */
 export function parseTheme(input, label = 'theme') {
-  const result = themeDocSchema.safeParse(input);
+  const result = schemas().themeDocSchema.safeParse(input);
   const protoKey =
     input !== null &&
     typeof input === 'object' &&
@@ -70,7 +86,7 @@ export function parseTheme(input, label = 'theme') {
   if (result.success && !protoKey) return result.data;
   const issues = [
     ...(result.error?.issues ?? []),
-    ...(protoKey ? [PROTO_KEY_ISSUE] : []),
+    ...(protoKey ? [schemas().PROTO_KEY_ISSUE] : []),
   ];
   throw new Error(formatZodError(label, new z.ZodError(issues)));
 }

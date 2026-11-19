@@ -71,6 +71,9 @@ function scaffold() {
   writeComponent(components, 'ZorbletCopier', {
     keywords: ['copy button'],
   });
+  writeComponent(components, 'ZorbletWarden', {
+    keywords: ['focus-trap'],
+  });
   writeComponent(components, 'AcmeGadgetPanel', {
     usage: {description: 'A panel of gadgets.'},
   });
@@ -154,6 +157,28 @@ describe('suggestions for an unknown component name', () => {
       const hook = names.findIndex(n => n.startsWith('astryx hook '));
       expect(component).toBeGreaterThanOrEqual(0);
       expect(hook).toBeGreaterThan(component);
+    },
+    SLOW,
+  );
+
+  it(
+    'keep an integration component that declares the typed name ahead of a folded hook hint',
+    async () => {
+      const names = await suggested('FocusTrap');
+      const component = names.indexOf('ZorbletWarden');
+      const hook = names.indexOf('astryx hook useFocusTrap');
+      expect(component).toBeGreaterThanOrEqual(0);
+      expect(hook === -1 || hook > component).toBe(true);
+    },
+    SLOW,
+  );
+
+  it(
+    'lead with the Core components that declare the typed name, not a folded hook hint',
+    async () => {
+      const names = await suggested('Combobox');
+      expect(names[0]).toBe('Typeahead');
+      expect(names).not.toContain('astryx hook useCombobox');
     },
     SLOW,
   );

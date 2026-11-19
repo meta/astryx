@@ -149,6 +149,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template AlertDialogDeleteConfirmation --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -161,6 +162,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -173,6 +175,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PopoverConfirmAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -185,6 +188,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToastAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -197,6 +201,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template useContainerRevealHookUsage --type block",
+        "isReady": true,
         "mentions": []
       },
       {

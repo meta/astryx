@@ -4,9 +4,10 @@
  * @file The CLI's heavy parsing and transform dependencies, each loaded on
  *   first use rather than when a module that may use it is imported.
  * @input Nothing; each getter requires its package once and keeps it.
- * @output `babelParser` (and `babelParse`, its `parse`), `babelCore`,
- *   `jscodeshift`, `selectorParser` and `postcss`: the same module objects a
- *   static import gives (test/lazy-dependencies.test.mjs checks it).
+ * @output `babelParser` (and `babelParse`, its `parse`), `babelCore` (and
+ *   `babelCorePath`, the file it loads), `jscodeshift`, `selectorParser` and
+ *   `postcss`: the same module objects a static import gives
+ *   (test/lazy-dependencies.test.mjs checks it).
  * @position The first-use loader for these packages on the API's import
  *   path (authoring/ may not import foundation, so the ShadCN source variants
  *   keep their own). Everything that imports the CLI's API reaches the
@@ -60,6 +61,12 @@ export const babelParse = (input, options) =>
 export const babelCore = () => (core ??= require('@babel/core'));
 
 /**
+ * The file `babelCore` loads, resolved without loading it.
+ * @returns {string}
+ */
+export const babelCorePath = () => require.resolve('@babel/core');
+
+/**
  * Untyped here: jscodeshift ships no types, and this module is reached by
  * type checks that do not load the CLI's ambient declaration for it.
  * @returns {any}
@@ -71,24 +78,26 @@ export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
 
 /**
- * postcss, for modules that `component` and the theme commands load and that
- * read a stylesheet only now and then (render/embedded-imports.mjs,
- * fonts/font-stylesheet.mjs). Its ES module entry hands on
- * what its CommonJS one exports, so this is the one postcss the modules that
- * import it get. Not in {@link LAZY_PACKAGES}: those modules import it as
- * they load.
+ * postcss, for the modules that read a stylesheet only now and then:
+ * doctor's theme checks and the codemods' parser, which the API's import
+ * path reaches, and the reader of a built theme's imports and the font
+ * stylesheet reader, which the theme commands load. Its ES module entry hands
+ * on what its CommonJS one exports, so this is the one postcss the modules
+ * that import it get.
  * @returns {typeof import('postcss').default}
  */
 export const postcss = () => (css ??= require('postcss'));
 
 /**
  * Every package loaded on first use, here and in the ShadCN source variants,
- * for the test that each resolves to one file either way.
+ * for the test that each gives one module either way and that importing the
+ * API loads none of them.
  */
 export const LAZY_PACKAGES = [
   '@babel/parser',
   '@babel/core',
   'jscodeshift',
+  'postcss',
   'postcss-selector-parser',
   'recast',
   '@babel/plugin-transform-typescript',

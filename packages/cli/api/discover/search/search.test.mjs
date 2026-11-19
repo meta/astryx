@@ -9,7 +9,7 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {search} from './search.mjs';
+import {answersAny, search} from './search.mjs';
 import {AstryxError} from '../../error.mjs';
 
 let docsDir;
@@ -176,12 +176,24 @@ describe('discover.search leaf — typo tolerance (parity with api/search)', () 
 
   it('orders near misses by how many edits away they are', async () => {
     const items = [
-      {package: '@acme/charts', kind: 'component', name: 'Paginaters', installed: false},
-      {package: '@acme/charts', kind: 'component', name: 'Paginator', installed: false},
+      {
+        package: '@acme/charts',
+        kind: 'component',
+        name: 'Paginaters',
+        installed: false,
+      },
+      {
+        package: '@acme/charts',
+        kind: 'component',
+        name: 'Paginator',
+        installed: false,
+      },
     ];
     const res = await search(packages, 'Paginatr', {items});
     const names = res.data.matches.map(m => m.component);
-    expect(names.indexOf('Paginator')).toBeLessThan(names.indexOf('Paginaters'));
+    expect(names.indexOf('Paginator')).toBeLessThan(
+      names.indexOf('Paginaters'),
+    );
   });
 
   it('a one-edit miss on a longer name returns results', async () => {
@@ -200,7 +212,12 @@ describe('discover.search leaf — typo tolerance (parity with api/search)', () 
 
   it('includes catalog items in fuzzy matches too', async () => {
     const items = [
-      {package: '@acme/charts', kind: 'component', name: 'Alphabets', installed: false},
+      {
+        package: '@acme/charts',
+        kind: 'component',
+        name: 'Alphabets',
+        installed: false,
+      },
     ];
     // 'Alphabel' vs 'Alphabets' is distance 2, both >= 8 chars
     const res = await search(packages, 'Alphabel', {items});
@@ -248,9 +265,18 @@ describe('discover.search leaf across every kind and source', () => {
     ).toEqual([
       ['component', 'Alpha', true],
       ['component', 'AlphaCard', true],
-      ['component', 'AlphaChart', false],
       ['template', 'pages/AlphaHome', true],
-      ['package', '@acme/charts', false],
+      ['component', 'AlphaChart', false],
+    ]);
+  });
+
+  it('matches whole words in text, never a part of a word', async () => {
+    // "alph" starts the name word "alpha", but in a description only a whole
+    // word counts, as in search.
+    const res = await search(packages, 'alpha', {items, only: 'available'});
+    expect(res.data.matches.map(m => m.component)).toEqual([
+      'AlphaChart',
+      '@acme/charts',
     ]);
   });
 
@@ -302,18 +328,169 @@ describe('discover.search leaf across every kind and source', () => {
     });
     expect(available.data.matches.map(m => m.component)).toEqual([
       'AlphaChart',
-      '@acme/charts',
     ]);
   });
 
   it('caps the list at limit and reports the total', async () => {
     const res = await search(packages, 'alph', {items, limit: 2});
     expect(res.data.matches).toHaveLength(2);
-    expect(res.data.total).toBe(5);
+    expect(res.data.total).toBe(4);
   });
 
   it('matches titles, summaries, keywords, and descriptions too', async () => {
     const res = await search(packages, 'how to chart', {items});
+    // Only the guide matches every word; the other chart items are cut.
     expect(res.data.matches.map(m => m.component)).toEqual(['guide']);
+  });
+});
+
+describe('discover.search leaf, word by word', () => {
+  /** @type {any[]} */
+  const items = [
+    {
+      package: '@acme/charts',
+      kind: 'component',
+      name: 'BarChart',
+      installed: false,
+      summary: 'Compare values across categories.',
+      packageDescription: 'Charts for dashboards',
+    },
+    {
+      package: '@acme/charts',
+      kind: 'component',
+      name: 'Sparkline',
+      installed: false,
+      summary: 'A tiny line chart for a time series.',
+      packageDescription: 'Charts for dashboards',
+    },
+    {
+      package: '@acme/charts',
+      kind: 'component',
+      name: 'ToolBar',
+      installed: false,
+      packageDescription: 'Charts for dashboards',
+    },
+    {
+      package: '@acme/people',
+      kind: 'component',
+      name: 'PersonPicker',
+      installed: false,
+      keywords: ['typeahead'],
+      packageDescription: 'Employee directory parts',
+    },
+    {
+      package: '@acme/people',
+      kind: 'component',
+      name: 'TeamList',
+      installed: false,
+      packageDescription: 'Employee directory parts',
+    },
+  ];
+
+  it('matches every word of a query across the name words and the summary', async () => {
+    const res = await search([], 'bar chart', {items});
+    // ToolBar has "chart" only in its package's description, a weaker match
+    // than a word of its own name.
+    expect(res.data.matches.map(m => m.component)).toEqual([
+      'BarChart',
+      'ToolBar',
+    ]);
+  });
+
+  it('ranks by how many words match when no item has them all', async () => {
+    const res = await search([], 'line chart sparkline time series', {items});
+    expect(res.data.matches[0].component).toBe('Sparkline');
+  });
+
+  it("adds the words of the item's package description, never matching on them alone", async () => {
+    const res = await search([], 'employee typeahead', {items});
+    expect(res.data.matches.map(m => m.component)).toEqual(['PersonPicker']);
+    await expect(search([], 'directory', {items})).rejects.toMatchObject({
+      code: 'ERR_NOT_FOUND',
+    });
+  });
+
+  it('reads an identifier as the words it spells', async () => {
+    const res = await search([], 'ChartBar', {items});
+    expect(res.data.matches[0].component).toBe('BarChart');
+  });
+
+  it('answers exactly when search() lists any item', async () => {
+    for (const query of [
+      'bar chart',
+      'barchart',
+      'employee typeahead',
+      'zzqqxx',
+      'bar zzqq yyxx wwvv',
+      'directory',
+    ]) {
+      const listed = await search([], query, {items}).then(
+        res => res.data.matches.length > 0,
+        () => false,
+      );
+      expect(answersAny([], query, {items})).toBe(listed);
+    }
+    expect(answersAny([], 'bar chart', {items, type: 'template'})).toBe(false);
+    // Installed components count, as in search().
+    expect(
+      answersAny(
+        [{name: '@acme/own', components: ['Frobnicator']}],
+        'frobnicator',
+        {items},
+      ),
+    ).toBe(true);
+  });
+
+  it('still finds what only a word form, a synonym, or a typo matches', async () => {
+    /** @type {any[]} */
+    const more = [
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'Spacer',
+        installed: false,
+        summary: 'Adds space between items.',
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'DataGrid',
+        installed: false,
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'Paginator',
+        installed: false,
+      },
+      {
+        package: '@acme/x',
+        kind: 'component',
+        name: 'EntryList',
+        installed: false,
+      },
+    ];
+    /** @param {string} query */
+    const found = async query =>
+      (await search([], query, {items: more})).data.matches.map(
+        m => m.component,
+      );
+    expect(await found('spacing helpers')).toContain('Spacer');
+    expect(await found('table rows')).toContain('DataGrid');
+    expect(await found('Paginatr')).toContain('Paginator');
+    expect(await found('entries list')).toContain('EntryList');
+    // A word with a hyphen is read joined, as a keyword spells it.
+    const tags = await search([], 'tags multi-select', {
+      items: [
+        {
+          package: '@acme/x',
+          kind: 'component',
+          name: 'MultiSelector',
+          installed: false,
+          keywords: ['multiselect'],
+        },
+      ],
+    });
+    expect(tags.data.matches.map(m => m.component)).toEqual(['MultiSelector']);
   });
 });

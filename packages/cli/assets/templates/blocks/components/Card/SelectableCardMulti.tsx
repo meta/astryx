@@ -20,7 +20,7 @@ export default function SelectableCardMulti() {
   const [selected, setSelected] = useState(new Set(['react', 'typescript']));
 
   return (
-    <Grid columns={3} gap={2} width={400}>
+    <Grid columns={3} gap={2} width={400} maxWidth="100%">
       {tags.map(tag => (
         <SelectableCard
           key={tag.id}
