@@ -93,6 +93,10 @@ import {
   frameCopies,
   framesByDefault,
   edgeCopies,
+  heldVariantsOf,
+  placementHolds,
+  ownsPlacement,
+  failingModes,
   borderFrames,
   framingSetting,
   undoArgs,
@@ -7370,6 +7374,61 @@ async function changeOnce(
       });
     }
   }
+  // A setting on one part that would make its text unreadable in one of its
+  // variants drawn on another ground (a top nav link in the phone menu)
+  // keeps that variant at Core's look (`hold`), in the same undo step; the
+  // result names it with the line that gives it there anyway.
+  /** @type {string[]} */
+  let heldVariants = [];
+  if (sub === 'set' && s.on && !s.when && !groupsOf(ctx)[s.on]) {
+    heldVariants = [
+      ...new Set([
+        ...(r.newProblems.length
+          ? heldVariantsOf(ctx, String(s.on), r.newProblems)
+          : []),
+        ...placementHolds(ctx, data, s),
+      ]),
+    ].filter(
+      v =>
+        // (A placement the theme colors itself keeps that color: no hold
+        // is saved or named there; holdCopies skips it in the build too.)
+        !ownsPlacement(data, s, v) ||
+        failingModes(ctx, data, s, v).some(m => !ownsPlacement(data, s, v, m)),
+    );
+    if (heldVariants.length) {
+      const entry =
+        data.settings.find(x => x === s) ??
+        [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x.thing === s.thing &&
+              x.on === s.on &&
+              !x.when &&
+              (x.state ?? '') === (s.state ?? '') &&
+              (x.mode ?? '') === (s.mode ?? ''),
+          ) ??
+        s;
+      /** @type {any} */ (entry).hold = heldVariants;
+      /** @type {any} */ (s).hold = heldVariants;
+      const r2 = await commitTheme(ctx, slug, data, {history: false});
+      const before = new Set(r.newProblems.map(p => p.key));
+      r = /** @type {typeof r} */ ({
+        ...r,
+        problems: r2.problems,
+        problemList: r2.problemList,
+        newProblems: r2.problemList
+          ? r.newProblems.filter(p =>
+              /** @type {any[]} */ (r2.problemList).some(
+                (/** @type {any} */ q) => q.key === p.key,
+              ),
+            )
+          : r.newProblems.filter(p => before.has(p.key)),
+        lifted: r2.lifted,
+        warnings: r2.warnings,
+      });
+    }
+  }
   await sayNextStepClears(ctx, slug, s, r);
   const sizeNote =
     borderAdded && sizeBefore
@@ -8003,6 +8062,10 @@ async function changeOnce(
   if (edged.length)
     notes.push(
       `with ${s.thing} gone, the floating surfaces that drew no border keep an edge at the theme's border (${edged.join(', ')}), so an open menu never reads as a blank panel; to keep one bare: \`${P} set ${slug} border none --on ${edged[0]}\``,
+    );
+  if (heldVariants.length)
+    notes.push(
+      `${s.on} keeps Core's ${s.thing} where it is drawn ${heldVariants.map(v => `as ${v.replace(':', '=')}`).join(', ')} (on another ground, such as the phone menu): there it would make text unreadable; to give it there anyway: ${heldVariants.map(v => `\`${P} set ${slug} ${setArgs({...s, when: v, only: undefined, hold: undefined, keep: undefined}, String(s.value))}\``).join(', ')}`,
     );
   if (keptForText.length)
     notes.push(
