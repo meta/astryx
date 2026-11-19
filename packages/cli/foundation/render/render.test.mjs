@@ -13,7 +13,7 @@ import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, cutFontFaces, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
+import {oneColorModeOf, renderPage, withCarriedPaths, withUncarriedImages} from './render-page.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -458,5 +458,109 @@ describe('a name that reads as configuration', () => {
   it('is not the reason a runner file or a dotfile is left out', () => {
     expect(embeddedPathProblem('a.config.test.ts')?.toolConfig).toBeUndefined();
     expect(embeddedPathProblem('.tool/x.config.json')?.toolConfig).toBeUndefined();
+  });
+});
+
+describe('oneColorModeOf: the modes a page\'s root theme draws in', () => {
+  const root = '<div data-astryx-theme="retro" class="x">Hi</div>';
+  const scoped = (/** @type {string} */ body) => `@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { :scope { ${body} } }`;
+  // A built light-only theme: plain page colors, and the light-dark() status
+  // roles theme build derives for any theme that sets a surface color.
+  const light = scoped('--color-background-body:#c0c0c0;--color-background-surface:#c0c0c0;--color-text-primary:#000;--color-on-info-muted:light-dark(#003F92,#093E87)');
+  const media = '[data-astryx-theme="retro"] [data-astryx-media="dark"]{color-scheme:dark;--color-text-primary:var(--color-on-dark)}';
+
+  it('takes the declared colorModes: one mode as it is, both modes as both', () => {
+    expect(oneColorModeOf(root, 'light', [scoped('--color-background-body:light-dark(#fff,#111)')])).toBe('light');
+    expect(oneColorModeOf(root, 'dark', [light])).toBe('dark');
+    expect(oneColorModeOf(root, 'both', [light])).toBeNull();
+  });
+
+  it('reads a theme with no colorModes as light only when it sets its page colors with no dark value', () => {
+    expect(oneColorModeOf(root, null, [light, media])).toBe('light');
+    expect(oneColorModeOf(root, null, [light, '.page{margin:0}'])).toBe('light');
+  });
+
+  it('reads a dark page with light text as dark only, and mixed or unreadable colors as both', () => {
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#101314;--color-text-primary:#e8f1f6'), media])).toBe('dark');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:rgb(16, 19, 20)')])).toBe('dark');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0;--color-text-primary:#eeeeee')])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:var(--brand-page)')])).toBeNull();
+    // Any color the shared reader fixes counts: named, hsl(), oklch().
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:white;--color-text-primary:black')])).toBe('light');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:hsl(0 0% 75%);--color-text-primary:oklch(0.2 0 0)')])).toBe('light');
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:oklch(0.18 0.01 250)')])).toBe('dark');
+    // Any page color set for one scheme only keeps both modes.
+    const gothic = scoped('--color-background-body:#101314;--color-text-primary:#e8f1f6');
+    const retroLightRoot = scoped('--color-background-body:#c0c0c0;--color-text-primary:#000');
+    expect(oneColorModeOf(root, null, [gothic, '[data-astryx-theme="retro"][data-theme="light"]{--color-background-body:#fff}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [gothic, '@media (prefers-color-scheme: light){[data-astryx-theme="retro"]{--color-text-primary:#111}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [gothic, '[data-astryx-theme="retro"][data-theme="dark"]{--color-background-surface:#202326}'])).toBeNull();
+    // A negated query, a query nested in the root rule, and a selector list.
+    expect(oneColorModeOf(root, null, [gothic, '@media not all and (prefers-color-scheme: dark){[data-astryx-theme="retro"]{--color-background-body:#fff}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, ['[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;@media (prefers-color-scheme: dark){--color-background-body:#111}}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLightRoot, '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"], [data-astryx-theme="retro"] .card{--color-background-body:#111}}'])).toBeNull();
+    // "Dark unless forced light": the media query decides, not the :not().
+    const darkUnlessLight = '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) [data-astryx-theme="retro"]{--color-background-body:#111}}';
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0;--color-text-primary:#000'), darkUnlessLight])).toBeNull();
+    const lightUnlessDark = '@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) [data-astryx-theme="retro"]{--color-background-body:#fff}}';
+    expect(oneColorModeOf(root, null, [gothic, lightUnlessDark])).toBeNull();
+    // Attribute selectors read the same however they are quoted.
+    const retroLight1 = scoped('--color-background-body:#c0c0c0;--color-text-primary:#000');
+    expect(oneColorModeOf(root, null, [retroLight1, "[data-astryx-theme='retro'][data-theme='dark']{--color-background-body:#111}"])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme=retro][data-theme=dark]{--color-background-body:#111}'])).toBeNull();
+    expect(oneColorModeOf(root, null, ["[data-astryx-theme='retro']{--color-background-body:#c0c0c0;--color-text-primary:#000}"])).toBe('light');
+    // A component's dark block from theme build keeps out of media surfaces; it still counts.
+    expect(oneColorModeOf(root, null, [retroLight1, '@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { :scope[data-astryx-scheme="dark"] .astryx-card:where(:not(:scope [data-astryx-media] *)) { --color-text-primary:#eee } }'])).toBeNull();
+    // A media surface's own colors say nothing of the theme's.
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme="retro"] [data-astryx-media="dark"]{--color-text-primary:#eee}'])).toBe('light');
+    // A theme name keeps its case.
+    expect(oneColorModeOf('<div data-astryx-theme="Retro">Hi</div>', null, ['@scope ([data-astryx-theme="Retro"]) to ([data-astryx-theme]) { :scope { --color-background-body:#c0c0c0;--color-text-primary:#000 } }'])).toBe('light');
+    // A flagged attribute or a `.dark` class is a mode condition too.
+    expect(oneColorModeOf(root, null, [retroLight1, '[data-astryx-theme="retro"][data-theme="DARK" i]{--color-background-body:#111}'])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLight1, '.dark [data-astryx-theme="retro"]{--color-background-body:#111}'])).toBeNull();
+    // An @scope's `to (...)` limit does not name the root.
+    expect(oneColorModeOf(root, null, ['@scope ([data-astryx-theme="night"]) to ([data-astryx-theme="retro"]) { :scope { --color-background-body:#101314 } }'])).toBeNull();
+    // A part's or another theme's page color for one mode in a sheet that
+    // names the theme keeps both modes too: the export never guesses one mode
+    // past such a rule. A sheet that never names the theme says nothing.
+    expect(oneColorModeOf(root, null, [retroLightRoot, '[data-astryx-theme="night"][data-theme="dark"]{--color-background-body:#111}'])).toBe('light');
+    expect(oneColorModeOf(root, null, [`${retroLightRoot}[data-astryx-theme="night"][data-theme="dark"]{--color-background-body:#111}`])).toBeNull();
+    expect(oneColorModeOf(root, null, [retroLightRoot, '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"] .astryx-card{--color-text-primary:#eee}}'])).toBeNull();
+    // A nested rule is not the root.
+    expect(oneColorModeOf(root, null, ['[data-astryx-theme="retro"]{--color-background-body:#c0c0c0;& .x{--color-text-primary:#fff}}'])).toBe('light');
+    // A translucent page color shows what is behind it.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-surface:rgba(0,0,0,.04)')])).toBeNull();
+    // Text is light or dark by its own color, whatever its alpha.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#fff;--color-text-primary:rgba(0, 0, 0, 0.87)')])).toBe('light');
+    // `:scope` counts only in an @scope that starts at the theme itself.
+    expect(oneColorModeOf(root, null, [scoped('--font-family-body:Georgia,serif'), '@scope ([data-astryx-theme="retro"] .promo) { :scope { --color-text-primary:#fff } }'])).toBeNull();
+    // Page colors set for one scheme only are not the theme's own.
+    expect(
+      oneColorModeOf(root, null, [
+        `@media (prefers-color-scheme: light) { ${scoped('--color-background-body:#c0c0c0;--color-text-primary:#000')} }`,
+      ]),
+    ).toBeNull();
+    // Another theme's root in the same sheet says nothing of this one's.
+    expect(
+      oneColorModeOf(root, null, [
+        `${scoped('--font-family-body:Georgia,serif')}@scope ([data-astryx-theme="night"]) to ([data-astryx-theme]) { :scope { --color-background-body:#101314 } }`,
+      ]),
+    ).toBeNull();
+    // A part's own text color says nothing of the page's.
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:#c0c0c0'), '@scope ([data-astryx-theme="retro"]) to ([data-astryx-theme]) { .astryx-tag { --color-text-primary: #fff } }'])).toBe('light');
+  });
+
+  it('keeps both modes for a theme that sets no page color, a dark page value, or no stylesheet of its own', () => {
+    expect(oneColorModeOf(root, null, [scoped('--font-family-body:Georgia,serif'), media])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-accent:#c2185b')])).toBeNull();
+    expect(oneColorModeOf(root, null, [scoped('--color-background-body:light-dark(#fff,#111)')])).toBeNull();
+    for (const dark of [
+      '@media (prefers-color-scheme: dark){[data-astryx-theme="retro"]{--color-background-body:#111}}',
+      '[data-astryx-theme="retro"][data-theme="dark"]{--color-text-primary:#eee}',
+      'html[data-astryx-scheme="dark"] [data-astryx-theme="retro"]{--color-background-surface:#222}',
+    ])
+      expect(oneColorModeOf(root, null, [light, dark])).toBeNull();
+    expect(oneColorModeOf('<main>Hi</main>', null, [light])).toBeNull();
+    expect(oneColorModeOf(root, null, ['.page{--color-background-body:#fff}'])).toBeNull();
   });
 });
