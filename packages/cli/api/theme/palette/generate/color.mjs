@@ -237,6 +237,24 @@ export function luminance(hex) {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 /**
+ * A see-through color over an opaque one, as the eye sees it. `alpha` is two hex digits; both colors are opaque hex.
+ * @param {string} color
+ * @param {string} alpha
+ * @param {string} under
+ * @returns {string}
+ */
+export function compositeOver(color, alpha, under) {
+  const a = parseInt(alpha, 16) / 255;
+  const top = hexToRgb(color);
+  const below = hexToRgb(under);
+  const mix =
+    /**
+     * @param {number} i
+     */
+    i => Math.round(a * top[i] + (1 - a) * below[i]);
+  return rgbToHex(mix(0), mix(1), mix(2));
+}
+/**
  * The WCAG contrast ratio of two opaque colors.
  * @param {string} a
  * @param {string} b
