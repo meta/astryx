@@ -31,6 +31,7 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
+import {TS_SOURCES} from '../../foundation/render/ts-paths.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
@@ -119,7 +120,6 @@ import {
   syncPaletteRefs,
   refuseIfLockLost,
   lockHeld,
-  removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
   readRecordIn,
@@ -127,6 +127,7 @@ import {
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
+import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -8212,7 +8213,7 @@ const MODULE_EXTENSIONS = [
 /**
  * The file a relative import names, resolved as TypeScript resolves it: a
  * JavaScript extension names its TypeScript source (`.js` → `.ts`/`.tsx`,
- * `.jsx` → `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
+ * `.jsx` → `.tsx`/`.ts`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
  * written, with each module extension, and as a folder's index file.
  * @param {string} dir
  * @param {string} spec
@@ -8222,12 +8223,7 @@ export function localModuleFile(dir, spec) {
   const base = path.resolve(dir, spec);
   const ext = path.extname(base);
   const stem = base.slice(0, base.length - ext.length);
-  const sourceFor = /** @type {Record<string, string[]>} */ ({
-    '.js': ['.ts', '.tsx'],
-    '.jsx': ['.tsx'],
-    '.mjs': ['.mts'],
-    '.cjs': ['.cts'],
-  })[ext];
+  const sourceFor = TS_SOURCES[ext];
   return [
     ...(sourceFor ?? []).map(x => stem + x),
     base,

@@ -41,6 +41,11 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {placeSkillFiles, renderProjectSkill} from '../../foundation/agent-docs/skill-places.mjs';
+import {managedFileState} from '../../foundation/agent-docs/managed-skill-file.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {readProjectPlaces} from '../../foundation/agent-docs/skill-place-files.mjs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
@@ -1082,7 +1087,8 @@ export function builtIntegrationPackages(target, cwd) {
 
 /**
  * The install line for the font families a known package loads (an open
- * font the editor's table names), in the project's package manager, and
+ * font the editor's table names), as the project's integration install
+ * guidance gives it, else in the project's package manager, and
  * whether it loads every family given. A family no known package loads (a
  * self-hosted face) gets none: its package name would be a guess.
  * @param {string} projectDir
@@ -1105,4 +1111,28 @@ export async function fontPackagesInstallLine(projectDir, families) {
     line: packages.length ? installLine(projectDir, packages) : null,
     coversAll: known.every(Boolean),
   };
+}
+
+/**
+ * The project's skill files and each one's state against this release's
+ * project skill, when the project's astryx.config `skills.to` saves no
+ * `agents-md` place; null otherwise (the block is the project's place).
+ * @param {string} cwd
+ * @returns {Promise<Array<{file: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}> | null>}
+ */
+export async function savedProjectSkillFiles(cwd) {
+  const root = resolveAgentDocsRoot(cwd);
+  if (root == null) return null;
+  const places = await readProjectPlaces(root);
+  if (places.some(place => place.kind === 'agents-md')) return null;
+  let text = '';
+  try {
+    text = renderProjectSkill(await renderAgentDocsBlock(root));
+  } catch {
+    // The agent-docs check reports a block that cannot render; every Astryx
+    // file then reads as from another release.
+  }
+  return places.flatMap(place =>
+    placeSkillFiles(place, root).map(file => ({file, state: managedFileState(file, text)})),
+  );
 }

@@ -305,11 +305,15 @@ export class BundleError extends Error {
    * @param {Record<string, unknown>} [detail]
    * @param {unknown} [compile] the error of one of the page's own files that
    *   does not compile, which the render reports as a static import's
+   * @param {{source: string, line: number, names: string[], module?: string}} [missingExport]
+   *   a named import or a package subpath that its module does not export:
+   *   the page's file that imports it, the line, the names and the module
    */
-  constructor(message, detail = {}, compile = undefined) {
+  constructor(message, detail = {}, compile = undefined, missingExport = undefined) {
     super(message);
     this.detail = detail;
     this.compile = compile;
+    this.missingExport = missingExport;
   }
 }
 
@@ -504,6 +508,30 @@ export async function bundleForBrowser({
       throw new BundleError(first.text, {}, first.detail.compile);
     }
     const located = first.location?.file ? locatedFile(first.location.file) : null;
+    // A named import its module does not export, in one of the page's own
+    // files: refused as a build refuses it. The worker names the file and
+    // the module, as for the same import on the server.
+    const noExport = /^No matching export in "[^"]+" for import "([^"]+)"$/.exec(first.text);
+    if (noExport && located && isPageFile(located)) {
+      throw new BundleError(first.text, {}, undefined, {
+        source: located,
+        line: first.location.line,
+        names: [noExport[1]],
+      });
+    }
+    // A package subpath the package's `exports` do not list, likewise.
+    const notes = (first.notes ?? []).map((/** @type {any} */ note) => note.text).join('\n');
+    const unexported = /^Could not resolve "[^"]+"$/.test(first.text)
+      ? /The path "([^"]+)" is not exported by package "([^"]+)"/.exec(notes)
+      : null;
+    if (unexported && located && isPageFile(located)) {
+      throw new BundleError(first.text, {}, undefined, {
+        source: located,
+        line: first.location.line,
+        names: [unexported[1]],
+        module: unexported[2],
+      });
+    }
     const where = located ? `${describe(located)}:${first.location.line}: ` : '';
     // A message that leads with a file's absolute path names it as the page does.
     const text = stripVTControlCharacters(first.text).replace(

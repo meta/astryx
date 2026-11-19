@@ -1818,3 +1818,26 @@ describe('label theme target', () => {
     expect(label).toHaveClass('astryx-switch-label');
   });
 });
+
+describe('mount cost (react-component-runtime INV18)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads no box when two hundred switches mount', () => {
+    const boxReads = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    render(
+      <>
+        {Array.from({length: 200}, (_, index) => (
+          <Switch
+            key={index}
+            label={`Setting ${index}`}
+            value={index % 2 === 0}
+            onChange={() => {}}
+          />
+        ))}
+      </>,
+    );
+    expect(boxReads).not.toHaveBeenCalled();
+  });
+});

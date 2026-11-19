@@ -39,7 +39,7 @@ How we verify:
 - `[BUG]` Band axis with many categories overlaps into a smear (candlestick, 30 days).
   Needs width-aware auto-skip without requiring `maxTicks`.
 - `[?]` `tickCount` respected for linear axes (d3 picks "nice" counts near it).
-- `[?]` `maxTicks` evenly skips labels when exceeded (verify the every-Nth logic).
+- `[?]` `maxTicks` thins labels when exceeded: every Nth label from the first, plus the last.
 - `[?]` Long category labels — truncation (`truncate`) appends "…"; consider rotation.
 - `[new]` Rotated labels option for dense/long band labels (currently none).
 - `[?]` First/last linear tick not clipped at plot edges (edge visibility guard exists —
