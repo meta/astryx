@@ -104,6 +104,13 @@ describe('rings, shadows, photos', () => {
     expect(writes(rs)).toEqual([]);
     expect(texts(rs)).toMatch(/no part is called "photos"/);
   }, 240_000);
+
+  it('a photo said beside other asks takes back only its own clause', async () => {
+    const rs = await how('q0', 'rounded photos and a blue accent');
+    expect(writes(rs)).toContain(`set q0 accent '#2563eb'`);
+    expect(writes(rs).some(c => /corners|radius/.test(c))).toBe(false);
+    expect(texts(rs)).toMatch(/no part is called "photos"/);
+  }, 240_000);
 });
 
 describe('text across statuses, a brighter fill', () => {
