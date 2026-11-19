@@ -41,6 +41,7 @@ import {
 import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
 import {
+  savedName,
   projectPlacesValue,
   renderProjectSkill,
 } from '../../foundation/agent-docs/skill-places.mjs';
@@ -58,7 +59,7 @@ export {
   removeSkillPlace,
   writeSkillPlace,
 } from '../../foundation/agent-docs/skill-place-files.mjs';
-import {skillPlaceEscape} from '../../foundation/agent-docs/skill-place-files.mjs';
+import {keptText, skillPlaceEscape} from '../../foundation/agent-docs/skill-place-files.mjs';
 
 // What the run leaf reads before it writes agent docs: the state of the files
 // it is about to write.
@@ -257,4 +258,53 @@ export function computerSkillText(command) {
 export function addComputerSkillFolders(folders) {
   const saved = computerSkillFolders();
   recordComputerSkillFolders([...new Set([...saved, ...folders])]);
+}
+
+/**
+ * Drop folders outside any project from the ones the settings file records.
+ * @param {readonly string[]} folders as saved: `~/<path>` or absolute
+ */
+export function dropComputerSkillFolders(folders) {
+  const drop = new Set(folders);
+  const saved = computerSkillFolders();
+  if (saved.some(each => drop.has(each))) {
+    recordComputerSkillFolders(saved.filter(each => !drop.has(each)));
+  }
+}
+
+/**
+ * The folders outside any project the settings file records.
+ * @returns {string[]}
+ */
+export function computerSkillFoldersSaved() {
+  return computerSkillFolders();
+}
+
+
+/**
+ * One receipt row, and its line, for one skill file a run wrote or removed.
+ * Null for a file that was not there.
+ * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
+ * @param {{file: string, action: string, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}} row
+ * @param {(file: string) => string} shown the file as the receipt names it
+ * @param {string} editedHint what a person does with a file they edited
+ * @param {string} [cwd] the folder the command runs in, for the commands a line names
+ * @returns {{entry: import('./init.type.mjs').InitSkillFile, line: string} | null}
+ */
+export function skillReceiptRow(place, row, shown, editedHint, cwd) {
+  if (row.action === 'absent') return null;
+  /** @type {import('./init.type.mjs').InitSkillFile} */
+  const entry = {
+    path: shown(row.file),
+    place: savedName(place),
+    action: /** @type {import('./init.type.mjs').InitSkillFile['action']} */ (row.action),
+  };
+  if (row.reason) entry.reason = row.reason;
+  const line =
+    entry.action === 'kept'
+      ? `[skip] Astryx skill: ${entry.path} ${keptText(entry.reason, editedHint, cwd)}`
+      : entry.action === 'unchanged'
+        ? `[ok] Astryx skill: ${entry.path} already current, nothing changed`
+        : `[ok] Astryx skill: ${entry.path} ${entry.action}`;
+  return {entry, line};
 }

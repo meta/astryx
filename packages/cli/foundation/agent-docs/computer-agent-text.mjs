@@ -266,6 +266,9 @@ export function computerAgentCommand() {
 function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
+    // A vague question inside a project otherwise loads this generic text and
+    // misses the project's own facts.
+    "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.",
     'Use it when you build or change UI, pick components, or style or theme an app.',
     `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
@@ -275,10 +278,10 @@ function bodyLines(run, install) {
     // own workflow lines.
     // A project that already installs Core gets the CLI at that version, as
     // the CLI's own hint for that state says, never a newer CLI beside it.
-    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). Run \`${run} init\` there and follow the agent docs it writes.`,
+    `To build UI, work in a project folder (create one if there is none). In a new project, add \`@astryxdesign/core\` and \`@astryxdesign/cli\`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). In a project that has or adds Astryx, run \`${run} init\` and follow the agent docs it writes; the WORKFLOW below is for that project.`,
     WORKFLOW_TITLE,
     ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
-    `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
+    `Before you deliver an Astryx page, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
     // A host's door is the host's to restore; only the global command has an
     // install step to name.
     ...(run === COMPUTER_COMMAND ? [computerRestoreLine(install)] : []),
@@ -368,7 +371,7 @@ function linkStateOf(at, folder) {
  * @param {string} expected
  * @returns {ComputerAgentTextState}
  */
-function copyStateOf(at, expected) {
+export function copyStateOf(at, expected) {
   /** @type {fs.Stats} */
   let stat;
   try {

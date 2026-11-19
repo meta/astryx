@@ -33,6 +33,7 @@
  * @property {string | null} templatePath Relative output path when `template === 'created'`.
  * @property {boolean} nextSteps Whether the getting-started "Next steps" were emitted (default mode inside a project; false outside one, and false when `agentDocsStatus` is `current`, where init prints the build and search commands instead).
  * @property {string[]} to The places init wrote the Astryx skill to, as they are saved: `agents-md` (the agent docs above), `skills`, `user`, or a folder. Without `--to`, the project's saved places, else `agents-md`. Empty when agent docs were not installed.
+ * @property {boolean} once Whether `--once` made this a copy that is saved nowhere: no later `init`, `upgrade`, or background refresh writes it again.
  * @property {InitSkillFile[]} skills One row per skill file of the `skills` and folder places: written, or, when `--to` moved the project off a place, removed. Empty for `agents-md` alone.
  * @property {InitUserData | null} user What the `user` place did, as `init --user` reports it; null when `to` has no `user`.
  */
@@ -44,9 +45,17 @@
  */
 
 /**
+ * @typedef {object} InitRemoveData
+ * @property {boolean} removed False when nothing was found to remove: no managed agent-docs block, and no Astryx skill file in the places removed from.
+ * @property {string[]} from The places removed from, as they were saved: without `--to`, the project's saved places (`agents-md` when nothing is saved); with `--to`, the places it names. Each is dropped from what is saved.
+ * @property {InitSkillFile[]} skills One row per skill file of the `skills` and folder places removed from: `removed`, or `kept` (reason `edited`, `not-astryx`, or `computer-skill` for the computer-level skill reached through a saved folder).
+ * @property {InitUserData | null} user What removing the `user` place did, as `init --user --remove-agents` reports it; null when `from` has no `user`.
+ */
+
+/**
  * @typedef {object} InitRemoveResponse
  * @property {'init.remove'} type
- * @property {{removed: boolean}} data False when no managed agent-docs block was found, so nothing was removed.
+ * @property {InitRemoveData} data
  */
 
 /**
@@ -77,7 +86,7 @@
  * @property {string} path The file: relative to the project root for a project place, absolute for a folder outside the project.
  * @property {string} place The place it belongs to, as saved: `skills` or a folder.
  * @property {'created' | 'updated' | 'unchanged' | 'removed' | 'kept'} action
- * @property {'edited' | 'not-astryx' | 'pair-kept'} [reason] Only on `kept`: `edited`, a person changed it since Astryx wrote it; `not-astryx`, Astryx did not write it; `pair-kept`, the other copy of the `skills` place is a person's own, so neither copy is written and every agent reads one text.
+ * @property {'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'} [reason] Only on `kept`: `edited`, a person changed it since Astryx wrote it; `not-astryx`, Astryx did not write it (a linked skill folder's file included); `pair-kept`, the other copy of the `skills` place is a person's own, so neither copy is written and every agent reads one text; `computer-skill`, it is the computer-level skill or one of its links or copies, reached through a saved folder, which `init --remove --to user` removes.
  */
 
 /**
@@ -98,7 +107,9 @@
  * @typedef {object} InitOptions
  * @property {string} [features] Comma-separated features to install (agents, theme, template).
  * @property {boolean} [all] Install all features.
- * @property {boolean} [removeAgents] Remove the managed agent-docs block, at the project root and in the folder init runs in, instead of installing; with `user`, remove the computer-level agent text.
+ * @property {boolean} [remove] Remove the Astryx skill from every saved place (with `to`, from the places it names) and drop them from what is saved; `removeAgents` is the same option.
+ * @property {boolean} [once] With `to`, write a copy that is saved nowhere, so no later run refreshes it. Refused without `to`, with `user`, with `remove`, and for `agents-md` or a place the project or this computer already saves.
+ * @property {boolean} [removeAgents] The same as `remove`.
  * @property {boolean} [user] Write the computer-level agent text (`~/.agents/skills/astryx/SKILL.md`, linked into `~/.claude/skills` and the skill folders of other installed tools, with a copy for Continue) instead of setting up the folder.
  * @property {string | string[]} [to] Where the Astryx skill goes: `agents-md`, `skills`, `user`, or a folder written as a path; a comma list or several. Saved in the project's config (project places) or the settings file (folders outside the project).
  * @property {string} [agent] Agent preset: claude, cursor, codex, hermes, muse, all. Refused with `user`.
