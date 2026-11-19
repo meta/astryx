@@ -518,7 +518,36 @@ describe('the Core layout components the scan trusts', () => {
   }
 
   /** The handlers of a press, as JSX props. */
-  const PRESS_PROPS = new Set(['onClick', 'onClickCapture', 'onDoubleClick', 'onMouseDown', 'onMouseUp']);
+  const PRESS_PROPS = new Set([
+    'onClick',
+    'onClickCapture',
+    'onDoubleClick',
+    'onMouseDown',
+    'onMouseUp',
+    'onPointerDown',
+    'onPointerUp',
+    'onTouchStart',
+    'onTouchEnd',
+  ]);
+  const PRESS_EVENTS = new Set(['click', 'auxclick', 'dblclick', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend']);
+
+  /**
+   * Whether a handler only passes on the caller's own handler and the
+   * component's truncation tooltip's (`composeEventHandlers(tooltipInterest.onPointerDown,
+   * props.onPointerDown)`), which hides that tooltip and acts on nothing it renders.
+   * @param {any} value a JSXAttribute value
+   */
+  const forwardsOnly = value =>
+    value?.type === 'JSXExpressionContainer' &&
+    value.expression.type === 'CallExpression' &&
+    value.expression.callee.type === 'Identifier' &&
+    value.expression.callee.name === 'composeEventHandlers' &&
+    value.expression.arguments.every(
+      (/** @type {any} */ argument) =>
+        argument.type === 'MemberExpression' &&
+        argument.object.type === 'Identifier' &&
+        ['props', 'tooltipInterest'].includes(argument.object.name),
+    );
 
   /**
    * What in a module can act on a press of what it renders: a press handler
@@ -530,7 +559,7 @@ describe('the Core layout components the scan trusts', () => {
     /** @type {string[]} */
     const found = [];
     walk(parseTemplateSource(source), (/** @type {any} */ node) => {
-      if (node.type === 'JSXAttribute' && node.name.type === 'JSXIdentifier' && PRESS_PROPS.has(node.name.name)) {
+      if (node.type === 'JSXAttribute' && node.name.type === 'JSXIdentifier' && PRESS_PROPS.has(node.name.name) && !forwardsOnly(node.value)) {
         found.push(node.name.name);
       }
       if (node.type === 'Identifier' && node.name === 'cloneElement') found.push('cloneElement');
@@ -549,7 +578,7 @@ describe('the Core layout components the scan trusts', () => {
         node.callee.property.type === 'Identifier' &&
         node.callee.property.name === 'addEventListener' &&
         node.arguments[0]?.type === 'StringLiteral' &&
-        ['click', 'pointerdown', 'mousedown'].includes(node.arguments[0].value)
+        PRESS_EVENTS.has(node.arguments[0].value)
       ) {
         found.push(`addEventListener('${node.arguments[0].value}')`);
       }
@@ -563,6 +592,12 @@ describe('the Core layout components the scan trusts', () => {
       'cloneElement',
     ]);
     expect(pressReaders('// onClick, cloneElement\nconst A = p => <div>{p.children}</div>;')).toEqual([]);
+    expect(pressReaders('const A = p => <div onPointerUp={p.go} onTouchEnd={p.go}>{p.children}</div>;')).toEqual(['onPointerUp', 'onTouchEnd']);
+    expect(pressReaders("el.addEventListener('touchend', go);")).toEqual(["addEventListener('touchend')"]);
+    expect(
+      pressReaders('const A = props => <p onPointerDown={composeEventHandlers(tooltipInterest.onPointerDown, props.onPointerDown)} />;'),
+    ).toEqual([]);
+    expect(pressReaders('const A = props => <p onPointerDown={composeEventHandlers(go, props.onPointerDown)} />;')).toEqual(['onPointerDown']);
   });
 
   it.each([...LAYOUT_COMPONENTS].sort())('%s listens for no press and clones nothing it renders', name => {
