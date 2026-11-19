@@ -8,7 +8,8 @@
  *   the control is enabled
  * @output useSegmentedTouchTracking (a press of any pointer, landing to
  *   lift, and its ClickWait), and segmentTargetAt, measureSegments,
- *   measureLiftArea and liftTargetAt, the segment a pointer counts for
+ *   measureLiftArea, liftTargetAt and createSegmentLiftTarget, the segment a
+ *   pointer counts for
  * @position Internal to SegmentedControl; drives useSegmentedSelectionMotion.ts
  *
  * SYNC: When modified, update:
