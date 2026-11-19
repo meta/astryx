@@ -67,11 +67,9 @@ import {
   paletteToken,
   sameColor,
   shade,
+  grownFamilies,
 } from '../theme/palette/generate/mapping.mjs';
-import {
-  isLookFamily,
-  lookSeeds,
-} from '../theme/palette/generate/derive-look.mjs';
+import {isLookFamily} from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
  * _settings (which imports this module) when it loads.
@@ -1010,9 +1008,6 @@ function planPalette(cwd, slug, data, base) {
   // The hues the editor grew for the look (lookSeeds) go, and are grown
   // again below while the theme has a color; any other hue the config
   // holds is the author's, and stays as written.
-  const derived = fams.length
-    ? lookSeeds(fams.find(f => f.id === 'accent')?.seed)
-    : null;
   const grown = isLookFamily;
   for (let i = families.length - 1; i >= 0; i--)
     if (grown(families[i])) families.splice(i, 1);

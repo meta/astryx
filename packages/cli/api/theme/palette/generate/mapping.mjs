@@ -14,8 +14,8 @@
  */
 import {
   compositeOver,
+  contrastRatio,
   hexToOklch,
-  luminance,
   normalizeColor,
 } from './color.mjs';
 export {compositeOver};
@@ -530,8 +530,7 @@ export const hex =
  * @returns {number}
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 /** A ratio to two decimals. */
 export const round =
@@ -1105,9 +1104,9 @@ export function grownFamilies(dials, context) {
       seed,
     });
   const accent = dials.find(d => d.id === 'accent')?.seed;
-  const out = Object.entries(
-    lookSeeds(accent, dials.find(d => d.id === 'neutral')?.seed),
-  ).map(([id, seed]) => named(id, seed));
+  const out = Object.entries(lookSeeds(accent)).map(([id, seed]) =>
+    named(id, seed),
+  );
   /**
    * @type {Record<string, string>}
    */

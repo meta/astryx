@@ -11,7 +11,12 @@
  *   generated copy
  */
 
-import {compositeOver, hexToOklch, luminance, normalizeColor} from './color';
+import {
+  compositeOver,
+  contrastRatio,
+  hexToOklch,
+  normalizeColor,
+} from './color';
 
 export {compositeOver};
 import {
@@ -944,9 +949,9 @@ export function grownFamilies(
     seed,
   });
   const accent = dials.find(d => d.id === 'accent')?.seed;
-  const out = Object.entries(
-    lookSeeds(accent, dials.find(d => d.id === 'neutral')?.seed),
-  ).map(([id, seed]) => named(id, seed));
+  const out = Object.entries(lookSeeds(accent)).map(([id, seed]) =>
+    named(id, seed),
+  );
   const baseColors: Record<string, string> = {};
   for (const d of Object.keys(STATUS_TOKEN)) {
     if (dials.some(f => f.id === d)) {
