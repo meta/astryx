@@ -16,6 +16,13 @@
         "message": "<text>"
       },
       {
+        "id": "core-stylesheets",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
         "id": "version-alignment",
         "label": "<text>",
         "status": "pass",
@@ -134,7 +141,7 @@
     ],
     "summary": {
       "pass": 11,
-      "warn": 3,
+      "warn": 4,
       "fail": 0,
       "info": 5
     }

@@ -654,6 +654,19 @@ function buildDocSchemas() {
               names: z
                 .enum(['component', 'hook', 'topic', 'template', 'theme'])
                 .optional(),
+              pointers: z
+                .array(
+                  z.union([
+                    z.string().min(1),
+                    z
+                      .object({
+                        commands: z.array(z.string().min(1)).min(1),
+                        text: z.string().min(1),
+                      })
+                      .strict(),
+                  ]),
+                )
+                .optional(),
             })
             .passthrough(),
         )

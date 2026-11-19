@@ -38,15 +38,15 @@ system_specs: [spec:AST-038]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `hasDivider`, `height`, `padding`, `paddingBlockEnd`, `label`, `role`, root `BaseProps`, and a root `ref`.                  |
-| Behavior                | A non-shrinking header region whose inner wrapper applies and publishes the Layout inset and aligns to the Layout's content width.      |
-| End-user impact         | People see a header that keeps its height above scrolling content, with content aligned to the page's readable width.                   |
-| Builder impact          | None; the record describes shipped behavior.                                                                                            |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. No implementation gap is open (Current-state impact).        |
-| Review checks           | Reject a header that shrinks, a published inset that differs from the applied padding, an inferred landmark, or a lost divider default. |
-| Governing rules         | `family:layout-regions` FR1, FR4–FR6, FR8; `architecture:container-padding`; `architecture:public-component-api` INV5–INV8.             |
+| Area                    | Contract                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | `children`, `hasDivider`, `height`, `padding`, `paddingBlockEnd`, `label`, `role`, root `BaseProps`, and a root `ref`.                                                                     |
+| Behavior                | A non-shrinking header region whose inner wrapper applies and publishes the Layout inset and aligns to the Layout's content width.                                                         |
+| End-user impact         | People see a header that keeps its height above scrolling content, with content aligned to the page's readable width.                                                                      |
+| Builder impact          | A theme styles one container's header through `layout-header` and its `container` state.                                                                                                   |
+| Compatibility/readiness | Additive: the root reflects `data-container` inside a Card, Dialog, or BottomSheet (FR6, DEC-1); no prop, default, or style changes. No implementation gap is open (Current-state impact). |
+| Review checks           | Reject a header that shrinks, a published inset that differs from the applied padding, an inferred landmark, or a lost divider default.                                                    |
+| Governing rules         | `family:layout-regions` FR1, FR4–FR6, FR8; `architecture:container-padding`; `architecture:public-component-api` INV5–INV8.                                                                |
 
 This table is a review projection; the body below is authoritative.
 
@@ -62,8 +62,8 @@ Consumer syntax and examples belong in `LayoutHeader.doc.mjs`.
 
 - Released default preserved: `yes` — no divider unless a Layout default says
   so, automatic inset, no landmark role.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: additive; the root reflects `data-container` inside a Card, Dialog, or BottomSheet (FR6, DEC-1). No prop, default, or style
+  changes.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -106,6 +106,7 @@ None.
 | FR3 | A divider draws a 1px solid `--color-border` line on the root's block-end edge and reflects `data-divider="true"`. `hasDivider` decides; when unset, the nearest Layout `defaultHasDividers` in the same layer decides (the default stops at a layer boundary, `spec:AST-038` FR7); otherwise there is no divider. A header without a divider lets the middle row below it collapse its block-start spacing. The collapse stops at each Layout, so a Layout nested in that middle row, including inside a Dialog, Drawer, or BottomSheet opened from it, keeps its own spacing (`spec:AST-038` FR7). | Current source and tests; `family:layout-regions` FR6                                   |
 | FR4 | `role` and `label` set the root's `role` and `aria-label`; LayoutHeader adds no role of its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Current source and tests; `family:layout-regions` FR8                                   |
 | FR5 | `ref` reaches the root. Supported DOM, data, ARIA, and event props reach the root, `xstyle`, `className`, and `style` compose after component styles, and the reflected `data-divider` stays component-owned: a caller's `data-divider` never replaces it, so the neighbouring spacing collapse always follows the divider state (`architecture:public-component-api` INV5).                                                                                                                                                                                                                         | Current source and tests; `architecture:public-component-api` INV5–INV8                 |
+| FR6 | The root reflects `data-container` with the container the Layout sits in, as the nearest Card (`card`), Dialog (`dialog`), or BottomSheet (`bottom-sheet`) in the same layer names it; outside one it reflects none. A theme styles one container's header through `layout-header[container=…]` without touching another's. The reflection is an attribute and sets no style.                                                                                                                                                                                                                        | Current source and `componentPartTargets.test.tsx`                                      |
 
 ### Allowed variation
 
@@ -173,7 +174,13 @@ of its own, so no anatomy-theming block is declared here.
 
 ## Decision log
 
-None recorded. The record describes shipped behavior.
+- **DEC-1 — `data-container` names the container a header sits in.** A theme
+  styles a dialog's header without a card's through one state on the existing
+  `layout-header` target, which extends to a later container without a new
+  target name (`architecture:component-theming-surface` INV6). Card, Dialog,
+  and BottomSheet name themselves through a layer-scoped context, so a menu or
+  popover opened from inside one is in no container. The attribute is public
+  because a theme selects on it (`architecture:public-component-api` DEC-2).
 
 ## Open questions
 

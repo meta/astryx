@@ -17,7 +17,11 @@
 import {useCallback, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {isRtlElement} from './isRtlElement';
-import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
+import {
+  findTypeaheadMatch,
+  nextTypeaheadBuffer,
+  isShortcutChord,
+} from '../utils/typeaheadMatch';
 
 /** Keys handled by the tree keyboard model (used to gate typeahead). */
 const NAVIGATION_KEYS = new Set([
@@ -503,9 +507,9 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
       if (
         typeahead &&
         e.key.length === 1 &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey &&
+        !isShortcutChord(e) &&
+        // AltGr reports Alt too; the letter it types still jumps.
+        (!e.altKey || e.getModifierState('AltGraph')) &&
         NAVIGATION_KEYS.has(e.key) === false
       ) {
         runTypeahead(e, items, currentIndex);

@@ -524,7 +524,9 @@ function ActiveUsersChart() {
             }}
             axisLine={false}
             tickLine={false}
-            width={30}
+            // Holds the widest tick label ("120") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={40}
           />
           <Tooltip
             content={<ChartTooltip />}
@@ -762,11 +764,11 @@ export default function DashboardTemplate() {
             </VStack>
 
             {/* Metric Cards */}
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               {[0, 2].map(start => (
                 <Grid
                   key={start}
-                  columns={{minWidth: 240, repeat: 'fit'}}
+                  columns={{minWidth: 240, max: 2, repeat: 'fit'}}
                   gap={4}>
                   {metrics.slice(start, start + 2).map((m, i) => (
                     <MetricCard
@@ -799,7 +801,7 @@ export default function DashboardTemplate() {
                 }
               />
             </HStack>
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               <StackedBarCard title="Region" data={regionData} />
               <StackedBarCard title="Role" data={roleData} />
             </Grid>
@@ -824,7 +826,7 @@ export default function DashboardTemplate() {
                 }
               />
             </HStack>
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+            <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={4}>
               <TableCard
                 title="Top pages"
                 linkLabel="All pages"

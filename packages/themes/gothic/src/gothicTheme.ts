@@ -174,6 +174,13 @@ const SECONDARY_SELECTOR = {
   },
 } as const;
 
+/**
+ * Gothic draws one color mode, dark, in light and dark pages alike. Tools
+ * read this to judge it in that mode; the build writes it into the built
+ * module.
+ */
+export const colorModes = ['dark'] as const;
+
 export const gothicTheme = defineTheme({
   name: 'gothic',
 
@@ -329,6 +336,8 @@ export const gothicTheme = defineTheme({
     '--radius-element': '0.5rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================

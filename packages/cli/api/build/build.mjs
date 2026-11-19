@@ -44,7 +44,7 @@ export {buildHelp, buildKit};
  */
 export async function build(query, options = {}) {
   if (!query || !String(query).trim()) {
-    return buildHelp();
+    return buildHelp({cwd: options.cwd});
   }
   if (
     options.limit != null &&
