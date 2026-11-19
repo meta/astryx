@@ -3813,6 +3813,18 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(5.5 92% 25%)',
         outlineColor: 'hsl(181.6 72% 25%)',
       },
+      first: {
+        backgroundColor: 'hsl(69.6 80% 49%)',
+        color: 'hsl(321.6 89% 12%)',
+        borderColor: 'hsl(105.3 73% 25%)',
+        outlineColor: 'hsl(35.1 94% 25%)',
+      },
+      last: {
+        backgroundColor: 'hsl(288.3 84% 56%)',
+        color: 'hsl(292.7 76% 12%)',
+        borderColor: 'hsl(229.3 73% 25%)',
+        outlineColor: 'hsl(116.0 92% 25%)',
+      },
     },
     'pagination-list': {
       base: {

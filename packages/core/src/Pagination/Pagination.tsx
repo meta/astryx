@@ -402,14 +402,23 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
  */
 function PaginationButton({
   isCurrent = false,
+  rowEnd,
   ...props
-}: React.ComponentProps<typeof Button> & {isCurrent?: boolean}) {
+}: React.ComponentProps<typeof Button> & {
+  isCurrent?: boolean;
+  rowEnd?: 'first' | 'last';
+}) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
   return (
     <Button
       {...props}
       {...themeProps('pagination-item', {
         selected: isCurrent ? 'selected' : null,
+        // A theme that joins the controls into one strip reads the row's ends
+        // here. A control with a tooltip renders its layer after it in the
+        // row, so `:last-child` can miss the last control.
+        first: rowEnd === 'first' ? 'first' : null,
+        last: rowEnd === 'last' ? 'last' : null,
       })}
       ref={ref}
     />
@@ -956,6 +965,7 @@ export function Pagination({
             {...controlProps(1, hasPrevious)}
             isDisabled={isDisabled || !hasPrevious}
             isIconOnly
+            rowEnd="first"
             xstyle={variant === 'compact' && styles.compactFirst}
           />
         )}
@@ -975,6 +985,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'first'}
         />
 
         {renderIndicator()}
@@ -994,6 +1005,7 @@ export function Pagination({
           {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
+          rowEnd={showFirstLast ? undefined : 'last'}
         />
 
         {showFirstLast && (
@@ -1012,6 +1024,7 @@ export function Pagination({
             {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
             isDisabled={isDisabled || !hasNext}
             isIconOnly
+            rowEnd="last"
             xstyle={variant === 'compact' && styles.compactLast}
           />
         )}
