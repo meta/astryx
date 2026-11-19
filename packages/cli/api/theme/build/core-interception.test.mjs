@@ -9,7 +9,8 @@
  *   root entry gives the theme namespace. `patchCommonJs` skips a Core entry
  *   that is absent or fails to load, and the entries of an unreadable package
  *   config. It wraps the root whatever request loads its file. A theme that
- *   imports only the theme subpath never loads the root through jiti.
+ *   imports only the theme subpath never loads the root through jiti. Added
+ *   virtual modules keep the root unread until a module asks for it.
  * @position Unit test of packages/cli/api/theme/build/core-interception.mjs
  */
 
@@ -19,7 +20,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createJiti} from 'jiti';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {interceptCore} from './core-interception.mjs';
+import {interceptCore, withVirtualModules} from './core-interception.mjs';
 
 const themeNamespace = () => ({
   defineTheme: input => ({...input, defined: true}),
@@ -49,6 +50,37 @@ describe('interceptCore', () => {
     expect(observed(root.defineTheme({name: 'ocean'}))).toBe(true);
     expect(modules['@astryxdesign/core']).toBe(root);
     expect(loadRoot).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the root unread when virtual modules are added', () => {
+    const loadRoot = vi.fn(rootNamespace);
+    const interception = interceptCore(themeNamespace(), loadRoot);
+    const base = {default: {name: 'base'}};
+    const {modules} = withVirtualModules(interception, {'./base': base});
+    expect(loadRoot).not.toHaveBeenCalled();
+    expect(modules['./base']).toBe(base);
+    expect(modules['@astryxdesign/core/theme'].themeOnly).toBe('theme');
+    expect(Object.keys(modules)).toEqual([
+      '@astryxdesign/core/theme',
+      '@astryxdesign/core',
+      './base',
+    ]);
+    expect(loadRoot).not.toHaveBeenCalled();
+    expect(modules['@astryxdesign/core'].Button).toBe('root-only');
+    expect(modules['@astryxdesign/core']).toBe(
+      interception.modules['@astryxdesign/core'],
+    );
+    expect(loadRoot).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets an added virtual module replace one of the same specifier', () => {
+    const interception = interceptCore(themeNamespace(), rootNamespace);
+    const theme = {defineTheme: () => 'replaced'};
+    const {modules} = withVirtualModules(interception, {
+      '@astryxdesign/core/theme': theme,
+    });
+    expect(modules['@astryxdesign/core/theme']).toBe(theme);
+    expect(interception.modules['@astryxdesign/core/theme']).not.toBe(theme);
   });
 
   it('gives the theme namespace for the root of a Core with no root entry', () => {

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'cornerRadius',
+  group: 'corners',
   description: 'How round the corners of an item are.',
   words: ['radius', 'rounded corners', 'border radius'],
 };

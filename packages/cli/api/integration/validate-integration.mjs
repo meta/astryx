@@ -35,7 +35,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-import {integrationDocTypes} from '../docs/_adapter.mjs';
+import {
+  integrationDocTypes,
+  packageTemplateLinkProblems,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {
   iconSetCoverage,
   iconSetIssues,
@@ -78,6 +82,7 @@ import {
   packageListingCheck,
   componentDocNamesCheck,
   INVALID_CLI_COMMAND,
+  INVALID_INSTALL_GUIDANCE,
   isListedIssue,
   issueListed as listed,
   validateLoadedIntegration,
@@ -384,6 +389,8 @@ async function validateAtPackageDir(
   let agentDocsError;
   /** @type {string | undefined} */
   let cliCommandError;
+  /** @type {string | undefined} */
+  let installGuidanceError;
   try {
     ({
       manifest,
@@ -392,6 +399,7 @@ async function validateAtPackageDir(
       declaredKeys,
       agentDocsError,
       cliCommandError,
+      installGuidanceError,
     } = await loadManifest(
       manifestFile,
       `Integration manifest (${path.basename(manifestFile)})`,
@@ -459,7 +467,9 @@ async function validateAtPackageDir(
     logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
+    installGuidance: manifest.installGuidance,
     __cliCommandError: cliCommandError,
+    __installGuidanceError: installGuidanceError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
     __ignoredFields: ignoredFields,
@@ -473,7 +483,8 @@ async function validateAtPackageDir(
 
   // Roots + contribution checks are shared with validateLoadedIntegration so
   // the everyday-command nudge runs the exact same validators.
-  // A malformed `cliCommand` is an info note beside the issues, not an issue:
+  // A malformed `cliCommand` or `installGuidance` is an info note beside the
+  // issues, not an issue:
   // `integration check --strict` fails on any warning, and a new failure code
   // joins only in a minor release (architecture:cli-surface INV35). Doctor's
   // project check still warns about it.
@@ -484,7 +495,10 @@ async function validateAtPackageDir(
   if (contribution.notes.length > 0)
     (result.notes ??= []).push(...contribution.notes);
   for (const issue of contribution.issues) {
-    if (issue.code === INVALID_CLI_COMMAND) {
+    if (
+      issue.code === INVALID_CLI_COMMAND ||
+      issue.code === INVALID_INSTALL_GUIDANCE
+    ) {
       (result.notes ??= []).push({code: issue.code, message: issue.message});
     } else {
       issues.push(issue);
@@ -987,10 +1001,13 @@ async function validateIntegrationOnce(pkg, options) {
   // `integration check --strict --next` fails on it today.
   const notes = result.found
     ? [
-        // A malformed cliCommand fails --strict from the next minor
-        // (spec:AST-081 FR5).
+        // A malformed cliCommand or installGuidance fails --strict from the
+        // next minor (spec:AST-081 FR5).
         ...(result.notes ?? []).map(note =>
-          note.code === INVALID_CLI_COMMAND ? {...note, next: true} : note,
+          note.code === INVALID_CLI_COMMAND ||
+          note.code === INVALID_INSTALL_GUIDANCE
+            ? {...note, next: true}
+            : note,
         ),
         ...(result.listed ?? []).map(issue => ({
           code: issue.code,
@@ -1015,6 +1032,21 @@ async function validateIntegrationOnce(pkg, options) {
       ...(await docTargetNotes(integration)).map(note => ({
         ...note,
         next: true,
+      })),
+    );
+  }
+  // Each link in a template's description that names no doc: a `next` note
+  // until the next minor release makes it a warning.
+  if (integration?.templates) {
+    const ownDocs = integration.docs
+      ? await discoverIntegrationDocs(integration)
+      : null;
+    const links = await packageTemplateLinkProblems(integration, ownDocs);
+    notes.push(
+      ...links.map(message => ({
+        code: 'invalid_doc_graph',
+        message,
+        next: /** @type {const} */ (true),
       })),
     );
   }

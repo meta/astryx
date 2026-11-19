@@ -22,6 +22,12 @@ editor required). The server-safe serializers are also available from
 Markdown imported into the editor exports back byte for byte when nothing was
 edited.
 
+Server rendering outputs no document content: `RichTextView` and
+`RichTextEditor` fill their blocks on the client. For content that must be in
+the server HTML, render it with core `Markdown`, which renders the same
+Markdown document on the server (affordances only RichText draws appear in
+their Markdown form), or convert it with `@astryxdesign/richtext/markdown`.
+
 ## Built on Lexical
 
 RichText is built on [Lexical](https://lexical.dev) and does not hide it:

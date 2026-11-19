@@ -26,6 +26,7 @@
  * overlay loading, and resolution they share sit in _adapter.mjs.
  */
 
+import {SKILLS_ROUTE, isSkillsRoute, skill, skills} from './skills/skills.mjs';
 import {list as listRead} from './list/list.mjs';
 import {index as indexRead} from './index/index.mjs';
 import {detail as detailRead} from './detail/detail.mjs';
@@ -131,7 +132,9 @@ function depthRead(options) {
  *   import('./docs.type.mjs').DocsIndexResponse |
  *   import('./docs.type.mjs').DocsDetailResponse |
  *   import('./docs.type.mjs').DocsDetailSectionResponse |
- *   import('./docs.type.mjs').DocsNodeResponse
+ *   import('./docs.type.mjs').DocsNodeResponse |
+ *   import('./docs.type.mjs').DocsSkillsResponse |
+ *   import('./docs.type.mjs').DocsSkillResponse
  * >}
  */
 export async function docs(topic, section, options = {}) {
@@ -148,7 +151,9 @@ export async function docs(topic, section, options = {}) {
  *   import('./docs.type.mjs').DocsIndexResponse |
  *   import('./docs.type.mjs').DocsDetailResponse |
  *   import('./docs.type.mjs').DocsDetailSectionResponse |
- *   import('./docs.type.mjs').DocsNodeResponse
+ *   import('./docs.type.mjs').DocsNodeResponse |
+ *   import('./docs.type.mjs').DocsSkillsResponse |
+ *   import('./docs.type.mjs').DocsSkillResponse
  * >}
  */
 async function docsRead(topic, section, options = {}) {
@@ -162,6 +167,19 @@ async function docsRead(topic, section, options = {}) {
   }
   if (!topic) return list(options);
   const found = await resolveDocsArgument(topic, options);
+  // The skills route answers unless a doc holds that name itself.
+  if (found.kind === 'unknown' && isSkillsRoute(topic)) {
+    if (section) {
+      throw new AstryxError(
+        'A skill has no sections: read it whole.',
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    return topic === SKILLS_ROUTE
+      ? skills(options)
+      : skill(topic.slice(SKILLS_ROUTE.length + 1), options);
+  }
   if (found.kind === 'node') {
     if (section) {
       // A namespace answers a section read from the one guide below it that

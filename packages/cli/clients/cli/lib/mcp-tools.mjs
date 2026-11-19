@@ -17,9 +17,12 @@
  * @position clients/cli/lib — read by commands/mcp.mjs and lib/mcp-server.mjs
  */
 
+import {renderProjectAgentDocsBlock} from '../../../api/docs/_adapter.mjs';
 import {Option} from 'commander';
 import {isAstryxPromptInReach} from '../../../foundation/agent-docs/agent-doc-state.mjs';
-import {renderAgentDocsBlock} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {
+  REMOVE_LINE,
+} from '../../../foundation/agent-docs/agent-docs.mjs';
 import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 
 /**
@@ -243,10 +246,13 @@ export function mcpTools(manifest, {docsOnly = false} = {}) {
 export async function projectAgentText(root) {
   if (isAstryxPromptInReach(root)) return null;
   try {
-    const block = await renderAgentDocsBlock(root);
+    const block = await renderProjectAgentDocsBlock(root);
+    // The remove line is about a block in an agent file; these instructions
+    // are no file, so it goes with the markers.
     return block
       .split('\n')
       .filter(line => !/^<!-- ASTRYX:(START|END) -->$/.test(line.trim()))
+      .filter(line => line !== REMOVE_LINE)
       .join('\n')
       .trim();
   } catch {

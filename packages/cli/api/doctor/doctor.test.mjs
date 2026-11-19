@@ -22,6 +22,7 @@ import {auditCliSelfDocs} from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   doctor,
   checkCliCommand,
+  checkInstallGuidance,
   checkAuthoringDocs,
   checkCliDocs,
   checkDocsTree,
@@ -32,6 +33,7 @@ import {
   checkIntegrationCoreRange,
   checkVersionAlignment,
   checkCoreInstalled,
+  checkCoreStylesheets,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
 } from './doctor.mjs';
@@ -331,8 +333,161 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+      'Install the design system: `npm install @astryxdesign/core`.',
     );
+  });
+});
+
+describe("the check that the app loads Core's component styles", () => {
+  const ctx = (/** @type {string} */ cwd) => ({
+    cwd,
+    nodeVersion: '',
+    coreDir: path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+    configPath: null,
+  });
+  const app = (/** @type {Record<string, string>} */ files) =>
+    mkProject({
+      'package.json': JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.7.16'},
+      }),
+      'src/App.tsx':
+        'import {Button} from \'@astryxdesign/core/Button\';\nexport default () => <Button label="Hi" />;\n',
+      ...files,
+    });
+
+  it('passes for a global stylesheet that @imports it, or a module that imports it', () => {
+    const css = app({
+      'src/index.css':
+        "@import '@astryxdesign/core/reset.css';\n@import url('@astryxdesign/core/astryx.css');\n",
+    });
+    expect(checkCoreStylesheets(ctx(css))).toMatchObject({
+      id: 'core-stylesheets',
+      status: 'pass',
+      message: `${path.join('src', 'index.css')} loads @astryxdesign/core/astryx.css, Core's component styles.`,
+    });
+    const entry = app({
+      'src/main.tsx':
+        "import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(entry))?.status).toBe('pass');
+  });
+
+  it('warns when no source imports it, a commented-out import included, and names the imports to add', () => {
+    const missing = app({
+      'src/index.css':
+        "/* @import '@astryxdesign/core/astryx.css'; */\nbody { margin: 0; }\n",
+      'src/main.tsx':
+        "// import '@astryxdesign/core/astryx.css';\nimport App from './App';\n",
+    });
+    expect(checkCoreStylesheets(ctx(missing))).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('render unstyled'),
+      fix: expect.stringContaining("@import '@astryxdesign/core/astryx.css';"),
+    });
+  });
+
+  it('passes for a page that links it, from a package CDN or the installed package, but not in a comment', () => {
+    for (const href of [
+      'https://cdn.jsdelivr.net/npm/@astryxdesign/core@0.7.16/dist/astryx.css',
+      '/node_modules/@astryxdesign/core/dist/astryx.css',
+    ]) {
+      const page = app({
+        'index.html': `<!doctype html><head><link rel="stylesheet" href="${href}" /></head>`,
+      });
+      expect(checkCoreStylesheets(ctx(page))).toMatchObject({
+        status: 'pass',
+        message: expect.stringMatching(/^index\.html loads /),
+      });
+    }
+    const commented = app({
+      'index.html':
+        '<!-- <link rel="stylesheet" href="/node_modules/@astryxdesign/core/dist/astryx.css"> -->',
+    });
+    expect(checkCoreStylesheets(ctx(commented))?.status).toBe('warn');
+  });
+
+  it.each([
+    [
+      'withAstryx() in next.config.mjs',
+      {
+        'next.config.mjs':
+          "import {withAstryx} from '@astryxdesign/build/next';\nexport default withAstryx({});\n",
+      },
+    ],
+    [
+      'astryxStylex() in vite.config.ts',
+      {
+        'vite.config.ts':
+          "import {defineConfig} from 'vite';\nimport {astryxStylex} from '@astryxdesign/build/vite';\nexport default defineConfig({plugins: [...astryxStylex()]});\n",
+      },
+    ],
+    [
+      `the \`@astryx;\` rule in ${path.join('src', 'app', 'globals.css')}`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@astryx;\n",
+      },
+    ],
+    [
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in postcss.config.mjs`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        'postcss.config.mjs':
+          "export default {plugins: {'@astryxdesign/build/postcss': {}}};\n",
+      },
+    ],
+    [
+      `the \`@stylex;\` rule in ${path.join('src', 'app', 'globals.css')}, with @astryxdesign/build in .postcssrc.json`,
+      {
+        'src/app/globals.css':
+          "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+        '.postcssrc.json': JSON.stringify({
+          plugins: {'@astryxdesign/build/postcss': {}},
+        }),
+      },
+    ],
+  ])(
+    'is not checked in an app that compiles Core from source: %s',
+    (setup, files) => {
+      expect(checkCoreStylesheets(ctx(app(files)))).toMatchObject({
+        id: 'core-stylesheets',
+        status: 'info',
+        message: expect.stringContaining(`(${setup})`),
+      });
+    },
+  );
+
+  it('warns an app whose `@stylex;` rule is its own StyleX, with no PostCSS plugin of @astryxdesign/build', () => {
+    const own = app({
+      'src/app/globals.css':
+        "@import '@astryxdesign/core/reset.css';\n@stylex;\n",
+      'postcss.config.mjs':
+        "export default {plugins: {'@stylexjs/postcss-plugin': {}}};\n",
+    });
+    expect(checkCoreStylesheets(ctx(own))?.status).toBe('warn');
+  });
+
+  it('passes an app that loads it beside a StyleX rule of its own', () => {
+    const stylex = app({
+      'src/app/globals.css':
+        "@import '@astryxdesign/core/reset.css';\n@import '@astryxdesign/core/astryx.css';\n@stylex;\n",
+    });
+    expect(checkCoreStylesheets(ctx(stylex))?.status).toBe('pass');
+  });
+
+  it('still checks an app that names the source build only in a comment', () => {
+    const commented = app({
+      'next.config.mjs':
+        "// import {withAstryx} from '@astryxdesign/build/next';\nexport default {};\n",
+      'src/app/globals.css': '/* @astryx; */\nbody { margin: 0; }\n',
+    });
+    expect(checkCoreStylesheets(ctx(commented))?.status).toBe('warn');
+  });
+
+  it('is left out when Core is not installed', () => {
+    expect(checkCoreStylesheets({...ctx(app({})), coreDir: null})).toBeNull();
   });
 });
 
@@ -379,6 +534,35 @@ describe('the command that adds an integration installed for the computer', () =
     });
     expect(c.status).toBe('info');
     expect(c).not.toHaveProperty('fix');
+  });
+});
+
+describe('checkInstallGuidance', () => {
+  it('is left out when no integration gives guidance', () => {
+    expect(checkInstallGuidance({cwd: mkProject({}), integrations: [{name: '@acme/a'}]})).toBeNull();
+  });
+
+  it('passes and names the guidance and who gave it', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [{name: '@acme/a', installGuidance: 'Add {packages}, then relock'}],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'pass'});
+    expect(c.message).toContain('@acme/a');
+    expect(c.message).toContain('Add {packages}, then relock');
+  });
+
+  it('warns when integrations give different guidance', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [
+        {name: '@acme/a', installGuidance: 'Add {packages}, then relock'},
+        {name: '@acme/b', installGuidance: 'Ask the platform team'},
+      ],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'warn'});
+    expect(c.message).toContain('@acme/a (`Add {packages}, then relock`)');
+    expect(c.fix).toContain('installGuidance');
   });
 });
 
@@ -535,7 +719,80 @@ describe('checkProviderIdentity', () => {
     });
     expect(c.status).toBe('warn');
     expect(c.message).toBe(message);
-    expect(c.fix).toContain('providerId');
+    expect(c.fix).toBe(
+      'Give each integration its own `providerId` in astryx.integration.*. ' +
+        "A renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('names both fixes when only some conflicts are declared by both', () => {
+    /** @param {string} name @param {boolean} bothDeclare */
+    const conflict = (name, bothDeclare) =>
+      loaded({
+        name,
+        __spec: name,
+        __providerConflict: {
+          providerId: '@acme/widgets',
+          claimedBy: '@acme/widgets',
+          message: `${name} message.`,
+          ...(bothDeclare ? {bothDeclare: true} : {}),
+        },
+      });
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        conflict('@acme/widgets-legacy', true),
+        conflict('@acme/renamed', false),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      '@acme/widgets-legacy message. @acme/renamed message.',
+    );
+    expect(c.fix).toBe(
+      'Where both manifests declare the ID: Both manifests declare the same ' +
+        '`providerId`. If they are one integration installed under two ' +
+        'names, keep one of the two dependencies; if they are different ' +
+        'integrations, give each its own `providerId` in ' +
+        'astryx.integration.*. For the other conflicts: Give each ' +
+        'integration its own `providerId` in astryx.integration.*. A ' +
+        "renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('offers keeping one dependency when both manifests declare the ID', () => {
+    const message =
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim ' +
+      'provider ID "@acme/widgets". @acme/widgets@1.0.0 loads first and is ' +
+      'used; @acme/widgets-legacy@1.0.0 contributes nothing. Both manifests ' +
+      'declare this provider ID. If they are one integration installed ' +
+      'under two names, keep one of the two dependencies; otherwise one ' +
+      'package must change its providerId.';
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        loaded({
+          name: '@acme/widgets-legacy',
+          __spec: '@acme/widgets-legacy',
+          __providerConflict: {
+            providerId: '@acme/widgets',
+            claimedBy: '@acme/widgets',
+            message,
+            bothDeclare: true,
+          },
+        }),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(message);
+    expect(c.fix).toBe(
+      'Both manifests declare the same `providerId`. If they are one ' +
+        'integration installed under two names, keep one of the two ' +
+        'dependencies; if they are different integrations, give each its ' +
+        'own `providerId` in astryx.integration.*.',
+    );
   });
 
   it('is part of the report doctor returns', async () => {

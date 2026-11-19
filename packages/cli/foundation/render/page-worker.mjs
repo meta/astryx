@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Worker for `astryx experimental render`: loads one page module from
+ * @file Worker for `astryx experimental export`: loads one page module from
  * the project (TypeScript, JSX and StyleX compiled in memory) and renders its
  * default export to static markup with the project's own React.
  *
@@ -26,15 +26,19 @@
  * (through the global layers.mjs names) is drawn the same way and put where
  * its marker is, with each overlay it opened after it.
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers}
- * @output one message: {ok: true, markup, css, files, texts, logs} or
+ * With `buildScript`, the page's modules and the modules they use are also
+ * bundled for the browser by esbuild (client-bundle.mjs) into one script,
+ * which draws the page over its markup in the browser.
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers, buildScript, esbuild}
+ * @output one message: {ok: true, markup, css, files, texts, logs, script} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Module, {createRequire, register} from 'node:module';
+import Module, {builtinModules, createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
@@ -42,9 +46,16 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
+import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
+import {parseSrcset} from './srcset.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
+import {packageResolveHooks} from './package-resolve-hooks.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
-import {importSpecifiers} from './embedded-imports.mjs';
+import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
+import {sha256} from './source-block.mjs';
+import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
+import {droppedImports, importUses} from './value-uses.mjs';
+import {coreComponentOf} from '../discovery/core-elements.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -78,6 +89,15 @@ for (const level of /** @type {const} */ (['log', 'info', 'warn', 'error', 'debu
 
 const requireFromCli = createRequire(import.meta.url);
 const stylexPlugin = /** @type {any} */ (requireFromCli('@stylexjs/babel-plugin'));
+/**
+ * The class-name prefix of the page's own compiled styles. Core's built sheet
+ * uses StyleX's default, `x`. A page rule with the same declaration as a Core
+ * rule would otherwise get the same class, unlayered, and override Core's
+ * layered rules on Core's own elements. With its own prefix the page's rules
+ * apply to the page's elements only, as in an app that @astryxdesign/build
+ * compiles with one prefix for Astryx and another for product files.
+ */
+const PAGE_CLASS_PREFIX = 'p';
 
 /** StyleX rules collected from every local module the page loads. */
 /** @type {unknown[]} */
@@ -88,11 +108,68 @@ const importedCss = [];
 /** Every local (non-package) module the page loaded, page first. */
 /** @type {string[]} */
 const localFiles = [];
+/** The page's own files that load as modules, not as text (`?raw`) or data. @type {Set<string>} */
+const moduleFiles = new Set();
+/**
+ * Local files the page uses that the file cannot carry: a module or JSON
+ * file it reaches by a relative import from outside the folder it carries
+ * from, and a Sass or Less stylesheet, which a render does not compile.
+ * @type {string[]}
+ */
+const outsideFiles = [];
 /** Package stylesheets the page imports, by specifier and importing file. */
 /** @type {{spec: string, from: string}[]} */
 const packageCss = [];
 /** Sass and Less stylesheets the page imports, which a render cannot compile. @type {string[]} */
 const skippedCss = [];
+/** https image addresses the page's own files name as literals, which the first paint may not show. @type {Set<string>} */
+const remoteLiterals = new Set();
+/**
+ * Of those, the addresses that count only because a name says they are
+ * images (`imageUploadUrl`, an object's `src`), never by their path or an
+ * element that shows them: such a name can hold an API's or a player's
+ * address. @type {Set<string>}
+ */
+const namedOnlyLiterals = new Set();
+/** The addresses that count by their path or an element that shows them. @type {Set<string>} */
+const placedLiterals = new Set();
+/**
+ * Record an https literal the render fetches as an image. A `srcSet` value
+ * lists candidates (`a.png 1x, a@2x.png 2x`): each https one is an image.
+ * @param {string} value
+ * @param {{srcset: boolean, byName: boolean} | null} why see imageLiteralKind
+ */
+function noteRemoteLiteral(value, why) {
+  if (!why) return;
+  const urls = why.srcset ? srcsetCandidates(value).filter(url => /^https:\/\//i.test(url) && !namesNoImage(url)) : [value];
+  for (const url of urls) {
+    remoteLiterals.add(url);
+    (why.byName ? namedOnlyLiterals : placedLiterals).add(url);
+  }
+}
+
+/**
+ * Whether an address's path names a type that is never an image.
+ * @param {string} url
+ */
+function namesNoImage(url) {
+  try {
+    return NOT_AN_IMAGE.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The addresses a `srcset` value lists, one per candidate.
+ * @param {string} value
+ * @returns {string[]}
+ */
+function srcsetCandidates(value) {
+  return parseSrcset(value).map(candidate => candidate.url);
+}
+/** https image addresses the page builds in code where an image goes, which a render cannot carry. @type {{text: string, file: string, line: number}[]} */
+const builtRemote = [];
 /** Local files inlined from asset imports. */
 /** @type {Set<string>} */
 const assetsInlined = new Set();
@@ -100,11 +177,17 @@ const assetsInlined = new Set();
 /** @type {Set<string>} */
 const packages = new Set();
 /** Static JSX text per element, for the dropped-children warning. */
-/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number}[]} */
+/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number, chain: {component: string, line: number, from: string | null, name: string}[]}[]} */
 const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/**
+ * Each string a page's own file gives a Core component's prop
+ * (`<Button variant="danger">`), for the unknown-prop-value warning.
+ * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ */
+const propValues = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -180,6 +263,23 @@ const jsxName = node => {
       : '';
 };
 
+/**
+ * The module a JSX component name is imported from, and the name that module
+ * exports it under; `from` is null for a component the page defines itself.
+ * @param {any} p a JSX element path
+ * @param {string} name the element's name as the page writes it
+ * @returns {{from: string | null, name: string}}
+ */
+const importOf = (p, name) => {
+  const binding = p.scope.getBinding(name);
+  if (binding?.kind !== 'module') return {from: null, name};
+  const spec = binding.path.node;
+  return {
+    from: binding.path.parent.source.value,
+    name: spec.type === 'ImportSpecifier' ? (spec.imported.name ?? spec.imported.value) : name,
+  };
+};
+
 /** @type {Record<string, string>} */
 const ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
@@ -211,6 +311,82 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
  * @param {string} file */
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
+
+/**
+ * The real folders of the packages that a `node_modules` folder links to
+ * inside the folder whose modules the page carries (`npm link`, a `file:`
+ * dependency, a workspace package). Node loads such a package's modules by
+ * their real path, so they read as the page's own. They compile as the
+ * page's own do, but the file carries only what the page reaches by a path
+ * (see dropLinkedPackageFiles), because the page imports the package by its
+ * name. The search covers each `node_modules` folder that Node reads for the
+ * page's imports, from the page's folder up, and the `node_modules` folders
+ * of each linked package and of the folders above it, as a workspace links
+ * one package into another. A link to a folder that holds the page is not a
+ * package of the page's. Empty when no link leads into the carried folder.
+ * @returns {string[]} each folder, with a trailing separator
+ */
+function linkedPackageRoots() {
+  /** @type {Set<string>} */
+  const roots = new Set();
+  /** @type {Set<string>} */
+  const scanned = new Set();
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} link */
+  const addIfLinkedIn = link => {
+    let real;
+    try {
+      if (!fs.lstatSync(link).isSymbolicLink()) return;
+      real = fs.realpathSync(link);
+    } catch {
+      return;
+    }
+    const folder = real + path.sep;
+    if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
+      roots.add(folder);
+      found.push(real);
+    }
+  };
+  /** Read the links in `dir`'s `node_modules` folder and in those above it, up to `top`. @param {string} dir @param {string | null} top */
+  const scanUp = (dir, top) => {
+    for (let at = dir; ; at = path.dirname(at)) {
+      if (!scanned.has(at)) {
+        scanned.add(at);
+        const modules = path.join(at, 'node_modules');
+        /** @type {string[]} */
+        let names = [];
+        try {
+          names = fs.readdirSync(modules);
+        } catch {
+          // No node_modules folder here.
+        }
+        for (const name of names) {
+          const link = path.join(modules, name);
+          if (!name.startsWith('@')) {
+            addIfLinkedIn(link);
+            continue;
+          }
+          try {
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+          } catch {
+            // A scope that cannot be read holds no package that Node can load.
+          }
+        }
+      }
+      if (at === top || path.dirname(at) === at) break;
+    }
+  };
+  scanUp(path.dirname(entry), null);
+  // A linked package resolves its own imports from its folder up.
+  for (let next = found.shift(); next !== undefined; next = found.shift()) scanUp(next, scope);
+  return [...roots];
+}
+
+const LINKED_ROOTS = linkedPackageRoots();
+
+/** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
+const inLinkedPackage = file => LINKED_ROOTS.some(root => file.startsWith(root));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -483,6 +659,26 @@ async function withLoadDocument(fn) {
 }
 
 /**
+ * Run `fn` with console.timeStamp hidden. A development build of React DOM
+ * decides as it loads whether to log every render to the Performance panel
+ * (console.timeStamp and performance.measure), and logs only when both are
+ * there. The worker has no Performance panel, and Node copies the props a
+ * logged re-render changed into its user timing buffer: a page of four
+ * charts of 50,000 points each spent most of its drawing time there.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withoutRenderTimings(fn) {
+  const had = Object.getOwnPropertyDescriptor(console, 'timeStamp');
+  /** @type {any} */ (console).timeStamp = undefined;
+  try {
+    await fn();
+  } finally {
+    if (had) Object.defineProperty(console, 'timeStamp', had);
+    else delete (/** @type {any} */ (console)).timeStamp;
+  }
+}
+
+/**
  * Draw each part the page asked to be drawn open, in the layer document
  * (layers.mjs), and put each where its marker is: the part as drawn, then
  * each overlay it shows or a press opens (openLayerMarkup), in place after
@@ -618,50 +814,340 @@ async function drawOpenLayers(elements, React) {
 
 /**
  * Babel plugin: a bare import that a path alias places loads from that file,
- * as in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads. It runs on the page's
+ * as in TypeScript, before any installed copy. A relative `.js`-family import
+ * that names no file loads the TypeScript source it stands for (`./fmt.js`
+ * for fmt.ts). Any other import is left alone, so an installed package
+ * loads. It runs on the page's
  * own files, before {@link pagePlugin}, and on every module the page loads
  * from outside them and outside `node_modules` (a sibling package's source,
  * say).
  */
 function aliasPlugin() {
   return () => {
-    /** @param {any} node a string literal to point at the file an alias places */
-    const point = node => {
+    /**
+     * Point a string literal at the file an alias places, or at the
+     * TypeScript source a relative `.js`-family name stands for when no file
+     * has that name (`./fmt.js` for fmt.ts), as TypeScript and bundlers read
+     * it.
+     * @param {any} node
+     * @param {string} from the importing file
+     */
+    const point = (node, from) => {
       if (node?.type !== 'StringLiteral') return;
       const file = resolvePath(PATHS, node.value);
-      if (file) node.value = file;
+      if (file) {
+        node.value = file;
+        return;
+      }
+      const source = from ? typeScriptSourceOf(node.value, from) : null;
+      if (source) node.value = source;
     };
     return {
       visitor: {
-        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-          point(p.node.source);
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
-        CallExpression(/** @type {any} */ p) {
+        CallExpression(/** @type {any} */ p, /** @type {any} */ state) {
           const callee = p.node.callee;
-          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require'))
+            point(p.node.arguments?.[0], state.filename);
         },
-        ImportExpression(/** @type {any} */ p) {
-          point(p.node.source);
+        ImportExpression(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
       },
     };
   };
 }
 
+/** An image file's extension at the end of an address's path. */
+const IMAGE_PATH = /\.(png|jpe?g|gif|webp|avif|svg|ico)$/i;
+
+/** The words a property or attribute name uses for an image. */
+const IMAGE_WORDS = new Set([
+  'avatar',
+  'image',
+  'img',
+  'photo',
+  'picture',
+  'thumbnail',
+  'thumb',
+  'logo',
+  'icon',
+  'cover',
+  'banner',
+  'poster',
+  'background',
+]);
+
+/**
+ * Whether a property or attribute name names an image: one of its words
+ * (`avatarUrl`, `cover_image`, `hero-photos`) is an image word, singular or
+ * plural. A word that only holds one (`logoutUrl`, `discoverUrl`) does not.
+ * @param {string} name
+ */
+function namesImage(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .some(word => {
+      const lower = word.toLowerCase();
+      return IMAGE_WORDS.has(lower) || (lower.endsWith('s') && IMAGE_WORDS.has(lower.slice(0, -1)));
+    });
+}
+
+/** The attributes where JSX puts an image's address. */
+const SRC_ATTR = /^(src|srcset|poster)$/i;
+
+/** The attributes and properties where a page puts a link's address. */
+const LINK_ATTR = /^(href|xlinkHref)$/i;
+
+/**
+ * The name a value is given, through the expressions that only choose or
+ * wrap it (`a ? x : y`, `x ?? y`, `x as string`): the key of the object
+ * property it is the value of, or the JSX attribute it is in.
+ * @param {any} p a path to the value
+ * @returns {{name: string, jsx: boolean, element?: string | null} | null}
+ *   `element`: the JSX element's name, for an attribute
+ */
+function nameOfValue(p) {
+  let at = p;
+  while (
+    at.parentPath &&
+    (at.parentPath.isConditionalExpression() ||
+      at.parentPath.isLogicalExpression() ||
+      at.parentPath.isParenthesizedExpression?.() ||
+      at.parentPath.isTSAsExpression?.() ||
+      at.parentPath.isTSSatisfiesExpression?.() ||
+      at.parentPath.isJSXExpressionContainer())
+  ) {
+    if (at.parentPath.isConditionalExpression() && at.parentPath.node.test === at.node) return null;
+    at = at.parentPath;
+  }
+  const holder = at.parentPath;
+  if (!holder) return null;
+  if (holder.isJSXAttribute() && holder.node.value === at.node) {
+    const n = holder.node.name;
+    const tag = holder.parentPath?.node?.name;
+    return {
+      name: n.type === 'JSXNamespacedName' ? n.name.name : n.name,
+      jsx: true,
+      element: tag?.type === 'JSXIdentifier' ? tag.name : null,
+    };
+  }
+  if (holder.isObjectProperty() && holder.node.value === at.node && !holder.node.computed) {
+    const k = holder.node.key;
+    const name = k.type === 'Identifier' ? k.name : k.type === 'StringLiteral' ? k.value : null;
+    return name === null ? null : {name, jsx: false};
+  }
+  return null;
+}
+
+/**
+ * What the place a value is given says about it: `shown` where an HTML
+ * element shows an image from it (showsImage), `name` where only a name
+ * says it is an image (a component's or an object's `src`, `srcSet` or
+ * `poster`, or a name with an image word), `other` at an HTML element's
+ * `src`, `srcset` or `poster` that shows no image (an `<iframe>`'s or a
+ * `<video>`'s `src`), and null where nothing says.
+ * @param {{name: string, jsx: boolean, element?: string | null} | null} named
+ * @returns {'shown' | 'name' | 'other' | null}
+ */
+function imagePlace(named) {
+  if (!named) return null;
+  if (named.jsx && named.element && /^[a-z]/.test(named.element) && SRC_ATTR.test(named.name)) {
+    return showsImage(named.element, named.name.toLowerCase()) ? 'shown' : 'other';
+  }
+  return SRC_ATTR.test(named.name) || namesImage(named.name) ? 'name' : null;
+}
+
+/**
+ * Where a value the page writes in its code goes: the place it is given, or,
+ * for a variable's value, the place a read of the variable gives it
+ * (`const hero = '…'` with `<img src={hero}>`). A read where an element
+ * shows it wins over one where only a name says so.
+ * @param {any} p a path to the value
+ * @returns {{place: 'shown' | 'name' | 'other' | null, srcset: boolean}}
+ *   `srcset` when that place is a `srcset`, whose candidates are the images
+ */
+function placeOf(p) {
+  const own = nameOfValue(p);
+  const ownPlace = imagePlace(own);
+  if (own && ownPlace) return {place: ownPlace, srcset: /^srcset$/i.test(own.name)};
+  const reads = readsOf(p).map(ref => {
+    const named = nameOfValue(ref);
+    return {place: imagePlace(named), srcset: Boolean(named && /^srcset$/i.test(named.name))};
+  });
+  return (
+    reads.find(read => read.place === 'shown') ??
+    reads.find(read => read.place === 'name') ??
+    reads.find(read => read.place === 'other') ?? {place: null, srcset: false}
+  );
+}
+
+/**
+ * Whether a literal is the value of a variable that the page uses as a
+ * link's address (`const full = 'https://…/a.png'` with `<a href={full}>`).
+ * @param {any} p a path to the literal
+ */
+function reachesLink(p) {
+  return readsOf(p).some(ref => {
+    const named = nameOfValue(ref);
+    return Boolean(named && LINK_ATTR.test(named.name));
+  });
+}
+
+/**
+ * The reads of the variable a literal is the value of (`const full = '…'`),
+ * through the expressions that only choose or wrap it; none when the literal
+ * is not a variable's value.
+ * @param {any} p a path to the literal
+ * @returns {any[]}
+ */
+function readsOf(p) {
+  let at = p;
+  while (
+    at.parentPath &&
+    (at.parentPath.isConditionalExpression() ||
+      at.parentPath.isLogicalExpression() ||
+      at.parentPath.isParenthesizedExpression?.() ||
+      at.parentPath.isTSAsExpression?.() ||
+      at.parentPath.isTSSatisfiesExpression?.())
+  ) {
+    at = at.parentPath;
+  }
+  const declarator = at.parentPath;
+  if (!declarator?.isVariableDeclarator() || declarator.node.init !== at.node) return [];
+  const id = declarator.node.id;
+  if (id.type !== 'Identifier') return [];
+  return declarator.scope.getBinding(id.name)?.referencePaths ?? [];
+}
+
+/**
+ * The address a template or a `+` chain builds, with each value it puts in
+ * written as `x`, so its fixed parts read as an address.
+ * @param {any} node
+ * @returns {string}
+ */
+function builtSkeleton(node) {
+  if (node.type === 'StringLiteral') return node.value;
+  if (node.type === 'TemplateLiteral') return node.quasis.map((/** @type {any} */ q) => q.value.cooked ?? '').join('x');
+  if (node.type === 'BinaryExpression' && node.operator === '+') return builtSkeleton(node.left) + builtSkeleton(node.right);
+  return 'x';
+}
+
+/**
+ * Why an https address the page writes as a literal is an image the
+ * render fetches: its path ends in an image extension; an HTML element shows
+ * it (showsImage), where the literal is written or where the page reads the
+ * variable it is the value of; or a name says it is one: a component's or an
+ * object's `src`, `srcSet` or `poster`, or a name with an image word. A
+ * link's address, written in `href` or in a variable only links read, never
+ * counts, nor does an address an HTML element takes for something else (an
+ * `<iframe>`'s or a `<video>`'s `src`) or one whose path names a type that is
+ * never an image (`clip.mp4`), and no other address does. A variable counts
+ * by the reads in its own file.
+ * @param {string} value
+ * @param {any} p a path to the literal
+ * @returns {{srcset: boolean, byName: boolean} | null} whether it is a
+ *   `srcSet` (whose candidates are the images) and whether only a name says
+ *   it is an image; null for no image the render fetches
+ */
+function imageLiteralKind(value, p) {
+  const {place, srcset} = placeOf(p);
+  // A srcset lists candidates, each with its own address, so any of them
+  // can be an https image (`./a.png 1x, https://cdn.example.com/a@2x.png 2x`,
+  // or a value written over several lines).
+  if (srcset ? !srcsetCandidates(value).some(url => /^https:\/\//i.test(url)) : !/^https:\/\//i.test(value)) return null;
+  const named = nameOfValue(p);
+  // A link's address is where the reader goes, even when it names an image
+  // file: the file keeps it as written.
+  // A variable a link and an image both read is an image's address too.
+  const image = place === 'shown' || place === 'name';
+  if ((named && LINK_ATTR.test(named.name)) || (reachesLink(p) && !image)) return null;
+  if (place === 'other') return null;
+  if (srcset) return {srcset: true, byName: place === 'name'};
+  /** @type {string} */
+  let pathname;
+  try {
+    pathname = new URL(value).pathname;
+  } catch {
+    return null;
+  }
+  // A clip, a font or a document is never an image, whatever name holds it.
+  if (NOT_AN_IMAGE.test(pathname)) return null;
+  if (IMAGE_PATH.test(pathname)) return {srcset: false, byName: false};
+  return image ? {srcset: false, byName: place === 'name'} : null;
+}
+
+/**
+ * The TypeScript source a relative `.js`-family import names when no file has
+ * the name as written, as the import walk and the browser bundle resolve it,
+ * or null.
+ * @param {string} spec
+ * @param {string} from the importing file
+ */
+function typeScriptSourceOf(spec, from) {
+  if (!spec.startsWith('.') || spec.includes('?')) return null;
+  const written = path.resolve(path.dirname(from), spec);
+  const file = existingFile(written, []);
+  return file && file !== written ? file : null;
+}
+
+/**
+ * The name a browser module calls `carried` by, imported once at its top.
+ * @param {any} p an import declaration's path
+ * @param {any} t Babel's types
+ */
+function carriedName(p, t) {
+  const program = p.scope.getProgramParent();
+  const name = '__astryxCarried';
+  if (!program.hasBinding(name)) {
+    program.path.unshiftContainer(
+      'body',
+      t.importDeclaration(
+        [t.importSpecifier(t.identifier(name), t.identifier('carried'))],
+        t.stringLiteral(CARRIED_MODULE),
+      ),
+    );
+    program.crawl();
+  }
+  return t.identifier(name);
+}
+
 /**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
+ *
+ * For the browser (`browser`), the same imports load the same way, but the
+ * page keeps its real charts and nothing is recorded: the server render
+ * recorded it already.
  * @param {string} filename
+ * @param {boolean} [browser]
  */
-function pagePlugin(filename) {
+function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
+  /**
+   * Record an https image address the page builds in code (a template with
+   * values, or `+`) that would count as an image if it were whole (see
+   * imageLiteralKind), read with each value it puts in as `x`
+   * (`https://cdn.example.com/x.png`): the render cannot know it, so the
+   * file asks the network for it when the script draws it.
+   * @param {any} p
+   */
+  const builtAddress = p => {
+    if (!imageLiteralKind(builtSkeleton(p.node), p)) return;
+    const {start, end} = p.node;
+    const text = typeof start === 'number' && typeof end === 'number' ? p.hub?.file?.code?.slice(start, end) : null;
+    builtRemote.push({text: text ?? '(an address built in code)', file: filename, line: p.node.loc?.start.line ?? 0});
+  };
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
         const spec = /** @type {string} */ (p.node.source.value);
-        if (spec === 'recharts') setChartsAside(p, t);
+        if (spec === 'recharts' && !browser) setChartsAside(p, t);
         const raw = spec.split('?')[0];
         // A stylesheet, image or JSON file imported through a project alias
         // (`@/styles/site.css`) resolves the way modules do.
@@ -722,7 +1208,13 @@ function pagePlugin(filename) {
         }
         if (/\.(scss|sass|less)$/i.test(bare)) {
           // Sass and Less need their compiler: say so rather than drop them.
-          skippedCss.push(bare);
+          if (!browser) {
+            skippedCss.push(bare);
+            if (bare.startsWith('.') || path.isAbsolute(bare)) {
+              const file = path.resolve(dir, bare);
+              if (!outsideFiles.includes(file)) outsideFiles.push(file);
+            }
+          }
           p.remove();
           return;
         }
@@ -760,7 +1252,7 @@ function pagePlugin(filename) {
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
-            packageCss.push({spec: bare, from: filename});
+            if (!browser) packageCss.push({spec: bare, from: filename});
           }
           p.remove();
           return;
@@ -777,22 +1269,75 @@ function pagePlugin(filename) {
             p.remove();
             return;
           }
+          // In the browser the image comes from the embedded source, which
+          // carries it; the render inlines one the source leaves out.
+          const base64 = browser ? /^(data:[^,]*;base64),/.exec(uri) : null;
           p.replaceWith(
             t.variableDeclaration('const', [
-              t.variableDeclarator(t.identifier(local.local.name), t.stringLiteral(uri)),
+              t.variableDeclarator(
+                t.identifier(local.local.name),
+                base64
+                  ? t.callExpression(carriedName(p, t), [
+                      t.stringLiteral(sha256(fs.readFileSync(file))),
+                      t.stringLiteral(base64[1]),
+                    ])
+                  : t.stringLiteral(uri),
+              ),
             ]),
           );
         }
       },
       'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        if (browser) return;
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
+      StringLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isImportDeclaration() || p.parentPath.isExportDeclaration()) return;
+        // The first part of an address built with `+` is not an address: the
+        // chain gets its own warning.
+        if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+        noteRemoteLiteral(p.node.value, imageLiteralKind(p.node.value, p));
+      },
+      TemplateLiteral(/** @type {any} */ p) {
+        if (browser || p.parentPath.isTaggedTemplateExpression()) return;
+        if (p.node.expressions.length === 0) {
+          if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+          const value = p.node.quasis[0]?.value.cooked ?? '';
+          noteRemoteLiteral(value, imageLiteralKind(value, p));
+          return;
+        }
+        // A template inside a `+` chain is part of the chain's address.
+        if (p.parentPath.isBinaryExpression({operator: '+'})) return;
+        builtAddress(p);
+      },
+      BinaryExpression(/** @type {any} */ p) {
+        if (browser || p.node.operator !== '+' || p.parentPath.isBinaryExpression({operator: '+'})) return;
+        builtAddress(p);
+      },
+      JSXOpeningElement(/** @type {any} */ p) {
+        if (browser) return;
+        const component = coreComponentOf(p.node.name, p.scope);
+        if (!component) return;
+        for (const attr of p.node.attributes) {
+          if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
+          const value =
+            attr.value?.type === 'StringLiteral'
+              ? attr.value.value
+              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
+                ? attr.value.expression.value
+                : null;
+          if (value === null) continue;
+          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+        }
+      },
       JSXText(/** @type {any} */ p) {
+        if (browser) return;
         const v = cleanText(p.node);
         if (v.length >= 2) (fnTexts[fnKey(p)] ??= []).push(v);
       },
       JSXElement(/** @type {any} */ p) {
+        if (browser) return;
         const component = jsxName(p.node);
         if (!/^[A-Z]/.test(component)) return;
         // Only children that are all static text: the whole text must show.
@@ -857,6 +1402,17 @@ function pagePlugin(filename) {
             }
           }
         }
+        // The element and the components around it in the same JSX tree,
+        // innermost first: any of them can be the one that drops the text.
+        /** @type {{component: string, line: number, from: string | null, name: string}[]} */
+        const chain = [];
+        for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
+          if (!up.isJSXElement()) continue;
+          const name = jsxName(up.node);
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
+          chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
+        }
         texts.push({
           file: filename,
           component,
@@ -864,6 +1420,7 @@ function pagePlugin(filename) {
           hidden: hidden || conditional,
           fn: fnKey(p),
           line: p.node.loc?.start.line ?? 0,
+          chain,
         });
       },
     },
@@ -969,11 +1526,30 @@ function serveFromSet() {
         ? packageOf(request)
         : null;
       if (!name || !isServedPackage(name, served.integrations)) throw e;
-      const file = resolveFilename.call(this, request, servedParent, false);
+      const file = servedFile(request, () => resolveFilename.call(this, request, servedParent, false));
       if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
       return file;
     }
   };
+}
+
+/**
+ * The file the set serves for `request`: what the CommonJS resolve gives,
+ * or, when that finds the subpath not exported, the file the package exports
+ * to an ES module import (a subpath exported under `import` only).
+ * @param {string} request
+ * @param {() => string} resolveAsRequire
+ * @returns {string}
+ */
+function servedFile(request, resolveAsRequire) {
+  try {
+    return resolveAsRequire();
+  } catch (e) {
+    const file =
+      /** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && served ? servedImportTarget(request, served.dir) : null;
+    if (!file) throw e;
+    return file;
+  }
 }
 
 /**
@@ -1004,6 +1580,12 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
+// Imports between the files of an installed package resolve by path (a
+// Node without in-thread hooks resolves them itself). The hook answers only
+// relative imports inside a package, and single-copy-hooks.mjs answers only
+// package names, so neither changes what the other resolves.
+const registerHooks = /** @type {any} */ (Module).registerHooks;
+if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
@@ -1041,78 +1623,102 @@ const jiti = createJiti(entry, {
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
-  transform(opts) {
-    // jiti names the file with forward slashes on Windows (`C:/...`), while
-    // `entry`, `root` and the node_modules test use the platform separator.
-    // Without this, no file reads as local there and none is transformed.
-    const filename = opts.filename ? path.normalize(opts.filename) : '';
-    let source = opts.source;
-    if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
-      localFiles.push(filename);
-    }
-    if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-      if (!localFiles.includes(filename)) localFiles.push(filename);
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'module',
-        parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [
-          aliasPlugin(),
-          pagePlugin(filename),
-          ...(source.includes('stylex')
-            ? [
-                [
-                  stylexPlugin,
-                  {
-                    dev: false,
-                    runtimeInjection: false,
-                    treeshakeCompensation: true,
-                    unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                    ...(themeFiles ? {aliases: themeFiles} : {}),
-                  },
-                ],
-              ]
-            : []),
-        ],
-      });
-      const rules = /** @type {any} */ (result?.metadata)?.stylex;
-      if (Array.isArray(rules)) stylexRules.push(...rules);
-      source = result?.code ?? source;
-    } else if (
-      PATHS.length > 0 &&
-      filename &&
-      !filename.includes(NODE_MODULES) &&
-      /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)
-    ) {
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'unambiguous',
-        // The options jiti compiles these files with: JSX only in .jsx and
-        // .tsx files (so `<string>value` stays a type assertion), and legacy
-        // decorators.
-        parserOpts: {
-          plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
-            ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
-          ),
-        },
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [aliasPlugin()],
-      });
-      source = result?.code ?? source;
-    }
-    return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
-  },
+  transform: opts => transformModule(opts),
 });
+
+/**
+ * One of the page's own files, or a file outside them and outside
+ * `node_modules` that a path alias may reach, compiled as the server
+ * compiles it: the page's files with its plugins and StyleX, the other with
+ * its path aliases. The code stays an ES module with its JSX and types. For
+ * the browser (`browser`), the page's files keep their real charts and
+ * record nothing. Null for any other file.
+ * @param {string} source
+ * @param {string} filename
+ * @param {boolean} [browser]
+ * @returns {string | null}
+ */
+function compilePageModule(source, filename, browser = false) {
+  if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    if (!localFiles.includes(filename)) localFiles.push(filename);
+    moduleFiles.add(filename);
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'module',
+      parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [
+        aliasPlugin(),
+        pagePlugin(filename, browser),
+        ...(source.includes('stylex')
+          ? [
+              [
+                stylexPlugin,
+                {
+                  dev: false,
+                  runtimeInjection: false,
+                  treeshakeCompensation: true,
+                  classNamePrefix: PAGE_CLASS_PREFIX,
+                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                  ...(themeFiles ? {aliases: themeFiles} : {}),
+                },
+              ],
+            ]
+          : []),
+      ],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    if (Array.isArray(rules)) stylexRules.push(...rules);
+    return result?.code ?? source;
+  }
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      // The options jiti compiles these files with: JSX only in .jsx and
+      // .tsx files (so `<string>value` stays a type assertion), and legacy
+      // decorators.
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [aliasPlugin()],
+    });
+    return result?.code ?? source;
+  }
+  return null;
+}
+
+/**
+ * One module as CommonJS, for the server render: {@link compilePageModule}
+ * for the page's files and the files its aliases reach, then jiti.
+ * @param {import('jiti').TransformOptions} opts
+ * @returns {{code: string}}
+ */
+function transformModule(opts) {
+  // jiti names the file with forward slashes on Windows (`C:/...`), while
+  // `entry`, `root` and the node_modules test use the platform separator.
+  // Without this, no file reads as local there and none is transformed.
+  const filename = opts.filename ? path.normalize(opts.filename) : '';
+  let source = opts.source;
+  if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
+    localFiles.push(filename);
+  }
+  const compiled = filename ? compilePageModule(source, filename) : null;
+  if (compiled !== null) source = compiled;
+  return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
+}
 
 /**
  * @param {string} code
@@ -1145,10 +1751,7 @@ function compileText(err) {
  */
 function compileSite(err) {
   const {text, named} = compileText(err);
-  const fromRoot = named ? path.relative(root, named) : '';
-  const file = named
-    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
-    : undefined;
+  const file = named ? siteFile(named) : undefined;
   const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
   const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
   const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
@@ -1163,6 +1766,33 @@ function compileSite(err) {
     ...(token ? {token} : {}),
     ...(named ? {source: named} : {}),
   };
+}
+
+/**
+ * A file as a compile error names it: a path from the project, or its name
+ * when it lies outside the project.
+ * @param {string} named
+ */
+function siteFile(named) {
+  const fromRoot = path.relative(root, named);
+  return (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot)
+    .split(path.sep)
+    .join('/');
+}
+
+/**
+ * Refuse a page that imports a name its module does not export, as a build
+ * refuses it.
+ * @param {{source: string, line: number, names: string[], module?: string}} absent
+ */
+function failMissingExport(absent) {
+  const file = siteFile(absent.source);
+  const module = absent.module ?? importedFrom(absent.source, absent.line) ?? 'its module';
+  fail(
+    'ERR_RENDER_COMPILE',
+    `The page does not compile (${file}, line ${absent.line}): ${module} has no export ${absent.names.join(', ')}`,
+    {file, line: absent.line},
+  );
 }
 
 /**
@@ -1186,12 +1816,80 @@ function importedFrom(file, line) {
   return undefined;
 }
 
+/**
+ * A package subpath that the package's `exports` do not list, as Node names
+ * it, with the import in the page's own files that asks for it when one does.
+ * @param {string} message
+ * @returns {{module: string, subpath: string, source?: string, line?: number} | null}
+ */
+function unexportedSubpath(message) {
+  const named = /Package subpath '([^']+)' is not defined by "exports" in (\S+package\.json)/.exec(message);
+  if (!named) return null;
+  const [, subpath, manifest] = named;
+  /** @type {string} */
+  let module;
+  try {
+    module = String(JSON.parse(fs.readFileSync(manifest, 'utf8')).name);
+  } catch {
+    module = describeFile(manifest);
+  }
+  const spec = `${module}${subpath.slice(1)}`;
+  for (const file of new Set([entry, ...localFiles])) {
+    let records;
+    try {
+      records = moduleImports(fs.readFileSync(file, 'utf8'), file);
+    } catch {
+      continue;
+    }
+    const asked = records?.find(record => record.specifier.split('?')[0] === spec);
+    if (asked) return {module, subpath, source: file, line: asked.line ?? 1};
+  }
+  return {module, subpath};
+}
+
+/**
+ * The subpath of a package import that the package's `exports` do not list,
+ * when Node refuses the import for that reason, as the importing file or the
+ * served Core sees it.
+ * @param {string} spec
+ * @param {string} file the importing file
+ * @returns {string | null} the subpath, as `./tokens/spacing.stylex`
+ */
+function notExportedSubpath(spec, file) {
+  if (spec.startsWith('.') || path.isAbsolute(spec)) return null;
+  const pkg = packageOf(spec);
+  const attempts = [() => createRequire(file).resolve(spec)];
+  if (served && isServedPackage(pkg, served.integrations)) {
+    const servedDir = served.dir;
+    attempts.push(() =>
+      servedFile(spec, () => createRequire(path.join(servedDir, 'package.json')).resolve(spec, {paths: [servedDir]})),
+    );
+  }
+  for (const attempt of attempts) {
+    try {
+      attempt();
+      return null;
+    } catch (e) {
+      if (/** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') return `.${spec.slice(pkg.length)}`;
+    }
+  }
+  return null;
+}
+
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
   if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
   const message = compileText(err).text;
+  // A build refuses an import of a subpath the package does not export.
+  const unexported = unexportedSubpath(message);
+  if (unexported?.source && unexported.line) {
+    return failMissingExport({source: unexported.source, line: unexported.line, module: unexported.module, names: [unexported.subpath]});
+  }
+  if (unexported) {
+    return fail('ERR_RENDER_COMPILE', `The page does not compile: ${unexported.module} has no export ${unexported.subpath}`);
+  }
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',
@@ -1224,6 +1922,10 @@ function classify(e) {
     // only from a file it can read, which it says without naming the import.
     if (reason.startsWith('Could not resolve the path to the imported file')) {
       const spec = site.source && site.line ? importedFrom(site.source, site.line) : undefined;
+      const subpath = spec && site.source && site.line ? notExportedSubpath(spec, site.source) : null;
+      if (spec && subpath && site.source && site.line) {
+        return failMissingExport({source: site.source, line: site.line, module: packageOf(spec), names: [subpath]});
+      }
       const value = site.token ? `\`${site.token}\`` : 'an imported value';
       reason =
         spec && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)
@@ -1251,12 +1953,305 @@ function classify(e) {
 }
 
 /**
+ * One of the page's files for esbuild (client-bundle.mjs), compiled as the
+ * server compiled it; null for a file esbuild loads itself.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserSource(file) {
+  const filename = path.normalize(file);
+  const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * The folder a package import resolves from in the browser bundle when it
+ * must be the copy the server loaded: React, React DOM and StyleX from the
+ * package set outside a project (one copy for every module), and a served
+ * package the importer has no copy of. Null when the importer's own copy
+ * serves.
+ * @param {string} name
+ * @param {string} importerDir
+ * @returns {string | null}
+ */
+function browserPackageDir(name, importerDir) {
+  if (!served) return null;
+  const pkg = packageOf(name);
+  if (pkg in SINGLE_COPY_ALIASES) return served.dir;
+  if (!findNodeModulesPackage(importerDir, pkg) && isServedPackage(pkg, served.integrations)) return served.dir;
+  return null;
+}
+
+/**
+ * Whether a package import resolves for the module that makes it: installed
+ * where the module is, served from the package set, or found by Node.
+ * @param {string} spec the import as written, without a query
+ * @param {string} file the importing module
+ */
+function packageResolves(spec, file) {
+  const pkg = packageOf(spec);
+  if (findNodeModulesPackage(path.dirname(file), pkg)) return true;
+  // A package the set serves counts only when the set holds it.
+  if (served && pkg in SINGLE_COPY_ALIASES) return true;
+  if (served && isServedPackage(pkg, served.integrations) && resolveServed(spec, file, served)) return true;
+  const require = createRequire(file);
+  for (const request of [spec, `${pkg}/package.json`]) {
+    try {
+      require.resolve(request);
+      return true;
+    } catch {
+      // Not found by this request: try the next one.
+    }
+  }
+  return false;
+}
+
+/**
+ * One of the page's modules as Babel parses it: TypeScript in a TypeScript
+ * file, JSX in a `.jsx` or `.tsx` file and in JavaScript.
+ * @param {string} source
+ * @param {string} file
+ */
+function parseModule(source, file) {
+  const typed = /\.[cm]?tsx?$/.test(file);
+  return requireFromCli('@babel/parser').parse(source, {
+    sourceType: 'module',
+    plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+  });
+}
+
+/**
+ * Every package the page's own modules import that does not resolve, found
+ * before the page loads, so one refusal names them all.
+ * @returns {string[]} package names, sorted
+ */
+function missingPackages() {
+  /** @type {Set<string>} */
+  const missing = new Set();
+  const seen = new Set([entry]);
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = /** @type {string} */ (queue.shift());
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    // TypeScript drops a static import that the module uses only as a type,
+    // or not at all; JavaScript loads every import.
+    /** @type {Set<string>} */
+    let dropped = new Set();
+    if (/\.[cm]?tsx?$/.test(file)) {
+      try {
+        dropped = droppedImports(parseModule(source, file));
+      } catch {
+        // A module that does not parse is reported where it is compiled.
+      }
+    }
+    for (const {specifier, typeOnly, declaration} of moduleImports(source, file) ?? []) {
+      if (typeOnly || (declaration && dropped.has(specifier))) continue;
+      const raw = specifier.split('?')[0];
+      const target = importedFile(raw, file);
+      if (target && path.isAbsolute(target)) {
+        if (isLocal(target) && !seen.has(target)) {
+          seen.add(target);
+          queue.push(target);
+        }
+        continue;
+      }
+      if (raw.startsWith('.') || path.isAbsolute(raw) || namesAlias(raw) || /^[@~#]\/|^#/.test(raw)) continue;
+      if (raw.startsWith('node:') || builtinModules.includes(raw.split('/')[0])) continue;
+      // A package's stylesheet the page imports is a missing-asset warning
+      // when absent, as the render reports it today, not a refusal.
+      if (/\.(css|scss|sass|less|styl)$/i.test(raw)) continue;
+      if (!packageResolves(raw, file)) missing.add(packageOf(raw));
+    }
+  }
+  return [...missing].sort();
+}
+
+/**
+ * The refusal for packages the page imports that are not installed.
+ * @param {string[]} packages sorted, at least one
+ */
+function failMissing(packages) {
+  const names =
+    packages.length === 1 ? packages[0] : `${packages.slice(0, -1).join(', ')} and ${packages[packages.length - 1]}`;
+  fail(
+    'ERR_RENDER_MISSING_DEPENDENCY',
+    `The page imports ${names}, which ${packages.length === 1 ? 'is' : 'are'} not installed`,
+    {package: packages[0], packages},
+  );
+}
+
+/**
+ * A file named for a message: a path from the page's folder for the page's
+ * own files, else the package that holds it.
+ * @param {string} file
+ */
+function describeFile(file) {
+  const at = file.lastIndexOf(NODE_MODULES);
+  if (at < 0) return path.relative(path.dirname(entry), file).split(path.sep).join('/');
+  const parts = file.slice(at + NODE_MODULES.length).split(path.sep);
+  return parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+/**
+ * Keep only the files of a linked package (see linkedPackageRoots) that the
+ * page reaches by a path, as --reverse walks it: from the page, through each
+ * relative or path-alias import of a carried module. The rest belong to the
+ * package, and so do the files that only its modules import: none is
+ * carried or named as not carried. A file that no module imports by a path
+ * (one Node loaded by itself) and is not a linked package's stays, as do the
+ * images, which the page's script reads from the file.
+ * @returns {string[]} the modules left out, whose image names the script may still draw
+ */
+function dropLinkedPackageFiles() {
+  /** @type {Map<string, Set<string>>} */
+  const importers = new Map();
+  for (const file of [...localFiles, ...outsideFiles]) {
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      if (!target || !path.isAbsolute(target)) continue;
+      const set = importers.get(target) ?? new Set();
+      set.add(file);
+      importers.set(target, set);
+    }
+  }
+  const reached = new Set([entry]);
+  const queue = [entry];
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    for (const [target, from] of importers) {
+      if (!reached.has(target) && from.has(file)) {
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  /** @param {string} file */
+  const kept = file =>
+    reached.has(file) || assetsInlined.has(file) || (!importers.has(file) && !inLinkedPackage(file));
+  const dropped = localFiles.filter(file => !kept(file) && /\.[cm]?[jt]sx?$/.test(file));
+  const keptLocal = localFiles.filter(kept);
+  localFiles.splice(0, localFiles.length, ...keptLocal);
+  const keptOutside = outsideFiles.filter(kept);
+  outsideFiles.splice(0, outsideFiles.length, ...keptOutside);
+  return dropped;
+}
+
+/**
  * Tell the host what the page is doing, so an end without an answer can say
  * where it ended.
  * @param {string} name
  */
 function reach(name) {
   parentPort?.postMessage({stage: name});
+}
+
+/** Statements that make a module an ES module. */
+const MODULE_STATEMENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration']);
+
+/**
+ * Whether one of the page's modules is CommonJS: a `.cjs` or `.cts` file, or
+ * one with no `import` or `export` statement. A bundler reads a CommonJS
+ * module's exports by interop, so it does not refuse a named import from it.
+ * @param {string} file
+ */
+function isCommonJs(file) {
+  if (/\.c[jt]s$/.test(file)) return true;
+  try {
+    return !parseModule(fs.readFileSync(file, 'utf8'), file).program.body.some(
+      (/** @type {any} */ statement) => MODULE_STATEMENTS.has(statement.type),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The first import in the page's own files of a name its module does not
+ * export (a named import), where the page uses that name as a value: a
+ * reference that resolves to the import binding, not to a parameter or a
+ * local binding of the same name. The page's own modules, Astryx packages
+ * and StyleX variables modules (`.stylex`) are checked. A missing component
+ * renders as "Element type is invalid", and StyleX compiles a missing value
+ * to a variable that nothing defines; a bundler would refuse the import in
+ * both cases.
+ * @returns {Promise<{source: string, line: number, module: string, names: string[]} | null>}
+ */
+async function missingNamedExports() {
+  for (const file of localFiles) {
+    if (!moduleFiles.has(file)) continue;
+    let ast;
+    try {
+      ast = parseModule(fs.readFileSync(file, 'utf8'), file);
+    } catch {
+      // A file that does not parse is reported where it is compiled.
+      continue;
+    }
+    for (const [node, bindings] of importUses(ast)) {
+      if (node.importKind === 'type') continue;
+      const spec = String(node.source.value).split('?')[0];
+      const target = importedFile(spec, file);
+      const local = Boolean(target && path.isAbsolute(target) && isLocal(target) && /\.[cm]?[jt]sx?$/.test(target));
+      if (!local && !spec.startsWith('@astryxdesign/') && !/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
+      if (local && isCommonJs(/** @type {string} */ (target))) continue;
+      // In TypeScript a plain re-export (`export {ButtonProps}`) may name a
+      // type, which the module cannot tell from a value's, so it is no use.
+      // In JavaScript it names a value, which a build refuses when missing.
+      const typed = /\.[cm]?tsx?$/.test(file);
+      const needed = bindings
+        .map(({specifier, values}) => ({
+          specifier,
+          values: typed ? values.filter(ref => !ref.parentPath.isExportSpecifier()) : values,
+        }))
+        .filter(({specifier, values}) => specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' && values.length > 0);
+      if (needed.length === 0) continue;
+      /** @type {any} */
+      let exports;
+      try {
+        exports = await jiti.import(local ? /** @type {string} */ (target) : spec);
+      } catch {
+        // A module that does not load is reported where it is loaded.
+        continue;
+      }
+      /** @param {any} s */
+      const nameOf = s => (s.imported.type === 'Identifier' ? s.imported.name : s.imported.value);
+      // jiti hands back a module with a default export as that export with the
+      // named ones on it (interopDefault), so a name is read, not listed.
+      const missing = needed
+        .map(({specifier}) => specifier)
+        .filter(s => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))));
+      if (missing.length > 0) {
+        return {source: file, line: missing[0].loc.start.line, module: spec, names: missing.map(nameOf)};
+      }
+      // An element drawn as `<Name.Member>` whose export has no such member
+      // renders as "Element type is invalid" too.
+      for (const {specifier, values} of needed) {
+        const value = exports[nameOf(specifier)];
+        if (value == null || (typeof value !== 'object' && typeof value !== 'function')) continue;
+        const absentMember = values.find(
+          ref => ref.parentPath.isJSXMemberExpression() && ref.key === 'object' && value[ref.parent.property.name] === undefined,
+        );
+        if (absentMember) {
+          const line = absentMember.node.loc?.start.line ?? specifier.loc.start.line;
+          return {source: file, line, module: spec, names: [`${nameOf(specifier)}.${absentMember.parent.property.name}`]};
+        }
+      }
+    }
+  }
+  return null;
 }
 
 try {
@@ -1268,12 +2263,27 @@ try {
   // into a field: a typeahead's search would reach no change handler. It is
   // loaded first, with a document that fires input events as a browser's
   // does; the page then renders on the server with no document.
-  await withLoadDocument(() => jiti.import('react-dom/client'));
+  await withoutRenderTimings(() => withLoadDocument(() => jiti.import('react-dom/client')));
   try {
     reach('importing the page');
+    const notInstalled = missingPackages();
+    if (notInstalled.length > 0) {
+      failMissing(notInstalled);
+      throw null;
+    }
     mod = await jiti.import(entry);
   } catch (e) {
-    classify(e);
+    if (e === null) throw null;
+    // A missing name the page calls as it loads throws here; it is named as
+    // a build names it, not by what it broke.
+    const absent = await missingNamedExports().catch(() => null);
+    if (absent) failMissingExport(absent);
+    else classify(e);
+    throw null;
+  }
+  const absent = await missingNamedExports();
+  if (absent) {
+    failMissingExport(absent);
     throw null;
   }
   const Page = mod?.default ?? (typeof mod === 'function' ? mod : undefined);
@@ -1342,21 +2352,79 @@ try {
   for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
     if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
   }
+  // The page's script is built first: it compiles every module the page
+  // can load, a lazily imported one included, and their styles join the
+  // stylesheet below.
+  /** @type {{code: string, modules: number, astryx: boolean} | null} */
+  let script = null;
+  if (workerData.buildScript) {
+    reach("building the page's script");
+    try {
+      const loaded = await import(pathToFileURL(workerData.esbuild).href);
+      script = await bundleForBrowser({
+        esbuild: loaded.default ?? loaded,
+        entry,
+        source: browserSource,
+        // The files compilePageModule compiles: the page's own, and, when
+        // the project has path aliases, every module outside node_modules.
+        isPageFile: file => {
+          const filename = path.normalize(file);
+          return (
+            isLocal(filename) ||
+            (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename))
+          );
+        },
+        resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
+        packageDir: browserPackageDir,
+        builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
+        describe: describeFile,
+        oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
+      });
+    } catch (e) {
+      if (e instanceof BundleError && e.compile !== undefined) {
+        classify(e.compile);
+      } else if (e instanceof BundleError && e.missingExport) {
+        failMissingExport(e.missingExport);
+      } else if (e instanceof BundleError) {
+        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
+      } else {
+        const message = e instanceof Error ? e.message : String(e);
+        fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
+      }
+      throw null;
+    }
+  }
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
     reach('compiling styles');
-    css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+    // A module compiled for the server and again for the browser gives its
+    // rules twice; each rule is written once.
+    const seen = new Set();
+    const rules = stylexRules.filter(rule => {
+      const key = JSON.stringify(rule);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    css = stylexPlugin.processStylexRules(rules, {useLayers: false});
   }
   // Node loads some local modules itself (jiti hands it a plain ES module,
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
-  // file carries each module the page reaches, as --reverse expects.
+  // file carries each module the page reaches, as --reverse expects. The
+  // modules outside the folder it carries from are followed too, so each
+  // file they import is named.
   /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
   const aliasImports = [];
-  for (let i = 0; i < localFiles.length; i++) {
-    const file = localFiles[i];
+  /** @type {Set<string>} */
+  const followed = new Set();
+  const nextToFollow = () =>
+    localFiles.find(f => !followed.has(f)) ?? outsideFiles.find(f => !followed.has(f));
+  for (let file = nextToFollow(); file !== undefined; file = nextToFollow()) {
+    followed.add(file);
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    const carriedModule = localFiles.includes(file);
     let source;
     try {
       source = fs.readFileSync(file, 'utf8');
@@ -1366,14 +2434,22 @@ try {
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
       const raw = spec.split('?')[0];
-      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
+      if (target && carriedModule && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
         localFiles.push(target);
+      } else if (
+        target &&
+        !target.includes(NODE_MODULES) &&
+        !isLocal(target) &&
+        !outsideFiles.includes(target)
+      ) {
+        outsideFiles.push(target);
       }
     }
   }
+  const linkedModules = LINKED_ROOTS.length > 0 ? dropLinkedPackageFiles() : [];
   parentPort?.postMessage({
     ok: true,
     markup,
@@ -1387,11 +2463,23 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    uncarried: outsideFiles,
+    linkedRoots: LINKED_ROOTS,
+    linkedModules,
     aliasImports,
     texts,
     fnTexts,
     screenQueries,
+    remoteLiterals: [...remoteLiterals],
+    remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
+    builtRemote,
+    propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
     logs,
+    script: script?.code ?? null,
+    scriptModules: script?.modules ?? 0,
+    // Whether the script's module graph holds an Astryx module; null when no
+    // script was built. The stylesheets it imports are read by the render.
+    astryx: script ? script.astryx : null,
   });
 } catch (e) {
   if (e !== null) classify(e);

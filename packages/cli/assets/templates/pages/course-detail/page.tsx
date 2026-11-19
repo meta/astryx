@@ -573,7 +573,7 @@ function ReviewsSection() {
             </HStack>
           </VStack>
         </Card>
-        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
+        <Grid columns={{minWidth: 280, max: 4, repeat: 'fit'}} gap={4}>
           {REVIEWS.map(review => (
             <ReviewCard key={review.name} review={review} />
           ))}
@@ -722,8 +722,8 @@ export default function CourseDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
+        <LayoutContent role="main" padding={6}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={6}>
             <VStack gap={4}>
               <CourseHead />
               <AboutSection />

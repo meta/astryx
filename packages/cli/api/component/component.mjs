@@ -40,6 +40,7 @@ import {
   resolveComponentReplacement,
   unscopedComponentOwners,
   linkComponentResponse,
+  linkBlockDescriptions,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -250,7 +251,7 @@ async function componentBatch(selectors, options, coreDir) {
  * @param {boolean} [options.source]
  * @param {boolean} [options.showcase]
  * @param {boolean} [options.blocks]
- * @param {'full'|'compact'|'brief'} [options.detail] - Defaults to 'full' for a single component, 'brief' for list views (list/category/no name), matching the CLI.
+ * @param {'full'|'compact'|'brief'} [options.detail] - The level of a list view's entries; defaults to 'brief' for list views (list/category/no name) and 'full' otherwise. A named component's JSON is the same at every level; only the CLI's text projection (default 'compact' for a component read) depends on it.
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
@@ -306,9 +307,9 @@ async function componentRead(name, options = {}) {
   const selectorList = Array.isArray(name) ? name : null;
   const noName = selectorList == null && !name;
 
-  // Default detail level mirrors the CLI (see commands/component.mjs):
-  // single-component views default to 'full', list-style views (--list,
-  // --category, or no name) default to 'brief' (scannable name lists).
+  // List-style views (--list, --category, or no name) default to 'brief'
+  // (scannable name lists). A named read returns the same JSON at every
+  // level; the CLI picks its text level (see commands/component.mjs).
   // An explicit array remains a batch even when it is empty or a caller also
   // passes a list-only option.
   const isListView =
@@ -471,7 +472,10 @@ async function componentRead(name, options = {}) {
             });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, owner.package);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, owner.package),
+          cwd,
+        );
       }
       const loaded = await loadComponentDoc(owner.docPath, docOpts);
       // A family member reads as that member, scoped the way the unscoped
@@ -518,7 +522,10 @@ async function componentRead(name, options = {}) {
         });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, scoped.ext.name);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, scoped.ext.name),
+          cwd,
+        );
       }
       const docs = await loadComponentDoc(extDocPath, docOpts);
       if (props) return componentDetailProps(docs, scoped.ext.name);
@@ -648,7 +655,10 @@ async function componentRead(name, options = {}) {
 
   // ── Blocks mode ──────────────────────────────────────────────
   if (blocks) {
-    return componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage);
+    return linkBlockDescriptions(
+      await componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage),
+      cwd,
+    );
   }
 
   // ── Sub-component scoping ────────────────────────────────────
