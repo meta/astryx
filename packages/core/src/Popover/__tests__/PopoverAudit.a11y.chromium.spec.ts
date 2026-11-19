@@ -215,6 +215,11 @@ async function readPopover(page: Page, triggerName: string) {
             overflowY: style?.overflowY,
             scrollable: surface.scrollHeight > surface.clientHeight + 1,
             border: `${style?.borderTopStyle} ${style?.borderTopWidth} ${style?.borderTopColor}`,
+            color: style?.color ?? null,
+            themeTextColor: (() => {
+              const root = document.querySelector('[data-astryx-theme]');
+              return root ? getComputedStyle(root).color : null;
+            })(),
             minTextContrast: textContrast.length
               ? Math.min(...textContrast)
               : null,
@@ -237,27 +242,28 @@ async function readPopover(page: Page, triggerName: string) {
             controls: trigger.getAttribute('aria-controls'),
           }
         : null,
-      active: active
-        ? {
-            tag: active.tagName.toLowerCase(),
-            role: active.getAttribute('role'),
-            name:
-              active.getAttribute('aria-label') ??
-              (active.id
-                ? document.querySelector(`label[for="${active.id}"]`)
-                    ?.textContent
-                : null) ??
-              active.textContent?.trim().slice(0, 40) ??
-              null,
-            inSurface: surface != null && surface.contains(active),
-            isSurface: active === surface,
-            isTrigger: active === trigger,
-            focusVisible: active.matches(':focus-visible'),
-            outline: activeStyle
-              ? `${activeStyle.outlineStyle} ${activeStyle.outlineWidth}`
-              : null,
-          }
-        : null,
+      active:
+        active && active !== document.body
+          ? {
+              tag: active.tagName.toLowerCase(),
+              role: active.getAttribute('role'),
+              name:
+                active.getAttribute('aria-label') ??
+                (active.id
+                  ? document.querySelector(`label[for="${active.id}"]`)
+                      ?.textContent
+                  : null) ??
+                active.textContent?.trim().slice(0, 40) ??
+                null,
+              inSurface: surface != null && surface.contains(active),
+              isSurface: active === surface,
+              isTrigger: active === trigger,
+              focusVisible: active.matches(':focus-visible'),
+              outline: activeStyle
+                ? `${activeStyle.outlineStyle} ${activeStyle.outlineWidth}`
+                : null,
+            }
+          : null,
       page: {
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth,
@@ -501,15 +507,22 @@ for (const mode of ['light', 'dark'] as const) {
       );
       await frame('fallback-close', {tabbed});
       await page.keyboard.press('Shift+Tab');
+      await settle(page);
       const back = await readPopover(page, name);
       check(back.active?.inSurface === true, 'Shift+Tab left the popover');
       await page.keyboard.press('Escape');
       await waitClosed(page);
       const after = await readPopover(page, name);
-      // The story opens the popover from code, with focus on the page, and
-      // focus then returns to the body: a known focus-return gap. The receipt
-      // records where focus lands and does not fail on it.
-      await frame('escaped', {after});
+      // The story opens the popover from code while focus is on the page.
+      // The receipt records where focus lands after Escape, and the finding
+      // it shows, and does not fail on it.
+      await frame('escaped', {
+        after,
+        finding:
+          after.active == null
+            ? 'Escape returned focus to the body; the trigger is still mounted'
+            : null,
+      });
     },
   });
 }
@@ -565,7 +578,7 @@ cases.push({
 
 cases.push({
   key: 'forced-colors-light-ltr',
-  group: 'narrow',
+  group: 'forced-colors',
   story: 'core-popover--default',
   ready: '#storybook-root button',
   mode: 'light',
