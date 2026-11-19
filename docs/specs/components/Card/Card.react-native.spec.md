@@ -30,15 +30,15 @@ system_specs: [spec:AST-082, spec:AST-093]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | React Native exports `Card` under core's name with core's `children`, `padding`, `variant` and `elevation`, with core's meaning and defaults. Its `variant` adds two values, `body` and `surface`, the theme's page and surface backgrounds (DEC-2). Core's `width`, `height`, `maxWidth` and `minHeight` stay in the web contract (DEC-1). |
-| Behavior                | A rounded surface from the theme that holds one discrete item: it paints its variant, draws `default`'s border inside its padding, casts its elevation's shadow, publishes its padding to what it holds, clips what does not fit, and turns bare words into body text.                                                                      |
-| End-user impact         | A person sees grouped content on the same surface as on the web, with insets on the spacing scale; a screen reader reads what the card holds, not the card.                                                                                                                                                                                 |
-| Builder impact          | An app writes the same `Card` call site as on the web; its size comes from the layout around it.                                                                                                                                                                                                                                            |
-| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged.                                                                                                                                                                                                                                                                |
-| Review checks           | Reject a card that becomes an accessibility element, a variant that falls through to another variant, a lost padding publication, bare words that fail to render, a sizing prop accepted and ignored, a visual value not taken from the theme, or a native dependency.                                                                      |
-| Governing rules         | `component:Card` FR2, FR3, FR5 and AR1; `architecture:container-padding` INV11; `architecture:component-theming-surface`; `spec:AST-082` FR3–FR5 and FR7; `spec:AST-093` FR2 and FR4; DEC-1 and DEC-2 below.                                                                                                                                |
+| Area                    | Contract                                                                                                                                                                                                                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | React Native exports `Card` under core's name with core's `children`, `padding`, `variant` and `elevation`, with core's meaning and defaults. Core's `width`, `height`, `maxWidth` and `minHeight` stay in the web contract (DEC-1).                                                                 |
+| Behavior                | A rounded surface from the theme that holds one discrete item: it paints its variant, draws `default`'s border inside its padding, casts its elevation's shadow, publishes its padding to what it holds, clips what does not fit, and turns bare words into body text.                               |
+| End-user impact         | A person sees grouped content on the same surface as on the web, with insets on the spacing scale; a screen reader reads what the card holds, not the card.                                                                                                                                          |
+| Builder impact          | An app writes the same `Card` call site as on the web; its size comes from the layout around it.                                                                                                                                                                                                     |
+| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged.                                                                                                                                                                                                                         |
+| Review checks           | Reject a card that becomes an accessibility element, a variant that falls through to another variant, a variant core does not have, a lost padding publication, bare words that fail to render, a sizing prop accepted and ignored, a visual value not taken from the theme, or a native dependency. |
+| Governing rules         | `component:Card` FR2, FR3, FR5 and AR1; `architecture:container-padding` INV11; `architecture:component-theming-surface`; `spec:AST-082` FR3, FR4, FR7, FR10 and DEC-2; `spec:AST-093` FR2, FR4 and FR5; DEC-1 below.                                                                                |
 
 This table is a review projection; the body below is authoritative.
 
@@ -61,15 +61,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- FR2 gap: `body` and `surface` cards keep their full padding inside their
-  border instead of reducing it by the border width as `default` does.
+- FR2 gap: the package's Card also takes the `variant` values `body` and
+  `surface`, the theme's page and surface backgrounds.
 
 ## Ownership boundary
 
 **Owns**
 
-- Which of core's props React Native offers, and the `body` and `surface`
-  variants (FR1, FR2).
+- Which of core's props React Native offers (FR1).
 - How a React Native card holds its content: bare words, clipping and its
   place in a row (FR4, FR5).
 - How the card reads to screen readers on React Native (FR6).
@@ -86,49 +85,48 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept | Closed values or states          | Meaning                                                                                                             | Availability by variant/orientation/state | Default   | Owner                                                                 | Stability    | Invalid-value behavior           |
-| ------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | --------- | --------------------------------------------------------------------- | ------------ | -------------------------------- |
-| variant | core's values; `body`; `surface` | the card's fill: core's card, muted and palette fills, and on React Native the theme's page and surface backgrounds | every card                                | `default` | `component:Card`; `body` and `surface`: `component:react-native/Card` | experimental | an unknown value is a type error |
+| Concept | Closed values or states | Meaning | Availability by variant/orientation/state | Default | Owner | Stability | Invalid-value behavior |
+| ------- | ----------------------- | ------- | ----------------------------------------- | ------- | ----- | --------- | ---------------------- |
 
 ## Behavioral and layout contract
 
 Draft requirements identify their basis so observed code is not mistaken for an
 intentional decision. A `current` contract contains no unresolved rows.
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                                                                 | Draft review state |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------ |
-| FR1 | React Native's `Card` MUST take core's `children`, `padding`, `variant` and `elevation` with core's names, meaning and defaults. `children` takes React content, as a platform contract whose implementation runs React may (`spec:AST-082` FR4). Base props are `id` and `isHidden` (`spec:AST-082` FR7) on the card's container, the part core's target sits on. It MUST NOT offer core's `width`, `height`, `maxWidth` or `minHeight` (DEC-1).                                                        | `component:Card`; `spec:AST-082` FR3, FR4, FR7; DEC-1                 | verify             |
-| FR2 | `variant` MUST paint as `component:Card` FR2 states: `default` the card background with the theme's border, `transparent` nothing, `muted` the muted background, and each palette value its own background tint, with the corners of the theme's container radius. React Native adds `body` and `surface` (DEC-2), which paint the theme's page background and surface background with `default`'s border and its inset rule. A theme's own variant name paints the base surface, never another variant. | `component:Card` FR2; `architecture:component-theming-surface`; DEC-2 | verify             |
-| FR3 | `padding` MUST resolve and publish as `component:Card` FR3 states: an omitted `padding` takes the theme's card padding, spacing step 4 with none; a step applies to every edge; a bordered card reduces each edge by the theme's border width, never below zero; and the card publishes its inset to what it holds, so a `Layout` or a full-bleed `Divider` inside it meets its edges (`architecture:container-padding` INV11).                                                                          | `component:Card` FR3; `architecture:container-padding` INV11          | verify             |
-| FR4 | The card MUST have no minimum width, so it shrinks in a row instead of holding the row at its content's width, and MUST clip what does not fit; it never scrolls. Its size comes from the layout around it: a `Stack`, a `StackItem` or the parent view (DEC-1). Inside a `Carousel` item, the card fills the item's height, so a row of cards is even.                                                                                                                                                  | `component:Card` FR4; DEC-1                                           | verify             |
-| FR5 | Bare words in `children` MUST render as body text in the theme's body type and text colour, since React Native draws words only inside a text view. Other content renders as given.                                                                                                                                                                                                                                                                                                                      | `component:Card`; `spec:AST-082` FR4                                  | verify             |
-| FR6 | The card MUST NOT be an accessibility element: it has no role, name or focus stop of its own, and VoiceOver and TalkBack reach the things it holds one by one (`component:Card` AR1). It announces nothing.                                                                                                                                                                                                                                                                                              | `component:Card` AR1                                                  | verify             |
-| FR7 | `elevation` MUST cast no shadow for `none` and the theme's low, medium or high shadow for the other values (`component:Card` FR5). The theme's component overrides for Card apply over the card's own styles.                                                                                                                                                                                                                                                                                            | `component:Card` FR5; `architecture:component-theming-surface`        | verify             |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                                                                                | Draft review state |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------ |
+| FR1 | React Native's `Card` MUST take core's `children`, `padding`, `variant` and `elevation` with core's names, meaning and defaults. `children` takes React content, as a platform contract whose implementation runs React may (`spec:AST-082` FR4). Base props are `id` and `isHidden` (`spec:AST-082` FR7) on the card's container, the part core's target sits on. It MUST NOT offer core's `width`, `height`, `maxWidth` or `minHeight` (DEC-1).                                        | `component:Card` FR2, FR3, FR5; `spec:AST-082` FR3, FR4, FR7; DEC-1                  | verify             |
+| FR2 | `variant` MUST paint as `component:Card` FR2 states: `default` the card background with the theme's border, `transparent` nothing, `muted` the muted background, and each palette value its own background tint, with the corners of the theme's container radius. A theme's own variant name paints the base surface, never another variant. React Native offers no variant core does not have (`spec:AST-082` DEC-2).                                                                  | `component:Card` FR2; `spec:AST-082` DEC-2; `architecture:component-theming-surface` | verify             |
+| FR3 | `padding` MUST resolve and publish as `component:Card` FR3 states: an omitted `padding` takes spacing step 4, or the padding a platform entry's `components` override for Card sets (`spec:AST-082` FR10); a step applies to every edge; a bordered card reduces each edge by the theme's border width, never below zero; and the card publishes its inset to what it holds, so a `Layout` or a full-bleed `Divider` inside it meets its edges (`architecture:container-padding` INV11). | `component:Card` FR3; `spec:AST-082` FR10; `architecture:container-padding` INV11    | verify             |
+| FR4 | The card MUST have no minimum width, so it shrinks in a row instead of holding the row at its content's width, and MUST clip what does not fit; it never scrolls. Its size comes from the layout around it: a `Stack`, a `StackItem` or the parent view (DEC-1).                                                                                                                                                                                                                         | `component:Card` FR4; DEC-1                                                          | verify             |
+| FR5 | Bare words in `children` MUST render as body text in the theme's body type and text colour, since React Native draws words only inside a text view. Other content renders as given.                                                                                                                                                                                                                                                                                                      | proposal; `spec:AST-082` FR4                                                         | verify             |
+| FR6 | The card MUST NOT be an accessibility element: it has no role, name or focus stop of its own, and VoiceOver and TalkBack reach the things it holds one by one (`component:Card` AR1). It announces nothing.                                                                                                                                                                                                                                                                              | `component:Card` AR1                                                                 | verify             |
+| FR7 | `elevation` MUST cast no shadow for `none` and the theme's low, medium or high shadow for the other values (`component:Card` FR5). A platform entry's `components` override for Card (`spec:AST-082` FR10) applies over the card's own styles.                                                                                                                                                                                                                                           | `component:Card` FR5; `spec:AST-082` FR10                                            | verify             |
 
 ### Allowed variation
 
 - **AV1 — Theme paint.** A theme may change the card's fills, border, corners,
-  shadows and padding through its tokens and its component overrides for Card,
-  without changing the card's structure or semantics.
+  shadows and padding through its tokens and a platform entry's `components`
+  override for Card (`spec:AST-082` FR10), without changing the card's
+  structure or semantics.
 
 ### Representative states
 
-| State                       | Required invariant                                       | Allowed variation |
-| --------------------------- | -------------------------------------------------------- | ----------------- |
-| `default`, padding omitted  | card background, border inside the theme's card padding  | theme paint       |
-| `padding={0}`               | content meets the card's edges                           | none              |
-| `body` in a surface section | the page background with `default`'s border              | theme paint       |
-| a theme variant             | the base surface                                         | theme paint       |
-| in a narrow row             | shrinks below its content width; clips                   | none              |
-| bare words                  | body text                                                | none              |
-| with a screen reader        | the card's content, one thing at a time; no card element | none              |
+| State                      | Required invariant                                       | Allowed variation |
+| -------------------------- | -------------------------------------------------------- | ----------------- |
+| `default`, padding omitted | card background, border inside spacing step 4            | theme paint       |
+| `padding={0}`              | content meets the card's edges                           | none              |
+| a theme variant            | the base surface                                         | theme paint       |
+| in a narrow row            | shrinks below its content width; clips                   | none              |
+| bare words                 | body text                                                | none              |
+| with a screen reader       | the card's content, one thing at a time; no card element | none              |
 
 ### Transformation and precedence order
 
-- **ORD1 — Padding.** `padding`, then the theme's card padding, then step 4
-  (`component:Card` FR3).
-- **ORD2 — Styles.** The card's own styles, then the theme's component
-  overrides for Card.
+- **ORD1 — Padding.** `padding`, then a platform entry's `components`
+  override for Card, then step 4 (`component:Card` FR3).
+- **ORD2 — Styles.** The card's own styles, then a platform entry's
+  `components` override for Card.
 
 ### Performance and resources
 
@@ -149,7 +147,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | ---------------- | ------------------------------------------------------------ | ------------------------ | -------------- | ------------------ |
 | Surface          | the variant's fill, the container radius, `default`'s border | theme intent             | container      | FR2                |
 | Shadow           | the elevation's shadow                                       | theme intent             | supporting     | FR7                |
-| Padding          | the spacing step or the theme's card padding                 | theme intent             | container      | FR3                |
+| Padding          | the spacing step, or a platform entry's override for Card    | theme intent             | container      | FR3                |
 
 The component implements design requirements without copying their rationale.
 
@@ -159,11 +157,10 @@ React Native does not draw, so the card is a React Native `View` drawn from
 the theme.
 
 Theme values read (`spec:AST-093` FR4): `color.backgroundCard`,
-`color.backgroundMuted`, the palette background colours, `color.backgroundBody`
-and `color.backgroundSurface`, the border colour and width,
-`radius.container`, the `space` steps and the theme's card padding, the
-`shadow.low`, `shadow.med` and `shadow.high` layers, the body type and text
-colour, and the theme's component overrides for Card.
+`color.backgroundMuted`, the palette background colours, the border colour and
+width, `radius.container`, the `space` steps, the `shadow.low`, `shadow.med`
+and `shadow.high` layers, the body type and text colour, and a platform
+entry's `components` override for Card (`spec:AST-082` FR10).
 
 ## Family and system relationships
 
@@ -175,13 +172,13 @@ colour, and the theme's component overrides for Card.
 
 ## Verification map
 
-| Contract       | Verification                                                         | Representative states                                                              | Mutation or failure expectation                                                                                               | Audit section                     |
-| -------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| FR1            | Type tests against core's Card contract and each platform's types    | each core prop; the sizing props                                                   | a sizing prop that type-checks, or a renamed core prop, fails                                                                 | `audit:react-native/Card/api`     |
-| FR2, FR7, ORD2 | Unit tests of the frame with two themes                              | each variant; `body`; `surface`; a theme variant; each elevation; a theme override | a variant painted with another's fill, a border on a variant core draws without one, or an override that does not apply fails | `audit:react-native/Card/surface` |
-| FR3, ORD1      | Unit tests of padding and the published inset                        | omitted; each step; `0`; a `default` and a `muted` card; a `Layout` inside         | a padding off the step, a lost publication, or an inset that differs from core's fails                                        | `audit:react-native/Card/padding` |
-| FR4, FR5       | Unit tests of placement and content                                  | a narrow row; a `Carousel` item; bare words; a view                                | a card that holds its row, a card that scrolls, or bare words that do not render fails                                        | `audit:react-native/Card/layout`  |
-| FR6, AR1, AR2  | VoiceOver and TalkBack checks; unit tests of the accessibility props | a card with text and a button                                                      | a card element, a role or label on the card, or content the screen reader skips fails                                         | `audit:react-native/Card/a11y`    |
+| Contract       | Verification                                                                                                         | Representative states                                                                                        | Mutation or failure expectation                                                                                                                   | Audit section                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| FR1            | Type tests against core's Card contract and each platform's types                                                    | each core prop; the sizing props                                                                             | a sizing prop that type-checks, or a renamed core prop, fails                                                                                     | `audit:react-native/Card/api`     |
+| FR2, FR7, ORD2 | Unit tests of the frame with two themes                                                                              | each variant; a theme variant; each elevation; a platform entry's `components` override for Card             | a variant painted with another's fill, a border on a variant core draws without one, or an override that does not apply fails                     | `audit:react-native/Card/surface` |
+| FR3, ORD1      | Unit tests of padding and the published inset                                                                        | omitted; omitted with a platform override; each step; `0`; a `default` and a `muted` card; a `Layout` inside | a padding off the step, a lost publication, or an inset that differs from core's fails                                                            | `audit:react-native/Card/padding` |
+| FR4, FR5       | Unit tests of placement and content                                                                                  | a narrow row; bare words; a view                                                                             | a card that holds its row, a card that scrolls, or bare words that do not render fails                                                            | `audit:react-native/Card/layout`  |
+| FR6, AR1, AR2  | VoiceOver and TalkBack checks; unit tests of the accessibility props; captures at the default and largest text sizes | a card with text and a button; bare words at the largest Dynamic Type size and Android font scale            | a card element, a role or label on the card, content the screen reader skips, bare words that do not scale, or a card that clips grown text fails | `audit:react-native/Card/a11y`    |
 
 ## Decision log
 
@@ -190,31 +187,18 @@ colour, and the theme's component overrides for Card.
 **Reference:** `component:react-native/Card/DEC-1`
 **Decider:** imdreamrunner, 2026-11-18
 
-Core's `width`, `height`, `maxWidth` and `minHeight` take a `SizeValue`: a
-number of pixels or a CSS length string, such as a percentage, `rem` or
-`calc()`, that React Native does not read (`spec:AST-082` FR4). On the web a
-card's width in a row is already only a preference that a `StackItem` holds;
-on React Native the `Stack`, the `StackItem` or the parent view sizes the card,
-so the sizing props stay in the web contract and a card never offers a size it
-lays out differently.
-
-### DEC-2 — React Native cards take the page and surface backgrounds
-
-**Reference:** `component:react-native/Card/DEC-2`
-**Decider:** imdreamrunner, 2026-11-18
-
-A checkout card on the page's colour inside a surface section needs the
-theme's page or surface background. The web reaches those backgrounds through
-a custom style on the card, which React Native's contract has no form for, so
-React Native's `variant` adds `body` and `surface`, which read the theme's
-background roles and stay bordered like `default` (`spec:AST-082` FR5).
+Core's `width`, `height`, `maxWidth` and `minHeight` take a `SizeValue`, a
+number of pixels or any CSS length string. React Native reads numbers and
+percentages but not lengths such as `rem`, `vh` or `calc()`, so it cannot
+honour the whole `SizeValue`, and a platform never offers a prop it honours
+only in part (`spec:AST-082` FR3). On the web a card's width in a row is
+already only a preference that a `StackItem` holds; on React Native the
+`Stack`, the `StackItem` or the parent view sizes the card, so the sizing props
+stay in the web contract.
 
 ## Open questions
 
-- **OQ1 — Do `body` and `surface` join core's `variant`?** (`human-api`)
-  Options: core adds them for every platform, so the web reaches the page and
-  surface backgrounds without a custom style; or they stay values of React
-  Native's contract (DEC-2).
+None.
 
 ## Content boundary
 
