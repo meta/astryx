@@ -3,14 +3,19 @@
 /**
  * @file RatingForcedColors.interaction.browser.spec.ts
  * @input The built Lab Rating "States" story under Chromium's forced-colors
- *   emulation
+ *   emulation, on the phone project's touch page and on a mouse page
  * @output Proofs that the stars keep system colours in a high-contrast
  *   theme: Highlight for a checked star, CanvasText for an empty star, and
  *   GrayText for every star of a disabled rating
  * @position Real-engine layer of Rating; jsdom cannot resolve forced colours
  */
 
-import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -48,11 +53,8 @@ async function starColor(
     });
 }
 
-test('stars keep system colours under forced colours', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== 'chromium', 'forced-colors emulation');
+/** Reads every star colour this proof checks, on one page. */
+async function checkStars(page: Page): Promise<void> {
   await page.emulateMedia({forcedColors: 'active'});
   await openStory(page, storybook(), STORY);
 
@@ -67,4 +69,41 @@ test('stars keep system colours under forced colours', async ({
   // A disabled rating of 2 of 5: filled and empty stars are both GrayText.
   expect(await starColor(page, 'Disabled', 2)).toBe(grayText);
   expect(await starColor(page, 'Disabled', 5)).toBe(grayText);
+}
+
+/**
+ * A page under a mouse: no touch and no mobile viewport, so CSS reads a
+ * hover-capable pointer. Hover-guarded rules apply only on this page.
+ */
+async function newMousePage(browser: Browser) {
+  const context = await browser.newContext({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1280, height: 800},
+  });
+  return {context, page: await context.newPage()};
+}
+
+test('stars keep system colours under forced colours on a touch page', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'forced-colors emulation');
+  await checkStars(page);
+});
+
+test('stars keep system colours under forced colours on a mouse page', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'forced-colors emulation');
+  const {context, page} = await newMousePage(browser);
+  try {
+    expect(
+      await page.evaluate(() => matchMedia('(hover: hover)').matches),
+    ).toBe(true);
+    await checkStars(page);
+  } finally {
+    await context.close();
+  }
 });
