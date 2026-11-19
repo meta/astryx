@@ -3215,18 +3215,25 @@ function clausesOf(q, partWords, words = null) {
       // after, before its next stop, is the ask's verb or a word between the part and what
       // changes, "links turn red", "the card zorp border", "secondary text
       // fails contrast on white", never a compound.)
+      // (Only as the subject of more: words after it before the stop, or
+      // an ask after the stop, "radio station site: heavy headings"; a
+      // part with one unknown word, "buttons chunky", keeps the part.)
       const tail = rest.slice((m.index ?? 0) + m[0].length);
       const after = /^ ([a-z]+)\b(?!['’(-])/.exec(tail);
+      const [own = '', ...later] = tail
+        .slice(after?.[0].length ?? 0)
+        .split(/[:;,.!?]/);
       if (
         after &&
         after[1].length >= 3 &&
         words &&
         !words.known(after[1]) &&
-        !tail
-          .slice(after[0].length)
-          .split(/[:;,.!?]/)[0]
-          .split(/\s+/)
-          .some(w => w && words.ask(w))
+        !own.split(/\s+/).some(w => w && words.ask(w)) &&
+        (own.trim() !== '' ||
+          later
+            .join(' ')
+            .split(/\s+/)
+            .some(w => w && words.ask(w)))
       ) {
         compound ??= `${m[0].trim()} ${after[1]}`;
         rest = `${rest.slice(0, m.index)} ${rest.slice((m.index ?? 0) + m[0].length + after[0].length)}`;
@@ -25900,20 +25907,22 @@ export function draftAnswer(ctx, env, question) {
         if (lost.length && !/nearly the same color/.test(d.text))
           d.text += ` (note: ${[...new Set(lost)].slice(0, 4).join(', ')} inside ${st.on} ${lost.length > 1 ? 'have' : 'has'} nearly the same color as ${st.value}${st.mode ? ` in ${st.mode} mode` : ''}, so ${lost.length > 1 ? 'they' : 'it'} would barely show; give ${lost.length > 1 ? 'them' : 'it'} a fill of ${lost.length > 1 ? 'their' : 'its'} own too)`;
       }
-  // A text color written for a variant whose fill the same answer gives
-  // ("buttons tinted blue with white text") is measured on that fill as it
+  // A text color written where the same answer gives the part a fill, in
+  // a variant, a state or at rest ("buttons tinted blue with white text",
+  // "cards tinted blue with white text", "selected nav items tinted green
+  // with white text") is measured on that fill as it
   // draws, a see-through tint over the page, in each mode it applies to:
   // text needs 4.5:1. Both words were asked, so a tint the text does not
   // read on is deepened along its own hue, in steps of 5%, until the text
   // reads in every mode, and said. Only when no strength of that hue reads
   // is the text kept to the modes it reads in, or not written where it
   // reads in none, said with the ink that reads there.
+  /** A tint as the tint pass writes it: its color, then its strength. */
+  const TINT_MIX =
+    /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*transparent\)$/;
   /** A fill as it draws over the page in a mode, or null. @param {string} value @param {'light' | 'dark'} mode */
   const drawnFill = (value, mode) => {
-    const mix =
-      /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*transparent\)$/.exec(
-        value.trim(),
-      );
+    const mix = TINT_MIX.exec(value.trim());
     const raw = mix ? mix[1] : value;
     const c = parseColor(raw);
     if (!c) return null;
@@ -25924,28 +25933,74 @@ export function draftAnswer(ctx, env, question) {
     );
     return page ? compositeOver(c, a, page) : null;
   };
+  // Text said for every variant of a part whose fill the answer gives
+  // only some variants ("cards tinted blue with white text": the coloured
+  // card variants keep their own fills) goes to those variants alone, each
+  // measured on its own fill below; the rest keep their text, and it is
+  // said.
   for (const d of result)
     for (const o of d.options)
       for (let i = o.length - 1; i >= 0; i--) {
         const st = o[i];
         if (
           !st.on ||
-          st.state ||
-          st.thing !== 'color' ||
-          !/^variant:/.test(String(st.when ?? ''))
+          st.when ||
+          (st.thing !== 'color' && !/^--color-text-/.test(st.thing))
+        )
+          continue;
+        const fills = o.filter(
+          x =>
+            x.on === st.on &&
+            (x.state ?? null) === (st.state ?? null) &&
+            /^background(?:-color)?$/.test(x.thing),
+        );
+        const variants = C.variantValues(one(st.on)).variant ?? [];
+        const given = [
+          ...new Set(
+            fills
+              .map(x => /^variant:(.+)$/.exec(String(x.when ?? ''))?.[1])
+              .filter(Boolean),
+          ),
+        ];
+        if (
+          !given.length ||
+          fills.some(x => !x.when) ||
+          given.length >= variants.length
+        )
+          continue;
+        o.splice(i, 1, ...given.map(v => ({...st, when: `variant:${v}`})));
+        const kept = variants.filter(v => !given.includes(v));
+        const said = `${st.value} text goes to the ${given.join(', ')} ${st.on}`;
+        if (!d.text.includes(said))
+          d.text += ` (${said}, the variants this fill reaches; the ${kept.join(', ')} ${st.on} keep their own text)`;
+      }
+  for (const d of result)
+    for (const o of d.options)
+      for (let i = o.length - 1; i >= 0; i--) {
+        const st = o[i];
+        // (Any text the part draws there: its color, or a text token on it,
+        // in a variant, a state, or at rest.)
+        if (
+          !st.on ||
+          (st.thing !== 'color' && !/^--color-text-/.test(st.thing))
         )
           continue;
         const ink = parseColor(String(st.value ?? ''));
         if (!ink || alphaOf(String(st.value)) < 1) continue;
-        const fill = o.find(
+        const fills = o.filter(
           x =>
             x !== st &&
             x.on === st.on &&
-            !x.state &&
-            x.when === st.when &&
+            (x.state ?? null) === (st.state ?? null) &&
             /^background(?:-color)?$/.test(x.thing) &&
             (!x.mode || !st.mode || x.mode === st.mode),
         );
+        // (The variant's own fill first, "transparent on ghost buttons";
+        // else a fill for the whole part, which text said for every
+        // variant, "--color-text-primary on card", sits on too.)
+        const fill =
+          fills.find(x => x.when === st.when) ??
+          fills.find(x => !x.when || !st.when);
         if (!fill) continue;
         const modes = /** @type {Array<'light' | 'dark'>} */ (
           st.mode
@@ -25964,10 +26019,7 @@ export function draftAnswer(ctx, env, question) {
         }
         const fails = measured.filter(x => x.ratio < 4.5);
         if (!fails.length) continue;
-        const mixed =
-          /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*transparent\)$/.exec(
-            String(fill.value ?? '').trim(),
-          );
+        const mixed = TINT_MIX.exec(String(fill.value ?? '').trim());
         if (mixed) {
           /** The weakest ratio across the modes at a strength. @param {number} pct */
           const weakest = pct =>
@@ -26013,7 +26065,13 @@ export function draftAnswer(ctx, env, question) {
               : {...st, mode: m},
           ),
         );
-        const variant = String(st.when).slice('variant:'.length);
+        const where = [
+          String(st.when ?? '').replace(/^[a-z]+:/, ''),
+          st.state ?? '',
+          st.on,
+        ]
+          .filter(Boolean)
+          .join(' ');
         for (const x of fails) {
           const dark = [0x11, 0x18, 0x27];
           const light = [0xff, 0xff, 0xff];
@@ -26021,7 +26079,7 @@ export function draftAnswer(ctx, env, question) {
             ratio(dark, x.under) >= ratio(light, x.under)
               ? '#111827'
               : '#ffffff';
-          const said = `${st.value} text on the ${variant} ${st.on}`;
+          const said = `${st.value} text on the ${where}`;
           if (!d.text.includes(said))
             d.text += ` (${said} would not read on ${fill.value}${modes.length > 1 || st.mode || fill.mode ? ` in ${x.mode} mode` : ''}: ${x.ratio.toFixed(2)}:1, under the 4.5:1 text needs, so it is ${reads.length ? `kept to ${reads.join(' and ')} mode` : 'not written'}; ${better} reads there at ${ratio(better === '#ffffff' ? light : dark, x.under).toFixed(1)}:1)`;
         }
