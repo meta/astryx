@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {FOLDER_JUNK} from '../../foundation/fs/empty-folder.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -52,9 +53,13 @@ export function isSharedThemeSource(arg) {
  * Read a shared theme into a staging folder.
  * @param {string} arg a folder, a `.tgz`, or an https URL to a `.tgz`
  * @param {string} cwd
- * @returns {Promise<{root: string, folder: string, slug: string, cleanup: () => void}>}
+ * @returns {Promise<{root: string, folder: string, slug: string, editor: {dir: string, folder: string} | {dir: null, folder: string, notCopied: string} | null, cleanup: () => void}>}
  *   `root` is the staging folder, holding the theme in `root/<slug>`;
- *   `folder` is where the theme sat in what was shared, for messages
+ *   `folder` is where the theme sat in what was shared, for messages;
+ *   `editor` is the theme editor's saved state for that theme when the
+ *   bundle carries one (a folder holding `<slug>.settings.json`), staged in
+ *   `editor.dir`; with more than one, `dir` is null and `notCopied` names
+ *   them
  */
 export async function stageSharedTheme(arg, cwd) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-add-'));
@@ -94,16 +99,58 @@ export async function stageSharedTheme(arg, cwd) {
     }
     const [{dir, slug}] = found;
     copyTree(dir, path.join(stage, 'theme', slug));
+    // (The theme editor's saved state for the same theme: the high-level
+    // description the copy was built from, which the editor opens. Two are
+    // named, never chosen between.)
+    const editors = editorFolders(from, slug).filter(e => e !== dir);
+    /** @type {{dir: string, folder: string} | {dir: null, folder: string, notCopied: string} | null} */
+    let editor = null;
+    if (editors.length === 1) {
+      // (System files, `.DS_Store`, are never part of the editor's state.)
+      copyTree(editors[0], path.join(stage, 'editor', slug), name =>
+        FOLDER_JUNK.has(name),
+      );
+      editor = {
+        dir: path.join(stage, 'editor', slug),
+        folder: shown(editors[0], from),
+      };
+    } else if (editors.length > 1) {
+      const folders = editors.map(e => shown(e, from));
+      editor = {
+        dir: null,
+        folder: folders.join(', '),
+        notCopied: `${arg} holds ${editors.length} folders with ${slug}.settings.json (${folders.join(', ')}), and theme add keeps one theme editor state; keep the one you want and add the theme again`,
+      };
+    }
     return {
       root: path.join(stage, 'theme'),
       folder: shown(dir, from),
       slug,
+      editor,
       cleanup,
     };
   } catch (error) {
     cleanup();
     throw error;
   }
+}
+
+/**
+ * The folders under `from` that hold the theme editor's saved state for
+ * `slug` (a regular `<slug>.settings.json`).
+ * @param {string} from
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function editorFolders(from, slug) {
+  /** @type {string[]} */
+  const found = [];
+  walkFolders(from, (dir, entries) => {
+    if (entries.some(e => e.isFile() && e.name === `${slug}.settings.json`))
+      found.push(dir);
+    return false;
+  });
+  return found;
 }
 
 /** @param {string} dir @param {string} from */
@@ -296,6 +343,32 @@ export function extractTgz(packed, dest, arg) {
 function themeFolders(from) {
   /** @type {Array<{dir: string, slug: string}>} */
   const out = [];
+  walkFolders(from, (dir, entries) => {
+    const descriptor = entries.find(
+      entry =>
+        entry.isFile() &&
+        entry.name.endsWith(`Theme${THEME_DOC_SUFFIX}`) &&
+        /\btype\s*:\s*['"]theme['"]/.test(
+          fs.readFileSync(path.join(dir, entry.name), 'utf8'),
+        ),
+    );
+    if (!descriptor) return false;
+    const stem = descriptor.name.slice(0, -`Theme${THEME_DOC_SUFFIX}`.length);
+    const slug = stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    if (THEME_SLUG_RE.test(slug)) out.push({dir, slug});
+    return true;
+  });
+  return out;
+}
+
+/**
+ * Visit each folder under `from`, `from` included, MAX_DEPTH deep at most,
+ * skipping dependencies, hidden folders and folders that cannot be read.
+ * `visit` returns true to stop going deeper there.
+ * @param {string} from
+ * @param {(dir: string, entries: fs.Dirent[]) => boolean} visit
+ */
+function walkFolders(from, visit) {
   /** @param {string} dir @param {number} depth */
   const walk = (dir, depth) => {
     /** @type {fs.Dirent[]} */
@@ -305,21 +378,7 @@ function themeFolders(from) {
     } catch {
       return;
     }
-    const descriptor = entries.find(
-      entry =>
-        entry.isFile() &&
-        entry.name.endsWith(`Theme${THEME_DOC_SUFFIX}`) &&
-        /\btype\s*:\s*['"]theme['"]/.test(
-          fs.readFileSync(path.join(dir, entry.name), 'utf8'),
-        ),
-    );
-    if (descriptor) {
-      const stem = descriptor.name.slice(0, -`Theme${THEME_DOC_SUFFIX}`.length);
-      const slug = stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-      if (THEME_SLUG_RE.test(slug)) out.push({dir, slug});
-      return;
-    }
-    if (depth >= MAX_DEPTH) return;
+    if (visit(dir, entries) || depth >= MAX_DEPTH) return;
     for (const entry of entries)
       if (
         entry.isDirectory() &&
@@ -329,20 +388,20 @@ function themeFolders(from) {
         walk(path.join(dir, entry.name), depth + 1);
   };
   walk(from, 0);
-  return out;
 }
 
 /**
  * Copy a theme folder's plain files and folders; links are left out.
  * @param {string} from
  * @param {string} to
+ * @param {(name: string) => boolean} [skip] file names left out
  */
-function copyTree(from, to) {
+export function copyTree(from, to, skip = (/** @type {string} */ _) => false) {
   fs.mkdirSync(to, {recursive: true});
   for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
-    if (entry.isDirectory()) copyTree(src, dest);
-    else if (entry.isFile()) fs.copyFileSync(src, dest);
+    if (entry.isDirectory()) copyTree(src, dest, skip);
+    else if (entry.isFile() && !skip(entry.name)) fs.copyFileSync(src, dest);
   }
 }
