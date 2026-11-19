@@ -108,6 +108,8 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} [listed] - the parts inside it drawn more than once in one of its elements (a menu's items), unlike a part drawn there once (a header's nav)
  * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [drawnAs] - the other targets its element carries where the census drew it (a calendar's nav arrow is a `button` too): a rule on one of them reaches this part
+ * @property {boolean} [alone] - the census drew it on an element carrying no other target too (a Button); a part never drawn alone rides on the parts it is drawn as
  * @property {string} [underInput] - drawn under an invisible native input
  *   laid over it (a checkbox's box), which takes its pointer and focus: the
  *   part that holds that input (empty when none is themed)
@@ -1615,6 +1617,11 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         innerCorners: new Set(),
         media: false,
       });
+      // (The other targets the same element carries: a calendar's nav arrow
+      // is a Button too, so a button rule reaches it.)
+      if (ownsTarget && named.length > 1)
+        for (const c of named)
+          if (c.slice(7) !== t) (T.drawnAs ??= new Set()).add(c.slice(7));
       // A data attribute another target on the element declares is this
       // part's only when the part rides on that one: a part always drawn
       // together with another (a list item on its Item) takes that one's
@@ -1915,6 +1922,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           }
         : {}),
       tags: [...v.tags],
+      ...(v.drawnAs?.size ? {drawnAs: [...v.drawnAs].sort()} : {}),
+      ...(v.alone ? {alone: true} : {}),
       ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),

@@ -120,11 +120,13 @@ export const FAMILIES = wordTable({
 });
 
 /**
- * Groups whose members always look alike: styling one member styles them
- * all unless `--only` is given. Other groups spread only when `--on`
+ * Groups whose members always look alike: styling one member styles the
+ * members that draw it alike unless `--only` is given (a menu's box
+ * reaches every select's dropdown). Any other part reaches its family role
+ * the census reads (reachGroupOf); containers spread only when `--on`
  * names the group itself.
  */
-export const AUTO_SPREAD = ['inputs', 'checks'];
+export const AUTO_SPREAD = ['inputs', 'checks', 'menus'];
 
 /** The family roles `--on` takes as groups. */
 export const GROUP_ROLES = /** @type {const} */ ([

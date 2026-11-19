@@ -113,6 +113,8 @@ import {
   ownSourceTokenValues,
   shadeAt,
   familyKind,
+  reachGroupOf,
+  drawnSame,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -17231,8 +17233,22 @@ export function draftAnswer(ctx, env, question) {
             continue;
           }
         }
+        // (A kept part keeps its own look: a keep that would reach a
+        // family member drawn with other values than the part's (a
+        // popover's shadow beside a dialog's) is kept to the part, --only.)
         for (const k of keep)
-          if (k && k !== UNTOUCHED) keeps.push(/** @type {Step} */ (k));
+          if (k && k !== UNTOUCHED) {
+            const st = /** @type {Step} */ (k);
+            keeps.push(
+              reachGroupOf(ctx, st) &&
+                partsOf(ctx, /** @type {any} */ (st)).some(
+                  t =>
+                    t !== st.on && !drawnSame(ctx, /** @type {any} */ (st), t),
+                )
+                ? {...st, only: true}
+                : st,
+            );
+          }
         said.push(`${name} keeps what it has now`);
       }
       // The kept parts, or one variant or state of them (`part@when|`, in

@@ -49,6 +49,91 @@ const partsOf = project => {
   };
 };
 
+describe('a part drawn on another part’s element', () => {
+  it('keeps its states to itself: the part it sits on takes none of them', () => {
+    // (A pagination cell drawn as a Button: the cell's selected state is the
+    // cell's, so a new target never changes the button's own record, nor the
+    // family the button belongs to.)
+    const target = new Map([
+      [
+        'button',
+        {
+          key: 'button',
+          className: 'astryx-button',
+          component: 'Button',
+          props: ['variant'],
+          states: [],
+        },
+      ],
+      [
+        'pager-cell',
+        {
+          key: 'pager-cell',
+          className: 'astryx-pager-cell',
+          component: 'Pager',
+          props: [],
+          states: ['selected'],
+        },
+      ],
+    ]);
+    const css = '.x1a{background-color:var(--color-background-surface)}';
+    const html =
+      '<button class="astryx-button x1a" data-variant="ghost"></button>' +
+      '<button class="astryx-button astryx-pager-cell x1a" data-variant="ghost" data-selected="selected"></button>';
+    const {map} = walkMarkup(
+      html,
+      declarations(css),
+      new Set(['--color-background-surface']),
+      /** @type {any} */ (target),
+    );
+    expect(map.button.attrs).toEqual({variant: ['ghost']});
+    // (The cell rides on the button: it takes the button's marks too.)
+    expect(map['pager-cell'].attrs).toEqual({
+      selected: ['selected'],
+      variant: ['ghost'],
+    });
+    expect(map['pager-cell'].drawnAs).toEqual(['button']);
+  });
+
+  it('takes the states of the part it always rides on', () => {
+    // (A list item is only ever drawn on an Item: the Item's selected mark
+    // is the list item's too.)
+    const target = new Map([
+      [
+        'item',
+        {
+          key: 'item',
+          className: 'astryx-item',
+          component: 'Item',
+          props: [],
+          states: ['selected'],
+        },
+      ],
+      [
+        'list-item',
+        {
+          key: 'list-item',
+          className: 'astryx-list-item',
+          component: 'List',
+          props: [],
+          states: [],
+        },
+      ],
+    ]);
+    const css = '.x1a{background-color:var(--color-background-surface)}';
+    const html =
+      '<div class="astryx-item x1a" data-selected="selected"></div>' +
+      '<li class="astryx-item astryx-list-item x1a" data-selected="selected"></li>';
+    const {map} = walkMarkup(
+      html,
+      declarations(css),
+      new Set(['--color-background-surface']),
+      /** @type {any} */ (target),
+    );
+    expect(map['list-item'].attrs).toEqual({selected: ['selected']});
+  });
+});
+
 describe('part conditions from the target declaration', () => {
   it('records and keeps a runtime state the target declares, with no code for it', () => {
     const project = projectWith(['expanded']);

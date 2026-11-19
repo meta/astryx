@@ -75,7 +75,10 @@ describe('lines for text on a media surface', () => {
       });
       const {left, followed} = await settle('n');
       expect(left).toEqual([]);
-      for (const f of followed) expect(f).toMatch(/--when variant:/);
+      // (Each fix names a variant, or is the drill-in of a family member the
+      // button's color reaches.)
+      for (const f of followed)
+        expect(f).toMatch(/--when variant:|--on (?!button\b)[\w-]+/);
     },
     T,
   );

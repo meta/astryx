@@ -161,7 +161,7 @@ describe('a padding of several lengths where only one works', () => {
   );
 
   it(
-    'names every side a later group setting hides',
+    "keeps every side a later group setting would cover: a part's own setting wins",
     async () => {
       await set('5px 0');
       const r = await themeEditSet('t', 'padding', '3px 2px', {
@@ -169,12 +169,8 @@ describe('a padding of several lengths where only one works', () => {
         on: 'menus',
       });
       const notes = r.data.notes.join('\n');
-      expect(notes).toMatch(
-        /padding-block = 5px on dropdown-menu no longer shows/,
-      );
-      expect(notes).toMatch(
-        /padding-inline = 0 on dropdown-menu no longer shows/,
-      );
+      expect(notes).not.toMatch(/on dropdown-menu no longer shows/);
+      expect(r.data.parts).not.toContain('dropdown-menu');
       await themeEditUndo('t', {cwd});
       await themeEditUndo('t', {cwd});
     },
