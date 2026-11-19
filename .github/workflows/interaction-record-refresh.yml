@@ -2,15 +2,19 @@
 
 # Keeps the recorded interaction spec times (.github/playwright-leg-durations.json)
 # close to main, as node-record-refresh.yml does for the Node times. Once a
-# week it re-records the Chromium times from main's three latest successful
+# week it re-records the Chromium times from main's (up to) three latest successful
 # full interaction runs ("Interaction proofs of …") and the WebKit times from
-# main's three latest successful WebKit weekly runs, each run on its own, and
+# main's (up to) three latest successful WebKit weekly runs, each run on its own, and
 # keeps each spec's median over them. When
 # the record changes, it opens one durations-only pull request on a fixed
 # branch, or force-updates that branch and refreshes the open one
 # (.github/scripts/interaction-record-refresh.mjs). Under nine in ten spec
 # files timed, the step summary carries an early warning; nothing fails on it.
 # It never pushes to main.
+#
+# A push or pull request made with the workflow token starts no workflow, so
+# CI on the refresh pull request starts when someone with write access
+# reopens it.
 
 name: Interaction test record refresh
 
@@ -42,7 +46,7 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # Each lane's three latest successful full runs of main, by the run
+      # Each lane's (up to) three latest successful full runs of main, by the run
       # name ci.yml gives them. Each run is recorded on its own, from each
       # leg's complete job log in a file of its own: the recorder costs each
       # test by its gap from the line before it, so one leg's lines never run
@@ -57,10 +61,12 @@ jobs:
           : > "$RUNNER_TEMP/run-urls.txt"
           record_lane() {
             local lane=$1 key=$2 project=$3 title=$4 jobs=$5 run times=()
-            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&branch=main&status=success&per_page=100" \
-              --jq "[.workflow_runs[] | select(.display_title | startswith(\"$title\"))][:3][].id" > "$RUNNER_TEMP/$lane-runs.txt"
+            # main dispatches a release check every few hours, so three weekly
+            # WebKit runs reach back past one page of runs.
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event workflow_dispatch --status success --limit 600 \
+              --json databaseId,displayTitle --jq "[.[] | select(.displayTitle | startswith(\"$title\"))][:3][].databaseId" > "$RUNNER_TEMP/$lane-runs.txt"
             if [ ! -s "$RUNNER_TEMP/$lane-runs.txt" ]; then
-              echo "::warning title=No ${lane} run::main has no successful '${title}…' run in its latest 100 dispatches; the ${lane} times stay as recorded."
+              echo "::warning title=No ${lane} run::main has no successful '${title}…' run in its latest 600 dispatches; the ${lane} times stay as recorded."
               return 0
             fi
             while read -r run; do
@@ -75,7 +81,7 @@ jobs:
               # The recorder writes the record in its working folder.
               cp .github/playwright-leg-durations.json "$dir/root/.github/"
               (cd "$dir/root" && node "$GITHUB_WORKSPACE/.github/scripts/playwright-legs.mjs" record --key "$key" --project "$project" "$dir"/logs/*.log)
-              node -e 'const fs = require("node:fs"); const [file, key, out] = process.argv.slice(1); fs.writeFileSync(out, JSON.stringify(JSON.parse(fs.readFileSync(file, "utf8"))[key]));' \
+              node -e 'const fs = require("node:fs"); const [file, key, out] = process.argv.slice(1); const d = JSON.parse(fs.readFileSync(file, "utf8")); fs.writeFileSync(out, JSON.stringify({times: d[key], perTest: d["seconds-per-test"]?.[key]}));' \
                 "$dir/root/.github/playwright-leg-durations.json" "$key" "$dir/times.json"
               times+=("$dir/times.json")
               echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$RUNNER_TEMP/run-urls.txt"

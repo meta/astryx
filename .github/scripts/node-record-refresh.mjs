@@ -185,16 +185,17 @@ Opened by the Node record refresh after a full unit run of main. A later refresh
  * Opens the refresh pull request, or edits the open one, so at most one is
  * ever open.
  * @param {(args: string[]) => string} gh runs `gh` and returns its stdout
- * @param {{title: string, body: string}} pr
+ * @param {{title: string, body: string, branch?: string}} pr `branch` is
+ *   the refresh's fixed head branch (this record's by default).
  * @returns {{action: 'created' | 'refreshed', url: string}}
  */
-export function openOrRefresh(gh, {title, body}) {
+export function openOrRefresh(gh, {title, body, branch = BRANCH}) {
   const open = JSON.parse(
     gh([
       'pr',
       'list',
       '--head',
-      BRANCH,
+      branch,
       '--base',
       'main',
       '--state',
@@ -214,7 +215,7 @@ export function openOrRefresh(gh, {title, body}) {
     '--base',
     'main',
     '--head',
-    BRANCH,
+    branch,
     '--title',
     title,
     '--body',

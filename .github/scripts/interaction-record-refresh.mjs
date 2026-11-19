@@ -5,12 +5,14 @@
  * @file Keeps the recorded interaction spec times
  *   (`.github/playwright-leg-durations.json`) close to main, as the Node
  *   record's refresh does for the Node times.
- * @input `median --key <times key> <run times>...`: one recorded-times file
- *   per run (spec file → seconds). `coverage --key <times key>
+ * @input `median --key <times key> <run times>...`: one file per run, its
+ *   recorded times (`times`: spec file → seconds) and mean time a test
+ *   (`perTest`). `coverage --key <times key>
  *   [--github-summary]`: the record and the interaction spec files git
  *   tracks. `pr --run-url <url>...`: the regenerated record and `gh`.
  * @output `median` writes each spec's median over those runs under the key,
- *   so one slow or fast run does not move a time alone. `coverage` prints how many spec files the record times and, below
+ *   and the median mean time a test, so one slow or fast run does not move a
+ *   time alone. `coverage` prints how many spec files the record times and, below
  *   nine in ten, an early warning (a workflow warning and a step summary
  *   line); it always exits 0. `pr` opens the refresh pull request, or edits
  *   the open one, so at most one is ever open.
@@ -24,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {openOrRefresh, percent} from './node-record-refresh.mjs';
 import {DURATIONS, isInteractionSpec} from './playwright-legs.mjs';
 
 export const BRANCH = 'ci/interaction-durations-refresh';
@@ -51,14 +54,15 @@ export function medianTimes(runs) {
   return Object.fromEntries(
     [...times]
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([file, values]) => {
-        const sorted = [...values].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        const median =
-          sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-        return [file, Math.round(median * 10) / 10];
-      }),
+      .map(([file, values]) => [file, Math.round(medianOf(values) * 10) / 10]),
   );
+}
+
+/** @param {number[]} values */
+function medianOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 /**
@@ -79,7 +83,7 @@ export function coverageOf(specs, recorded) {
  */
 export function earlyWarning(key, {total, timed, share, low}) {
   if (!low) return '';
-  return `Early warning: the ${key} record times ${timed} of ${total} interaction spec files (${Math.floor(share * 1000) / 10}%), under nine in ten. Each untimed spec is costed at the mean time a test, so its legs can run past the time they planned.`;
+  return `Early warning: the ${key} record times ${timed} of ${total} interaction spec files (${percent(share)}), under nine in ten. Each untimed spec is costed at the mean time a test, so its legs can run past the time they planned.`;
 }
 
 /**
@@ -101,48 +105,9 @@ export function prBody({runs, lines}) {
     ...lines.map(line => `- ${line}`),
     '',
     `Opened by the interaction record refresh from the fixed branch \`${BRANCH}\`. A later refresh force-updates that branch and this pull request instead of opening another, so each refresh needs a new review at its head.`,
+    '',
+    'A pull request opened with the workflow token starts no CI: someone with write access reopens it to start CI.',
   ].join('\n');
-}
-
-/**
- * Opens the refresh pull request, or edits the open one.
- * @param {(args: string[]) => string} gh runs `gh` and returns its stdout
- * @param {{title: string, body: string}} pr
- * @returns {{action: 'created' | 'refreshed', url: string}}
- */
-export function openOrRefresh(gh, {title, body}) {
-  const open = JSON.parse(
-    gh([
-      'pr',
-      'list',
-      '--head',
-      BRANCH,
-      '--base',
-      'main',
-      '--state',
-      'open',
-      '--json',
-      'number,url',
-    ]) || '[]',
-  );
-  if (open.length > 0) {
-    const [{number, url}] = open;
-    gh(['pr', 'edit', String(number), '--title', title, '--body', body]);
-    return {action: 'refreshed', url};
-  }
-  const url = gh([
-    'pr',
-    'create',
-    '--base',
-    'main',
-    '--head',
-    BRANCH,
-    '--title',
-    title,
-    '--body',
-    body,
-  ]).trim();
-  return {action: 'created', url};
 }
 
 /** The interaction spec files git tracks. */
@@ -155,7 +120,7 @@ function trackedSpecs() {
 function coverageLine(key, durations, specs) {
   const coverage = coverageOf(specs, durations[key] ?? {});
   return {
-    line: `${key}: ${coverage.timed} of ${coverage.total} spec files timed (${Math.floor(coverage.share * 1000) / 10}%)`,
+    line: `${key}: ${coverage.timed} of ${coverage.total} spec files timed (${percent(coverage.share)})`,
     warning: earlyWarning(key, coverage),
   };
 }
@@ -174,9 +139,17 @@ function main(args) {
       );
     if (files.length === 0)
       throw new Error('median needs one times file per run');
-    durations[key] = medianTimes(
-      files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))),
-    );
+    const runs = files.map(file => JSON.parse(fs.readFileSync(file, 'utf8')));
+    durations[key] = medianTimes(runs.map(run => run.times));
+    // The mean time a test, for a spec with no recorded time: its median too.
+    const perTest = runs
+      .map(run => run.perTest)
+      .filter(value => typeof value === 'number');
+    if (perTest.length)
+      durations['seconds-per-test'] = {
+        ...durations['seconds-per-test'],
+        [key]: medianOf(perTest),
+      };
     fs.writeFileSync(DURATIONS, `${JSON.stringify(durations, null, 2)}\n`);
     console.log(
       `${key}: the median of ${files.length} run(s) for ${Object.keys(durations[key]).length} spec files`,
@@ -206,6 +179,7 @@ function main(args) {
     const gh = ghArgs =>
       execFileSync('gh', ghArgs, {cwd: ROOT, encoding: 'utf8'});
     const {action, url} = openOrRefresh(gh, {
+      branch: BRANCH,
       title: TITLE,
       body: prBody({runs: values('--run-url'), lines}),
     });

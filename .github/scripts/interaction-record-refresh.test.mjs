@@ -19,9 +19,9 @@ import {
   coverageOf,
   earlyWarning,
   medianTimes,
-  openOrRefresh,
   prBody,
 } from './interaction-record-refresh.mjs';
+import {openOrRefresh} from './node-record-refresh.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -77,7 +77,7 @@ describe('openOrRefresh', () => {
       calls.push(args),
       args[1] === 'list' ? '[]' : 'https://x/pr/1\n'
     );
-    expect(openOrRefresh(gh, {title: 't', body: 'b'})).toEqual({
+    expect(openOrRefresh(gh, {title: 't', body: 'b', branch: BRANCH})).toEqual({
       action: 'created',
       url: 'https://x/pr/1',
     });
@@ -90,7 +90,9 @@ describe('openOrRefresh', () => {
       calls.push(args),
       args[1] === 'list' ? '[{"number": 7, "url": "https://x/pr/7"}]' : ''
     );
-    expect(openOrRefresh(gh, {title: 't', body: 'b'}).action).toBe('refreshed');
+    expect(
+      openOrRefresh(gh, {title: 't', body: 'b', branch: BRANCH}).action,
+    ).toBe('refreshed');
     expect(calls.map(args => args[1])).toEqual(['list', 'edit']);
   });
 });
@@ -106,6 +108,7 @@ describe('prBody', () => {
     expect(body).toContain('127 of 127');
     expect(body).toContain(`fixed branch \`${BRANCH}\``);
     expect(body).toContain('median');
+    expect(body).toContain('someone with write access reopens it');
   });
 });
 
@@ -132,7 +135,9 @@ describe('the workflow', () => {
     expect(ci).toContain("format('Interaction proofs of {0}', github.sha)");
     expect(ci).toContain("format('WebKit weekly of {0}', github.sha)");
     const run = step('Re-record each lane from its latest full runs').run;
-    expect(run).toContain('[:3][].id');
+    expect(run).toContain('--limit 600');
+    expect(run).toContain('[:3][].databaseId');
+    expect(run).toContain('perTest: d["seconds-per-test"]?.[key]');
     expect(run).toContain(
       "record_lane chromium interaction-chromium chromium 'Interaction proofs of ' '^pr-interaction \\\\([0-9]+/[0-9]+\\\\)$'",
     );
