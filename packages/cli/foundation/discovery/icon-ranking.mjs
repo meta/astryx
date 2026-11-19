@@ -334,8 +334,10 @@ function pluralPair(a, b) {
 const ICON_WORDS = new Set(['icon', 'icons']);
 
 /**
- * Words that phrase a query without naming anything: left out of a query of
- * several words that nothing answers as typed (`go home` asks for `home`).
+ * Words that phrase a query without naming anything, the words that only
+ * join others among them: left out of a query of several words that nothing
+ * answers as typed (`go home` asks for `home`, `card with a star` for
+ * `card star`).
  */
 const FILLER_WORDS = new Set([
   'a',
@@ -346,6 +348,8 @@ const FILLER_WORDS = new Set([
   'my',
   'of',
   'for',
+  'with',
+  'and',
   ...ICON_WORDS,
 ]);
 

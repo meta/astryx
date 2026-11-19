@@ -182,7 +182,7 @@ How we verify:
 
 - `[ok]` `bar` — simple/stacked/grouped/grouped-stacked/negative; rounded top corners;
   corner radius only on stack top.
-- `[ok]` `line` — curves (monotone default); optional dots (hardcoded r=3 — expose?).
+- `[ok]` `line` — curves (linear default); optional dots (hardcoded r=3 — expose?).
 - `[ok]` `area` — fill + gradient + stacked; top stroke.
 - `[?]` `dot` (SVG scatter) — no dedicated story yet. `[new]`
 - `[BUG]` `dot.dodge` — declared, does nothing.
