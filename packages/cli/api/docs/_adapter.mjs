@@ -393,6 +393,67 @@ export function componentLinkProvider(ownerPackage, providerId) {
     : normalizeProviderId(providerId ?? ownerPackage);
 }
 
+/**
+ * A linker for doc objects that packages wrote: it resolves each inline link
+ * in a doc's text fields to the command that opens its doc, against the docs
+ * of the package that wrote it (a Core item's against the CLI's own), and
+ * renders its doc tokens in the same pass (spec:AST-047 FR9). An owner that is
+ * not a package, or names no provider, links nothing: its links print as
+ * written and its tokens still render. `astryx component`, `astryx template`,
+ * `build` and `search` read packages' doc text through it.
+ * @param {string} cwd
+ * @returns {Promise<<T>(doc: T, owner: string | undefined) => Promise<T>>}
+ */
+export async function ownedDocLinker(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of projectOfCatalog.get(catalog)?.loadedIntegrations ??
+    []) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /** @type {LinkResolver} */
+  const noDocs = async () => ({problem: 'its owner names no docs provider'});
+  return async (doc, owner) => {
+    if (!JSON.stringify(doc ?? null).includes('{@')) return doc;
+    let provider = null;
+    try {
+      if (typeof owner === 'string') {
+        provider = componentLinkProvider(owner, declared.get(owner));
+      }
+    } catch {
+      // Not a provider id: nothing to link against.
+    }
+    if (provider == null) return (await linkFields(doc, noDocs)).doc;
+    return (await linkComponentDoc(catalog, provider, doc)).doc;
+  };
+}
+
+/**
+ * Doc text that packages wrote, such as template descriptions, read through
+ * {@link ownedDocLinker}. The docs catalog loads only when a text links.
+ * @param {ReadonlyArray<{text: string, package?: string}>} items
+ * @param {string} cwd
+ * @returns {Promise<string[]>}
+ */
+export async function linkOwnedTexts(items, cwd) {
+  if (!items.some(item => item.text.includes('{@link'))) {
+    return items.map(item => renderTokens(item.text));
+  }
+  const link = await ownedDocLinker(cwd);
+  /** @type {string[]} */
+  const out = [];
+  for (const item of items) {
+    const linked = await link(
+      {description: item.text},
+      item.package ?? CORE_PACKAGE,
+    );
+    out.push(linked.description);
+  }
+  return out;
+}
+
 /** @type {WeakMap<DocsCatalog, Promise<DocsTree>>} */
 const treesByCatalog = new WeakMap();
 
@@ -1273,13 +1334,8 @@ export async function docsLinkProblems(
    * @param {LinkProblem} problem
    * @param {string | undefined} provider the provider of the doc it sits in
    */
-  const leftOut = (problem, provider) => {
-    if (absent == null) return false;
-    const target = parseLinkTarget(problem.target);
-    if ('error' in target) return false;
-    const owning = target.provider ?? provider;
-    return owning != null && absent({...target, provider: owning});
-  };
+  const leftOut = (problem, provider) =>
+    leftOutOfRun(absent, problem, provider);
   /**
    * @param {string} where
    * @param {string | undefined} provider
@@ -1319,6 +1375,58 @@ export async function docsLinkProblems(
         node.route,
         node.provider,
         (await nodeContent(catalog, tree, node)).problems,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * Whether a link problem names a target the run leaves out on purpose.
+ * @param {((target: {provider: string, kind: string, name: string}) => boolean) | undefined} absent
+ * @param {LinkProblem} problem
+ * @param {string | undefined} provider the provider of the doc it sits in
+ * @returns {boolean}
+ */
+function leftOutOfRun(absent, problem, provider) {
+  if (absent == null) return false;
+  const target = parseLinkTarget(problem.target);
+  if ('error' in target) return false;
+  const owning = target.provider ?? provider;
+  return owning != null && absent({...target, provider: owning});
+}
+
+/**
+ * Every link in a template's description that names no doc. Each description
+ * is checked against the docs of the package that wrote it, with the provider
+ * a component doc's links use.
+ * @param {DocsCatalog} catalog
+ * @param {{owner?: string, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only this package's templates. `absent`: as in
+ *   {@link docsLinkProblems}.
+ * @returns {Promise<string[]>}
+ */
+export async function templateLinkProblems(catalog, {owner, absent} = {}) {
+  const contributions = await catalog.contributions();
+  /** @type {string[]} */
+  const problems = [];
+  for (const record of contributions?.templates ?? []) {
+    if (owner != null && record.package !== owner) continue;
+    if (!record.description?.includes('{@link')) continue;
+    let provider;
+    try {
+      provider = componentLinkProvider(record.package, record.providerId);
+    } catch {
+      // An owner that is not a provider id has no docs to check against.
+      continue;
+    }
+    const linked = await linkComponentDoc(catalog, provider, {
+      description: record.description,
+    });
+    for (const problem of linked.problems) {
+      if (leftOutOfRun(absent, problem, provider)) continue;
+      problems.push(
+        `template ${record.id}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
     }
   }
@@ -1369,6 +1477,26 @@ export async function packageComponentLinkProblems(integration, discovered) {
   return (await componentLinkProblems(catalog, integration.name)).map(
     message => ({severity: /** @type {const} */ ('warning'), message}),
   );
+}
+
+/**
+ * Each link in one integration's own template descriptions that names no doc.
+ * `validate` lists each as a `next` note.
+ * @param {any} integration a loaded integration
+ * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
+ *   docs, which its templates' links may name; null when it ships none
+ * @returns {Promise<string[]>}
+ */
+export async function packageTemplateLinkProblems(integration, discovered) {
+  // A package with no provider id has no docs to check against.
+  try {
+    normalizeProviderId(integration.providerId ?? integration.name);
+  } catch {
+    return [];
+  }
+  return templateLinkProblems(packageCatalog(integration, discovered), {
+    owner: integration.name,
+  });
 }
 
 /**
@@ -2324,7 +2452,8 @@ function fewerWordMatches(topic, everyDoc, byWords, taken) {
  * first. Otherwise it suggests the docs whose own name it is, or whose route
  * it spells with hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
- * none shares a word with the argument). When the argument matches a component, hook or template
+ * none shares a word with the argument, with the names a slip or two from it
+ * first). When the argument matches a component, hook or template
  * (exact, folded or last segment), the command that reads that entry joins the list as
  * foundation/suggest/other-command.mjs places it, and the list keeps its
  * length; when no suggested doc
@@ -2394,7 +2523,13 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       orderDocPages(tree, topic, suggestions, false),
     );
   } else if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions, {closest: true});
+    // Every topic and namespace is listed, so a near name (`tokns` for
+    // tokens, `colr` for color) only moves to the front, from four letters.
+    suggestions = orderRouteSuggestions(
+      topic,
+      suggestions,
+      everyDoc ? {closest: true, typos: true, slipFrom: 4} : {closest: true},
+    );
   }
   // In place of the every-doc list: the docs a typed word names by their
   // route, title or keywords.

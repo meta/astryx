@@ -266,6 +266,7 @@ async function observe(page: Page) {
             disabled: row.getAttribute('data-disabled'),
           },
           ariaCurrent: row.getAttribute('aria-current'),
+          actionAriaCurrent: action?.getAttribute('aria-current') ?? null,
           ariaSelected: row.getAttribute('aria-selected'),
           ariaDisabled: row.getAttribute('aria-disabled'),
           actionTag: action?.tagName ?? null,
@@ -492,11 +493,20 @@ for (const item of cases) {
             (expected.disabled === true ? 'disabled' : null),
           `${where} data-disabled ${row.data.disabled}`,
         );
-        // Selection reaches assistive technology on a role-less row.
+        // Selection reaches assistive technology on a role-less row, on the
+        // element that takes focus: the row's own button or link, else the row.
+        const current =
+          row.actionTag == null ? row.ariaCurrent : row.actionAriaCurrent;
         check(
-          row.ariaCurrent === (expected.selected === true ? 'true' : null),
-          `${where} aria-current ${row.ariaCurrent}`,
+          current === (expected.selected === true ? 'true' : null),
+          `${where} aria-current ${current}`,
         );
+        if (row.actionTag != null) {
+          check(
+            row.ariaCurrent == null,
+            `${where} row aria-current ${row.ariaCurrent}`,
+          );
+        }
         check(
           row.ariaSelected == null,
           `${where} aria-selected ${row.ariaSelected}`,
@@ -617,7 +627,7 @@ for (const item of cases) {
         rows: item.story === 'states' ? STATE_ROWS : null,
         density: density ?? null,
         states:
-          'states: data-highlighted, data-selected and data-disabled on the astryx-item root match each row; a selected role-less row has aria-current="true"; selected rows paint accent-muted and highlighted rows overlay-hover at rest, resolved in the row scope',
+          'states: data-highlighted, data-selected and data-disabled on the astryx-item root match each row; a selected role-less row has aria-current="true" on its button or link, or on the root when it has neither; selected rows paint accent-muted and highlighted rows overlay-hover at rest, resolved in the row scope',
         disabled:
           'disabled rows: a focusable aria-disabled button, aria-disabled on the root, content at half opacity, pointer-events none; enabled interactive rows answer with a pointer cursor',
         padding:

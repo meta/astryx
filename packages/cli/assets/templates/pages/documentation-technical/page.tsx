@@ -74,10 +74,12 @@ export default function TechnicalDocumentationPage() {
         )
       }
       content={
-        <LayoutContent isScrollable={false} padding={8}>
+        <LayoutContent role="main" isScrollable={false} padding={8}>
           <VStack gap={8}>
             <VStack gap={2}>
-              <Text type="display-1">Getting started with Product Name</Text>
+              <Text as="h1" type="display-1">
+                Getting started with Product Name
+              </Text>
               <Text type="supporting" color="secondary">
                 Last updated March 30, 2026
               </Text>
@@ -86,7 +88,7 @@ export default function TechnicalDocumentationPage() {
 
             <Card>
               <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
+                <HStack wrap="wrap" gap={2} vAlign="center">
                   <StackItem size="fill">
                     <HStack gap={2} vAlign="center">
                       <Icon icon={SparklesIcon} size="sm" color="secondary" />

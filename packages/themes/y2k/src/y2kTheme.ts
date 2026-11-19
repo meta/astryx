@@ -246,6 +246,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/** The color modes y2k draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const y2kTheme = defineTheme({
   name: 'y2k',
 
@@ -442,6 +445,9 @@ export const y2kTheme = defineTheme({
     '--radius-container': '0px',
     '--radius-page': '0px',
     '--radius-full': '0px',
+    // Set, so a theme that extends Y2K and sets its own container radius
+    // keeps square chat surfaces.
+    '--radius-chat': '0px',
 
     // =========================================================================
     // Shadows — warm cream neutral

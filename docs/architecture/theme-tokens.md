@@ -13,6 +13,7 @@ applies_to:
   [
     packages/core/src/theme/tokens.stylex.ts,
     packages/core/src/theme/tokens.ts,
+    packages/core/src/theme/statusRoleDefaults.ts,
     packages/core/src/theme/localTokens.ts,
     packages/core/src/theme/domainTokens/,
     packages/core/src/theme/syntax/,

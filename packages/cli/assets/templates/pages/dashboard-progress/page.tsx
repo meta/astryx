@@ -184,6 +184,12 @@ const TIMELINE_TICKS = Array.from(
 // "Today" marker, as a day offset on the same scale.
 const PROJECT_DAY = 58;
 
+// The marker's label sits above the plot area, outside the bars. The chart's
+// top margin holds one label line plus the label's gap above the plot, so the
+// SVG does not clip the label.
+const TODAY_LABEL_SIZE = 11;
+const TODAY_LABEL_GAP = 5;
+
 // ============= DATA =============
 
 // Task backlog by status. Tasks are not equally sized, so the fixture makes
@@ -480,7 +486,7 @@ const pageStyles = stylex.create({
       },
     },
   },
-  // Rows run the full width of the card, so the hover card has to cap itself.
+  // Rows run the full width of the panel, so the hover card has to cap itself.
   riskDetail: {
     maxWidth: 320,
   },
@@ -519,36 +525,20 @@ function SectionHeading({title, hint}: {title: string; hint?: string}) {
   );
 }
 
-// Card titles are visually level 3 but sit at level 2 in the outline, as peers
-// of the section headings. `hint` describes the card, `meta` is the count or
-// figure that trails on the opposite edge.
-function CardHeading({
-  title,
-  hint,
-  meta,
-}: {
-  title: string;
-  hint?: string;
-  meta?: string;
-}) {
+// Panel titles in the summary grid are visually level 3 but sit at level 2 in
+// the outline, as peers of the section headings. `hint` describes the panel.
+function PanelHeading({title, hint}: {title: string; hint?: string}) {
   return (
-    <HStack gap={3} hAlign="between" vAlign="center" wrap="wrap">
-      <VStack>
-        <Heading level={3} accessibilityLevel={2}>
-          {title}
-        </Heading>
-        {hint ? (
-          <Text type="supporting" color="secondary">
-            {hint}
-          </Text>
-        ) : null}
-      </VStack>
-      {meta ? (
-        <Text type="body" color="secondary">
-          {meta}
+    <VStack>
+      <Heading level={3} accessibilityLevel={2}>
+        {title}
+      </Heading>
+      {hint ? (
+        <Text type="supporting" color="secondary">
+          {hint}
         </Text>
       ) : null}
-    </HStack>
+    </VStack>
   );
 }
 
@@ -681,7 +671,12 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
         <BarChart
           data={data}
           layout="vertical"
-          margin={{top: 4, right: 16, left: 8, bottom: 4}}
+          margin={{
+            top: TODAY_LABEL_SIZE + TODAY_LABEL_GAP,
+            right: 16,
+            left: 8,
+            bottom: 4,
+          }}
           barCategoryGap={12}>
           <CartesianGrid horizontal={false} vertical stroke={CHART_GRID} />
           <XAxis
@@ -711,7 +706,8 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
             label={{
               value: 'Today',
               position: 'top',
-              fontSize: 11,
+              offset: TODAY_LABEL_GAP,
+              fontSize: TODAY_LABEL_SIZE,
               fill: CHART_NEUTRAL,
             }}
           />
@@ -884,7 +880,9 @@ function BurndownChart() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Holds the widest tick label ("320 pts") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={64}
             unit=" pts"
           />
           <Tooltip
@@ -892,7 +890,7 @@ function BurndownChart() {
             cursor={{stroke: CHART_GRID}}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="ideal"
             name="Ideal"
             stroke={IDEAL_COLOR}
@@ -902,7 +900,7 @@ function BurndownChart() {
             isAnimationActive={false}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="actual"
             name="Actual"
             stroke={ACTUAL_COLOR}
@@ -977,28 +975,26 @@ function RiskRow({risk}: {risk: Risk}) {
 
 function RisksPanel({risks}: {risks: Risk[]}) {
   return (
-    <Card padding={6}>
-      <VStack gap={4}>
-        <CardHeading
-          title="Blockers & risks"
-          hint="Hover or focus a row for detail"
+    <VStack gap={4}>
+      <PanelHeading
+        title="Blockers & risks"
+        hint="Hover or focus a row for detail"
+      />
+      {risks.length === 0 ? (
+        <EmptyState
+          title="No open blockers or risks"
+          description="Nothing flagged for the selected phase. Keep it up."
+          icon={<Icon icon={CheckCircleIcon} size="lg" color="success" />}
+          isCompact
         />
-        {risks.length === 0 ? (
-          <EmptyState
-            title="No open blockers or risks"
-            description="Nothing flagged for the selected phase. Keep it up."
-            icon={<Icon icon={CheckCircleIcon} size="lg" color="success" />}
-            isCompact
-          />
-        ) : (
-          <List hasDividers>
-            {risks.map(risk => (
-              <RiskRow key={risk.id} risk={risk} />
-            ))}
-          </List>
-        )}
-      </VStack>
-    </Card>
+      ) : (
+        <List hasDividers>
+          {risks.map(risk => (
+            <RiskRow key={risk.id} risk={risk} />
+          ))}
+        </List>
+      )}
+    </VStack>
   );
 }
 
@@ -1099,52 +1095,49 @@ export default function ProjectStatusPage() {
             </VStack>
           </Section>
 
+          <Section padding={6} paddingBlock={10} dividers={['bottom']}>
+            <Grid
+              gap={10}
+              columns={{minWidth: 320, max: 3}}
+              xstyle={pageStyles.contentColumn}>
+              <VStack gap={5}>
+                <PanelHeading
+                  title="Overall progress"
+                  hint={`${TASK_COUNT_TOTAL} tasks · ${TASK_POINTS_TOTAL} story points`}
+                />
+                <TaskProgressDonut />
+              </VStack>
+
+              <VStack gap={5}>
+                <PanelHeading
+                  title="Scope burndown"
+                  hint={`Remaining story points · ${BURNDOWN.length} weeks`}
+                />
+                <BurndownChart />
+              </VStack>
+
+              <RisksPanel risks={risks} />
+            </Grid>
+          </Section>
+
           <Section padding={6} paddingBlock={10}>
             <VStack gap={6} xstyle={pageStyles.contentColumn}>
-              <Grid gap={4} columns={{minWidth: 320, max: 3}}>
-                <Card padding={6}>
-                  <VStack gap={5}>
-                    <CardHeading
-                      title="Overall progress"
-                      hint={`${TASK_COUNT_TOTAL} tasks · ${TASK_POINTS_TOTAL} story points`}
-                    />
-                    <TaskProgressDonut />
-                  </VStack>
-                </Card>
-
-                <Card padding={6}>
-                  <VStack gap={5}>
-                    <CardHeading
-                      title="Scope burndown"
-                      hint={`Remaining story points · ${BURNDOWN.length} weeks`}
-                    />
-                    <BurndownChart />
-                  </VStack>
-                </Card>
-
-                <RisksPanel risks={risks} />
-              </Grid>
-
-              <Card padding={6}>
-                <VStack paddingBlockEnd={4}>
-                  <CardHeading
-                    title="Workstreams"
-                    meta={`${workstreams.length} of ${WORKSTREAMS.length}`}
-                  />
-                </VStack>
-                {workstreams.length === 0 ? (
-                  <PhaseEmptyState noun="workstreams" />
-                ) : (
-                  <Table<Workstream>
-                    data={workstreams}
-                    columns={WORKSTREAM_COLUMNS}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                    hasHover
-                  />
-                )}
-              </Card>
+              <SectionHeading
+                title="Workstreams"
+                hint={`${workstreams.length} of ${WORKSTREAMS.length}`}
+              />
+              {workstreams.length === 0 ? (
+                <PhaseEmptyState noun="workstreams" />
+              ) : (
+                <Table<Workstream>
+                  data={workstreams}
+                  columns={WORKSTREAM_COLUMNS}
+                  idKey="id"
+                  density="balanced"
+                  dividers="rows"
+                  hasHover
+                />
+              )}
             </VStack>
           </Section>
         </LayoutContent>

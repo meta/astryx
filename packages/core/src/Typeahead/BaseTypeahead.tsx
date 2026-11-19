@@ -478,6 +478,7 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-3'],
     textAlign: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   // The indicator a direct caller gets. In flow, where it has always been, so
@@ -1110,6 +1111,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [onOpenChange, dismiss, outsidePress, replaceResults]);
 
   const popover = usePopoverInternal({
+    surfaceTarget: 'typeahead-popup',
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the
