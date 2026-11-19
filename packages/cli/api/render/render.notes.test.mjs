@@ -124,6 +124,13 @@ describe('a rendered file describes itself', () => {
     expect(note.slice(4, -3)).not.toMatch(/-->|<!--/);
   });
 
+  it('tells an offline reader to install the CLI first, since npx cannot fetch it without a network', () => {
+    const note = html.slice(html.indexOf('<!--'), html.indexOf('-->') + 3);
+    expect(note).toContain(
+      `Offline, npx cannot fetch the CLI: install it first with npm install --save-dev @astryxdesign/cli@${cliVersion()}, then run the same commands with npx astryx.`,
+    );
+  });
+
   it('never spells the opening tag of the embedded block outside the block, so every CLI finds the block', () => {
     expect(html.split(`<script type="${SOURCE_TYPE}"`)).toHaveLength(2);
     const block = readSourceBlock(html);
