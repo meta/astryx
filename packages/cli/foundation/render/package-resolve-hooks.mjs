@@ -103,7 +103,9 @@ export function packageModuleUrl(specifier, parent, lookups) {
   const root = installedPackageOf(from);
   if (root === null) return null;
   const file = path.resolve(path.dirname(from), specifier);
-  if (!file.startsWith(root + path.sep)) return null;
+  // A file in a node_modules folder inside the package belongs to another
+  // package, whose scope Node reads apart from this one.
+  if (installedPackageOf(file) !== root) return null;
   const stat = fs.statSync(file, {throwIfNoEntry: false});
   if (!stat?.isFile()) return null;
   try {

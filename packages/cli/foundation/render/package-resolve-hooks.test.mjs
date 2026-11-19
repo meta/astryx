@@ -76,6 +76,10 @@ beforeAll(() => {
   );
   put('node_modules/other/o.js', "export const o = 'o';\n");
   put('page/page.js', "export const p = 'p';\n");
+  put(
+    'node_modules/@scope/lib/node_modules/vend/x.js',
+    "module.exports = {vend: 'cjs'};\n",
+  );
 });
 
 afterAll(() => {
@@ -127,6 +131,7 @@ describe('packageModuleUrl', () => {
       './legacy/l.js',
       './notype/n.js',
       '../../other/o.js',
+      '../node_modules/vend/x.js',
       '#internal',
       '@scope/lib',
       'other',
@@ -188,12 +193,17 @@ describe.skipIf(!hasHooks)('an import through the hook', () => {
       'node_modules/@scope/lib/dist/linked.js',
       "export {b} from './link.js';\n",
     );
+    const nested = put(
+      'node_modules/@scope/lib/dist/nested.js',
+      "import v from '../node_modules/vend/x.js';\nexport default v;\n",
+    );
     for (const specifier of [
       '@scope/lib',
       pathToFileURL(broken).href,
       pathToFileURL(toFolder).href,
       pathToFileURL(bare).href,
       pathToFileURL(linked).href,
+      pathToFileURL(nested).href,
       urlOf('dist/legacy/l.js'),
       urlOf('dist/notype/n.js'),
     ]) {
