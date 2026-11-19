@@ -24510,8 +24510,9 @@ export function draftAnswer(ctx, env, question) {
             `(in ${kind} mode only: a ${kind} fill, and the ${other} mode keeps its own so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`,
           );
         }
-      // A stripe's other stripe cleared in the same answer holds in the
-      // mode the stripe took, so the other mode keeps Core's stripe too.
+      // The other stripe the stripe answer clears (on striped tables) holds
+      // in the mode the stripe took, so the other mode keeps Core's stripe
+      // too. A clear the ask says itself keeps every mode.
       for (const o of d.options) {
         const stripe = o.find(
           x =>
@@ -24527,6 +24528,7 @@ export function draftAnswer(ctx, env, question) {
             st.on === stripe.on &&
             /^background(?:-color)?$/.test(st.thing) &&
             st.value === 'transparent' &&
+            st.state === 'striped' &&
             /^parity:/.test(String(st.when ?? '')) &&
             st.when !== stripe.when
           )

@@ -855,6 +855,14 @@ describe('stripe answers keep to the stripe', () => {
       /--on card --state hover(?! --mode)/,
     );
   });
+  it('keeps a stripe removal the ask says in every mode', async () => {
+    const commands = await commandsFor(
+      'odd rows #f9f9f9 and no stripes on even rows',
+    );
+    expect(commands).toMatch(
+      /--when parity:even(?! --state)(?! --mode)(?:\s|$)/,
+    );
+  });
   it("reads a stripe ask that names no part as a table row's", async () => {
     expect(await commandsFor('zebra stripes')).toMatch(
       /--on table-row --when parity:even/,
