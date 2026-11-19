@@ -117,7 +117,6 @@ import {
   isColorValue,
   isSafeValue,
   parseColor,
-  colorsIn,
   oklabDistance,
   ratio,
   ratioWords,

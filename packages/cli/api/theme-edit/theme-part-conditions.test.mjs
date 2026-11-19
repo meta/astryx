@@ -57,11 +57,23 @@ describe('a part drawn on another part’s element', () => {
     const target = new Map([
       [
         'button',
-        {key: 'button', className: 'astryx-button', component: 'Button', props: ['variant'], states: []},
+        {
+          key: 'button',
+          className: 'astryx-button',
+          component: 'Button',
+          props: ['variant'],
+          states: [],
+        },
       ],
       [
         'pager-cell',
-        {key: 'pager-cell', className: 'astryx-pager-cell', component: 'Pager', props: [], states: ['selected']},
+        {
+          key: 'pager-cell',
+          className: 'astryx-pager-cell',
+          component: 'Pager',
+          props: [],
+          states: ['selected'],
+        },
       ],
     ]);
     const css = '.x1a{background-color:var(--color-background-surface)}';
@@ -87,8 +99,26 @@ describe('a part drawn on another part’s element', () => {
     // (A list item is only ever drawn on an Item: the Item's selected mark
     // is the list item's too.)
     const target = new Map([
-      ['item', {key: 'item', className: 'astryx-item', component: 'Item', props: [], states: ['selected']}],
-      ['list-item', {key: 'list-item', className: 'astryx-list-item', component: 'List', props: [], states: []}],
+      [
+        'item',
+        {
+          key: 'item',
+          className: 'astryx-item',
+          component: 'Item',
+          props: [],
+          states: ['selected'],
+        },
+      ],
+      [
+        'list-item',
+        {
+          key: 'list-item',
+          className: 'astryx-list-item',
+          component: 'List',
+          props: [],
+          states: [],
+        },
+      ],
     ]);
     const css = '.x1a{background-color:var(--color-background-surface)}';
     const html =

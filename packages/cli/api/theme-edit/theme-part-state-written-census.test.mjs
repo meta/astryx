@@ -82,9 +82,9 @@ describe("a part's own state in its census spelling", () => {
         on: 'toggle-button',
         state: 'isPressed',
       });
-      expect(
-        saved().map((/** @type {any} */ {keep, ...x}) => x),
-      ).toEqual([PRESSED]);
+      expect(saved().map((/** @type {any} */ {keep, ...x}) => x)).toEqual([
+        PRESSED,
+      ]);
       // ToggleButton writes data-is-pressed="true" when pressed (its
       // isPressed prop is a boolean): the rule is built on that value.
       const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');

@@ -136,7 +136,11 @@ describe('a saved setting and how far it reaches', () => {
     expect(partsWith('old', 'border-color')).toContain('text-area');
     const rec = saved('old').reached ?? {};
     expect(
-      rec[/** @type {string} */ (Object.keys(rec).find(k => k.startsWith('border-color|')))],
+      rec[
+        /** @type {string} */ (
+          Object.keys(rec).find(k => k.startsWith('border-color|'))
+        )
+      ],
     ).toEqual(expect.arrayContaining(['text-area']));
   }, 240_000);
 

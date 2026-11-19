@@ -2506,7 +2506,7 @@ function embeddedReach(ctx, slug, data, s, parts) {
     const [axis, wanted] = s.when ? String(s.when).split(':') : [];
     if (
       axis &&
-      !(/** @type {string[]} */ (rec?.attrs?.[axis] ?? [])).includes(wanted)
+      !/** @type {string[]} */ (rec?.attrs?.[axis] ?? []).includes(wanted)
     )
       continue;
     if (
@@ -7387,7 +7387,8 @@ async function changeOnce(
   // The group it styles: the one named, or the family a setting on one
   // member reaches (unless --only), with every part written and the line
   // that keeps it to the member alone.
-  const reach = s.on && !groupsOf(ctx)[s.on] && !s.only ? reachGroupOf(ctx, s) : null;
+  const reach =
+    s.on && !groupsOf(ctx)[s.on] && !s.only ? reachGroupOf(ctx, s) : null;
   const group = s.on
     ? groupsOf(ctx)[s.on]
       ? s.on
@@ -7428,12 +7429,12 @@ async function changeOnce(
   // too): a rule on the part reaches them as well. Each is named, with the
   // line that keeps it as Core draws it (its own entry wins over the
   // part's).
-  const embedded = sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
+  const embedded =
+    sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
   // (Parts drawn as this part that its rule misses: they draw the property
   // with no variable a theme sets, so nothing reaches them there. Said, with
   // no line, rather than counted as reached.)
-  const missedAs =
-    sub === 'set' && s.on ? missedDrawnAs(ctx, s) : [];
+  const missedAs = sub === 'set' && s.on ? missedDrawnAs(ctx, s) : [];
   if (missedAs.length)
     notes.push(
       `${s.thing} on ${s.on} does not reach ${missedAs.join(', ')}: drawn as ${s.on}, ${missedAs.length > 1 ? 'they draw' : 'it draws'} ${s.thing} with no variable a theme sets, so Core gives no way to change it there`,

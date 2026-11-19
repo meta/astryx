@@ -55,11 +55,12 @@ const cssOf = theme =>
 
 /** The rules on a part, every condition. @param {string} css @param {string} part */
 const rulesOf = (css, part) =>
-  (css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []).join(
-    '\n',
-  );
+  (
+    css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []
+  ).join('\n');
 
-const FRAME = /border(?:-style)?: [^;]*solid|border-width: var\(--border-width\)/;
+const FRAME =
+  /border(?:-style)?: [^;]*solid|border-width: var\(--border-width\)/;
 
 describe('a whole-theme border width', () => {
   it('frames the surfaces that draw no border of their own, named, in one undo step', async ctx => {
@@ -77,7 +78,8 @@ describe('a whole-theme border width', () => {
     const css = cssOf('w');
     for (const p of framed) expect(rulesOf(css, p), p).toMatch(FRAME);
     await themeEditUndo('w', {cwd});
-    for (const p of framed) expect(rulesOf(cssOf('w'), p), p).not.toMatch(FRAME);
+    for (const p of framed)
+      expect(rulesOf(cssOf('w'), p), p).not.toMatch(FRAME);
   }, 240_000);
 
   it('leaves a part borderless when the theme says so, and a zero width frames nothing', async ctx => {

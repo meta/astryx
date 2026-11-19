@@ -54,9 +54,9 @@ const cssOf = theme =>
 
 /** The rules on a part, every condition. @param {string} css @param {string} part */
 const rulesOf = (css, part) =>
-  (css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []).join(
-    '\n',
-  );
+  (
+    css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []
+  ).join('\n');
 
 describe('a theme with no elevation shadows', () => {
   it('keeps an edge on the floating surfaces, named, and a part setting wins', async ctx => {

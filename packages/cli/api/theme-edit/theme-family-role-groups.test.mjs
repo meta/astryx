@@ -232,7 +232,12 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
     });
     expect(r.data.group?.name).toBe('overlays');
     expect(r.data.parts).toEqual(
-      expect.arrayContaining(['drawer', 'bottom-sheet', 'popover', 'hover-card']),
+      expect.arrayContaining([
+        'drawer',
+        'bottom-sheet',
+        'popover',
+        'hover-card',
+      ]),
     );
   }, 240_000);
 
