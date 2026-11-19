@@ -66,9 +66,15 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
  * How much of the Node project the record times.
  * @param {string[]} nodeFiles the Node project's test files
  * @param {Record<string, number>} recorded seconds per file
+ * @param {{minShare?: number}} [options] the least share that is fresh (this
+ *   record's bar by default)
  * @returns {{total: number, recorded: number, share: number, missing: string[], fresh: boolean}}
  */
-export function coverage(nodeFiles, recorded) {
+export function coverage(
+  nodeFiles,
+  recorded,
+  {minShare = MIN_RECORDED_SHARE} = {},
+) {
   const missing = nodeFiles.filter(file => typeof recorded[file] !== 'number');
   const total = nodeFiles.length;
   const share = total === 0 ? 1 : (total - missing.length) / total;
@@ -77,7 +83,7 @@ export function coverage(nodeFiles, recorded) {
     recorded: total - missing.length,
     share,
     missing,
-    fresh: share >= MIN_RECORDED_SHARE,
+    fresh: share >= minShare,
   };
 }
 
@@ -232,16 +238,17 @@ Opened by the Node record refresh after a full unit run of main. A later refresh
  * Opens the refresh pull request, or edits the open one, so at most one is
  * ever open.
  * @param {(args: string[]) => string} gh runs `gh` and returns its stdout
- * @param {{title: string, body: string}} pr
+ * @param {{title: string, body: string, branch?: string}} pr `branch` is
+ *   the refresh's fixed head branch (this record's by default).
  * @returns {{action: 'created' | 'refreshed', url: string}}
  */
-export function openOrRefresh(gh, {title, body}) {
+export function openOrRefresh(gh, {title, body, branch = BRANCH}) {
   const open = JSON.parse(
     gh([
       'pr',
       'list',
       '--head',
-      BRANCH,
+      branch,
       '--base',
       'main',
       '--state',
@@ -261,7 +268,7 @@ export function openOrRefresh(gh, {title, body}) {
     '--base',
     'main',
     '--head',
-    BRANCH,
+    branch,
     '--title',
     title,
     '--body',
