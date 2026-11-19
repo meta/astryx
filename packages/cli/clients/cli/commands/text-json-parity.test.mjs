@@ -534,6 +534,9 @@ const CASES = [
       );
     },
     jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
+    textBlockAllowlist: [
+      "The file's markup and stylesheets load nothing from outside the file. — the text form of an empty checks.outside",
+    ],
   },
   {
     // The --reverse projection (same command, same folder as the case above).
