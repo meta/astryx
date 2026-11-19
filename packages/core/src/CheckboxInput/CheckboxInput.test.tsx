@@ -583,7 +583,8 @@ describe('CheckboxInput', () => {
       expect(tooltip).toHaveTextContent(
         'Terms are managed by your administrator',
       );
-      fireEvent.mouseEnter(getRow());
+      fireEvent.pointerEnter(getRow(), {pointerType: 'mouse'});
+      fireEvent.pointerMove(getRow(), {pointerType: 'mouse'});
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(getRow());
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));

@@ -161,7 +161,8 @@ describe('InfoTip', () => {
     render(<InfoTip content="Helpful context" />);
     const trigger = screen.getByRole('button', {name: 'More information'});
 
-    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerMove(trigger, {pointerType: 'mouse'});
 
     await waitFor(() => {
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
@@ -221,7 +222,8 @@ describe('InfoTip', () => {
     fireEvent.focusOut(trigger);
     fireEvent.mouseLeave(trigger);
 
-    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerMove(trigger, {pointerType: 'mouse'});
     await waitFor(() => {
       expect(popoverOpenState.get(layer)).toBe(true);
     });
@@ -309,7 +311,8 @@ describe('InfoTip', () => {
       const trigger = screen.getByRole('button', {name: 'More information'});
       const layer = screen.getByRole('tooltip', {hidden: true});
 
-      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.pointerMove(trigger, {pointerType: 'mouse'});
       fireEvent.click(trigger);
       await waitFor(() => {
         expect(popoverOpenState.get(layer)).toBe(true);

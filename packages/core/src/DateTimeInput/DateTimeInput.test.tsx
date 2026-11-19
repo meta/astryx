@@ -1605,7 +1605,8 @@ describe('DateTimeInput', () => {
       const tooltip = screen.getByRole('tooltip', h);
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
-      fireEvent.mouseEnter(row);
+      fireEvent.pointerEnter(row, {pointerType: 'mouse'});
+      fireEvent.pointerMove(row, {pointerType: 'mouse'});
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });

@@ -1367,7 +1367,12 @@ describe('ComplexSelector disabledMessage', () => {
     const tooltip = screen.getByRole('tooltip', h);
     expect(tooltip).toHaveTextContent('You need the Editor role');
 
-    fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerEnter(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerMove(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -1768,7 +1773,12 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).not.toBeDisabled();
     const tooltip = screen.getByRole('tooltip', h);
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
-    fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerEnter(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerMove(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -1804,7 +1814,12 @@ describe('ComplexSelector disabledMessage', () => {
         .exec(el?.getAttribute('style') ?? '')?.[1]
         .trim();
 
-    fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerEnter(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerMove(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -1827,7 +1842,12 @@ describe('ComplexSelector disabledMessage', () => {
     await waitFor(() => {
       expect(tooltip).not.toHaveAttribute('popover-open');
     });
-    fireEvent.mouseEnter(within(container).getByRole('combobox'));
+    fireEvent.pointerEnter(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerMove(within(container).getByRole('combobox'), {
+      pointerType: 'mouse',
+    });
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -1998,7 +2018,9 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
 
     const tooltip = screen.getByRole('tooltip', h);
-    fireEvent.mouseEnter(screen.getByTestId('view-options'));
+    const viewOptions = screen.getByTestId('view-options');
+    fireEvent.pointerEnter(viewOptions, {pointerType: 'mouse'});
+    fireEvent.pointerMove(viewOptions, {pointerType: 'mouse'});
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -2026,7 +2048,9 @@ describe('ComplexSelector disabledMessage', () => {
       renderCallerTrigger();
       const tooltip = screen.getByRole('tooltip', h);
       expect(tooltip).toHaveTextContent('You need the Editor role');
-      fireEvent.mouseEnter(screen.getByRole('combobox', {name: 'Assign'}));
+      const trigger = screen.getByRole('combobox', {name: 'Assign'});
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.pointerMove(trigger, {pointerType: 'mouse'});
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });

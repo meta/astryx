@@ -428,6 +428,7 @@ export function LineClamp({
   onBlur,
   onFocus,
   onPointerEnter,
+  onPointerMove,
   onPointerLeave,
   onPointerDown,
   ...props
@@ -535,9 +536,10 @@ export function LineClamp({
         // `tabIndex` wins.
         tabIndex={tooltipEnabled ? 0 : undefined}
         {...{[ROOT_ATTRIBUTE]: ''}}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          onPointerEnter,
+        onPointerEnter={onPointerEnter}
+        onPointerMove={composeEventHandlers(
+          tooltipInterest.onPointerMove,
+          onPointerMove,
         )}
         onPointerLeave={composeEventHandlers(
           tooltipInterest.onPointerLeave,

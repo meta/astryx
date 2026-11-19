@@ -53,7 +53,7 @@ export interface TruncationTooltipInterest {
   readonly tooltip: TooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
-  readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
+  readonly onPointerMove: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
@@ -117,7 +117,7 @@ export function useTruncationTooltipInterest(
       state.interest = null;
     }
   }, []);
-  const onPointerEnter = useCallback(
+  const onPointerMove = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (event.pointerType !== 'touch') {
         want('hover');
@@ -165,7 +165,7 @@ export function useTruncationTooltipInterest(
     isWanted,
     tooltip,
     interestRef,
-    onPointerEnter,
+    onPointerMove,
     onPointerLeave,
     onPointerDown,
     onFocus,

@@ -81,6 +81,12 @@ function trigger() {
   return screen.getByRole('button', {name: 'Trigger'});
 }
 
+/** A hover-capable pointer must move after entering before hover can show. */
+function hover(element: HTMLElement, pointerType: 'mouse' | 'touch' = 'mouse') {
+  fireEvent.pointerEnter(element, {pointerType});
+  fireEvent.pointerMove(element, {pointerType});
+}
+
 /** The popover element the trigger's aria-describedby points at. */
 function tooltipElement(): HTMLElement {
   const id = trigger().getAttribute('aria-describedby');
@@ -97,11 +103,24 @@ function tick(ms: number) {
 }
 
 describe('useTooltip — show delay', () => {
+  it('does not show when a trigger appears under a stationary pointer', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={0} onShow={onShow} />);
+
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    // Chromium sends a native mouseenter as part of the same entry sequence;
+    // it must not stand in for the movement that proves the pointer moved.
+    fireEvent.mouseEnter(trigger());
+    tick(1000);
+
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
   it('does not show before the default 200ms delay elapses', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(199);
 
     expect(onShow).not.toHaveBeenCalled();
@@ -111,9 +130,23 @@ describe('useTooltip — show delay', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(200);
 
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not restart the show delay on each pointer move', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={200} onShow={onShow} />);
+
+    hover(trigger());
+    tick(150);
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(49);
+    expect(onShow).not.toHaveBeenCalled();
+
+    tick(1);
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
@@ -121,7 +154,7 @@ describe('useTooltip — show delay', () => {
     const onShow = vi.fn();
     render(<Harness delay={50} onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(49);
     expect(onShow).not.toHaveBeenCalled();
 
@@ -133,7 +166,7 @@ describe('useTooltip — show delay', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(100);
     fireEvent.mouseLeave(trigger());
     tick(1000);
@@ -145,7 +178,7 @@ describe('useTooltip — show delay', () => {
     const onShow = vi.fn();
     render(<Harness isEnabled={false} onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(1000);
 
     expect(onShow).not.toHaveBeenCalled();
@@ -155,7 +188,7 @@ describe('useTooltip — show delay', () => {
     const onShow = vi.fn();
     const {rerender} = render(<Harness onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(100);
     rerender(<Harness isEnabled={false} onShow={onShow} />);
     tick(1000);
@@ -193,7 +226,7 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
   it('closes an open tooltip when its trigger stays detached', async () => {
     const onHide = vi.fn();
     const {rerender} = render(<DetachableHarness isAttached onHide={onHide} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(200);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
 
@@ -292,7 +325,7 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
     // Opens the tooltip, removes its trigger, and reads whether it is open.
     async function removeTrigger(discardFirst: boolean): Promise<boolean> {
       const {rerender, unmount} = render(<Screen isPending={false} />);
-      fireEvent.mouseEnter(trigger());
+      hover(trigger());
       tick(200);
       const tip = tooltipElement();
       expect(tip.matches(':popover-open')).toBe(true);
@@ -383,7 +416,7 @@ describe('useTooltip — a caller ref that changes on each render', () => {
     const {rerender} = render(
       <MergedRefHarness consumerRef={() => {}} onHide={onHide} />,
     );
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(200);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
 
@@ -417,7 +450,7 @@ describe('useTooltip — a caller ref that changes on each render', () => {
     rerender(
       <InlineRefHarness label="Trigger" onShow={onShow} isShown={false} />,
     );
-    fireEvent.mouseEnter(removed);
+    hover(removed);
     tick(1000);
     expect(onShow).not.toHaveBeenCalled();
   });
@@ -427,7 +460,7 @@ describe('useTooltip — a pending show and isEnabled', () => {
   it('drops a pending show when the tooltip is disabled, even if it is enabled again before the delay ends', () => {
     const onShow = vi.fn();
     const {rerender} = render(<Harness onShow={onShow} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(100);
     rerender(<Harness onShow={onShow} isEnabled={false} />);
     rerender(<Harness onShow={onShow} />);
@@ -445,13 +478,11 @@ describe('useTooltip — touch suppression', () => {
     const onShow = vi.fn();
     render(<Harness onShow={onShow} />);
 
-    fireEvent.pointerEnter(trigger(), {pointerType: 'touch'});
-    fireEvent.mouseEnter(trigger());
+    hover(trigger(), 'touch');
     tick(1000);
     expect(onShow).not.toHaveBeenCalled();
 
-    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(200);
     expect(onShow).toHaveBeenCalledTimes(1);
   });
@@ -460,7 +491,7 @@ describe('useTooltip — touch suppression', () => {
 describe('useTooltip — hide delay', () => {
   function showTooltip(onHide: () => void, options: TooltipOptions = {}) {
     render(<Harness delay={0} onHide={onHide} {...options} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(0);
   }
 
@@ -511,6 +542,18 @@ describe('useTooltip — hide delay', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels a pending hide when the pointer returns to the trigger', () => {
+    const onHide = vi.fn();
+    showTooltip(onHide, {hideDelay: 500});
+
+    fireEvent.mouseLeave(trigger());
+    tick(100);
+    hover(trigger());
+    tick(500);
+
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
   it('uses an explicit hideDelay instead of the hover bridge', () => {
     const onHide = vi.fn();
     showTooltip(onHide, {hideDelay: 500});
@@ -545,7 +588,7 @@ describe('useTooltip — controlled isOpen', () => {
     const onShow = vi.fn();
     render(<Harness isOpen={false} onShow={onShow} />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     expect(vi.getTimerCount()).toBe(0);
 
     tick(1000);
@@ -557,7 +600,7 @@ describe('useTooltip — Escape dismissal', () => {
   it('hides an uncontrolled tooltip when Escape is pressed', () => {
     const onHide = vi.fn();
     render(<Harness delay={0} onHide={onHide} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(0);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
 
@@ -567,10 +610,50 @@ describe('useTooltip — Escape dismissal', () => {
     expect(tooltipElement().matches(':popover-open')).toBe(false);
   });
 
+  it('does not reopen from a move after Escape until the pointer re-enters', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    render(<Harness delay={0} onShow={onShow} onHide={onHide} />);
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(0);
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseLeave(trigger());
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reopen from a move after a press until the pointer re-enters', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    render(<Harness delay={0} onShow={onShow} onHide={onHide} />);
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerDown(trigger(), {pointerType: 'mouse'});
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(0);
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseLeave(trigger());
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
+  });
+
   it('ignores an Escape that carries the IME keyCode 229', () => {
     const onHide = vi.fn();
     render(<Harness delay={0} onHide={onHide} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(0);
 
     fireEvent.keyDown(document, {key: 'Escape', keyCode: 229});
@@ -581,7 +664,7 @@ describe('useTooltip — Escape dismissal', () => {
   it('ignores keys other than Escape', () => {
     const onHide = vi.fn();
     render(<Harness delay={0} onHide={onHide} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(0);
 
     fireEvent.keyDown(document, {key: 'Enter'});
@@ -606,7 +689,7 @@ describe('useTooltip — teardown', () => {
   it('clears a pending show timer on unmount', () => {
     const {unmount} = render(<Harness />);
 
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     expect(vi.getTimerCount()).toBe(1);
 
     unmount();
@@ -616,7 +699,7 @@ describe('useTooltip — teardown', () => {
 
   it('clears a pending hide timer on unmount', () => {
     const {unmount} = render(<Harness delay={0} />);
-    fireEvent.mouseEnter(trigger());
+    hover(trigger());
     tick(0);
 
     fireEvent.mouseLeave(trigger());
@@ -862,7 +945,7 @@ describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => 
   it('does not hide a hover-opened tooltip when focus leaves a child of a non-focusable trigger', () => {
     const onHide = vi.fn();
     render(<WrapperTrigger onHide={onHide} />);
-    fireEvent.mouseEnter(screen.getByTestId('wrapper'));
+    hover(screen.getByTestId('wrapper'));
     tick(0);
     fireEvent.focusOut(screen.getByLabelText('Amount'));
     tick(100);

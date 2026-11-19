@@ -1316,7 +1316,8 @@ describe('CheckboxListItem ARIA props', () => {
         'Notifications are managed by your administrator',
       );
       const group = screen.getByRole('group');
-      fireEvent.mouseEnter(group);
+      fireEvent.pointerEnter(group, {pointerType: 'mouse'});
+      fireEvent.pointerMove(group, {pointerType: 'mouse'});
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
