@@ -1,286 +1,269 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file MCP server tests.
+ * @file The docs site's MCP endpoint serves `astryx mcp --docs-only`.
  *
- * Validates the keyword-based search resolution and branding for the
- * MCP server route handler. Uses the same generated registries and keyword
- * index as the actual server.
+ * Each request goes to the command, and each answer is the command's: the
+ * tools are the CLI's commands that read the docs, and a tool call answers
+ * with exactly what that command prints with --json.
  *
  * Run: pnpm -F @astryxdesign/docsite test
  */
 
-import {describe, it, expect} from 'vitest';
-import {components} from '../generated/componentRegistry';
-import {docTopics} from '../generated/docsRegistry';
-import {templates} from '../generated/templateRegistry';
-import {blocks} from '../generated/blockRegistry';
+import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {describe, expect, it} from 'vitest';
+import {DELETE, GET, POST} from '../app/mcp/route';
 import {
-  DEMO_CONTENT_MODULE,
-  replaceDemoContent,
-} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
+  askMcpServer,
+  commandEnv,
+  handleMcpPost,
+  mcpRuntime,
+} from '../lib/mcpBridge.mjs';
+import {DEMO_CONTENT_MODULE} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {DOCS_ONLY_COMMANDS} from '../../../../packages/cli/clients/cli/lib/mcp-tools.mjs';
 
-import type {ComponentEntry} from '../generated/componentRegistry';
-import {buildKeywordIndex, resolveKeywords} from '../app/mcp/keywordIndex';
-
-// ── Replicate MCP server logic for testing ─────────────────────────────
-// The keyword index and its resolution are the route's own (keywordIndex.ts).
-// The scoring below mirrors the runtime logic in
-// apps/docsite/src/app/mcp/route.ts without importing the Next.js route
-// handler directly.
-
-const allComponents: ComponentEntry[] = Object.values(components).flat();
-const visibleComponents = allComponents.filter(c => !c.hidden);
-
-const keywordIndex = buildKeywordIndex(visibleComponents);
-
-function score(text: string, query: string): number {
-  const lower = text.toLowerCase();
-  const queryLower = query.toLowerCase();
-  if (lower === queryLower) {
-    return 100;
-  }
-  if (lower.startsWith(queryLower)) {
-    return 90;
-  }
-  if (lower.includes(queryLower)) {
-    return 85;
-  }
-  const words = queryLower.split(/\s+/).filter(w => w.length > 1);
-  if (words.length === 0) {
-    return 0;
-  }
-  let matched = 0;
-  for (const word of words) {
-    if (lower.includes(word)) {
-      matched++;
-    }
-  }
-  const ratio = matched / words.length;
-  if (ratio === 1) {
-    return 75;
-  }
-  if (ratio >= 0.5) {
-    return 50;
-  }
-  if (ratio > 0) {
-    return 30;
-  }
-  return 0;
+/**
+ * POST one body to the endpoint.
+ * @param body the request body, as JSON or as raw text
+ */
+function post(body: unknown): Promise<Response> {
+  return POST(
+    new Request('https://astryx.atmeta.com/mcp', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+      },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }),
+  );
 }
 
-function simulateSearch(query: string, limit = 8) {
-  const keywordMatches = resolveKeywords(keywordIndex, query);
-  const scored: Array<{name: string; score: number; type: string}> = [];
-
-  for (const comp of visibleComponents) {
-    const nameScore = score(comp.name, query);
-    const descScore = score(comp.description, query);
-    const kwTextScore = Math.max(...comp.keywords.map(k => score(k, query)), 0);
-    const kwBoost = keywordMatches.includes(comp.name) ? 90 : 0;
-    let best = Math.max(nameScore, descScore, kwTextScore, kwBoost);
-
-    // Demote sub-components so parent entries surface first
-    if (best > 0 && comp.parentDoc && comp.name !== comp.parentDoc) {
-      best = Math.min(best, best - 1);
-    }
-
-    if (best > 0) {
-      scored.push({name: comp.name, score: best, type: 'component'});
-    }
-  }
-
-  for (const doc of docTopics) {
-    const best = Math.max(
-      score(doc.topic, query),
-      score(doc.title, query),
-      score(doc.description, query),
-      ...doc.sections.map(s => score(s.title, query) * 0.8),
-      0,
-    );
-    if (best > 0) {
-      scored.push({name: doc.topic, score: best, type: 'doc'});
-    }
-  }
-
-  for (const t of templates) {
-    const best = Math.max(score(t.name, query), score(t.description, query));
-    if (best > 0) {
-      scored.push({name: t.name, score: best, type: 'template'});
-    }
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+/** The parts of a JSON-RPC reply these tests read. */
+interface McpReply {
+  id: number;
+  result?: {
+    serverInfo?: {name: string; title: string};
+    instructions?: string;
+    tools?: Array<{
+      name: string;
+      inputSchema: {properties: Record<string, unknown>};
+    }>;
+    isError?: boolean;
+    content?: Array<{type: string; text: string}>;
+  };
+  error?: {code: number; message: string};
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────
+/** POST one request and read the JSON-RPC reply. */
+async function ask(method: string, params: unknown, id = 1): Promise<McpReply> {
+  const response = await post({jsonrpc: '2.0', id, method, params});
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe('application/json');
+  return (await response.json()) as McpReply;
+}
 
-describe('MCP keyword index', () => {
-  it('builds a non-empty keyword index from component docs', () => {
-    expect(keywordIndex.size).toBeGreaterThan(50);
-  });
-
-  it('Toast is indexed under "snackbar"', () => {
-    expect(keywordIndex.get('snackbar')).toBeDefined();
-    expect(keywordIndex.get('snackbar')).toContain('Toast');
-  });
-
-  it('Selector is indexed under "dropdown"', () => {
-    expect(keywordIndex.get('dropdown')).toBeDefined();
-    expect(keywordIndex.get('dropdown')).toContain('Selector');
-  });
-
-  it('Dialog is indexed under "modal"', () => {
-    expect(keywordIndex.get('modal')).toBeDefined();
-    expect(keywordIndex.get('modal')).toContain('Dialog');
-  });
-
-  it('no duplicate component names within a keyword entry', () => {
-    for (const names of keywordIndex.values()) {
-      expect(new Set(names).size).toBe(names.length);
-    }
-  });
-
-  it('hidden components are excluded from the index', () => {
-    const hiddenNames = allComponents.filter(c => c.hidden).map(c => c.name);
-    const indexedNames = new Set([...keywordIndex.values()].flat());
-    for (const name of hiddenNames) {
-      expect(indexedNames.has(name)).toBe(false);
-    }
-  });
-});
-
-describe('MCP keyword resolution', () => {
-  it('resolves "snackbar" to Toast', () => {
-    const results = resolveKeywords(keywordIndex, 'snackbar');
-    expect(results).toContain('Toast');
-  });
-
-  it('resolves "dropdown" to Selector', () => {
-    const results = resolveKeywords(keywordIndex, 'dropdown');
-    expect(results).toContain('Selector');
-  });
-
-  it('resolves "modal" to Dialog', () => {
-    const results = resolveKeywords(keywordIndex, 'modal');
-    expect(results).toContain('Dialog');
-  });
-
-  it('resolves multi-word queries by substring matching', () => {
-    const results = resolveKeywords(keywordIndex, 'toast notification');
-    expect(results).toContain('Toast');
-  });
-
-  it('returns empty for nonsense queries', () => {
-    const results = resolveKeywords(keywordIndex, 'xyzzy12345');
-    expect(results).toEqual([]);
-  });
-
-  it('deduplicates results', () => {
-    // A query that matches multiple keywords for the same component
-    const results = resolveKeywords(keywordIndex, 'select dropdown');
-    const selectorCount = results.filter(r => r === 'Selector').length;
-    expect(selectorCount).toBeLessThanOrEqual(1);
-  });
-});
-
-describe('MCP search simulation', () => {
-  it('finds Button by exact name', () => {
-    const results = simulateSearch('Button');
-    expect(results[0].name).toBe('Button');
-    expect(results[0].score).toBe(100);
-  });
-
-  it('finds Toast via "snackbar" keyword', () => {
-    const results = simulateSearch('snackbar');
-    const toast = results.find(r => r.name === 'Toast');
-    expect(toast).toBeDefined();
-    // "snackbar" is an exact keyword on Toast → score("snackbar","snackbar") = 100
-    expect(toast!.score).toBe(100);
-  });
-
-  it('finds Dialog via "modal"', () => {
-    const results = simulateSearch('modal');
-    const dialog = results.find(r => r.name === 'Dialog');
-    expect(dialog).toBeDefined();
-    // "modal" is an exact keyword on Dialog → score("modal","modal") = 100
-    expect(dialog!.score).toBe(100);
-  });
-
-  it('ranks parent components above sub-components for keyword matches', () => {
-    const results = simulateSearch('modal');
-    const dialog = results.find(r => r.name === 'Dialog');
-    const dialogHeader = results.find(r => r.name === 'DialogHeader');
-    expect(dialog).toBeDefined();
-    if (dialogHeader) {
-      expect(dialog!.score).toBeGreaterThan(dialogHeader.score);
-    }
-  });
-
-  it('finds doc topics by name', () => {
-    const results = simulateSearch('spacing');
-    const spacingDoc = results.find(
-      r => r.type === 'doc' && r.name === 'spacing',
+describe('the docs site MCP endpoint', () => {
+  it('names itself as the CLI and gives the docs-only instructions', async () => {
+    const reply = await ask('initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: {name: 'test', version: '1'},
+    });
+    expect(reply.result?.serverInfo).toMatchObject({
+      name: 'astryx',
+      title: 'Astryx CLI',
+    });
+    expect(reply.result?.instructions).toContain(
+      'only the astryx commands that read the docs',
     );
-    expect(spacingDoc).toBeDefined();
-    expect(spacingDoc!.score).toBe(100);
-  });
+    // A docs-only tool takes no `base`, so the instructions do not offer it.
+    expect(reply.result?.instructions).not.toContain('--base');
+  }, 60_000);
 
-  it('returns results sorted by score descending', () => {
-    const results = simulateSearch('button');
-    for (let i = 1; i < results.length; i++) {
-      expect(results[i].score).toBeLessThanOrEqual(results[i - 1].score);
+  it('lists the CLI commands that read the docs, with no folder input', async () => {
+    const reply = await ask('tools/list', {});
+    const tools = reply.result?.tools ?? [];
+    expect(tools.map(tool => tool.name).sort()).toEqual(
+      DOCS_ONLY_COMMANDS.map(name => name.replaceAll(' ', '_')).sort(),
+    );
+    for (const tool of tools) {
+      expect(Object.keys(tool.inputSchema.properties)).not.toContain('cwd');
     }
+  }, 60_000);
+
+  it('answers a call with exactly what the command prints with --json', async () => {
+    const {bin, cwd} = mcpRuntime();
+    const direct = spawnSync(
+      process.execPath,
+      [bin, 'component', '--json', '--', 'Button'],
+      {cwd, encoding: 'utf8', env: commandEnv()},
+    );
+    expect(direct.status).toBe(0);
+
+    const reply = await ask('tools/call', {
+      name: 'component',
+      arguments: {names: ['Button']},
+    });
+    expect(reply.result?.isError).toBe(false);
+    expect(reply.result?.content?.[0]).toEqual({
+      type: 'text',
+      text: direct.stdout,
+    });
+  }, 60_000);
+
+  it('refuses a tool that writes or reads a path, and an input a tool does not list', async () => {
+    const unknown = await ask('tools/call', {name: 'init', arguments: {}});
+    expect(unknown.error?.message).toBe('Unknown tool: init');
+
+    const pathInput = await ask('tools/call', {
+      name: 'template',
+      arguments: {name: 'settings', path: 'src/app'},
+    });
+    expect(pathInput.result).toEqual({
+      content: [
+        {type: 'text', text: 'template takes no "path" on this server'},
+      ],
+      isError: true,
+    });
+  }, 60_000);
+
+  it('hands out example source as the CLI commands do (spec:AST-033 FR23)', async () => {
+    // The component tool keeps a showcase's fixture media; the template tool
+    // answers as a copy writes it, with media and demo contents replaced.
+    const showcase = await ask('tools/call', {
+      name: 'component',
+      arguments: {names: ['AspectRatio'], showcase: true},
+    });
+    const showcaseText = showcase.result?.content?.[0]?.text ?? '';
+    expect(showcaseText).toContain('/template-assets/');
+    expect(showcaseText).not.toContain(DEMO_CONTENT_MODULE);
+
+    const media = await ask('tools/call', {
+      name: 'template',
+      arguments: {name: 'AspectRatioCircleImage'},
+    });
+    const mediaAnswer = JSON.parse(media.result?.content?.[0]?.text ?? '{}');
+    expect(mediaAnswer.data.demoMediaReplaced).toBeGreaterThan(0);
+    expect(mediaAnswer.data.source).not.toContain('/template-assets/');
+
+    const demo = await ask('tools/call', {
+      name: 'template',
+      arguments: {name: 'usePressFeedbackHookUsage'},
+    });
+    const demoAnswer = JSON.parse(demo.result?.content?.[0]?.text ?? '{}');
+    expect(demoAnswer.data.demoContentReplaced).toBeGreaterThan(0);
+    expect(demoAnswer.data.source).not.toContain(DEMO_CONTENT_MODULE);
+  }, 60_000);
+
+  it('answers a batch and an invalid message as the server does', async () => {
+    const batch = await post([
+      {jsonrpc: '2.0', id: 1, method: 'ping'},
+      {jsonrpc: '2.0', id: 2, method: 'ping'},
+    ]);
+    expect(batch.status).toBe(200);
+    expect(await batch.json()).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32600,
+        message: 'This server takes one message at a time, not a batch',
+      },
+    });
+
+    const invalid = await post({jsonrpc: '2.0'});
+    expect(invalid.status).toBe(200);
+    expect(await invalid.json()).toMatchObject({
+      id: null,
+      error: {code: -32600},
+    });
+  }, 60_000);
+
+  it('takes a notification and a response with 202 and starts no server, and refuses a body that is not JSON', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mcp-bridge-'));
+    try {
+      const started = path.join(dir, 'started');
+      const bin = path.join(dir, 'server.mjs');
+      fs.writeFileSync(
+        bin,
+        `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(started)}, '');\n`,
+      );
+      for (const message of [
+        {jsonrpc: '2.0', method: 'notifications/initialized'},
+        {jsonrpc: '2.0', id: 3, result: {}},
+        {jsonrpc: '2.0', id: null, error: {code: -32603, message: 'x'}},
+      ]) {
+        const response = await handleMcpPost(
+          new Request('https://astryx.atmeta.com/mcp', {
+            method: 'POST',
+            body: JSON.stringify(message),
+          }),
+          {bin, cwd: dir},
+        );
+        expect(response.status).toBe(202);
+        expect(await response.text()).toBe('');
+      }
+      expect(fs.existsSync(started)).toBe(false);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+
+    const broken = await post('{not json');
+    expect(broken.status).toBe(400);
+    expect(await broken.json()).toMatchObject({error: {code: -32700}});
   });
 
-  it('respects limit parameter', () => {
-    const results = simulateSearch('button', 3);
-    expect(results.length).toBeLessThanOrEqual(3);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'stops the server and every command it started when no answer comes in time',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mcp-bridge-'));
+      try {
+        const pidFile = path.join(dir, 'command.pid');
+        const bin = path.join(dir, 'server.mjs');
+        // A server that starts a command and never answers.
+        fs.writeFileSync(
+          bin,
+          [
+            "import {spawn} from 'node:child_process';",
+            "import {writeFileSync} from 'node:fs';",
+            "const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio: 'ignore'});",
+            `writeFileSync(${JSON.stringify(pidFile)}, String(command.pid));`,
+            'setInterval(() => {}, 1000);',
+            '',
+          ].join('\n'),
+        );
+        await expect(
+          askMcpServer(
+            {bin, cwd: dir},
+            {jsonrpc: '2.0', id: 1, method: 'ping'},
+            {timeoutMs: 1500},
+          ),
+        ).rejects.toThrow('astryx mcp gave no answer in 1.5 s');
+        const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+        const running = () => {
+          const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+            encoding: 'utf8',
+          }).stdout.trim();
+          return state !== '' && !state.startsWith('Z');
+        };
+        for (let tries = 0; running() && tries < 50; tries += 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        expect(running()).toBe(false);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    30_000,
+  );
 
-  it('returns empty for nonsense queries', () => {
-    const results = simulateSearch('xyzzy12345nonsense');
-    expect(results).toEqual([]);
-  });
-});
-
-describe('MCP branding', () => {
-  it('route file uses Astryx (XDS) in tool descriptions', async () => {
-    const fs = await import('node:fs');
-    const routePath = new URL('../app/mcp/route.ts', import.meta.url);
-    const source = fs.readFileSync(routePath, 'utf-8');
-    expect(source).toContain('Search Astryx (XDS) design system');
-    expect(source).toContain('Astryx (XDS) component');
-    expect(source).toContain("name: 'astryx'");
-    // Should NOT have bare "XDS design system" in tool descriptions
-    expect(source).not.toMatch(/`Search XDS design system/);
-  });
-
-  it('route file does not contain hardcoded ALIASES map', async () => {
-    const fs = await import('node:fs');
-    const routePath = new URL('../app/mcp/route.ts', import.meta.url);
-    const source = fs.readFileSync(routePath, 'utf-8');
-    expect(source).not.toContain('const ALIASES');
-    expect(source).toContain('keywordIndex');
-  });
-});
-
-describe('MCP get() example source (spec:AST-033 FR23)', () => {
-  // get() returns `source` from these registries: a component's showcase and
-  // one more example, and a template's examples or else its page source.
-  it('hands out each block and template after the demo-content replacement', () => {
-    const sources = [
-      ...blocks.map(block => block.source),
-      ...templates.map(template => template.source),
-    ];
-    expect(sources.length).toBeGreaterThan(0);
-    for (const source of sources) {
-      expect(source).not.toContain(DEMO_CONTENT_MODULE);
-      expect(replaceDemoContent(source)).toEqual({
-        source,
-        demoContentReplaced: 0,
-      });
+  it('opens no event stream and keeps no session', () => {
+    for (const response of [GET(), DELETE()]) {
+      expect(response.status).toBe(405);
+      expect(response.headers.get('allow')).toBe('POST');
     }
   });
 });

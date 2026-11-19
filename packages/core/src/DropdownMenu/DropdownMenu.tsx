@@ -55,6 +55,7 @@ import {
   currentGesture,
   isPressInFlight,
 } from '../Layer/gestureCounter';
+import {isHTMLElement} from '../utils/nodeType';
 import {Button, type ButtonProps} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
@@ -727,7 +728,9 @@ function DropdownMenuBottomSheet({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [currentItems, isOpen]);
+    // Re-run only on open or a sub-menu change. A new `items` array from a
+    // parent render must not move focus.
+  }, [currentSubmenu, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -1056,10 +1059,10 @@ function DropdownMenuPopover({
     if (!trigger) {
       return;
     }
-    const active = document.activeElement;
+    const active = trigger.ownerDocument.activeElement;
     const focusLandedElsewhere =
-      active instanceof HTMLElement &&
-      active !== document.body &&
+      isHTMLElement(active) &&
+      active !== trigger.ownerDocument.body &&
       active !== trigger &&
       !contentRef.current?.contains(active);
     if (focusLandedElsewhere) {
@@ -1507,7 +1510,7 @@ function DropdownMenuPopover({
       // model no longer tracks the press, and a settled release outside must
       // still close the menu.
       const layer = listRef.current?.closest('[popover]');
-      if (didOpen && pointerType === 'mouse' && layer instanceof HTMLElement) {
+      if (didOpen && pointerType === 'mouse' && isHTMLElement(layer)) {
         claimPress(layer, {releaseTarget: buttonRef.current});
       }
       return didOpen;

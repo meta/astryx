@@ -40,7 +40,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "A project's agent docs reach only agents working in that project. Your global install also keeps one skill file, `~/.agents/skills/astryx/SKILL.md`, which most coding agents read. It tells agents that Astryx is on this computer, when it is relevant (building or changing UI), and to start with `{@command search}`. It names no version, so it never goes stale. Inside a project, the project's own agent docs come first.",
+          text: "A project's agent docs reach only agents working in that project. Your global install also keeps one skill file, `~/.agents/skills/astryx/SKILL.md`, which most coding agents read. It tells agents that Astryx is on this computer, when it is relevant (building or changing UI), and to start a page with `{@command build}` and anything else with `{@command search}`. It names no version, so it never goes stale. Inside a project, the project's own agent docs come first.",
         },
         {
           type: 'prose',

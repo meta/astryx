@@ -135,6 +135,7 @@ const dynamicStyles = stylex.create({
     fontSize: `max(${typeScaleVars['--text-supporting-size']}, ${
       s * OVERFLOW_FONT_RATIO
     }px)`,
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   }),
   overlap: (offset: number) => ({
     '--_avatar-group-overlap': `${offset}px`,

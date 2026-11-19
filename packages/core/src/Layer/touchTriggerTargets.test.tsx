@@ -106,18 +106,21 @@ function isOpen(text: string): boolean {
 
 /**
  * The control a disabled reason describes: the element whose
- * `aria-describedby` names the reason's tooltip, which is what a finger taps.
+ * `aria-describedby` names the reason's tooltip or an element inside it (a
+ * control can name its own reason text), which is what a finger taps.
  */
 function controlDescribedBy(reason: string): HTMLElement {
   const layer = layerOf(reason);
-  const id = layer?.id;
-  if (id == null || id === '') {
-    throw new Error(`no tooltip with an id holds "${reason}"`);
+  if (layer == null) {
+    throw new Error(`no tooltip holds "${reason}"`);
   }
   const control = Array.from(
     document.querySelectorAll<HTMLElement>('[aria-describedby]'),
   ).find(element =>
-    (element.getAttribute('aria-describedby') ?? '').split(/\s+/).includes(id),
+    (element.getAttribute('aria-describedby') ?? '').split(/\s+/).some(id => {
+      const described = id === '' ? null : document.getElementById(id);
+      return described != null && layer.contains(described);
+    }),
   );
   if (control == null) {
     throw new Error(`nothing is described by the tooltip holding "${reason}"`);

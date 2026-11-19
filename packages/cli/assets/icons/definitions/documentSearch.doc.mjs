@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'documentSearch',
+  group: 'search',
   description: 'Inspect a document or a detailed log.',
   words: ['inspect', 'logging', 'find in document'],
 };
