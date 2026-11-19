@@ -629,6 +629,15 @@ export const samples = {
     }
     return React.createElement(Sample);
   },
+  lab__MediaPlayer: ({C, React, mod, Pkg}) =>
+    React.createElement(
+      C,
+      {label: 'Clip'},
+      React.createElement(mod.MediaPlayerElement ?? Pkg.MediaPlayerElement, {
+        kind: 'video',
+        src: '/clip.mp4',
+      }),
+    ),
   lab__MediaPlayerElement: ({C, React, mod, Pkg}) =>
     React.createElement(
       mod.MediaPlayer ?? Pkg.MediaPlayer,
