@@ -620,7 +620,7 @@ function joinSideLists(q) {
       const before = clause
         .slice(0, at - from)
         .match(
-          /\b(?:borders?|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
+          /\b(?:borders?|bordered|edges?|outlines?|padding|margins?|spacing|gaps?|radius|corners?|space)\b/gi,
         );
       const owner = before?.at(-1) ?? '';
       // (A look said right after the list is its own: "a border and top
@@ -633,7 +633,8 @@ function joinSideLists(q) {
         );
       // (Only a border's or a padding's sides are listed: "corners on top
       // and bottom" are every corner, read by the corner reader.)
-      const sided = /^(?:borders?|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
+      const sided =
+        /^(?:borders?|bordered|edges?|outlines?|lines?|padding|margins?|spacing|space)$/i;
       // (Any look's list is kept whole, "top and bottom padding 6px", so
       // each side said takes the look: the border reader and the padding
       // reader each read the sides.)
@@ -668,7 +669,7 @@ function sideColorsIn(text) {
   const written = colorsFound(lower)
     .filter(([at, v, typed]) => typed && lower.slice(at, at + v.length) === v)
     .sort((a, b) => a[0] - b[0]);
-  for (let i = 0; i < written.length; ) {
+  for (let i = 0; i < written.length;) {
     let j = i;
     while (
       j + 1 < written.length &&
@@ -14257,11 +14258,30 @@ export function draftAnswer(ctx, env, question) {
     if (!/\btransparent\b/.test(t)) return undefined;
     const m =
       /\btransparent\s+(top|bottom|left|right)\b/.exec(t) ??
-      /\b(top|bottom|left|right)\s+(?:borders?|edges?|lines?)\b/.exec(t);
+      /\b(top|bottom|left|right)\s+(?:borders?|edges?|lines?)\b/.exec(t) ??
+      // ("the top edge transparent" is read as "the top transparent
+      // border".)
+      /\b(top|bottom|left|right)\s+transparent\s+(?:borders?|edges?|lines?)\b/.exec(
+        t,
+      );
     return m
       ? /** @type {'top' | 'bottom' | 'left' | 'right'} */ (m[1])
       : undefined;
   };
+  /**
+   * The side a clause says is drawn see-through, said plainly: after an
+   * article, a joining word, a side, the side's line ("bottom border
+   * transparent") or a label's colon or dash. A word before it that grades
+   * it, "barely", "very", "slightly", "50%", makes a fainter border, so
+   * none. undefined when there is none.
+   * @param {string} text
+   */
+  const seeThroughSide = text =>
+    /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right|borders?|edges?|lines?)\s+|[,:;]\s*|\s[-–—]\s*)transparent\b/i.test(
+      text,
+    )
+      ? transparentSide(text)
+      : undefined;
   /**
    * Every side of a part a clause names, in the order said: "top and
    * sides" is the top, left and right; "the sides" are the left and right.
@@ -18292,7 +18312,8 @@ export function draftAnswer(ctx, env, question) {
           : /^(vertical|block)/.test(side)
             ? 'padding-block'
             : 'padding-inline';
-      const props = listed.length > 1 ? listed.map(x => `padding-${x}`) : [prop];
+      const props =
+        listed.length > 1 ? listed.map(x => `padding-${x}`) : [prop];
       // Padding on a table row (a box CSS draws no padding on) is its
       // cells'.
       const onParts = /^padding/.test(prop)
@@ -22360,7 +22381,8 @@ export function draftAnswer(ctx, env, question) {
           }
           // Darker, lighter, subtler, more contrast or how visible (or
           // transparent) asks for the color.
-          const seen = visibilityAsk(c.text);
+          // (A side said see-through is that side's line, answered below.)
+          const seen = seeThroughSide(c.text) ? null : visibilityAsk(c.text);
           if (
             seen ||
             /\b(darker|lighter|subtle\w*|contrast|stronger|fainter|softer|too (dark|light|faint|strong|harsh|heavy))\b/.test(
@@ -22564,18 +22586,21 @@ export function draftAnswer(ctx, env, question) {
         // writes them, are that one border color, every side as written; a
         // part that draws no border is given one by set.
         // (A width said with them, "border 2px #eee #eee #ddd", is the
-        // line they color: the border first, then the colors.)
+        // line they color: its width and style, never a shorthand, which
+        // would reset the color in a mode the colors are not for.)
         const perSide = outline ? null : sideColorsIn(c.text);
         if (perSide && c.lengths.length <= 1)
           return {
-            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border, then ' : ''}border-color`,
+            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): ${c.lengths.length ? 'border-width and border-style, then ' : ''}border-color`,
             options: [
               [
                 ...(c.lengths.length
                   ? [
+                      set('border-width', c.lengths[0], f),
                       set(
-                        'border',
-                        `${c.lengths[0]} ${/\b(dashed|dotted|double)\b/.exec(c.text)?.[1] ?? 'solid'}`,
+                        'border-style',
+                        /\b(dashed|dotted|double)\b/.exec(c.text)?.[1] ??
+                          'solid',
                         f,
                       ),
                     ]
@@ -22590,16 +22615,7 @@ export function draftAnswer(ctx, env, question) {
         // a fainter border or the fill.
         const color =
           colorFor(c, 'border') ??
-          (transparentSide(c.text) &&
-          // (Only "transparent" said plainly, after an article, a joining
-          // word, a side or a label's colon or dash: a word before it that
-          // grades it, "barely", "very", "slightly", "50%", makes a fainter
-          // border.)
-          /(?:^|\b(?:a|an|the|with|and|is|are|be|its|their|top|bottom|left|right)\s+|[,:;]\s*|\s[-–—]\s*)transparent\b/i.test(
-            c.text,
-          )
-            ? 'transparent'
-            : null);
+          (seeThroughSide(c.text) ? 'transparent' : null);
         // "outline buttons", "the danger buttons outline only": the outline
         // look, never a border added over the fill. All buttons: the
         // buttons dial's outline rung; one variant: its fill cleared, and
