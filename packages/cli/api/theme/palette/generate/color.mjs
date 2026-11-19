@@ -1,14 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @typedef {[number, number, number]} ColorTriple */
+import {
+  oklabToLinearRgb,
+  relativeLuminance,
+  srgbToLinear,
+} from '../../../../foundation/color/css-color.mjs';
 
-/** @param {number} channel @returns {number} */
-function srgbToLinear(channel) {
-  const value = channel / 255;
-  return value <= 0.04045
-    ? value / 12.92
-    : Math.pow((value + 0.055) / 1.055, 2.4);
-}
+export {oklabToLinearRgb};
+
+/** @typedef {[number, number, number]} ColorTriple */
 
 /** @param {number} channel @returns {number} */
 function linearToSrgb(channel) {
@@ -59,21 +59,6 @@ function linearRgbToOklab(red, green, blue) {
     0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
     1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
     0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
-  ];
-}
-
-/** @param {number} lightness @param {number} a @param {number} b @returns {ColorTriple} */
-export function oklabToLinearRgb(lightness, a, b) {
-  const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b;
-  const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b;
-  const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b;
-  const l = lRoot ** 3;
-  const m = mRoot ** 3;
-  const s = sRoot ** 3;
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
   ];
 }
 
@@ -168,8 +153,7 @@ export function toneToOklabLightness(tone) {
 
 /** @param {string} hex @returns {number} */
 export function luminance(hex) {
-  const [red, green, blue] = hexToRgb(hex).map(srgbToLinear);
-  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  return relativeLuminance(hexToRgb(hex));
 }
 
 /** @param {string} hex @returns {ColorTriple} */
