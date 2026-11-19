@@ -505,6 +505,26 @@ async function withLoadDocument(fn) {
 }
 
 /**
+ * Run `fn` with console.timeStamp hidden. A development build of React DOM
+ * decides as it loads whether to log every render to the Performance panel
+ * (console.timeStamp and performance.measure), and logs only when both are
+ * there. The worker has no Performance panel, and Node copies the props a
+ * logged re-render changed into its user timing buffer: a page of four
+ * charts of 50,000 points each spent most of its drawing time there.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withoutRenderTimings(fn) {
+  const had = Object.getOwnPropertyDescriptor(console, 'timeStamp');
+  /** @type {any} */ (console).timeStamp = undefined;
+  try {
+    await fn();
+  } finally {
+    if (had) Object.defineProperty(console, 'timeStamp', had);
+    else delete (/** @type {any} */ (console)).timeStamp;
+  }
+}
+
+/**
  * Draw each part the page asked to be drawn open, in the layer document
  * (layers.mjs), and put each where its marker is: the part as drawn, then
  * each overlay it shows or a press opens (openLayerMarkup), in place after
@@ -1731,7 +1751,7 @@ try {
   // into a field: a typeahead's search would reach no change handler. It is
   // loaded first, with a document that fires input events as a browser's
   // does; the page then renders on the server with no document.
-  await withLoadDocument(() => jiti.import('react-dom/client'));
+  await withoutRenderTimings(() => withLoadDocument(() => jiti.import('react-dom/client')));
   try {
     reach('importing the page');
     const notInstalled = missingPackages();

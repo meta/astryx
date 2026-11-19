@@ -49,7 +49,9 @@
  *
  * With `{check: true}`, it compiles the same outputs in memory but writes
  * nothing: it compares each generated file against what is on disk (ignoring
- * only the volatile `@generated` `Command:` line) and returns a
+ * the `@generated` header's volatile `Command:` line, the release its `CLI:`
+ * line names, and the command a built module's built-by line names) and
+ * returns a
  * `theme.build.check` receipt listing any stale or missing outputs. This is
  * the CI guard for committed, generated theme CSS: the source of truth is
  * `<theme>.ts`, and `theme build --check` fails when the committed
@@ -687,8 +689,9 @@ function readPkgVersion(dir) {
 /**
  * Resolve the CLI and core package versions recorded in generated headers.
  * These are stable (unlike a timestamp): identical inputs produce byte-identical
- * output, so rebuilds don't churn git and `theme build --check` stays a pure
- * content-drift signal.
+ * output, so rebuilds don't churn git. `theme build --check` ignores the CLI
+ * version (normalizeThemeBuildForCompare), so it stays a content-drift signal
+ * whichever CLI release answers.
  * @param {string} cwd - Consumer cwd, used to locate the installed core.
  * @returns {{cli: string, core: string}}
  */
@@ -852,27 +855,101 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
 }
 
 /**
- * Normalize generated file content for staleness comparison by dropping the
- * volatile `Command:` line of the `@generated` header (it embeds the
- * invocation, e.g. an explicit --out). Everything else — including the rest of
- * the header and all real content — is compared verbatim. Used only by
- * `--check`: a differing command must NOT report a file as stale, but any real
- * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content. CRLF
- * line endings read as LF.
+ * Generated file content without the volatile `Command:` line of the
+ * `@generated` header (it embeds the invocation, e.g. an explicit --out).
+ * CRLF line endings read as LF, since a checkout may turn line endings into
+ * CRLF.
+ * @param {string} content
+ * @returns {string}
+ */
+export function withoutBuildCommandLine(content) {
+  return content
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter(line => !headerText(line).startsWith('Command:'))
+    .join('\n');
+}
+
+/** @param {string} line */
+function headerText(line) {
+  return line.replace(/^\s*\*?\s?/, '');
+}
+
+/**
+ * The line of a built module's doc comment that names the command that built
+ * it (`<name> theme — built by \`<command> theme build\``). The command
+ * depends on how the CLI was started: the package manager, or a tool that
+ * runs the CLI for its users.
+ */
+export const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
+
+/** The `@generated` header's line that names the CLI release that built it. */
+export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
+
+/**
+ * `lines` with the command in a built module's built-by line as
+ * `<command>`, when exactly one line is a built-by line; otherwise unchanged,
+ * so a second or a malformed line stays significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withBuiltByCommandPlaceholder(lines) {
+  if (lines.filter(line => BUILT_BY_LINE.test(line)).length !== 1) return lines;
+  return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
+}
+
+/**
+ * The index of the line that closes a file's first comment, the header a
+ * build writes, or -1 when the file does not start with a comment.
+ * @param {string[]} lines
+ * @returns {number}
+ */
+export function generatedHeaderEnd(lines) {
+  if (lines[0] !== '/*' && lines[0] !== '/**') return -1;
+  return lines.indexOf(' */', 1);
+}
+
+/**
+ * `lines` with the release in the header's `CLI:` line as `<version>`, when
+ * the header ({@link generatedHeaderEnd}) holds exactly one; otherwise
+ * unchanged, so a missing or second line, or one outside the header, stays
+ * significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withCliReleasePlaceholder(lines) {
+  const close = generatedHeaderEnd(lines);
+  if (close === -1) return lines;
+  const header = lines.slice(1, close);
+  if (header.filter(line => CLI_VERSION_LINE.test(line)).length !== 1) {
+    return lines;
+  }
+  return lines.map((line, index) =>
+    index < close ? line.replace(CLI_VERSION_LINE, '$1<version>$3') : line,
+  );
+}
+
+/**
+ * Normalize generated file content for staleness comparison: without the
+ * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
+ * that the header's one `CLI:` line names as `<version>`
+ * ({@link withCliReleasePlaceholder}), and with the command in a built
+ * module's one {@link BUILT_BY_LINE} as `<command>`. Which release
+ * answers, and the command that starts it, depend on how the CLI was started
+ * (a global install, a tool that runs it, or the project's own copy) and
+ * change with each update, so the same outputs built another way are not
+ * stale. A header with no `CLI:` line or with two stays significant.
+ * Everything else, the `Core:` line and all real content included, is compared
+ * verbatim. Used only by `--check`: any real content drift reports a file as
+ * stale.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  // A checkout may turn line endings into CRLF; the text is the same.
-  return content
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter(line => {
-      const t = line.replace(/^\s*\*?\s?/, '');
-      return !t.startsWith('Command:');
-    })
-    .join('\n');
+  return withCliReleasePlaceholder(
+    withBuiltByCommandPlaceholder(withoutBuildCommandLine(content).split('\n')),
+  ).join('\n');
 }
 
 /**
@@ -1876,17 +1953,20 @@ export function importSpecifier(relDir, base) {
     : `./${fromSrc}/${base}`;
 }
 
-/** @type {Promise<Record<string, Record<string, string[]>>> | null} */
-let _knownValuesIndexPromise = null;
+/**
+ * The known values index of each Core `src` folder.
+ * @type {Map<string | null, Promise<Record<string, Record<string, string[]>>>>}
+ */
+const _knownValuesIndexes = new Map();
 
 /**
  * Build one target-keyed index of built-in visual-prop values from every core
  * component doc. A rendered target often lives in a sibling doc (for example,
  * `astryx-heading` is documented by Text/Heading.doc.mjs), so directory-name
  * guessing is not a valid lookup strategy.
+ * @param {string | null} coreSrc
  */
-async function loadKnownValuesIndex() {
-  const coreSrc = coreSrcPath();
+async function loadKnownValuesIndex(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
   return (await coreThemeValues(coreSrc)).knownValues;
 }
@@ -1896,25 +1976,60 @@ async function loadKnownValuesIndex() {
  * @returns {Promise<Record<string, string[]>>}
  */
 async function getKnownValues(componentName) {
-  _knownValuesIndexPromise ??= loadKnownValuesIndex();
-  const index = await _knownValuesIndexPromise;
+  const coreSrc = coreSrcPath();
+  let pending = _knownValuesIndexes.get(coreSrc);
+  if (!pending) {
+    pending = loadKnownValuesIndex(coreSrc);
+    _knownValuesIndexes.set(coreSrc, pending);
+  }
+  const index = await pending;
   return index[componentName] ?? {};
 }
 
 /**
- * Resolve `@astryxdesign/core`'s package root relative to the CLI package. Core
- * and the CLI ship as siblings (`@astryxdesign/core`, `@astryxdesign/cli`), so
- * `../../../../core` from `api/theme/build/` reaches core whether installed from
- * npm or run inside the monorepo. Returns null if it can't be found.
+ * The package root of the Core whose component docs and types the build reads:
+ * the Core the build selected ({@link selectCore}), else the Core beside the
+ * CLI. A copy installed for the computer has no Core beside it, so it reads
+ * the project's Core once the build selects it, as the build itself does.
+ * Returns null if neither can be found.
+ * @returns {string | null}
  */
 function resolveCoreRoot() {
+  const selected = _coreThemeFile ? corePackageRoot(_coreThemeFile) : null;
+  if (selected) return selected;
+  // Core and the CLI ship as siblings, so `../../../../core` from
+  // `api/theme/build/` reaches Core whether installed from npm or run inside
+  // the monorepo.
   const cliDir = path.dirname(fileURLToPath(import.meta.url));
   const coreRoot = path.resolve(cliDir, '../../../../core');
   return fs.existsSync(coreRoot) ? coreRoot : null;
 }
 
 /**
- * The `src` folder of the Core beside the CLI ({@link resolveCoreRoot}), or
+ * The folder at or above `file` whose package.json names `@astryxdesign/core`,
+ * or null.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function corePackageRoot(file) {
+  let dir = path.dirname(file);
+  for (;;) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+      );
+      if (pkg?.name === '@astryxdesign/core') return dir;
+    } catch {
+      // No readable package.json here; keep walking up.
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * The `src` folder of the Core the build reads ({@link resolveCoreRoot}), or
  * null when there is none.
  * @returns {string | null}
  */
@@ -1924,7 +2039,7 @@ function coreSrcPath() {
 }
 
 /**
- * Whether the Core beside the CLI declares `interfaceName` in
+ * Whether the Core the build reads declares `interfaceName` in
  * `@astryxdesign/core/<Component>` ({@link componentDeclaresInterface}).
  * @param {string} pascalName
  * @param {string} interfaceName
@@ -1942,7 +2057,7 @@ function componentHasAugmentableInterface(pascalName, interfaceName, options) {
 
 /**
  * The public module/interface that can widen a component prop value, in the
- * Core beside the CLI ({@link resolveCoreAugmentationTarget}).
+ * Core the build reads ({@link resolveCoreAugmentationTarget}).
  * @param {string} component
  * @param {string} prop
  * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
@@ -4175,7 +4290,7 @@ function generateBuiltModule(
       : serializeField('componentIcons', componentIconValues, true));
 
   return `${iconImport}${componentIconPrelude}${iconDeclaration}${iconNodesDeclaration}/**
- * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
+ * ${themeDef.name} theme — built by \`astryx theme build\`
  * Import the CSS file alongside this module:
  *
  *   import { ${themeBinding} } from './${artifactBaseName}';
@@ -4278,17 +4393,21 @@ async function loadKnownComponents() {
   return Object.keys(propsByKey).length > 0 ? {propsByKey} : null;
 }
 
-/** @type {{propsByKey: Record<string, string[]>} | null | undefined} */
-let knownComponentsCache;
+/**
+ * The known components of each Core `src` folder.
+ * @type {Map<string | null, {propsByKey: Record<string, string[]>} | null>}
+ */
+const knownComponentsCache = new Map();
 
 /**
  * @returns {Promise<{propsByKey: Record<string, string[]>} | null>}
  */
 async function getKnownComponents() {
-  if (knownComponentsCache === undefined) {
-    knownComponentsCache = await loadKnownComponents();
+  const coreSrc = coreSrcPath();
+  if (!knownComponentsCache.has(coreSrc)) {
+    knownComponentsCache.set(coreSrc, await loadKnownComponents());
   }
-  return knownComponentsCache;
+  return knownComponentsCache.get(coreSrc) ?? null;
 }
 
 /**
@@ -4707,7 +4826,12 @@ async function themeBuildInternal(
 
   // Core's facts first, before the build reads the theme: kept facts then do
   // not depend on it, and a build after an edit to the theme reads them back.
-  await keepCoreThemeFacts(coreSrcPath());
+  {
+    const installed = findInstalledPackage(cwd, '@astryxdesign/core');
+    await keepCoreThemeFacts(
+      installed ? path.join(installed, 'src') : coreSrcPath(),
+    );
+  }
 
   {
     const problem = buildInputProblem(file, options, cwd);
@@ -6066,7 +6190,8 @@ async function themeBuildInternal(
 
   // Check mode: compare generated content against what's on disk instead of
   // writing. A file is "stale" if it's missing or its content differs once the
-  // volatile @generated `Command:` line is ignored. Returns a
+  // @generated header's `Command:` line, the release its `CLI:` line names, and
+  // the command a built module's built-by line names are ignored. Returns a
   // receipt listing stale/missing outputs so callers (CI) can fail on drift.
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
