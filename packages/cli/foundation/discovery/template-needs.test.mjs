@@ -482,7 +482,7 @@ describe('installCommandFor names a package Astryx releases with Core at the pro
       "lockfileVersion: '9.0'\n",
     );
     expect(installStepFor([theme], pinned).line).toBe(
-      `npm install ${theme}@0.7.10`,
+      `npm install -E ${theme}@0.7.10`,
     );
   });
 });

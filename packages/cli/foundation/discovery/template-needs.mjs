@@ -372,8 +372,9 @@ export function installStepFor(packages, cwd) {
   const resolved = resolveInstallVerb(cwd);
   const where =
     resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  const {specs, exact} = installSpecs(packages, cwd);
   return {
-    line: `npm install ${installSpecs(packages, cwd).specs.join(' ')}`,
+    line: `npm install ${exact ? `${exactAddFlag('npm')} ` : ''}${specs.join(' ')}`,
     note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
   };
 }
