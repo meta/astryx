@@ -304,7 +304,8 @@ draws each meaning a bundled template imports.
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
   definition (`icon.definitions`), each with its `group` when it names one
   and `templates`, the number of
-  bundled templates whose `icons` name it (FR9). When a set is known (the
+  bundled templates whose `icons` or placeholder imports (FR21) name it
+  (FR9). When a set is known (the
   one `--set` names, else the project's main set, else the only set of the
   icon-set package the command runs in), the answer names it as `set` and
   each definition has `mapped`, whether that set's `map` names it, and, when
@@ -859,7 +860,17 @@ message}`) names each template or namespace doc that sets `stability`, and
   them with no extra step. Every table meaning is a definition, every icon
   exists in its library, and the package matches the table. The package is
   private to the repository; only template sources import it, and they resolve
-  it through the CLI package's dev dependency and the docs site's dependency.
+  it through the CLI package's dev dependency and the docs site's dependency. The template meanings
+  FR15 counts include the meanings a template's placeholder imports name. The
+  bundled-template declarations test fails on a placeholder import whose name
+  is not a definition, whose path is not a variant, or whose meaning the table
+  does not draw in that variant; on a type-only or side-effect placeholder
+  import, which a copy cannot fill; and on an `icons` declaration
+  left beside placeholder imports, so a bundled template's copy never imports
+  the package. `packages/cli/scripts/migrate-template-icons.mjs` moves
+  a template from library imports to placeholders by its declared meanings,
+  and stops when the table draws a meaning with another icon, so no picture
+  changes.
 
 - **FR22 — Copies fill placeholders.** `astryx template` (printed or copied),
   the component showcase source and build's setup notes first replace each
@@ -873,9 +884,9 @@ message}`) names each template or namespace doc that sets `stability`, and
   table names for the import path's variant: a Heroicon, or a Lucide icon for
   `/lucide`. Only a named import whose meaning the table draws is filled; any
   other import from the package (a name with no table meaning, a default,
-  namespace, type-only or side-effect import) stays as written. Template search, its pre-parse bound and the components a template
-  lists read a placeholder imported under its own name, filled or not, as the
-  library icon that draws it.
+  namespace, type-only or side-effect import) stays as written. Template
+  search, its pre-parse bound and the components `template show` lists read a
+  placeholder, aliased or not, as the library icon that draws it.
 
 - **FR23 — A meaning can fall back.** A table entry may name a `fallback`:
   another meaning that draws the same icon (`verified` falls back to

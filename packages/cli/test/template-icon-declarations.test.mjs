@@ -24,6 +24,10 @@ const {
   sharedTemplateMeanings,
   undeclaredTemplateIcons,
 } = require('../foundation/discovery/template-icons.mjs');
+/** @type {typeof import('../foundation/discovery/template-placeholders.mjs')} */
+const {
+  templatePlaceholderProblems,
+} = require('../foundation/discovery/template-placeholders.mjs');
 /** @type {typeof import('../foundation/discovery/icon-definition-discovery.mjs')} */
 const {
   astryxDefinitionsByName,
@@ -108,5 +112,15 @@ describe('bundled template icon declarations', () => {
       undeclared: [],
       unchecked: [],
     });
+  }, 60_000);
+
+  it('import placeholders only by meaning, from a look the table draws', async () => {
+    const definitions = astryxDefinitionsByName();
+    const templates = (await discoverCoreTemplates()).map(template => ({
+      id: `${template.type}/${template.dirName}`,
+      source: fs.readFileSync(template.filePath, 'utf-8'),
+      declared: template.icons ?? {},
+    }));
+    expect(templatePlaceholderProblems(templates, definitions)).toEqual([]);
   }, 60_000);
 });

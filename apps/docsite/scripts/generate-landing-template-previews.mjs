@@ -27,6 +27,7 @@ import {
   rewriteTemplatePreview,
 } from './template-icon-loader.mjs';
 import {optimizeTemplateImages} from './template-image-loader.mjs';
+import {fillTemplatePlaceholders} from '../../../packages/cli/foundation/discovery/template-placeholders.mjs';
 import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
 
 const docsiteDir = path.resolve(
@@ -226,6 +227,10 @@ async function stageTemplateCopy({
         projectDir,
         list: iconSets,
       });
+    } else {
+      // A copy imports the library icon each placeholder names, not the
+      // private placeholder package.
+      source = fillTemplatePlaceholders(source).source;
     }
     fs.writeFileSync(path.join(copyDir, relative), source);
   }
