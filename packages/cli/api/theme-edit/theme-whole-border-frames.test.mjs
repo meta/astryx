@@ -55,11 +55,12 @@ const cssOf = theme =>
 
 /** The rules on a part, every condition. @param {string} css @param {string} part */
 const rulesOf = (css, part) =>
-  (css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []).join(
-    '\n',
-  );
+  (
+    css.match(new RegExp(`\\.astryx-${part}\\b[^{]*\\{[^}]*\\}`, 'g')) ?? []
+  ).join('\n');
 
-const FRAME = /border(?:-style)?: [^;]*solid|border-width: var\(--border-width\)/;
+const FRAME =
+  /border(?:-style)?: [^;]*solid|border-width: var\(--border-width\)/;
 
 describe('a whole-theme border width', () => {
   it('frames the surfaces that draw no border of their own, named, in one undo step', async ctx => {
@@ -77,21 +78,36 @@ describe('a whole-theme border width', () => {
     const css = cssOf('w');
     for (const p of framed) expect(rulesOf(css, p), p).toMatch(FRAME);
     await themeEditUndo('w', {cwd});
-    for (const p of framed) expect(rulesOf(cssOf('w'), p), p).not.toMatch(FRAME);
+    for (const p of framed)
+      expect(rulesOf(cssOf('w'), p), p).not.toMatch(FRAME);
   }, 240_000);
 
   it('leaves a part borderless when the theme says so, and a zero width frames nothing', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('n', {cwd, like: 'neutral'});
     const r = await themeEditSet('n', '--border-width', '2px', {cwd});
-    const keep = /** @type {string} */ (
-      r.data.notes.join(' ').match(/`([^`]*border none --on (\S+))`/)?.[2] ?? ''
-    );
+    const framed = /** @type {string} */ (
+      r.data.notes.join(' ').match(/no border of their own \(([^)]*)\)/)?.[1] ??
+        ''
+    )
+      .split(', ')
+      .filter(Boolean);
+    const m = r.data.notes
+      .join(' ')
+      .match(/`[^`]*border none --on (\S+)( --only)?`/);
+    const keep = m?.[1] ?? '';
     expect(keep).not.toBe('');
-    await themeEditSet('n', 'border', 'none', {cwd, on: keep});
+    // (The line keeps that one surface borderless, the others framed.)
+    await themeEditSet('n', 'border', 'none', {
+      cwd,
+      on: keep,
+      ...(m?.[2] ? {only: true} : {}),
+    });
     expect(rulesOf(cssOf('n'), keep)).not.toMatch(
       /border: var\(--border-width\) solid/,
     );
+    for (const p of framed.filter(x => x !== keep))
+      expect(rulesOf(cssOf('n'), p), p).toMatch(FRAME);
     await themeEditNew('z', {cwd, like: 'neutral'});
     const zero = await themeEditSet('z', '--border-width', '0px', {cwd});
     expect(zero.data.notes.join(' ')).not.toMatch(/also frames/);

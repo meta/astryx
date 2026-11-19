@@ -59,7 +59,6 @@ import {
   CORNERS,
   ROUND_TO_PILL_STEP,
   DIALS,
-  FAMILIES,
   FONT_ROLES,
   FONTS,
   GROUPS,
@@ -5186,8 +5185,10 @@ function checkOne(
   // A later setting on one member of a thing its family already carries
   // from another member or from the family group (a gradient on
   // icon-button after the one on button reached it): a drill-in, kept to
-  // that member, so the family keeps its look; the note gives the line
-  // that changes the whole family.
+  // that member, so the family keeps its look; the note gives the lines
+  // that change the whole family: take the drill-in back, then set the
+  // member the family look comes from (its own setting wins over a group
+  // setting, so a line on the family would leave it as it was).
   if (!unset && s.on && !s.only && TARGET.has(s.on)) {
     const fam = reachGroupOf(ctx, s);
     const carried = fam
@@ -5207,7 +5208,7 @@ function checkOne(
       : undefined;
     if (fam && carried) {
       s.only = true;
-      s.note = `${s.on} keeps this on its own (saved with --only): ${describe(carried)} already reaches the ${fam} family, which keeps that look; to change the whole family instead: ${P} set ${slug} ${quoteCommandArgument(String(thing))} ${quoteCommandArgument(String(value))} --on ${fam}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
+      s.note = `${s.on} keeps this on its own (saved with --only): ${describe(carried)} already reaches the ${fam} family, which keeps that look; to change the whole family instead, take this back and set it where the family look comes from: ${P} undo ${slug} && ${P} set ${slug} ${quoteCommandArgument(String(thing))} ${quoteCommandArgument(String(value))} --on ${carried.on}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
     }
   }
   // A font role in other letters (Body, CODE) is that role.

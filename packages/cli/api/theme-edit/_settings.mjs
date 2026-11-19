@@ -119,7 +119,6 @@ import {
   isColorValue,
   isSafeValue,
   parseColor,
-  colorsIn,
   oklabDistance,
   ratio,
   ratioWords,
@@ -4686,13 +4685,13 @@ export function spreads(ctx, s) {
  */
 export function memberState(ctx, s, member) {
   const st = s.state ?? undefined;
-  if (!st || !s.on || member === s.on || !MOMENT_STATES.includes(st))
-    return st;
+  if (!st || !s.on || member === s.on || !MOMENT_STATES.includes(st)) return st;
   if (!spreads(/** @type {any} */ (ctx), /** @type {any} */ (s))) return st;
   const MAP = /** @type {any} */ (ctx).C?.MAP;
   const fills = (/** @type {string} */ part) =>
     Object.entries(MAP?.[part]?.at?.['background-color'] ?? {}).map(
-      ([cond, v]) => /** @type {[string, string]} */ ([cond, plainPaint(String(v))]),
+      ([cond, v]) =>
+        /** @type {[string, string]} */ ([cond, plainPaint(String(v))]),
     );
   /** @param {string} cond @param {string} state */
   const inState = (cond, state) => {
@@ -4867,9 +4866,7 @@ export function heldVariantsOf(ctx, part, newProblems) {
     if (
       drawn.some(
         x =>
-          !x.bg?.target ||
-          x.bg.target === part ||
-          restGrounds.has(x.bg.target),
+          !x.bg?.target || x.bg.target === part || restGrounds.has(x.bg.target),
       )
     )
       continue;
@@ -4882,8 +4879,13 @@ export function heldVariantsOf(ctx, part, newProblems) {
     if (!common.size) continue;
     for (const v of common) held.add(v);
   }
-  // (A variant that holds every text of the part is the part itself.)
-  return [...held].filter(v => pairs.some(x => !variantsOf(x).has(v)));
+  // (A variant that holds every text of the part is the part itself, and
+  // one drawn on the grounds the part sits on anyway is no placement.)
+  return [...held].filter(
+    v =>
+      pairs.some(x => !variantsOf(x).has(v)) &&
+      onOtherGround(pairs, variantsOf, v),
+  );
 }
 
 /**
@@ -4928,9 +4930,29 @@ export function placementHolds(ctx, data, s) {
       for (const v of placementsOf(p)) found.add(v);
   return [...found].filter(
     v =>
-      // (The part draws text outside the placement too.)
+      // (The part draws text outside the placement too, and the placement
+      // puts it on a ground it is never drawn on outside it: a link in the
+      // phone menu, never a heading level on the same page.)
       pairs.some(x => !placementsOf(x).has(v)) &&
+      onOtherGround(pairs, placementsOf, v) &&
       failsInPlacement(ctx, data, s, v),
+  );
+}
+
+/**
+ * Whether a placement (`mode:drawer`) puts a part's text on a ground the
+ * part's text never sits on outside it: a true placement on another
+ * ground, never a visual prop drawn on the same page (a heading's level).
+ * @param {any[]} pairs the part's census texts
+ * @param {(p: any) => Set<string>} placementsOf
+ * @param {string} v axis:value
+ */
+function onOtherGround(pairs, placementsOf, v) {
+  const outside = new Set(
+    pairs.filter(x => !placementsOf(x).has(v)).map(x => x.bg?.target),
+  );
+  return pairs.some(
+    x => placementsOf(x).has(v) && x.bg?.target && !outside.has(x.bg.target),
   );
 }
 
@@ -4943,20 +4965,56 @@ export function placementHolds(ctx, data, s) {
  * @returns {Setting[]}
  */
 export function holdCopies(ctx, data, s) {
-  const hold = /** @type {any} */ (s).hold;
-  if (!Array.isArray(hold) || !s.on || s.when) return [];
+  if (!s.on || s.when) return [];
+  // (The holds the set decided, and the ones this build's own grounds call
+  // for: a menu made white after the light link color was set holds its
+  // links too.)
+  const hold = [
+    ...new Set([
+      ...(Array.isArray(/** @type {any} */ (s).hold)
+        ? /** @type {any} */ (s).hold
+        : []),
+      ...placementHolds(ctx, data, s),
+    ]),
+  ];
   /** @type {Setting[]} */
   const out = [];
   for (const variant of hold) {
-    const value = coreValueIn(ctx, String(s.on), kebab(s.thing), variant);
-    if (value == null) continue;
+    if (coreValueIn(ctx, String(s.on), kebab(s.thing), variant) == null)
+      continue;
     // (Held only where the setting's own color would be unreadable on the
-    // ground the placement shows as this theme builds it: a theme that
-    // darkens the phone menu too lets the bar's link color reach it.)
-    if (!failsInPlacement(ctx, data, s, variant)) continue;
+    // ground the placement shows as this theme builds it, and only in the
+    // modes it fails in: a theme that darkens the phone menu too lets the
+    // bar's link color reach it.)
+    const failing = failingModes(ctx, data, s, variant);
+    if (!failing.length) continue;
+    // (A theme with both modes holds only the mode the color fails in.)
+    const mode =
+      s.mode ??
+      (failing.length === 1 && modesOf(data).length > 1
+        ? failing[0]
+        : undefined);
+    // (A setting the theme made there itself, an older `--when mode:drawer`
+    // color, wins, as a part's own setting does.)
+    if (
+      data.settings.some(
+        x =>
+          x !== s &&
+          String(x.value).trim() !== 'revert-layer' &&
+          x.on === s.on &&
+          kebab(String(x.thing)) === kebab(String(s.thing)) &&
+          x.when === variant &&
+          (x.state ?? '') === (s.state ?? '') &&
+          (!x.mode || !mode || x.mode === mode),
+      )
+    )
+      continue;
     out.push({
       ...s,
-      value,
+      ...(mode ? {mode} : {}),
+      // (Core's own color there in every state, a selected link's included:
+      // the theme's rule rolls back to Core's layer.)
+      value: 'revert-layer',
       when: variant,
       only: true,
       hold: undefined,
@@ -4979,6 +5037,21 @@ export function holdCopies(ctx, data, s) {
  * @returns {boolean}
  */
 export function failsInPlacement(ctx, data, s, variant) {
+  return failingModes(ctx, data, s, variant).length > 0;
+}
+
+/**
+ * The modes in which a text color setting on a part reads under 4.5:1 on
+ * the ground its text sits on in one placement (failsInPlacement), each a
+ * mode the setting applies to; every one of them when the ground cannot be
+ * read.
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s @param {string} variant axis:value
+ * @returns {Array<'light' | 'dark'>}
+ */
+function failingModes(ctx, data, s, variant) {
+  const modes = /** @type {Array<'light' | 'dark'>} */ (
+    s.mode ? [s.mode] : ['light', 'dark']
+  );
   const C = /** @type {any} */ (ctx).C;
   const part = String(s.on);
   const cond = variant.replace(':', '=');
@@ -4991,7 +5064,7 @@ export function failsInPlacement(ctx, data, s, variant) {
         c.split(/[,\s]+/).includes(cond),
       ),
   );
-  if (!pair) return true;
+  if (!pair) return modes;
   const region = String(pair.bg.target);
   const tokens = /** @type {string[]} */ (pair.bg.tokens ?? []);
   const base = /** @type {any} */ (ctx).base ?? {};
@@ -5056,22 +5129,19 @@ export function failsInPlacement(ctx, data, s, variant) {
     }
     return tokens.length ? resolve(`var(${tokens[0]})`, m) : '';
   };
-  const modes = s.mode ? [s.mode] : ['light', 'dark'];
-  for (const m of modes) {
+  return modes.filter(m => {
     const g = groundIn(m);
     const fg = resolve(String(s.value), m);
     const gc = parseColor(g);
     const fc = parseColor(fg);
     if (!gc || !fc || alphaOf(g) < 1) return true;
-    if (
+    return (
       ratio(
         /** @type {[number, number, number]} */ (fc),
         /** @type {[number, number, number]} */ (gc),
       ) < 4.5
-    )
-      return true;
-  }
-  return false;
+    );
+  });
 }
 
 /**
@@ -5092,7 +5162,9 @@ export function edgeCopies(ctx, data, s) {
     s.on ||
     s.when ||
     s.state ||
-    !/^(?:none|0(?:px)?(?:\s+0(?:px)?)*(?:\s+\S+)?)$/i.test(String(s.value).trim())
+    !/^(?:none|0(?:px)?(?:\s+0(?:px)?)*(?:\s+\S+)?)$/i.test(
+      String(s.value).trim(),
+    )
   )
     return [];
   // (A theme border width frames the floating surfaces already.)
@@ -5257,10 +5329,17 @@ export function frameCopies(ctx, data, s) {
   // it asks for outlines; a width of zero frames nothing.)
   const at =
     s === width
-      ? !zero(s.value) && !(outlines && data.settings.indexOf(outlines) > data.settings.indexOf(width))
+      ? !zero(s.value) &&
+        !(
+          outlines &&
+          data.settings.indexOf(outlines) > data.settings.indexOf(width)
+        )
       : s === outlines
         ? !(width && zero(width.value)) &&
-          !(width && data.settings.indexOf(width) > data.settings.indexOf(outlines))
+          !(
+            width &&
+            data.settings.indexOf(width) > data.settings.indexOf(outlines)
+          )
         : false;
   if (!at) return [];
   return borderFrames(
@@ -5290,8 +5369,8 @@ export function frameCopies(ctx, data, s) {
 export function outlinesOf(data) {
   return [...data.settings]
     .reverse()
-    .find(x => x.source === 'dial' && x.thing === 'edges' && !x.on)
-    ?.value === 'outlines'
+    .find(x => x.source === 'dial' && x.thing === 'edges' && !x.on)?.value ===
+    'outlines'
     ? [...data.settings]
         .reverse()
         .find(x => x.source === 'dial' && x.thing === 'edges' && !x.on)
@@ -5331,7 +5410,8 @@ function momentCopies(ctx, data, s) {
  */
 function plainPaint(v) {
   let out = v.trim();
-  for (let m; (m = /^var\(--_[\w-]+\s*,\s*(.+)\)$/.exec(out)); ) out = m[1].trim();
+  for (let m; (m = /^var\(--_[\w-]+\s*,\s*(.+)\)$/.exec(out));)
+    out = m[1].trim();
   return out;
 }
 
@@ -5369,8 +5449,7 @@ export function writtenPartsOf(ctx, data, s) {
     : null;
   return parts.filter(
     t =>
-      t === s.on ||
-      (!ownSettingOf(data, s, t) && (!grounds || grounds.has(t))),
+      t === s.on || (!ownSettingOf(data, s, t) && (!grounds || grounds.has(t))),
   );
 }
 
@@ -5419,7 +5498,9 @@ export function membersOf(ctx, name) {
 export function partsOf(ctx, s) {
   // (A saved reach is pinned: a part its family gains later is offered,
   // never applied, so a theme changes only where a command said.)
-  const pin = /** @type {any} */ (s).reached;
+  const pin =
+    /** @type {any} */ (s).reached ??
+    (UNRECORDED.has(s) ? savedReach(ctx, /** @type {any} */ (s)) : null);
   const all = reachedPartsOf(ctx, s).filter(
     t => !Array.isArray(pin) || t === s.on || pin.includes(t),
   );
@@ -5490,6 +5571,51 @@ function reachedPartsOf(ctx, s) {
     );
   }
   return [s.on];
+}
+
+/**
+ * The parts drawn as a setting's part that the part's rule does not reach:
+ * the part draws the property through a variable of its own, and the part
+ * drawn as it reads another variable of its own and none of the part's, so
+ * the part's variable never sets it there. Parts that read the part's
+ * variable, or none, take the part's rule on its element.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing' | 'source'>} s
+ * @returns {string[]}
+ */
+export function missedDrawnAs(ctx, s) {
+  if (!s.on || s.source !== 'property') return [];
+  /** @type {Record<string, any>} */
+  const MAP = /** @type {any} */ (ctx).C?.MAP ?? {};
+  const prop = kebab(String(s.thing));
+  /** A part's values for the property and its longhands (padding-top). @param {string} part */
+  const valuesOf = part =>
+    Object.entries(MAP[part]?.at ?? {})
+      .filter(([k]) => k === prop || k.startsWith(`${prop}-`))
+      .flatMap(([, byCond]) => Object.values(byCond ?? {}));
+  /** The variables a part's own values for the property read. @param {string} part */
+  const varsOf = part =>
+    new Set(
+      valuesOf(part).flatMap(v =>
+        [...String(v).matchAll(/var\(\s*(--astryx-[\w-]+)/g)].map(m => m[1]),
+      ),
+    );
+  const own = [...varsOf(String(s.on))];
+  if (!own.length) return [];
+  return Object.keys(MAP).filter(
+    p =>
+      p !== s.on &&
+      ctx.project.target.has(p) &&
+      (MAP[p]?.drawnAs ?? []).includes(s.on) &&
+      valuesOf(p).length > 0 &&
+      // (A part that reads a variable of its own, and none of the part's,
+      // draws the property its own way. One that reads no such variable
+      // draws through the part's element, where the part's variable
+      // reaches it: a clickable card with no padding of its own takes the
+      // card's.)
+      varsOf(p).size > 0 &&
+      !own.some(v => varsOf(p).has(v)),
+  );
 }
 
 /**
@@ -5565,8 +5691,7 @@ function drawnKind(prop, value) {
     return 'none';
   if (
     /radius/.test(prop) &&
-    (/--radius-full\b|50%|calc\(infinity/.test(v) ||
-      (lengthPx(v) ?? 0) >= 999)
+    (/--radius-full\b|50%|calc\(infinity/.test(v) || (lengthPx(v) ?? 0) >= 999)
   )
     return 'round';
   return 'drawn';
@@ -5658,9 +5783,52 @@ function drawnAlike(ctx, s, member, exact = false) {
       );
     return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
   };
+  // (A one-line height reaches only members drawn one line tall: a
+  // multi-line field grows with its rows, so a text input's height would
+  // shut a text area to one line.)
+  if (oneLineSizeMisses(ctx, s, member)) return false;
   const a = rest(s.on);
   const b = rest(member);
   return a == null || b == null || a === b;
+}
+
+/** The properties that size a part's height, as one line. */
+const ONE_LINE_SIZE = /^(?:min-|max-)?(?:height|block-size)$/;
+
+/**
+ * Whether a part is drawn one line tall: it draws a fixed height of its own
+ * at rest (a text input's control height), not one its rows set (a text
+ * area grows with its text).
+ * @param {{C?: any}} ctx @param {string} part
+ */
+function drawnOneLine(ctx, part) {
+  const at = /** @type {any} */ (ctx).C?.MAP?.[part]?.at ?? {};
+  return ['height', 'min-height', 'block-size', 'min-block-size'].some(p =>
+    Object.values(at[p] ?? {}).some(
+      v =>
+        !/^(?:auto|none|initial|unset|fit-content|0(?:px)?)$/.test(
+          String(v).trim(),
+        ),
+    ),
+  );
+}
+
+/**
+ * Whether a height set on a part drawn one line tall misses a member of its
+ * family drawn with no one-line height (a text area beside a text input):
+ * the member keeps its own height, and the result names it.
+ * @param {{C?: any}} ctx
+ * @param {{on?: string | null, thing?: string}} s
+ * @param {string} member
+ */
+export function oneLineSizeMisses(ctx, s, member) {
+  return Boolean(
+    s.on &&
+    member !== s.on &&
+    ONE_LINE_SIZE.test(kebab(String(s.thing ?? ''))) &&
+    drawnOneLine(ctx, String(s.on)) &&
+    !drawnOneLine(ctx, member),
+  );
 }
 
 /**
@@ -12044,7 +12212,9 @@ export async function contrastProblems(ctx, data, res) {
         ctx.C.variantValues?.(p.text) ?? {}
       );
       const states = ctx.project.target.get(p.text)?.states ?? [];
-      const conds = /** @type {string[]} */ (/** @type {any} */ (p).conds ?? []);
+      const conds = /** @type {string[]} */ (
+        /** @type {any} */ (p).conds ?? []
+      );
       const placed = conds.length
         ? conds
             .map(
@@ -12541,7 +12711,71 @@ export async function contrastProblems(ctx, data, res) {
     if (x.source !== 'property' || x.thing !== 'color' || !x.on || x.state)
       continue;
     for (const t of partsOf(ctx, x)) {
-      if (drawnParts.has(t)) continue;
+      if (drawnParts.has(t)) {
+        // (A part the census draws on another part that sets text of its
+        // own, a top bar heading in the phone menu: the theme's color on
+        // the part is its own rule there, which wins over the color it
+        // would take from around it, so its text is measured on that
+        // ground too.)
+        // (A placement the setting holds at Core's look, a link in the phone
+        // menu, keeps Core's color there: nothing of the setting to
+        // measure.)
+        const held = holdCopies(ctx, data, x).map(c =>
+          String(c.when).replace(':', '='),
+        );
+        const axes = /** @type {Record<string, string[]>} */ (
+          ctx.C?.variantValues?.(t) ?? {}
+        );
+        // (A placement whose ground, as this theme builds it, keeps the
+        // color readable: a phone menu the theme darkens too.)
+        /** @param {any} p */
+        const readsInPlacement = p =>
+          (p.conds ?? []).some((/** @type {string} */ c) =>
+            c
+              .split(/[,\s]+/)
+              .map(kv => kv.split('='))
+              .some(
+                ([a, v]) =>
+                  a !== 'variant' &&
+                  axes[a]?.includes(v) &&
+                  !failsInPlacement(ctx, data, x, `${a}:${v}`),
+              ),
+          );
+        for (const p of census.pairs)
+          if (
+            p.text === t &&
+            !readsInPlacement(p) &&
+            !(
+              /** @type {any} */ (p.conds ?? []).some(
+                (/** @type {string} */ c) =>
+                  held.some(h => c.split(/[,\s]+/).includes(h)),
+              )
+            ) &&
+            p.bg.target &&
+            p.bg.target !== t &&
+            ctx.C.partReads(p.bg.target, 'text')?.length &&
+            // (A color set for a condition, `--when mode:drawer`, is
+            // measured where the census drew the part in it.)
+            (!x.when ||
+              /** @type {any} */ (p.conds ?? []).some(
+                (/** @type {string} */ c) =>
+                  String(x.when)
+                    .split('+')
+                    .every(w =>
+                      c.split(/[,\s]+/).includes(w.replace(':', '=')),
+                    ),
+              ))
+          )
+            ownTextPairs.push(
+              /** @type {any} */ ({
+                ...p,
+                ownColor: true,
+                fg: {target: t, tokens: [], raw: null},
+                ...(x.when ? {when: x.when} : {}),
+              }),
+            );
+        continue;
+      }
       // The fill the census saw the part draw (with its default props),
       // else what it reads at rest, else the fill of the part it sits in
       // (a checkbox's check on its box), else none: the page shows.
@@ -13280,7 +13514,10 @@ export async function contrastProblems(ctx, data, res) {
     // Pairs styled for one state or condition whose colors cannot be read
     // as one color, and the button styles, are not measured yet.
     ...(() => {
-      const scopedLeft = [...new Set(scoped.unmeasured)];
+      // (A held placement is Core's own color there: nothing set to read.)
+      const scopedLeft = [...new Set(scoped.unmeasured)].filter(
+        x => String(x.value).trim() !== 'revert-layer',
+      );
       return scopedLeft.length
         ? [
             plain(
@@ -15116,19 +15353,54 @@ function topFieldNames(data) {
  */
 function readReachRecords(data) {
   const map =
-    data?.reached && typeof data.reached === 'object' && !Array.isArray(data.reached)
+    data?.reached &&
+    typeof data.reached === 'object' &&
+    !Array.isArray(data.reached)
       ? data.reached
-      : null;
-  if (map && Array.isArray(data.settings))
+      : {};
+  if (Array.isArray(data?.settings))
     for (const s of data.settings) {
-      const rec = s && typeof s === 'object' ? map[keyOf(s)] : null;
+      if (!s || typeof s !== 'object') continue;
+      const rec = map[keyOf(s)];
       if (
         Array.isArray(rec) &&
         rec.every((/** @type {unknown} */ x) => typeof x === 'string' && x)
       )
         s.reached = [...rec];
+      // (A saved setting with no record reaches as it was saved to: by the
+      // rule of the editor that wrote it, until the build records it.)
+      else if (s.on) UNRECORDED.add(s);
     }
   if (data && typeof data === 'object') delete data.reached;
+}
+
+/**
+ * The saved settings read with no reach record: a theme an earlier editor
+ * saved, or a setting that reached only its own part. Each reaches what
+ * the rule it was saved under gave it (savedReach) until the build records
+ * it; the rest of its family is offered.
+ * @type {WeakSet<object>}
+ */
+const UNRECORDED = new WeakSet();
+
+/**
+ * The parts a saved setting with no record reaches: what the editor that
+ * saved it gave it. A setting named on a group, set on a member of an
+ * group the editors before family reach spread from one member (inputs, checks), or kept to its part with
+ * `--only` reaches as it does now; any other reaches its own part.
+ * @param {Ctx} ctx
+ * @param {Setting} s
+ * @returns {string[]}
+ */
+function savedReach(ctx, s) {
+  const fam = s.on ? familyOf(s.on) : null;
+  // (The editors before family reach spread only inputs and checks from
+  // one member: a menu's setting reached that menu.)
+  return s.only ||
+    groupsOf(ctx)[String(s.on)] ||
+    (fam && ['inputs', 'checks'].includes(fam))
+    ? reachedPartsOf(ctx, s)
+    : reachedPartsOf(ctx, {...s, only: true});
 }
 
 /**
@@ -16007,7 +16279,14 @@ export function stateSlot(
   values = {},
   census = [],
 ) {
-  const pieces = state ? String(state).split('+') : [];
+  // A part that marks its chosen one as active (a pagination dot) takes a
+  // selected look in that state: no :selected pseudo-class exists, so the
+  // look would never show. An asked active stays the press it names.
+  const chosen = (/** @type {string} */ p) =>
+    p === 'selected' && !own.includes(p) && own.includes('active')
+      ? 'active'
+      : p;
+  const pieces = state ? String(state).split('+').map(chosen) : [];
   // (A state the part shows from an element it rides, which Core's theme
   // takes no style key for there (a list item's Item marks it selected):
   // written as the attribute Core marks, inside the plain rule.)
@@ -17124,23 +17403,38 @@ export function reachOffers(ctx, slug, data) {
  * keeps the parts it reached when it was made (`reached`, saved on the
  * setting), and parts its family gains later are offered (reachOffers),
  * written by the build (`offered`, like `lifted`) and said once. A setting
- * with no record yet is recorded as it reaches now, with no message.
+ * saved with no record is recorded at the reach it was saved with
+ * (savedReach), and the rest of its family is offered.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
+ * @param {ThemeData | null} before the settings saved before this change
  * @returns {Array<{setting: string, parts: string[], run: string}>} the offers not said before
  */
-function recordReach(ctx, slug, data) {
-  const said =
-    data.offered &&
-    typeof data.offered === 'object' &&
-    !Array.isArray(data.offered)
-      ? data.offered
+function recordReach(ctx, slug, data, before) {
+  // (Said before: by the build this change replaces, or by the steps an
+  // undo goes back to, so an undo never offers again what was said.)
+  /** @param {any} x */
+  const offeredIn = x =>
+    x?.offered && typeof x.offered === 'object' && !Array.isArray(x.offered)
+      ? x.offered
       : {};
+  /** @type {Record<string, string[]>} */
+  const said = {...offeredIn(data)};
+  for (const [k, v] of Object.entries(offeredIn(before)))
+    if (Array.isArray(v))
+      said[k] = [
+        ...new Set([...(Array.isArray(said[k]) ? said[k] : []), ...v]),
+      ];
   for (const s of data.settings) {
     if (!s.on || Array.isArray(s.reached)) continue;
+    // (A setting saved with no record keeps the reach it was saved with,
+    // recorded so its family's other members are offered.)
     const whole = partsOf(ctx, s);
-    if (whole.some(t => t !== s.on)) s.reached = whole;
+    const full = partsOf(ctx, {...s});
+    if (whole.some(t => t !== s.on) || full.some(t => !whole.includes(t)))
+      s.reached = whole;
+    UNRECORDED.delete(s);
   }
   const offers = reachOffers(ctx, slug, data);
   if (offers.length)
@@ -17393,7 +17687,7 @@ export async function commitTheme(
         ERROR_CODES.ERR_THEME_BAD_VALUE,
       );
     data.lifted = built.lifted;
-    offered = recordReach(ctx, slug, data);
+    offered = recordReach(ctx, slug, data, before);
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
     // the two leaves the change saved with the history one step short (or,

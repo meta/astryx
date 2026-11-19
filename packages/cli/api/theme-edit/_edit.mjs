@@ -87,6 +87,8 @@ import {
   edgeCopies,
   heldVariantsOf,
   placementHolds,
+  missedDrawnAs,
+  oneLineSizeMisses,
   borderFrames,
   undoArgs,
   isCheckNote,
@@ -2462,6 +2464,21 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * ` --only` when a line that styles one part would reach that part's family
+ * without it, else nothing: a keep line styles the part it names alone.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string} thing
+ * @param {string | null} [state] the state the line sets it for: a selected
+ *   look reaches the selected items, any other the part's own family
+ */
+function aloneFlag(ctx, part, thing, state = null) {
+  return spreads(ctx, {on: part, thing, only: false, state})
+    ? ' --only'
+    : '';
+}
+
+/**
  * What a whole-theme border width frames in the build (frameCopies): the
  * surfaces that draw no border of their own, named, with the line that
  * keeps one borderless; null for any other setting or a width of zero.
@@ -2475,7 +2492,7 @@ function frameNote(ctx, slug, data, s) {
   const copies = frameCopies(ctx, data, s);
   const parts = [...new Set(copies.map(x => String(x.on)))];
   if (!parts.length) return null;
-  return `${s.thing === 'edges' ? 'outlines' : '--border-width'} also frames the surfaces that draw no border of their own (${parts.join(', ')}); to keep one borderless: \`${P} set ${slug} border none --on ${parts[0]}\``;
+  return `${s.thing === 'edges' ? 'outlines' : '--border-width'} also frames the surfaces that draw no border of their own (${parts.join(', ')}); to keep one borderless: \`${P} set ${slug} border none --on ${parts[0]}${aloneFlag(ctx, parts[0], 'border')}\``;
 }
 
 /**
@@ -2516,17 +2533,42 @@ export function unreadableReach(named, reached, newProblems) {
  */
 function embeddedReach(ctx, slug, data, s, parts) {
   if (!s.on || s.source !== 'property' || !parts.length) return [];
+  // (A part drawn as it that the rule misses is not reached: missedDrawnAs.)
+  const missed = missedDrawnAs(ctx, s);
   const prop = kebab(String(s.thing));
   /** @type {Record<string, any>} */
   const MAP = ctx.C?.MAP ?? {};
   /** @type {Array<{part: string, as: string, keep: string}>} */
   const out = [];
   for (const [part, rec] of Object.entries(MAP)) {
-    if (!ctx.project.target.has(part) || parts.includes(part)) continue;
+    if (
+      !ctx.project.target.has(part) ||
+      parts.includes(part) ||
+      missed.includes(part)
+    )
+      continue;
     const as = (rec?.drawnAs ?? []).find((/** @type {string} */ t) =>
       parts.includes(t),
     );
     if (!as) continue;
+    // (A variant's look reaches only the parts drawn in that variant: a
+    // ghost button's look reaches a calendar's ghost arrows, never a part
+    // drawn as a primary button.)
+    // (Each condition of the look, `size:sm+variant:ghost`, must hold.)
+    const conds = s.when
+      ? String(s.when)
+          .split('+')
+          .map(c => c.split(':'))
+      : [];
+    if (
+      conds.some(
+        ([axis, wanted]) =>
+          !(
+            /** @type {string[]} */ (rec?.attrs?.[axis] ?? []).includes(wanted)
+          ),
+      )
+    )
+      continue;
     if (
       data.settings.some(
         x =>
@@ -2546,11 +2588,37 @@ function embeddedReach(ctx, slug, data, s, parts) {
           .map(([, v]) => String(v).trim()),
       ),
     ];
-    const value = rest.length === 1 ? rest[0] : 'initial';
+    // (A part drawn alike in several variants draws the value the part's
+    // own variable falls back to with no theme: a card's spacing step.)
+    const fallback = [
+      ...new Set(
+        Object.entries(MAP[String(s.on)]?.at ?? {})
+          .filter(([k]) => k === prop || k.startsWith(`${prop}-`))
+          .flatMap(([, byCond]) => Object.values(byCond ?? {}))
+          .flatMap(v => {
+            const inner = [
+              ...String(v).matchAll(
+                /var\(\s*--astryx-[\w-]+\s*,\s*(var\(--(?!astryx-)[\w-]+\))/g,
+              ),
+            ];
+            return inner.length ? [inner[inner.length - 1][1]] : [];
+          }),
+      ),
+    ];
+    // (A look for a state or a variant keeps the part as Core draws it
+    // there: the theme's rule rolls back to Core's layer.)
+    const value =
+      s.state || s.when
+        ? 'revert-layer'
+        : rest.length === 1
+          ? rest[0]
+          : fallback.length === 1
+            ? fallback[0]
+            : 'initial';
     out.push({
       part,
       as,
-      keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}`,
+      keep: `${P} set ${slug} ${setArgs({...s, on: part, only: undefined, when: undefined}, value)}${aloneFlag(ctx, part, String(s.thing), s.state ?? null)}`,
     });
   }
   return out;
@@ -6194,6 +6262,8 @@ async function changeOnce(
   );
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
+  /** The saved setting with or without `--only` that a set replaces. @type {import('./_settings.mjs').Setting | null} */
+  let twin = null;
   // A value is compared as `set` reads it: case, spacing around commas,
   // slashes and parentheses, and the quote style are not part of it.
   const norm = (/** @type {string} */ x) =>
@@ -6646,7 +6716,12 @@ async function changeOnce(
         keyOf(x) !== k &&
         skips(x, s) &&
         entryProblem(x, data) != null);
-    alsoReplaced = data.settings.filter(replaced);
+    twin =
+      data.settings.find(
+        x =>
+          x !== s && keyOf(x) !== k && sameSettingKey(x) === sameSettingKey(s),
+      ) ?? null;
+    alsoReplaced = data.settings.filter((x, i) => replaced(x, i) && x !== twin);
     data.settings = data.settings.filter((x, i) => !replaced(x, i));
   }
   // A setting for both modes replaces the ones made for one mode, which it
@@ -7240,6 +7315,16 @@ async function changeOnce(
           ...(sizeNote ? [sizeNote] : []),
         ]
       : []),
+    // The group version a `--only` set takes the place of, or the
+    // `--only` version a set without it does: the parts it no longer
+    // reaches, or reaches again, are named.
+    ...(twin
+      ? [
+          s.only
+            ? `replaces ${describe(twin)}: the rest of the group goes back to the base theme's value`
+            : `replaces ${describe(twin)}: it reaches the group again`,
+        ]
+      : []),
     ...(alsoReplaced.length && prev
       ? [
           `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is ${sub === 'set' ? 'replaced' : 'removed'}`,
@@ -7436,7 +7521,8 @@ async function changeOnce(
   // The group it styles: the one named, or the family a setting on one
   // member reaches (unless --only), with every part written and the line
   // that keeps it to the member alone.
-  const reach = s.on && !groupsOf(ctx)[s.on] && !s.only ? reachGroupOf(ctx, s) : null;
+  const reach =
+    s.on && !groupsOf(ctx)[s.on] && !s.only ? reachGroupOf(ctx, s) : null;
   const group = s.on
     ? groupsOf(ctx)[s.on]
       ? s.on
@@ -7459,7 +7545,7 @@ async function changeOnce(
       : [];
   if (edged.length)
     notes.push(
-      `with ${s.thing} gone, the floating surfaces that drew no border keep an edge at the theme's border (${edged.join(', ')}), so an open menu never reads as a blank panel; to keep one bare: \`${P} set ${slug} border none --on ${edged[0]}\``,
+      `with ${s.thing} gone, the floating surfaces that drew no border keep an edge at the theme's border (${edged.join(', ')}), so an open menu never reads as a blank panel; to keep one bare: \`${P} set ${slug} border none --on ${edged[0]}${aloneFlag(ctx, edged[0], 'border')}\``,
     );
   if (heldVariants.length)
     notes.push(
@@ -7478,7 +7564,95 @@ async function changeOnce(
   // too): a rule on the part reaches them as well. Each is named, with the
   // line that keeps it as Core draws it (its own entry wins over the
   // part's).
-  const embedded = sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
+  const embedded =
+    sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
+  // (Parts drawn as this part that its rule misses: they draw the property
+  // with no variable a theme sets, so nothing reaches them there. Said, with
+  // no line, rather than counted as reached.)
+  const missedAs = sub === 'set' && s.on ? missedDrawnAs(ctx, s) : [];
+  // (A color set on a part covers a text color token an earlier setting
+  // gives a part around it: the part's own color wins over the color it
+  // would take from around it, whatever their order. Named, with the line
+  // that takes the new color back.)
+  if (
+    sub === 'set' &&
+    s.on &&
+    s.source === 'property' &&
+    kebab(String(s.thing)) === 'color'
+  ) {
+    const MAPC = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
+    const covered = data.settings.filter(
+      x =>
+        x !== s &&
+        x.source === 'token' &&
+        x.on &&
+        !x.state &&
+        (!x.mode || !s.mode || x.mode === s.mode) &&
+        parts.some(
+          t =>
+            t !== x.on &&
+            (MAPC[String(x.on)]?.contains ?? []).includes(t) &&
+            (ctx.C?.partReads(t, 'text') ?? []).some(
+              (/** @type {any} */ r) => r.token === x.thing,
+            ),
+        ),
+    );
+    for (const x of covered) {
+      const inside = parts.filter(t =>
+        (MAPC[String(x.on)]?.contains ?? []).includes(t),
+      );
+      notes.push(
+        `${s.thing} on ${s.on} covers ${describe(x)}: ${inside.join(', ')} inside ${x.on} ${inside.length > 1 ? 'draw' : 'draws'} ${s.value} there now, since a part's own color wins over a text color set on a part around it; to keep ${x.on}'s text as it was: \`${P} undo ${slug} ${undoArgs(s)}\``,
+      );
+    }
+  }
+  // (Two settings that reach one element through two parts drawn on it, a
+  // dialog look reaching the popover and a menu look reaching the selector
+  // popup drawn on that popover: their rules meet on that element, and the
+  // build's order alone decides which shows. Named, with the line that
+  // gives the other part this look too.)
+  if (sub === 'set' && s.on) {
+    const MAPE = /** @type {Record<string, any>} */ (ctx.C?.MAP ?? {});
+    const prop = kebab(String(s.thing));
+    /** @type {Map<import('./_settings.mjs').Setting, Set<string>>} */
+    const meets = new Map();
+    for (const t of parts)
+      for (const q of /** @type {string[]} */ (MAPE[t]?.drawnAs ?? [])) {
+        if (parts.includes(q)) continue;
+        const rival = [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x !== s &&
+              x.on &&
+              kebab(String(x.thing)) === prop &&
+              (x.state ?? '') === (s.state ?? '') &&
+              (!x.mode || !s.mode || x.mode === s.mode) &&
+              partsOf(ctx, x).includes(q),
+          );
+        if (rival) meets.set(rival, (meets.get(rival) ?? new Set()).add(q));
+      }
+    for (const [rival, qs] of meets) {
+      const list = [...qs];
+      notes.push(
+        `${s.thing} on ${s.on} and ${describe(rival)} meet on one element: ${list.join(', ')} ${list.length > 1 ? 'are' : 'is'} drawn on a part this reaches, and the build's order alone decides which look shows there; to give ${list.length > 1 ? 'one' : 'it'} this look as well: ${list.map(q => `\`${P} set ${slug} ${setArgs({...s, on: q, only: true}, String(s.value))}\``).join(', ')}`,
+      );
+    }
+  }
+  // (A one-line height set on one member of a family leaves its multi-line
+  // members their own height, named with the line that sizes them too.)
+  const fam = sub === 'set' && s.on && !s.only ? reachGroupOf(ctx, s) : null;
+  const tallOnes = fam
+    ? (groupsOf(ctx)[fam] ?? []).filter(m => oneLineSizeMisses(ctx, s, m))
+    : [];
+  if (tallOnes.length)
+    notes.push(
+      `${s.thing} does not reach ${tallOnes.join(', ')}: ${tallOnes.length > 1 ? 'they are' : 'it is'} drawn with no one-line height (a multi-line field grows with its rows); to size ${tallOnes.length > 1 ? 'one' : 'it'} too: ${tallOnes.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: undefined}, String(s.value))}${aloneFlag(ctx, m, String(s.thing), s.state ?? null)}\``).join(', ')}`,
+    );
+  if (missedAs.length)
+    notes.push(
+      `${s.thing} on ${s.on} does not reach ${missedAs.join(', ')}: drawn as ${s.on}, ${missedAs.length > 1 ? 'they draw' : 'it draws'} ${s.thing} with no variable a theme sets, so Core gives no way to change it there`,
+    );
   if (embedded.length)
     notes.push(
       `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}`,
@@ -8022,7 +8196,9 @@ async function changeOnce(
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
       replaced:
-        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
+        sub === 'set'
+          ? (prev ?? twin ?? covered[0] ?? longhands[0] ?? null)
+          : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
@@ -9820,7 +9996,8 @@ function partValues(ctx, data, res, mode) {
       );
       if (exact)
         return `${describe(s)} -> not shown: ${describe(exact)} is an exact property and wins there`;
-      const parts = partsOf(ctx, s);
+      // (A member that keeps a setting of its own shows that one instead.)
+      const parts = writtenPartsOf(ctx, data, s);
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {
         const px = cornerPx(s.value);
@@ -10342,7 +10519,7 @@ function valueIs(saved, typed) {
  */
 function lastStepTakes(cwd, slug, now) {
   const steps = readHistory(themeFiles(cwd, slug).history).steps;
-  const at = JSON.stringify({...now, lifted: 0, built: 0});
+  const at = JSON.stringify({...now, lifted: 0, built: 0, reached: 0});
   for (let i = steps.length - 1; i >= 0; i--) {
     const before = settingsJson(steps[i]);
     if (
@@ -10351,7 +10528,8 @@ function lastStepTakes(cwd, slug, now) {
       !Array.isArray(before.settings)
     )
       return [];
-    if (JSON.stringify({...before, lifted: 0, built: 0}) === at) continue;
+    if (JSON.stringify({...before, lifted: 0, built: 0, reached: 0}) === at)
+      continue;
     return stepTakesBack(now, before);
   }
   return [];
@@ -10566,8 +10744,8 @@ async function undoTheme(theme, options) {
     return (
       x !== undefined &&
       y !== undefined &&
-      JSON.stringify({...x, lifted: 0, built: 0}) ===
-        JSON.stringify({...y, lifted: 0, built: 0})
+      JSON.stringify({...x, lifted: 0, built: 0, reached: 0}) ===
+        JSON.stringify({...y, lifted: 0, built: 0, reached: 0})
     );
   };
   while (history.length && same(history[history.length - 1], nowText))

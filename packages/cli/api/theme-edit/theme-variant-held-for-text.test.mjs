@@ -73,7 +73,7 @@ describe('a top nav link colored for a dark bar', () => {
     expect(css).toMatch(/\.astryx-top-nav-item[^{]*\{[^}]*color: #bfbfbf/);
     // In the phone menu: Core's own color again.
     expect(css).toMatch(
-      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: var\(--color-text-/,
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: revert-layer/,
     );
     expect(r.data.notes.join('\n')).toMatch(
       /top-nav-item keeps Core's color where it is drawn as mode=drawer .*set bar color '#bfbfbf' --on top-nav-item --when 'mode:drawer'( --mode light)? --only/,
@@ -103,7 +103,7 @@ describe('a top nav link colored for a dark bar', () => {
     // (Held while the menu is white...)
     await themeEditSet('dk', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
     expect(cssOf('dk')).toMatch(
-      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: var\(--color-text-/,
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: revert-layer/,
     );
     // (...and reaching it once the theme darkens the menu as well.)
     const r = await themeEditSet(
@@ -113,13 +113,44 @@ describe('a top nav link colored for a dark bar', () => {
       {cwd, on: 'mobile-nav'},
     );
     expect(cssOf('dk')).not.toMatch(
-      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: var\(--color-text-/,
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: revert-layer/,
     );
     expect(
       (r.data.newProblems ?? [])
         .map((/** @type {any} */ p) => p.problem)
         .join('\n'),
     ).not.toMatch(/top-nav-item/);
+    // (A menu made white again holds the links again, at build.)
+    await themeEditSet('dk', '--color-background-surface', '#ffffff', {
+      cwd,
+      on: 'mobile-nav',
+    });
+    expect(cssOf('dk')).toMatch(
+      /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*color: revert-layer/,
+    );
+  }, 240_000);
+
+  it('keeps a drawer color the theme set there itself', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('own', {cwd, like: 'neutral'});
+    await themeEditSet('own', 'mode', 'light-only', {cwd});
+    await themeEditSet('own', 'background-color', '#222222', {
+      cwd,
+      on: 'app-shell-header',
+    });
+    await themeEditSet('own', 'color', '#333333', {
+      cwd,
+      on: 'top-nav-item',
+      when: 'mode:drawer',
+      only: true,
+    });
+    await themeEditSet('own', 'color', '#bfbfbf', {cwd, on: 'top-nav-item'});
+    const drawer =
+      cssOf('own').match(
+        /\.astryx-top-nav-item[^{]*\[data-mode="drawer"\][^{]*\{[^}]*\}/g,
+      ) ?? [];
+    expect(drawer.join('\n')).toMatch(/#333333/);
+    expect(drawer.join('\n')).not.toMatch(/revert-layer/);
   }, 240_000);
 
   it('holds nothing where the color reads in the menu too', async ctx => {

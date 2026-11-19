@@ -163,8 +163,63 @@ describe('a saved setting and how far it reaches', () => {
     expect(partsWith('old', 'border-color')).toContain('text-area');
     const rec = saved('old').reached ?? {};
     expect(
-      rec[/** @type {string} */ (Object.keys(rec).find(k => k.startsWith('border-color|')))],
+      rec[
+        /** @type {string} */ (
+          Object.keys(rec).find(k => k.startsWith('border-color|'))
+        )
+      ],
     ).toEqual(expect.arrayContaining(['text-area']));
+  }, 240_000);
+
+  it('a family setting an earlier editor saved keeps its own part; its family is offered', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('rel', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'rel',
+      'background-image',
+      'linear-gradient(#ffffff, #e6e6e6)',
+      {
+        cwd,
+        on: 'button',
+      },
+    );
+    expect(partsWith('rel', 'background-image')).toContain('toggle-button');
+    // (As an editor that reached only the part named saved it: no record.)
+    const data = saved('rel');
+    delete data.reached;
+    save('rel', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('rel', 'corners', '4px', {cwd})
+    );
+    expect(partsWith('rel', 'background-image')).toContain('button');
+    expect(partsWith('rel', 'background-image')).not.toContain('toggle-button');
+    const offer = (r.data.offered ?? []).find((/** @type {any} */ o) =>
+      o.setting.startsWith('background-image'),
+    );
+    expect(offer?.parts).toEqual(expect.arrayContaining(['toggle-button']));
+    expect(offer?.run).toMatch(/--on button$/);
+  }, 240_000);
+
+  it("a menu's setting an earlier editor saved keeps that menu; the rest is offered", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('menu', {cwd, like: 'neutral'});
+    await themeEditSet('menu', 'border-radius', '3px', {
+      cwd,
+      on: 'context-menu',
+    });
+    const data = saved('menu');
+    delete data.reached;
+    save('menu', data);
+    const r = /** @type {any} */ (
+      await themeEditSet('menu', 'corners', '4px', {cwd})
+    );
+    expect(partsWith('menu', 'border-radius')).toContain('context-menu');
+    expect(partsWith('menu', 'border-radius')).not.toContain('dropdown-menu');
+    expect(
+      (r.data.offered ?? []).some((/** @type {any} */ o) =>
+        o.setting.startsWith('border-radius'),
+      ),
+    ).toBe(true);
   }, 240_000);
 
   it('--only on the same setting replaces it, so the look leaves the group', async ctx => {
@@ -254,7 +309,7 @@ describe('a saved setting and how far it reaches', () => {
     ).toHaveLength(2);
   }, 240_000);
 
-  it('an undo offers the growth its build finds, and undoing a narrowing names both entries', async ctx => {
+  it('undoing a narrowing names both entries', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('back', {cwd, like: 'neutral'});
     await themeEditSet('back', 'border-color', '#ff0000', {
@@ -271,14 +326,54 @@ describe('a saved setting and how far it reaches', () => {
     expect(undone).toMatch(/removed border-color = #ff0000 on text-input only/);
     expect(undone).toMatch(/put back border-color = #ff0000 on text-input/);
     expect(partsWith('back', 'border-color')).toContain('text-area');
+  }, 240_000);
 
-    narrowRecord('back', 'border-color|');
-    await themeEditSet('back', 'corners', '4px', {cwd});
-    narrowRecord('back', 'border-color|');
-    const u2 = /** @type {any} */ (await themeEditUndo('back', {cwd}));
-    expect(u2.data.offered?.[0]?.parts).toEqual(
-      expect.arrayContaining(['text-area']),
+  it('an undo never offers again what a change already offered', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('once', {cwd, like: 'neutral'});
+    await themeEditSet('once', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    await themeEditSet('once', 'corners', '4px', {cwd});
+    narrowRecord('once', 'border-color|');
+    const said = /** @type {any} */ (
+      await themeEditSet('once', 'corners', '6px', {cwd})
     );
-    expect(partsWith('back', 'border-color')).not.toContain('text-area');
+    expect(said.data.offered?.length).toBe(1);
+    const u = /** @type {any} */ (await themeEditUndo('once', {cwd}));
+    expect(u.data.offered ?? []).toEqual([]);
+  }, 240_000);
+
+  it('--only says which saved setting it replaces and that the rest of the group goes back', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('rep', {cwd, like: 'neutral'});
+    await themeEditSet('rep', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+    });
+    const r = /** @type {any} */ (
+      await themeEditSet('rep', 'border-color', '#0000ff', {
+        cwd,
+        on: 'text-input',
+        only: true,
+      })
+    );
+    expect(r.data.replaced?.value).toBe('#ff0000');
+    expect(r.data.notes.join('\n')).toMatch(
+      /replaces border-color = #ff0000 on text-input: the rest of the group goes back to the base theme's value/,
+    );
+    const back = /** @type {any} */ (
+      await themeEditSet('rep', 'border-color', '#ff0000', {
+        cwd,
+        on: 'text-input',
+      })
+    );
+    expect(back.data.notes.join('\n')).toMatch(/it reaches the group again/);
+    expect(
+      saved('rep').settings.filter(
+        (/** @type {any} */ x) => x.thing === 'border-color',
+      ),
+    ).toHaveLength(1);
   }, 240_000);
 });

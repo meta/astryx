@@ -127,7 +127,9 @@ describe('family reach by default', () => {
     expect(r.data.notes.join(' ')).toMatch(/toggle-button keeps its own/);
     const css = cssOf('o');
     expect(ruleOf(css, 'button')).toContain(GRADIENT);
-    expect(ruleOf(css, 'toggle-button')).toContain('linear-gradient(red, blue)');
+    expect(ruleOf(css, 'toggle-button')).toContain(
+      'linear-gradient(red, blue)',
+    );
   }, 240_000);
 
   it('a later setting on another member is its drill-in; undo gives it the family look back', async ctx => {
@@ -143,7 +145,7 @@ describe('family reach by default', () => {
     expect(drill.data.setting.only).toBe(true);
     expect(drill.data.parts).toEqual(['toggle-button']);
     expect(drill.data.notes.join(' ')).toMatch(
-      /toggle-button keeps this on its own \(saved with --only\).*--on button-like/,
+      /toggle-button keeps this on its own \(saved with --only\).*undo d && .* set d background-image .* --on button\b/,
     );
     // The family keeps the button's look everywhere else.
     expect(settingsOf('d')).toEqual(
@@ -178,6 +180,35 @@ describe('family reach by default', () => {
     expect(ruleOf(cssOf('d'), 'button')).toContain(GRADIENT);
   }, 240_000);
 
+  it("a drill-in's whole-family lines give the family the new look", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('dw', {cwd, like: 'neutral'});
+    await themeEditSet('dw', 'background-image', GRADIENT, {cwd, on: 'button'});
+    await themeEditSet('dw', 'background-image', 'linear-gradient(red, blue)', {
+      cwd,
+      on: 'toggle-button',
+    });
+    // (The lines the note gives, run in order.)
+    await themeEditUndo('dw', {cwd});
+    await themeEditSet('dw', 'background-image', 'linear-gradient(red, blue)', {
+      cwd,
+      on: 'button',
+    });
+    const looks = settingsOf('dw').filter(
+      (/** @type {any} */ s) => s.thing === 'background-image',
+    );
+    expect(looks).toEqual([
+      expect.objectContaining({
+        on: 'button',
+        value: 'linear-gradient(red, blue)',
+      }),
+    ]);
+    expect(ruleOf(cssOf('dw'), 'button')).toContain(
+      'linear-gradient(red, blue)',
+    );
+    expect(cssOf('dw')).not.toContain(GRADIENT);
+  }, 240_000);
+
   it("a menu row's hover look reaches each list option in the state that draws the row the pointer is on", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('h', {cwd, like: 'neutral'});
@@ -202,7 +233,9 @@ describe('family reach by default', () => {
     // (Every part whose element the census drew as a button too.)
     const {C} = /** @type {any} */ (await context(cwd));
     const drawnAsButton = Object.entries(C.MAP)
-      .filter(([, rec]) => (/** @type {any} */ (rec).drawnAs ?? []).includes('button'))
+      .filter(([, rec]) =>
+        /** @type {any} */ (rec.drawnAs ?? []).includes('button'),
+      )
       .map(([part]) => part);
     expect(drawnAsButton).toEqual(
       expect.arrayContaining(['calendar-nav', 'code-block-copy-button']),
@@ -212,13 +245,11 @@ describe('family reach by default', () => {
       on: 'button',
       only: true,
     });
-    const named = (r.data.embedded ?? []).map(
-      (/** @type {any} */ x) => x.part,
-    );
+    const named = (r.data.embedded ?? []).map((/** @type {any} */ x) => x.part);
     expect([...named].sort()).toEqual([...drawnAsButton].sort());
     for (const x of r.data.embedded ?? [])
       expect(x.keep).toMatch(
-        new RegExp(`set e background-image \\S+ --on ${x.part}$`),
+        new RegExp(`set e background-image \\S+ --on ${x.part}( --only)?$`),
       );
     expect(r.data.notes.join(' ')).toMatch(/also reaches .*calendar-nav/);
     // Its line keeps the part as Core draws it: named no more.
@@ -230,11 +261,16 @@ describe('family reach by default', () => {
       cwd,
       on: 'calendar-nav',
     });
-    const again = await themeEditSet('e', 'background-image', 'linear-gradient(#ffffff, #dddddd)', {
-      cwd,
-      on: 'button',
-      only: true,
-    });
+    const again = await themeEditSet(
+      'e',
+      'background-image',
+      'linear-gradient(#ffffff, #dddddd)',
+      {
+        cwd,
+        on: 'button',
+        only: true,
+      },
+    );
     expect(
       (again.data.embedded ?? []).map((/** @type {any} */ x) => x.part),
     ).not.toContain('calendar-nav');
@@ -255,7 +291,9 @@ describe('family reach by default', () => {
       new RegExp(`\\.astryx-typeahead-option:hover[^{]*\\{[^}]*${esc}`),
     );
     expect(css).toMatch(
-      new RegExp(`\\.astryx-typeahead-option\\[data-highlighted[^{]*\\{[^}]*${esc}`),
+      new RegExp(
+        `\\.astryx-typeahead-option\\[data-highlighted[^{]*\\{[^}]*${esc}`,
+      ),
     );
   }, 240_000);
 
@@ -278,11 +316,16 @@ describe('family reach by default', () => {
   it('a see-through color stays on the part: it is a tint over its own ground', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('tr', {cwd, like: 'neutral'});
-    const r = await themeEditSet('tr', 'background-color', 'rgba(0, 0, 0, 0.5)', {
-      cwd,
-      on: 'top-nav-item',
-      state: 'selected',
-    });
+    const r = await themeEditSet(
+      'tr',
+      'background-color',
+      'rgba(0, 0, 0, 0.5)',
+      {
+        cwd,
+        on: 'top-nav-item',
+        state: 'selected',
+      },
+    );
     expect(r.data.parts).toEqual(['top-nav-item']);
   }, 240_000);
 
@@ -293,7 +336,19 @@ describe('family reach by default', () => {
       unreadableReach(
         'side-nav-item',
         ['side-nav-item', 'top-nav-item', 'pagination-dot'],
-        [p('text', 'top-nav-item', '', '', 'top-nav-item', '', '', 'Inbox', 'light')],
+        [
+          p(
+            'text',
+            'top-nav-item',
+            '',
+            '',
+            'top-nav-item',
+            '',
+            '',
+            'Inbox',
+            'light',
+          ),
+        ],
       ),
     ).toEqual(['top-nav-item']);
     // Even where the part named fails too, the member is kept out.
@@ -302,8 +357,28 @@ describe('family reach by default', () => {
         'side-nav-item',
         ['side-nav-item', 'top-nav-item'],
         [
-          p('text', 'side-nav-item', '', '', 'side-nav-item', '', '', 'Home', 'light'),
-          p('text', 'top-nav-item', '', '', 'top-nav-item', '', '', 'Inbox', 'light'),
+          p(
+            'text',
+            'side-nav-item',
+            '',
+            '',
+            'side-nav-item',
+            '',
+            '',
+            'Home',
+            'light',
+          ),
+          p(
+            'text',
+            'top-nav-item',
+            '',
+            '',
+            'top-nav-item',
+            '',
+            '',
+            'Inbox',
+            'light',
+          ),
         ],
       ),
     ).toEqual(['top-nav-item']);
@@ -354,12 +429,17 @@ describe('family reach by default', () => {
           ),
         );
       // A disabled look of the theme's own wins.
-      await themeEditSet(slug, 'background-image', 'linear-gradient(#eeeeee, #dddddd)', {
-        cwd,
-        on: 'button',
-        state: 'disabled',
-        when: `variant:${variant}`,
-      });
+      await themeEditSet(
+        slug,
+        'background-image',
+        'linear-gradient(#eeeeee, #dddddd)',
+        {
+          cwd,
+          on: 'button',
+          state: 'disabled',
+          when: `variant:${variant}`,
+        },
+      );
       expect(cssOf(slug)).toContain('linear-gradient(#eeeeee, #dddddd)');
     },
     240_000,
