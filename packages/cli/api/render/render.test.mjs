@@ -444,6 +444,15 @@ describe('render(): a page that uses nothing from Astryx', () => {
     expect(exported('owncss/page.tsx')).toBe(false);
   });
 
+  it('refuses a page whose own stylesheet reaches only a package stylesheet with nothing from Astryx', async () => {
+    put('pkgplain/node_modules/@rl3/plain/package.json', JSON.stringify({name: '@rl3/plain', version: '1.0.0'}));
+    put('pkgplain/node_modules/@rl3/plain/plain.css', '.plain { color: red; }\n');
+    put('pkgplain/globals.css', "@import '@rl3/plain/plain.css';\n");
+    put('pkgplain/page.tsx', "import './globals.css';\nexport default function Page() {\n  return <p className=\"plain\">Plain</p>;\n}\n");
+    expect(await codeOf(() => render('pkgplain/page.tsx', {cwd: dir}))).toBe('ERR_RENDER_NOT_ASTRYX');
+    expect(exported('pkgplain/page.tsx')).toBe(false);
+  });
+
   it('refuses a page alone in an Astryx package\'s folder: the page itself does not count', async () => {
     put('kitalone/package.json', JSON.stringify({name: '@astryxdesign/rl3-kit-alone', private: true}));
     put('kitalone/page.tsx', 'export default function Page() {\n  return <p>Alone</p>;\n}\n');
@@ -472,6 +481,15 @@ describe('render(): a page that uses nothing from Astryx', () => {
       {
         'globals/globals.css': "@import '@astryxdesign/core/astryx.css';\n",
         'globals/page.tsx': "import './globals.css';\nexport default function Page() {\n  return <p>Styled</p>;\n}\n",
+      },
+    ],
+    [
+      'its own stylesheet through a package stylesheet that imports an Astryx stylesheet',
+      {
+        'pkgcss/node_modules/@rl3/theme/package.json': JSON.stringify({name: '@rl3/theme', version: '1.0.0'}),
+        'pkgcss/node_modules/@rl3/theme/theme.css': "@import '@astryxdesign/core/astryx.css';\n",
+        'pkgcss/globals.css': "@import '@rl3/theme/theme.css';\n",
+        'pkgcss/page.tsx': "import './globals.css';\nexport default function Page() {\n  return <p>Themed</p>;\n}\n",
       },
     ],
     [

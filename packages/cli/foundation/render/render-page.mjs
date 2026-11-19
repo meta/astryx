@@ -243,12 +243,37 @@ export function importParams(params) {
 }
 
 /**
- * Whether one of the page's own stylesheets imports an Astryx package's
- * stylesheet, directly or through another of its own stylesheets.
+ * Where a stylesheet's `@import` of `url` leads, read the way a render inlines
+ * it: a relative one from the importing sheet's folder, a package one
+ * (`@scope/pkg/x.css`) by Node resolution from the importing sheet.
+ * @param {string} url the import's address, as written
+ * @param {string} file the importing stylesheet's path
+ * @param {ServedSet | null} served
+ * @returns {{kind: 'remote' | 'preprocessed' | 'missing'} | {kind: 'sheet', target: string, fromPackage: boolean}}
+ */
+function resolveImport(url, file, served) {
+  if (/^([a-z]+:)?\/\//i.test(url)) return {kind: 'remote'};
+  if (/\.(scss|sass|less)$/i.test(url)) return {kind: 'preprocessed'};
+  const relative = path.resolve(path.dirname(file), url);
+  if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
+    return fs.existsSync(relative)
+      ? {kind: 'sheet', target: relative, fromPackage: false}
+      : {kind: 'missing'};
+  }
+  const target = resolveServed(url.replace(/^~/, ''), file, served);
+  return target ? {kind: 'sheet', target, fromPackage: true} : {kind: 'missing'};
+}
+
+/**
+ * Whether the page's own stylesheets reach an Astryx package's stylesheet
+ * through their `@import`s, followed as {@link expandImports} follows them
+ * (project and package stylesheets alike). A package import counts by the
+ * package it names, as the page's script counts a package stylesheet.
  * @param {{file: string, css: string}[]} sheets
+ * @param {ServedSet | null} served
  * @returns {boolean}
  */
-function importsAstryxSheet(sheets) {
+function importsAstryxSheet(sheets, served) {
   /** @type {Set<string>} */
   const seen = new Set();
   /** @param {string} file @param {string} css @returns {boolean} */
@@ -266,14 +291,13 @@ function importsAstryxSheet(sheets) {
     root.walkAtRules(/^import$/i, rule => {
       const url = importParams(rule.params)?.url;
       if (found || !url) return;
-      if (/^~?@astryxdesign\//.test(url)) {
-        found = true;
-        return;
+      const to = resolveImport(url, file, served);
+      if (to.kind === 'remote' || to.kind === 'preprocessed') return;
+      if (/^@astryxdesign\//.test(url.replace(/^~/, ''))) {
+        found = to.kind === 'missing' || to.fromPackage;
+        if (found) return;
       }
-      const target = path.resolve(path.dirname(file), url);
-      if (!/^([a-z]+:)?\/\//i.test(url) && /\.css$/i.test(target) && fs.existsSync(target)) {
-        found = visit(target, fs.readFileSync(target, 'utf8'));
-      }
+      if (to.kind === 'sheet') found = visit(to.target, fs.readFileSync(to.target, 'utf8'));
     });
     return found;
   };
@@ -312,7 +336,8 @@ function expandImports(file, css, ctx) {
     const parsed = importParams(rule.params);
     if (!parsed || !parsed.url) return;
     const {url} = parsed;
-    if (/^([a-z]+:)?\/\//i.test(url)) {
+    const to = resolveImport(url, file, ctx.served);
+    if (to.kind === 'remote') {
       ctx.warnings.push({
         code: 'remote-asset',
         message: `${path.basename(file)} imports ${url}, which a sandboxed page cannot load, so it is left out; save it beside the stylesheet and import it instead.`,
@@ -320,7 +345,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    if (/\.(scss|sass|less)$/i.test(url)) {
+    if (to.kind === 'preprocessed') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.`,
@@ -328,17 +353,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
-    const relative = path.resolve(path.dirname(file), url);
-    /** @type {string | null} */
-    let target;
-    let fromPackage = false;
-    if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
-      target = fs.existsSync(relative) ? relative : null;
-    } else {
-      target = resolveServed(url.replace(/^~/, ''), file, ctx.served);
-      fromPackage = target !== null;
-    }
-    if (!target) {
+    if (to.kind === 'missing') {
       ctx.warnings.push({
         code: 'missing-asset',
         message: `${path.basename(file)} imports ${url}, which was not found, so its styles are missing.`,
@@ -346,6 +361,7 @@ function expandImports(file, css, ctx) {
       rule.remove();
       return;
     }
+    const {target, fromPackage} = to;
     if (!fromPackage) ctx.importers.set(target, (ctx.importers.get(target) ?? new Set()).add(file));
     if (seen.has(target) || ctx.included.has(target)) {
       rule.remove();
@@ -1405,12 +1421,12 @@ export async function renderPage(entry, options = {}) {
 
   // A page that uses nothing from Astryx is not what the command makes: its
   // own app's build shares it. Its script's module graph (local components,
-  // re-exports and lazy imports included) and the Astryx stylesheets it
-  // imports, directly or through its own stylesheets, decide, before
-  // any image is fetched or anything written. A markup-only render builds no script
-  // and is not checked.
+  // re-exports and lazy imports included) and the Astryx stylesheets its own
+  // stylesheets reach decide, before any stylesheet is expanded, any asset
+  // inlined, any image fetched or anything written. A markup-only render
+  // builds no script and is not checked.
   const ownSheets = /** @type {{file: string, css: string}[]} */ (message.importedCss ?? []);
-  if (message.astryx === false && !importsAstryxSheet(ownSheets)) {
+  if (message.astryx === false && !importsAstryxSheet(ownSheets, served)) {
     throw new RenderError(
       'ERR_RENDER_NOT_ASTRYX',
       `${path.basename(entry)} uses no Astryx components or styles; \`astryx experimental export\` only writes pages built with Astryx. Don't add Astryx to this app to export it: share the page with the app's own build instead (for a Vite app, a single-file build); nothing was written.`,
