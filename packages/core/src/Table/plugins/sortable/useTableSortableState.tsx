@@ -34,6 +34,14 @@ import {useCommittedRef} from '../../../hooks/useCommittedRef';
  */
 export type TableSortComparator<T> = (a: T, b: T) => number;
 
+function isMissingSortValue(value: unknown): boolean {
+  return (
+    value == null ||
+    (typeof value === 'number' && Number.isNaN(value)) ||
+    (value instanceof Date && Number.isNaN(value.getTime()))
+  );
+}
+
 function toSortableString(value: unknown): string {
   if (value instanceof Date) {
     return value.toISOString();
@@ -170,13 +178,11 @@ function defaultCompare<T extends Record<string, unknown>>(
   const aVal = a[sortKey];
   const bVal = b[sortKey];
 
-  // null/undefined/NaN sort to the end. NaN must not reach the numeric fast
-  // path: a NaN comparator result reads as "equal" to Array.sort, which makes
-  // the comparator inconsistent and corrupts the order of the other rows.
-  const aMissing =
-    aVal == null || (typeof aVal === 'number' && Number.isNaN(aVal));
-  const bMissing =
-    bVal == null || (typeof bVal === 'number' && Number.isNaN(bVal));
+  // Missing values never reach the comparisons below. A NaN result reads as
+  // equal to Array.sort and breaks the order of the other rows. An Invalid
+  // Date throws in toISOString.
+  const aMissing = isMissingSortValue(aVal);
+  const bMissing = isMissingSortValue(bVal);
   if (aMissing && bMissing) {
     return 0;
   }
