@@ -428,7 +428,8 @@ works on is `spec:AST-040` FR9's.
     not-found hint, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the JavaScript `theme build` compiles
     from a theme's local TypeScript or JSX modules, what `theme build` finds
-    when it checks a theme's pseudo-class keys and token names, the lookup
+    when it checks a theme's pseudo-class keys, token names and settings
+    the browser won't show as written, the lookup
     commands'
     not-found hint's name summaries of folder trees, npm's list of the files an integration
     package packs (for `integration check` and `doctor integration validate`
