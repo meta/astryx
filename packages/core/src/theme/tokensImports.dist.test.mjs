@@ -3,10 +3,10 @@
 /**
  * @file tokensImports.dist.test.mjs
  * @input Core's source, compiled file by file with Core's own Babel config
- *   as `build:esm` compiles dist, from the Button, Icon, Link and IconButton
- *   package entries
- * @output No built module those entries reach imports the theme-rule
- *   generator
+ *   as `build:esm` compiles dist, from the Button, Icon, Link, IconButton and
+ *   theme/tokens package entries
+ * @output No built module those component entries reach imports the
+ *   theme-rule generator, and the theme/tokens entry reaches no theme builder
  * @position Built-output boundary test of packages/core/src/theme/tokens.ts
  *
  * A host can keep every export of every module it loads, with no unused
@@ -28,6 +28,14 @@ const CORE_ROOT = path.resolve(
 );
 const SRC = path.join(CORE_ROOT, 'src');
 const GENERATOR = 'theme/generateThemeRules.ts';
+// The theme builder and the modules that only it loads.
+const THEME_BUILDER = [
+  'theme/defineTheme.ts',
+  'theme/resolveThemeValues.ts',
+  'theme/themeAdaptations.ts',
+  'theme/localTokens.ts',
+  'theme/themeRegistry.ts',
+];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs'];
 
 /** @type {Record<string, {source: string}>} */
@@ -142,5 +150,19 @@ describe('the compiled component entries', () => {
 
   it('finds the generator from the theme entry, which exports it', async () => {
     expect(await reachedModules('./theme')).toContain(GENERATOR);
+  }, 120_000);
+});
+
+describe('the compiled theme/tokens entry', () => {
+  it('reaches no theme builder and no generator, with every import and re-export followed', async () => {
+    const reached = await reachedModules('./theme/tokens');
+    expect(
+      [...THEME_BUILDER, GENERATOR].filter(file => reached.has(file)),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('finds every theme builder module from the theme entry, which exports defineTheme', async () => {
+    const reached = await reachedModules('./theme');
+    expect(THEME_BUILDER.filter(file => !reached.has(file))).toEqual([]);
   }, 120_000);
 });
