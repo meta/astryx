@@ -153,19 +153,19 @@ export interface IconSetData {
   exclude?: string[];
   /**
    * The variants the set supplies, lower-kebab names such as `outline` and
-   * `solid`; absent when it has one look. A variant is a named look the set
+   * `solid`; absent when it has one variant. A variant is a named look the set
    * supplies; size comes from CSS.
    */
   variants?: string[];
   /** The variant an icon's own `export` draws. */
   default?: IconSetDefault;
-  /** The export that maps each built-in definition in `map` to its artwork. */
+  /** The export that maps each built-in meaning in `map` to its artwork. */
   themeMap?: string;
   /**
-   * Which of this set's icons draws each icon definition, by definition name:
+   * Which of this set's icons draws each icon meaning, by meaning name:
    * Astryx's (`astryx docs cli/experimental/icon-definitions`) or one the set declares in its
-   * `definitions` folder. One icon may draw several definitions; each
-   * definition maps to one icon.
+   * `definitions` folder. One icon may draw several meanings; each
+   * meaning maps to one icon.
    */
   map?: Record<string, string>;
   /**

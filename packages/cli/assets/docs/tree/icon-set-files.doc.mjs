@@ -28,6 +28,6 @@ export const docs = {
     'IconDefinitionDoc',
   ],
   description:
-    'Every field of the files an icon set is made of: the descriptor, the data file, and an icon definition.',
+    'Every field of the files an icon set is made of: the descriptor, the data file, and an icon meaning.',
   sections: await buildExperimentalAuthoringSections(),
 };
