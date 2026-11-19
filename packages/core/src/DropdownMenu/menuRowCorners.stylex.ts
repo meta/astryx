@@ -5,8 +5,8 @@
  * @input The menu's radius and padding variables
  * @output Exports menuRowCornerStyles: a menu row's corners, each the menu's
  *   corner less the menu's padding, never below 0
- * @position Shared by DropdownMenu's item, checkbox item and radio item (and
- *   so the context menu, which renders them)
+ * @position Shared by DropdownMenu's item, checkbox item, radio item and
+ *   sub-menu row (and so the context menu, which renders them)
  *
  * Each corner follows the menu corner it sits inside: a theme that gives the
  * menu corners of different radii (a corner variable the theme pipeline

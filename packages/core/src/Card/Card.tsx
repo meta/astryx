@@ -61,6 +61,16 @@ export type CardVariant = keyof CardVariantMap;
 const styles = stylex.create({
   card: {
     '--_card-radius': radiusVars['--radius-container'],
+    // The theme's corner variables inherit: an unthemed surface inside a
+    // themed one resets them, so what it hands each corner is its own radius.
+    '--_card-radius-top-left': 'initial',
+    '--_card-radius-top-right': 'initial',
+    '--_card-radius-bottom-right': 'initial',
+    '--_card-radius-bottom-left': 'initial',
+    '--_card-radius-start-start': 'initial',
+    '--_card-radius-start-end': 'initial',
+    '--_card-radius-end-start': 'initial',
+    '--_card-radius-end-end': 'initial',
     borderRadius: 'var(--_card-radius)',
     // A card in a flex row or grid cell yields to its track instead of
     // holding it at the card's min-content width (a long ID or a nowrap row

@@ -183,6 +183,16 @@ const styles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
+    // The theme's corner variables inherit: an unthemed surface inside a
+    // themed one resets them, so what it hands each corner is its own radius.
+    '--_dropdown-menu-radius-top-left': 'initial',
+    '--_dropdown-menu-radius-top-right': 'initial',
+    '--_dropdown-menu-radius-bottom-right': 'initial',
+    '--_dropdown-menu-radius-bottom-left': 'initial',
+    '--_dropdown-menu-radius-start-start': 'initial',
+    '--_dropdown-menu-radius-start-end': 'initial',
+    '--_dropdown-menu-radius-end-start': 'initial',
+    '--_dropdown-menu-radius-end-end': 'initial',
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
     padding: spacingVars['--spacing-1'],
     borderRadius: 'var(--_dropdown-menu-radius)',

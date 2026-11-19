@@ -313,3 +313,27 @@ export const BleedListInDialogWithRoundedBottom: Story = {
     </Theme>
   ),
 };
+
+/** A theme that rounds only a muted Card, more than the default. */
+const roundedMutedCard = defineTheme({
+  name: 'container-corners-rounded-muted-card',
+  components: {card: {'variant:muted': {borderRadius: '24px'}}},
+});
+
+/**
+ * A default Card inside a Card the theme rounds more: the table that fills
+ * the inner card takes the inner card's corners, not the outer card's.
+ */
+export const TableInDefaultCardInsideRoundedCard: Story = {
+  render: () => (
+    <Theme theme={roundedMutedCard} mode="light">
+      <div style={{width: 400}}>
+        <Card variant="muted">
+          <Card>
+            <OrdersTable />
+          </Card>
+        </Card>
+      </div>
+    </Theme>
+  ),
+};

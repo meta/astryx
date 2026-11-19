@@ -223,6 +223,16 @@ const styles = stylex.create({
     // that sets no color of its own (a selected nav row) needs this.
     color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // The theme's corner variables inherit: an unthemed surface inside a
+    // themed one resets them, so what it hands each corner is its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     display: 'none',
@@ -346,6 +356,16 @@ const styles = stylex.create({
     padding: 0,
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
+    // The theme's corner variables inherit: an unthemed surface inside a
+    // themed one resets them, so what it hands each corner is its own radius.
+    '--_dialog-radius-top-left': 'initial',
+    '--_dialog-radius-top-right': 'initial',
+    '--_dialog-radius-bottom-right': 'initial',
+    '--_dialog-radius-bottom-left': 'initial',
+    '--_dialog-radius-start-start': 'initial',
+    '--_dialog-radius-start-end': 'initial',
+    '--_dialog-radius-end-start': 'initial',
+    '--_dialog-radius-end-end': 'initial',
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
     // Forced colors removes box-shadow, which is this surface's only edge.

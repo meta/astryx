@@ -342,4 +342,19 @@ test.describe('Container corners (Chromium)', () => {
       '16px',
     ]);
   });
+
+  test('a table that fills a default Card inside a Card the theme rounds more takes the corners of the inner card', async ({
+    page,
+  }) => {
+    await mount(
+      page,
+      'table-in-default-card-inside-rounded-card',
+      TABLE_REGION,
+    );
+    const outer = await radii(page, '#storybook-root .astryx-card', 0);
+    const inner = await radii(page, '#storybook-root .astryx-card', 1);
+    expect(outer).toEqual(['24px', '24px', '24px', '24px']);
+    expect(inner).not.toEqual(outer);
+    expect(await radii(page, TABLE_REGION)).toEqual(inner);
+  });
 });
