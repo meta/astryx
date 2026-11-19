@@ -4918,6 +4918,9 @@ function badgeChoices(style, colors) {
   return out;
 }
 
+/** The properties that are an effect on one part: shadows and filters. */
+const EFFECT_THINGS = /^(?:text-shadow|box-shadow|filter|backdrop-filter)$/;
+
 /**
  * The family roles a setting on one of their members reaches by default,
  * the most particular first: a look set on a button reaches every part
@@ -4938,8 +4941,12 @@ const REACH_ROLES = [
  * always-alike group the part is in (inputs, checks, menus), else, for a
  * CSS property or a dial, the family role the census reads from its
  * structure (a selected or active look: the selected items; any other: the
- * first of its look roles). None for a group named itself, a role font, or
- * a part in no family.
+ * first of its look roles). None for a group named itself, a role font, a
+ * part in no family, or an effect (a shadow or a filter) in a family role:
+ * an effect is a mark on the one part it is set on, and reaches the role's
+ * other members only when `--on` names it. The always-alike groups take
+ * every change as one, and an overlay's box shadow (its lift) reaches the
+ * other overlays.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @returns {string | null}
@@ -4957,6 +4964,19 @@ export function reachGroupOf(ctx, s) {
     (groups.controls ?? []).includes(String(s.on))
   )
     return null;
+  // (A box shadow made only of inset rings, `inset 0 0 0 1px <color>`, is
+  // how a border for one mode is written: an edge, which reaches as a
+  // border does. The color may hold commas: light-dark(), rgba(). A ring
+  // followed by another shadow carries that shadow, an effect: it stays.)
+  const ring = splitTop(String(/** @type {any} */ (s).value ?? ''), ',').every(
+    layer =>
+      /^inset\s+0(?:px)?\s+0(?:px)?\s+0(?:px)?\s+[\d.]+[a-z%]*\s+\S/i.test(
+        layer.trim(),
+      ),
+  );
+  const effect =
+    EFFECT_THINGS.test(kebab(String(s.thing ?? ''))) &&
+    !(kebab(String(s.thing ?? '')) === 'box-shadow' && ring);
   // (A token set on a part is what that part reads inside: a family's
   // members read their own, so no drawing tells which take it alike.)
   if (String(s.thing ?? '').startsWith('--')) return null;
@@ -4964,7 +4984,33 @@ export function reachGroupOf(ctx, s) {
   // selected look reaches the selected items.)
   const roles =
     String(s.state ?? '') === 'selected' ? ['selected-items'] : REACH_ROLES;
-  return roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  const role =
+    roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  // A floating frame's shadow is its lift, which every overlay shares (a
+  // dialog's frame reaches the drawer, sheet and popover): a box shadow,
+  // or a drop shadow drawn as a filter.
+  const lift =
+    kebab(String(s.thing)) === 'box-shadow' ||
+    (kebab(String(s.thing)) === 'filter' &&
+      /drop-shadow\(/i.test(String(/** @type {any} */ (s).value ?? '')));
+  if (effect && !(role === 'overlays' && lift)) return null;
+  return role;
+}
+
+/**
+ * How an effect (a shadow, a text shadow, a filter) set on one member of a
+ * group that reaches by default goes, as `how` says it: an always-alike
+ * group takes it as one (`spreads`); the overlays share a box shadow, their
+ * lift, and keep other effects on the member (`box-shadow`); any other
+ * family keeps it on the member (`stays`: `--on <group>` reaches them all).
+ * Null for a group that reaches only when named.
+ * @param {string} name
+ * @returns {'spreads' | 'box-shadow' | 'stays' | null}
+ */
+export function groupEffects(name) {
+  if (AUTO_SPREAD.includes(name)) return 'spreads';
+  if (!groupReachesByDefault(name)) return null;
+  return name === 'overlays' ? 'box-shadow' : 'stays';
 }
 
 /**
@@ -5223,6 +5269,29 @@ export function heldVariantsOf(ctx, part, newProblems) {
 }
 
 /**
+ * Whether the theme sets the thing itself in a placement (an older
+ * `--when mode:drawer` color), in the mode given or in any mode: that
+ * setting wins there, as a part's own setting does, so no hold is written
+ * or named for it.
+ * @param {ThemeData} data
+ * @param {Setting} s
+ * @param {string} variant
+ * @param {string} [mode]
+ */
+export function ownsPlacement(data, s, variant, mode) {
+  return data.settings.some(
+    x =>
+      x !== s &&
+      String(x.value).trim() !== 'revert-layer' &&
+      x.on === s.on &&
+      kebab(String(x.thing)) === kebab(String(s.thing)) &&
+      x.when === variant &&
+      (x.state ?? '') === (s.state ?? '') &&
+      (!x.mode || !mode || x.mode === mode),
+  );
+}
+
+/**
  * The placements of a part (`mode:drawer`) where a text color set on it
  * reads under 4.5:1 on the ground the census drew its text on there, as
  * this theme builds that ground (failsInPlacement), while the part also
@@ -5450,29 +5519,6 @@ export function failingModes(ctx, data, s, variant) {
       ) < 4.5
     );
   });
-}
-
-/**
- * Whether the theme sets the thing itself in a placement (an older
- * `--when mode:drawer` color), in the mode given or in any mode: that
- * setting wins there, as a part's own setting does, so no hold is written
- * or named for it.
- * @param {ThemeData} data
- * @param {Setting} s
- * @param {string} variant
- * @param {string} [mode]
- */
-export function ownsPlacement(data, s, variant, mode) {
-  return data.settings.some(
-    x =>
-      x !== s &&
-      String(x.value).trim() !== 'revert-layer' &&
-      x.on === s.on &&
-      kebab(String(x.thing)) === kebab(String(s.thing)) &&
-      x.when === variant &&
-      (x.state ?? '') === (s.state ?? '') &&
-      (!x.mode || !mode || x.mode === mode),
-  );
 }
 
 /**
@@ -6459,8 +6505,9 @@ function drawnAlike(ctx, s, member, exact = false) {
         ? 'background-color'
         : kebab(thing);
   // A color is the part's own: members take it only where they draw that
-  // same color (a toast's fill never becomes a banner's). A shape, an edge,
-  // a shadow or a layered fill is a look: by kind.
+  // same color (a toast's fill never becomes a banner's). A shape, an edge
+  // or a layered fill is a look: by kind. (An effect reaches a family only
+  // as reachGroupOf allows: an overlay's lift.)
   const byValue = exact || COLOR_PROPS.test(prop);
   // A see-through color is a tint over what lies under the part: it reads
   // alike only on the same ground, so it stays on the part named.

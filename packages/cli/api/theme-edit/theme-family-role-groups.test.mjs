@@ -172,6 +172,28 @@ describe('a look said of one member stays on it (Bootstrap 1.4)', () => {
     ]);
   }, 240_000);
 
+  it("a button shadow stays on the button and names the family's line", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('bf', {cwd, like: 'neutral'});
+    const lines = await first(
+      'buttons with a 1px solid #333333 border and a 0 1px 2px #000000 shadow',
+      'bf',
+    );
+    expect(lines).toEqual([
+      "set bf border '1px solid #333333' --on button",
+      "set bf box-shadow '0 1px 2px #000000' --on button",
+    ]);
+    const r = /** @type {any} */ (
+      await themeEditSet('bf', 'box-shadow', '0 1px 2px #000000', {
+        cwd,
+        on: 'button',
+      })
+    );
+    expect(r.data.notes.join('\n')).toMatch(
+      /box-shadow stays on button: an effect reaches its family \(button-like\) only when --on names it; for the family: .*--on button-like/,
+    );
+  }, 240_000);
+
   it("a border and a shadow said as items of the dialogs' list stay on the dialog", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('d', {cwd, like: 'neutral'});

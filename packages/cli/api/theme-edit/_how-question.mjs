@@ -14073,7 +14073,8 @@ export function draftAnswer(ctx, env, question) {
       ...Object.fromEntries(Object.entries(flags).filter(([, v]) => v)),
       // One member of a group ("the text area") is that member only; set
       // otherwise reaches the whole group.
-      // (set spreads only the inputs and checks groups).
+      // (set spreads inputs and checks from one member; a menu said by
+      // name means the menus, which set reaches drawn alike).
       ...(flags.on &&
       ['inputs', 'checks'].some(g =>
         (FAMILIES[g] ?? []).includes(/** @type {string} */ (flags.on)),
