@@ -307,13 +307,11 @@ describe('defineTheme({palette})', () => {
     expect(css).not.toMatch(/--color-text-secondary:\s*(\[|#[0-9a-f]{6},)/);
   });
 
-  it("leaves a coloured card's secondary text to the card, as the official theme does", () => {
-    // A coloured card's own secondary text is that card's ink, not a lift
-    // on the accent tint.
+  it('lifts secondary text on each coloured card, as the official theme does', () => {
     for (const color of ['blue', 'green', 'red', 'yellow']) {
-      expect(palette.components.card?.[`variant:${color}`], color).toBe(
-        undefined,
-      );
+      const lift = palette.components.card?.[`variant:${color}`];
+      expect(lift?.['@light']['--color-text-secondary'], color).toMatch(/^#/);
+      expect(lift?.['@dark']['--color-text-secondary'], color).toMatch(/^#/);
     }
   });
 
