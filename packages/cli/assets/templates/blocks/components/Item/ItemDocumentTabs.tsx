@@ -13,7 +13,7 @@ import {Item} from '@astryxdesign/core/Item';
 import {HStack} from '@astryxdesign/core/Layout';
 import {useToast} from '@astryxdesign/core/Toast';
 import {mergeProps} from '@astryxdesign/core/utils';
-import {DocumentIcon, PlusIcon, XMarkIcon} from '@heroicons/react/24/outline';
+import {FileIcon, AddIcon, CloseIcon} from '@astryxdesign/template-icons';
 
 const TABS = [
   {name: 'Project brief', isActive: true},
@@ -45,7 +45,7 @@ function DocumentTab({name, isActive}: (typeof TABS)[number]) {
       {...getContainerProps()}
       startContent={
         <Icon
-          icon={DocumentIcon}
+          icon={FileIcon}
           size="sm"
           color={isActive ? 'primary' : 'secondary'}
         />
@@ -55,7 +55,7 @@ function DocumentTab({name, isActive}: (typeof TABS)[number]) {
           label={`Close ${name}`}
           variant="ghost"
           size="sm"
-          icon={<Icon icon={XMarkIcon} size="sm" />}
+          icon={<Icon icon={CloseIcon} size="sm" />}
           onClick={() => showToast({body: `Demo: ${name} would close here`})}
           {...mergeProps(revealProps, stylex.props(styles.action))}
         />
@@ -97,7 +97,7 @@ export default function ItemDocumentTabs() {
         tooltip="New document"
         variant="ghost"
         size="sm"
-        icon={<Icon icon={PlusIcon} size="sm" color="secondary" />}
+        icon={<Icon icon={AddIcon} size="sm" color="secondary" />}
         onClick={() =>
           showToast({body: 'Demo: a new document would open here'})
         }

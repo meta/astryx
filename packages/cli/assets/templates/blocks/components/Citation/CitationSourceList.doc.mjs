@@ -11,9 +11,4 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Citation', 'Icon', 'Layout', 'Text'],
-  icons: {
-    BookOpenIcon: 'book',
-    CodeBracketIcon: 'code',
-    GlobeAltIcon: 'globe',
-  },
 };
