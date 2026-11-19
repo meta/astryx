@@ -35,7 +35,7 @@ import {
   MAX_ASSET_BYTES,
   RenderAssetError,
 } from './assets.mjs';
-import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
+import {classesIn, cutCss, cutFontFaces, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID, imageSinks} from './client-bundle.mjs';
 import {remoteImages} from './remote-images.mjs';
@@ -1247,7 +1247,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0]}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0], cutFontFaces?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -1270,6 +1270,9 @@ const SCHEME_CSS =
  *   and reaches no network. The render fetches each https image the page
  *   names, once, so the file carries it (remote-images.mjs; `remoteImages`:
  *   the fetch and its time limits, for tests).
+ *   `cutFontFaces` drops each font face that no character in the page, its
+ *   stylesheet or its script reaches (css-cut.mjs), for a file whose text is
+ *   known (export); a page a person types into keeps every face.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -1491,42 +1494,68 @@ export async function renderPage(entry, options = {}) {
     const included = new Set(sheetFiles);
     /** @type {string[]} */
     const packageSheets = [];
-    /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
-    const sheet = async (file, text) => {
+    /**
+     * A stylesheet's rules cut to the page, with its own imports expanded,
+     * and the warnings that expanding them gave.
+     * @param {string} file @param {string} text
+     * @returns {{file: string, cut: string, expandWarnings: RenderWarning[]}}
+     */
+    const sheet = (file, text) => {
+      /** @type {RenderWarning[]} */
+      const expandWarnings = [];
       try {
         const own = expandImports(file, text, {
-          warnings,
+          warnings: expandWarnings,
           carried: carriedCss,
           importers: cssImporters,
           included,
           packageSheets,
           served,
         });
-        return await inlineWithRemote(cutCss(own, kept, {states}), 'css', {
-          ...ctx,
-          dir: path.dirname(file),
-        });
+        return {file, cut: cutCss(own, kept, {states}), expandWarnings};
       } catch (e) {
-        if (e instanceof RenderAssetError || e instanceof RenderError) throw e;
-        const reason =
-          /** @type {any} */ (e)?.reason ??
-          (e instanceof Error ? e.message : String(e));
-        throw new RenderError(
-          'ERR_RENDER_COMPILE',
-          `${path.relative(dir, file).split(path.sep).join('/')} is not valid CSS: ${reason}`,
-        );
+        warnings.push(...expandWarnings);
+        throw invalidSheet(e, file);
       }
     };
-    for (const [i, text] of sheetText.entries()) {
-      css += await sheet(sheetFiles[i], text);
-    }
+    /** @param {unknown} e @param {string} file */
+    const invalidSheet = (e, file) => {
+      if (e instanceof RenderAssetError || e instanceof RenderError) return e;
+      const reason =
+        /** @type {any} */ (e)?.reason ??
+        (e instanceof Error ? e.message : String(e));
+      return new RenderError(
+        'ERR_RENDER_COMPILE',
+        `${path.relative(dir, file).split(path.sep).join('/')} is not valid CSS: ${reason}`,
+      );
+    };
+    const parts = sheetText.map((text, i) => sheet(sheetFiles[i], text));
     for (const {
       file,
       css: text,
     } of /** @type {{file: string, css: string}[]} */ (
       message.importedCss ?? []
     )) {
-      css += await sheet(file, text);
+      parts.push(sheet(file, text));
+    }
+    // The font faces the page draws with are known from the whole
+    // stylesheet, the markup and the script; the cut runs before the files
+    // are read, so a face it drops is never read, counted or warned about.
+    const stylesheet = [...parts.map(part => part.cut), message.css ?? ''].join(
+      '\n',
+    );
+    const drawn = markup + (script ?? '');
+    for (const {file, cut, expandWarnings} of parts) {
+      warnings.push(...expandWarnings);
+      try {
+        css += await inlineWithRemote(
+          options.cutFontFaces ? cutFontFaces(cut, drawn, stylesheet) : cut,
+          'css',
+          {...ctx, dir: path.dirname(file)},
+        );
+      } catch (e) {
+        throw invalidSheet(e, file);
+      }
     }
     for (const spec of packageSheets)
       if (!sheets.includes(spec)) sheets.push(spec);
