@@ -615,7 +615,7 @@ function changeBlocks(r) {
   const {
     newProblems = [],
     leftProblems = [],
-    widened = [],
+    offered = [],
     leftOut = [],
     fontNotLoaded = [],
     missed: _missed,
@@ -634,18 +634,14 @@ function changeBlocks(r) {
     const {only: _only, ...group} = rest.group;
     rest.group = group;
   }
-  const widenedText = widenedStatus(widened);
   const status = newProblems.length
-    ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}${widenedText ? `, and ${widenedText}` : ''}:`
-    : widenedText
-      ? `${done}, but ${widenedText}:`
-      : done;
+    ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
+    : done;
   // On undo, `setting` and `removed` both name the setting removed, as in
   // the JSON; the status line says the base theme's value is back.
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
-    ...widenedLines(widened),
     // Problems it moved but left failing: said under the new ones.
     ...(leftProblems.length
       ? [
@@ -653,6 +649,7 @@ function changeBlocks(r) {
           ...problemList(leftProblems),
         ]
       : []),
+    ...offeredLines(offered),
     ...(fontNotLoaded.length
       ? [
           list(
@@ -707,38 +704,17 @@ function missedLine(d) {
 }
 
 /**
- * The status line's words for saved settings a change made reach more
- * parts, or '' when there are none.
- * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditWidened[]} widened
- */
-function widenedStatus(widened) {
-  return widened.length
-    ? `it also made ${widened.length} saved setting${widened.length > 1 ? 's' : ''} reach more parts`
-    : '';
-}
-
-/**
- * One line for each saved setting a change made reach more parts, with the
- * command that keeps it on its own part. Narrowed one at a time, the ones
- * not yet narrowed still paint the parts the narrowed ones left, so two or
- * more keep lines also print as one sequence.
- * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditWidened[]} widened
+ * One line for each saved setting whose family gained parts after it was
+ * made: it keeps its reach, and the parts are offered with the line that
+ * takes them.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditOffered[]} offered
  * @returns {string[]}
  */
-function widenedLines(widened) {
-  const keeps = widened.flatMap(w => (w.keep ? [w.keep] : []));
-  return [
-    ...widened.map(w =>
-      w.keep
-        ? `- ${w.setting} now also reaches ${w.parts.join(', ')} (drawn alike); to keep it as it was: ${w.keep}`
-        : `- ${w.setting} now also reaches ${w.parts.join(', ')} (set on the group, so it follows the group's members)`,
-    ),
-    ...(keeps.length > 1
-      ? [
-          `- to keep all ${keeps.length} as they were: ${keeps.join(' && ')}\n  sequence: run as one line, in this order`,
-        ]
-      : []),
-  ];
+function offeredLines(offered) {
+  return offered.map(
+    o =>
+      `- ${o.setting} would also reach ${o.parts.join(', ')}, drawn alike; to let it: ${o.run}`,
+  );
 }
 
 /**
@@ -2569,21 +2545,18 @@ export function registerExperimentalTheme(group, program) {
                       ...(() => {
                         const {
                           newProblems = [],
-                          widened = [],
+                          offered = [],
                           ...rest
                         } = /** @type {any} */ (r.data);
-                        const widenedText = widenedStatus(widened);
                         const tail = newProblems.length
-                          ? `, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}${widenedText ? `, and ${widenedText}` : ''}:`
-                          : widenedText
-                            ? `, but ${widenedText}:`
-                            : '';
+                          ? `, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
+                          : '';
                         return [
                           `[ok] ${rest.theme}: undid ${rest.undid ?? 'the last change'}${rest.refusedBefore ? ` (${rest.refusedBefore})` : ''}${tail}`,
                           ...(newProblems.length
                             ? problemList(newProblems)
                             : []),
-                          ...widenedLines(widened),
+                          ...offeredLines(offered),
                           ...changeFields(rest),
                         ];
                       })(),
