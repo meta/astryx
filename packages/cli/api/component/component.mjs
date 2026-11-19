@@ -40,6 +40,7 @@ import {
   resolveComponentReplacement,
   unscopedComponentOwners,
   linkComponentResponse,
+  linkBlockDescriptions,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -471,7 +472,10 @@ async function componentRead(name, options = {}) {
             });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, owner.package);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, owner.package),
+          cwd,
+        );
       }
       const loaded = await loadComponentDoc(owner.docPath, docOpts);
       // A family member reads as that member, scoped the way the unscoped
@@ -518,7 +522,10 @@ async function componentRead(name, options = {}) {
         });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, scoped.ext.name);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, scoped.ext.name),
+          cwd,
+        );
       }
       const docs = await loadComponentDoc(extDocPath, docOpts);
       if (props) return componentDetailProps(docs, scoped.ext.name);
@@ -648,7 +655,10 @@ async function componentRead(name, options = {}) {
 
   // ── Blocks mode ──────────────────────────────────────────────
   if (blocks) {
-    return componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage);
+    return linkBlockDescriptions(
+      await componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage),
+      cwd,
+    );
   }
 
   // ── Sub-component scoping ────────────────────────────────────

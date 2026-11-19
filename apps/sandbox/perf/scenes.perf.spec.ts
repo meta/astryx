@@ -195,6 +195,13 @@ const INTERACTIONS: Readonly<
       .click();
     await frames(page, 2);
   },
+  // Re-render all 500 tooltip Buttons once.
+  'tooltip-buttons': async page => {
+    await page
+      .getByRole('button', {name: 'Re-render buttons', exact: true})
+      .click();
+    await frames(page, 2);
+  },
   // Open each overlay, let an anchored overlay's entrance end, and close it,
   // OVERLAY_CYCLES times.
   'overlay-churn-settled': async page => {

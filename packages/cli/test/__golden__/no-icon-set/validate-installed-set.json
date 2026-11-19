@@ -630,6 +630,17 @@
             ]
           },
           {
+            "name": "exitFullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "expand",
             "description": "<text>",
             "words": [
@@ -732,6 +743,17 @@
             "name": "frame",
             "description": "<text>",
             "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "fullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -949,7 +971,6 @@
             "name": "message",
             "description": "<text>",
             "words": [
-              "<text>",
               "<text>",
               "<text>"
             ]
@@ -1357,8 +1378,6 @@
             "name": "textCase",
             "description": "<text>",
             "words": [
-              "<text>",
-              "<text>",
               "<text>",
               "<text>",
               "<text>"

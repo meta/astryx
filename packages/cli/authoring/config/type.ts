@@ -109,7 +109,8 @@ export interface AstryxConfig {
   discover?: DiscoverSource;
   /**
    * Where the Astryx skill goes in this project. `astryx init --to` writes
-   * it, and `astryx init` writes each place it names.
+   * it, `astryx init` writes each place it names, and `astryx upgrade
+   * --apply` refreshes them.
    */
   skills?: {
     /**

@@ -218,6 +218,150 @@ describe("a render, which carries the page's script", () => {
     dom.window.close();
   });
 
+  it('keeps a link to a place in the page inside the file, in a frame whose address is the viewer\u2019s', async () => {
+    put(
+      'src/places.tsx',
+      `import {useEffect, useState} from 'react';
+export default function Page() {
+  const [hash, setHash] = useState('none');
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash || 'top');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  return (
+    <main>
+      <span id="big" />
+      <span id="café" />
+      <span id="100%" />
+      <button id="opener" onClick={() => setHash('opened')}>Opener</button>
+      <a href="#big">Big only</a>
+      <div onClick={() => setHash('card')}>
+        <a href="#big" onClick={e => e.stopPropagation()}>Stopped</a>
+      </div>
+      <div id="plain-card" />
+      <a href="#café" onClick={() => document.getElementById('opener')?.click()}>Open then go</a>
+      <a href="#café">Café</a>
+      <a href="#100%">Hundred</a>
+      <a href="#">All</a>
+      <a href="#own" onClick={e => { e.preventDefault(); setHash('handled'); }}>Own</a>
+      <p id="hash">{hash}</p>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/places.tsx', {cwd: dir, out: 'places.html'});
+    // A frame given its document inline (srcdoc) has the viewer's address as
+    // its base, so a bare "#big" would navigate the frame to the viewer.
+    const file = read('places.html').replace(
+      '<head>',
+      '<head><base href="https://viewer.test/board">',
+    );
+    const dom = new JSDOM(file, {
+      url: 'about:srcdoc',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const doc = dom.window.document;
+    const click = (/** @type {string} */ text) => {
+      const link = [...doc.querySelectorAll('a')].find(
+        a => a.textContent === text,
+      );
+      // A mouse press focuses a link before its click, as in a browser.
+      /** @type {any} */ (link)?.focus();
+      const event = new dom.window.MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      link?.dispatchEvent(event);
+      return event;
+    };
+    // A first click on "#", while the address has no fragment yet, is a move
+    // to the top inside the same document, never a load of the file again.
+    /** @type {any} */ (dom.window).stillHere = true;
+    const entries = dom.window.history.length;
+    expect(click('All').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#');
+    expect(/** @type {any} */ (dom.window).stillHere).toBe(true);
+    // A new place adds a history entry, as in a tab, so Back stays in the file.
+    expect(dom.window.history.length).toBe(entries + 1);
+    // A link whose handler stops the click on its way still moves inside the
+    // file, and the card around it never hears the click.
+    expect(click('Stopped').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    expect(doc.getElementById('hash')?.textContent).toBe('#big');
+    expect(click('Big only').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    expect(doc.getElementById('hash')?.textContent).toBe('#big');
+    // A link whose handler stops the click and cancels it without
+    // preventDefault (\`return false\`, \`returnValue = false\`) stays put.
+    const card = /** @type {HTMLElement} */ (doc.getElementById('plain-card'));
+    card.innerHTML =
+      '<a id="falsy" href="#café" onclick="event.stopPropagation(); return false">False</a>' +
+      '<a id="rv" href="#café" onclick="event.stopPropagation(); event.returnValue = false">Return value</a>';
+    click('False');
+    click('Return value');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    // The same link again is a move to the same place, still inside the file.
+    expect(click('Big only').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    // An id the address encodes, and one that is not encoded text.
+    click('Café');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#caf%C3%A9');
+    expect(click('Café').defaultPrevented).toBe(true);
+    click('Hundred');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#100%');
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    // A link whose own handler clicks another element first still moves
+    // inside the file once its own click reaches the window.
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(click('Open then go').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#caf%C3%A9');
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    // A listener the page adds on the window after the file's script still
+    // cancels the move.
+    const cancel = (/** @type {Event} */ e) => e.preventDefault();
+    dom.window.addEventListener('click', cancel);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    dom.window.removeEventListener('click', cancel);
+    // A handler the page adds on the document after the file's script still
+    // cancels the move.
+    const stop = (/** @type {Event} */ e) => e.preventDefault();
+    doc.addEventListener('click', stop);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    doc.removeEventListener('click', stop);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href.startsWith('about:srcdoc')).toBe(true);
+    expect(dom.window.location.hash).toBe('');
+    // A link the page handles itself keeps its own way.
+    click('Own');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(doc.getElementById('hash')?.textContent).toBe('handled');
+    expect(dom.window.location.hash).toBe('');
+    dom.window.close();
+  }, 120_000);
+
   it('asks for no focus in its first paint, and the drawn page focuses as the app does', async () => {
     put(
       'src/focus.tsx',
@@ -228,6 +372,7 @@ describe("a render, which carries the page's script", () => {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/focus.tsx', {cwd: dir, out: 'focus.html'});
@@ -295,6 +440,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/form.tsx', {cwd: dir, out: 'form.html'});
@@ -372,6 +518,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
@@ -423,6 +570,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/pictured.tsx', {cwd: dir, out: 'pictured.html'});
@@ -505,6 +653,7 @@ export default function Notice() {
 export default function Page() {
   return <main><img src={shoe.src} alt="Shoe" /></main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('site/src/shoe.tsx', {cwd: dir, out: 'shoe.html'});
@@ -539,6 +688,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     const rendered = /** @type {any} */ (
@@ -569,6 +719,36 @@ export default function Page() {
     expect(fs.readFileSync(path.join(dir, 'drawn-later-back/src/near.png'))).toEqual(png);
   }, 120_000);
 
+  it('shows an image named with percent-escapes that the page draws only after a click', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    put('escaped-later/c d.png', png);
+    put(
+      'escaped-later/page.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <img src="./c%20d.png" alt="Later" />}</main>;
+}
+`,
+    );
+    await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
+    const dom = new JSDOM(read('escaped-later.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await settle();
+    const doc = dom.window.document;
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await settle();
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(
+      `data:image/png;base64,${png.toString('base64')}`,
+    );
+    dom.window.close();
+    const back = /** @type {any} */ (await render('escaped-later.html', {cwd: dir, reverse: true, out: 'escaped-later-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 120_000);
+
   it('shows the file a relative string names from the page, also when modules in two folders each name one', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
@@ -591,6 +771,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <><CardA /><CardB /></>}</main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('two-folders/page.tsx', {cwd: dir, out: 'two-folders.html'});
@@ -628,6 +809,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
@@ -658,6 +840,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
@@ -778,6 +961,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
@@ -824,7 +1008,7 @@ export default function Page() {
     put('src/lib-x.ts', 'export const a = 1;\n');
     put(
       'src/no-export.tsx',
-      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\n",
+      "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const local = await errorOf(() =>
       render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
@@ -850,7 +1034,7 @@ export default function Page() {
     );
     put(
       'src/lib-y.ts',
-      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\n',
+      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\nimport "@astryxdesign/core/astryx.css";\n',
     );
     const component = await errorOf(() =>
       render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}),
@@ -906,7 +1090,7 @@ export default function Page() {
     );
     put(
       'src/re-and-raw.tsx',
-      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\n",
+      "import {label, type ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
@@ -914,7 +1098,7 @@ export default function Page() {
     put('src/lib-cjs.js', 'module.exports = {a: 1};\n');
     put(
       'src/from-cjs.tsx',
-      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\n",
+      "import {a, b} from './lib-cjs.js';\nexport default function Page() { return <main>{a}{String(b)}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/from-cjs.tsx', {cwd: dir, out: 'from-cjs.html'});
     expect(fs.existsSync(path.join(dir, 'from-cjs.html'))).toBe(true);
@@ -925,7 +1109,7 @@ export default function Page() {
     );
     put(
       'src/js-re.tsx',
-      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\n",
+      "import {ok} from './lib-js.js';\nexport default function Page() { return <main>{ok}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const jsRe = await errorOf(() =>
       render('src/js-re.tsx', {cwd: dir, out: 'js-re.html'}),
@@ -962,7 +1146,7 @@ export default function Page() {
     put('src/lib-load.ts', 'export const other = 1;\n');
     put(
       'src/load-call.tsx',
-      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\n",
+      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const atLoad = await errorOf(() =>
       render('src/load-call.tsx', {cwd: dir, out: 'load-call.html'}),
@@ -982,7 +1166,7 @@ export default function Page() {
     );
     put(
       'src/script-only.tsx',
-      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\n",
+      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const scripted = await errorOf(() =>
       render('src/script-only.tsx', {cwd: dir, out: 'script-only.html'}),
@@ -1001,11 +1185,12 @@ export default function Page() {
   const [panel, setPanel] = useState('closed');
   return <button onClick={() => import('./panel').then(m => setPanel(m.default()))}>{panel}</button>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     put(
       'src/panel.tsx',
-      'export default function Panel() {\n  return "open";\n}\nconst broken = (;\n',
+      'export default function Panel() {\n  return "open";\n}\nconst broken = (;\nimport "@astryxdesign/core/astryx.css";\n',
     );
     let error;
     try {
@@ -1027,7 +1212,9 @@ export default function Page() {
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^scriptBytes:\s+[\d.]+ KB$/m);
+    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB/m);
+    for (const key of ['scriptBytes', 'cssBytes', 'markupBytes', 'sourceBytes'])
+      expect(page.stdout).toMatch(new RegExp(`^${key}:\\s+[\\d.]+ (?:KB|B)$`, 'm'));
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(
@@ -1048,7 +1235,7 @@ export default function Page() {
   it('refuses a page whose script needs Node, naming the module, and writes nothing', async () => {
     put(
       'src/node-page.tsx',
-      `import {readFileSync} from 'node:fs';\nexport default function Page() {\n  return <button onClick={() => readFileSync('x')}>Read</button>;\n}\n`,
+      `import {readFileSync} from 'node:fs';\nexport default function Page() {\n  return <button onClick={() => readFileSync('x')}>Read</button>;\n}\nimport '@astryxdesign/core/astryx.css';\n`,
     );
     const error = await errorOf(() =>
       render('src/node-page.tsx', {cwd: dir, out: 'node-page.html'}),
@@ -1066,7 +1253,7 @@ export default function Page() {
   it('refuses a page whose lazily loaded module is missing, naming the page file as the page names it', async () => {
     put(
       'src/lazy-missing.tsx',
-      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./gone'));\nexport default function Page() {\n  return (\n    <Suspense fallback={<p>Loading</p>}>\n      <Panel />\n    </Suspense>\n  );\n}\n",
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./gone'));\nexport default function Page() {\n  return (\n    <Suspense fallback={<p>Loading</p>}>\n      <Panel />\n    </Suspense>\n  );\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const error = await errorOf(() =>
       render('src/lazy-missing.tsx', {cwd: dir, out: 'lazy-missing.html'}),
@@ -1142,7 +1329,7 @@ export default function Page() {
     );
     put(
       'src/ready.tsx',
-      "import {hasFs} from 'browser-ready';\nimport {EventEmitter} from 'events';\nexport default function Page() {\n  return <p>{String(hasFs)} {typeof EventEmitter}</p>;\n}\n",
+      "import {hasFs} from 'browser-ready';\nimport {EventEmitter} from 'events';\nexport default function Page() {\n  return <p>{String(hasFs)} {typeof EventEmitter}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const ready = /** @type {any} */ (
       await render('src/ready.tsx', {
@@ -1159,11 +1346,11 @@ export default function Page() {
   it('styles a module the page loads lazily, which the server render never imports', async () => {
     put(
       'src/panel.tsx',
-      "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({panel: {color: 'rgb(1, 2, 3)'}});\nexport default function Panel() {\n  return <p {...stylex.props(styles.panel)}>Panel</p>;\n}\n",
+      "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({panel: {color: 'rgb(1, 2, 3)'}});\nexport default function Panel() {\n  return <p {...stylex.props(styles.panel)}>Panel</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     put(
       'src/lazy.tsx',
-      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./panel'));\nexport default function Page() {\n  return (\n    <main>\n      <Suspense fallback={<p>Loading</p>}>\n        <Panel />\n      </Suspense>\n    </main>\n  );\n}\n",
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./panel'));\nexport default function Page() {\n  return (\n    <main>\n      <Suspense fallback={<p>Loading</p>}>\n        <Panel />\n      </Suspense>\n    </main>\n  );\n}\nimport '@astryxdesign/core/astryx.css';\n",
     );
     await render('src/lazy.tsx', {
       cwd: dir,
@@ -1203,7 +1390,7 @@ export default function Page() {
   it('says a chart the render could not draw is drawn by the script', async () => {
     put(
       'src/blank-chart.tsx',
-      'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\n',
+      'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\nimport "@astryxdesign/core/astryx.css";\n',
     );
     const live = /** @type {any} */ (
       await render('src/blank-chart.tsx', {

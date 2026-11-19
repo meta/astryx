@@ -84,6 +84,7 @@ import {
   guideEntry,
   overlayLanguages,
   projectTree,
+  templateLinkProblems,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
@@ -145,7 +146,7 @@ import {
   doctorStylesheetImports,
   doctorStylesheetAtRules,
   builtProjectRoot,
-  savedProjectSkillFiles,
+  readSkillPlaces,
 } from './_adapter.mjs';
 import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
@@ -185,9 +186,8 @@ import {
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
- * @property {Array<{file: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}> | null} [projectSkillFiles]
- *   The project skill files and their states, when astryx.config `skills.to`
- *   saves no `agents-md` place; null otherwise.
+ * @property {import('./_adapter.mjs').SkillPlacesReport|null} [skillPlaces]
+ *   The project's skill places, or null when they could not be read.
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]|null} [integrations]
  *   Every integration the project loaded, or null when the project could not be
  *   read at all.
@@ -207,7 +207,7 @@ import {
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
- * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
+ * @property {{sets: Array<{name: string, package: string, replacedKeys?: Array<{key: string, definition: string}>}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
  *   The project's icon sets (AST-084 FR17), or null when they could not be
  *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
@@ -1157,40 +1157,18 @@ export function checkAgentDocs(ctx) {
       : initFix;
 
   // A project that keeps its Astryx guidance as a skill (astryx.config
-  // `skills.to` without `agents-md`) is judged by its skill files; its agent
-  // files are its own text.
-  const skillFiles = ctx.projectSkillFiles;
-  if (skillFiles) {
-    const current = skillFiles.filter(each => each.state === 'current');
-    const stale = skillFiles.filter(each => each.state === 'differs');
-    const kept = skillFiles.filter(each => each.state === 'edited' || each.state === 'foreign');
-    const list = (/** @type {typeof skillFiles} */ files) => files.map(each => shown(each.file)).join(', ');
-    const keptNote = kept.length > 0 ? ` Kept as they are (edited, or not written by Astryx): ${list(kept)}.` : '';
-    if (stale.length === 0 && current.length > 0) {
-      return {
-        id: 'agent-docs',
-        label: 'AI agent docs',
-        status: 'pass',
-        message: `The Astryx skill matches this release in ${list(current)} (astryx.config skills.to).${keptNote}`,
-      };
-    }
-    if (stale.length === 0 && kept.length > 0) {
-      return {
-        id: 'agent-docs',
-        label: 'AI agent docs',
-        status: 'info',
-        message: `The project keeps its Astryx guidance as a skill (astryx.config skills.to).${keptNote}`,
-      };
-    }
+  // `skills.to` without `agents-md`): its agent files are its own text, and
+  // the skill-places check judges its skill files.
+  const places = ctx.skillPlaces?.places ?? ['agents-md'];
+  if (ctx.skillPlaces && !places.includes('agents-md')) {
+    const astryx = ctx.skillPlaces.files.filter(
+      file => file.state === 'current' || file.state === 'differs' || file.state === 'edited',
+    );
     return {
       id: 'agent-docs',
       label: 'AI agent docs',
-      status: 'warn',
-      message:
-        stale.length > 0
-          ? `The Astryx skill is from another release in ${list(stale)}.${keptNote}`
-          : 'The project saves its Astryx guidance as a skill (astryx.config skills.to), and no skill file is there.',
-      fix: fixFor(`Run \`${getCliInvocation(ctx.cwd)} init\` to write the saved places.`),
+      status: astryx.length > 0 ? 'pass' : 'info',
+      message: `The project keeps its Astryx guidance as a skill (astryx.config skills.to: ${places.join(', ')})${astryx.length > 0 ? `, in ${astryx.map(file => file.path).join(', ')}` : ''}; the skill-places check reports whether each file is there and current.`,
     };
   }
   if (present.length === 0) {
@@ -1269,6 +1247,149 @@ export function checkAgentDocs(ctx) {
     label: 'AI agent docs',
     status: 'pass',
     message: `Astryx agent docs section present in ${withMarkers.map(shown).join(', ')}.`,
+  };
+}
+
+/**
+ * The project's skill places (astryx.config `skills.to`): each file of a
+ * saved `skills` or folder place against this release's project skill, a
+ * project that holds both the block and the skill (agents read Astryx twice),
+ * and a project skill named `astryx`, the computer-level skill's name, which
+ * an agent shows in place of one of the two. Left out of a project that keeps
+ * only the AGENTS.md block and has no project skill.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkSkillPlaces(ctx) {
+  const report = ctx.skillPlaces;
+  if (!report) return null;
+  const blockOnly = report.places.length === 1 && report.places[0] === 'agents-md';
+  if (
+    blockOnly &&
+    report.skillFiles.length === 0 &&
+    report.plainNamed.length === 0 &&
+    report.skillProblems.length === 0
+  ) {
+    return null;
+  }
+  const base = {id: 'skill-places', label: 'Astryx skill places'};
+  const init = (/** @type {string} */ args) => `\`${formatCliCommand(`astryx init ${args}`.trim(), ctx.cwd)}\``;
+  const saved = report.places.join(',');
+  if (report.renderError) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The Astryx skill could not be rendered, so its files were not checked: ${firstLine(report.renderError)}`,
+      fix: `Fix what the message names, then run ${init('')}.`,
+    };
+  }
+  if (report.plainNamed.length > 0) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `${report.plainNamed.join(', ')} ${report.plainNamed.length === 1 ? 'is a project skill' : 'are project skills'} named \`astryx\`, the name of the computer-level skill, so an agent that has both shows only one, and Claude Code shows the computer one.`,
+      fix: `Delete ${report.plainNamed.length === 1 ? 'it' : 'them'}; ${init('--to skills')} writes the project skill as \`astryx-project\`.`,
+    };
+  }
+  const leftOutNote =
+    report.skillProblems.length > 0
+      ? ` Skills left out: ${report.skillProblems.map(problem => `${problem.package}: ${problem.message}`).join(' ')}`
+      : '';
+  const savesBlock = report.places.includes('agents-md');
+  const savesSkill = report.places.some(place => place !== 'agents-md');
+  // Both saved is the person's choice: the note in the pass line says so.
+  const doubled =
+    report.blockFiles.length > 0 && report.skillFiles.length > 0 && !(savesBlock && savesSkill);
+  if (doubled) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The Astryx guidance is here twice: as the block in ${report.blockFiles.join(', ')} and as the skill in ${report.skillFiles.join(', ')}, so agents read it twice.`,
+      fix: savesSkill
+        ? `The project saves ${saved}: remove the Astryx block from ${report.blockFiles.join(', ')} by hand, or run ${init('--to agents-md')} to keep only the block (it removes the skill copies).`
+        : `The project saves agents-md: delete ${report.skillFiles.join(', ')}, or run ${init('--to skills')} to keep only the skill (it removes the block).`,
+    };
+  }
+  // The two copies of a place are one skill: one a person's own and the other
+  // Astryx's means agents read two different texts.
+  // Grouped by place and skill: the project skill and each integration skill
+  // have copies of their own.
+  /** @param {{place: string, skill?: string}} file */
+  const copiesOf = file => `${file.place}\0${file.skill ?? ''}`;
+  const splitKeys = [...new Set(report.files.map(copiesOf))].filter(key => {
+    const states = report.files.filter(file => copiesOf(file) === key).map(file => file.state);
+    return (
+      states.some(state => state === 'edited' || state === 'foreign') &&
+      states.some(state => state === 'current' || state === 'differs' || state === 'absent')
+    );
+  });
+  if (splitKeys.length > 0) {
+    const files = report.files.filter(file => splitKeys.includes(copiesOf(file)));
+    const names = splitKeys.map(key => {
+      const [place, skill] = key.split('\0');
+      return skill ? `${skill} in ${place}` : place;
+    });
+    return {
+      ...base,
+      status: 'warn',
+      message: `The copies of ${names.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : 'Astryx\'s'})`).join(', ')}, so agents read different texts.`,
+      fix: 'Make the copies the same: copy your file over the other, or delete both and run ' + init('') + '.',
+    };
+  }
+  if (report.linkedOut.length > 0) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `Not checked: ${report.linkedOut.join(' ')}`,
+      fix: `Make each folder a real folder inside the project, or choose another place with ${init('--to <places>')}.`,
+    };
+  }
+  const missing = report.files.filter(file => file.state === 'absent');
+  const stale = report.files.filter(file => file.state === 'differs');
+  const kept = report.files.filter(file => file.state === 'edited' || file.state === 'foreign');
+  const leftoverNote =
+    report.leftovers.length > 0
+      ? ` Skills Astryx wrote for an integration this project no longer has: ${report.leftovers.join(', ')}; \`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` or ${init('')} removes them.`
+      : '';
+  const keptNote =
+    kept.length > 0
+      ? ` Kept as they are (edited, or not written by Astryx): ${kept.map(file => file.path).join(', ')}.`
+      : '';
+  const bothNote =
+    report.blockFiles.length > 0 && report.skillFiles.length > 0
+      ? ` The project saves both the block and the skill (${saved}), so agents that read both get it twice.`
+      : '';
+  const codexNote = report.computerSkill && report.skillsFolderFiles.length > 0
+    ? ' This computer also has the computer-level `astryx` skill, so Codex lists both skills.'
+    : '';
+  if (missing.length > 0 || stale.length > 0 || report.leftovers.length > 0) {
+    const missingNote =
+      missing.length > 0 ? ` An Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.` : '';
+    const staleNote =
+      stale.length > 0 ? ` The Astryx skill is from another release in ${stale.map(file => file.path).join(', ')}.` : '';
+    return {
+      ...base,
+      status: 'warn',
+      message: `${(missingNote + staleNote).trim()}${keptNote}${leftoverNote}${codexNote}${leftOutNote}`,
+      fix: `Run ${init('')}: it writes every saved place again, and is the refresh after an integration changes (\`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` also refreshes them after an Astryx update).${leftOutNote ? ' For a skill left out, its package fixes the `skill` its note names.' : ''}`,
+    };
+  }
+  const current = report.files.filter(file => file.state === 'current');
+  if (leftOutNote) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `${leftOutNote.trim()}${keptNote}${codexNote}`,
+      fix: 'Its package fixes the `skill` each note names; until then agents get no line or skill for it.',
+    };
+  }
+  return {
+    ...base,
+    status: kept.length > 0 && current.length === 0 ? 'info' : 'pass',
+    message:
+      current.length > 0
+        ? `The Astryx skill matches this release in ${current.map(file => file.path).join(', ')}.${keptNote}${leftoverNote}${bothNote}${codexNote}`
+        : `Saved places: ${report.places.join(', ')}.${keptNote}${bothNote}${codexNote}`,
   };
 }
 
@@ -1484,7 +1605,8 @@ export function checkIntegrationCoreRange(ctx) {
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
- * other installed set that was withdrawn, with why.
+ * other installed set that was withdrawn, with why, and for each `map` key
+ * of an installed set that names a replaced definition.
  * Icon sets are experimental (spec:AST-017 FR27): only a project where the
  * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
@@ -1581,6 +1703,23 @@ export function checkIconSets(ctx) {
       status: 'warn',
       message: withdrawn.map(each => each.reason).join(' | '),
       fix: 'Run `astryx integration check` in the package that ships the set, or install its module.',
+    };
+  }
+  // A `map` key that names a replaced definition still maps its successor,
+  // so nothing breaks; the set's own package renames the key.
+  const renamed = sets.flatMap(set =>
+    (set.replacedKeys ?? []).map(
+      each =>
+        `${set.package}/${set.name} maps "${each.key}", which "${each.definition}" replaced`,
+    ),
+  );
+  if (renamed.length > 0) {
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `${renamed.join(' | ')}. Each entry maps the definition that replaced it.`,
+      fix: 'In the package that ships the set, rename each map key to the definition that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
     };
   }
   return {
@@ -1830,6 +1969,35 @@ export function checkPackageManager(ctx) {
   };
 }
 
+const TWIN_PROVIDER_FIX =
+  'Both manifests declare the same `providerId`. If they are one ' +
+  'integration installed under two names, keep one of the two ' +
+  'dependencies; if they are different integrations, give each its ' +
+  'own `providerId` in astryx.integration.*.';
+const NAMED_PROVIDER_FIX =
+  'Give each integration its own `providerId` in astryx.integration.*. ' +
+  "A renamed package may keep its predecessor's ID only when the " +
+  'predecessor is no longer installed.';
+
+/**
+ * The fix for a set of provider conflicts: the two-case advice for conflicts
+ * where both manifests declare the ID, the rename advice for the rest, and
+ * both, each named, when the project has some of each.
+ * @param {ReadonlyArray<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} conflicts
+ * @returns {string}
+ */
+function providerConflictFix(conflicts) {
+  const twins = conflicts.filter(
+    integration => integration.__providerConflict?.bothDeclare,
+  ).length;
+  if (twins === conflicts.length) return TWIN_PROVIDER_FIX;
+  if (twins === 0) return NAMED_PROVIDER_FIX;
+  return (
+    `Where both manifests declare the ID: ${TWIN_PROVIDER_FIX} ` +
+    `For the other conflicts: ${NAMED_PROVIDER_FIX}`
+  );
+}
+
 /**
  * Check 6b — every contributing integration owns its provider identity.
  *
@@ -1870,10 +2038,7 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix:
-        'Give each integration its own `providerId` in astryx.integration.*. ' +
-        "A renamed package may keep its predecessor's ID only when the " +
-        'predecessor is no longer installed.',
+      fix: providerConflictFix(conflicts),
     };
   }
 
@@ -2172,9 +2337,10 @@ export async function checkDocsTree(_ctx, options = {}) {
         }
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
-      // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names. A run whose base is not
-      // Core leaves Core's docs out; a link to one of them is not a problem.
+      // typed fields, reference and workflow blocks, and inline links, a
+      // template description's included. A reference block also includes all
+      // it names. A run whose base is not Core leaves Core's docs out; a link
+      // to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
@@ -2185,6 +2351,7 @@ export async function checkDocsTree(_ctx, options = {}) {
       const absent = target =>
         CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
       problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
+      problems.push(...(await templateLinkProblems(catalog, {absent})));
       problems.push(
         ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
@@ -2400,6 +2567,8 @@ export function checkInstallGuidance(ctx) {
  *   the person's choices about the computer-level agent text
  * @property {string | null} [agentTextCommand] the command the skill file
  *   tells agents to run, or null
+ * @property {Array<{path: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}>} [agentTextFolders]
+ *   each folder outside a project that `init --to <folder>` saved
  * @property {string | null} [agentTextInstall] the install step the skill
  *   file records for when that command is not found, or null
  * @property {string} [cwd] the folder doctor runs in, for the printed fix
@@ -2648,11 +2817,30 @@ export function checkComputerAgentText(ctx) {
     label: 'Computer-level agent text',
     status: /** @type {const} */ ('info'),
   };
+  const folders =
+    ctx.agentTextFolders ??
+    (state ? state.folders : []);
+  const staleFolders = folders.filter(f => f.state === 'differs');
+  const deletedFolders = folders.filter(f => f.state === 'absent');
+  const keptFolders = folders.filter(f => f.state === 'edited' || f.state === 'foreign');
+  const folderNote =
+    (folders.length > 0
+      ? ` Also in the folders \`init --to\` saved: ${folders.map(f => f.path).join(', ')}.`
+      : '') +
+    (staleFolders.length > 0
+      ? ` From another release there: ${staleFolders.map(f => f.path).join(', ')}; the CLI installed for the computer refreshes them after its next upgrade, and \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one now.`
+      : '') +
+    (deletedFolders.length > 0
+      ? ` Deleted there, so not refreshed: ${deletedFolders.map(f => f.path).join(', ')}; \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one again.`
+      : '') +
+    (keptFolders.length > 0
+      ? ` Kept as they are (edited, or not written by Astryx): ${keptFolders.map(f => f.path).join(', ')}.`
+      : '');
   if (!settings.install) {
     return {
       ...base,
       message:
-        'The computer-level agent text is turned off (`astryx init --user --remove-agents`), so the CLI installed for the computer does not write it.',
+        `The computer-level agent text is turned off (\`astryx init --user --remove-agents\`), so the CLI installed for the computer does not write it.${folderNote}`,
       fix: `To turn it back on, run \`${formatCliCommand('astryx init --user', ctx.cwd)}\`.`,
     };
   }
@@ -2678,6 +2866,7 @@ export function checkComputerAgentText(ctx) {
     .filter(l => l.state === 'absent' || l.state === 'differs')
     .map(home);
   const linkNote =
+    folderNote +
     (linked.length > 0 ? ` Linked into: ${linked.join(', ')}.` : '') +
     (copied.length > 0 ? ` Copied into: ${copied.join(', ')}.` : '') +
     (skipped.length > 0
@@ -2890,7 +3079,7 @@ export function checkGatherCache(ctx) {
     label: 'Kept catalog cache',
     status: 'info',
     brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys, token names and settings the browser won't show as written, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, what template reads from a template's source to name the components it uses, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
 }
 
@@ -2970,6 +3159,7 @@ export const SYNC_CHECKS = [
   checkIconPlaceholders,
   checkIconImports,
   checkAgentDocs,
+  checkSkillPlaces,
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
@@ -3163,12 +3353,20 @@ export async function runChecks(options = {}) {
     }
   }
 
+  /** @type {DoctorContext['skillPlaces']} */
+  let skillPlaces = null;
+  try {
+    skillPlaces = await readSkillPlaces(cwd);
+  } catch {
+    // Unreadable places leave the skill-places check out.
+  }
+
   /** @type {DoctorContext} */
   const ctx = {
     cwd,
     nodeVersion: process.versions.node,
     coreDir,
-    projectSkillFiles: await savedProjectSkillFiles(cwd),
+    skillPlaces,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
     addedThemePackages: addedThemePackages(cwd),

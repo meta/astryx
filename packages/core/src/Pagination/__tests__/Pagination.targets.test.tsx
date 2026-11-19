@@ -4,7 +4,8 @@
  * @file Pagination.targets.test.tsx
  * @input Pagination in the pages variant, with first/last in compact
  * @output Verifies the control row, its Button cells and the ellipsis carry
- *   their theme targets, the current page's cell reflects data-selected, and
+ *   their theme targets, the current page's cell reflects data-selected, the
+ *   row's first and last controls reflect data-first and data-last, and
  *   the default markup otherwise matches the Button cells' own
  * @position Unit test for Pagination's joined-strip theme seams
  */
@@ -64,5 +65,54 @@ describe('Pagination theme targets', () => {
     // First, previous, next, last.
     expect(items).toHaveLength(4);
     expect(container.querySelector('[data-selected]')).toBeNull();
+  });
+
+  it('names the first and last control in the row as its ends', () => {
+    const {container} = render(
+      <Pagination
+        page={5}
+        onChange={vi.fn()}
+        totalPages={20}
+        variant="pages"
+      />,
+    );
+    const items = [
+      ...container.querySelectorAll<HTMLElement>('.astryx-pagination-item'),
+    ];
+    const firsts = items.filter(item => item.dataset.first === 'first');
+    const lasts = items.filter(item => item.dataset.last === 'last');
+    expect(firsts).toEqual([items[0]]);
+    expect(lasts).toEqual([items.at(-1)]);
+    // Previous and next have tooltips, whose layers can follow them in the
+    // row, so the ends are read from the controls, not the row's children.
+    expect(items[0]?.getAttribute('aria-label')).toMatch(/previous/i);
+    expect(items.at(-1)?.getAttribute('aria-label')).toMatch(/next/i);
+  });
+
+  it('moves the ends to first and last when those buttons show', () => {
+    const {container} = render(
+      <Pagination
+        page={3}
+        onChange={vi.fn()}
+        totalPages={9}
+        variant="compact"
+        hasFirstLast
+      />,
+    );
+    const items = [
+      ...container.querySelectorAll<HTMLElement>('.astryx-pagination-item'),
+    ];
+    expect(items.map(item => item.dataset.first ?? null)).toEqual([
+      'first',
+      null,
+      null,
+      null,
+    ]);
+    expect(items.map(item => item.dataset.last ?? null)).toEqual([
+      null,
+      null,
+      null,
+      'last',
+    ]);
   });
 });

@@ -33,19 +33,48 @@ import {
   scanAutolinkCandidates,
 } from '../../foundation/integrations/autolink.mjs';
 import {
+  COMPUTER_COMMAND,
+  computerInstallStep,
   computerSkillFile,
   displayHomePath,
   inspectComputerAgentText,
+  renderComputerAgentText,
   skillCommandOf,
   skillInstallStepOf,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
-import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
-import * as fs from 'node:fs';
-import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
-import {placeSkillFiles, renderProjectSkill} from '../../foundation/agent-docs/skill-places.mjs';
+import {
+  computerAgentTextSettings,
+  computerSkillFolders,
+} from '../../foundation/env/user-settings.mjs';
 import {managedFileState} from '../../foundation/agent-docs/managed-skill-file.mjs';
-import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
-import {readProjectPlaces} from '../../foundation/agent-docs/skill-place-files.mjs';
+import * as fs from 'node:fs';
+import {
+  AgentDocsHomeError,
+  assertAgentDocsTarget,
+  resolveAgentDocsRoot,
+} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {
+  AGENT_DOC_PATHS,
+  holdsAstryxBlock,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
+import {renderProjectAgentDocsBlock} from '../docs/_adapter.mjs';
+import {
+  COMPUTER_SKILL_NAME,
+  PROJECT_SKILL_FOLDERS,
+  savedComputerFolderSkillFile,
+  PROJECT_SKILL_NAME,
+  placeSkillFiles,
+  renderProjectSkill,
+  savedName,
+} from '../../foundation/agent-docs/skill-places.mjs';
+import {
+  inspectSkillPlace,
+  leftoverIntegrationSkills,
+  readProjectPlaces,
+  skillPlaceEscape,
+  resolvesInside,
+} from '../../foundation/agent-docs/skill-place-files.mjs';
+import {integrationSkillFiles} from '../docs/skills/skills.mjs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
@@ -84,6 +113,11 @@ import {
 } from '../../foundation/discovery/theme-discovery.mjs';
 import {resolveThemeImports} from '../../foundation/discovery/theme-imports.mjs';
 import {
+  isLocalThemeOwner as isLocalThemeOwnerForWiring,
+  readThemeState as readThemeStateForWiring,
+  themeModuleStylesheets,
+} from '../../foundation/config/theme-state.mjs';
+import {
   CLI_ROOT,
   findProjectCoreDir,
   findInstalledPackage,
@@ -116,6 +150,7 @@ export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+export {generatedSource} from '../../foundation/fs/file-protection.mjs';
 
 // What the authoring-docs check reads (./_authoring-audit.mjs), reached only
 // through this adapter.
@@ -465,6 +500,55 @@ export function doctorElementPropOrigins(file, element) {
 }
 
 /**
+ * The stylesheets the app's registered themes load, read from the theme
+ * module the CLI writes for them: an import of one is theme wiring, never
+ * page styling. A package stylesheet matches by its name; a local one by
+ * the file it names.
+ * @param {string} target the scanned folder or file
+ * @returns {{has: (spec: string, rel: string) => boolean}}
+ */
+export function doctorThemeWiring(target) {
+  const none = {has: () => false};
+  let base;
+  try {
+    base = fs.statSync(target).isDirectory() ? target : path.dirname(target);
+  } catch {
+    return none;
+  }
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {Set<string>} */
+  const files = new Set();
+  try {
+    const {configured, module, projectDir} = readThemeStateForWiring(base);
+    if (!configured || !module.expectedOriginal) return none;
+    // (Only a stylesheet from its theme's recorded owner: the owner's
+    // package, or a file in a local theme's folder. Another import in the
+    // module is no wiring.)
+    for (const {spec, owner} of themeModuleStylesheets(
+      module.expectedOriginal.toString('utf-8'),
+      module.typescript,
+    )) {
+      if (!isLocalThemeOwnerForWiring(owner)) {
+        if (spec.startsWith(`${owner}/`)) names.add(spec);
+        continue;
+      }
+      const file = path.resolve(path.dirname(module.file), spec);
+      const folder = path.resolve(projectDir, owner);
+      if (!path.relative(folder, file).startsWith('..')) files.add(file);
+    }
+  } catch {
+    return none;
+  }
+  return {
+    has: (spec, rel) =>
+      names.has(spec) ||
+      (spec.startsWith('.') &&
+        files.has(path.resolve(base, path.dirname(rel), spec))),
+  };
+}
+
+/**
  * Whether a module renders an element imported by name from a module (see
  * `rendersElement`).
  * @param {string} file
@@ -726,7 +810,7 @@ function declaredPackageNames(cwd) {
  * the skill file tells agents to run and the install step it records for when
  * that command is not found (each null when there is no file, or it names
  * none).
- * @returns {{settings: import('../../foundation/env/user-settings.mjs').ComputerAgentTextSettings, entries: Array<{path: string, state: import('../../foundation/agent-docs/computer-agent-text.mjs').ComputerAgentTextState, link?: true}>, command: string | null, install: string | null}}
+ * @returns {{settings: import('../../foundation/env/user-settings.mjs').ComputerAgentTextSettings, entries: Array<{path: string, state: import('../../foundation/agent-docs/computer-agent-text.mjs').ComputerAgentTextState, link?: true}>, command: string | null, install: string | null, folders: Array<{path: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}>}}
  */
 export function computerAgentTextState() {
   const settings = computerAgentTextSettings();
@@ -739,11 +823,20 @@ export function computerAgentTextState() {
   } catch {
     // No skill file, or one that cannot be read: no command to check.
   }
+  const text = renderComputerAgentText({
+    command: COMPUTER_COMMAND,
+    install: computerInstallStep({for: 'judge'}),
+  });
   return {
     settings,
     entries: inspectComputerAgentText({links: settings.links}),
     command,
     install,
+    // The folders outside any project `init --to <folder>` saved.
+    folders: computerSkillFolders().map(folder => ({
+      path: folder,
+      state: managedFileState(savedComputerFolderSkillFile(folder), text),
+    })),
   };
 }
 
@@ -1113,26 +1206,145 @@ export async function fontPackagesInstallLine(projectDir, families) {
   };
 }
 
+
 /**
- * The project's skill files and each one's state against this release's
- * project skill, when the project's astryx.config `skills.to` saves no
- * `agents-md` place; null otherwise (the block is the project's place).
- * @param {string} cwd
- * @returns {Promise<Array<{file: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}> | null>}
+ * What doctor reads about the project's skill places.
+ * @typedef {object} SkillPlacesReport
+ * @property {string[]} places The saved places, as astryx.config saves them; `agents-md` when nothing is saved.
+ * @property {Array<{path: string, place: string, skill?: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}>} files
+ *   Each file of a saved `skills` or folder place against this release's project skill, and each integration skill's (`skill`), relative to the folder doctor runs in.
+ * @property {Array<{package: string, message: string}>} skillProblems Why each skill an integration declares was left out.
+ * @property {string[]} leftovers Skill files Astryx wrote for an integration the project no longer has.
+ * @property {string[]} linkedOut Why each saved place linked out of the project was not checked.
+ * @property {string[]} skillsFolderFiles The project skill copies in the project skills folders (`.agents/skills`, `.claude/skills`).
+ * @property {string | null} renderError Why the project skill could not be rendered, when a skill place is saved and it could not.
+ * @property {string[]} blockFiles The project's agent files that hold the Astryx block.
+ * @property {string[]} skillFiles The project skill files present in the project skills folders, saved or not.
+ * @property {string[]} plainNamed Project skills folders named `astryx`, the computer-level skill's name.
+ * @property {boolean} computerSkill Whether the computer-level skill file is present.
  */
-export async function savedProjectSkillFiles(cwd) {
-  const root = resolveAgentDocsRoot(cwd);
-  if (root == null) return null;
-  const places = await readProjectPlaces(root);
-  if (places.some(place => place.kind === 'agents-md')) return null;
-  let text = '';
+
+/**
+ * Read the project's skill places for doctor: the saved places and each of
+ * their files against this release's project skill, the agent files holding
+ * the block, the skill files present, and whether the computer-level skill is
+ * there.
+ * @param {string} cwd
+ * @returns {Promise<SkillPlacesReport>}
+ */
+export async function readSkillPlaces(cwd) {
+  const root = resolveAgentDocsRoot(cwd) ?? cwd;
+  /** @param {string} file */
+  const shown = file => path.relative(cwd, file).split(path.sep).join('/') || '.';
+  /** @param {string} file */
+  const read = file => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  // In the home folder or a settings folder, the skill folders are the
+  // computer's (the computer-level skill and its links), not a project's:
+  // nothing there is scanned as a project place (INV31).
+  let atHome = false;
   try {
-    text = renderProjectSkill(await renderAgentDocsBlock(root));
-  } catch {
-    // The agent-docs check reports a block that cannot render; every Astryx
-    // file then reads as from another release.
+    assertAgentDocsTarget(root);
+  } catch (err) {
+    if (!(err instanceof AgentDocsHomeError)) throw err;
+    atHome = true;
   }
-  return places.flatMap(place =>
-    placeSkillFiles(place, root).map(file => ({file, state: managedFileState(file, text)})),
+  const places = atHome ? [] : await readProjectPlaces(root);
+  const skillPlaces = places.filter(place => place.kind === 'skills' || place.kind === 'folder');
+  /** @type {SkillPlacesReport['files']} */
+  const files = [];
+  // A place linked out of the project is not the project's: init and
+  // upgrade refuse it, so its files are not judged.
+  /** @type {string[]} */
+  const linkedOut = [];
+  const inside = skillPlaces.filter(place => {
+    const escape = skillPlaceEscape(place, root);
+    if (escape) linkedOut.push(escape);
+    return !escape;
+  });
+  /** @type {SkillPlacesReport['skillProblems']} */
+  const skillProblems = [];
+  /** @type {string[]} */
+  const leftovers = [];
+  let renderError = null;
+  if (inside.length > 0) {
+    try {
+      const text = renderProjectSkill(await renderProjectAgentDocsBlock(root));
+      const declared = await integrationSkillFiles(root);
+      // A package that did not load is the integration checks' to report.
+      skillProblems.push(...declared.problems.filter(problem => !problem.unread));
+      const keep = declared.keep;
+      for (const place of inside) {
+        for (const {file, state} of inspectSkillPlace(place, root, text)) {
+          files.push({path: shown(file), place: savedName(place), state});
+        }
+        for (const each of declared.skills) {
+          for (const {file, state} of inspectSkillPlace(place, root, each.text, each.name)) {
+            files.push({path: shown(file), place: savedName(place), skill: each.name, state});
+          }
+        }
+        for (const file of declared.complete ? leftoverIntegrationSkills(place, root, keep) : []) {
+          leftovers.push(shown(file));
+        }
+      }
+    } catch (err) {
+      renderError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  // A project that keeps only the block still loses a left-out skill's
+  // pointer line, so its problems are read either way.
+  if (skillPlaces.length === 0) {
+    try {
+      skillProblems.push(...(await integrationSkillFiles(root)).problems.filter(problem => !problem.unread));
+    } catch {
+      // Unreadable integrations are the integration checks' to report.
+    }
+  }
+  const blockFiles = AGENT_DOC_PATHS.map(rel => path.join(root, rel))
+    .filter(file => holdsAstryxBlock(read(file) ?? ''))
+    .map(shown);
+  // The project skills folders, where agents read project skills; one linked
+  // out of the project (such as `.claude` linked to `~/.claude`) holds the
+  // computer's skills, not the project's, so it is not read.
+  const projectFolders = (atHome ? [] : PROJECT_SKILL_FOLDERS).filter(folder =>
+    resolvesInside(path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md'), root),
   );
+  // The project skill copies in those folders.
+  const skillsFolderFiles = projectFolders
+    .map(folder => path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md'))
+    .filter(file => read(file) != null)
+    .map(shown);
+  // Every project skill copy that is there: the project skills folders and
+  // the folder places saved in the project.
+  const skillFiles = [
+    ...new Set([
+      ...projectFolders.map(folder => path.join(root, folder, PROJECT_SKILL_NAME, 'SKILL.md')),
+      ...inside
+        .filter(place => place.kind === 'folder')
+        .flatMap(place => placeSkillFiles(place, root)),
+    ]),
+  ]
+    .filter(file => read(file) != null)
+    .map(shown);
+  const plainNamed = projectFolders.map(folder => path.join(root, folder, COMPUTER_SKILL_NAME))
+    .filter(dir => fs.existsSync(path.join(dir, 'SKILL.md')))
+    .map(shown);
+  return {
+    places: atHome ? ['agents-md'] : places.map(savedName),
+    files,
+    renderError,
+    linkedOut,
+    skillProblems,
+    leftovers,
+    blockFiles,
+    skillFiles,
+    skillsFolderFiles,
+    plainNamed,
+    computerSkill: fs.existsSync(computerSkillFile()),
+  };
 }
