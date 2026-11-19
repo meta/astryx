@@ -539,10 +539,11 @@ export interface ComponentThemingTarget {
    *  state-driven selectors. */
   states?: string[];
   /** The target of the component whose element this part sits on, when it
-   *  carries that component's target too (a toggle button's `button`). A
-   *  theme's entry for this part wins over its entries for that component:
-   *  the theme compiler emits the part's rules in a later astryx-theme
-   *  sub-layer. Omit for a target on an element of its own. */
+   *  carries that component's target too (a toggle button's `button`). Core's
+   *  shared-element parts list names the same parts, and the theme compiler
+   *  reads that list: a theme's entry for such a part goes in a later
+   *  astryx-theme sub-layer and wins over its entries for that component.
+   *  Omit for a target on an element of its own. */
   sitsOn?: string;
 }
 
