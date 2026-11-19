@@ -152,7 +152,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `side-nav-item-icon`, per selected and disabled state, in the expanded and
   the collapsed rail. The target rides on the Icon element itself, so a theme
   that styles it reaches only side nav item icons, never the label or other
-  icons. It reflects the row's states but not its size: the Icon reflects its
+  icons, and a theme's entry for it wins over the theme's `icon` entries on
+  that element, keyed ones included. It reflects the row's states but not its size: the Icon reflects its
   own `size` on that element. A custom React node given as `icon` carries no
   target, because Core does not inject props into consumer elements; the row
   target's inherited color still reaches it.

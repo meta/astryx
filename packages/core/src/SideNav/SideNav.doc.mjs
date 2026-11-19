@@ -22,7 +22,7 @@ export const docs = {
       {className: 'astryx-side-nav', visualProps: ['mode']},
       {className: 'astryx-side-nav-heading'},
       {className: 'astryx-side-nav-item', visualProps: ['size'], states: ['selected', 'disabled']},
-      {className: 'astryx-side-nav-item-icon', states: ['selected', 'disabled']},
+      {className: 'astryx-side-nav-item-icon', sitsOn: 'icon', states: ['selected', 'disabled']},
       {className: 'astryx-side-nav-section'},
     ],
   },
