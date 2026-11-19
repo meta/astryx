@@ -265,7 +265,7 @@ describe('shared-element parts', () => {
     const parts = component.slice(component.indexOf('@layer parts {'));
     const part = parts.indexOf('.astryx-timestamp');
     const color = parts.indexOf(
-      '.astryx-text[data-color="secondary"] { color: var(--color-text-secondary); }',
+      '.astryx-text[data-color="primary"] { color: var(--color-text-primary); }',
     );
     const size = parts.indexOf(
       '.astryx-text[data-size="sm"] { font-size: var(--font-size-sm); }',
@@ -273,6 +273,10 @@ describe('shared-element parts', () => {
     expect(part).toBeGreaterThan(-1);
     expect(color).toBeGreaterThan(part);
     expect(size).toBeGreaterThan(part);
+    // With no color prop a Timestamp still reflects its default `secondary`:
+    // no override for it follows the part, so the theme's timestamp color
+    // paints there, and an explicit color beats it.
+    expect(parts).not.toContain('[data-color="secondary"]');
   });
 
   it("writes no Text prop rules in the parts sub-layer without a part on Text's element", () => {

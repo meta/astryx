@@ -64,7 +64,11 @@ import {
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
-import {isSharedElementPart, SHARED_ELEMENT_PARTS} from './sharedElementParts';
+import {
+  isSharedElementPart,
+  SHARED_ELEMENT_PARTS,
+  TEXT_PART_DEFAULT_COLOR,
+} from './sharedElementParts';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
@@ -1196,6 +1200,23 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
 }
 
 /**
+ * The Text colors the theme's parts on Text's element give with no color
+ * prop. Text reflects them like an explicit one, so the Text color overrides
+ * written after those parts leave them out, and the part's own color applies
+ * there.
+ */
+function partDefaultColors(
+  components: Record<string, unknown> | undefined,
+): ReadonlySet<string> {
+  const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
+  return new Set(
+    Object.keys(components ?? {})
+      .filter(part => Object.hasOwn(defaults, part))
+      .map(part => defaults[part]),
+  );
+}
+
+/**
  * The components a theme's shared-element part entries sit on (Timestamp's
  * `timestamp` on Text's element), each as a key. A prop override gated on a
  * theme touching that component (Text's `color` and `size`) follows such a
@@ -1613,6 +1634,7 @@ function generateColorOverrides(
   components: Record<string, unknown>,
   parts: string[],
   surface?: MediaSurface,
+  skipColors: ReadonlySet<string> = new Set(),
 ): void {
   const TEXT_COLOR_MAP: Record<string, string> = {
     primary: 'var(--color-text-primary)',
@@ -1631,6 +1653,9 @@ function generateColorOverrides(
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
+      if (skipColors.has(colorName)) {
+        continue;
+      }
       if (touchesText) {
         parts.push(
           `  ${componentSelector('text', parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
@@ -1760,7 +1785,12 @@ export function generateThemeRulesSplit(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
     });
-    generateColorOverrides(partHosts(components), parts);
+    generateColorOverrides(
+      partHosts(components),
+      parts,
+      undefined,
+      partDefaultColors(components),
+    );
     generateSizeOverrides(partHosts(components), parts);
   }
   return {component, prose, parts};
@@ -1868,7 +1898,12 @@ function onMediaCSS(
           location,
           group,
         });
-        generateColorOverrides(partHosts(onMedia.components), out, surface);
+        generateColorOverrides(
+          partHosts(onMedia.components),
+          out,
+          surface,
+          partDefaultColors(onMedia.components),
+        );
         generateSizeOverrides(partHosts(onMedia.components), out, surface);
       }
       return;
@@ -2061,7 +2096,12 @@ function generateAdaptationPartsCSS(
       group: 'parts',
       darkPageSides: flipped,
     });
-    generateColorOverrides(partHosts(components), parts);
+    generateColorOverrides(
+      partHosts(components),
+      parts,
+      undefined,
+      partDefaultColors(components),
+    );
     generateSizeOverrides(partHosts(components), parts);
     if (parts.length > 0) {
       blocks.push(
