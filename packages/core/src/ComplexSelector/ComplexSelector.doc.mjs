@@ -427,8 +427,6 @@ export const docsDense = {
         controlStyle: 'Inline styles for the visual control box.',
         statusVariant:
           'How status message is placed: attached overlaps below input (detached for secondary and ghost); detached floats below w/ spacing; tooltip shows on status icon.',
-        accessibility:
-          'Custom content must provide its own accessible structure. Use focus hooks and evaluate against WCAG 2.2.',
       },
     },
   ],
