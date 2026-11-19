@@ -84,6 +84,7 @@ import {
   guideEntry,
   overlayLanguages,
   projectTree,
+  templateLinkProblems,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
@@ -2172,9 +2173,10 @@ export async function checkDocsTree(_ctx, options = {}) {
         }
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
-      // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names. A run whose base is not
-      // Core leaves Core's docs out; a link to one of them is not a problem.
+      // typed fields, reference and workflow blocks, and inline links, a
+      // template description's included. A reference block also includes all
+      // it names. A run whose base is not Core leaves Core's docs out; a link
+      // to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
@@ -2185,6 +2187,7 @@ export async function checkDocsTree(_ctx, options = {}) {
       const absent = target =>
         CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
       problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
+      problems.push(...(await templateLinkProblems(catalog, {absent})));
       problems.push(
         ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
