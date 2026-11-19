@@ -332,21 +332,21 @@ const STAR_COUNTS = [
 const RELATED = [
   {
     topic: 'Evaluation',
-    title: 'Ship it: the reviewed project',
+    title: 'Evaluation suites that catch regressions',
     teacher: 'Gabriela Fernández',
     rating: '4.9',
     price: 89,
   },
   {
     topic: 'Retrieval',
-    title: 'Vector search from first principles',
+    title: 'Dense retrieval for long documents',
     teacher: 'Priya Raman',
     rating: '4.7',
     price: 69,
   },
   {
     topic: 'Tooling',
-    title: 'The working setup: SDK, keys, scratchpad',
+    title: 'A reproducible developer setup',
     teacher: 'Tomas Beck',
     rating: '4.6',
     price: 49,
@@ -976,6 +976,25 @@ function ReviewsSection() {
     );
   };
 
+  // The rating control filters the same search, so it announces the same
+  // count while a query is active.
+  const handleRatingChange = (value: string) => {
+    setRating(value);
+    if (!needle) {
+      return;
+    }
+    const count = REVIEWS.filter(review => {
+      const matchesText = fold(review.body).includes(needle);
+      const matchesRating = value === 'all' || review.rating === Number(value);
+      return matchesText && matchesRating;
+    }).length;
+    announce(
+      count === 0
+        ? `No reviews match “${query.trim()}”`
+        : `${count} ${count === 1 ? 'review' : 'reviews'} match “${query.trim()}”`,
+    );
+  };
+
   return (
     <Section padding={6}>
       <VStack gap={4}>
@@ -1050,7 +1069,10 @@ function ReviewsSection() {
               startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
             />
           </StackItem>
-          <SegmentedControl value={rating} onChange={setRating} label="Rating">
+          <SegmentedControl
+            value={rating}
+            onChange={handleRatingChange}
+            label="Rating">
             <SegmentedControlItem value="all" label="All" />
             <SegmentedControlItem value="5" label="5 star" />
             <SegmentedControlItem value="4" label="4 star" />
