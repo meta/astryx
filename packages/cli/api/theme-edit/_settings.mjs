@@ -85,6 +85,7 @@ import {
   CARD_LIKE,
   SHOWCASE_GROUPS,
   COLOR_PROP_PARTS,
+  onlyMeans,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -7442,9 +7443,12 @@ export function compileTheme(ctx, data, base) {
         // banner's text size) goes into that token on the part.
         if (
           !s.state &&
-          ['font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
-            kebab(s.thing),
-          )
+          [
+            'font-size',
+            'font-weight',
+            'line-height',
+            'letter-spacing',
+          ].includes(kebab(s.thing))
         ) {
           const toks = innerPropTokens(ctx.C, t, kebab(s.thing));
           // (Every line of a text column takes it: it means all of the
@@ -14113,7 +14117,8 @@ export function colorPropTokens(ctx, part, when) {
   if (!COLOR_PROP_PARTS.includes(part)) return [];
   const named = /^color:([\w-]+)$/.exec(when ?? '')?.[1];
   if (named) return [`--color-text-${named}`];
-  if (part === 'heading') return ['--color-text-primary', '--color-text-secondary'];
+  if (part === 'heading')
+    return ['--color-text-primary', '--color-text-secondary'];
   const prop = partComponentDocs(ctx, part)
     .map(d => d.doc.props?.color)
     .find(Boolean);
