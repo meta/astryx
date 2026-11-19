@@ -60,6 +60,8 @@ import {syncReaderTextSize} from './dynamicType';
 import {
   SystemSchemeContext,
   ThemeContext,
+  ThemeSourceContext,
+  createThemeSource,
   ThemeModeContext,
   useRootScheme,
 } from './useTheme';
@@ -483,6 +485,12 @@ export function Theme({
   const themeless =
     applied == null && (parentModeValue?.themeless ?? !isNested);
   const modeValue = useMemo(() => ({mode, themeless}), [mode, themeless]);
+  const [source] = useState(() => createThemeSource(ctxValue));
+  // Syncs this Theme's value to subscribers in other React roots (the
+  // fallback toast viewport).
+  useIsomorphicLayoutEffect(() => {
+    source.set(ctxValue);
+  }, [source, ctxValue]);
 
   const wrapper = (
     <ThemeNestingContext value={true}>
@@ -505,7 +513,9 @@ export function Theme({
   return (
     <SystemSchemeContext value={systemScheme}>
       <ThemeModeContext value={modeValue}>
-        <ThemeContext value={ctxValue}>{wrapper}</ThemeContext>
+        <ThemeContext value={ctxValue}>
+          <ThemeSourceContext value={source}>{wrapper}</ThemeSourceContext>
+        </ThemeContext>
       </ThemeModeContext>
     </SystemSchemeContext>
   );
