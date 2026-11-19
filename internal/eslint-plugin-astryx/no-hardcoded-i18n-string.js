@@ -419,7 +419,7 @@ const rule = {
         'Hardcoded user-facing string {{value}} passed to `{{name}}()`. ' +
         'Route through `t(\'<namespace>.<component>.<key>\')` via `useTranslator()` so it can be localized.',
       staleExemption:
-        'Exempted string {{value}} no longer appears in this file. ' +
+        'Exempted string {{value}} matches no report in this file. ' +
         'Remove it from `allowedStringsByFile`.',
     },
     schema: [
