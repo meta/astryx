@@ -21,6 +21,8 @@
 import {
   compositeOver,
   contrastRatio,
+  hexToRgbTriple as rgbOf,
+  rgbTripleToHex as hexOf,
   hexToOklch,
   maxOklchChroma,
   oklchClampedHex,
@@ -665,10 +667,12 @@ export function deriveStatusColors({
     const tintSeen = (m: Mode) =>
       muted[m].alpha
         ? grounds(m).map(g =>
-            compositeOver(
-              muted[m].color.slice(0, 7),
-              muted[m].alpha ?? 'ff',
-              g,
+            hexOf(
+              compositeOver(
+                rgbOf(muted[m].color.slice(0, 7)),
+                parseInt(muted[m].alpha ?? 'ff', 16) / 255,
+                rgbOf(g),
+              ),
             ),
           )
         : [muted[m].color];
