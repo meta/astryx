@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme, generateThemeRules} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeRules} from './generateThemeRules';
 import {
   resolveThemeToken,
   resolveThemeTokens,

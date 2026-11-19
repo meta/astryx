@@ -85,7 +85,11 @@ const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
+    // The room between the box and its label. A theme sets it with gap on
+    // the `checkbox-input` target, which the compiler hands to this row as
+    // --_checkbox-input-gap (derivedVarRegistry): the target is the outer
+    // field, which also holds the status message below the row.
+    gap: `var(--_checkbox-input-gap, ${spacingVars['--spacing-2']})`,
   },
   containerLabelHidden: {
     gap: 0,
@@ -102,6 +106,10 @@ const styles = stylex.create({
     // The row paints every press, so the indicator draws no `:active` fill.
     '--_indicator-active-press': 'transparent',
   },
+  // The slot is as big as the indicator it holds. So a box a theme sizes,
+  // or a replacement indicator, sets the row's spacing, and the pressed layer
+  // fits it. The hidden input keeps the full size for its hit area
+  // (wrapperSizeStyles), centered on the box.
   checkboxWrapper: {
     position: 'relative',
     display: 'flex',
@@ -532,7 +540,6 @@ export function CheckboxInput({
           {...(isDisabled ? undefined : pressBoxProps)}
           {...stylex.props(
             styles.checkboxWrapper,
-            wrapperSizeStyles[size],
             !isDisabled && styles.indicatorPressOverlay,
             // Under a row that owns the press, the row's own overlay paints
             // instead of the owner's press paint.

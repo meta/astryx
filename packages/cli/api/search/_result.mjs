@@ -142,6 +142,14 @@ export function checkSearchArgs(query, options) {
 export const searchedComponentsOf = new WeakMap();
 
 /**
+ * The results each search response leads with because the query names them
+ * (see rankLexical): the order of matches keeps them first in their run.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const namedLeadsOf = new WeakMap();
+
+/**
  * The components (name, keywords and category) a search response was scored against, or
  * null when that search was narrowed away from components.
  * @param {object} response

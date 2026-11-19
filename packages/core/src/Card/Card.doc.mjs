@@ -140,7 +140,7 @@ function PayoutCards() {
       {name: '--_card-ring', description: 'Inset ring drawn in the card box-shadow list. SelectableCard sets it to show selection without taking over the shadow.', default: '0 0 transparent', private: true},
     ],
     derived: [
-      {property: 'borderRadius', vars: ['--_card-radius']},
+      {property: 'borderRadius', vars: ['--_card-radius'], corners: true},
       {property: 'padding', expand: 'container'},
     ],
   },
@@ -192,7 +192,7 @@ export const docsZh = {
       {name: '--_card-ring', description: 'Inset ring drawn in the card box-shadow list.', default: '0 0 transparent', private: true},
     ],
     derived: [
-      {property: 'borderRadius', vars: ['--_card-radius']},
+      {property: 'borderRadius', vars: ['--_card-radius'], corners: true},
       {property: 'padding', expand: 'container'},
     ],
   },

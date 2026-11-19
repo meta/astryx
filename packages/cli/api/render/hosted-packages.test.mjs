@@ -22,7 +22,7 @@ const VERSION = JSON.parse(
 ).version;
 
 const PAGE =
-  "import {STAR} from 'acme-icons';\nexport default function Page() {\n  return <p>{STAR}</p>;\n}\n";
+  "import {STAR} from 'acme-icons';\nexport default function Page() {\n  return <p>{STAR}</p>;\n}\nimport '@astryxdesign/core/astryx.css';\n";
 
 /** @type {string} */
 let work;

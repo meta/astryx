@@ -179,7 +179,7 @@ export async function context(cwd) {
  * Core's registry of the variables a part's plain border-radius or padding
  * also writes (a card's inner corners), or empty on a Core without it.
  * @param {string} coreDir
- * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string, corners?: boolean}>>>}
  */
 async function derivedVars(coreDir) {
   const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
@@ -876,7 +876,9 @@ export function themeImageNotes(ctx, slug) {
     else if (named.kind === 'missing')
       notes.set(
         named.ref,
-        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+        named.ref.startsWith('/')
+          ? `${named.ref} was not found in ${shown(ctx.project.cwd, path.join(at.root, 'public'))}/, where a path from the site's root is read, so neither the previews nor the app show it.`
+          : `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
       );
     else if (named.kind === 'not-file')
       notes.set(

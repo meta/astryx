@@ -135,6 +135,40 @@ The report reads only the local repository. It prints:
 The report is a lookup. The records decide acceptance, not the report. A
 finding is a lead to check, not a verdict.
 
+### Before you mark ready
+
+```bash
+pnpm preflight                       # the committed change against origin/main
+pnpm preflight --base upstream/main  # a fork whose main remote is upstream
+pnpm preflight --browser             # also the browser specs the change selects
+pnpm preflight --quick               # minutes: the changed packages, files and tests alone
+```
+
+`pnpm preflight` runs `pnpm review:pre`, then the checks CI runs for this
+change, scoped the way CI scopes them: the typecheck of the changed packages
+and the packages that depend on them, ESLint on the changed files and Prettier on the changed TypeScript and Markdown files
+and `pnpm check:repo`, the Vitest tests the change reaches in each project,
+`pnpm check:knowledge` and `pnpm check:changesets`. With `--browser` it also
+builds Storybook and runs the accessibility and Chromium interaction specs the
+change selects. It prints one PASS, FAIL or SKIP line a check, the command of
+each failing check, and "ready to flip" or "not ready: N"; it exits 1 when a
+check fails. CI can run more for a change than preflight does (whole-repository
+lint, the build tests, and the browser, visual, WebKit, accessibility and
+docsite jobs), so a pass is a good sign, not CI's verdict. It checks committed work, as CI's test listers do: with uncommitted
+changes it stops and exits 2. `--wrap <command>` (or `PREFLIGHT_WRAP`) runs each heavy step as
+`<command> <build|test|knowledge> <step...>`, for a machine that limits heavy
+jobs.
+
+`--quick` runs `pnpm review:pre`, the typecheck of the changed packages alone,
+ESLint on the changed files, the changed test files alone, `pnpm check:knowledge`
+and `pnpm check:changesets`, in minutes. It is not CI-equivalent: it builds
+nothing, leaves out dependent packages, the tests the change reaches through an
+import, and the guards, and it ends with "run `pnpm preflight` before you flip"
+rather than "ready to flip".
+
+Preflight is not a required step. It reproduces the pre-review checklist and
+CI's checks; it does not reproduce a reviewer's judgment.
+
 ### Find the governing records by hand
 
 | Command                                                                                                            | What it answers                                                                           |

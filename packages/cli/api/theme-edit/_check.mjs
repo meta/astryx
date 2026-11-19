@@ -93,7 +93,7 @@ import {
   VIBRANCY_DEFAULT,
   vibrancyMoves,
   paletteToken,
-  seedOf,
+  seedsInEffect,
 } from './_palette.mjs';
 import {
   camel,
@@ -6449,9 +6449,12 @@ function checkOne(
       // With no color to saturate, no vibrancy value is suggested. A color
       // counts when vibrancy changes the shades made from it at all (a warm
       // gray has a little hue to take out or add; a pure gray has none).
-      const canApply = colors.some(x =>
-        vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
+      const inEffect = seedsInEffect(ctx.project.cwd, slug, data);
+      const canApply = inEffect.some(f =>
+        vibrancyMoves(f.dial, f.seed, 0, 100),
       );
+      // The fills the theme's own source sets win over their settings.
+      const fromSource = inEffect.filter(f => f.source);
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
         // The value meant: a step in other letters (MORE), or the number
         // read as CSS reads it (70%, 7e1), kept in range.
@@ -6489,7 +6492,7 @@ function checkOne(
         refuse(
           E.ERR_THEME_NO_EFFECT,
           colors.length
-            ? `vibrancy sets how saturated the generated colors are, and every color this theme sets (${colors.map(x => `${x.thing} ${x.value}`).join(', ')}) comes out the same at every vibrancy: a gray with no hue to change, so it would change nothing. Set a color first.`
+            ? `vibrancy sets how saturated the generated colors are, and every color this theme shows (${(inEffect.length ? inEffect.map(f => (f.source ? `${f.dial} ${f.seed}, the ${f.source} ${slug}.theme.ts sets` : `${f.dial} ${f.value}`)) : colors.map(x => `${x.thing} ${x.value}`)).join('; ')}) comes out the same at every vibrancy: a gray with no hue to change, so it would change nothing. ${fromSource.length ? `${slug}.theme.ts wins over the setting for ${fromSource.map(f => f.dial).join(' and ')}: set ${fromSource.length > 1 ? 'those fills' : 'that fill'} there to a color, or take ${fromSource.length > 1 ? 'them' : 'it'} out.` : 'Set a color first.'}`
             : (() => {
                 // Colors set as tokens or on parts are values of their own:
                 // vibrancy saturates only what the color dials make.
@@ -7256,10 +7259,18 @@ function checkOne(
     // max() or clamp() giving one.
     if (s.on && ctx.derived && !WRAPPED_PARTS[s.on]) {
       const inCalc = calcVars(ctx.project);
+      // A radius entry with `corners` hands each corner its own variable, so
+      // one length per corner works there; a `/` radius still does not.
+      const eachCornerOneLength =
+        !v.includes('/') &&
+        splitTop(v.trim(), ' ').every(
+          x => oneLength(x) || /^[+-]?0+(?:\.0+)?$/.test(x.trim()),
+        );
       const hit = partsOf(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
           d =>
             d.property === camel(prop) &&
+            !(d.corners && eachCornerOneLength) &&
             (d.vars ?? []).some(x => inCalc.has(x.toLowerCase())),
         ),
       );

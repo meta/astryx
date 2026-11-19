@@ -26,7 +26,11 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {overflowStyles, containerEdgeStyles} from './table.stylex';
+import {
+  headerOverflowStyles,
+  overflowStyles,
+  containerEdgeStyles,
+} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
   hasTableContextActions,
@@ -69,6 +73,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
   balanced: {
@@ -78,6 +83,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
   spacious: {
@@ -87,6 +93,7 @@ const densityStyles = stylex.create({
     '--_table-header-end-room':
       'var(--_table-edge-inline-end, var(--_table-header-inline))',
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     boxSizing: 'border-box',
   },
 });
@@ -185,7 +192,9 @@ export function TableHeaderCell({
       headerStyles.cell,
       densityStyles[ctx.density],
       headerDividerStyles.cell,
-      overflowStyles.cell,
+      ctx.textOverflow === 'truncate'
+        ? overflowStyles.cell
+        : headerOverflowStyles.cell,
       containerEdgeStyles[ctx.density],
     );
     // Column dividers come from the shared builder (column axis only).
