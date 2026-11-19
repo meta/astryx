@@ -112,7 +112,7 @@ The fastest way to get started. No build plugins, no PostCSS, no Babel config �
 @import '@astryxdesign/theme-neutral/theme.css';
 ```
 
-The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`). `fonts.css` loads the theme's web fonts and goes first: it holds a remote `@import`, which a browser ignores after other rules. Without it the page falls back to the system font stack; leave it out on purpose if you want no external font requests.
+The import order maps to the layer cascade: `reset.css` (`@layer reset`) → `astryx.css` component styles (`@layer astryx-base`) → `theme.css` token overrides (`@layer astryx-theme`). `fonts.css` loads the theme's fonts: `@font-face` rules for font files the theme package ships, so the page requests nothing outside your app. Without it the page falls back to the system font stack.
 
 **`src/app/providers.tsx`**
 
