@@ -109,11 +109,12 @@ describe('states Core marks on a part', () => {
       themeEditSet('p', 'background-color', '#2563eb', {
         cwd,
         on: 'pagination',
-        state: 'current',
+        state: 'selected',
       }),
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_STATE');
-    expect(r.message).toMatch(/button has it/);
-    expect(r.run[0]).toMatch(/ --on button --state current$/);
+    // (Its own cell first; the Button the cell is drawn on has it too.)
+    expect(r.message).toMatch(/ pagination-item(?:, [a-z-]+)* ha(?:s|ve) it\./);
+    expect(r.run[0]).toMatch(/ --on pagination-item --state selected$/);
   }, 240_000);
 });
