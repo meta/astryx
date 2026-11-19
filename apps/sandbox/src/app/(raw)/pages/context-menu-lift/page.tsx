@@ -116,6 +116,9 @@ const styles = stylex.create({
 // leaves 90 px above and below, as the tall card does. Each box needs one
 // `@position-try` fallback to fit, except the control's. The rules copy the
 // layer runtime's fit construct, step by step, with plain 16 px gutters.
+// P5 is the runtime's own fit rule, as the page receives it. P6 and P7 keep
+// the declarations a browser keeps from P5: P6 with values for its
+// variables, P7 without `env()`.
 const PROBE_CSS = `
 .pt-overlay{position:fixed;inset:0;z-index:2147483000;pointer-events:none}
 .pt-anchor{position:absolute;inset-inline:16px;top:90px;bottom:90px;anchor-name:--pt-anchor;background:rgba(59,130,246,.25)}
@@ -126,11 +129,18 @@ const PROBE_CSS = `
 .pt-p2{position-try-fallbacks:--pt-p2}
 .pt-p3{position-try-fallbacks:--pt-p3}
 .pt-p4{position-try-fallbacks:--pt-p4}
+.pt-p5{position-try-fallbacks:--pt-p5}
+.pt-p6{position-try-fallbacks:--pt-p6}
+.pt-p7{position-try-fallbacks:--pt-p7}
 @position-try --pt-p1{position-area:block-end;margin-block-start:16px;block-size:40px}
 @position-try --pt-p2{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:calc(100% - 32px)}
 @position-try --pt-p3{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:max(calc(100% - 32px),calc((100dvb - anchor-size(block)) / 2 - 33px))}
 @position-try --pt-p4{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:max(calc(100% - 32px),calc((100vh - anchor-size(block)) / 2 - 33px))}
+@position-try --pt-p5{position-area:self-block-end span-all;margin-block-start:var(--_astryx-layer-clearance, 0px);margin-block-end:calc(var(--spacing-4) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)));margin-block-end:calc(max(var(--spacing-4), env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)));margin-inline-start:calc(var(--spacing-4) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));margin-inline-start:calc(max(var(--spacing-4), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));margin-inline-end:calc(var(--spacing-4) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));margin-inline-end:calc(max(var(--spacing-4), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));inset-inline-start:0;inset-inline-end:0;block-size:max(calc(100% - var(--_astryx-layer-clearance, 0px) - calc(var(--spacing-4) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)))), calc((100vh - anchor-size(block)) / 2 - var(--_astryx-layer-clearance, 0px) - calc(var(--spacing-4) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px))) - 1px));block-size:max(calc(100% - var(--_astryx-layer-clearance, 0px) - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)))), calc((100dvb - anchor-size(block)) / 2 - var(--_astryx-layer-clearance, 0px) - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px))) - 1px));align-self:unsafe self-start;}
+@position-try --pt-p6{position-area:self-block-end span-all;margin-block-start:0px;margin-block-end:calc(max(16px, env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(0px, 0px));margin-inline-start:calc(max(16px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)) + max(0px, 0px));margin-inline-end:calc(max(16px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)) + max(0px, 0px));inset-inline-start:0;inset-inline-end:0;block-size:max(calc(100% - 0px - calc(max(16px, env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(0px, 0px))), calc((100dvb - anchor-size(block)) / 2 - 0px - calc(max(16px, env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)) + max(0px, 0px)) - 1px));align-self:unsafe self-start}
+@position-try --pt-p7{position-area:self-block-end span-all;margin-block-start:var(--_astryx-layer-clearance, 0px);margin-block-end:calc(max(var(--spacing-4), 0px, 0px) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)));margin-inline-start:calc(max(var(--spacing-4), 0px, 0px) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));margin-inline-end:calc(max(var(--spacing-4), 0px, 0px) + max(var(--astryx-layer-inset-inline-start, 0px), var(--astryx-layer-inset-inline-end, 0px)));inset-inline-start:0;inset-inline-end:0;block-size:max(calc(100% - var(--_astryx-layer-clearance, 0px) - calc(max(var(--spacing-4), 0px, 0px) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px)))), calc((100dvb - anchor-size(block)) / 2 - var(--_astryx-layer-clearance, 0px) - calc(max(var(--spacing-4), 0px, 0px) + max(var(--astryx-layer-inset-block-start, 0px), var(--astryx-layer-inset-block-end, 0px))) - 1px));align-self:unsafe self-start}
 .pt-unit{position:fixed;top:0;left:0;inline-size:1px;visibility:hidden}
+.pt-env{position:fixed;top:0;left:0;inline-size:1px;visibility:hidden;padding-top:env(safe-area-inset-top, 0px);padding-bottom:env(safe-area-inset-bottom, 0px)}
 `;
 
 const PROBES = [
@@ -147,6 +157,17 @@ const PROBES = [
     fits: 'below, capped',
   },
   {id: 'p4', label: 'P4: the same with 100vh', fits: 'below, capped'},
+  {
+    id: 'p5',
+    label: 'P5: the layer’s own fit rule, as it ships',
+    fits: 'below, capped',
+  },
+  {
+    id: 'p6',
+    label: 'P6: P5 with values for its variables',
+    fits: 'below, capped',
+  },
+  {id: 'p7', label: 'P7: P5 without env()', fits: 'below, capped'},
 ] as const;
 
 type ProbeResult = {id: string; verdict: string; box: string};
@@ -200,8 +221,15 @@ function PositionTryProbe() {
         ? '?'
         : `${Math.round(el.getBoundingClientRect().height)}`;
     };
+    const env = document.querySelector<HTMLElement>('.pt-env');
+    const envStyle = env == null ? null : getComputedStyle(env);
+    const spacing =
+      env == null
+        ? ''
+        : getComputedStyle(env).getPropertyValue('--spacing-4').trim();
     setUnits(
       `innerHeight ${innerHeight}, visualViewport ${Math.round(window.visualViewport?.height ?? 0)}, ` +
+        `safe-area top ${envStyle?.paddingTop ?? '?'}, bottom ${envStyle?.paddingBottom ?? '?'}, --spacing-4 ${spacing === '' ? 'unset' : spacing}; ` +
         `100vh ${read('vh')}, 100svh ${read('svh')}, 100lvh ${read('lvh')}, 100dvh ${read('dvh')}; ` +
         `anchor-size supported: ${CSS.supports('block-size', 'anchor-size(block)')}; ` +
         `${navigator.userAgent}`,
@@ -214,22 +242,26 @@ function PositionTryProbe() {
       <Heading level={2}>Position-try probe</Heading>
       <Text type="supporting">
         Tap Run. Each box in turn is placed against a tall anchor that leaves 90
-        px above and below it. The control fits with no fallback. P1 to P4 fit
-        only if the browser applies their fallback. Results show below.
+        px above and below it. The control fits with no fallback. P1 to P7 fit
+        only if the browser applies their fallback. P5 is the layer’s own rule.
+        Results show below.
       </Text>
       <Button label="Run the position-try probe" onClick={() => void run()} />
       <style>{PROBE_CSS}</style>
       {current != null ? (
         <div className="pt-overlay" aria-hidden>
           {current === 'units' ? (
-            ['vh', 'svh', 'lvh', 'dvh'].map(unit => (
-              <div
-                key={unit}
-                className="pt-unit"
-                data-pt-unit={unit}
-                style={{blockSize: `100${unit}`}}
-              />
-            ))
+            <>
+              {['vh', 'svh', 'lvh', 'dvh'].map(unit => (
+                <div
+                  key={unit}
+                  className="pt-unit"
+                  data-pt-unit={unit}
+                  style={{blockSize: `100${unit}`}}
+                />
+              ))}
+              <div className="pt-env" />
+            </>
           ) : (
             <>
               <div className="pt-anchor" />
