@@ -87,7 +87,10 @@ import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {
   useFieldInputStyling,
   type FieldInputBaseProps,
@@ -1200,7 +1203,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
   const t = useComponentTranslator();
   const pressable = usePressFeedback();
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  const {
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+  } = useResolvedOptionality({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.multiSelector.selectPlaceholder');
   const selectAllLabel =
@@ -1225,6 +1231,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const descriptionId = useId();
   const statusMessageId = useId();
   const fieldLabelId = useId();
+  const requiredDescriptionId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -2039,6 +2046,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         // not the trigger — must be the combobox reporting the highlighted
         // option via aria-activedescendant (comboboxes-4).
         role="combobox"
+        aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-expanded={surface.isOpen}
         aria-controls={listboxId}
         aria-autocomplete="list"
@@ -2130,6 +2138,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     isGrid,
     createQuery,
     commitCreate,
+    isEffectivelyRequired,
     t,
   ]);
 
@@ -2525,15 +2534,29 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
   const callerProps = withholdCallerHandlers(rest, isDisabled);
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: (rest as {'aria-label'?: string})['aria-label'],
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
-      undefined,
+      [
+        ariaDescribedByProp,
+        ariaDescribedBy,
+        hasRequiredDescription ? requiredDescriptionId : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
     'aria-labelledby': triggerLabelledBy,
-    'aria-required': isEffectivelyRequired ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
@@ -2716,6 +2739,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         {isEffectivelyReadOnly && (
           <VisuallyHidden id={readOnlyDescriptionId}>
             {t('@astryx.input.readOnly')}
+          </VisuallyHidden>
+        )}
+        {hasRequiredDescription && (
+          <VisuallyHidden id={requiredDescriptionId}>
+            {t('@astryx.field.required')}
           </VisuallyHidden>
         )}
         <button

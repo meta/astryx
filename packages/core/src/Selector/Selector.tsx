@@ -77,7 +77,10 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedOptionality} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
@@ -2155,17 +2158,15 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
-  // With search, the editable trigger is a role-less button, where
-  // aria-required is not allowed. The closed trigger states the required
-  // state in its name, through the Field label's visible marker, or else in
-  // its description; the search combobox carries aria-required while open.
-  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
-  const isLabelRequiredInName =
-    isLabelRequiredMarkerShown &&
-    !inputGroup &&
-    (callerAriaLabel == null || ariaLabelledByProp != null);
-  const hasRequiredDescription =
-    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: callerAriaLabel,
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2283,8 +2284,7 @@ export function Selector<T extends SelectorOptionType>(
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required':
-      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
