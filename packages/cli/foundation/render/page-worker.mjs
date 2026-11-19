@@ -130,6 +130,12 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/**
+ * Each string a page's own file gives a Core component's prop
+ * (`<Button variant="danger">`), for the unknown-prop-value warning.
+ * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ */
+const propValues = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -716,6 +722,26 @@ function carriedName(p, t) {
 }
 
 /**
+ * The Core component a JSX element name draws, when the page imports it from
+ * Core: `<Button>` from `import {Button} from '@astryxdesign/core/Button'`, or
+ * `<Core.Button>` from `import * as Core from '@astryxdesign/core'`. Null for
+ * any other element.
+ * @param {any} name the element's JSX name node
+ * @param {any} scope the element's Babel scope
+ * @returns {string | null}
+ */
+function coreComponentOf(name, scope) {
+  const local = name.type === 'JSXIdentifier' ? name : name.type === 'JSXMemberExpression' ? name.object : null;
+  if (local?.type !== 'JSXIdentifier') return null;
+  const spec = scope.getBinding(local.name)?.path;
+  const source = spec?.parent?.source ? String(spec.parent.source.value) : '';
+  if (source !== '@astryxdesign/core' && !source.startsWith('@astryxdesign/core/')) return null;
+  if (name.type === 'JSXMemberExpression') return spec.isImportNamespaceSpecifier() ? name.property.name : null;
+  if (!spec.isImportSpecifier()) return null;
+  return spec.node.imported.type === 'Identifier' ? spec.node.imported.name : spec.node.imported.value;
+}
+
+/**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
@@ -876,6 +902,22 @@ function pagePlugin(filename, browser = false) {
         if (browser) return;
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
+      },
+      JSXOpeningElement(/** @type {any} */ p) {
+        if (browser) return;
+        const component = coreComponentOf(p.node.name, p.scope);
+        if (!component) return;
+        for (const attr of p.node.attributes) {
+          if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
+          const value =
+            attr.value?.type === 'StringLiteral'
+              ? attr.value.value
+              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
+                ? attr.value.expression.value
+                : null;
+          if (value === null) continue;
+          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+        }
       },
       JSXText(/** @type {any} */ p) {
         if (browser) return;
@@ -1923,6 +1965,7 @@ try {
     texts,
     fnTexts,
     screenQueries,
+    propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,
