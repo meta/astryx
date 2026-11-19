@@ -2,7 +2,8 @@
 
 /**
  * @file a Yarn Plug'n'Play workspace gets its own refusal from a
- * member app; a repository inside a home-folder app names the app; a
+ * member app; a Plug'n'Play app is refused before any lock or cache folder,
+ * whose root never points into Yarn's package archives; a repository inside a home-folder app names the app; a
  * suggested `new my-<name>` is free and valid; a base typed as its package
  * name or in other letters stays that base, with its install line.
  *
@@ -13,8 +14,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {
+  themeEditNew,
+  themeEditSet,
+  themeEditShow,
+  themeEditUndo,
+} from './theme-edit.mjs';
+import {themeCacheRoot} from './_project.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {cacheRoot} from '../../test-utils/theme-cache.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -85,6 +93,36 @@ describe('a Plug-n-Play workspace', () => {
       fs.rmSync(root, {recursive: true, force: true});
     }
   });
+});
+
+describe('a Plug-n-Play app with Core where a node_modules would hold it', () => {
+  it('refuses every locking command before any lock or cache folder', async () => {
+    // Under Plug'n'Play, Core resolves into Yarn's package archive, whose
+    // path looks like a node_modules/@astryxdesign/core: the linked Core
+    // stands in for it.
+    const app = makeLinkedFixture('astryx-pnp-lock-', FIXTURE_PACKAGES);
+    try {
+      put(path.join(app, '.pnp.cjs'), '');
+      const locks = path.join(cacheRoot(path.dirname(app)), 'locks');
+      fs.rmSync(locks, {recursive: true, force: true});
+      expect(themeCacheRoot(app)).toBeNull();
+      for (const [name, run] of /** @type {const} */ ([
+        ['new', () => themeEditNew('brand', {cwd: app, like: 'neutral'})],
+        ['set', () => themeEditSet('brand', 'corners', 'square', {cwd: app})],
+        ['undo', () => themeEditUndo('brand', {cwd: app})],
+      ])) {
+        const err = await refusal(run);
+        expect(err.code, name).toBe('ERR_PROJECT_REQUIRED');
+        expect(err.message, name).toContain("Plug'n'Play");
+        expect(err.run[0], name).toBe(
+          'yarn config set nodeLinker node-modules',
+        );
+        expect(fs.existsSync(locks), name).toBe(false);
+      }
+    } finally {
+      removeLinkedFixture(app);
+    }
+  }, 120_000);
 });
 
 describe('a repository inside a home-folder app', () => {

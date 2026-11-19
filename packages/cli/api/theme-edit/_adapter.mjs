@@ -58,6 +58,7 @@ import {
   context,
   coreApp,
   loneFamilyNotes,
+  refusePlugAndPlay,
 } from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
@@ -306,6 +307,9 @@ async function withLock(root, name, fn, bestEffort = false, again = null) {
   // A preview command, which holds the preview lock, suggests the list of
   // previews (what the other command may be changing).
   again ??= name === 'preview' ? 'experimental theme preview list' : null;
+  // A Plug'n'Play app has no node_modules to keep the lock in, and the editor
+  // refuses it: refuse before any lock folder, read-only commands included.
+  if (!isOutsideProject(root)) refusePlugAndPlay(root);
   /** @type {string | null} */
   let dir;
   try {
