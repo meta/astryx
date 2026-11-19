@@ -421,7 +421,7 @@ const columns = [
 export const docsZh = {
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Table 没有行点击属性（没有 onRowClick）：要打开某一行，请用 renderCell 在该行的主单元格中放一个 Link 或 Button，如最佳实践所示。 Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Table 没有行点击属性（没有 onRowClick）：要打开某一行，请用 renderCell 在该行的主单元格中放一个 Link 或 Button，如最佳实践所示。Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,

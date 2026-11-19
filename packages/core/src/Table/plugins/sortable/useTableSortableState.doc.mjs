@@ -102,7 +102,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Options: data: T[] (required); defaultSort?: TableSortState<TSortKey> (default []); sort?: TableSortState<TSortKey> with onSortChange?: (sort: TableSortState<TSortKey>) => void for controlled state; comparators?: Partial<Record<TSortKey, (a: T, b: T) => number>>, ascending comparators per sort key, as in `comparators: {status: (a, b) => rank[a.status] - rank[b.status]}`; allowUnsortedState?: boolean (default true); isMultiSortEnabled?: boolean (default false). Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.",
+      "Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Options: data: T[] (required); defaultSort?: TableSortState<TSortKey> (default []); sort?: TableSortState<TSortKey> with onSortChange?: (sort: TableSortState<TSortKey>) => void for controlled state; comparators?: Partial<Record<TSortKey, (a: T, b: T) => number>>, ascending comparators per sort key, as in `comparators: {status: (a, b) => rank[a.status] - rank[b.status]}` (arrays such as tags need one: they have no sort text); allowUnsortedState?: boolean (default true); isMultiSortEnabled?: boolean (default false). Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.",
     bestPractices: [
       {
         guidance: true,
@@ -153,7 +153,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Local sort state + sorted rows for Table over useTableSortable. Options: data (required), defaultSort (default []), sort?: TableSortState + onSortChange?: (sort) => void (controlled), comparators: {key: (a, b) => number} ascending, allowUnsortedState (default true), isMultiSortEnabled (default false). Render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
+      'Local sort state + sorted rows for Table over useTableSortable. Options: data (required), defaultSort (default []), sort?: TableSortState + onSortChange?: (sort) => void (controlled), comparators: {key: (a, b) => number} ascending (arrays e.g. tags need one), allowUnsortedState (default true), isMultiSortEnabled (default false). Render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
     bestPractices: [
       {
         guidance: true,
