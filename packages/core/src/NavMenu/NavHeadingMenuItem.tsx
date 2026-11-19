@@ -4,7 +4,7 @@
 
 /**
  * @file NavHeadingMenuItem.tsx
- * @input Uses React, StyleX, Icon, Text, NavMenuContext, useLinkComponent
+ * @input Uses React, StyleX, Icon, Text, NavMenuContext, useLinkComponent, the shared focus ring
  * @output Exports NavHeadingMenuItem component and NavHeadingMenuItemProps type
  * @position Core implementation; consumed by index.ts
  *
@@ -18,12 +18,14 @@ import {renderIconSlot, type IconType} from '../Icon';
 import {Text} from '../Text';
 import {
   colorVars,
+  focusVars,
   spacingVars,
   typographyVars,
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
@@ -62,7 +64,10 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // The fill alone does not mark keyboard focus: it is too faint, and forced
+    // colors remove it. The shared focus ring, drawn inside the row by its own
+    // width, marks the focused row after keyboard input.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
     textDecoration: 'none',
   },
   content: {
@@ -185,6 +190,7 @@ export function NavHeadingMenuItem({
       {...mergeProps(
         themeProps('nav-heading-menu-item', {size}),
         stylex.props(
+          focusOutlineStyles.focusVisible,
           styles.root,
           sizeStyles[size],
           isDisabled && styles.disabled,
