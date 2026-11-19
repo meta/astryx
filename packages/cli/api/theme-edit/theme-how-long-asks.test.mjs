@@ -9,7 +9,8 @@
  * button keeps the destructive one's red, and each look whose text would
  * not read gets its text line. A hex counts as typed only in the clause
  * that drafted its step, and "works in dark mode" keeps an ask joined
- * after it by "and" or "&".
+ * after it by "and" or "&"; a dial ask refused for one mode is answered
+ * with why.
  *
  * @position api/theme-edit — tests
  */
@@ -169,6 +170,19 @@ describe('long asks keep each change where it was said', () => {
       expect(corners.all.some(x => /^corners /.test(x))).toBe(true);
       const compact = await answer('works in dark mode & compact spacing');
       expect(compact.all).toContain('spacing compact');
+    },
+    T,
+  );
+
+  it(
+    'a dial ask refused for one mode answers with why, and never throws',
+    async test => {
+      needsBases(test);
+      // Spacing is the same in both modes, so the dark-only ask is refused
+      // with its reason and writes nothing.
+      const r = await answer('compact spacing in dark mode');
+      expect(r.text).toMatch(/cannot be dark mode only/);
+      expect(r.all).toEqual([]);
     },
     T,
   );

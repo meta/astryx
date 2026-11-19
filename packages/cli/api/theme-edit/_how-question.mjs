@@ -12720,8 +12720,17 @@ export function draftAnswer(ctx, env, question) {
    * @type {Array<{keep: string, from: number}>}
    */
   const sequenceKeeps = [];
-  const recordTop = (/** @type {Clause} */ c, /** @type {Step[]} */ steps) => {
-    if (steps.length) tops.push({clause: c, steps});
+  /**
+   * Records the steps a clause's answer runs, as push kept them. push
+   * writes back what it kept, which is no option at all when one of its
+   * gates refuses the clause (a dial said for one mode, "compact spacing
+   * in dark mode"; a word nothing reads): nothing is recorded then.
+   */
+  const recordTop = (
+    /** @type {Clause} */ c,
+    /** @type {Step[] | undefined} */ steps,
+  ) => {
+    if (steps?.length) tops.push({clause: c, steps});
   };
 
   // "the pink page background is a bit much, make the page a warm cream":
