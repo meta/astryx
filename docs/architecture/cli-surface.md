@@ -163,8 +163,8 @@ and remains available through explicit Core package selection.
   prints the short answer, the `--detail compact` level: the description's
   first paragraph, the import, a usage line, each prop with its description's
   first sentence, the accessibility requirements, the component's pieces, a
-  hook's returns, and as its last line the `--detail full` command that prints
-  the whole doc.
+  hook's parameters and returns, and as its last line the `--detail full`
+  command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
   The detail level never changes a component read's JSON. A field shown in

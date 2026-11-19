@@ -647,3 +647,38 @@ describe('a doc with returns (a hook)', () => {
     expect(out).not.toContain('## Returns');
   });
 });
+
+describe('a doc with params (a hook)', () => {
+  const docs = {
+    name: 'useThing',
+    usage: {description: 'Reads a thing.'},
+    params: [
+      {name: 'id', type: 'string', required: true, description: 'The id.'},
+    ],
+    returns: [{name: 'thing', type: 'Thing', description: 'The thing.'}],
+  };
+  const row = '| `id` | `string` | - | The id. **(required)** |';
+
+  it('prints a Parameters section before Returns in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain(
+      `## Parameters\n\n| Param | Type | Default | Description |\n|---|---|---|---|\n${row}`,
+    );
+    expect(out.indexOf('## Parameters')).toBeLessThan(
+      out.indexOf('## Returns'),
+    );
+  });
+
+  it('prints each parameter as a props-style line in compact output', () => {
+    const out = formatCompact(docs, 'useThing');
+    expect(out).toContain(
+      '## Parameters\n\n- `id`: `string` **(required)** - The id.',
+    );
+    expect(out).not.toContain(row);
+  });
+
+  it('prints no Parameters section for a component', () => {
+    const out = formatFull({name: 'Box', description: 'A box.', props: []});
+    expect(out).not.toContain('## Parameters');
+  });
+});
