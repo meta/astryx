@@ -190,6 +190,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
  * @property {string} [stateNote] - The state word a command wrote as another state, said in its result.
+ * @property {string[]} [reached] - The parts a setting that reaches beyond its own part reached when it was made: its reach stays there; parts its family gains later are offered, never applied.
  */
 
 /**
@@ -200,7 +201,8 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {'both' | 'light-only' | 'dark-only'} mode
  * @property {Setting[]} settings
  * @property {string[]} [lifted] - Variant keys the last build repeated a part setting on.
- * @property {Record<string, string[]>} [reached] - The parts each setting that reaches beyond its own part reached at the last build, by the setting's identity.
+ * @property {Record<string, string[]>} [reached] - Each setting's reach record (Setting.reached), by the setting's identity, as the file keeps it.
+ * @property {Record<string, string[]>} [offered] - The parts each saved setting's family gained after its reach was recorded, offered and not applied, by the setting's identity (written by the build, like lifted).
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
  */
 
@@ -1736,6 +1738,14 @@ export function settingsProblem(
     )
       return `${s.thing} has keep ${JSON.stringify(s.keep)}, not a list of parts`;
     if (
+      s.reached != null &&
+      (!Array.isArray(s.reached) ||
+        !s.reached.every(
+          (/** @type {unknown} */ x) => typeof x === 'string' && x,
+        ))
+    )
+      return `${s.thing} has reached ${JSON.stringify(s.reached)}, not a list of parts`;
+    if (
       s.hold != null &&
       (!Array.isArray(s.hold) ||
         !s.hold.every(
@@ -1860,6 +1870,7 @@ const ENTRY_FIELDS = [
   'only',
   'keep',
   'hold',
+  'reached',
 ];
 
 /**
@@ -2386,6 +2397,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       }
     }
   }
+  // (Each setting's reach record, read once its identity is read.)
+  readReachRecords(data);
   markLoneOnly(data);
   ENTRY_NOTES.set(data, notes);
 }
@@ -4948,6 +4961,7 @@ export function holdCopies(ctx, data, s) {
       only: true,
       hold: undefined,
       keep: undefined,
+      reached: undefined,
       note: undefined,
     });
   }
@@ -5395,14 +5409,20 @@ export function membersOf(ctx, name) {
 /**
  * The parts a setting styles: the group when `--on` names one; set on one
  * member of a family (reachGroupOf), the members that draw it alike, unless
- * `--only`; else the one part. Members the setting keeps (`keep`) are left
- * out.
+ * `--only`; else the one part. A saved setting reaches no part beyond the
+ * ones it reached when it was made (`reached`), and members the setting
+ * keeps (`keep`) are left out.
  * @param {Ctx} ctx
- * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null}} s
+ * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null, keep?: string[], reached?: string[]}} s
  * @returns {string[]}
  */
 export function partsOf(ctx, s) {
-  const all = reachedPartsOf(ctx, s);
+  // (A saved reach is pinned: a part its family gains later is offered,
+  // never applied, so a theme changes only where a command said.)
+  const pin = /** @type {any} */ (s).reached;
+  const all = reachedPartsOf(ctx, s).filter(
+    t => !Array.isArray(pin) || t === s.on || pin.includes(t),
+  );
   // (Members the setting keeps out, where it would make text unreadable.)
   const keep = /** @type {any} */ (s).keep;
   return Array.isArray(keep) && keep.length
@@ -15008,6 +15028,7 @@ const TOP_FIELDS = [
   'settings',
   'lifted',
   'reached',
+  'offered',
   'palette',
 ];
 /** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
@@ -15088,6 +15109,29 @@ function topFieldNames(data) {
 }
 
 /**
+ * Puts the file's reach records (`reached`, by each setting's identity) on
+ * the settings they belong to, in place, as partsOf reads them; savedForm
+ * writes them back. A record for no saved setting is dropped.
+ * @param {any} data
+ */
+function readReachRecords(data) {
+  const map =
+    data?.reached && typeof data.reached === 'object' && !Array.isArray(data.reached)
+      ? data.reached
+      : null;
+  if (map && Array.isArray(data.settings))
+    for (const s of data.settings) {
+      const rec = s && typeof s === 'object' ? map[keyOf(s)] : null;
+      if (
+        Array.isArray(rec) &&
+        rec.every((/** @type {unknown} */ x) => typeof x === 'string' && x)
+      )
+        s.reached = [...rec];
+    }
+  if (data && typeof data === 'object') delete data.reached;
+}
+
+/**
  * Read settings data as a change reads it, in place: entry modes and
  * sources in other words, and a damaged mode or base (see
  * {@link readFields}). The settings file and every undo step are read
@@ -15164,12 +15208,26 @@ export function savedSetting(s) {
 }
 
 /**
- * The settings as the file keeps them (see savedSetting).
+ * The settings as the file keeps them (see savedSetting), with each
+ * setting's reach record kept beside the settings (`reached`, by identity).
  * @param {ThemeData} data
  * @returns {ThemeData}
  */
 function savedForm(data) {
-  return {...data, settings: data.settings.map(s => savedSetting(s))};
+  /** @type {Record<string, string[]>} */
+  const reached = {};
+  const settings = data.settings.map(s => {
+    const entry = {...savedSetting(s)};
+    if (Array.isArray(entry.reached)) reached[keyOf(entry)] = entry.reached;
+    delete entry.reached;
+    return entry;
+  });
+  const {reached: _old, ...rest} = data;
+  return {
+    ...rest,
+    settings,
+    ...(Object.keys(reached).length ? {reached} : {}),
+  };
 }
 
 /**
@@ -17033,57 +17091,67 @@ function partTokenChanges(before, after, modes) {
 }
 
 /**
- * Records, for each saved setting that reaches beyond its own part, the
- * parts it reaches (`reached`, written by the build like `lifted`), and
- * names once each saved setting that now reaches parts its record does
- * not hold (an editor that widens a group, a group that grows), so the
- * change that widens it says so. A setting with no record yet is recorded
- * as it reaches now, with no word; a setting this change writes says where
- * it reaches in its own result.
+ * The parts each saved setting's family drawn alike holds beyond the reach
+ * the setting was made with (`reached`): offered, never applied, each with
+ * the same line, which sets the setting again at its whole reach.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @param {ThemeData | null} before the settings saved before this change
- * @returns {Array<{setting: string, parts: string[], keep: string | null}>}
+ * @returns {Array<{key: string, setting: string, parts: string[], run: string}>}
  */
-function recordReach(ctx, slug, data, before) {
-  const savedKeys = new Set((before?.settings ?? []).map(x => keyOf(x)));
-  const recorded =
-    data.reached &&
-    typeof data.reached === 'object' &&
-    !Array.isArray(data.reached)
-      ? data.reached
-      : {};
-  /** @type {Record<string, string[]>} */
-  const reached = {};
-  /** @type {Array<{setting: string, parts: string[], keep: string | null}>} */
+export function reachOffers(ctx, slug, data) {
+  /** @type {Array<{key: string, setting: string, parts: string[], run: string}>} */
   const out = [];
   for (const s of data.settings) {
-    if (!s.on) continue;
-    const parts = partsOf(ctx, s);
-    if (!parts.some(t => t !== s.on)) continue;
-    const k = keyOf(s);
-    const was = recorded[k];
-    const added = Array.isArray(was)
-      ? parts.filter(t => !was.map(String).includes(t))
-      : [];
-    if (added.length && savedKeys.has(k))
+    if (!s.on || !Array.isArray(s.reached)) continue;
+    const pin = s.reached.map(String);
+    const gained = partsOf(ctx, {...s, reached: undefined}).filter(
+      t => !pin.includes(t),
+    );
+    if (gained.length)
       out.push({
+        key: keyOf(s),
         setting: describe(s),
-        parts: added,
-        // A setting named on a group reaches the group's members: no line
-        // keeps it on fewer, as `--only` is for one member. The check is
-        // the one `set --only` makes, with the part map.
-        keep:
-          onlyFits(s)
-          ? `${P} set ${slug} ${setArgs({...s, only: true}, String(s.value))}`
-          : null,
+        parts: gained,
+        run: `${P} set ${slug} ${setArgs({...s, reached: undefined, keep: undefined, hold: undefined}, String(s.value))}`,
       });
-    reached[k] = parts;
   }
-  if (Object.keys(reached).length) data.reached = reached;
-  else delete data.reached;
   return out;
+}
+
+/**
+ * Pins each setting's reach: a setting that reaches beyond its own part
+ * keeps the parts it reached when it was made (`reached`, saved on the
+ * setting), and parts its family gains later are offered (reachOffers),
+ * written by the build (`offered`, like `lifted`) and said once. A setting
+ * with no record yet is recorded as it reaches now, with no message.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @returns {Array<{setting: string, parts: string[], run: string}>} the offers not said before
+ */
+function recordReach(ctx, slug, data) {
+  const said =
+    data.offered &&
+    typeof data.offered === 'object' &&
+    !Array.isArray(data.offered)
+      ? data.offered
+      : {};
+  for (const s of data.settings) {
+    if (!s.on || Array.isArray(s.reached)) continue;
+    const whole = partsOf(ctx, s);
+    if (whole.some(t => t !== s.on)) s.reached = whole;
+  }
+  const offers = reachOffers(ctx, slug, data);
+  if (offers.length)
+    data.offered = Object.fromEntries(offers.map(o => [o.key, o.parts]));
+  else delete data.offered;
+  return offers
+    .filter(o => {
+      const before = Array.isArray(said[o.key]) ? said[o.key].map(String) : [];
+      return !o.parts.every(t => before.includes(t));
+    })
+    .map(({setting, parts, run}) => ({setting, parts, run}));
 }
 
 /**
@@ -17117,8 +17185,8 @@ export async function commitTheme(
     : null;
   /** @type {string[]} */
   const notes = [];
-  /** @type {Array<{setting: string, parts: string[], keep: string | null}> | undefined} */
-  let widened;
+  /** @type {Array<{setting: string, parts: string[], run: string}> | undefined} */
+  let offered;
   // The history is read and checked before anything is written.
   const read = history ? readHistory(f.history) : {steps: [], dropped: 0};
   const past = read.steps;
@@ -17132,14 +17200,23 @@ export async function commitTheme(
     );
   // A change that leaves the settings as they were builds nothing and adds
   // no undo step.
+  // (A setting's reach record counts as the parts it reaches: a setting set
+  // again at its whole reach is a change where its family has grown, and
+  // the record alone is none.)
+  const reachForm = (/** @type {ThemeData} */ a) =>
+    JSON.stringify({
+      ...savedForm(a),
+      lifted: undefined,
+      offered: undefined,
+      reached: undefined,
+      settings: a.settings.map(s => {
+        const entry = {...s};
+        delete entry.note;
+        return s.on ? {...entry, reached: partsOf(ctx, s)} : entry;
+      }),
+    });
   const same = (/** @type {ThemeData | null} */ a) =>
-    a != null &&
-    JSON.stringify({...savedForm(a), lifted: undefined, reached: undefined}) ===
-      JSON.stringify({
-        ...savedForm(data),
-        lifted: undefined,
-        reached: undefined,
-      });
+    a != null && reachForm(a) === reachForm(data);
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
   const noop = history && same(parseSettings(snapBefore));
@@ -17316,7 +17393,7 @@ export async function commitTheme(
         ERROR_CODES.ERR_THEME_BAD_VALUE,
       );
     data.lifted = built.lifted;
-    widened = recordReach(ctx, slug, data, parseSettings(snapBefore));
+    offered = recordReach(ctx, slug, data);
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
     // the two leaves the change saved with the history one step short (or,
@@ -17549,7 +17626,7 @@ export async function commitTheme(
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
     notes,
-    widened: widened ?? [],
+    offered: offered ?? [],
     unchanged: false,
     // The theme and its tokens before this change, for what a caller says
     // of the change against them.

@@ -166,6 +166,7 @@ import {
   reachGroupOf,
   ownSettingOf,
   spreads,
+  reachOffers,
 } from './_settings.mjs';
 import {
   borderFor,
@@ -6406,7 +6407,7 @@ async function changeOnce(
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
-        ...(r.widened?.length ? {widened: r.widened} : {}),
+        ...(r.offered?.length ? {offered: r.offered} : {}),
         leftOut: [],
         notes: [
           ...(r.unchanged
@@ -6596,9 +6597,13 @@ async function changeOnce(
     prev &&
     // (By what is saved: a note the command adds is no change. The members
     // the saved setting keeps out, where it would make text unreadable, are
-    // the editor's: the same setting again is the same.)
-    JSON.stringify(savedSetting({...prev, keep: undefined})) ===
-      JSON.stringify(savedSetting({...s, keep: undefined})) &&
+    // the editor's: the same setting again is the same. Its reach record is
+    // too, unless its family gained parts since: then the same setting
+    // again takes them.)
+    JSON.stringify(savedSetting({...prev, keep: undefined, reached: undefined})) ===
+      JSON.stringify(savedSetting({...s, keep: undefined, reached: undefined})) &&
+    partsOf(ctx, {...prev, keep: undefined}).length ===
+      partsOf(ctx, {...s, keep: undefined, reached: undefined}).length &&
     // A later setting that covers the same parts hides it: set again, it
     // moves last and wins.
     !data.settings
@@ -8061,7 +8066,7 @@ async function changeOnce(
       styled,
       kept,
       lifted: r.lifted,
-      ...(r.widened?.length ? {widened: r.widened} : {}),
+      ...(r.offered?.length ? {offered: r.offered} : {}),
       problems: r.problems,
       // What this change made unreadable or unseen, with each fix: text
       // and borders measured against the settings before it, and the
@@ -8728,6 +8733,12 @@ export async function themeEditShow(theme, options = {}) {
         // change says it.
         ...entryNotes(data),
         ...rebuiltNotes,
+        // A saved setting keeps the reach it was made with: the parts its
+        // family gained since are offered, with the line that takes them.
+        ...reachOffers(ctx, theme, data).map(
+          o =>
+            `${o.setting} would also reach ${o.parts.join(', ')}, drawn alike; to let it: ${o.run}`,
+        ),
         ...(png ? [] : leftWords),
         ...sheet.notes,
         // Text the sample page's pictures draw cut short.
@@ -10763,7 +10774,7 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      ...(committed.widened?.length ? {widened: committed.widened} : {}),
+      ...(committed.offered?.length ? {offered: committed.offered} : {}),
       changedTokens: lookCollapsed(
         committed.changed,
         derivedStatusWords(prev),
