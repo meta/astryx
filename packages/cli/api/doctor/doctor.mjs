@@ -2704,6 +2704,13 @@ export function checkInstallGuidance(ctx) {
  *   the integrations installed beside the running CLI
  * @property {string[]} [loadedComputerIntegrations] the names of those that
  *   loaded outside a project
+ * @property {Array<{package: string, severity: string, message: string}>} [computerIntegrationIssues]
+ *   the issues in the contributions of those that loaded
+ * @property {((name: string) => string | null) | null} [integrationUpdate]
+ *   the command that updates one of them, beside a CLI installed for the
+ *   computer
+ * @property {boolean} [integrationsUpdateWithTool] they sit in a tool's
+ *   package set, which updates them
  * @property {string[]} [folderIntegrations] the names of the integrations the
  *   folder loads itself, whose copies win over the computer's
  */
@@ -3034,7 +3041,9 @@ export function checkComputerAgentText(ctx) {
 /**
  * The integrations installed for the computer (spec AST-081 FR12). Outside a
  * project: each one that loads, and a warning for each that is skipped
- * because its peer ranges exclude the answering release, or fails to load.
+ * because its peer ranges exclude the answering release, fails to load, or
+ * has issues in its contributions. The everyday commands print one line for
+ * such issues that points here.
  * @param {ComputerContext} ctx
  * @returns {DoctorCheck}
  */
@@ -3061,10 +3070,23 @@ export function checkComputerIntegrations(ctx) {
   const used = rest.filter(c => !c.incompatible && loaded.has(c.name));
   const skipped = rest.filter(c => c.incompatible);
   const failed = rest.filter(c => !c.incompatible && !loaded.has(c.name));
+  /** @type {Map<string, string[]>} the issue messages of each package */
+  const issuesOf = new Map();
+  for (const issue of ctx.computerIntegrationIssues ?? []) {
+    issuesOf.set(issue.package, [
+      ...(issuesOf.get(issue.package) ?? []),
+      issue.message,
+    ]);
+  }
+  const withIssues = used.filter(c => issuesOf.has(c.name));
   const notes = [
     used.length > 0
       ? `Used outside a project: ${used.map(label).join(', ')}.`
       : '',
+    ...withIssues.map(c => {
+      const messages = issuesOf.get(c.name) ?? [];
+      return `${label(c)} has ${messages.length} integration issue${messages.length === 1 ? '' : 's'}: ${messages.join(' ')}`;
+    }),
     ...shadowed.map(
       c =>
         `${label(c)} is not used here: this folder loads its own copy of ${c.name}.`,
@@ -3081,11 +3103,28 @@ export function checkComputerIntegrations(ctx) {
         `run \`${formatCliCommand(`astryx doctor integration validate ${c.name}`, ctx.cwd)}\``,
     ),
   ];
+  // The issues are in the package's own files: its maintainer fixes them, so
+  // anyone else needs a newer release.
+  const advice = withIssues.map(c => {
+    const one = (issuesOf.get(c.name) ?? []).length === 1;
+    const command = ctx.integrationUpdate?.(c.name) ?? null;
+    const how = command
+      ? ` To get one, run \`${command}\`.`
+      : ctx.integrationsUpdateWithTool
+        ? ' It updates with the tool that runs this CLI.'
+        : '';
+    return `If you maintain ${c.name}, the ${one ? 'fix in the issue is' : 'fixes in the issues are'} yours. Otherwise, a newer release of ${c.name} needs to fix ${one ? 'it' : 'them'}.${how}`;
+  });
+  const fix = [
+    ...(fixes.length > 0 ? [`To fix: ${fixes.join('; ')}.`] : []),
+    ...advice,
+  ].join(' ');
   return {
     ...base,
-    status: skipped.length + failed.length > 0 ? 'warn' : 'pass',
+    status:
+      withIssues.length + skipped.length + failed.length > 0 ? 'warn' : 'pass',
     message: notes.join(' '),
-    ...(fixes.length > 0 ? {fix: `To fix: ${fixes.join('; ')}.`} : {}),
+    ...(fix ? {fix} : {}),
   };
 }
 
