@@ -4,6 +4,6 @@
 export default {
   type: 'icon-definition',
   name: 'cloud',
-  description: 'Cloud storage, a hosted service, or weather.',
+  description: 'Cloud storage or a hosted service.',
   words: ['storage', 'hosted', 'sync'],
 };
