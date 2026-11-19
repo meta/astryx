@@ -1174,15 +1174,30 @@ function finish(env, drafts) {
   // set where it renders the theme"; the line it offers follows.)
   if (out.length && out.every(r => r.offer))
     out.unshift({text: out[0].text, commands: []});
-  return out
+  const sorted = out
     .sort((a, b) => offered(a) - offered(b) || changes(a) - changes(b))
     .filter(r => {
       const k = `${r.text}\n${r.commands.join('\n')}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
-    })
-    .slice(0, 10);
+    });
+  // A line whose every command an earlier line already gives (a clause of
+  // a whole ask that its sequence runs) follows the lines that say
+  // something new, so the cut at ten never drops a clause's only line.
+  /** @type {Set<string>} */
+  const given = new Set();
+  /** @type {typeof sorted} */
+  const fresh = [];
+  /** @type {typeof sorted} */
+  const repeated = [];
+  for (const r of sorted) {
+    const repeats =
+      r.commands.length > 0 && r.commands.every(c => given.has(c));
+    (repeats ? repeated : fresh).push(r);
+    for (const c of r.commands) given.add(c);
+  }
+  return [...fresh, ...repeated].slice(0, 10);
 }
 
 /**

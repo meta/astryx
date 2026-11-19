@@ -1957,6 +1957,41 @@ export const typoLimit = typed => {
   return n < 4 ? 0 : n <= 5 ? 1 : 2;
 };
 
+/** Words that give the grays a hue of their own ("cool neutral grays"). */
+const GRAY_TEMPERATURE =
+  /\b(?:warm(?:er)?|cool(?:er)?|slate|stone|zinc|sand|sandy|beige|blue|bluish|navy|green|greenish|brown|brownish)\s+$/i;
+
+/**
+ * "Neutral grays", "pure grays", "make the grays neutral", "grays with
+ * no tint": grays without a hue of their own are the neutral color
+ * without a tint (`neutral untinted`). A gray given a hue ("cool neutral
+ * grays") or a color ("neutral grays #64748b") keeps its own words.
+ * @param {string} question
+ * @returns {string}
+ */
+export function untintedGraysWords(question) {
+  const untinted = question
+    .replace(
+      /\b(?:neutral|pure|plain|untinted|uncolou?red|true)\s+gr[ae]ys\b(?!\s*(?:#|rgb|hsl|oklch|oklab|lab|lch))/gi,
+      (m, at, text) =>
+        GRAY_TEMPERATURE.test(String(text).slice(0, at))
+          ? m
+          : 'neutral untinted',
+    )
+    .replace(
+      /\b(?:make\s+)?the\s+gr[ae]ys\s+(?:neutral|untinted|pure)\b|\bgr[ae]ys\s+(?:that\s+are\s+|stay(?:ing)?\s+|kept\s+)?(?:neutral|untinted)\b|\bgr[ae]ys\s+with\s+no\s+(?:colou?r\s+)?tint\b/gi,
+      'neutral untinted',
+    );
+  // ("pure neutral grays, no tint"): the "no tint" said with them is the
+  // same ask, never the hover tint.
+  return /\bneutral untinted\b/.test(untinted)
+    ? untinted.replace(
+        /(\bneutral untinted)(?:\s*[,;]?\s*(?:with\s+|and\s+)?no\s+(?:colou?r\s+)?tint(?:s|ing)?\b)+/gi,
+        '$1',
+      )
+    : untinted;
+}
+
 /**
  * Whether `word` is within the typo limit of `typed` (two letters swapped
  * count as one edit, as typed: flxe is flex).
