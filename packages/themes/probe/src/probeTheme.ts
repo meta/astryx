@@ -5174,6 +5174,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(151.6 83% 25%)',
         outlineColor: 'hsl(17.2 94% 25%)',
       },
+      striped: {
+        backgroundColor: 'hsl(282.7 90% 52%)',
+        color: 'hsl(298.3 85% 12%)',
+        borderColor: 'hsl(70.8 75% 25%)',
+        outlineColor: 'hsl(126.6 74% 25%)',
+      },
     },
     'table-scroll-wrapper': {
       base: {
