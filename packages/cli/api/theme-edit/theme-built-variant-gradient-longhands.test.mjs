@@ -191,6 +191,40 @@ describe('a stress theme of gradients', () => {
 
 describe('beside a variant gradient', () => {
   it(
+    'reads a token position with no slash as the position, and a color token near the slash as the color',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('tp', {cwd, like: 'neutral'});
+      const sel = '.astryx-button[data-variant="primary"]';
+      const scope = {cwd, on: 'button', when: 'variant:primary'};
+      await themeEditSet(
+        'tp',
+        'background',
+        'linear-gradient(#337ab7, #265a88) var(--spacing-2) top',
+        scope,
+      );
+      let body = /** @type {{body: string}} */ (
+        rulesOn(css('tp'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-position')).toBe('var(--spacing-2) top');
+      expect(body).not.toMatch(/background-color:\s*var\(--spacing-2\)/);
+      await themeEditSet(
+        'tp',
+        'background',
+        'linear-gradient(#337ab7, #265a88) center / cover var(--color-accent)',
+        scope,
+      );
+      body = /** @type {{body: string}} */ (
+        rulesOn(css('tp'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-color')).toBe('var(--color-accent)');
+      expect(valueIn(body, 'background-position')).toBe('center');
+      expect(valueIn(body, 'background-size')).toBe('cover');
+    },
+    T,
+  );
+
+  it(
     'reads a lone var() after the size slash as the size, never the color',
     async () => {
       if (unbuilt) return;
