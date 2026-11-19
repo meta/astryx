@@ -4,9 +4,8 @@
  * A published CLI keeps discover's record of the integrations a project
  * loads and what each adds (api/discover/_adapter.mjs describeInstalled),
  * which `discover` lists and search's discover line reads, between runs
- * (foundation/fs/gather-cache.mjs). This file: the record is kept, an edit
- * to an installed package's doc shows on the very next run, and a cache
- * folder that cannot be written leaves the answer as a fresh run gives it.
+ * when Node supports module hooks. Both kept and fresh runs see document edits
+ * on the next run and report the search result for the current folder.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -20,6 +19,7 @@ import {
   keptTmp,
   freshTmp,
   readKept,
+  hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -108,14 +108,14 @@ function savedSearchEntries(tmp) {
 }
 
 describe.skipIf(process.platform !== 'linux')(
-  'kept installed doc names',
+  'installed doc names and saved search',
   () => {
-    it('are kept, and an edit to an installed package doc shows on the very next run', () => {
+    it('lists edits to installed package docs on the next run', () => {
       const tmp = keptTmp('installed-doc-names');
       const {dir, docs} = projectWithDocs();
       try {
         expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
-        expect(docNameEntries(tmp)).toHaveLength(1);
+        expect(docNameEntries(tmp)).toHaveLength(hasModuleHooks ? 1 : 0);
         expect(listedDocs(tmp, dir)).toEqual(['widgets-setup']);
         // A new doc, then a renamed one: each shows on the next run, as a
         // fresh run gives it.
@@ -270,13 +270,12 @@ describe.skipIf(process.platform !== 'linux')(
           for (const cwd of [...order, ...order]) {
             expect(hint(tmp, cwd)).toBe(answers(tmp, cwd));
           }
-          // The two folders answer differently, and each keeps a record of
-          // its own: a record one folder kept never answers for the other.
           expect(answers(tmp, other.dir)).toBe(false);
           expect(answers(tmp, src)).toBe(true);
-          expect(savedSearchEntries(tmp).sort()).toEqual(
-            [fs.realpathSync(other.dir), fs.realpathSync(src)].sort(),
-          );
+          const expectedFolders = hasModuleHooks
+            ? [fs.realpathSync(other.dir), fs.realpathSync(src)].sort()
+            : [];
+          expect(savedSearchEntries(tmp).sort()).toEqual(expectedFolders);
         }
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
