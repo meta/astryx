@@ -245,6 +245,29 @@ describe('experimental icon --definitions marks template use and the set', () =>
     );
   });
 
+  it('names the fallback a set draws for a definition it does not map', async () => {
+    // The set maps `home` but not `house`, which falls back to `home`.
+    const data = glyphsData();
+    writeIconPackage(pkg, {data: {...data, map: {...data.map, home: 'home'}}});
+    const {code, body} = await json(['experimental', 'icon', '--definitions']);
+    expect(code).toBe(0);
+    /** @type {Map<string, any>} */
+    const byName = new Map(
+      body.data.definitions.map((/** @type {any} */ each) => [each.name, each]),
+    );
+    expect(meaningWithFallbacks('house')).toEqual(['house', 'home']);
+    expect(byName.get('house')).toMatchObject({
+      mapped: false,
+      fallback: 'home',
+    });
+    expect(byName.get('home')).toMatchObject({mapped: true});
+    expect(byName.get('home').fallback).toBeUndefined();
+    expect(byName.get('document').fallback).toBeUndefined();
+
+    const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
+    expect(text.stdout).toMatch(/- house \[[^\]]*drawn as home\]/u);
+  });
+
   it("in a project: the project's main set, or the set --set names", async () => {
     const project = writeIconSetProject(tmp, {
       config: {experimental: {iconSet: 'glyphs'}},
