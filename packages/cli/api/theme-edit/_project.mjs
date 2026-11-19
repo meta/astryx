@@ -80,7 +80,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 9;
+const DOCS_VERSION = 10;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`

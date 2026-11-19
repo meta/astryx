@@ -108,7 +108,8 @@ export const doc = {
       cli: 'astryx experimental theme editor set brand background-color "#f3e8ff" --on button --when variant:ghost --state hover',
     },
     {
-      label: 'Zebra rows: the odd rows of every table striped',
+      label:
+        "Zebra rows: the odd rows of every data-driven table striped (in an isStriped table, also set the even rows transparent with --when parity:even --state striped to clear Core's own stripe)",
       cli: 'astryx experimental theme editor set brand background-color "#f9f9f9" --on table-row --when parity:odd',
     },
     {

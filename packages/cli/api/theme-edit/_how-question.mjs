@@ -20945,23 +20945,31 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         // The stripe a table row carries (its `parity`, odd or even, as
-        // Core marks body rows), when the installed Core marks it: the
-        // values are the part data's, so an ask naming one ("odd rows") is
-        // a stripe ask too.
+        // Core marks body rows), when the installed Core marks it and the
+        // clause's own part is that row: the values are the part data's, so
+        // an ask naming one as a row qualifier ("odd rows", "the even ones")
+        // is a stripe ask too. A part with no stripe ("card background even
+        // lighter", "alternate button background") never is.
+        const ownPart = on ? one(on) : null;
         const parityOn =
-          [on ? one(on) : null, 'table-row'].find(
-            p => p && (C.variantValues(p)?.parity ?? []).length,
-          ) ?? null;
+          ownPart && (C.variantValues(ownPart)?.parity ?? []).length
+            ? ownPart
+            : null;
         const parities = parityOn
           ? /** @type {string[]} */ (C.variantValues(parityOn).parity)
           : [];
-        const paritySaid = parities.filter(v =>
-          new RegExp(`\\b${v}\\b`).test(noMode(c.text)),
-        );
+        /** @param {string} text */
+        const paritiesSaid = text =>
+          parities.filter(v =>
+            new RegExp(`\\b${v}(?:-numbered)?\\s+(?:rows?|ones?)\\b`).test(
+              noMode(text),
+            ),
+          );
+        const paritySaid = paritiesSaid(c.text);
         if (
           /\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text) ||
-          stripeNamesOf(ctx.project)(c.text) ||
-          (parityOn && paritySaid.length === 1)
+          (parityOn &&
+            (stripeNamesOf(ctx.project)(c.text) || paritySaid.length === 1))
         ) {
           // The token Core paints every other row with, read from the part
           // data (a row's fill under an nth-child condition): set on the part,
@@ -21005,6 +21013,7 @@ export function draftAnswer(ctx, env, question) {
                       on: parityOn,
                       when: `parity:${other}`,
                       state: 'striped',
+                      ...modeOf(c),
                     }),
                   ]
                 : []),
@@ -21012,7 +21021,7 @@ export function draftAnswer(ctx, env, question) {
             return {
               text: c.neg
                 ? `no stripe on the ${p} rows of ${parityOn}`
-                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}; add --state striped to stripe only the tables the app marks isStriped`,
+                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every data-driven table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}; add --state striped to stripe only the tables the app marks isStriped`,
               options: [steps],
               sequence: steps.length > 1,
             };
@@ -21060,15 +21069,16 @@ export function draftAnswer(ctx, env, question) {
             coreParity &&
             stripe &&
             !c.neg &&
-            !parities.some(v => new RegExp(`\\b${v}\\b`).test(noMode(q)))
+            !paritiesSaid(q).length
           )
             return {
-              text: `stripes on every table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them)`,
+              text: `stripes on every data-driven table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them)`,
               options: [
                 [
                   set('background-color', `var(${stripe})`, {
                     on: parityOn,
                     when: `parity:${coreParity}`,
+                    ...modeOf(c),
                   }),
                 ],
               ],
@@ -24480,6 +24490,23 @@ export function draftAnswer(ctx, env, question) {
             `(in ${kind} mode only: a ${kind} fill, and the ${other} mode keeps its own so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`,
           );
         }
+      // A step that takes the same part's fill away in the same answer (a
+      // stripe's other stripe cleared) holds in the mode that fill took, so
+      // the other mode keeps its fill too.
+      for (const o of d.options) {
+        const fillMode = o.find(
+          x => x.mode && x.on && /^background(?:-color)?$/.test(x.thing),
+        );
+        if (!fillMode) continue;
+        for (const st of o)
+          if (
+            !st.mode &&
+            st.on === fillMode.on &&
+            /^background(?:-color)?$/.test(st.thing) &&
+            /^(?:transparent|none)$/.test(String(st.value))
+          )
+            st.mode = fillMode.mode;
+      }
       for (const n of notes) if (!d.text.includes(n)) d.text += ` ${n}`;
     }
   }

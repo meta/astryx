@@ -329,7 +329,7 @@ const QUESTIONS = [
       parts: ['table-row'],
       // (The odd stripe, and Core's own even stripe of a striped table
       // cleared, run in order.)
-      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped$/,
+      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped --mode light$/,
       adds: /table-row\.parity:odd\.@light\.backgroundColor=#f9f9f9/,
     },
   ],
@@ -820,6 +820,22 @@ const QUESTIONS = [
   ],
   ['modern', {top: null}],
 ];
+
+describe("a stripe is only a table row's", () => {
+  // "even", "odd" and the stripes' plain names ("alternate") mean a stripe
+  // only on a part whose rows carry one.
+  it.each([
+    'make the card background even lighter',
+    'card background an even gray',
+    'alternate button background',
+  ])('%s', async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    const commands = (data.results ?? []).flatMap(
+      (/** @type {{commands: string[]}} */ r) => r.commands,
+    );
+    expect(commands.join('\n')).not.toMatch(/--on table-row|--when parity:/);
+  });
+});
 
 describe('how answers plain-words questions', () => {
   for (const [question, want] of QUESTIONS)
