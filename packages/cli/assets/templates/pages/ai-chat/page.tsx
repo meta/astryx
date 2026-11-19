@@ -42,6 +42,7 @@ import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useClipboard} from '@astryxdesign/core/hooks';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 import {
   DocumentTextIcon,
@@ -316,7 +317,9 @@ function ArtifactBody() {
   return (
     <Section variant="transparent" style={artifactScroll}>
       <VStack gap={2} style={articleBody}>
-        <Heading level={1}>{ARTIFACT_TITLE}</Heading>
+        <Heading level={1} accessibilityLevel={2}>
+          {ARTIFACT_TITLE}
+        </Heading>
         <Markdown>{ARTIFACT_CONTENT}</Markdown>
       </VStack>
     </Section>
@@ -387,7 +390,8 @@ export default function AIChatConversationTemplate() {
       <Layout
         height="fill"
         content={
-          <LayoutContent padding={0}>
+          <LayoutContent role="main" padding={0}>
+            <VisuallyHidden as="h1">Chat</VisuallyHidden>
             <HStack height="100%">
               {/* Chat column — flexes to fill the space the artifact leaves */}
               <VStack

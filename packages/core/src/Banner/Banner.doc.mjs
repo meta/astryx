@@ -25,6 +25,7 @@ export const docs = {
       {name: 'Banner frame', required: true, description: 'Outer frame that groups the status surface and optional content surface. It carries whole-banner elevation and, for elevated card banners, the radius that shapes that silhouette.'},
       {name: 'Status surface', required: true, description: 'The primary painted surface. It communicates status and contains the icon, title, description, actions, and controls.'},
       {name: 'Icon', required: true, description: 'Automatically set based on the status (info, warning, error, success).'},
+      {name: 'Message', required: true, description: 'Holds the title and the description. Themes can lay the two out on one line.'},
       {name: 'Title', required: true, description: 'The main message. Always required.'},
       {name: 'Description', required: false, description: 'Additional detail below the title.'},
       {name: 'Action button', required: false, description: 'A button for the user to act on the message, like "Review" or "Retry".'},
@@ -170,8 +171,11 @@ function SaveSettings() {
       {className: 'astryx-banner-frame', visualProps: ['container', 'elevation']},
       {className: 'astryx-banner', visualProps: ['container', 'status']},
       {className: 'astryx-banner-icon', visualProps: ['status']},
+      {className: 'astryx-banner-message'},
+      {className: 'astryx-banner-title'},
       {className: 'astryx-banner-description'},
       {className: 'astryx-banner-content', visualProps: ['container', 'status']},
+      {className: 'astryx-banner-close'},
     ],
     vars: [
       {name: '--_banner-radius', description: 'Border radius of the card container (header, content area and the elevated root silhouette)', default: 'var(--radius-container)', private: true},
@@ -203,6 +207,7 @@ export const docsZh = {
       {name: 'Banner frame', required: true, description: 'Outer frame that groups the status surface and optional content surface. It carries whole-banner elevation and, for elevated card banners, the radius that shapes that silhouette.'},
       {name: 'Status surface', required: true, description: 'The primary painted surface. It communicates status and contains the icon, title, description, actions, and controls.'},
       {name: 'Icon', required: true, description: 'Automatically set based on the status (info, warning, error, success).'},
+      {name: 'Message', required: true, description: 'Holds the title and the description. Themes can lay the two out on one line.'},
       {name: 'Title', required: true, description: 'The main message. Always required.'},
       {name: 'Description', required: false, description: 'Additional detail below the title.'},
       {name: 'Action button', required: false, description: 'A button for the user to act on the message, like "Review" or "Retry".'},
@@ -253,6 +258,12 @@ export const docsZh = {
         ],
       },
       {
+        className: 'astryx-banner-message',
+      },
+      {
+        className: 'astryx-banner-title',
+      },
+      {
         className: 'astryx-banner-description',
       },
       {
@@ -261,6 +272,9 @@ export const docsZh = {
           'container',
           'status',
         ],
+      },
+      {
+        className: 'astryx-banner-close',
       },
     ],
     vars: [
@@ -292,6 +306,7 @@ export const docsDense = {
       {name: 'Banner frame', required: true, description: 'Outer frame grouping the status and optional content surfaces; owns whole-banner elevation and its elevated-card silhouette.'},
       {name: 'Status surface', required: true, description: 'Primary painted surface communicating status and containing the message and controls.'},
       {name: 'Icon', required: true, description: 'Set automatically from status.'},
+      {name: 'Message', required: true, description: 'Title plus description; themeable as one line.'},
       {name: 'Title', required: true, description: 'Main message text.'},
       {name: 'Description', required: false, description: 'Detail below title.'},
       {name: 'Action button', required: false, description: 'CTA like Review or Retry.'},

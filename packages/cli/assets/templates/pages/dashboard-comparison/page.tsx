@@ -105,7 +105,7 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 // ============= DETERMINISTIC SERIES =============
@@ -547,7 +547,9 @@ function ActiveUsersTrend() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Holds the widest tick label ("1200K") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={56}
             unit="K"
           />
           <Tooltip
@@ -844,7 +846,7 @@ export default function DataDashboardPage() {
                 icon={UsersIcon}
               />
               <Grid
-                columns={{minWidth: 240, repeat: 'fit'}}
+                columns={{minWidth: 240, max: 4, repeat: 'fit'}}
                 gap={3}
                 xstyle={metricsGridStyles.grid}>
                 {OVERVIEW_METRICS.map(metric => (
@@ -875,7 +877,7 @@ export default function DataDashboardPage() {
                 hint="Share of active users"
                 icon={UsersIcon}
               />
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+              <Grid columns={{minWidth: 320, max: 3, repeat: 'fit'}} gap={4}>
                 <BreakdownCard title="Age" data={AGE_DATA} />
                 <BreakdownCard title="Gender" data={GENDER_DATA} />
                 <BreakdownCard title="Device" data={DEVICE_DATA} />

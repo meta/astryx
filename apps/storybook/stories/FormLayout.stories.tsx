@@ -224,14 +224,18 @@ export const Nested: Story = {
 
 const dialogStyles = stylex.create({
   container: {
-    border: '1px solid #ddd',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#ddd',
     borderRadius: 8,
     maxWidth: 480,
     overflow: 'hidden',
   },
   header: {
     padding: 16,
-    borderBottom: '1px solid #eee',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    borderBottomColor: '#eee',
   },
   body: {
     padding: 16,
@@ -241,12 +245,14 @@ const dialogStyles = stylex.create({
     justifyContent: 'flex-end',
     gap: 8,
     padding: 16,
-    borderTop: '1px solid #eee',
+    borderTopWidth: '1px',
+    borderTopStyle: 'solid',
+    borderTopColor: '#eee',
   },
   button: {
     padding: '8px 16px',
     borderRadius: 6,
-    border: 'none',
+    borderStyle: 'none',
     cursor: 'pointer',
     fontSize: 14,
   },

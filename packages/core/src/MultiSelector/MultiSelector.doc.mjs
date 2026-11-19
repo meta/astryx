@@ -372,8 +372,8 @@ export const docs = {
         },
         {
           name: 'startIcon',
-          type: 'IconType | ReactNode',
-          description: 'Icon displayed at the start of the selector trigger.',
+          type: 'ReactNode | IconType',
+          description: 'Icon displayed at the start of the selector trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
         },
         {
           name: 'hasClear',

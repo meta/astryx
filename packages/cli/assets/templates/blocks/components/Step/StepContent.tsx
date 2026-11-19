@@ -2,6 +2,7 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
@@ -12,19 +13,19 @@ export default function StepContent() {
   // this on the step being active; here it is a single Step so the slot is
   // always shown.
   return (
-    <div style={{width: 400}}>
+    <div style={{width: 400, maxWidth: '100%'}}>
       <Stepper activeStep={1} orientation="vertical">
         <Step
           step={1}
           label="Billing address"
           description="Used for invoices and tax calculation">
-          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+          <VStack gap={3}>
             <TextInput label="Street" placeholder="1 Hacker Way" value="" />
             <TextInput label="City" placeholder="Menlo Park" value="" />
             <div>
               <Button label="Save address" variant="primary" />
             </div>
-          </div>
+          </VStack>
         </Step>
       </Stepper>
     </div>

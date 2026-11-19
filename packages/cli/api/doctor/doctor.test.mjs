@@ -22,6 +22,7 @@ import {auditCliSelfDocs} from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   doctor,
   checkCliCommand,
+  checkInstallGuidance,
   checkAuthoringDocs,
   checkCliDocs,
   checkDocsTree,
@@ -332,7 +333,7 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+      'Install the design system: `npm install @astryxdesign/core`.',
     );
   });
 });
@@ -536,6 +537,35 @@ describe('the command that adds an integration installed for the computer', () =
   });
 });
 
+describe('checkInstallGuidance', () => {
+  it('is left out when no integration gives guidance', () => {
+    expect(checkInstallGuidance({cwd: mkProject({}), integrations: [{name: '@acme/a'}]})).toBeNull();
+  });
+
+  it('passes and names the guidance and who gave it', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [{name: '@acme/a', installGuidance: 'Add {packages}, then relock'}],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'pass'});
+    expect(c.message).toContain('@acme/a');
+    expect(c.message).toContain('Add {packages}, then relock');
+  });
+
+  it('warns when integrations give different guidance', () => {
+    const c = checkInstallGuidance({
+      cwd: mkProject({}),
+      integrations: [
+        {name: '@acme/a', installGuidance: 'Add {packages}, then relock'},
+        {name: '@acme/b', installGuidance: 'Ask the platform team'},
+      ],
+    });
+    expect(c).toMatchObject({id: 'install-guidance', status: 'warn'});
+    expect(c.message).toContain('@acme/a (`Add {packages}, then relock`)');
+    expect(c.fix).toContain('installGuidance');
+  });
+});
+
 describe('checkCliCommand', () => {
   it('is informational when no integration declares a command', () => {
     const dir = mkProject({'pnpm-lock.yaml': ''});
@@ -689,7 +719,80 @@ describe('checkProviderIdentity', () => {
     });
     expect(c.status).toBe('warn');
     expect(c.message).toBe(message);
-    expect(c.fix).toContain('providerId');
+    expect(c.fix).toBe(
+      'Give each integration its own `providerId` in astryx.integration.*. ' +
+        "A renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('names both fixes when only some conflicts are declared by both', () => {
+    /** @param {string} name @param {boolean} bothDeclare */
+    const conflict = (name, bothDeclare) =>
+      loaded({
+        name,
+        __spec: name,
+        __providerConflict: {
+          providerId: '@acme/widgets',
+          claimedBy: '@acme/widgets',
+          message: `${name} message.`,
+          ...(bothDeclare ? {bothDeclare: true} : {}),
+        },
+      });
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        conflict('@acme/widgets-legacy', true),
+        conflict('@acme/renamed', false),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(
+      '@acme/widgets-legacy message. @acme/renamed message.',
+    );
+    expect(c.fix).toBe(
+      'Where both manifests declare the ID: Both manifests declare the same ' +
+        '`providerId`. If they are one integration installed under two ' +
+        'names, keep one of the two dependencies; if they are different ' +
+        'integrations, give each its own `providerId` in ' +
+        'astryx.integration.*. For the other conflicts: Give each ' +
+        'integration its own `providerId` in astryx.integration.*. A ' +
+        "renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('offers keeping one dependency when both manifests declare the ID', () => {
+    const message =
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim ' +
+      'provider ID "@acme/widgets". @acme/widgets@1.0.0 loads first and is ' +
+      'used; @acme/widgets-legacy@1.0.0 contributes nothing. Both manifests ' +
+      'declare this provider ID. If they are one integration installed ' +
+      'under two names, keep one of the two dependencies; otherwise one ' +
+      'package must change its providerId.';
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        loaded({
+          name: '@acme/widgets-legacy',
+          __spec: '@acme/widgets-legacy',
+          __providerConflict: {
+            providerId: '@acme/widgets',
+            claimedBy: '@acme/widgets',
+            message,
+            bothDeclare: true,
+          },
+        }),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(message);
+    expect(c.fix).toBe(
+      'Both manifests declare the same `providerId`. If they are one ' +
+        'integration installed under two names, keep one of the two ' +
+        'dependencies; if they are different integrations, give each its ' +
+        'own `providerId` in astryx.integration.*.',
+    );
   });
 
   it('is part of the report doctor returns', async () => {
