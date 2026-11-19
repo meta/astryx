@@ -185,13 +185,42 @@ describe('the workflow', () => {
       );
   });
 
-  it('runs the CLI tests in four legs, split by the recorded times, each stopped by name before its limit', () => {
+  it('runs the CLI tests in the legs the version job plans from the minimum-Node record, each stopped by name before its limit', () => {
+    const plan = jobs.version.steps.find(step => step.id === 'legs');
+    expect(plan.run).toBe(
+      'node scripts/vitest-node-legs.mjs plan --min-node --github-output',
+    );
+    expect(plan['continue-on-error']).toBe(true);
+    // The plan reads the minimum-Node record and every module it imports.
+    const checkout = jobs.version.steps.find(step =>
+      String(step.uses).startsWith('actions/checkout'),
+    );
+    for (const file of [
+      'scripts/vitest-node-legs.mjs',
+      'scripts/vitest-node-files.mjs',
+      '.github/scripts/lib/a11y-spec-files.mjs',
+      'scripts/lib/duration-split.mjs',
+      'scripts/vitest-node-durations.json',
+      'scripts/vitest-node-durations.min-node.json',
+    ])
+      expect(checkout.with['sparse-checkout']).toContain(file);
+    expect(jobs.version.outputs.legs).toBe('${{ steps.legs.outputs.legs }}');
+    expect(jobs.version.outputs.shards).toBe(
+      '${{ steps.legs.outputs.shards }}',
+    );
     const cli = jobs['cli-tests'];
-    expect(cli.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    // Six legs when the plan could not run.
+    expect(cli.strategy.matrix.shard).toBe(
+      "${{ fromJSON(needs.version.outputs.shards || '[1, 2, 3, 4, 5, 6]') }}",
+    );
+    expect(cli.name).toBe(
+      'cli-tests (${{ matrix.shard }}/${{ needs.version.outputs.legs || 6 }})',
+    );
     expect(cli.strategy['fail-fast']).toBe(false);
     expect(cli['timeout-minutes']).toBe(30);
     const tests = cli.steps.find(step => step.id === 'tests');
-    expect(tests.run).toContain('--shard="$SHARD/4"');
+    expect(tests.env.LEGS).toBe('${{ needs.version.outputs.legs || 6 }}');
+    expect(tests.run).toContain('--shard="$SHARD/$LEGS"');
     expect(tests.run).toContain(
       '--reporter=./scripts/vitest-shard-watchdog.mjs',
     );
@@ -199,13 +228,16 @@ describe('the workflow', () => {
     expect(tests.run).toContain('set -o pipefail');
   });
 
-  it('keeps each leg’s verdict for the report, which reads all four', () => {
+  it('keeps each leg’s verdict for the report, which reads as many as the plan started', () => {
     const cli = jobs['cli-tests'];
     const record = cli.steps.find(
       step => step.name === "Record this leg's verdict",
     );
     expect(record.if).toBe("always() && steps.tests.outcome != 'skipped'");
     expect(record.run).toContain('Node shard stuck');
+    // The log names the leg out of the legs the plan started.
+    expect(record.env.LEGS).toBe('${{ needs.version.outputs.legs || 6 }}');
+    expect(record.run).toContain('echo "Leg $SHARD/$LEGS: $verdict"');
     const keep = cli.steps.find(
       step => step.name === "Keep this leg's verdict",
     );
@@ -214,8 +246,11 @@ describe('the workflow', () => {
       step => step.name === "Read the legs' verdicts",
     );
     expect(read.with.pattern).toBe('cli-tests-verdict-*');
+    expect(reportStep().env.LEGS).toBe(
+      '${{ needs.version.outputs.legs || 6 }}',
+    );
     expect(reportStep().with.script).toContain(
-      'readLegVerdicts(process.env.VERDICTS, 4)',
+      'readLegVerdicts(process.env.VERDICTS, Number(process.env.LEGS))',
     );
   });
 
@@ -628,6 +663,8 @@ describe('the report step, run as the workflow runs it', () => {
     vi.stubEnv('PACK_RESULT', 'success');
     vi.stubEnv('SMOKE_RESULT', 'success');
     vi.stubEnv('NODE_VERSION', '22.13.0');
+    // The legs the version job planned for these fixtures.
+    vi.stubEnv('LEGS', '4');
     const github = fakeGithub(openIssues);
     const summary = [];
     const core = {

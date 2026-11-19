@@ -44,6 +44,7 @@ import {
   nearestShade,
   paletteDialOf,
   seedOf,
+  seedsInEffect,
   vibrancyMoves,
 } from './_palette.mjs';
 import {isColorToken} from './_compiler.mjs';
@@ -227,6 +228,8 @@ const TEXT_WORDS =
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  // A range (a calendar's range band, a date range) is no color.
+  'range',
   // A reader (a book reader, a feed reader) is no header.
   'reader',
   'readers',
@@ -7548,6 +7551,34 @@ export function draftAnswer(ctx, env, question) {
             );
       // (Names test the element's own words; states, the whole.)
       const nameText = said;
+      // Spacing asked between the parts a holder lays out ("more space
+      // between the keys in the shortcut", "between the buttons in the
+      // button group") is the holder's gap, when the census shows the
+      // holder draws a gap and holds those parts side by side.
+      if (
+        c.aspects.includes('spacing') &&
+        said &&
+        ((by === 'possessive' &&
+          /\bbetween\s+(?:the\s+)?[a-z]/i.test(holderText)) ||
+          new RegExp(
+            `\\bbetween\\s+(?:the\\s+)?${said.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`,
+            'i',
+          ).test(elementText))
+      ) {
+        const rec = ctx.C.MAP[holder];
+        const laidOut = (rec?.repeats ?? []).filter(
+          k =>
+            partIn(said) === k ||
+            words(k).test(said) ||
+            (k.startsWith(`${holder}-`) &&
+              words(k.slice(holder.length + 1)).test(said)),
+        );
+        if (
+          laidOut.length > 0 &&
+          ['gap', 'row-gap', 'column-gap'].some(x => rec?.own?.[x])
+        )
+          return {part: {on: holder}, holder};
+      }
       /** @type {Array<{k: string, score: number}>} */
       const found = [];
       for (const h of members) {
@@ -10474,8 +10505,8 @@ export function draftAnswer(ctx, env, question) {
     const missing = clauseNow?.parts.find(x => x.missing);
     // A title Core draws as a heading inside the part, with no part of its
     // own: no setting reaches it alone, so nothing is written for it.
-    // (A part that draws its title as its own text, a banner's, is answered
-    // for the whole part, said so.)
+    // (A part that draws its title as its own text, a citation's, is
+    // answered for the whole part, said so.)
     if (
       missing &&
       /\btitle$/.test(String(missing.missing)) &&
@@ -11970,6 +12001,10 @@ export function draftAnswer(ctx, env, question) {
             continue;
           }
           if (!members || !k.when) continue;
+          // A shadow kept in a state (a status's focus ring): the step it is
+          // kept from writes that state on every member, so every member
+          // keeps it, whether or not it draws a look of its own there.
+          if (k.thing === 'box-shadow' && k.state) continue;
           // Any other property: a member with no look of its own under the
           // condition (a date input's error look, which its field draws)
           // keeps by inheriting, so it takes no pin.
@@ -15200,6 +15235,28 @@ export function draftAnswer(ctx, env, question) {
         const tokenNow = resolvedValue(st.thing) || current(st.thing);
         if (tokenNow) return set(st.thing, tokenNow, {...flags, on: p.on});
       }
+      // A shadow asked in a state ("the focus ring on inputs, but keep the
+      // invalid ones"): the kept part's shadow in that state, under its
+      // kept status or variant, from what Core draws for it there; the
+      // part's plain shadow in that state when the status draws none of
+      // its own.
+      if (st.thing === 'box-shadow' && st.state && !p.state) {
+        const inState = Object.entries(
+          C.MAP[one(p.on)]?.at?.['box-shadow'] ?? {},
+        ).filter(([k]) =>
+          new RegExp(`(?:^|\\s):${st.state}(?![\\w-])`).test(k),
+        );
+        const [axisName, axisValue] = String(p.when ?? '').split(':');
+        const scoped = p.when
+          ? inState.find(([k]) =>
+              new RegExp(`\\b${axisName}=${axisValue}\\b`).test(k),
+            )
+          : undefined;
+        const plain = inState.find(([k]) => !/\bstatus=/.test(k));
+        const value = (scoped ?? plain)?.[1];
+        if (value != null)
+          return set('box-shadow', String(value), {...flags, state: st.state});
+      }
       // The shadow it has now, written out (the tokens it reads may be set
       // to none in the same answer).
       // Its shadow at rest; none when it has none.
@@ -15491,6 +15548,62 @@ export function draftAnswer(ctx, env, question) {
         ? secondary
         : toks
       : toks;
+  }
+  /**
+   * The part's own pieces inside it, by the census, that draw an aspect
+   * the part itself draws none of: empty when the part draws it, or holds
+   * no such piece of its own.
+   * @param {string} on
+   * @param {string} a
+   * @returns {string[]}
+   */
+  function innerDrawing(on, a) {
+    const props = GROUPS[a] ?? [];
+    const rec = C.MAP[one(on)];
+    if (!rec || props.length === 0) return [];
+    /** @param {any} r */
+    const draws = r =>
+      props.some(x => r?.own?.[x] || r?.at?.[x]) ||
+      Object.values(r?.inside ?? {}).some(ps =>
+        /** @type {string[]} */ (ps).some(x => props.includes(x)),
+      );
+    if (draws(rec)) return [];
+    // A piece whose own resting paint draws it, never one that paints it
+    // only to mark a state (a nav item's selected fill, an option's
+    // highlight) or through a hover or press layer inside it.
+    /**
+     * Whether a census condition is a resting look: always, or only the
+     * piece's visual props (its size, its orientation), never a runtime
+     * state, a pseudo-class or a layer.
+     * @param {string} cond
+     * @param {string} k
+     */
+    const resting = (cond, k) => {
+      if (cond === 'always') return true;
+      if (/[\s:[]/.test(cond)) return false;
+      const visual = ctx.project.target.get(k)?.props ?? [];
+      return cond
+        .split(',')
+        .every(pair => visual.includes(pair.split('=')[0] ?? ''));
+    };
+    /** @param {string} k */
+    const drawsAtRest = k =>
+      props.some(x =>
+        Object.entries(C.MAP[k]?.at?.[x] ?? {}).some(
+          ([cond, value]) =>
+            resting(cond, k) &&
+            !/^(transparent|none|)$/.test(String(value).trim()),
+        ),
+      );
+    // Only the part's own pieces: a shared component inside it (an empty
+    // state's Button) is never handed a change meant for the part.
+    const owner = ctx.project.target.get(one(on))?.component;
+    return (rec.contains ?? []).filter(
+      k =>
+        drawsAtRest(k) &&
+        owner !== undefined &&
+        ctx.project.target.get(k)?.component === owner,
+    );
   }
   /**
    * The commands for one part (or the whole theme) and one aspect.
@@ -16591,12 +16704,33 @@ export function draftAnswer(ctx, env, question) {
           ),
       ) &&
       !/\b(background|bg|fill(ed)?|gradient)\b/.test(c.text)
-    )
+    ) {
+      // A part that draws none of what is asked hands it to the one part
+      // inside it that draws it (a keyboard shortcut's fill, drawn by its
+      // key badges); with several such parts, nothing is written and the
+      // answer names them.
+      const inner = innerDrawing(on, a);
+      if (inner.length === 1) {
+        /** @type {Draft | null} */
+        const d = answerFor(c, {on: inner[0]}, a);
+        if (d)
+          return {
+            ...d,
+            text: `${on} draws no fill of its own: the ${inner[0]} inside it draws it, so on ${inner[0]}. ${d.text}`,
+          };
+      }
+      if (inner.length > 1)
+        return {
+          text: `${on} draws no fill of its own; the parts inside it that draw it: ${inner.join(', ')}. Name one with --on; nothing is written`,
+          options: [],
+          lookup: `${HOW} ${on}`,
+        };
       return {
         text: `${on} reads no fill or text color token that set can change; its color comes from its own props`,
         options: [],
         lookup: `${HOW} ${on}`,
       };
+    }
     if (p?.role === 'body' && a === 'weight') {
       const v =
         weightIn(c) ??
@@ -21703,11 +21837,11 @@ export function draftAnswer(ctx, env, question) {
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       // A color dial counts when the step changes the shades made from it
       // (a warm gray has a little hue to take out), as set measures it.
-      const hasColor = env.data.settings.some(
-        x =>
-          PALETTE_DIALS.includes(x.thing) &&
-          vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
-      );
+      const hasColor = seedsInEffect(
+        ctx.project.cwd,
+        env.slug,
+        env.data,
+      ).some(f => vibrancyMoves(f.dial, f.seed, 0, 100));
       const help =
         'vibrancy sets how saturated every generated color is (0 is gray, 100 the most vivid, 50 the default)';
       // Every accent the theme shows moves the way asked in saturation.

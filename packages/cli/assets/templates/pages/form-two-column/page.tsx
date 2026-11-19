@@ -90,7 +90,7 @@ export default function FormTwoColumnPage() {
   const handleSubmit = () => setSubmitted(true);
 
   return (
-    <Center style={pageStyle}>
+    <Center role="main" style={pageStyle}>
       <Section maxWidth={1100} width="100%" padding={10} variant="transparent">
         <VStack gap={10}>
           {/* Two-column; stacks to one column below ~520px. */}

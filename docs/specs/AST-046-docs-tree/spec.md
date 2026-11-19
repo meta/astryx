@@ -196,7 +196,10 @@ and references from other packages are an open question (OQ2).
   topic result's command MUST list the topic's sections when it has more than
   one. A typed doc MUST also match by its own name, and a doc part by each
   identifier it defines or names in code (`assertResponse`,
-  `ERR_UNKNOWN_SECTION`). A docs-only search (`--type doc`) MUST NOT need
+  `ERR_UNKNOWN_SECTION`). A namespace that sums up the docs beneath it MUST
+  NOT answer a query word through its text when one of those docs answers it
+  at least as strongly, so the doc that holds the rule is the hit
+  (`spec:AST-083` FR1). A docs-only search (`--type doc`) MUST NOT need
   `@astryxdesign/core`, because `astryx docs` does not.
 - **FR11 — Integrations join the tree.** A configured integration MAY ship
   namespace docs, and guides with `placement`, in its docs directory. The tree
@@ -319,6 +322,34 @@ and references from other packages are an open question (OQ2).
   namespace with no guide below it, such as a generated topic level (FR12), has
   no page. The docsite build MUST fail when a slug is both a page and a
   redirect, or both a flat topic and a namespace page.
+- **FR15 — A doc may also be a skill.** An integration's flat topic or
+  placed guide MAY declare `skill: {name, description}`. `astryx docs skills`
+  MUST list every skill the folder has (the project skill in a project, the
+  computer-level skill, then each declared skill in load order), and
+  `astryx docs skills/<name>` MUST print one, when no doc holds that route. A
+  skill whose value is not an object with a string name and description,
+  whose name is not lowercase words joined by hyphens, is longer than 64
+  characters, is `astryx` or `astryx-project`, or repeats an earlier one, or
+  whose description breaks a rule of an agent-docs block line (blank,
+  surrounding space, control characters or line separators, marker text) or
+  is longer than 1,024 code points, MUST be left out with a note naming why,
+  and its doc and the package's other docs still load; `integration check`
+  reports the note as `invalid_skill`, marked `next`. The agent-docs block
+  MUST hold one line per kept skill under `INTEGRATIONS:`, ``- `<package>`
+skill `<name>`: <description> Read it with `astryx docs skills/<name>`.``,
+  and no line when no skill is kept. In each project skill place `init`
+  writes (`spec:AST-081` FR7), a `--once` copy included, `init` MUST write
+  each kept skill as `<folder>/<name>/SKILL.md` (the doc's text under skill
+  frontmatter, under the managed-file rules: copies together or not at all,
+  a person's file kept) and remove one it wrote for a skill that is no
+  longer kept (no integration declares it, or it is left out), except while
+  any integration's docs cannot be read, when no copy is removed; `init --remove`
+  removes the integration skills with the project skill. `upgrade` reports
+  each such file in `agentDocs.skills` with its `skill` and writes or
+  removes it with `--apply`; `doctor`'s `skill-places` check names missing,
+  stale, kept and leftover integration skill files and skills left out, in a
+  project that keeps only the block too; and `discover` lists each package's
+  `skills`.
 
 ### Platform support
 
@@ -374,6 +405,7 @@ Phase 1 changes these surfaces:
 | FR12          | `docs()` tests, the graph walk, and search tests                              | the level and its children in list order; a topic's Up, Previous, and Next; a flat topic hit's parent; an integration's flat topic                                                                                                                                                                                                                              | A flat topic without a home, a topic whose name changes, or a level that lists a placed guide                                                                                                                                                                                                              |
 | FR13          | Split tests over the topic before and after, the graph walk, and search tests | each old section key read through the namespace; a link and a token reference to the old topic; a `--dense` read; the topic list and a search for one section                                                                                                                                                                                                   | A dropped, merged, or copied section; a changed title or `id`; a reference left on the old identity; a name listed twice; a section found twice                                                                                                                                                            |
 | FR14          | Docsite page-generation and route-resolution tests                            | a split namespace; a nested namespace; a nested namespace with its own page; a page with a named sidebar parent in another group; a package-page namespace; a namespace with a `category`, and one whose guides are all foundations docs; a generated topic level                                                                                               | An old address that stops resolving or lands in a sidebar group other than its own or its named parent's, a permanent guide redirect, a guide page on a non-package namespace, a nested page its root page also holds, or a slug that is both a page and a redirect                                        |
+| FR15          | Skill discovery, `docs skills` and init `--to skills` tests                   | a valid skill on a topic and on a guide; each broken rule; a repeated name across two packages; `docs skills/<name>` for each kind of skill                                                                                                                                                                                                                     | A broken skill that is written or fails its doc, a repeated name that wins, or a skill `docs skills` does not list                                                                                                                                                                                         |
 
 ## Decision log
 

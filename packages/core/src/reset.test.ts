@@ -238,4 +238,16 @@ describe('reset.css pseudo-element rules', () => {
     expect(fontFamilyOf(':where(html)')).toBe('var(--font-family-body)');
     expect(fontFamilyOf(':where(body)')).toBeUndefined();
   });
+
+  it('sets no font size on html or body, so a host keeps its own text size', () => {
+    // Installing Astryx leaves the host's own styles alone. Each Theme root
+    // carries the theme's body size for the text inside it instead.
+    const fontSizeOf = (selector: string) =>
+      ruleBlocks
+        .filter(block => block.selector === selector)
+        .map(({body}) => body.match(/font-size:\s*([^;]+);/)?.[1])
+        .find(Boolean);
+    expect(fontSizeOf(':where(body)')).toBeUndefined();
+    expect(fontSizeOf(':where(html)')).toBeUndefined();
+  });
 });

@@ -178,10 +178,15 @@ this record's current membership snapshot must be updated with it.
 - **FR2 — One request affects one surface.** An unclaimed Escape press is routed
   to exactly one topmost registered present member. That member either invokes
   its dismissal callback or blocks the request; the request does not continue
-  to a member behind it.
+  to a member behind it. A non-modal Popover is present for Escape only while
+  focus is inside it, or on or inside its anchor or trigger (`spec:AST-116`
+  FR15); otherwise
+  the press goes to the member beneath it, or to the page when none is.
 - **FR3 — Platform close requests use the same topmost rule.** A member receiving
   a browser or platform close request closes only when it is the topmost
   registered present member. A request aimed at a lower member is declined.
+  Presence follows FR2, so a non-modal Popover that is not present does not
+  take the request, and it goes to the member beneath it.
 - **FR4 — Available nesting signals outrank host placement.** When a member
   provides `LayerDepthProvider`, React-tree depth orders its descendant layers
   ahead of the member even when both mount in the same commit. DOM containment
@@ -246,6 +251,10 @@ this record's current membership snapshot must be updated with it.
   layer returns it, or else on the host itself. The rule is the same for a
   mouse, a pen, and a finger.
 
+FR2 and FR3 gap: Escape and platform close requests reach a non-modal Popover through
+the shared stack and native auto light dismiss wherever focus is
+(`spec:AST-116` FR15 gap).
+
 ## Allowed component variation
 
 - **AV1 — Focus.** Members own focus entry, containment, movement, and the
@@ -268,7 +277,7 @@ this record's current membership snapshot must be updated with it.
 | Member and state                                       | Shared invariant                                                                                                                 | Deliberate variation                                                                                                                |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Dialog inside Dialog                                   | Inner dialog handles the first request                                                                                           | Dialog supplies native modality and focus behavior                                                                                  |
-| Popover inside Dialog                                  | Popover handles the first Escape                                                                                                 | Popover supplies anchoring, portal placement, and focus policy                                                                      |
+| Popover inside Dialog                                  | A modal Popover, or a non-modal one holding focus, handles the first Escape                                                      | Popover supplies anchoring, portal placement, and focus policy                                                                      |
 | Registered descendant inside CommandPalette            | Descendant handles the first Escape                                                                                              | CommandPalette inherits Dialog's shared stack participation                                                                         |
 | Tooltip or HoverCard inside Dialog, in page            | An open HoverCard handles the first Escape; over an unpinned Tooltip, the Dialog takes it; a pinned Tooltip takes it first       | Hover families decide when they are present and how controlled state responds                                                       |
 | Lightbox or MobileNav above a required Dialog          | Top member handles the request                                                                                                   | Required Dialog uses `block` only when it is topmost                                                                                |
@@ -277,7 +286,7 @@ this record's current membership snapshot must be updated with it.
 | Two unrelated registered surfaces                      | Later active-cycle registration is topmost                                                                                       | Neither surface is treated as nested                                                                                                |
 | Platform close request sent to a lower Dialog          | Lower Dialog stays open                                                                                                          | The platform targets a host; the shared check decides whether it may close                                                          |
 | Popover in an iframe, Dialog in the page               | Request goes to its own document's top member                                                                                    | The app renders into the second document through a portal                                                                           |
-| Popover inside Dialog in an iframe                     | Popover handles the iframe's first request                                                                                       | Both register their own elements, so they rank in the iframe's order                                                                |
+| Popover inside Dialog in an iframe                     | A modal Popover, or a non-modal one holding focus, handles the iframe's first request                                            | Both register their own elements, so they rank in the iframe's order                                                                |
 | Tooltip or HoverCard inside Dialog, in iframe          | An open HoverCard handles the first Escape there; over an unpinned Tooltip, the Dialog takes it; a pinned Tooltip takes it first | An unpinned Tooltip never wins or blocks Escape against another member; a pinned Tooltip takes it first (`spec:AST-003` FR4, DEC-6) |
 | ContextMenu in a Picture-in-Picture window             | Escape closes it; focus returns to its opener there                                                                              | The menu opens where the person pressed (FR8, FR9)                                                                                  |
 | BottomSheet or Lightbox in a Picture-in-Picture window | Escape closes it; focus returns to its return target there                                                                       | The surface covers that window (FR8, FR9)                                                                                           |

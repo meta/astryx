@@ -244,8 +244,14 @@ const styles = stylex.create({
   triggerIconOpen: {
     transform: 'rotate(180deg)',
   },
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
   content: {
     boxSizing: 'border-box',

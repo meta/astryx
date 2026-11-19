@@ -557,6 +557,46 @@ describe('estimateSeconds and legCount', () => {
   });
 });
 
+describe('the recorded Chromium interaction times', () => {
+  // Every interaction spec file in the tree, as the interaction config runs
+  // them (isInteractionSpec).
+  const specs = execFileSync(
+    'git',
+    ['ls-files', '--', 'internal/interaction-harness/src', 'packages'],
+    {cwd: root, encoding: 'utf8'},
+  )
+    .split('\n')
+    .filter(isInteractionSpec);
+  const recorded = durations['interaction-chromium'];
+
+  it('time at least nine in ten of the spec files the suite runs', () => {
+    // A spec with no recorded time is costed at the mean time a test, which
+    // undercounts a slow spec; the legs then run past the time they planned.
+    expect(specs.length).toBeGreaterThan(100);
+    const timed = specs.filter(file => recorded[file] != null);
+    expect(timed.length / specs.length).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('plan the whole suite into legs that each end within 12 minutes', () => {
+    // The leg count job's own limits: 90 s of setup, 600 s a leg, 10 legs.
+    const seconds = specs.reduce(
+      (sum, file) =>
+        sum +
+        (recorded[file] ??
+          durations['seconds-per-test'][`interaction-chromium`]),
+      0,
+    );
+    const legs = legCount({
+      seconds,
+      setupSeconds: 90,
+      maxSeconds: 600,
+      maxLegs: 10,
+    });
+    for (const leg of planLegs(specs, recorded, legs))
+      expect(90 + leg.seconds).toBeLessThanOrEqual(12 * 60);
+  });
+});
+
 describe('the list reader and recordLog', () => {
   it("reads the list report and the component folder with the accessibility contracts' own helpers", () => {
     const source = fs.readFileSync(
@@ -653,10 +693,10 @@ describe('the interaction leg count job in ci.yml', () => {
       const job = ci.jobs[lane.id];
       // The same checkout, each with the bound its own job's time allows
       // (ci-checkout-timeout.test.mjs owns the bounds).
-      const {'timeout-minutes': _counterBound, ...counterCheckout} =
-        counter.steps[0];
-      const {'timeout-minutes': _laneBound, ...laneCheckout} = job.steps[0];
-      expect(counterCheckout).toEqual(laneCheckout);
+      // A lane's checkout is also tried twice; the counter's short job has no
+      // room for that, so only what each checks out is compared.
+      expect(counter.steps[0].uses).toBe(job.steps[0].uses);
+      expect(counter.steps[0].with).toEqual(job.steps[0].with);
       const keep = "Keep the leg planner from the workflow's commit";
       expect(step(counter, keep).run).toBe(step(job, keep).run);
     }

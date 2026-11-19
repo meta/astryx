@@ -17,6 +17,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function topLevelCSSBlocks(css: string): string[] {
   const blocks: string[] = [];
   let depth = 0;
@@ -864,6 +873,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('re-emits explicit weight overrides after media-specific type rules', () => {
     const themed = defineTheme({
       name: 'media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -890,6 +900,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('carries an authored main weight past a media-specific type rule', () => {
     const themed = defineTheme({
       name: 'inherited-media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -915,6 +926,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('scopes Text color and size guards after each media-surface type rule', () => {
     const themed = defineTheme({
       name: 'media-text-prop-guards',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           text: {'type:large': {color: '#fff', fontSize: '4rem'}},
@@ -1175,6 +1187,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('keeps onDark and onLight weight guards after adaptation guards', () => {
     const themed = defineTheme({
       name: 'surface-adapted-heading-weight',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -1220,6 +1233,105 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
 // =============================================================================
 
 describe('derived var expansion', () => {
+  /** The rule for one selector text, by its start. */
+  const ruleAt = (css: string, start: string) => {
+    const at = css.indexOf(start);
+    return at < 0 ? undefined : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('lowers a pseudo-class block like its resting rule: a normal mapping', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-mapping',
+        components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-button:hover');
+    expect(hover).toContain('border-radius: 9px');
+    expect(hover).toContain('--_button-radius: 9px');
+  });
+
+  it('lowers a pseudo-class block like its resting rule: replaces', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-replaces',
+        components: {icon: {base: {':hover': {width: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-icon:hover');
+    expect(hover).toContain('--_icon-width: 20px');
+    expect(hover).not.toMatch(/(^|[\s;])width: 20px/);
+  });
+
+  it('lowers a pseudo-class block like its resting rule: container padding', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-container',
+        components: {card: {base: {':hover': {padding: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-card:hover');
+    expect(hover).toContain('--astryx-card-padding: 20px');
+  });
+
+  it('lowers a pseudo-class block on a media surface too', () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'pseudo-class-media',
+        onDark: {
+          components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+        },
+      }),
+    );
+    expect(css).toMatch(/:hover[^{]*\{[^}]*--_button-radius: 9px/);
+  });
+
+  it('reports a rejected pseudo-class declaration once, under the name the theme wrote', () => {
+    const warnings: string[] = [];
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'pseudo-class-boundary',
+        components: {
+          icon: {base: {':hover': {width: '20px} .x { color: red'}}},
+          button: {base: {':hover': {borderRadius: '9px} .x { color: red'}}},
+        },
+      }),
+      warnings,
+    ).join('\n');
+    expect(css).not.toContain('.x {');
+    expect(warnings.filter(w => w.includes('"width"'))).toHaveLength(1);
+    expect(warnings.filter(w => w.includes('"border-radius"'))).toHaveLength(1);
+    // No private name reaches the author.
+    expect(warnings.join('\n')).not.toMatch(/--_/);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('writes a pseudo-element block as authored', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-element-as-written',
+        components: {
+          card: {base: {'::before': {padding: '4px'}}},
+          icon: {base: {'::after': {width: '2px'}}},
+          section: {base: {':after': {padding: '6px'}}},
+          button: {base: {':hover::after': {borderRadius: '3px'}}},
+        },
+      }),
+    ).component;
+    const before = ruleAt(css, '.astryx-card::before');
+    expect(before).toContain('padding: 4px');
+    expect(before).not.toContain('--astryx-card-padding');
+    const after = ruleAt(css, '.astryx-icon::after');
+    expect(after).toContain('width: 2px');
+    expect(after).not.toContain('--_icon-width');
+    // (A CSS2 one-colon pseudo-element too.)
+    const oneColon = ruleAt(css, '.astryx-section:after');
+    expect(oneColon).toContain('padding: 6px');
+    expect(oneColon).not.toContain('--astryx-section-padding');
+    expect(css).toMatch(/:hover[^{]*::after[^{]*\{[^}]*border-radius: 3px/);
+    expect(css).not.toContain('--_button-radius: 3px');
+  });
+
   it('emits borderRadius AND internal var for card', () => {
     const theme = defineTheme({
       name: 'test-derived',
@@ -1594,6 +1706,26 @@ describe('derived var expansion', () => {
     // which an unlayered consumer build wins — the vars have no competitor.
     expect(rule).not.toMatch(/[{;]\s*width: 2px/);
     expect(rule).not.toMatch(/[{;]\s*height: 12px/);
+  });
+});
+
+describe('the room between a control and its label', () => {
+  it.each([
+    ['checkbox-input', '--_checkbox-input-gap'],
+    ['switch-field', '--_switch-field-gap'],
+  ])('routes gap on %s to its row (no raw gap on the field)', (target, v) => {
+    const theme = defineTheme({
+      name: `test-derived-${target}-gap`,
+      components: {[target]: {base: {gap: '3px'}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes(`.astryx-${target}`),
+    );
+    expect(rule).toBeDefined();
+    expect(rule).toContain(`${v}: 3px`);
+    // The field also holds the status message: a raw gap there would space
+    // the row from the status instead of the box from its label.
+    expect(rule).not.toMatch(/[{;]\s*gap: 3px/);
   });
 });
 
@@ -2169,6 +2301,7 @@ describe('declaration assembly keeps values as values', () => {
     const {css} = generate(
       defineTheme({
         name: 'brand',
+        tokens: KEEPS_SIDE,
         components: {heading: {'weight:bold': {fontWeight: payload}}},
         onDark: {components: {heading: {'level:1': {fontSize: '2rem'}}}},
       }),
@@ -2268,5 +2401,99 @@ describe('declaration assembly keeps values as values', () => {
       expect.stringContaining('in onDark.tokens:'),
       expect.stringContaining('in adaptations[0].tokens:'),
     ]);
+  });
+});
+
+describe('a media surface that flips with the page', () => {
+  const surfaces = (tokens: Record<string, [string, string]>) =>
+    generateOnMediaCSS(defineTheme({name: 'flip', tokens}));
+
+  it("writes the light side's rules for a dark page when an inverted surface flips", () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).toContain(
+      ':where(:scope[data-theme="dark"]) [data-astryx-media-dark-page="light"]',
+    );
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\n {2}[^{]*\[data-astryx-media-dark-page="light"\]/,
+    );
+  });
+
+  it('draws a root color-mode block by the side a flipped surface takes on a dark page', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'flip-modes',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        components: {
+          button: {
+            base: {
+              '@dark': {color: '#fafafa'},
+              '@light': {color: '#121212'},
+            },
+          },
+        },
+      }),
+    ).component;
+    const rules = css.split('}').map(rule => rule.trim());
+    const flipped =
+      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"] *';
+    // Inside the flipped surface on a dark page the light block applies...
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(${flipped}`) && rule.includes('color: #121212'),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves it out there.
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(:not(${flipped}`) &&
+          rule.includes('color: #fafafa'),
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves the light-page side's overrides out of a surface a dark page flips", () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'flip-scope',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        onDark: {
+          components: {button: {base: {backgroundColor: '#000000'}}},
+        },
+      }),
+    );
+    const rules = css.split('}').map(rule => rule.trim());
+    const fill = rules.filter(rule =>
+      rule.includes('background-color: #000000'),
+    );
+    expect(fill.length).toBeGreaterThan(0);
+    // Each dark-side fill rule leaves out a surface a dark page flips light.
+    for (const rule of fill)
+      expect(rule).toContain(
+        ':where(:not(:scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+      );
+  });
+
+  it('writes no dark-page rules when every inverted surface keeps its side', () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#0a1317'],
+      '--color-background-error-inverted': ['#a8071e', '#a8071e'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).not.toContain('data-astryx-media-dark-page');
   });
 });

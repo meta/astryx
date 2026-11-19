@@ -2,7 +2,7 @@
 
 /**
  * @file The esbuild that builds a rendered page's script. The CLI depends on
- * esbuild, but only `astryx experimental render` loads it, by dynamic import
+ * esbuild, but only `astryx experimental export` loads it, by dynamic import
  * in the page's worker, so no other command pays for it at startup.
  * @position foundation/render — used by render-page.mjs
  */
