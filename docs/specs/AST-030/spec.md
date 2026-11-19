@@ -622,11 +622,13 @@ they are separately named.
   swizzle proof imports), so adding one is a Lab path. A Lab-only change always
   runs, with no browser, the swizzle proof's sample guard (`samples.test.mjs`,
   which checks by name that every swizzle target has a sample or a
-  `needsNoSample` entry, reading the Lab package's samples), the shadcn
-  registry generator's test (`generate-shadcn-registry.test.mjs`), and
+  `needsNoSample` entry, reading the Lab package's samples) and
   `pnpm lab:sync --check`, which names each Lab component's missing route-lock
-  entry or sample; so a new Lab component without them fails its own pull
-  request. `pnpm lab:sync` writes those entries and a sample stub. The full
+  entry or sample; and it runs the route-lock check (the docsite data
+  generation's `checkShadcnRouteLock`) whenever it touches a Lab doc file
+  (`packages/lab/src/**/*.doc.mjs`), a Lab `index.ts` or the route lock, not
+  only when the route lock changed; so a new Lab component without them fails
+  its own pull request. `pnpm lab:sync` writes those entries and a sample stub. The full
   render of every sample stays on release checks. A component in a family folder keeps the full
   suite.
   The classifier reads those files' diffs as data and never runs them; a diff
