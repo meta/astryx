@@ -4458,7 +4458,10 @@ export function draftAnswer(ctx, env, question) {
         !/\s(?:case|caps)$/i.test(name) &&
         // (A mode said with capitals, "Dark Mode", is the mode, never a
         // family.)
-        !(/^[a-z]+[- ]?(?:mode|theme)\b/i.test(name) && modeNear(name.split(/[\s-]/)[0].toLowerCase()))
+        !(
+          /^[a-z]+[- ]?(?:mode|theme)\b/i.test(name) &&
+          modeNear(name.split(/[\s-]/)[0].toLowerCase())
+        )
       );
     };
     // (The words the editor reads: its dials, their rungs and feel words
@@ -8111,7 +8114,9 @@ export function draftAnswer(ctx, env, question) {
     const prevParts = clauses[i - 1]?.parts ?? [];
     const accentRoles = groupsOf(ctx);
     const drawsAccent = (/** @type {string} */ on) =>
-      ['button-like', 'accent-fills'].some(g => (accentRoles[g] ?? []).includes(on));
+      ['button-like', 'accent-fills'].some(g =>
+        (accentRoles[g] ?? []).includes(on),
+      );
     const textOnly = (/** @type {string} */ on) =>
       /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
       !Object.keys(C.MAP[on]?.at?.['background-color'] ?? {}).length;
@@ -8121,7 +8126,10 @@ export function draftAnswer(ctx, env, question) {
           !/^(?:transparent|none|initial|inherit)$/.test(String(v).trim()) &&
           !/--color-accent\b/.test(String(v)),
       ) && !drawsAccent(on);
-    const takesItself = (/** @type {string} */ aspect, /** @type {(on: string) => boolean} */ test) =>
+    const takesItself = (
+      /** @type {string} */ aspect,
+      /** @type {(on: string) => boolean} */ test,
+    ) =>
       prevParts.length > 0 &&
       prevParts.every(p => (FAMILIES[p.on] ?? [p.on]).every(test)) &&
       aspect;
@@ -13965,7 +13973,8 @@ export function draftAnswer(ctx, env, question) {
         // (A light color is the light mode's, as a plain light fill is: on
         // the dark page its text would not read.)
         const rgb = parseColor(String(c.colors[0]));
-        if (!c.mode && rgb && luminance(hex(rgb.slice(0, 3))) > 0.5) c.mode = 'light';
+        if (!c.mode && rgb && luminance(hex(rgb.slice(0, 3))) > 0.5)
+          c.mode = 'light';
         c.colors = [`color-mix(in srgb, ${c.colors[0]} 80%, transparent)`];
         c.text = `${said} background ${c.colors[0]}`
           .replace(/\s+/g, ' ')
