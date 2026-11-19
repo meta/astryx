@@ -986,15 +986,15 @@ const CVD_ALIKE = 0.06;
  */
 export function cvdClashes(
   fills: Record<string, string>,
-): Array<{a: string; b: string; vision: 'red-weak' | 'green-weak'}> {
-  const out: Array<{a: string; b: string; vision: 'red-weak' | 'green-weak'}> =
-    [];
+): {a: string; b: string; vision: 'red-weak' | 'green-weak'}[] {
+  const out: {a: string; b: string; vision: 'red-weak' | 'green-weak'}[] = [];
   const roles = Object.keys(fills).filter(r =>
     /^#[0-9a-f]{6}$/i.test(fills[r]),
   );
-  for (const [vision, M] of Object.entries(CVD) as Array<
-    ['red-weak' | 'green-weak', ReadonlyArray<ReadonlyArray<number>>]
-  >) {
+  for (const [vision, M] of Object.entries(CVD) as [
+    'red-weak' | 'green-weak',
+    ReadonlyArray<ReadonlyArray<number>>,
+  ][]) {
     // Weak, not absent: partway from normal vision to the full matrix.
     const W = M.map((row, r) =>
       row.map(

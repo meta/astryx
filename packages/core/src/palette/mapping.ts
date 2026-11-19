@@ -176,7 +176,7 @@ export interface PaletteMapping {
   /** Lifted secondary text per background token of LIFT_PARTS, per mode; null without one. */
   lift: Record<string, Partial<Record<PaletteMode, StopRef>>> | null;
   /** Status fills someone red-weak or green-weak may not tell apart. */
-  cvd: Array<{
+  cvd: {
     a: string;
     b: string;
     vision: 'red-weak' | 'green-weak';
@@ -184,7 +184,7 @@ export interface PaletteMapping {
     colors: [string, string];
     page?: string;
     pages?: string[];
-  }>;
+  }[];
   /** The code colors that keep the base theme's because none of their family's stops reads on the code background and the page. */
   code: string[];
   /** The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read. */
@@ -2046,14 +2046,9 @@ export function mapPalette(
     // (Every mode's page: a status color set with no mode shows on each.)
     const pages = modes.map(m => {
       const c = parseColor(
-        String(
-          tokens['--color-background-body']?.[m]?.color ??
-            t.colorIn(
-              String(base?.[m]?.['--color-background-body'] ?? ''),
-              m,
-            ) ??
-            (m === 'light' ? '#ffffff' : '#000000'),
-        ),
+        tokens['--color-background-body']?.[m]?.color ??
+          t.colorIn(base?.[m]?.['--color-background-body'] ?? '', m) ??
+          (m === 'light' ? '#ffffff' : '#000000'),
       );
       return c ? hex(c) : m === 'light' ? '#ffffff' : '#000000';
     });
@@ -2064,7 +2059,7 @@ export function mapPalette(
         const v =
           exactOf(k, m) ??
           tokens[k]?.[m]?.color ??
-          t.colorIn(String(base?.[m]?.[k] ?? ''), m);
+          t.colorIn(base?.[m]?.[k] ?? '', m);
         const rgb = v ? parseColor(v) : null;
         if (v && rgb && alphaOf(v) >= 1) {
           fills[w] = hex(rgb);
@@ -2073,14 +2068,9 @@ export function mapPalette(
       const changed = (w: string): boolean =>
         `--color-${w}` in tokens || exactOf(`--color-${w}`, m) != null;
       const pageOf = parseColor(
-        String(
-          tokens['--color-background-body']?.[m]?.color ??
-            t.colorIn(
-              String(base?.[m]?.['--color-background-body'] ?? ''),
-              m,
-            ) ??
-            (m === 'light' ? '#ffffff' : '#000000'),
-        ),
+        tokens['--color-background-body']?.[m]?.color ??
+          t.colorIn(base?.[m]?.['--color-background-body'] ?? '', m) ??
+          (m === 'light' ? '#ffffff' : '#000000'),
       );
       const page = pageOf ? hex(pageOf) : m === 'light' ? '#ffffff' : '#000000';
       for (const c of cvdClashes(fills)) {
