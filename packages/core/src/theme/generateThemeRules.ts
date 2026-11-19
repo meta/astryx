@@ -1300,11 +1300,46 @@ function generateComponentRules(
           );
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles);
+          // A pseudo-class block expands like its resting rule. A hovered
+          // row's fill then reaches pinned cells through --table-row-overlay.
+          // A pseudo-element block (`::before`) is another box. A derived
+          // variable set there never reaches the element that reads it, so
+          // the compiler writes the block as authored. This includes the CSS2
+          // one-colon forms (`:before`, `:after`, `:first-line`,
+          // `:first-letter`).
+          const pseudoClass =
+            pseudo.startsWith(':') &&
+            !pseudo.includes('::') &&
+            !/:(before|after|first-line|first-letter)(?![-\w])/i.test(pseudo);
+          // The boundary check reads the authored declarations first, as it
+          // does for the resting rule. So the author sees one warning for a
+          // rejected declaration, under the name the theme wrote.
+          const pseudoLocation = `${location}[${JSON.stringify(pseudo)}]`;
+          const accepted: [string, string][] = [];
+          if (pseudoClass) {
+            for (const [prop, value] of Object.entries(pseudoStyles)) {
+              if (value === undefined) {
+                continue;
+              }
+              const text = stringifyTokenValue(value);
+              if (
+                acceptDeclaration(toKebabCase(prop), text, pseudoLocation, sink)
+              ) {
+                accepted.push([prop, text]);
+              }
+            }
+          }
+          const pseudoEntries = pseudoClass
+            ? expandComponentDeclarations(
+                component,
+                accepted,
+                resetInheritedPaddingSpecificity,
+              )
+            : Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,
-              `${location}[${JSON.stringify(pseudo)}]`,
+              pseudoLocation,
               sink,
               toKebabCase,
             );

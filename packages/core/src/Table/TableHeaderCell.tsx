@@ -26,7 +26,11 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {overflowStyles, containerEdgeStyles} from './table.stylex';
+import {
+  headerOverflowStyles,
+  overflowStyles,
+  containerEdgeStyles,
+} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
   hasTableContextActions,
@@ -188,7 +192,9 @@ export function TableHeaderCell({
       headerStyles.cell,
       densityStyles[ctx.density],
       headerDividerStyles.cell,
-      overflowStyles.cell,
+      ctx.textOverflow === 'truncate'
+        ? overflowStyles.cell
+        : headerOverflowStyles.cell,
       containerEdgeStyles[ctx.density],
     );
     // Column dividers come from the shared builder (column axis only).

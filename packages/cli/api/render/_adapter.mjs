@@ -590,6 +590,7 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
     checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
+    ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
   };
 }
 

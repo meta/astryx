@@ -291,6 +291,81 @@ export const ChildrenMode: Story = {
   ),
 };
 
+/**
+ * A children-mode table that is wider than its container scrolls inside its
+ * own box. Columns keep whole words and full headings; nothing breaks letter
+ * by letter.
+ */
+export const ChildrenModeNarrow: Story = {
+  render: () => (
+    <div
+      style={{width: '320px', border: '1px dashed #ccc', borderRadius: '8px'}}>
+      <Table density="compact" dividers="rows">
+        <TableHeader>
+          <TableRow>
+            <TableHeaderCell>Priority</TableHeaderCell>
+            <TableHeaderCell>Workflow</TableHeaderCell>
+            <TableHeaderCell>Median wait</TableHeaderCell>
+            <TableHeaderCell>Slowest wait</TableHeaderCell>
+            <TableHeaderCell>Jobs</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>Background</TableCell>
+            <TableCell>Continuous</TableCell>
+            <TableCell>12 min</TableCell>
+            <TableCell>95 min</TableCell>
+            <TableCell>48,210</TableCell>
+            <TableCell>Watching</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Interactive</TableCell>
+            <TableCell>Landing</TableCell>
+            <TableCell>2 min</TableCell>
+            <TableCell>19 min</TableCell>
+            <TableCell>9,804</TableCell>
+            <TableCell>Healthy</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const wrappers = canvasElement.querySelectorAll<HTMLElement>(
+      '.astryx-table-scroll-wrapper',
+    );
+    expect(wrappers).toHaveLength(1);
+    const [wrapper] = Array.from(wrappers);
+    await waitFor(() => {
+      expect(wrapper).toHaveAttribute('data-scrollable-inline', 'true');
+    });
+    expect(wrapper.scrollWidth).toBeGreaterThan(wrapper.clientWidth);
+
+    // Every heading shows in full.
+    for (const header of canvasElement.querySelectorAll('th')) {
+      expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth + 1);
+    }
+    // Every cell keeps its words whole: the text of each cell stays on as
+    // many lines as it has words, never more.
+    for (const cell of canvasElement.querySelectorAll('td')) {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const lines = new Set(
+        Array.from(range.getClientRects(), rect => Math.round(rect.top)),
+      );
+      const words = (cell.textContent ?? '').trim().split(/\s+/).length;
+      expect(lines.size).toBeLessThanOrEqual(words);
+    }
+  },
+};
+
 export const AllDensities: Story = {
   render: () => (
     <div style={{display: 'flex', flexDirection: 'column', gap: '32px'}}>

@@ -26,6 +26,7 @@ import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
+import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
 export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
@@ -187,6 +188,7 @@ export function TableRow({
   ...props
 }: TableRowProps) {
   const ctx = use(TableContext);
+  const placement = use(TableRowPlacementContext);
 
   if (!ctx) {
     return (
@@ -243,12 +245,17 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
+  // Every row Core may stripe carries `striped`, footer rows included. Only
+  // a body row whose place Core knows carries `parity`.
   return (
     <tr
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps('table-row'),
+        themeProps('table-row', {
+          parity: placement.isBodyRow && !isHeaderRow ? placement.parity : null,
+          striped: ctx.isStriped && !isHeaderRow ? 'striped' : null,
+        }),
         stylex.props(tableRowMarker, ...rowStyles),
         incomingClassName,
         incomingStyle,
