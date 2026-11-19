@@ -664,16 +664,6 @@ export function modesOf(data) {
   );
 }
 
-/** The fill token each color dial's family is drawn as. */
-const DIAL_FILL_TOKEN = /** @type {Record<string, string>} */ ({
-  accent: '--color-accent',
-  neutral: '--color-neutral',
-  success: '--color-success',
-  warning: '--color-warning',
-  danger: '--color-error',
-  info: '--color-info',
-});
-
 /**
  * The light-mode color of a token value the theme's own source writes: a
  * plain color, or the first half of a light-dark() pair.
@@ -681,8 +671,8 @@ const DIAL_FILL_TOKEN = /** @type {Record<string, string>} */ ({
  */
 function lightHalf(value) {
   const v = String(value ?? '').trim();
-  const pair = /^light-dark\(\s*([^,]+?)\s*,/.exec(v);
-  return pair ? pair[1] : v;
+  const pair = /^light-dark\((.*)\)$/is.exec(v);
+  return pair ? (splitTop(pair[1], ',')[0] ?? '').trim() : v;
 }
 
 /**
@@ -690,6 +680,7 @@ function lightHalf(value) {
  * token the theme's own source sets exactly takes that color, the one in
  * effect, as its seed: the shades its text, icons and tints read come from
  * the color the fill shows, never from a dial value the source overrides.
+ * The neutral family always takes its setting.
  * @param {{settings: Setting[]}} data
  * @param {Record<string, string>} [own] the tokens the theme's own source sets
  */
@@ -700,7 +691,10 @@ function dialFamilies(data, own = {}) {
     const s = [...data.settings]
       .reverse()
       .find(x => x?.source === 'dial' && x.thing === dial && !x.on && !x.mode);
-    const inEffect = seedOf(lightHalf(own[DIAL_FILL_TOKEN[dial] ?? '']));
+    // The neutral family keeps its setting: a gray the source sets exactly
+    // is one surface, not the color every gray grows from.
+    const inEffect =
+      dial === 'neutral' ? null : seedOf(lightHalf(own[paletteToken(dial)]));
     const seed = inEffect ?? (s && seedOf(s.value));
     if (s && seed) out.push({id: dial, dial, seed, value: s.value});
   }
@@ -1257,7 +1251,10 @@ function planPalette(cwd, slug, data, base) {
     );
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
-  const savedSeeds = dialFamilies({settings: saved});
+  const savedSeeds = dialFamilies(
+    {settings: saved},
+    ownSourceTokenValues(cwd, slug),
+  );
 
   /**
    * One dial family: the author's family with the dial's seed and the
@@ -3052,7 +3049,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   const given = pal.families.find(x => x.dial === dial);
   if (given && isClipped(given.value))
     notes.push(
-      `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${given.seed}, is used`,
+      `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${seedOf(given.value)}, is used`,
     );
   for (const c of dialChecks(pal, dial, modes)) {
     if (c.note || !c.pass) notes.push(checkNote(c, dial));

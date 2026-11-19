@@ -36,20 +36,26 @@ beforeAll(async () => {
   );
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
-  await themeEditNew('t', {cwd, like: 'neutral'});
-  const file = path.join(cwd, 'themes/t/t.theme.ts');
-  fs.writeFileSync(
-    file,
-    fs
-      .readFileSync(file, 'utf8')
-      .replace(
-        "name: 't',",
-        "name: 't',\n  tokens: {'--color-accent': ['#9333ea', '#d8b4fe']},",
-      ),
-  );
-  await runCli(['experimental', 'theme', 'compile', 'themes/t/t.theme.ts'], {
-    cwd,
-  });
+  /** @param {string} slug @param {string} accent */
+  const withAccent = async (slug, accent) => {
+    await themeEditNew(slug, {cwd, like: 'neutral'});
+    const file = path.join(cwd, `themes/${slug}/${slug}.theme.ts`);
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          `name: '${slug}',`,
+          `name: '${slug}',\n  tokens: {'--color-accent': ${accent}},`,
+        ),
+    );
+    await runCli(
+      ['experimental', 'theme', 'compile', `themes/${slug}/${slug}.theme.ts`],
+      {cwd},
+    );
+  };
+  await withAccent('t', "['#9333ea', '#d8b4fe']");
+  await withAccent('u', "['rgb(147, 51, 234)', 'rgb(216, 180, 254)']");
 }, 600_000);
 
 afterAll(() => {
@@ -89,11 +95,31 @@ describe('a family whose fill the source sets', () => {
     const note = (r.data?.notes ?? []).find((/** @type {string} */ n) =>
       /your exact color \(#9333ea\)/.test(n),
     );
-    if (note) {
-      const shade = /\((#[0-9a-f]{6})\), the nearest that reads/.exec(
-        note,
-      )?.[1];
-      expect(hue(String(shade))).toBeGreaterThan(250);
-    }
+    expect(note).toBeDefined();
+    const shade = /\((#[0-9a-f]{6})\), the nearest that reads/.exec(
+      String(note),
+    )?.[1];
+    expect(hue(String(shade))).toBeGreaterThan(250);
+  }, 240_000);
+
+  it('names no replaced seed when the file is set again', async () => {
+    if (unbuilt) return;
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'accent', '#2563eb', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
+  }, 240_000);
+
+  it('reads a pair written with rgb() colors', async () => {
+    if (unbuilt) return;
+    await themeEditSet('u', 'accent', '#2563eb', {cwd});
+    const css = fs.readFileSync(path.join(cwd, 'themes/u/u.css'), 'utf8');
+    const text = /--color-text-accent:\s*light-dark\((#[0-9a-f]{6}),/i.exec(
+      css,
+    )?.[1];
+    expect(text).toBeDefined();
+    expect(hue(String(text))).toBeGreaterThan(250);
+    expect(hue(String(text))).toBeLessThan(300);
   }, 240_000);
 });
