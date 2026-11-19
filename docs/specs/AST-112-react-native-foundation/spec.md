@@ -752,9 +752,10 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-082` FR10's `defineNativeTheme` configuration gains one member,
   `render.default: 'auto' | 'system' | 'drawn'`; `auto` keeps each
   component's own per-platform default (FR21).
-- Relies on `spec:AST-082` DEC-2 as amended: `surface` on `Button` and
-  `IconButton` is a situational, per-call-site appearance choice, and the look
-  of that surface stays the native theme's `material` member (FR21).
+- `spec:AST-082` DEC-2 gains one sentence, with **Decider:** cixzhang,
+  2026-11-18: `surface` on `Button` and `IconButton` is a situational,
+  per-call-site appearance choice, and the look of that surface stays the
+  native theme's `material` member (FR21).
 - `spec:AST-082` DEC-2 also gains, as a proposal of this record: a component's
   `render` prop is a presentation choice under its DEC-6, not a visual
   (FR21).
