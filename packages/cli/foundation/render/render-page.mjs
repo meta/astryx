@@ -1499,7 +1499,7 @@ export async function renderPage(entry, options = {}) {
     for (const {tag, ref} of embeddedLoads(markup)) {
       warnings.push({
         code: 'remote-asset',
-        message: `The page renders a <${tag}> that loads ${ref}, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.`,
+        message: `The page renders a <${tag}> that loads ${ref}, which a sandboxed page cannot reach and which loads from outside the file; remove it from the page.`,
       });
     }
   } catch (e) {
