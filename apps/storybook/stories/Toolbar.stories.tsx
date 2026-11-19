@@ -274,6 +274,36 @@ export const PageHeader: Story = {
   ),
 };
 
+/**
+ * Two lanes that do not fit one row on a phone: the row wraps, the title and
+ * its count stay on one line, and the end lane moves below.
+ */
+export const TwoLaneNarrow: Story = {
+  name: 'Readiness: two lanes on a narrow screen',
+  parameters: {layout: 'fullscreen'},
+  render: () => (
+    <Toolbar
+      label="Board actions"
+      startContent={
+        <>
+          <Heading level={3}>Sprint Board</Heading>
+          <Badge label={7} variant="neutral" />
+        </>
+      }
+      endContent={
+        <>
+          <Button label="Sort" variant="ghost" />
+          <Button label="Filter" variant="ghost" />
+          <Button
+            label="Add task"
+            icon={<PlusIcon style={{width: 16, height: 16}} />}
+          />
+        </>
+      }
+    />
+  ),
+};
+
 /** Bulk selection toolbar with badge count + action buttons. */
 export const BulkActions: Story = {
   name: 'Composition: Bulk Selection',

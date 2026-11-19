@@ -45,6 +45,7 @@ import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
+import {childrenReader, dropperOf} from './dropped-text.mjs';
 import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
@@ -1310,6 +1311,10 @@ export async function renderPage(entry, options = {}) {
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/\s+/g, ' ');
+  // The components' own docs say which one drops a missing text; they are
+  // read only when a text is missing.
+  /** @type {((entry: import('./dropped-text.mjs').ChainEntry) => Promise<boolean | null>) | null} */
+  let takesChildren = null;
   for (const t of /** @type {any[]} */ (message.texts ?? [])) {
     if (t.hidden || t.text.length < 2 || plainText.includes(t.text)) continue;
     // The code around it ran: other text from the same function rendered.
@@ -1317,9 +1322,26 @@ export async function renderPage(entry, options = {}) {
       message.fnTexts?.[t.fn] ?? []
     ).filter(o => o !== t.text);
     if (!around.some(o => plainText.includes(o))) continue;
+    takesChildren ??= childrenReader(
+      /** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).find(
+        p => p.name === '@astryxdesign/core',
+      )?.dir ??
+        findNodeModulesPackage(dir, '@astryxdesign/core')?.packageDir ??
+        null,
+    );
+    const dropper = await dropperOf(t.chain ?? [], takesChildren);
+    // Its own component takes children: a later paint shows the text.
+    if (dropper === null) continue;
+    const shown = t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text;
+    const where =
+      t.file && t.file !== entry
+        ? ` of ${path.relative(dir, t.file).split(path.sep).join('/')}`
+        : '';
     warnings.push({
       code: 'dropped-children',
-      message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
+      message: dropper
+        ? `<${dropper.component}> on line ${dropper.line}${where} did not render the text "${shown}" it was given; ${dropper.name} takes no children, so pass the text through one of its props (astryx component ${dropper.name}).`
+        : `<${t.component}> on line ${t.line}${where} did not render the text "${shown}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
   // A media query the page asks in JavaScript gets its server answer in the

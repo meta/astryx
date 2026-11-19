@@ -2257,6 +2257,29 @@ describe('Selector', () => {
       expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
+    it('selects an option from a letter typed with AltGr (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          value="Kraków"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(onChange).toHaveBeenLastCalledWith('Łódź');
+    });
+
     it('puts the exact option first for a typed mark (INV17)', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -2382,6 +2405,27 @@ describe('Selector', () => {
       const search = screen.getByPlaceholderText('Search…');
       expect(search).toHaveValue('c');
       await waitFor(() => expect(search).toHaveFocus());
+    });
+
+    it('seeds a letter typed with AltGr on a closed hasSearch trigger (INV17)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="City"
+          options={['Kraków', 'Lublin', 'Łódź']}
+          hasSearch
+        />,
+      );
+
+      await user.tab();
+      fireEvent.keyDown(document.activeElement as Element, {
+        key: 'ł',
+        ctrlKey: true,
+        altKey: true,
+        modifierAltGraph: true,
+      });
+
+      expect(await screen.findByPlaceholderText('Search…')).toHaveValue('ł');
     });
 
     it('accumulates a multi-character prefix and resets it after the timeout', async () => {

@@ -120,7 +120,6 @@
     "spec:AST-025"
   ],
   "packages/core/src/Chat/ChatComposer.tsx": [
-    "#2072",
     "FR11",
     "FR2",
     "FR5",
@@ -128,7 +127,7 @@
     "INV10",
     "spec:AST-086"
   ],
-  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
+  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182"],
   "packages/core/src/Chat/ChatComposerInput.tsx": ["FR1", "spec:AST-056"],
   "packages/core/src/Chat/ChatLayout.tsx": ["#2573", "#2573"],
   "packages/core/src/Chat/ChatLayoutScrollButton.tsx": [
@@ -136,7 +135,7 @@
     "architecture:component-theming-surface",
     "spec quote"
   ],
-  "packages/core/src/Chat/ChatMessageBubble.tsx": ["#2072", "#2574"],
+  "packages/core/src/Chat/ChatMessageBubble.tsx": ["#2574"],
   "packages/core/src/Chat/ChatMessageList.tsx": ["FR4", "FR8", "spec:AST-086"],
   "packages/core/src/Chat/ChatSystemMessage.tsx": [
     "FR4",
@@ -584,11 +583,9 @@
   ],
   "packages/core/src/Markdown/Markdown.fr23.sampling.ts": ["FR23"],
   "packages/core/src/Markdown/Markdown.tsx": [
-    "AST-061",
     "DEC-6",
     "DEC-6",
     "DEC-9",
-    "FR11",
     "FR17",
     "FR23",
     "FR30",
@@ -2114,13 +2111,8 @@
     "spec:AST-108",
     "spec:AST-108"
   ],
-  "packages/core/src/theme/expandRadiusScale.ts": ["#2072"],
   "packages/core/src/theme/generateThemeRules.ts": [
     "INV16",
-    "INV16",
-    "INV17",
-    "INV17",
-    "INV17",
     "INV17",
     "INV17",
     "INV17",
@@ -2205,7 +2197,6 @@
     "spec:AST-108"
   ],
   "packages/core/src/theme/tokens.stylex.ts": [
-    "#2072",
     "FR2",
     "INV11",
     "architecture:theme-tokens",

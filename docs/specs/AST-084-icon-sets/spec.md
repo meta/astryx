@@ -263,7 +263,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
   an id part, and an exact meaning
-  match by its tag position; then by `id`. `--set` keeps one set and `--limit`
+  match by its tag position; then an icon whose id the query names in
+  full (each id word, or its plural or singular, is a query word); then by
+  `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
   definition (`icon.definitions`), each with `templates`, the number of
@@ -514,7 +516,13 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
     is built from, never the built file), the `react` and optional
     `@types/react` and `@astryxdesign/cli` peers it does not declare, and a
     `typecheck` script running `integration check --strict` when it has
-    none. `--variants` and `--default-variant` declare `variants` and
+    none. When the package's own package.json sets `"private": true` (the
+    field npm reads to refuse a publish), the receipt names none of these
+    publishing notes (peers, the script, the strict check's TypeScript, the
+    placeholder description), and its notes end with the
+    `experimental icon use <set>` step. No other signal, such as the
+    package's folder or how it is installed, changes the notes; every other
+    package gets them as above. `--variants` and `--default-variant` declare `variants` and
     `default`; `--display-name` and `--description` fill the descriptor.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a

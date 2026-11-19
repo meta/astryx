@@ -4373,7 +4373,7 @@ export default function TableFilterTemplate() {
                       Section and LayoutHeader all take content only — so the
                       title and its action are a row, the same shape the other
                       table templates use. */}
-                  <HStack gap={3} vAlign="center">
+                  <HStack gap={3} vAlign="center" wrap="wrap">
                     <StackItem size="fill">
                       <Heading level={1}>Service jobs</Heading>
                     </StackItem>

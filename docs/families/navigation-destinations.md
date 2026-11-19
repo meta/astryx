@@ -25,6 +25,7 @@ verified_by:
     packages/core/src/hooks/useClickableContainer.test.tsx,
     packages/core/src/ClickableCard/ClickableCard.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
+    packages/core/src/Item/Item.test.tsx,
   ]
 members:
   [
@@ -176,11 +177,17 @@ must be added here even when it delegates to an existing member or shared hook.
   that handles both navigation and resources applies this family only to its
   navigation path. Markdown is the exception: its parser applies its link rule
   to image URLs too (`spec:AST-005/DEC-3`).
-- **FR9 — Opening a new tab leaves the page as it is.** A Cmd/Ctrl-click,
+- **FR9 — The current marker sits on the focusable element.** On an
+  interactive row (an `onClick`, `href` or delegated row), the current marker
+  (`aria-current`) sits on the row's focusable element, not the row's root, so a
+  screen reader announces it when that element takes focus. A row whose root
+  takes focus (a parent-supplied role or a link root) keeps it on the root
+  (`family:navigation-destinations/DEC-1`).
+- **FR10 — Opening a new tab leaves the page as it is.** A Cmd/Ctrl-click,
   Shift-click, or middle-click on a member's accepted link opens the
   destination the browser's way (FR5). It does not run the item's `onClick`,
   close a drawer or menu, or navigate the current page. A navigation item that
-  renders a link accepts `target` and `rel` (AV4) (DEC-1).
+  renders a link accepts `target` and `rel` (AV4) (DEC-2).
 
 ## Allowed component variation
 
@@ -237,11 +244,12 @@ router with an undefined rejected destination is an approved exception.
 | ------------------ | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR4, FR5           | `safeUrl.test.ts`                                                                                   | string and structured destinations; mixed case; controls; relative, fragment, protocol-relative, ordinary, safe custom schemes, and `data:image/*`; separate `protocol` | The shared rule accepts a blocked destination or rejects an ordinary one, including when a protocol is separate from its pathname.                                            |
 | FR1, FR2, FR6      | `useLinkComponent.test.tsx` and `apps/docsite/src/__tests__/link-navigation.test.ts`                | native Link, Button, navigation members; provider and `as`; safe/rejected `href` and `to` in either combination; structured destinations and object identity            | A rejected destination invokes the router (including with `undefined` or fallback), an accepted object loses identity, or a real router throws while rendering inert content. |
-| FR9                | `SideNav.test.tsx`, `TopNav.test.tsx`, and `TopNavMenu.test.tsx` modified-click cases               | Cmd/Ctrl-, Shift-, and middle-click on a drawer link, a bar menu item, and a drawer menu item; `target="_blank"` on a menu item                                         | A modified click that closes the drawer or menu, runs `onClick`, or navigates the current page fails                                                                          |
+| FR10               | `SideNav.test.tsx`, `TopNav.test.tsx`, and `TopNavMenu.test.tsx` modified-click cases               | Cmd/Ctrl-, Shift-, and middle-click on a drawer link, a bar menu item, and a drawer menu item; `target="_blank"` on a menu item                                         | A modified click that closes the drawer or menu, runs `onClick`, or navigates the current page fails                                                                          |
 | FR1, FR3, FR4, FR5 | `useClickableContainer.test.tsx` and real Chromium navigation coverage                              | ClickableCard and Token shapes; native Link; plain, `_blank`, Cmd/Ctrl-click, middle-click, delegated activation; accepted downloads                                    | A rejected destination remains activatable, a blocked native, imperative, or delegated navigation occurs, or an accepted destination loses an activation mode.                |
 | FR4, FR5           | `parser.test.ts`, `urlSchemes.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx` | parsed, reference, autolink, and transformed built-in links; mixed case; controls; ordinary schemes; every `data:` URL in links and images                              | Markdown accepts a blocked scheme or any `data:` URL in a link, rejects an ordinary navigation destination, or renders a rejected node as navigation.                         |
 | FR1, IR3           | source/member audit required by `spec:AST-005`                                                      | every caller-controlled Core navigation destination                                                                                                                     | A new sink or destination-bearing component ships outside this member snapshot                                                                                                |
 | FR7, FR8           | member-focused behavior and resource suites                                                         | disabled link modes; Markdown links and images under one parser rule; Citation link versus image                                                                        | Destination rejection changes disabled semantics or navigation policy silently becomes resource policy                                                                        |
+| FR9                | `Item.test.tsx` current-marker tests                                                                | `onClick`, `href` and delegated rows; a parent role and a link root                                                                                                     | The marker sits on the list item of an interactive row, or leaves a row whose root takes focus                                                                                |
 
 ## Decision links
 
@@ -250,7 +258,29 @@ router with an undefined rejected destination is an approved exception.
 - `spec:AST-005/DEC-3` — Markdown's parser owns its URL safety and blocks every
   `data:` URL.
 
-### DEC-1 — A new-tab click does not change the current page
+### DEC-1 — The current marker sits on the row's focusable element
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+On an interactive row, the current marker (`aria-current`) sits on the
+element that takes focus: the row's own button or link, or the control it
+delegates to. A screen reader then announces "current" when that element
+takes focus. A row whose root takes focus keeps the marker on the root, and a
+row that is not interactive keeps it on its root. A selected row keeps
+`data-selected` on its root for styling. A caller's `aria-current` on an
+interactive row moves with the marker. In server-rendered HTML a delegated
+row's control carries the marker only after hydration, and a delegated row
+whose control is not mounted carries none. A control that its own component
+mounts or replaces without a render of the row carries the marker from the
+row's next render. When the row is deselected it removes a value it wrote,
+so a caller that sets the same value on its own control loses it then. A
+selected row keeps its own fill while it slides past other rows, whatever its
+`aria-current` value.
+
+Rejected: the marker on the list item of an interactive row, which a screen
+reader does not announce on focus.
+
+### DEC-2 — A new-tab click does not change the current page
 
 **Decider:** pending
 
