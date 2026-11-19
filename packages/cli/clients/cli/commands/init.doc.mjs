@@ -58,25 +58,21 @@ export const doc = {
       flag: '--to <places>',
       param: 'options.to',
       description:
-        'Where the Astryx skill goes, a comma list: agents-md (the AGENTS.md block, the default), skills (.agents/skills/astryx-project and .claude/skills/astryx-project in the project), ' +
-        'user (this computer, same as --user), or a folder written as a path (./team-skills, ~/team-skills). The choice is saved: in astryx.config `skills.to` for the project, so a later init writes the same places; ' +
-        'in the settings file for a folder outside it, whose copy the CLI installed for the computer refreshes after each of its upgrades while it is there. Moving a project off a place removes the skill there. ' +
-        'An unknown place exits 1 with ERR_INVALID_ARGUMENT',
+        'Where the Astryx skill goes, a comma list: agents-md (default), skills, user (same as --user), or a folder path. ' +
+        'Saved, so later runs keep each place current (a deleted copy in a folder outside the project stays deleted); moving off a place removes the skill there. Which to pick: `{@command docs cli/skill-places}`',
     },
     {
       flag: '--once',
       param: 'options.once',
       description:
-        'With --to, write a copy that is saved nowhere, so init and upgrade never touch it again (a bundle, a skill to upload); doctor still reports a copy in the project skills folders beside the saved guidance as the guidance being there twice. Refused without --to, with user, and for agents-md or a place already saved',
+        'With --to, a copy saved nowhere, so init and upgrade never refresh it; doctor still reports one in the project skills folders beside the AGENTS.md block as a second copy. Refused without --to, with user, and for agents-md or a place already saved',
     },
     {
       flag: '--remove',
       param: 'options.remove',
       description:
-        'Remove the Astryx skill from every place the project saved (with --to, from the places it names) and drop them from what is saved. ' +
-        'Without --to it also removes the managed block from AGENTS.md, CLAUDE.md, .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md and HERMES.md, ' +
-        'at the project root (where init writes them) and in this folder. An edited skill file is kept. ' +
-        '--features, --all, --agent, --agent-docs-path and --once are refused',
+        "Remove the skill from the project's saved places (with --to, the places named) and drop them from what is saved; without --to, or with agents-md, also the block from AGENTS.md, CLAUDE.md, .claude/CLAUDE.md, GEMINI.md, .cursorrules, .hermes.md and HERMES.md at the project root (where init writes them) and in this folder. " +
+        'A skill file you edited is kept; folders saved for this computer stay unless --to names them. --features, --all, --agent, --agent-docs-path and --once are refused',
     },
     {
       flag: '--remove-agents',
@@ -156,7 +152,7 @@ export const doc = {
     },
     {
       type: 'prose',
-      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` (or `--to user`) writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
+      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` (or `--to user`) writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global}, {@link generic:computer-agent-guide}, and {@link generic:skill-places}.",
     },
   ],
 };
