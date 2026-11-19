@@ -730,6 +730,18 @@
             "available": true
           },
           {
+            "flag": "--once",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          },
+          {
+            "flag": "--remove",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          },
+          {
             "flag": "--remove-agents",
             "description": "<text>",
             "type": "boolean",
@@ -762,6 +774,8 @@
           "<text>"
         ],
         "examples": [
+          "<text>",
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
