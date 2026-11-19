@@ -120,6 +120,8 @@ describe("a part said beside a mode, a role or a look is that part's", () => {
       'works in light and dark',
       'works in light and dark mode',
       'looks good in dark and light modes',
+      'should work in light and dark mode',
+      'it needs to look good in dark and light',
     ])
       expect(writes(await how('lo', ask)), ask).toContain('set lo mode both');
   });
