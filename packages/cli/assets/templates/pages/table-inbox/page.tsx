@@ -2024,7 +2024,13 @@ function ComposeWindow({
                   <Button
                     label="Send"
                     variant="primary"
-                    icon={<Icon icon={PaperAirplaneIcon} size="sm" />}
+                    icon={
+                      <Icon
+                        icon={PaperAirplaneIcon}
+                        size="sm"
+                        xstyle={rtlStyles.mirror}
+                      />
+                    }
                     onClick={() =>
                       // Demo only: replace this toast with the call that performs the action.
                       showToast({
