@@ -422,7 +422,7 @@ export function partValues(comp) {
  * @param {Record<string, string>} map
  * @param {'light' | 'dark'} mode
  */
-export function resolveIn(v, map, mode) {
+function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
@@ -811,6 +811,43 @@ const CHROMA_STEP = 0.005;
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
 /**
+ * One part's rules: each source's declarations on top of the one before,
+ * condition by condition (a rule that sets one property keeps the earlier
+ * rule's others).
+ * @param {...Record<string, any>} sources the part's rules, earliest first
+ * @returns {Record<string, Record<string, any>>}
+ */
+export function mergeRules(...sources) {
+  /** @type {Record<string, Record<string, any>>} */
+  const rules = {};
+  for (const src of sources)
+    for (const [when, rule] of Object.entries(src ?? {}))
+      rules[when] =
+        rule && typeof rule === 'object' && !Array.isArray(rule)
+          ? {...(rules[when] ?? {}), ...rule}
+          : rule;
+  return rules;
+}
+
+/**
+ * The tokens inside a part in one mode: the theme's, with each token the
+ * part's own rule sets (a part-scoped dial's `--spacing-4`) over them, and a
+ * variant's rule over the part's in that variant.
+ * @param {Record<string, Record<string, any>>} rules the part's rules
+ * @param {Record<string, string>} tokens the theme's tokens in that mode
+ * @param {string} when the rule's condition (`base` at rest)
+ * @returns {Record<string, string>}
+ */
+export function scopedTokens(rules, tokens, when) {
+  /** @type {Record<string, string>} */
+  const t = {...tokens};
+  for (const w of when === 'base' ? ['base'] : ['base', when])
+    for (const [k, v] of Object.entries(rules[w] ?? {}))
+      if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+  return t;
+}
+
+/**
  * The values a part shows, by `when|state|prop` and mode: its own
  * compiled rules (the base theme's, with the theme's on top), then each
  * token it reads for a property, with every var() written out from the
@@ -823,35 +860,15 @@ const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
  * @returns {Map<string, {light: string, dark: string, raw: string}>}
  */
 export function partShows(C, baseComponents, compiled, toks, part) {
-  // Each rule of the part: the base theme's own declarations with the
-  // theme's on top, condition by condition (a theme rule that sets one
-  // property keeps the base rule's others).
-  /** @type {Record<string, Record<string, any>>} */
-  const rules = {};
-  for (const src of [
+  const rules = mergeRules(
     baseComponents?.[part] ?? {},
     compiled.components?.[part] ?? {},
-  ])
-    for (const [when, rule] of Object.entries(src))
-      rules[when] =
-        rule && typeof rule === 'object' && !Array.isArray(rule)
-          ? {...(rules[when] ?? {}), ...rule}
-          : rule;
+  );
   const own = partValues(rules);
-  // A token the part's own rule sets (a part-scoped dial's --spacing-4)
-  // is the value inside the part.
-  // A token a variant's rule sets holds in that variant, over the part's.
   const scoped = (
     /** @type {'light' | 'dark'} */ m,
     /** @type {string} */ when,
-  ) => {
-    /** @type {Record<string, string>} */
-    const t = {...toks[m]};
-    for (const w of when === 'base' ? ['base'] : ['base', when])
-      for (const [k, v] of Object.entries(rules[w] ?? {}))
-        if (k.startsWith('--') && typeof v === 'string') t[k] = v;
-    return t;
-  };
+  ) => scopedTokens(rules, toks[m], when);
   /** @type {Map<string, string>} */
   const raw = new Map(own);
   // The part at rest in its main variant is its `base` too (a set with no

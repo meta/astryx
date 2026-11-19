@@ -192,7 +192,7 @@
  * @property {string | {light: string | null, dark: string | null} | null} value - The final value, every token written out; per mode when the modes differ; null when a token it reads has no value.
  * @property {string} expression - The declaration that gives it, as written: Core's, or the rule on the part.
  * @property {string[] | {light: string[], dark: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.
- * @property {'core' | 'base' | 'theme'} source - Who decides it: Core's default, the base theme the theme extends, or the theme's own file.
+ * @property {'core' | 'base' | 'theme'} source - Who decides the value (not a setting's source, as in `show`'s settings): Core's default, the base theme the theme extends, or the theme's own file, a setting on the part included.
  * @property {'token' | 'dial' | 'part' | 'value'} via - How: a token's value, a dial (an editor theme's), a rule on the part, or a plain value Core writes.
  */
 

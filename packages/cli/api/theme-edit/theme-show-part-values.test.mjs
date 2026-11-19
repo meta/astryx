@@ -37,7 +37,10 @@ beforeAll(async () => {
   await themeEditNew('brand', {cwd, like: 'neutral'});
   await themeEditSet('brand', 'corners', 'pill', {cwd});
   await themeEditSet('brand', 'padding', '24px', {cwd, on: 'card'});
-}, 180_000);
+  await themeEditNew('roomy', {cwd, like: 'neutral'});
+  await themeEditSet('roomy', 'spacing', 'roomy', {cwd, on: 'card'});
+  await themeEditSet('roomy', 'corners', 'pill', {cwd, on: 'card'});
+}, 240_000);
 
 afterAll(() => {
   removeLinkedFixture(cwd);
@@ -152,13 +155,16 @@ describe('show --on: what one part of a theme shows', () => {
       {cwd},
     );
     expect(text.code).toBe(0);
-    const lines = text.stdout.trim().split('\n');
+    const lines = text.stdout
+      .trim()
+      .split('\n')
+      .filter(line => line !== '');
     expect(lines[0]).toMatch(
-      /^card in brand \(editor theme\): \d+ values at rest/,
+      /^card in brand \(editor theme\), at rest: \d+ values$/,
     );
     expect(lines.length).toBeLessThanOrEqual(16);
     expect(text.stdout).toMatch(
-      /border-radius: \S+ \(var\(--radius-container\), theme dial\)/,
+      /^border-radius +\S+ - --radius-container - theme - dial$/m,
     );
     const json = await runCli(
       [
@@ -176,6 +182,52 @@ describe('show --on: what one part of a theme shows', () => {
     const r = JSON.parse(json.stdout);
     expect(r.type).toBe('themeEdit.showPart');
     expect(r.data.values.length).toBeGreaterThan(lines.length);
+  }, 120_000);
+
+  it('credits a value a part-scoped dial sets to the theme’s dial, not to Core', async () => {
+    const r = /** @type {any} */ (
+      await themeEditShow('roomy', {cwd, on: 'card'})
+    );
+    const pad = valueOf(r, 'padding-top');
+    expect(pad).toMatchObject({source: 'theme', via: 'dial'});
+    expect(pad.tokens).toContain('--spacing-4');
+    // The spacing token the dial sets on the card, also named as the dial's.
+    expect(valueOf(r, '--spacing-4')).toMatchObject({
+      source: 'theme',
+      via: 'dial',
+    });
+    // Inside the card the dial's value shows, not the whole-theme value.
+    const base = /** @type {any} */ (
+      await themeEditShow('neutral', {cwd, on: 'card'})
+    );
+    const plain = valueOf(base, 'padding-top') ?? valueOf(base, 'padding');
+    expect(plain).toBeDefined();
+    expect(pad.value).not.toBe(plain.value);
+    // A dial that writes a property on the part (corners writes the card's
+    // border-radius) is named as the dial too.
+    expect(valueOf(r, 'border-radius')).toMatchObject({
+      source: 'theme',
+      via: 'dial',
+    });
+    // A token the dials leave alone stays the base's.
+    expect(valueOf(r, 'background-color')).toMatchObject({
+      source: 'base',
+      via: 'token',
+    });
+  }, 120_000);
+
+  it('gives a button’s corner radius once, not once per corner', async () => {
+    const r = /** @type {any} */ (
+      await themeEditShow('neutral', {cwd, on: 'button'})
+    );
+    expect(r.data.kind).toBe('bundled');
+    const corners = r.data.values.filter(
+      (/** @type {any} */ v) =>
+        v.when == null && v.state == null && /radius$/.test(v.property),
+    );
+    expect(corners.map((/** @type {any} */ v) => v.property)).toEqual([
+      'border-radius',
+    ]);
   }, 120_000);
 
   it('refuses a group, a name that is no part, and the page options beside --on', async () => {

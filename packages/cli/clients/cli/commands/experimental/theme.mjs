@@ -754,14 +754,14 @@ function valueText(v) {
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowPartResponse['data']} d
  */
 function partValueBlocks(d) {
-  const rest = d.values.filter(v => v.when == null && v.state == null);
+  // (A token a rule sets on the part is in the JSON; the text gives the
+  // properties the part draws.)
+  const drawn = d.values.filter(v => !v.property.startsWith('--'));
+  const rest = drawn.filter(v => v.when == null && v.state == null);
   const restOf = new Map(rest.map(v => [v.property, valueText(v.value)]));
-  // (A token a variant sets on the part is in the JSON; the text gives the
-  // properties it draws.)
-  const variants = d.values.filter(
+  const variants = drawn.filter(
     v =>
       (v.when != null || v.state != null) &&
-      !v.property.startsWith('--') &&
       valueText(v.value) !== restOf.get(v.property),
   );
   // A combined condition that draws what one of its conditions draws alone
@@ -782,37 +782,33 @@ function partValueBlocks(d) {
         ),
   );
   /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
-  const who = v => (v.via === 'value' ? 'core value' : `${v.source} ${v.via}`);
-  /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
-  const from = v => {
-    // A declaration through Core's own variables reads clearer as the
-    // public tokens it reads.
-    if (/var\(--(?:_|astryx-)/.test(v.expression)) {
-      const tokens = Array.isArray(v.tokens)
-        ? v.tokens
-        : [...new Set([...v.tokens.light, ...v.tokens.dark])];
-      return tokens.length ? `${tokens.join(' ')}, ` : '';
-    }
-    return v.expression !== valueText(v.value) ? `${v.expression}, ` : '';
-  };
-  const lines = [
-    `${d.part} in ${d.theme} (${d.kind} theme): ${rest.length} value${rest.length === 1 ? '' : 's'} at rest${shown.length ? `, ${shown.length} that differ in variants` : ''}`,
-    ...rest.map(
-      v => `  ${v.property}: ${valueText(v.value)} (${from(v)}${who(v)})`,
+  const row = v => ({
+    ...(v.when != null || v.state != null
+      ? {when: [v.when, v.state].filter(Boolean).join(' ')}
+      : {}),
+    property: v.property,
+    value: valueText(v.value),
+    tokens: (Array.isArray(v.tokens)
+      ? v.tokens
+      : [...new Set([...v.tokens.light, ...v.tokens.dark])]
+    ).join(' '),
+    source: v.source,
+    via: v.via,
+  });
+  return [
+    section(
+      `${d.part} in ${d.theme} (${d.kind} theme), at rest: ${rest.length} value${rest.length === 1 ? '' : 's'}`,
     ),
-    ...shown
-      .slice(0, VARIANT_LINES)
-      .map(
-        v =>
-          `  ${[v.when, v.state].filter(Boolean).join(' ')}: ${v.property}: ${valueText(v.value)} (${from(v)}${who(v)})`,
-      ),
-    ...(shown.length > VARIANT_LINES
+    records(rest.map(row), {layout: 'inline'}),
+    ...(shown.length
       ? [
-          `  and ${shown.length - VARIANT_LINES} more in variants (--json lists every value)`,
+          section(
+            `in variants: ${shown.length} value${shown.length === 1 ? '' : 's'} that differ${shown.length > VARIANT_LINES ? `, the first ${VARIANT_LINES} here (--json lists every value)` : ''}`,
+          ),
+          records(shown.slice(0, VARIANT_LINES).map(row), {layout: 'inline'}),
         ]
       : []),
   ];
-  return [lines.join('\n')];
 }
 
 /**

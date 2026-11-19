@@ -24,7 +24,13 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {context} from './_context.mjs';
 import {baseResolved} from './_project.mjs';
 import {compileTheme, editedThemes, loadTheme} from './_settings.mjs';
-import {ownTokens, partShows, partValues} from './_how-commands.mjs';
+import {
+  mergeRules,
+  ownTokens,
+  partShows,
+  partValues,
+  scopedTokens,
+} from './_how-commands.mjs';
 import {FAMILIES, P} from './_tables.mjs';
 
 /** @typedef {{light: Record<string, string>, dark: Record<string, string>}} ModeTokens */
@@ -38,8 +44,14 @@ import {FAMILIES, P} from './_tables.mjs';
  * @property {Record<string, any>} components
  * @property {ModeTokens} parentTokens
  * @property {Record<string, any>} parentComponents
- * @property {(token: string) => 'token' | 'dial'} [tokenVia] - for an editor
- *   theme: whether an exact token setting or a dial writes a token
+ * @property {ModeTokens} coreTokens - Core's own defaults
+ * @property {(token: string, part: string, onPart: boolean) => 'token' | 'dial' | 'part'} [tokenVia] -
+ *   for an editor theme: what writes a token, from its saved settings (an
+ *   exact token setting, a dial, or a rule on the part); `onPart` when the
+ *   part's own rule sets it
+ * @property {(property: string, part: string) => 'dial' | 'part'} [propertyVia] -
+ *   for an editor theme: what writes a CSS property the theme's own rule on
+ *   the part sets: a property setting that covers it, else a dial on the part
  */
 
 /**
@@ -54,6 +66,10 @@ const physical = prop =>
     .replace(/-inline-end(?=$|-)/, '-right')
     .replace(/-block-start(?=$|-)/, '-top')
     .replace(/-block-end(?=$|-)/, '-bottom')
+    .replace(/^border-start-start-radius$/, 'border-top-left-radius')
+    .replace(/^border-start-end-radius$/, 'border-top-right-radius')
+    .replace(/^border-end-start-radius$/, 'border-bottom-left-radius')
+    .replace(/^border-end-end-radius$/, 'border-bottom-right-radius')
     .replace(/^inset-inline-start$/, 'left')
     .replace(/^inset-inline-end$/, 'right')
     .replace(/^inset-block-start$/, 'top')
@@ -123,24 +139,40 @@ async function loadNamedTheme(ctx, cwd, name) {
     const data = loadTheme(cwd, name);
     const base = await baseResolved(ctx.project, data.like);
     const compiled = compileTheme(ctx, data, base);
-    const exact = new Set(
-      data.settings.filter(s => s.source === 'token').map(s => String(s.thing)),
-    );
+    /** @param {import('./_settings.mjs').ThemeData['settings'][number]} st @param {string} part */
+    const reaches = (st, part) =>
+      st.on == null
+        ? false
+        : st.on === part || (FAMILIES[st.on] ?? []).includes(part);
     return {
       kind: 'editor',
       tokens: ownTokens(compiled, base, core),
       components: mergeComponents(base.components, compiled.components ?? {}),
       parentTokens: {light: base.light, dark: base.dark},
       parentComponents: base.components ?? {},
-      tokenVia: token => (exact.has(token) ? 'token' : 'dial'),
+      coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
+      tokenVia: (token, part, onPart) => {
+        const mine = data.settings.filter(st =>
+          onPart ? reaches(st, part) : st.on == null,
+        );
+        if (mine.some(st => st.source === 'token' && st.thing === token))
+          return 'token';
+        if (mine.some(st => st.source === 'dial')) return 'dial';
+        return onPart ? 'part' : 'token';
+      },
+      propertyVia: (property, part) => {
+        const mine = data.settings.filter(st => reaches(st, part));
+        if (
+          mine.some(
+            st => st.source === 'property' && sets(String(st.thing), property),
+          )
+        )
+          return 'part';
+        return mine.some(st => st.source === 'dial') ? 'dial' : 'part';
+      },
     };
   }
-  const {findTheme} = await import('../theme/_adapter.mjs');
-  const found = await findTheme(name, {
-    cwd,
-    includeLocal: true,
-    command: `${P} show`,
-  });
+  const found = await findProjectTheme(cwd, name);
   if (!found)
     throw new AstryxError(
       `No theme named "${name}" in this project: an editor theme, a local theme or an installed theme package.`,
@@ -183,6 +215,7 @@ async function loadNamedTheme(ctx, cwd, name) {
         }
       : {light: coreDefaults.light, dark: coreDefaults.dark},
     parentComponents: parent?.components ?? {},
+    coreTokens: {light: coreDefaults.light, dark: coreDefaults.dark},
   };
 }
 
@@ -195,15 +228,11 @@ async function loadNamedTheme(ctx, cwd, name) {
 function mergeComponents(under, over) {
   /** @type {Record<string, any>} */
   const out = {};
-  for (const src of [under ?? {}, over ?? {}])
-    for (const [part, rules] of Object.entries(src)) {
-      const into = (out[part] ??= {});
-      for (const [when, rule] of Object.entries(rules ?? {}))
-        into[when] =
-          rule && typeof rule === 'object' && !Array.isArray(rule)
-            ? {...(into[when] ?? {}), ...rule}
-            : rule;
-    }
+  for (const part of new Set([
+    ...Object.keys(under ?? {}),
+    ...Object.keys(over ?? {}),
+  ]))
+    out[part] = mergeRules(under?.[part] ?? {}, over?.[part] ?? {});
   return out;
 }
 
@@ -253,6 +282,24 @@ export async function themePartValues(cwd, name, part) {
   );
   const own = partValues(theme.components?.[key]);
   const inherited = partValues(theme.parentComponents?.[key]);
+  const themeRules = mergeRules(theme.components?.[key] ?? {});
+  const parentRules = mergeRules(theme.parentComponents?.[key] ?? {});
+  /**
+   * The tokens inside the part under a condition, in each mode: the
+   * theme's, the theme it extends, and Core's, each with what that theme's
+   * own rule on the part sets.
+   * @param {string} when
+   */
+  const inside = when => ({
+    theme: {
+      light: scopedTokens(themeRules, theme.tokens.light, when),
+      dark: scopedTokens(themeRules, theme.tokens.dark, when),
+    },
+    parent: {
+      light: scopedTokens(parentRules, theme.parentTokens.light, when),
+      dark: scopedTokens(parentRules, theme.parentTokens.dark, when),
+    },
+  });
   /** @type {PartValue[]} */
   const values = [];
   // The theme layer comes after Core's styles: a property a rule on the
@@ -288,30 +335,51 @@ export async function themePartValues(cwd, name, part) {
     if (!own.has(k) && ruledOver(when, property)) continue;
     if (own.has(k) && overwritten(k)) continue;
     const ruleKey = own.has(k) ? k : `base||${property}`;
-    const light = tokenChain(v.raw, theme.tokens.light);
-    const dark = tokenChain(v.raw, theme.tokens.dark);
+    const at = inside(when);
+    const light = tokenChain(v.raw, at.theme.light);
+    const dark = tokenChain(v.raw, at.theme.dark);
+    /** @param {ModeTokens} a @param {ModeTokens} b */
+    const changed = (a, b) => [
+      ...light.filter(t => a.light[t] !== b.light[t]),
+      ...dark.filter(t => a.dark[t] !== b.dark[t]),
+    ];
+    // Whether the part's own rule sets a token it reads (a part-scoped
+    // dial), at rest or under this condition.
+    const onPart = [...light, ...dark].some(t =>
+      [when, 'base'].some(w => own.has(`${w}||${t}`)),
+    );
+    const mine = changed(at.theme, at.parent);
+    /** @type {PartValue['via']} */
+    const tokenVia = theme.tokenVia
+      ? theme.tokenVia(mine[0], key, onPart)
+      : onPart
+        ? 'part'
+        : 'token';
     /** @type {PartValue['source']} */
     let source = 'core';
     /** @type {PartValue['via']} */
-    let via = 'value';
+    let via = light.length || dark.length ? 'token' : 'value';
     if (own.has(ruleKey) && own.get(ruleKey) === v.raw) {
-      via = 'part';
-      source = inherited.get(ruleKey) === v.raw ? 'base' : 'theme';
-    } else if (light.length || dark.length) {
-      const first = light[0] ?? dark[0];
-      via = 'token';
-      const differs = (
-        /** @type {ModeTokens} */ a,
-        /** @type {ModeTokens} */ b,
-      ) =>
-        light.some(t => a.light[t] !== b.light[t]) ||
-        dark.some(t => a.dark[t] !== b.dark[t]);
-      if (differs(theme.tokens, theme.parentTokens)) {
-        source = 'theme';
-        if (theme.tokenVia) via = theme.tokenVia(first);
-      } else if (differs(theme.parentTokens, coreTokensOf(ctx))) {
-        source = 'base';
-      }
+      // A rule on the part: the theme's own, or the one it extends with
+      // the tokens it reads changed inside the part.
+      const inheritedRule = inherited.get(ruleKey) === v.raw;
+      if (!inheritedRule)
+        [source, via] = [
+          'theme',
+          // A token the part's rule sets, as the setting that wrote it.
+          property.startsWith('--') && theme.tokenVia
+            ? theme.tokenVia(property, key, true)
+            : theme.propertyVia
+              ? theme.propertyVia(property, key)
+              : 'part',
+        ];
+      else if (mine.length) [source, via] = ['theme', tokenVia];
+      else [source, via] = ['base', 'part'];
+    } else if (mine.length) {
+      [source, via] = ['theme', tokenVia];
+    } else if (changed(at.parent, theme.coreTokens).length) {
+      source = 'base';
+      if (onPart) via = 'part';
     }
     values.push({
       property,
@@ -364,24 +432,37 @@ export async function themePartValues(cwd, name, part) {
  */
 const orNull = v => (/var\(/.test(v) ? null : v);
 
-/** @type {WeakMap<object, ModeTokens>} */
-const coreTokens = new WeakMap();
-
 /**
- * Core's default tokens in each mode, for the project's Core.
- * @param {any} ctx
- * @returns {ModeTokens}
+ * A theme the project lists, by slug. A slug two packages provide is the
+ * one the app records under that slug; with none recorded, it is refused,
+ * naming the packages: `show` selects no package.
+ * @param {string} cwd
+ * @param {string} name
  */
-function coreTokensOf(ctx) {
-  const {core} = ctx.project;
-  let t = coreTokens.get(core);
-  if (!t) {
-    const d = core.defineTheme({name: 'astryx-defaults'});
-    t = {
-      light: core.resolveThemeTokens(d, {mode: 'light'}),
-      dark: core.resolveThemeTokens(d, {mode: 'dark'}),
-    };
-    coreTokens.set(core, t);
+async function findProjectTheme(cwd, name) {
+  const {findTheme, readThemeListState} = await import('../theme/_adapter.mjs');
+  try {
+    return await findTheme(name, {cwd, includeLocal: true});
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    if (err?.code !== ERROR_CODES.ERR_AMBIGUOUS_THEME) throw e;
+    const recorded = (() => {
+      try {
+        return readThemeListState(cwd).themes[name] ?? null;
+      } catch {
+        return null;
+      }
+    })();
+    if (recorded)
+      return findTheme(name, {cwd, includeLocal: true, package: recorded});
+    // Each package's `theme add`, which takes --package; once the app
+    // records one, show reads that one.
+    throw new AstryxError(
+      `Theme "${name}" is provided by more than one package, and the app records none of them, so show cannot tell which one to read. Add the one you use to the app; show then reads it.`,
+      err.suggestions ?? [
+        {name: 'astryx theme list', reason: 'the packages that provide it'},
+      ],
+      ERROR_CODES.ERR_AMBIGUOUS_THEME,
+    );
   }
-  return t;
 }
