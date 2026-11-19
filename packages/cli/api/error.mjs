@@ -53,27 +53,39 @@ export class AstryxError extends Error {
  * the ones it could not restore as `unrestored`, so the message never says
  * nothing was written when something was.
  *
+ * A caller outside a project names the target its own way (`shown`, such
+ * as a home-relative path), says what the write was (`what`), what had
+ * already changed when it stopped (`outcome`), and the step that fixes the
+ * cause (`next`).
+ *
  * @param {string} target absolute path the write was aimed at
  * @param {string} cwd project root, for the relative form
  * @param {unknown} cause the error the filesystem call threw
  * @param {string[]} [unrestored] absolute paths an undo could not put back
+ * @param {{shown?: string, what?: string, outcome?: string, next?: string}} [say]
  * @returns {AstryxError}
  */
-export function writeFailed(target, cwd, cause, unrestored = []) {
-  const rel = path.relative(cwd, target) || target;
+export function writeFailed(target, cwd, cause, unrestored = [], say = {}) {
+  const rel = say.shown ?? (path.relative(cwd, target) || target);
   const errno =
     typeof (/** @type {any} */ (cause)?.code) === 'string'
       ? /** @type {any} */ (cause).code
       : null;
-  const why = errno === 'EACCES' || errno === 'EPERM' ? ' (no permission)' : '';
+  const why =
+    errno === 'EACCES' || errno === 'EPERM'
+      ? ' (no permission)'
+      : errno === 'EROFS'
+        ? ' (read-only file system)'
+        : '';
   const outcome =
-    unrestored.length === 0
+    say.outcome ??
+    (unrestored.length === 0
       ? 'Nothing was written.'
       : `Earlier writes could not all be undone: ${unrestored
           .map(file => path.relative(cwd, file) || file)
-          .join(', ')}.`;
+          .join(', ')}.`);
   return new AstryxError(
-    `Could not write ${rel}${errno ? `: ${errno}` : ''}${why}. ${outcome}`,
+    `Could not ${say.what ?? 'write'} ${rel}${errno ? `: ${errno}` : ''}${why}. ${outcome}${say.next ? ` ${say.next}` : ''}`,
     undefined,
     ERROR_CODES.ERR_WRITE_FAILED,
   );
@@ -84,9 +96,10 @@ export function writeFailed(target, cwd, cause, unrestored = []) {
  * foundation/fs/paths.mjs), raising its coded failure as an AstryxError:
  * ERR_CORE_NOT_FOUND with no Core to answer from, ERR_VERSIONS_UNAVAILABLE
  * when the carried Core is needed and cannot be installed.
- * @param {(cwd: string) => string} lookup the foundation lookup
+ * @template {string | null} T
+ * @param {(cwd: string) => T} lookup the foundation lookup
  * @param {string} cwd
- * @returns {string}
+ * @returns {T}
  */
 export function coreDirOrThrow(lookup, cwd) {
   try {

@@ -174,13 +174,21 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator object for error, warning, or success states with a message. For a date the field rejects, typed or picked in the native control, and for unreadable or unfinished text that Enter or blur keeps, the field shows its own error message instead; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection.',
+        'Status indicator object for error, warning, or success states with a message. For a date the field rejects, typed or picked in the native control, and for unreadable or unfinished text that Enter or blur keeps, the field shows its own error message instead; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection. A typed time the time segment rejects shows once it is complete, or at Enter or blur, and stays in the field; its own error message shows unless the date segment shows its message or an error status with a message shows in its place.',
     },
     {
       name: 'onEntryErrorChange',
       type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
       description:
         "Called each time the date segment's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before the date of min or after the date of max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection; it reports null when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With it, an error status with a message replaces the field's own message, and a rejection that starts under an unchanged error message announces that message once. The native and touch pickers take no typed text, so it never reports a rejection there.",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When both segments show their own entry errors: a typed date or time the field rejects. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. 'complete' shows a complete typed date the calendar does not have or that is out of range, a complete typed time outside the range, and a time the native control reports outside the range at once, and other rejected text at Enter or blur. 'blur-or-enter' holds every rejection until Enter or blur in its segment: the message, aria-invalid, the invalid styling, the announcement, and the date segment's onEntryErrorChange report then appear together. Under both values, an edit the field accepts or that empties the segment clears the error at once; under 'blur-or-enter', an edit that leaves the entry wrong keeps the shown error until the next Enter or blur. A date the native control refuses shows at Enter or blur under both values. The field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
     },
     {
       name: 'labelTooltip',
@@ -580,13 +588,21 @@ export const docsZh = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的日期（无论是输入的还是在原生控件中选择的），以及按 Enter 或失焦后保留的无法识别或未完成的文本，字段显示自身的错误消息；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。',
+        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的日期（无论是输入的还是在原生控件中选择的），以及按 Enter 或失焦后保留的无法识别或未完成的文本，字段显示自身的错误消息；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。时间部分拒绝的输入时间在完整后或按 Enter、失焦时显示，并保留在字段中；除非日期部分正在显示其消息，或带消息的 error 状态显示在其位置，否则显示其自身的错误消息。',
     },
     {
       name: 'onEntryErrorChange',
       type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
       description:
         "每当日期部分对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 的日期或晚于 max 的日期）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时若输入字段被替换（例如展示方式或指针类型改变而显示原生或触控选择器），会传入 null。传入此回调后，带消息的 error 状态会替代字段自身的错误消息；若拒绝开始时该错误消息未变，字段会再播报一次该消息。原生和触控选择器不接受输入文本，因此不会报告拒绝。",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "两个分段何时显示自身的输入错误：即字段拒绝的输入日期或时间。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。'complete' 立即显示完整输入但日历中不存在或超出范围的日期、完整输入但超出范围的时间，以及原生控件报告的超出范围的时间；其他被拒绝的文本在按 Enter 或失焦时显示。'blur-or-enter' 将每个拒绝保留到在该分段中按 Enter 或失焦：届时消息、aria-invalid、无效样式、播报和日期分段的 onEntryErrorChange 报告一起出现。两种取值下，字段接受的编辑或清空分段的编辑都会立即清除错误；在 'blur-or-enter' 下，输入仍然错误的编辑会保留已显示的错误，直到下一次按 Enter 或失焦。原生控件拒绝的日期在两种取值下都在按 Enter 或失焦时显示。字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
     },
     {
       name: 'labelTooltip',
@@ -751,9 +767,11 @@ export const docsDense = {
       'accessible label for the time input; defaults to "{label} time"',
     size: 'input control size',
     status:
-      'error/warning/success status w/ message; a rejected date (typed or native) or kept unreadable/unfinished text shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message',
+      'error/warning/success status w/ message; a rejected date (typed or native) or kept unreadable/unfinished text shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message; a rejected typed time (complete, or at Enter/blur, text kept) shows its own error unless the date message shows or status is an error w/ message',
     onEntryErrorChange:
       "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when both segments' own rejections show (not when validation runs; not React Aria validationBehavior; never changes status). complete: complete nonexistent/out-of-range date, complete out-of-range time and native out-of-range time at once, other text at Enter/blur. blur-or-enter: message, aria-invalid, styling, announcement and date onEntryErrorChange report all wait for Enter/blur in that segment. Accepted or emptied entry clears at once; still-wrong edit keeps a shown error (blur-or-enter). Native date refusals wait for Enter/blur under both. Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     labelTooltip: 'tooltip text via info icon at label end',
     numberOfMonths:
       'Astryx pointer-calendar months shown simultaneously; ignored by native date controls and the mobile touch sheet',

@@ -62,8 +62,11 @@ run root; a recursive read of one of those roots, or of a folder that holds one,
 by `grep -r`, `rg`, `ag`, `ack`, `find -exec`, `find | xargs` or the Grep tool;
 and any use of a web tool or a sub-agent. Paths in shell commands resolve from
 the folder the agent's shell is in, which persists between commands. Heredoc
-bodies that are file content are skipped; shell heredocs are audited as shell
-text, and other interpreter heredocs are scanned for path literals. The agent's
+bodies that are file content are skipped, except the command substitutions
+(`$(…)`, backticks) that the shell runs in an unquoted heredoc; shell heredocs
+are audited as shell text, and other interpreter heredocs are scanned for path
+literals. The script or pattern of `sed` and search commands is text, not a
+path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
 `report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
@@ -76,8 +79,9 @@ lists it but leaves it out of the pass rates.
 ## Grading
 
 The grader is deterministic and has no LLM judge. It checks behavior that a
-browser can observe: roles, names, text, focus and real input. Visual details in
-a prompt, such as a destructive button style, are not graded; the screenshots
+browser can observe: roles, names, text, focus and real input, and for a
+theming task the page and text colors a person sees. Other visual details in a
+prompt, such as a destructive button style, are not graded; the screenshots
 and axe counts show them. A result passes only if all four checks hold:
 
 - `tsc -b` exits 0. The arm's own command decides this, not a parsed log.
@@ -114,8 +118,9 @@ A task set is a folder under `tasks/`. Each task has three parts:
 - `<id>.task.json`: the prompt. Write acceptance criteria as behavior a person
   can observe, and name the roles and labels the probe relies on. Never name a
   component or a library.
-- `<id>.probe.mjs`: named steps that use only accessible roles, names, text and
-  real keyboard and pointer input. The helpers are in `lib/probe-kit.mjs`. Hold
+- `<id>.probe.mjs`: named steps that use only accessible roles, names, text,
+  real keyboard and pointer input, and, for a theming task, the computed colors
+  a person sees. The helpers are in `lib/probe-kit.mjs`. Hold
   keys with `press()`, not `keyboard.press()`: some widgets act on a focus move
   that a timer schedules after keydown, and they check that the key is still
   down.
@@ -182,6 +187,9 @@ what the eval measures, so compare results only within one arm version.
   `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
   an encoded path, and a script the agent writes and then runs give a warning
   at most. Running each agent in an isolated filesystem would close this.
+- The audit reads `sed` and search options from per-command lists. An option
+  missing from those lists can shift which word it reads as the script or
+  pattern, so a quoted path there can pass, or a correct pattern can fail.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).
@@ -190,5 +198,6 @@ what the eval measures, so compare results only within one arm version.
 - The `pilot` set (5 tasks) only shows that the pipeline works; fresh agents
   pass all of it in both arms. The `v1` set is the fixed comparison set:
   multi-step forms, paged tables with selection, menus, comboboxes, dialogs,
-  switches, accordions and announced notifications. Run it with
+  switches, accordions, announced notifications, responsive navigation,
+  theming, sign-up validation, tooltips, loading states, filters and sliders. Run it with
   `--task-set v1`.

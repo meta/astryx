@@ -11,7 +11,7 @@
  */
 
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {

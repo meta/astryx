@@ -141,3 +141,43 @@ test('a fitting table passes horizontal wheel input to its outer scroller', asyn
     .poll(async () => outer.evaluate(element => element.scrollLeft))
     .toBeGreaterThan(0);
 });
+
+for (const rule of ['overflow-x:auto', 'overflow:auto']) {
+  test(`a host rule (${rule}) on every table's parent leaves the wrapper the scroller`, async ({
+    page,
+  }) => {
+    // Some page hosts give every table's parent a scroll rule with zero
+    // specificity, outside any cascade layer. It is in place before the story
+    // renders, as a host's stylesheet is.
+    await page.addInitScript(css => {
+      const style = document.createElement('style');
+      style.textContent = css;
+      // The head appears once parsing starts; a style placed earlier is lost.
+      new MutationObserver((_, observer) => {
+        if (document.head != null) {
+          document.head.append(style);
+          observer.disconnect();
+        }
+      }).observe(document, {childList: true, subtree: true});
+    }, `:where(:not(body):has(> table)){max-width:100%;${rule}}`);
+    const wrappers = await mount(page);
+    const tableViewport = wrappers.nth(0);
+    expect(
+      await tableViewport.evaluate(
+        (element: HTMLElement) => element.scrollWidth > element.clientWidth,
+      ),
+    ).toBe(true);
+    await expect(tableViewport).toHaveAttribute(
+      'data-scrollable-inline',
+      'true',
+    );
+    await expect(tableViewport).toHaveAttribute('tabindex', '0');
+    const content = tableViewport.locator('[data-scroll-content]');
+    expect(
+      await content.evaluate((element: HTMLElement) => {
+        const style = getComputedStyle(element);
+        return [style.overflowX, style.overflowY];
+      }),
+    ).toEqual(['visible', 'visible']);
+  });
+}

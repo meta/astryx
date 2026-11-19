@@ -17,7 +17,9 @@ export const doc = {
   summary: 'List components or print component docs',
   description:
     'Resolves one or several components by exact selector across core and integration ' +
-    'packages and prints each authored doc, or lists the catalog grouped by category. ' +
+    'packages and prints a short answer for each (import, usage, every prop in short form, ' +
+    'its pieces, and the commands that print the rest; --detail full prints the whole doc), ' +
+    'or lists the catalog grouped by category. ' +
     "Use 'Button', 'widgets/Button', '@acme/widgets/Button', or " +
     "'@acme/widgets@1.2.3/Button'. A version applies to the package and must match the " +
     'installed version. Boolean flags narrow every resolved component to just its props, ' +
@@ -34,6 +36,7 @@ export const doc = {
         'One or more exact selectors. Use Name, package/Name, @scope/package/Name, or @scope/package@version/Name. Two or more return one ordered batch. At most 100 selectors are accepted.',
       required: false,
       variadic: true,
+      names: 'component',
     },
   ],
   options: [
@@ -51,7 +54,7 @@ export const doc = {
     {
       flag: '--props',
       param: 'options.props',
-      description: 'Print only the props table',
+      description: 'Print only the props list',
     },
     {
       flag: '--source',

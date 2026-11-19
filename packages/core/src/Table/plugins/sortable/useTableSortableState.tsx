@@ -20,6 +20,7 @@
 import {useState, useMemo, useCallback, useRef} from 'react';
 import type {TableSortState, UseTableSortableConfig} from './useTableSortable';
 import {useCollator} from '../../../i18n/useCollator';
+import {useCommittedRef} from '../../../hooks/useCommittedRef';
 
 // =============================================================================
 // Comparator Types
@@ -32,6 +33,14 @@ import {useCollator} from '../../../i18n/useCollator';
  * comparators should always sort in ascending order.
  */
 export type TableSortComparator<T> = (a: T, b: T) => number;
+
+function isMissingSortValue(value: unknown): boolean {
+  return (
+    value == null ||
+    (typeof value === 'number' && Number.isNaN(value)) ||
+    (value instanceof Date && Number.isNaN(value.getTime()))
+  );
+}
 
 function toSortableString(value: unknown): string {
   if (value instanceof Date) {
@@ -169,13 +178,11 @@ function defaultCompare<T extends Record<string, unknown>>(
   const aVal = a[sortKey];
   const bVal = b[sortKey];
 
-  // null/undefined/NaN sort to the end. NaN must not reach the numeric fast
-  // path: a NaN comparator result reads as "equal" to Array.sort, which makes
-  // the comparator inconsistent and corrupts the order of the other rows.
-  const aMissing =
-    aVal == null || (typeof aVal === 'number' && Number.isNaN(aVal));
-  const bMissing =
-    bVal == null || (typeof bVal === 'number' && Number.isNaN(bVal));
+  // Missing values never reach the comparisons below. A NaN result reads as
+  // equal to Array.sort and breaks the order of the other rows. An Invalid
+  // Date throws in toISOString.
+  const aMissing = isMissingSortValue(aVal);
+  const bMissing = isMissingSortValue(bVal);
   if (aMissing && bMissing) {
     return 0;
   }
@@ -288,12 +295,11 @@ export function useTableSortableState<
   comparatorsRef.current = comparators;
 
   // The config holds one stable handler, so an inline callback does not
-  // recreate it. The handler reads the latest callback when the user sorts.
-  const onSortChangeRef = useRef(onSortChange);
-  onSortChangeRef.current = onSortChange;
+  // recreate it. The handler reads the committed callback when the user sorts.
+  const onSortChangeRef = useCommittedRef(onSortChange);
   const handleSortChange = useCallback(
     (nextSort: TableSortState<TSortKey>) => onSortChangeRef.current(nextSort),
-    [],
+    [onSortChangeRef],
   );
 
   // Sorted data — memoized on sort state + data identity

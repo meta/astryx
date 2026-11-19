@@ -33,6 +33,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {menuRowCornerStyles} from './menuRowCorners.stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import {Item} from '../Item';
@@ -40,7 +41,7 @@ import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {keepDisabledRowUnfocused} from './menuItemRoles';
@@ -48,7 +49,6 @@ import {keepDisabledRowUnfocused} from './menuItemRoles';
 const styles = stylex.create({
   root: {
     width: '100%',
-    borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
@@ -240,6 +240,7 @@ export function DropdownMenuCheckboxItem({
       xstyle={[
         focusOutlineStyles.focusVisible,
         styles.root,
+        menuRowCornerStyles.root,
         menuPressLitRowStyle,
         isDisabled && styles.disabled,
         xstyle,

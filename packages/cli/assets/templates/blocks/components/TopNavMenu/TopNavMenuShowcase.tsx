@@ -9,6 +9,7 @@ import {
   TopNavMenu,
 } from '@astryxdesign/core/TopNav';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ChartBarIcon,
   Cog6ToothIcon,
@@ -17,9 +18,10 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function TopNavMenuShowcase() {
+  const showToast = useToast();
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Menu demo"
       heading={<TopNavHeading heading="Platform" />}
       startContent={
@@ -56,6 +58,7 @@ export default function TopNavMenuShowcase() {
           variant="ghost"
           icon={<MagnifyingGlassIcon />}
           isIconOnly
+          onClick={() => showToast({body: 'Demo: search would open here'})}
         />
       }
     />

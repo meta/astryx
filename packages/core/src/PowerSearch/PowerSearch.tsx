@@ -114,12 +114,19 @@ import {
 } from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -263,7 +270,13 @@ const sheetTriggerStyles = stylex.create({
     position: 'absolute',
     inset: 0,
     minWidth: 0,
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
+  },
+  // Holds the status icon without a box of its own, so the icon stays a
+  // direct item of the end lane.
+  statusIconSlot: {
+    display: 'contents',
   },
   endSection: {
     display: 'flex',
@@ -379,6 +392,7 @@ export interface PowerSearchProps extends Omit<
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
+   * - 'tooltip': the status icon is an info-tip button that reveals the message
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
@@ -601,6 +615,20 @@ export function PowerSearch({
   presentation = 'adaptive',
   ...rest
 }: PowerSearchProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearch',
+      'config',
+      'is required: the fields people can filter by, for example config={{fields: [...]}}.',
+    );
+  }
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(filters)) {
+    throw devPropError(
+      'PowerSearch',
+      'filters',
+      'must be an array of the applied filters, for example filters={filters} with onChange={setFilters} and useState([]).',
+    );
+  }
   const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
@@ -1445,17 +1473,24 @@ export function PowerSearch({
   // and taps, and an interactive control must not nest in a component
   // button, so a tap on it must not open the flow.
   const endLaneRef = useRef<HTMLDivElement>(null);
+  const statusIconRef = useRef<HTMLSpanElement>(null);
   const handleTriggerWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      // Tokens are display-only; a tap on them or the empty space around them
-      // opens the flow. The trigger button handles its own click, and the end
-      // lane handles its own.
-      if (
-        event.target instanceof Node &&
-        (triggerRef.current?.contains(event.target) ||
-          endLaneRef.current?.contains(event.target))
-      ) {
-        return;
+      // Tokens are display-only; a tap on them, the empty space around them or
+      // the plain status icon opens the flow. The trigger button handles its
+      // own click, and the rest of the end lane (the result count,
+      // `endContent`, the status info-tip) handles its own.
+      const target = event.target;
+      if (target instanceof Element) {
+        const isOnPlainStatusIcon =
+          statusIconRef.current?.contains(target) === true &&
+          !hasInteractiveAncestor(target, event.currentTarget);
+        if (
+          triggerRef.current?.contains(target) ||
+          (endLaneRef.current?.contains(target) && !isOnPlainStatusIcon)
+        ) {
+          return;
+        }
       }
       openSheet();
     },
@@ -1498,10 +1533,21 @@ export function PowerSearch({
     [handleFieldBlur],
   );
 
+  // The popover presentation's Tokenizer draws its own status icon; the sheet
+  // trigger's field draws this one.
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status: isSheetPresentation ? status : undefined,
+      statusVariant,
+    });
+
   if (isSheetPresentation) {
     const triggerDescribedBy =
       [
-        status?.message ? statusMessageId : null,
+        // The tooltip variant renders no message box; the info-tip's tooltip
+        // describes the trigger instead.
+        status?.message && statusVariant !== 'tooltip' ? statusMessageId : null,
+        statusTooltipDescribedBy,
         showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
       ]
         .filter(Boolean)
@@ -1594,7 +1640,9 @@ export function PowerSearch({
                 ) : null}
               </button>
             </div>
-            {(endContent || isRenderable(resultCountText)) && (
+            {(endContent ||
+              isRenderable(resultCountText) ||
+              isRenderable(statusIcon)) && (
               <div
                 ref={endLaneRef}
                 {...stylex.props(sheetTriggerStyles.endSection)}>
@@ -1604,6 +1652,11 @@ export function PowerSearch({
                   </span>
                 )}
                 {endContent}
+                <span
+                  ref={statusIconRef}
+                  {...stylex.props(sheetTriggerStyles.statusIconSlot)}>
+                  {statusIcon}
+                </span>
               </div>
             )}
           </div>

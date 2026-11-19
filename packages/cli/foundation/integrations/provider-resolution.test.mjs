@@ -20,9 +20,7 @@ import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(
-    path.join(REPO_ROOT, '.astryx-provider-resolution-'),
-  );
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-provider-resolution-'));
 });
 
 afterEach(() => {
@@ -301,6 +299,58 @@ describe('markProviderConflicts', () => {
       ['a', 'l'],
       ['l', null],
     ]);
+  });
+});
+
+describe('the message for a package set aside', () => {
+  /** @param {string} name @param {boolean} declares */
+  const pkg = (name, declares) => ({
+    name,
+    version: '1.0.0',
+    providerId: '@acme/widgets',
+    __spec: name,
+    __declaredKeys: declares ? ['providerId', 'components'] : ['components'],
+  });
+  /** @param {any} first @param {any} second */
+  const conflictOf = (first, second) =>
+    markProviderConflicts([first, second])[1].__providerConflict;
+  /** @param {any} first @param {any} second */
+  const messageOf = (first, second) => conflictOf(first, second).message;
+
+  it('marks a conflict both manifests declare, and only that one', () => {
+    expect(
+      conflictOf(pkg('@acme/widgets', true), pkg('@acme/widgets-legacy', true))
+        .bothDeclare,
+    ).toBe(true);
+    expect(
+      conflictOf(pkg('@acme/widgets', false), pkg('@acme/renamed', true))
+        .bothDeclare,
+    ).toBeUndefined();
+  });
+
+  it('offers keeping one dependency when both manifests declare the ID', () => {
+    expect(
+      messageOf(pkg('@acme/widgets', true), pkg('@acme/widgets-legacy', true)),
+    ).toBe(
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim provider ID "@acme/widgets". ' +
+        '@acme/widgets@1.0.0 loads first and is used; @acme/widgets-legacy@1.0.0 contributes nothing. ' +
+        'Both manifests declare this provider ID. If they are one integration installed under two names, ' +
+        'keep one of the two dependencies; otherwise one package must change its providerId.',
+    );
+  });
+
+  it('says to change a providerId unless both manifests declare it', () => {
+    for (const [first, second] of [
+      [pkg('@acme/widgets', false), pkg('@acme/renamed', true)],
+      [pkg('@acme/widgets', true), pkg('@acme/renamed', false)],
+      [pkg('@acme/widgets', false), pkg('@acme/renamed', false)],
+    ]) {
+      expect(messageOf(first, second)).toBe(
+        '@acme/renamed@1.0.0 and @acme/widgets@1.0.0 both claim provider ID "@acme/widgets". ' +
+          '@acme/widgets@1.0.0 loads first and is used; @acme/renamed@1.0.0 contributes nothing ' +
+          'until one package changes its providerId.',
+      );
+    }
   });
 });
 

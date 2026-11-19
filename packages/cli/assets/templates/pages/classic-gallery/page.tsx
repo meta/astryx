@@ -112,7 +112,7 @@ export default function ClassicGalleryTemplate() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <Center axis="horizontal">
             <VStack gap={8} style={outer}>
               {/* Header */}

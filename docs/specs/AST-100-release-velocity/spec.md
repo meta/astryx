@@ -25,7 +25,9 @@ affects_consumer_docs: []
   "paths": [
     "packages/core/src/BottomSheet/**",
     "packages/core/src/Item/**",
-    "packages/core/src/Toast/**"
+    "packages/core/src/Toast/**",
+    "packages/core/src/Swipe/**",
+    "packages/core/src/motion/uikit/swipeActions.ts"
   ]
 }
 ```

@@ -4,12 +4,21 @@
  * @file tableColumnWindowing.ts
  * @input A `Table.virtualization` value
  * @output The rows capability, the columns capability with the column
- *   windowing it carries, or why the value cannot window
+ *   windowing it carries, or why the value cannot window; the mapping between
+ *   mounted cells and full-table column positions
  * @position Table's base wiring for column windowing. The column hook puts
  *   its implementation in the capability value, so a Table that never
- *   imports the hook carries none of the column windowing code.
+ *   imports the hook carries only this wiring, not the column planner,
+ *   the inline window or the spacer cells.
  */
-import type {ReactElement, ReactNode, RefObject} from 'react';
+import type {
+  FocusEventHandler,
+  MouseEventHandler,
+  PointerEventHandler,
+  ReactElement,
+  ReactNode,
+  RefObject,
+} from 'react';
 import {sharedKey} from '../utils/sharedRealm';
 import type {InlineListWindowGeometrySource} from '../virtualization/useInlineListWindow';
 import type {TableColumn} from './types';
@@ -34,6 +43,8 @@ export type TableColumnSegment =
 export interface TableColumnLayout {
   /** Columns that mount and spacers between them, in full-table order. */
   segments: ReadonlyArray<TableColumnSegment>;
+  /** Cells in one mounted row: pinned and mounted cells, and spacers. */
+  cellCount: number;
   /** The header width style of the column at a full-table index. */
   widthOf: (columnIndex: number) => {width: string; minWidth: string};
   /** Builds the cells of one row: mounted cells and native spacers. */
@@ -49,7 +60,6 @@ export interface TableColumnWindowInput {
   fallbackReason: string | undefined;
   /** Whether every resolved column has single-line admission. */
   hasFixedHeightColumns: boolean;
-  isRowsWindowing: boolean;
   /** Columns with their widths resolved, in full-table order. */
   columns: ReadonlyArray<TableColumn<never>>;
   plugins: ReadonlyArray<object>;
@@ -58,8 +68,20 @@ export interface TableColumnWindowInput {
   hasRows: boolean;
   runtime: {
     table: RefObject<HTMLTableElement | null>;
+    viewport: RefObject<HTMLDivElement | null>;
     geometry: InlineListWindowGeometrySource;
   };
+}
+
+/**
+ * Handlers the column window gives the table element: focus tracking, and
+ * the press or context menu that names the cell a layer belongs to.
+ */
+export interface TableColumnFocusProps {
+  onFocus: FocusEventHandler<HTMLTableElement>;
+  onBlur: FocusEventHandler<HTMLTableElement>;
+  onPointerDown: PointerEventHandler<HTMLTableElement>;
+  onContextMenu: MouseEventHandler<HTMLTableElement>;
 }
 
 export interface TableColumnWindowProps {
@@ -67,7 +89,10 @@ export interface TableColumnWindowProps {
   capability: Readonly<TableColumnsCapabilityValue> | undefined;
   input: TableColumnWindowInput;
   /** Renders the table; a windowed table gets its column layout. */
-  render: (layout: TableColumnLayout | undefined) => ReactNode;
+  render: (
+    layout: TableColumnLayout | undefined,
+    focusProps?: TableColumnFocusProps,
+  ) => ReactNode;
 }
 
 /** The column windowing a columns capability carries. */
@@ -128,4 +153,29 @@ export function resolveTableVirtualization(
     }
   }
   return resolved;
+}
+
+/**
+ * The full-table column index of a mounted cell. A windowed cell carries its
+ * position. An unwindowed row has no spacers, so there the cell index is the
+ * column index. A spacer has no column.
+ */
+export function getCellColumnIndex(
+  cell: HTMLTableCellElement,
+): number | undefined {
+  if (cell.getAttribute('aria-hidden') === 'true') {
+    return undefined;
+  }
+  const position = cell.getAttribute('aria-colindex');
+  return position == null ? cell.cellIndex : Number(position) - 1;
+}
+
+/** The cell of a mounted row at a full-table column index, if it is mounted. */
+export function getCellAtColumn(
+  row: HTMLTableRowElement,
+  columnIndex: number,
+): HTMLTableCellElement | undefined {
+  return Array.from(row.cells).find(
+    cell => getCellColumnIndex(cell) === columnIndex,
+  );
 }

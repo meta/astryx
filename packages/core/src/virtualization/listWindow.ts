@@ -188,6 +188,14 @@ export interface VariableListRangeOptions {
   overscan: number;
 }
 
+export interface VariableListRange {
+  start: number;
+  end: number;
+  firstVisibleIndex: number;
+  /** Distance from the first visible item's start to the scroll offset. */
+  offset: number;
+}
+
 /**
  * The first index in `[0, limit)` whose offset is at least `value`, or above
  * it when `isStrict` is set.
@@ -221,15 +229,17 @@ export function calculateVariableListRange({
   scrollOffset,
   isMeasured,
   overscan,
-}: VariableListRangeOptions): {start: number; end: number} {
+}: VariableListRangeOptions): VariableListRange {
   const count = Math.max(0, offsets.length - 1);
   if (count === 0) {
-    return {start: 0, end: 0};
+    return {start: 0, end: 0, firstVisibleIndex: 0, offset: 0};
   }
   if (!isMeasured) {
     return {
       start: 0,
       end: Math.min(count, lowerBound(offsets, viewportSize, count) + overscan),
+      firstVisibleIndex: 0,
+      offset: 0,
     };
   }
   const total = offsets[count];
@@ -250,6 +260,8 @@ export function calculateVariableListRange({
   return {
     start: Math.max(0, first - overscan),
     end: Math.min(count, last + overscan),
+    firstVisibleIndex: first,
+    offset: scroll - offsets[first],
   };
 }
 
@@ -265,6 +277,12 @@ export interface ListAnchorOptions {
   trailingContentHeight?: number;
   /** Key-to-index map. Build it when the keys change, never on scroll. */
   keyIndices?: ReadonlyMap<string | number, number>;
+  /**
+   * Item start offsets plus the total extent, for items of varying size. With
+   * them, `offset` is a fraction of the anchor item's size, and `rowHeight`
+   * is not read.
+   */
+  offsets?: ReadonlyArray<number>;
 }
 
 export function reconcileListAnchor(options: ListAnchorOptions): number {
@@ -300,13 +318,23 @@ export function reconcileListAnchor(options: ListAnchorOptions): number {
       }
     }
   }
+  const {offsets} = options;
   const maximumScroll = Math.max(
     0,
     startOffset +
-      keys.length * rowHeight +
+      (offsets ? (offsets[keys.length] ?? 0) : keys.length * rowHeight) +
       (options.trailingContentHeight ?? 0) -
       viewportHeight,
   );
+  if (offsets) {
+    const itemStart = offsets[index ?? 0] ?? 0;
+    const itemSize = index === undefined ? 0 : offsets[index + 1] - itemStart;
+    const fraction = Math.min(1, Math.max(0, offset));
+    return Math.max(
+      0,
+      Math.min(maximumScroll, startOffset + itemStart + fraction * itemSize),
+    );
+  }
   // With no surviving key, a position inside the leading content stays where
   // it is, and a position inside the rows moves to the first row.
   const fraction =

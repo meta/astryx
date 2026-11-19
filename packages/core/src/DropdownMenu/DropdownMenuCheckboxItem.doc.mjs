@@ -49,9 +49,9 @@ export const docs = {
     },
     {
       name: 'icon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label. See `astryx docs icons` for valid semantic names.',
+        'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'value',
@@ -111,7 +111,7 @@ export const docsZh = {
   propDescriptions: {
     label: '标识该项的主标签文本。',
     description: '显示在标签下方的次要描述文本。',
-    icon: '显示在标签前的图标。',
+    icon: '显示在标签前的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     value: '该项是否被勾选。受控，与 onChange 搭配使用。',
     onChange: '切换该项时以下一个勾选状态触发的回调。',
     isDisabled: '该项是否禁用。',
@@ -130,7 +130,7 @@ export const docsDense = {
   propDescriptions: {
     label: 'primary label text',
     description: 'secondary text below label',
-    icon: 'icon before label',
+    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     value: 'checked state (controlled, w/ onChange)',
     onChange: 'fired w/ next checked state on toggle',
     isDisabled:

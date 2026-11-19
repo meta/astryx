@@ -7,6 +7,8 @@ import {
   useTableColumnResize,
   useTableSelection,
   useTableSelectionState,
+  useTableSortable,
+  useTableSortableState,
   pixel,
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
@@ -109,6 +111,52 @@ export const Default: Story = {
           columns={columns}
           idKey="id"
           plugins={{columnResize: resizePlugin}}
+        />
+      </div>
+    );
+  },
+};
+
+const mixedColumns: TableColumn<User>[] = [
+  {key: 'name', header: 'Name', sortable: true},
+  {key: 'email', header: 'Email'},
+  {key: 'role', header: 'Role', sortable: true},
+];
+
+export const WithSortableColumns: Story = {
+  render: () => {
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
+      {},
+    );
+    const {sortedData, sortConfig} = useTableSortableState<User>({
+      data: users,
+    });
+    const sortablePlugin = useTableSortable<User>(sortConfig);
+    const resizePlugin = useTableColumnResize<User>({
+      columnWidths,
+      columns: mixedColumns as TableColumn<Record<string, unknown>>[],
+      onColumnResizeEnd: updates => {
+        setColumnWidths(prev => ({...prev, ...updates}));
+      },
+    });
+
+    return (
+      <div style={{maxWidth: 600}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          Name and Role sort; Email does not. Every resize line sits on its
+          column divider.
+        </p>
+        <Table
+          data={sortedData}
+          columns={mixedColumns}
+          idKey="id"
+          dividers="columns"
+          plugins={{sortable: sortablePlugin, columnResize: resizePlugin}}
         />
       </div>
     );

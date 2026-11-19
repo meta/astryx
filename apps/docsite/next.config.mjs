@@ -25,6 +25,10 @@ const playgroundCookieCompatibility = readFileSync(
   'utf8',
 );
 
+const landingPreviewsInBrowser = resolve(
+  import.meta.dirname,
+  'src/app/(site)/_landing/landingPreviewsInBrowser.ts',
+);
 // Slugs that are not pages of their own (generate-data.mjs): a guide under a
 // docs-tree namespace opens at its section on the namespace's full page, and
 // a flat topic merged into another page opens there.
@@ -73,6 +77,11 @@ const nextConfig = {
       '../../packages/cli/package.json',
       '../../packages/cli/api/**/*.json',
     ],
+    // The MCP endpoint runs `astryx mcp --docs-only` as a child process, which
+    // the tracer cannot follow. scripts/build-mcp-runtime.mjs installs the CLI
+    // and the documented Core there as plain files, so the function carries
+    // the whole folder.
+    '/mcp': ['./.mcp-runtime/**/*'],
   },
   // Packages the CLI imports for other commands but a search never loads
   // (bundlers, compilers, browsers, test runners), and built output and Core's
@@ -126,6 +135,20 @@ const nextConfig = {
         destination,
         permanent: false,
       })),
+      // Changelog links from before each package had its own page name the
+      // package in the query string. A theme package has no changelog page.
+      {
+        source: '/changelog',
+        has: [
+          {
+            type: 'query',
+            key: 'package',
+            value: '@astryxdesign/(?<changelogPackage>(?!theme-)[a-z0-9-]+)',
+          },
+        ],
+        destination: '/changelog/:changelogPackage',
+        permanent: false,
+      },
     ];
   },
   // The playground preview evaluates user-authored code, so it is the one
@@ -191,6 +214,21 @@ const nextConfig = {
         ...[config.externals ?? []].flat(),
         {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
       ];
+    }
+    // The landing preview markup reaches the page once, as server HTML. The
+    // browser bundle gets an empty map in place of the generated one, so the
+    // markup is not sent again in the page's scripts or RSC payload.
+    if (!isServer) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /[\\/]src[\\/]generated[\\/]landingPreviews\.ts$/u,
+          resource => {
+            if (resource.createData) {
+              resource.createData.resource = landingPreviewsInBrowser;
+            }
+          },
+        ),
+      );
     }
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.

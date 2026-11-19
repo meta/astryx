@@ -45,6 +45,7 @@ export type ErrorCode =
   | 'ERR_FILE_EXISTS'
   | 'ERR_PATH_TRAVERSAL'
   | 'ERR_WRITE_FAILED'
+  | 'ERR_READ_FAILED'
   | 'ERR_THEME_INVALID'
   | 'ERR_THEME_LOAD'
   | 'ERR_THEME_STALE'
@@ -53,7 +54,10 @@ export type ErrorCode =
   | 'ERR_DEP_MISSING'
   | 'ERR_GH_CLI'
   | 'ERR_LAYOUT_PARSE'
-  | 'ERR_LAYOUT_INVALID';
+  | 'ERR_LAYOUT_INVALID'
+  | 'ERR_BASE_CAPABILITY'
+  | 'ERR_BASE_NOT_FOUND'
+  | 'ERR_BASE_AMBIGUOUS';
 
 /** The frozen runtime map of all error codes (keys === values). */
 export declare const ERROR_CODES: Readonly<Record<ErrorCode, ErrorCode>>;
