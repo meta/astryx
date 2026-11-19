@@ -328,7 +328,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Show a status column as a StatusDot beside its Text label, so a status that repeats down every row stays quiet; keep Badge for a rare state that needs action.',
       },
       {
         guidance: true,
@@ -359,6 +359,11 @@ export const docs = {
         guidance: false,
         description:
           'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put a solid status Badge (success, warning, error, info) in every row. The repeated fills compete with the data; use StatusDot with a Text label instead.',
       },
       {
         guidance: false,
@@ -426,7 +431,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose rich cell content with Astryx components like Text, StatusDot, and Avatar via renderCell. Show a status column as a StatusDot beside its Text label, so a status that repeats down every row stays quiet; keep Badge for a rare state that needs action.',
       },
       {
         guidance: true,
@@ -446,6 +451,11 @@ export const docsZh = {
       {
         guidance: false,
         description:
+          'Put a solid status Badge (success, warning, error, info) in every row. The repeated fills compete with the data; use StatusDot with a Text label instead.',
+      },
+      {
+        guidance: false,
+        description:
           'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.',
       },
     ],
@@ -456,7 +466,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
+    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Text, StatusDot + label, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
@@ -469,7 +479,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+          'Compose cells via renderCell w/ Text, StatusDot, Avatar. Status column: StatusDot + Text label, quiet in every row; Badge only for a rare state that needs action.',
       },
       {
         guidance: true,
