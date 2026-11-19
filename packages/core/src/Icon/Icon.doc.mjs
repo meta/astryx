@@ -124,7 +124,7 @@ export const docs = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        'Ref to the rendered SVG element, for an icon component and for a semantic or namespaced name. For a name, it is the <svg> inside the wrapper, or null when the resolved glyph has no <svg>.',
+        'Ref to the rendered SVG element, for an icon component and for a built-in meaning or namespaced key. For a name, it is the <svg> inside the wrapper, or null when the resolved glyph has no <svg>.',
     },
   ],
   theming: {

@@ -64,7 +64,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'For icons not in the semantic list, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
+          text: 'For icons that are not built-in meanings, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.',
         },
         {
           type: 'code',
