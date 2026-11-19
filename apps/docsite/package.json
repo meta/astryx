@@ -31,6 +31,7 @@
     "@astryxdesign/theme-stone": "*",
     "@astryxdesign/theme-y2k": "*",
     "@astryxdesign/vega": "*",
+    "@astryxdesign/template-icons": "*",
     "fflate": "^0.8.2",
     "lucide-react": "^1.66.0",
     "lz-string": "^1.5.0",
