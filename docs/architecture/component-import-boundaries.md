@@ -196,9 +196,13 @@ one pending load per module, caches a success, and resets after a failure.
   optional feature is behavior a caller turns on through a prop, an option or
   a plugin, that is off by default, and that is not part of a family contract
   every member carries. A field's `status`, with its on-field status icon, is
-  such a contract (`family:input-fields` FR8), so every field that takes it
-  loads the icon with the field, as TextInput does. Each such field draws the
-  icon with the shared `useInputStatusIcon` hook. A field that moves focus to
+  such a contract (`family:input-fields` FR8 sets the placements every member
+  offers, and `component:TextInput` FR9 the icon they show), so every field
+  that takes it loads the icon with the field, as TextInput does. TextInput,
+  NumberInput, TextArea, FileInput, the date and time inputs,
+  ComplexSelector, Tokenizer, Typeahead and PowerSearch draw the icon with the
+  shared `useInputStatusIcon` hook; Selector and MultiSelector draw their own.
+  A field that moves focus to
   its input on a press anywhere in it (Tokenizer, Typeahead) tells a press on
   the status info-tip from other presses with Core's internal
   `hooks/statusButtonPress`, so the tip keeps focus. An optional feature adds at most 0.3 KB gzip (KB as the
