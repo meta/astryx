@@ -7338,7 +7338,9 @@ async function changeOnce(
         const read = (ctx.C.partReads(c, 'background') ?? []).find(
           q =>
             q.when.includes('') &&
-            q.props.some((/** @type {string} */ p) => /^background(-color)?$/.test(p)) &&
+            q.props.some((/** @type {string} */ p) =>
+              /^background(-color)?$/.test(p),
+            ) &&
             !/overlay|tint/.test(q.token),
         );
         const value = read ? String(tokens[read.token] ?? '') : '';
