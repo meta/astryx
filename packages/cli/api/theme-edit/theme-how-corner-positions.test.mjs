@@ -469,4 +469,43 @@ describe('the corners an ask names', () => {
       'corners square --on context-menu',
     ]);
   }, 240_000);
+
+  it('ends the corner ask before a length of another look said with words between, and reads a part named with a side word whole', async ctx => {
+    if (needBases(ctx)) return;
+    const all = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'k'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set k /, ''));
+    // (The length is the border's, the spacing's or the underline's, never
+    // a radius on every corner.)
+    for (const [q, length] of [
+      ['tabs rounded on top and bottom 8px blue border', '8px'],
+      ['tabs rounded on top and bottom 1px solid border', '1px'],
+      ['tabs rounded on top and bottom 2px dashed border', '2px'],
+      ['tabs rounded on top and bottom 12px spacing', '12px'],
+      ['tabs rounded on top and bottom 2px underline', '2px'],
+    ])
+      expect(
+        (await all(q)).some(c => new RegExp(`radius '?${length}\\b`).test(c)),
+        q,
+      ).toBe(false);
+    expect(
+      await all('tabs rounded on top and bottom 8px blue border'),
+    ).toContain("border '8px solid #2563eb' --on tab");
+    // ("top nav" is a part: "top" names no corner, so every corner is
+    // squared.)
+    const nav = await all('square corners on the top nav');
+    expect(nav.length).toBeGreaterThan(0);
+    expect(nav.some(c => /border-(?:start|end)-/.test(c))).toBe(false);
+    // ("roundness", like "rounding", taken off squares.)
+    expect(
+      await writes('take the roundness off the top corners of tabs'),
+    ).toEqual([
+      'border-start-start-radius 0 --on tab',
+      'border-start-end-radius 0 --on tab',
+    ]);
+  }, 240_000);
 });

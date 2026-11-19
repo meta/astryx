@@ -1025,7 +1025,13 @@ function ownWords(k) {
  * never that side, and a new look after "side" ("and right side padding
  * 12px") is its own ask.
  */
-const SIDE_TAIL = String.raw`(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b))`;
+/**
+ * A length that belongs to another look said after it, with up to three
+ * words between: "2px border", "8px blue border", "1px solid border",
+ * "12px spacing", "2px underline".
+ */
+const LENGTH_OF_A_LOOK = String.raw`\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b`;
+const SIDE_TAIL = String.raw`(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!${LENGTH_OF_A_LOOK})\d*\.?\d+(?:px|rem|em|%)?\b)`;
 const JOINED_SIDE_ENDS = String.raw`(?=\s*(?:${SIDE_TAIL}|\b(?:sides?|edges?|ones?)\b\s*${SIDE_TAIL}))`;
 
 /**
@@ -3667,17 +3673,21 @@ function clausesOf(q, partWords, words = null) {
         (m, prev, sp) => (colorsIn(String(prev)).length ? `${prev}${sp};` : m),
       )
       // (Two sides of a corner ask and then a length of another look,
-      // "cards rounded on top and bottom 2px border": the corner ask ends at
-      // the second side, and the length is the look's own ask.)
+      // "cards rounded on top and bottom 2px border", "… 8px blue border":
+      // the corner ask ends at the second side, and the length is the
+      // look's own ask.)
       .replace(
-        /(\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at)\s+(?:the\s+)?(?:top|bottom|left|right)\s+(?:and|&)\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right))\s+(?=\d*\.?\d+(?:px|rem|em|%)?\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?)\b)/gi,
+        new RegExp(
+          String.raw`(\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at)\s+(?:the\s+)?(?:top|bottom|left|right)\s+(?:and|&)\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right))\s+(?=${LENGTH_OF_A_LOOK})`,
+          'gi',
+        ),
         '$1; ',
       )
       .split(
         // A font stack ("Georgia, serif") is one value, not two asks.
         // Two sides of a corner ask joined by "and" ("rounded on top and
         // bottom") are one ask, as a corner except is.
-        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b))|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|\d*\.?\d+(?:px|rem|em|%)?\b(?!\s*(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|text|fonts?|lines?|width|height)\b)))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*\b(?:on|at|along|across|to)\s+(?:the\s+)?(?:top|bottom|left|right)\s+)and\s+(?:(?:on|at)\s+)?(?:the\s+)?(?:top|bottom|left|right)\b(?=\s*(?:(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b)|\b(?:sides?|edges?|ones?)\b\s*(?:$|[;.,!?]|\b(?:corners?|of|on|for|in|too|as\s+well|only|also|both)\b|(?!\d*\.?\d+(?:px|rem|em|%)?(?:\s+[^\s;.,!?]+){0,3}?\s+(?:borders?|outlines?|rings?|shadows?|padding|margins?|gaps?|spacing|underlines?|dividers?|strokes?|text|fonts?|lines?|width|height)\b)\d*\.?\d+(?:px|rem|em|%)?\b))))\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)(?!(?<=\b(?:corners?|round\w*|radius|radii|square\w*|sharp\w*)\b[^;.,]*)\bexcept\s+(?:for\s+)?(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?(?:\s*(?:,|&|\band\b)\s*(?:the\s+)?(?:top|bottom|left|right|upper|lower)(?:[\s-](?:left|right))?(?:\s+(?:corners?|ones?|sides?|edges?))?)*(?=\s*(?:$|[;.,]|\bon\b))))/,
       );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
@@ -5851,9 +5861,16 @@ export function draftAnswer(ctx, env, question) {
   /** A part's rest color read, with the project's tokens. @param {Array<{token: string, when: string[]}>} reads @param {string} [when] */
   const restRead = (reads, when) => restColorRead(reads, when, TOKENS);
   const lex = partLexicon(ctx);
-  /** The words a clause can say a part by, as the part reader matches them. @param {string} on */
-  const partNames = on =>
-    lex.parts.filter(([, x]) => x?.on === on).map(([re]) => re);
+  // (Every part name that holds a side word, "top nav", "bottom sheet",
+  // "right-click menu", names no corner, whichever part the clause is
+  // about, and so does every name of that part.)
+  const sideWordNames = lex.parts
+    .map(([re]) => re)
+    .filter(re => /top|bottom|left|right/.test(re.source));
+  const partNames = (/** @type {string} */ on) => [
+    ...lex.parts.filter(([, x]) => x?.on === on).map(([re]) => re),
+    ...sideWordNames,
+  ];
   // "make the blue a bit darker": a color named as the theme's own, with a
   // way, is the theme color whose hue it is (the accent when the accent is
   // blue), never a part.
@@ -21751,7 +21768,7 @@ export function draftAnswer(ctx, env, question) {
           // "unrounded".)
           const square =
             /\b(square[ds]?|sharp|squared off|unround\w*)\b/.test(c.text) ||
-            /\b(?:take|takes|taking|took|strip|strips)\s+(?:the\s+)?rounding\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?rounding\b/.test(
+            /\b(?:take|takes|taking|took|strip|strips)\s+(?:the\s+)?(?:rounding|roundness|round|curves?|curvature)\s+off\b|\b(?:remove|removes|drop|drops|lose|loses)\s+(?:the\s+)?(?:rounding|roundness|curves?|curvature)\b/.test(
               c.text,
             ) ||
             Boolean(c.neg);
