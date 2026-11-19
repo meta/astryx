@@ -729,7 +729,7 @@ const fallbackRegionTheme = defineTheme({
 });
 
 /**
- * With the toolbar theme set to none, no `LayerProvider` is above this story.
+ * The story sets the toolbar theme to none, so no `LayerProvider` is above it.
  * Both buttons then show their toasts in the fallback viewport, which sits
  * outside both Themes.
  */
@@ -737,6 +737,7 @@ export const FallbackUnderTheme: StoryObj = {
   name: 'Accessibility / Fallback viewport under a Theme',
   // The toasts stay up, so they would cover the docs page.
   tags: ['!autodocs'],
+  globals: {astryxTheme: 'none'},
   render: function FallbackUnderThemeStory() {
     return (
       <Theme theme={fallbackPageTheme} mode="light">

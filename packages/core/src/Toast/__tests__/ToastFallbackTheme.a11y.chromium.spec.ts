@@ -7,9 +7,10 @@
  *   with the toolbar theme set to none so no LayerProvider is above it, in
  *   Chromium
  * @output Evidence that a toast in the fallback viewport keeps the Theme it
- *   was shown from, and text at WCAG 2.2 AA contrast (SC 1.4.3, 4.5:1), after
- *   a host page names its own theme and colors on the root element, in light
- *   and in dark, for a page Theme and for a Theme around one region
+ *   was shown from, draws with that Theme's tokens, and has text at WCAG 2.2
+ *   AA contrast (SC 1.4.3, 4.5:1), after a host page names its own theme and
+ *   colors on the root element, in a light and a dark host, for a page Theme
+ *   and for a Theme around one region
  * @position Run with `pnpm test:a11y-contract`. jsdom applies no scoped theme
  *   CSS, so only an engine shows which rules reach the card and its text.
  */
@@ -42,9 +43,15 @@ const HOST_COLORS = {
     '--color-background-inverted': '#FFFFFF',
   },
 } as const;
+/** Each Theme sets its own `--radius-container`, which the card draws. */
 const CASES = [
-  {button: 'Save page', body: 'Page saved', theme: PAGE_THEME},
-  {button: 'Save region', body: 'Region saved', theme: REGION_THEME},
+  {button: 'Save page', body: 'Page saved', theme: PAGE_THEME, radius: '0px'},
+  {
+    button: 'Save region',
+    body: 'Region saved',
+    theme: REGION_THEME,
+    radius: '24px',
+  },
 ] as const;
 
 let storybook: StaticServer;
@@ -68,10 +75,13 @@ async function openStoryInHost(
   await page.goto(
     `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:none`,
   );
-  await expect(page.locator('html')).toHaveAttribute(
-    'data-astryx-theme',
-    PAGE_THEME,
-  );
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-astryx-theme', PAGE_THEME);
+  // Storybook writes the root's inline color scheme once, after mount. Wait
+  // for that write, so it cannot replace the host's scheme below.
+  const inlineScheme = async () =>
+    html.evaluate(el => (el as HTMLElement).style.colorScheme);
+  await expect.poll(inlineScheme).toBe('light');
   await page.evaluate(
     ([theme, mode, colors]) => {
       const root = document.documentElement;
@@ -84,13 +94,18 @@ async function openStoryInHost(
     },
     [HOST_THEME, scheme, HOST_COLORS[scheme]] as const,
   );
+  await expect.poll(inlineScheme).toBe(scheme);
+  await expect(html).toHaveCSS('color-scheme', scheme);
 }
 
-/** The theme whose rules reach the toast, and its text's contrast on the card. */
+/**
+ * The Theme around the toast, the card's corner radius from that Theme's
+ * tokens, and the text's contrast on the card.
+ */
 async function shownToast(
   page: Page,
   body: string,
-): Promise<{theme: string | null; ratio: number}> {
+): Promise<{theme: string | null; radius: string | null; ratio: number}> {
   const text = page.locator('.astryx-toast').getByText(body);
   await expect(text).toBeVisible();
   await page.waitForTimeout(600); // the entrance and the measured side
@@ -128,17 +143,19 @@ async function shownToast(
       lum(channels(getComputedStyle(el).color)),
       lum(back),
     ].sort((x, y) => y - x);
+    const card = el.closest('.astryx-toast');
     return {
       theme:
         el.closest('[data-astryx-theme]')?.getAttribute('data-astryx-theme') ??
         null,
+      radius: card ? getComputedStyle(card).borderTopLeftRadius : null,
       ratio: (hi + 0.05) / (lo + 0.05),
     };
   });
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  for (const {button, body, theme} of CASES) {
+  for (const {button, body, theme, radius} of CASES) {
     test(`host ${scheme}: a toast from "${button}" keeps ${theme} and reaches ${AA_TEXT}:1`, async ({
       page,
     }) => {
@@ -146,6 +163,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('button', {name: button}).click();
       const toast = await shownToast(page, body);
       expect.soft(toast.theme).toBe(theme);
+      expect.soft(toast.radius).toBe(radius);
       expect(toast.ratio).toBeGreaterThanOrEqual(AA_TEXT);
     });
   }
