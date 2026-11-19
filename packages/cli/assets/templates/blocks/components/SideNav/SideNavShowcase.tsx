@@ -3,6 +3,7 @@
 'use client';
 
 import type {ComponentProps} from 'react';
+import {Cog6ToothIcon, LifebuoyIcon} from '@heroicons/react/24/outline';
 import {
   SideNav,
   SideNavHeading,
@@ -80,7 +81,14 @@ function DocumentTextIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavShowcase() {
   return (
-    <SideNav header={<SideNavHeading heading="My App" headingHref="/" />}>
+    <SideNav
+      header={<SideNavHeading heading="My App" headingHref="/" />}
+      footer={
+        <SideNavSection title="Support" isHeaderHidden>
+          <SideNavItem label="Help & docs" icon={LifebuoyIcon} href="/help" />
+          <SideNavItem label="Settings" icon={Cog6ToothIcon} href="/settings" />
+        </SideNavSection>
+      }>
       <SideNavSection title="Main">
         <SideNavItem
           label="Dashboard"

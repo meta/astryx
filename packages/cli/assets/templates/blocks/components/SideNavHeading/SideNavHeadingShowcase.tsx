@@ -2,8 +2,8 @@
 
 'use client';
 
-import {SideNav, SideNavHeading} from '@astryxdesign/core/SideNav';
 import {HStack} from '@astryxdesign/core/Layout';
+import {SideNav, SideNavHeading} from '@astryxdesign/core/SideNav';
 
 function AppIcon() {
   return (
@@ -23,6 +23,7 @@ function AppIcon() {
   );
 }
 
+// Compare a simple heading against one with a superheading and subheading.
 export default function SideNavHeadingShowcase() {
   return (
     <HStack gap={6}>
