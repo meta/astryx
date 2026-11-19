@@ -194,7 +194,18 @@ one pending load per module, caches a success, and resets after a failure.
 
 - **INV10 — An optional feature costs nothing where it is unused.** An
   optional feature is behavior a caller turns on through a prop, an option or
-  a plugin, and that is off by default. It adds at most 0.3 KB gzip (KB as the
+  a plugin, that is off by default, and that is not part of a family contract
+  every member carries. A field's `status`, with its on-field status icon, is
+  such a contract (`family:input-fields` FR8 sets the placements every member
+  offers, and `component:TextInput` FR9 the icon they show), so every field
+  that takes it loads the icon with the field, as TextInput does. TextInput,
+  NumberInput, TextArea, FileInput, the date and time inputs,
+  ComplexSelector, Tokenizer, Typeahead and PowerSearch draw the icon with the
+  shared `useInputStatusIcon` hook; Selector and MultiSelector draw their own.
+  A field that moves focus to
+  its input on a press anywhere in it (Tokenizer, Typeahead) tells a press on
+  the status info-tip from other presses with Core's internal
+  `hooks/statusButtonPress`, so the tip keeps focus. An optional feature adds at most 0.3 KB gzip (KB as the
   boundary check prints it, 1,024 bytes) of
   first-load JavaScript to a page that renders its component without it, the
   same wiring allowance as INV7. A larger feature takes INV7's route (its own
@@ -390,8 +401,9 @@ anyone hovers.
 > unused features and shared behavior code
 
 An app pays for an optional feature only when it uses it, and pays the least
-the feature can cost. A prop, option or plugin that is off by default adds no
-more than INV7's wiring allowance to a page that does not turn it on, and a
+the feature can cost. A prop, option or plugin that is off by default, and that
+no family contract makes part of every member, adds no more than INV7's
+wiring allowance to a page that does not turn it on, and a
 growing shared module states what it costs the apps that do not use the new
 code (INV10).
 

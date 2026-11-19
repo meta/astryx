@@ -11,12 +11,12 @@ import {
   TopNavMegaMenuFeaturedCard,
 } from '@astryxdesign/core/TopNav';
 import {
-  RocketLaunchIcon,
-  BookOpenIcon,
-  CodeBracketIcon,
-  ShieldCheckIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  RocketIcon,
+  BookIcon,
+  CodeIcon,
+  ShieldIcon,
+  SearchIcon,
+} from '@astryxdesign/template-icons';
 
 export default function TopNavMegaMenuShowcase() {
   return (
@@ -34,25 +34,25 @@ export default function TopNavMegaMenuShowcase() {
                 <TopNavMegaMenuItem
                   title="Deploy"
                   description="Ship to production in seconds"
-                  icon={<RocketLaunchIcon width={20} height={20} />}
+                  icon={<RocketIcon width={20} height={20} />}
                   href="#deploy"
                 />
                 <TopNavMegaMenuItem
                   title="Documentation"
                   description="Guides, references, and tutorials"
-                  icon={<BookOpenIcon width={20} height={20} />}
+                  icon={<BookIcon width={20} height={20} />}
                   href="#docs"
                 />
                 <TopNavMegaMenuItem
                   title="API"
                   description="Programmatic access to all features"
-                  icon={<CodeBracketIcon width={20} height={20} />}
+                  icon={<CodeIcon width={20} height={20} />}
                   href="#api"
                 />
                 <TopNavMegaMenuItem
                   title="Security"
                   description="Enterprise-grade protection"
-                  icon={<ShieldCheckIcon width={20} height={20} />}
+                  icon={<ShieldIcon width={20} height={20} />}
                   href="#security"
                 />
               </>
@@ -68,7 +68,7 @@ export default function TopNavMegaMenuShowcase() {
           />
         </>
       }
-      endContent={<MagnifyingGlassIcon width={20} height={20} />}
+      endContent={<SearchIcon width={20} height={20} />}
     />
   );
 }

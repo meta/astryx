@@ -10,5 +10,4 @@ export const doc = {
   aspectRatio: 1,
   isShowcase: true,
   componentsUsed: ['Icon', 'Layout', 'Token'],
-  icons: {TagIcon: 'tag'},
 };
