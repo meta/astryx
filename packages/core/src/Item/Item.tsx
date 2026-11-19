@@ -155,6 +155,8 @@ export type ItemControlProps = Omit<
   | 'hidden'
   | 'inert'
   | 'aria-hidden'
+  // The disabled state is the row's own, from `isDisabled`.
+  | 'aria-disabled'
 > & {
   [key: `data-${string}`]: string | number | boolean | undefined;
 };
@@ -281,14 +283,14 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * through `aria-label` or `aria-labelledby` — and for a host's own marks
    * and key handling (`data-*`, `onKeyDown`, a composite's roving
    * `tabIndex`). Every other prop keeps landing on the root. The row's own
-   * attributes win where they conflict: a disabled row keeps `aria-disabled`
-   * on its button or anchor and does not activate, and the control keeps the
-   * focus order these props give it. Where the root is the control (`as` is
-   * a link component, with or without a `role`), these land on the root after
-   * the row's other props, so on an attribute named in both places the
-   * `controlProps` value is the one written, a disabled row keeps
-   * `aria-disabled` there too, and an invisible button the row still nests
-   * inside such a root for `onClick` takes none of them. A row given no
+   * attributes win where they conflict. `aria-disabled` is the row's own,
+   * from `isDisabled`: a disabled row's button or anchor says so and does not
+   * activate, and keeps the focus order these props give it. Where the root
+   * is the control (`as` is a link component, with or without a `role`),
+   * these land on the root after the row's other props, so on an attribute
+   * named in both places the `controlProps` value is the one written, a
+   * disabled row says so there too, and an invisible button the row still
+   * nests inside such a root for `onClick` takes none of them. A row given no
    * `controlProps` renders exactly what it did before the prop existed.
    * Ignored, with a development warning, where the row renders no control: a
    * row with a `role` on a plain root (its parent owns keyboard access) or an
@@ -1029,13 +1031,10 @@ export function Item({
           {...controlProps}
           ref={anchorRef}
           {...(isDisabled
-            ? {
-                role: 'link',
-                'aria-disabled': true,
-                tabIndex: controlProps?.tabIndex ?? 0,
-              }
+            ? {role: 'link', tabIndex: controlProps?.tabIndex ?? 0}
             : {href, target, rel})}
           aria-current={ariaCurrent ?? controlProps?.['aria-current']}
+          aria-disabled={isDisabled || undefined}
           {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -1051,9 +1050,7 @@ export function Item({
           type="button"
           onClick={onClick}
           aria-current={ariaCurrent ?? buttonControlProps?.['aria-current']}
-          aria-disabled={
-            isDisabled ? true : buttonControlProps?.['aria-disabled']
-          }
+          aria-disabled={isDisabled || undefined}
           {...(isDisabled
             ? disabledInteractionProps<HTMLButtonElement>(
                 buttonControlProps?.onKeyDown,
@@ -1154,7 +1151,7 @@ export function Item({
           ? undefined
           : (rootControlProps?.['aria-current'] ?? ariaCurrent)
       }
-      aria-disabled={isDisabled ? true : rootControlProps?.['aria-disabled']}
+      aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}
       {...mergeProps(
         themeProps('item', {

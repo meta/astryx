@@ -4149,31 +4149,6 @@ describe('controlProps', () => {
     );
   });
 
-  it('carries the bag\x27s aria-disabled to the control of an enabled row', () => {
-    const {rerender} = render(
-      <Item
-        label="Views"
-        onClick={vi.fn()}
-        controlProps={{'aria-disabled': false}}
-      />,
-    );
-    expect(screen.getByRole('button', {name: 'Views'})).toHaveAttribute(
-      'aria-disabled',
-      'false',
-    );
-    rerender(
-      <Item
-        label="Inbox"
-        href="/inbox"
-        controlProps={{'aria-disabled': false}}
-      />,
-    );
-    expect(screen.getByRole('link', {name: 'Inbox'})).toHaveAttribute(
-      'aria-disabled',
-      'false',
-    );
-  });
-
   it('gives a name of its own to the control, not the root', () => {
     render(
       <Item
@@ -4187,13 +4162,13 @@ describe('controlProps', () => {
     ).toBeInTheDocument();
   });
 
-  it('a disabled row keeps its own aria-disabled over the caller\x27s, and the focus order the bag gives it', () => {
+  it('a disabled row says so on its anchor, and keeps the focus order the bag gives it', () => {
     render(
       <Item
         label="Message"
         href="/m/1"
         isDisabled
-        controlProps={{tabIndex: -1, 'aria-disabled': false}}
+        controlProps={{tabIndex: -1}}
       />,
     );
     // A disabled anchor says so and goes nowhere. It keeps the tab order the
@@ -4234,27 +4209,23 @@ describe('controlProps', () => {
     }
   });
 
-  it('a link root keeps the anchor path\x27s precedence: the caller\x27s aria-current, aria-disabled and tabIndex on an enabled row', () => {
+  it('a link root keeps the anchor path\x27s precedence: the caller\x27s aria-current and tabIndex on an enabled row', () => {
     render(
       <Item
         as={LinkRoot}
         role="menuitem"
         label="Docs"
         href="/docs"
-        controlProps={{
-          'aria-current': 'page',
-          'aria-disabled': false,
-          tabIndex: 0,
-        }}
+        controlProps={{'aria-current': 'page', tabIndex: 0}}
       />,
     );
     const root = screen.getByRole('menuitem', {name: 'Docs'});
     expect(root).toHaveAttribute('aria-current', 'page');
-    expect(root).toHaveAttribute('aria-disabled', 'false');
+    expect(root).not.toHaveAttribute('aria-disabled');
     expect(root).toHaveAttribute('tabindex', '0');
   });
 
-  it('a disabled link root says so over the caller\x27s aria-disabled, and keeps the bag\x27s tabIndex', () => {
+  it('a disabled link root says so, and keeps the bag\x27s tabIndex', () => {
     render(
       <Item
         as={LinkRoot}
@@ -4262,7 +4233,7 @@ describe('controlProps', () => {
         label="Docs"
         href="/docs"
         isDisabled
-        controlProps={{tabIndex: 0, 'aria-disabled': false}}
+        controlProps={{tabIndex: 0}}
       />,
     );
     const root = screen.getByRole('menuitem', {name: 'Docs'});
@@ -4292,6 +4263,44 @@ describe('controlProps', () => {
     expect(root).toHaveAttribute('aria-current', 'page');
     expect(root).toHaveAttribute('tabindex', '0');
     expect(root).toHaveAttribute('data-nav-id', 'control');
+  });
+
+  it('keeps aria-disabled out of the bag: the row\x27s own state sets it on every control', () => {
+    const {rerender} = render(
+      <Item
+        label="Views"
+        onClick={vi.fn()}
+        // @ts-expect-error aria-disabled is the row's own; isDisabled sets it
+        controlProps={{'data-nav-id': 'row', 'aria-disabled': true}}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Views'});
+    expect(button).toHaveAttribute('data-nav-id', 'row');
+    expect(button).not.toHaveAttribute('aria-disabled');
+    rerender(
+      <Item
+        label="Inbox"
+        href="/inbox"
+        // @ts-expect-error aria-disabled is the row's own; isDisabled sets it
+        controlProps={{'data-nav-id': 'row', 'aria-disabled': true}}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Inbox'});
+    expect(link).toHaveAttribute('data-nav-id', 'row');
+    expect(link).not.toHaveAttribute('aria-disabled');
+    rerender(
+      <Item
+        as={LinkRoot}
+        role="menuitem"
+        label="Docs"
+        href="/docs"
+        // @ts-expect-error aria-disabled is the row's own; isDisabled sets it
+        controlProps={{'data-nav-id': 'row', 'aria-disabled': true}}
+      />,
+    );
+    const root = screen.getByRole('menuitem', {name: 'Docs'});
+    expect(root).toHaveAttribute('data-nav-id', 'row');
+    expect(root).not.toHaveAttribute('aria-disabled');
   });
 
   it('a link root that passes no controlProps renders what it always did, enabled and disabled', () => {
@@ -4360,7 +4369,7 @@ describe('controlProps', () => {
     expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
-  it('a disabled onClick row keeps aria-disabled and blocks activation over the caller\x27s, and keeps the bag\x27s tabIndex and other keys', () => {
+  it('a disabled onClick row says so and blocks activation, and keeps the bag\x27s tabIndex and other keys', () => {
     const onClick = vi.fn();
     const onKeyDown = vi.fn();
     render(
@@ -4368,7 +4377,7 @@ describe('controlProps', () => {
         label="Views"
         onClick={onClick}
         isDisabled
-        controlProps={{tabIndex: -1, 'aria-disabled': false, onKeyDown}}
+        controlProps={{tabIndex: -1, onKeyDown}}
       />,
     );
     const button = screen.getByRole('button', {name: 'Views'});
