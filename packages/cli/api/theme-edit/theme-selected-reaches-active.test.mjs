@@ -50,7 +50,8 @@ describe('a selected look on a part marked active', () => {
   it('lands in the active state, never as :selected', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('dots', {cwd, like: 'neutral'});
-    await themeEditSet('dots', 'text-shadow', '0 1px 1px rgba(0, 0, 0, 0.25)', {
+    // (A look that reaches the family: an effect stays on its own part.)
+    await themeEditSet('dots', 'font-weight', '800', {
       cwd,
       on: 'segmented-control-item',
       state: 'selected',
@@ -60,7 +61,7 @@ describe('a selected look on a part marked active', () => {
         .readFileSync(path.join(cwd, 'themes', 'dots', 'dots.css'), 'utf8')
         .matchAll(/([^{}]+)\{([^{}]*)\}/g),
     ]
-      .filter(m => m[2].includes('text-shadow:'))
+      .filter(m => m[2].includes('font-weight: 800'))
       .map(m => m[1].trim());
     expect(rules.filter(r => r.includes(':selected'))).toEqual([]);
     expect(rules.some(r => /astryx-pagination-dot\[data-active/.test(r))).toBe(

@@ -4501,6 +4501,9 @@ export const GROUP_ROLES = /** @type {const} */ ([
   'overlay-headers',
 ]);
 
+/** The properties that are an effect on one part: shadows and filters. */
+const EFFECT_THINGS = /^(?:text-shadow|box-shadow|filter|backdrop-filter)$/;
+
 /**
  * The family roles a setting on one of their members reaches by default,
  * the most particular first: a look set on a button reaches every part
@@ -4521,8 +4524,12 @@ const REACH_ROLES = [
  * always-alike group the part is in (inputs, checks, menus), else, for a
  * CSS property or a dial, the family role the census reads from its
  * structure (a selected or active look: the selected items; any other: the
- * first of its look roles). None for a group named itself, a role font, or
- * a part in no family.
+ * first of its look roles). None for a group named itself, a role font, a
+ * part in no family, or an effect (a shadow or a filter) in a family role:
+ * an effect is a mark on the one part it is set on, and reaches the role's
+ * other members only when `--on` names it. The always-alike groups take
+ * every change as one, and an overlay's box shadow (its lift) reaches the
+ * other overlays.
  * @param {{project?: any, C?: any} | null | undefined} ctx
  * @param {Pick<Setting, 'on' | 'thing'> & {state?: string | null}} s
  * @returns {string | null}
@@ -4533,13 +4540,23 @@ export function reachGroupOf(ctx, s) {
   if (groups[s.on]) return null;
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam)) return fam;
+  const effect = EFFECT_THINGS.test(kebab(String(s.thing ?? '')));
   // (A token set on a part is what that part reads inside: a family's
   // members read their own, so no drawing tells which take it alike.)
   if (String(s.thing ?? '').startsWith('--')) return null;
   const roles = /^(?:selected|active)$/.test(String(s.state ?? ''))
     ? ['selected-items']
     : REACH_ROLES;
-  return roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  const role =
+    roles.find(r => (groups[r] ?? []).includes(String(s.on))) ?? null;
+  // A floating frame's shadow is its lift, which every overlay shares (a
+  // dialog's frame reaches the drawer, sheet and popover).
+  if (
+    effect &&
+    !(role === 'overlays' && kebab(String(s.thing)) === 'box-shadow')
+  )
+    return null;
+  return role;
 }
 
 /**
