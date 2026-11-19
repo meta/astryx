@@ -1949,7 +1949,7 @@ export function mapPalette(candidate, dials, fills, context) {
         t.onChoices(id, m).map(r => ({
           stop: r.stop,
           color: r.color,
-          family: String(r.family ?? 'neutral'),
+          family: r.family ?? 'neutral',
         })),
       accent: m => tokens['--color-accent']?.[m]?.color ?? null,
       wanted: k => has(k) && !setExactly(k),

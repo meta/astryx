@@ -89,7 +89,7 @@ import {perceptualDelta} from './generator.mjs';
  * @property {ReadonlyArray<Mode>} modes
  * @property {ReadonlyArray<string>} roles The dial ids to derive (info, success, warning, danger).
  * @property {(m: Mode) => string[]} grounds Page, surface, card (opaque hex).
- * @property {(m: Mode, role: string) => Array<Stop & {family: string}>} inks The text the theme draws on a role's fill in a mode, preferred first (white or near-black).
+ * @property {(m: Mode, role: string) => (Stop & {family: string})[]} inks The text the theme draws on a role's fill in a mode, preferred first (white or near-black).
  * @property {(m: Mode) => string | null} accent The accent fill in a mode, kept apart from.
  * @property {(token: string) => boolean} [wanted]
  */
@@ -666,7 +666,7 @@ export function deriveStatusColors({
        * @param {Mode} m
        * @param {number} stop
        */
-      (m, stop) => ({stop, color: String(fam[m][stop])});
+      (m, stop) => ({stop, color: fam[m][stop]});
     /**
      * @type {string[]}
      */
