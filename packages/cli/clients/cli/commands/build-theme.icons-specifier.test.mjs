@@ -186,7 +186,7 @@ describe('theme build --icons-specifier', () => {
     expect(withSpecifier.code).toBe(0);
   });
 
-  it('leaves the scraped specifier untouched when the flag is absent', async () => {
+  it('keeps the scraped path when the flag is absent, with the file’s extension written out', async () => {
     const project = path.join(tmpDir, 'project');
     const themeFile = writeThemeWithIcons(project, 'untouched');
 
@@ -196,15 +196,14 @@ describe('theme build --icons-specifier', () => {
     );
     expect(result.code).toBe(0);
 
-    // The pre-flag behaviour, preserved: no extension is invented. In this
-    // layout the neighbour is a source file only a bundler can resolve, so
-    // adding one would break a build that works today.
+    // The path the source writes, with the extension of the file it names
+    // (icons.mjs), so plain Node loads the built module as a bundler does.
     const generated = fs.readFileSync(
       path.join(project, 'untouched.js'),
       'utf8',
     );
     expect(iconImportLine(generated)).toBe(
-      "import { testIcons } from './icons';",
+      "import { testIcons } from './icons.mjs';",
     );
   });
 
@@ -310,8 +309,12 @@ describe('theme build --icons-specifier (spawned processes)', () => {
       // Rebuilds run through a child re-invocation of `theme build`, so the
       // flag reaches them only if the watch loop forwards it. Change a token
       // and wait for the rebuilt JavaScript module. fs.watch delivery is
-      // best-effort under load, so re-touch until the rebuild shows up
-      // (idempotent write).
+      // best-effort under load, so write again only when the watcher has not
+      // reported the change for a second: every write restarts the watcher's
+      // 100 ms debounce, so writing on every poll can hold the rebuild off for
+      // as long as the writes go on, and each write that lands during a
+      // rebuild queues another one. Writes replace the file whole, as an
+      // editor's save does, so no build reads a half-written theme.
       const touched =
         `import {testIcons} from './icons';\n` +
         `export default {\n` +
@@ -319,18 +322,30 @@ describe('theme build --icons-specifier (spawned processes)', () => {
         `  icons: testIcons,\n` +
         `  tokens: {'--color-bg': '#0a0b0c'},\n` +
         `};\n`;
-      fs.writeFileSync(themeFile, touched);
+      const touch = () => {
+        const staged = `${themeFile}.tmp`;
+        fs.writeFileSync(staged, touched);
+        fs.renameSync(staged, themeFile);
+        return {at: Date.now(), outputLength: output.length};
+      };
+      let lastTouch = touch();
+      /** @type {string | null} */
+      let rebuiltModule = null;
       const rebuilt = await waitFor(() => {
         try {
-          if (fs.readFileSync(builtFile, 'utf-8').includes('#0a0b0c'))
+          const source = fs.readFileSync(builtFile, 'utf-8');
+          if (source.includes('#0a0b0c')) {
+            rebuiltModule = source;
             return true;
+          }
         } catch {
-          // JavaScript module mid-write; fall through to re-touch.
+          // Not readable yet; poll again.
         }
-        try {
-          fs.writeFileSync(themeFile, touched);
-        } catch {
-          // Retried on the next poll.
+        const reported = /Change detected/.test(
+          output.slice(lastTouch.outputLength),
+        );
+        if (!reported && Date.now() - lastTouch.at > 1000) {
+          lastTouch = touch();
         }
         return false;
       });
@@ -339,10 +354,9 @@ describe('theme build --icons-specifier (spawned processes)', () => {
       // The regenerated module still carries the declared specifier — the
       // forwarding is what this test pins. A watch loop that dropped the flag
       // would regenerate with the scraped './icons' here and ship the #4620
-      // bytes on every save.
-      expect(iconImportLine(fs.readFileSync(builtFile, 'utf8'))).toBe(
-        declaredImport,
-      );
+      // bytes on every save. The module is the one read that showed the
+      // change, not a later read a queued rebuild could be rewriting.
+      expect(iconImportLine(rebuiltModule ?? '')).toBe(declaredImport);
     } finally {
       child.kill('SIGINT');
     }

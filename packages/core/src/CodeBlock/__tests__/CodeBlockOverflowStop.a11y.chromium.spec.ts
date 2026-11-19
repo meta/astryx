@@ -8,7 +8,7 @@
  * @position CodeBlock FR8 / AST-025 FR12–FR13 proof over the shared scroll capability
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

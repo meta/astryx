@@ -8,7 +8,7 @@
  * All original themes are MIT licensed. Only color values are extracted.
  * See THIRD_PARTY_LICENSES.md for full attribution.
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 import {

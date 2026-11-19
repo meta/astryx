@@ -39,7 +39,12 @@ export type {IconSetData} from './doctypes/types.js'; //     outline.icons.json
 export type {IconDefinitionDoc} from './doctypes/types.js'; //  delete.doc.mjs
 export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,mjs}
 export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
-export type {AstryxIntegration} from './integration/type.js'; // astryx.integration.{ts,mjs}
+export type {
+  AstryxIntegration,
+  BaseCapability,
+  BaseDeclaration,
+  BaseStep,
+} from './integration/type.js'; // astryx.integration.{ts,mjs}
 export type {
   GapReportHandler,
   GapReportHandlerContext,
@@ -89,6 +94,18 @@ export {parseCodemod} from './codemod/parse.mjs';
 export {parseDebugEvent} from './debug/parse.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════
+// EXAMPLES — whether a doc example runs on its own, as a live preview does.
+// ═══════════════════════════════════════════════════════════════════════
+export {previewableExample} from './example/preview.mjs';
+export type {
+  ExampleScope,
+  ExampleScopeName,
+  PreviewableExample,
+  ExampleProblem,
+  ExampleProblemCode,
+} from './example/type.js';
+
+// ═══════════════════════════════════════════════════════════════════════
 // FIELD & SUB-TYPES — the building blocks of the docs above. Import these
 // only to annotate a part directly (or to read/render docs); you rarely
 // need them to author. Names carry the doc kind they belong to.
@@ -118,10 +135,12 @@ export type {
   SingleComponentDoc,
   MultiComponentDoc,
   ComponentEntry,
+  ComponentDeprecation,
   ComponentGroupDoc,
   ComponentTranslationDoc,
   ComponentPropDoc,
   ComponentExampleDoc,
+  ExampleKind,
   ComponentAnatomyElement,
   ComponentAccessibilityRequirement,
   ComponentAccessibilityThemeStatus,
@@ -137,6 +156,8 @@ export type {
   ComponentThemingTarget,
   ComponentThemingVar,
   ComponentThemingDerivedVar,
+  ComponentIconSlotDoc,
+  ComponentIconSlotStateDoc,
   UsageDoc,
   // hook
   HookParamDoc,

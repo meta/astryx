@@ -40,7 +40,13 @@ import {CommandPaletteEmpty} from './CommandPaletteEmpty';
 import type {BaseProps} from '../BaseProps';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPalette.generated';
+
+registerEnglishFallback(english);
 
 export interface CommandPaletteProps<
   T extends SearchableItem = SearchableItem,
@@ -64,6 +70,8 @@ export interface CommandPaletteProps<
    * Search source providing items. Implements `search(query)` and `bootstrap()`.
    * Same interface as Typeahead's searchSource.
    * Use `createStaticSource` for simple static lists.
+   * A new source while the palette is open runs the shown query again, so
+   * keep the source stable (for example with `useMemo`).
    */
   searchSource: SearchSource<T>;
 
@@ -272,10 +280,11 @@ function ItemRenderer<T extends SearchableItem>({
  *
  * @example
  * ```
+ * const source = useMemo(() => createStaticSource(commands), [commands]);
  * <CommandPalette
  *   isOpen={isOpen}
  *   onOpenChange={setIsOpen}
- *   searchSource={createStaticSource(commands)}
+ *   searchSource={source}
  * />
  * ```
  */
@@ -297,7 +306,7 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   maxHeight = 480,
   ...rest
 }: CommandPaletteProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.commandPalette.label');
   const emptySearchText =
     emptySearchTextFromProps ?? t('@astryx.commandPalette.emptySearch');
@@ -315,6 +324,8 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   const [optimisticSearch, setOptimisticSearch] = useOptimistic(search);
   const [optimisticResults, setOptimisticResults] =
     useOptimistic(searchResults);
+  const currentQueryRef = useRef(optimisticSearch);
+  currentQueryRef.current = optimisticSearch;
   const isBusy = isPending;
   const searchVersionRef = useRef(0);
   const emptyStateRef = useRef<HTMLDivElement>(null);
@@ -428,11 +439,17 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
           );
         }
 
-        const result = isBootstrap
-          ? searchSource.bootstrap()
-          : searchSource.search(query);
+        let items: T[] = [];
+        try {
+          const result = isBootstrap
+            ? searchSource.bootstrap()
+            : searchSource.search(query);
 
-        const items = await Promise.resolve(result);
+          items = await Promise.resolve(result);
+        } catch {
+          // A failed request settles as an empty answer. React sends an
+          // uncaught error from this transition to the nearest error boundary.
+        }
 
         if (searchVersionRef.current === version) {
           if (!isBootstrap) {
@@ -498,16 +515,26 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     ],
   );
 
-  // Bootstrap on open. We use a ref to avoid re-triggering when
-  // runSearch's identity changes (it depends on searchResults).
+  // A ref, so the Effect below does not run again when runSearch's identity
+  // changes (it depends on searchResults).
   const runSearchRef = useRef(runSearch);
   runSearchRef.current = runSearch;
 
+  // Syncs the caller's search source with the open palette. Opening runs the
+  // bootstrap; a new source while open runs the shown query again. Cleanup
+  // cancels the source's pending request when it is replaced or closed.
+  const openSourceRef = useRef<SearchSource<T> | null>(null);
   useEffect(() => {
-    if (isOpen) {
-      runSearchRef.current('');
+    if (!isOpen) {
+      openSourceRef.current = null;
+      return;
     }
-  }, [isOpen]);
+    const isNewSourceWhileOpen =
+      openSourceRef.current !== null && openSourceRef.current !== searchSource;
+    openSourceRef.current = searchSource;
+    runSearchRef.current(isNewSourceWhileOpen ? currentQueryRef.current : '');
+    return () => searchSource.cancel?.();
+  }, [isOpen, searchSource]);
 
   // Wrap combobox's onKeyDown to preserve inline-preview Escape handling and
   // select + close on Enter. Modal Escape stays unclaimed here so Dialog's
@@ -624,12 +651,20 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     ],
   );
 
-  // `search` is the committed query the on-screen results correspond to (it
-  // still holds the previous query while a transition is pending). Keeping both
-  // flags ungated by `isPending` makes them exhaustive over the empty case, so
-  // the empty state is never unmounted and re-added mid-search (which flashed).
-  const showEmptyBootstrap = search === '' && optimisticResults.length === 0;
-  const showEmptySearch = search !== '' && optimisticResults.length === 0;
+  // "No query" is the field's current value (`optimisticSearch`), so the
+  // bootstrap text never shows over a query the person has typed
+  // (component:CommandPaletteEmpty FR2). The search-empty text belongs to a
+  // committed query (`search`, which still holds the previous query while a
+  // transition is pending): it stays mounted across keystrokes after a query
+  // settled empty, so it never flashes. While the first query is pending and
+  // nothing is committed, neither text shows: the result surface keeps the
+  // Empty container's size with no message, so the dialog does not jump, and
+  // the Input's Loading spinner is the indicator (component:CommandPalette
+  // FR1 and its Pending search state row).
+  const hasQuery = optimisticSearch !== '';
+  const showEmptyBootstrap = !hasQuery && optimisticResults.length === 0;
+  const showEmptySearch =
+    hasQuery && search !== '' && optimisticResults.length === 0;
   // Announce only once the search settles: while it is pending, optimistic
   // narrowing can empty the list before the source answers, which would
   // speak "No results" early or wrongly.
@@ -647,6 +682,12 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
       <CommandPaletteEmpty ref={emptyStateRef}>
         {emptySearchText}
       </CommandPaletteEmpty>
+    );
+  } else if (optimisticResults.length === 0) {
+    // A no-break space gives the empty container one line of height; it is
+    // hidden from assistive technology, which hears the busy start instead.
+    listContent = (
+      <CommandPaletteEmpty aria-hidden="true">{'\u00a0'}</CommandPaletteEmpty>
     );
   } else {
     listContent = (

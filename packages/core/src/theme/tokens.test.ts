@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme, generateThemeRules} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeRules} from './generateThemeRules';
 import {
   resolveThemeToken,
   resolveThemeTokens,
@@ -99,6 +100,21 @@ describe('resolveThemeToken', () => {
   it('resolves one token', () => {
     expect(resolveThemeToken(testTheme, '--color-accent', {mode: 'dark'})).toBe(
       '#FF5555',
+    );
+  });
+
+  it('resolves the exit curve to its accelerating default and to an override', () => {
+    // No rise at the start (y1 = 0): an exit moves off from rest and leaves
+    // fast, so its travel stays visible for the whole duration.
+    expect(resolveThemeToken(null, '--ease-exit', {mode: 'light'})).toBe(
+      'cubic-bezier(0.3, 0, 0.6, 0.6)',
+    );
+    const snappyExit = defineTheme({
+      name: 'snappy-exit',
+      tokens: {'--ease-exit': 'ease-in'},
+    });
+    expect(resolveThemeToken(snappyExit, '--ease-exit', {mode: 'dark'})).toBe(
+      'ease-in',
     );
   });
 

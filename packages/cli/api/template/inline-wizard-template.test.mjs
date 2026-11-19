@@ -9,7 +9,11 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {template} from './template.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./template.mjs')} */
+const {template} = require('./template.mjs');
 
 describe('inline wizard template interactions', () => {
   it('ships step navigation without a dead skip action', async () => {

@@ -3,7 +3,8 @@
 /**
  * @file themeAdaptations.ts
  * @input Ordered environment-conditioned theme value rules from defineTheme
- * @output Validated breakpoint metadata, the compact definition, and resolved
+ * @output Validated breakpoint metadata, the compact definition, the size-edge
+ *   spellings (range features and the StyleX "below" key), and resolved
  *   CSS-first rule layers
  * @position Theme system core; consumed by defineTheme, AppShell, and the CSS compiler
  *
@@ -27,9 +28,11 @@
 import type {ComponentStyleMap, TokenName, TokenValue} from './defineTheme';
 import type {TypographyConfig, TypographyRole} from './types';
 import type {MotionScaleConfig} from './expandMotionScale';
+import type {ThemeMotionConfig, ThemeMotionKnobs} from './themeMotion';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
+import {withoutUnsetComponents} from './mergeComponents';
 import {assertNoTokenCycles, resolveAdaptationLocalTokens} from './localTokens';
 
 // =============================================================================
@@ -54,6 +57,53 @@ export const DEFAULT_WIDTH_BREAKPOINTS: Readonly<WidthBreakpoints> =
     xl: 1280,
     '2xl': 1536,
   });
+
+// StyleX lowers a range feature such as `(width < 768px)` to
+// `(max-width: 767.99px)`. Chromium rounds that length up to 768px, so the
+// rule also matches at exactly 768px wide, where the wider side must apply.
+// A StyleX key therefore says "below" as the negation of the inclusive lower
+// edges. The negation is one parenthesized condition, so StyleX can combine it
+// with another media key on the same property and the result stays valid.
+// Script and plain CSS keep the range features, which the browser reads
+// directly.
+
+/** A width strictly below `px`, as a media feature for script or plain CSS. */
+export function widthBelowFeature(px: number): string {
+  return `(width < ${px}px)`;
+}
+
+/** A height strictly below `px`, as a media feature for script or plain CSS. */
+export function heightBelowFeature(px: number): string {
+  return `(height < ${px}px)`;
+}
+
+/** A width at or above `px`, as a media feature for script or plain CSS. */
+export function widthFromFeature(px: number): string {
+  return `(width >= ${px}px)`;
+}
+
+/** The edges of a "below" condition: true below the width, or below the height. */
+export interface BelowEdges {
+  /** Matches below this width. */
+  readonly width: number;
+  /** Also matches below this height. */
+  readonly height?: number;
+}
+
+/**
+ * The StyleX media key for "narrower than `width`, or shorter than `height`".
+ * Write the returned string as a literal key: a computed key gets a different
+ * StyleX priority. Put it after every other width or height key on the same
+ * property. StyleX rewrites an earlier key to exclude the later keys, and
+ * lowers the edges it negates. themeAdaptations.edges.test.ts enforces this
+ * for the compact key.
+ */
+export function belowStyleKey({width, height}: BelowEdges): string {
+  const widthEdge = `(min-width: ${width}px)`;
+  return height === undefined
+    ? `@media (not ${widthEdge})`
+    : `@media (not (${widthEdge} and (min-height: ${height}px)))`;
+}
 
 /**
  * When a screen is compact, for a component that chooses a presentation by
@@ -82,8 +132,8 @@ const COMPACT_HEIGHT_BELOW = 500;
 export function compactDefinition(
   points: Readonly<Pick<WidthBreakpoints, 'md'>> = DEFAULT_WIDTH_BREAKPOINTS,
 ): CompactDefinition {
-  const width = `(width < ${points.md}px)`;
-  const height = `(height < ${COMPACT_HEIGHT_BELOW}px)`;
+  const width = widthBelowFeature(points.md);
+  const height = heightBelowFeature(COMPACT_HEIGHT_BELOW);
   return Object.freeze({
     widthBelow: points.md,
     heightBelow: COMPACT_HEIGHT_BELOW,
@@ -133,8 +183,11 @@ export interface ThemeAdaptationValue {
   color?: Partial<ColorScaleConfig>;
   /** Radius axis overrides, completed from root metadata. */
   radius?: Partial<RadiusScaleConfig>;
-  /** Motion axis overrides, completed from root metadata. */
-  motion?: Partial<MotionScaleConfig>;
+  /**
+   * Motion axis overrides, completed from root metadata: scale fields, or the
+   * `tempo` and `character` knobs (spec:AST-108 FR5).
+   */
+  motion?: Partial<MotionScaleConfig> & ThemeMotionKnobs;
   /** Portable semantic-token writes. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
   /** Replacements for exact theme-local names enrolled by the root lineage. */
@@ -176,7 +229,7 @@ export interface ThemeGenerativeAxes {
   typography?: TypographyConfig;
   color?: ColorScaleConfig;
   radius?: RadiusScaleConfig;
-  motion?: MotionScaleConfig;
+  motion?: ThemeMotionConfig;
 }
 
 /** One rule lowered to concrete CSS writes. */
@@ -222,18 +275,39 @@ function assertAllowedKeys(
   }
 }
 
-function cloneData<T>(value: T): T {
-  if (Array.isArray(value)) {
-    const cloned: unknown[] = [];
-    for (const item of value) {
-      cloned.push(cloneData(item));
+/**
+ * A deep copy of plain data. A value inside the objects that hold it never
+ * ends, so it is refused by name (`path`) instead of overflowing the stack.
+ */
+function cloneData<T>(
+  value: T,
+  path = 'value',
+  holding: Set<object> = new Set(),
+): T {
+  if (Array.isArray(value) || isRecord(value)) {
+    if (holding.has(value)) {
+      throw new Error(
+        `${path} holds an object it sits in, so it never ends and is no theme value.`,
+      );
     }
-    return cloned as T;
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [key, cloneData(nested)]),
-    ) as T;
+    holding.add(value);
+    try {
+      if (Array.isArray(value)) {
+        const cloned: unknown[] = [];
+        for (const [i, item] of value.entries()) {
+          cloned.push(cloneData(item, `${path}[${i}]`, holding));
+        }
+        return cloned as T;
+      }
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          key,
+          cloneData(nested, `${path}.${key}`, holding),
+        ]),
+      ) as T;
+    } finally {
+      holding.delete(value);
+    }
   }
   return value;
 }
@@ -330,7 +404,7 @@ function normalizeCondition(
     throw new Error(`${path} must contain at least one condition.`);
   }
 
-  const condition = cloneData(defined) as ThemeAdaptationCondition;
+  const condition = cloneData(defined, path) as ThemeAdaptationCondition;
   if (condition.width !== undefined) {
     assertRecord(condition.width, `${path}.width`);
     assertAllowedKeys(condition.width, WIDTH_CONDITION_KEYS, `${path}.width`);
@@ -392,7 +466,7 @@ function normalizeValue(value: unknown, path: string): ThemeAdaptationValue {
       throw new Error(`${path}.${key} must be an object.`);
     }
   }
-  return cloneData(value);
+  return cloneData(value, path);
 }
 
 function normalizeRule(value: unknown, path: string): ThemeAdaptationRule {
@@ -570,13 +644,41 @@ function completeRadius(
 }
 
 function completeMotion(
-  root: MotionScaleConfig | undefined,
-  rule: Partial<MotionScaleConfig>,
+  root: ThemeMotionConfig | undefined,
+  rule: Partial<MotionScaleConfig> & ThemeMotionKnobs,
   path: string,
-): MotionScaleConfig {
-  const fast = rule.fast ?? root?.fast;
-  const medium = rule.medium ?? root?.medium;
-  const ratio = rule.ratio ?? root?.ratio;
+): ThemeMotionConfig {
+  // Not a public field, but a plain-JS caller may still pass it.
+  if ((rule as {reducedMotion?: unknown}).reducedMotion !== undefined) {
+    throw new Error(
+      `${path}.reducedMotion is a theme-wide setting: set it on the theme's own ` +
+        `motion, not in an adaptation rule.`,
+    );
+  }
+  const tempo = rule.tempo ?? root?.tempo;
+  const character = rule.character ?? root?.character;
+  const knobs: ThemeMotionKnobs = {
+    ...(tempo !== undefined ? {tempo} : {}),
+    ...(character !== undefined ? {character} : {}),
+  };
+  if (knobs.tempo !== undefined) {
+    assertFiniteNumber(knobs.tempo, `${path}.tempo`);
+  }
+  const rootScale: Partial<MotionScaleConfig> =
+    root != null && 'fast' in root ? root : {};
+  const writesScale =
+    rule.fast !== undefined ||
+    rule.medium !== undefined ||
+    rule.ratio !== undefined ||
+    rule.slow !== undefined ||
+    rule.easing !== undefined;
+  if (!writesScale && 'fast' in rootScale === false) {
+    // Knobs only, over a root with no scale: the knobs generate the tokens.
+    return knobs;
+  }
+  const fast = rule.fast ?? rootScale.fast;
+  const medium = rule.medium ?? rootScale.medium;
+  const ratio = rule.ratio ?? rootScale.ratio;
   if (fast === undefined || medium === undefined || ratio === undefined) {
     throw new Error(
       `${path} must supply \`fast\`, \`medium\`, and \`ratio\` unless each missing field exists on the effective root motion axis.`,
@@ -585,17 +687,18 @@ function completeMotion(
   assertFiniteNumber(fast, `${path}.fast`);
   assertFiniteNumber(medium, `${path}.medium`);
   assertFiniteNumber(ratio, `${path}.ratio`);
-  const slow = rule.slow ?? root?.slow;
+  const slow = rule.slow ?? rootScale.slow;
   if (slow !== undefined) {
     assertFiniteNumber(slow, `${path}.slow`);
   }
-  const easing = rule.easing ?? root?.easing;
+  const easing = rule.easing ?? rootScale.easing;
   return {
     fast,
     medium,
     ratio,
     ...(slow !== undefined ? {slow} : {}),
     ...(easing !== undefined ? {easing} : {}),
+    ...knobs,
   };
 }
 
@@ -664,10 +767,10 @@ function mediaQueryForCondition(
       );
     }
     if (from !== undefined) {
-      parts.push(`(width >= ${points[from]}px)`);
+      parts.push(widthFromFeature(points[from]));
     }
     if (below !== undefined) {
-      parts.push(`(width < ${points[below]}px)`);
+      parts.push(widthBelowFeature(points[below]));
     }
   }
   if (condition.pointer !== undefined) {
@@ -825,12 +928,19 @@ function assertNoReachableTokenCycles(
           const queries = matchingRuleIndexes
             .map(index => rules[index].query)
             .join('; ');
+          const ruleContext = `defineTheme("${themeName}").adaptations ${
+            matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
+          } [${indexes}] (${queries})`;
           assertNoTokenCycles(
             effective,
-            `defineTheme("${themeName}").adaptations ${
-              matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
-            } [${indexes}] (${queries})`,
+            ruleContext,
             relevantNames,
+            // A value no matching rule sets is the theme's own root token (a
+            // root local token that holds itself is refused before this).
+            name =>
+              relevantNames.has(name)
+                ? ruleContext
+                : `defineTheme("${themeName}").tokens`,
           );
         }
       }
@@ -990,7 +1100,14 @@ export function resolveThemeAdaptationRules(
       // acceptance to preserve, so a malformed token is rejected here rather
       // than emitted. The root path stays lenient for compatibility.
       // SYNC: packages/core/src/theme/resolveThemeValues.ts (resolveTokenValue)
-      {strictTokens: true},
+      // A rule without motion of its own keeps the theme's character, so its
+      // explicit --ease-standard leaves that character's curves alone; one
+      // at 'standard' matches the theme's --ease-standard.
+      {
+        strictTokens: true,
+        inheritedCharacter: axes.motion?.character,
+        standardBeneath: rootTokens['--ease-standard'],
+      },
     );
     for (const [name, value] of Object.entries(resolved.tokens)) {
       assertConcreteLeaf(
@@ -1037,7 +1154,8 @@ export function resolveThemeAdaptationRules(
         ? omitRootTypeScaleDefaults(
             resolved.components,
             rootComponents,
-            rule.value.components,
+            // A value the rule leaves undefined is no write of its own.
+            withoutUnsetComponents(rule.value.components),
           )
         : resolved.components,
     };

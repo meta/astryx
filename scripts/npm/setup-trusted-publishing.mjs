@@ -139,7 +139,7 @@ function parseCliArgs(argv) {
       // single, non-reusable release.yml that runs ALL npm publishing (see the
       // workflow_ref subtlety in the file header and release.yml's own header).
       workflow: {type: 'string', default: 'release.yml'},
-      repo: {type: 'string', default: 'facebook/astryx'},
+      repo: {type: 'string', default: 'meta/astryx'},
     },
     allowPositionals: false,
   });
@@ -585,7 +585,7 @@ async function main() {
   const [repoOwner, repoName] = repo.split('/');
   if (!repoOwner || !repoName) {
     console.error(
-      `Invalid --repo value "${repo}". Expected owner/name, e.g. facebook/astryx.`,
+      `Invalid --repo value "${repo}". Expected owner/name, e.g. meta/astryx.`,
     );
     process.exit(1);
   }

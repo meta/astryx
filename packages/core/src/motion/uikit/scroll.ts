@@ -4,8 +4,8 @@
  * @file scroll.ts
  * @input Nothing; data only
  * @output Exports `scroll`, the UIScrollView constants: deceleration rates,
- *   the rubber-band coefficient, the bounce-back spring, paging and the
- *   content-touch delay
+ *   the rubber-band coefficient, the bounce-back spring and the content-touch
+ *   delay
  * @position The scroll domain of the UIKit constants table (motion/uikit);
  *   read by the motion math and components
  *
@@ -82,22 +82,6 @@ export const scroll = {
    * @measure M-S3
    */
   bounce: {duration: 0.5, bounce: 0},
-  paging: {
-    /**
-     * Deceleration rate a paging release is projected with to pick the next
-     * page.
-     * @source GUESS — UIScrollView paging behaves like a fast scroll view;
-     *   the rate it uses internally is not documented
-     * @measure M-PG1
-     */
-    projectionRate: 0.99,
-    /**
-     * The spring that carries a paging scroll view onto its page.
-     * @source GUESS — SwiftUI `.smooth` default until measured
-     * @measure M-PG1
-     */
-    snap: {duration: 0.5, bounce: 0},
-  },
   /**
    * `delaysContentTouches`: how long a scroll view holds a touch-down from
    * its content while it decides whether the touch is a scroll (no highlight

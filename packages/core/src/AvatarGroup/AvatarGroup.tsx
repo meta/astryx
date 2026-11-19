@@ -33,12 +33,18 @@ import {mergeProps} from '../utils';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {AvatarGroupContext} from './AvatarGroupContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useListFocus} from '../hooks/useListFocus';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {VisuallyHidden} from '../VisuallyHidden';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AvatarGroup/AvatarGroup.generated';
+
+registerEnglishFallback(english);
 const OVERLAP_RATIO = 0.25;
 
 export interface AvatarGroupProps extends BaseProps<HTMLDivElement> {
@@ -123,7 +129,7 @@ export function AvatarGroup({
   ref,
   ...props
 }: AvatarGroupProps): ReactNode {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.avatarGroup.label');
   const numericSize = resolveSize(size);
   const overlap = Math.round(numericSize * OVERLAP_RATIO);

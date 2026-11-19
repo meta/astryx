@@ -78,7 +78,7 @@ const SLIDER_AR1: AstryxRecord = {
   standard: 'astryx',
   id: 'component:Slider',
   clause: 'AR1',
-  url: 'https://github.com/facebook/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/Slider/Slider.spec.md#L120-L133',
+  url: 'https://github.com/meta/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/Slider/Slider.spec.md#L120-L133',
   requirement:
     "On a horizontal track the horizontal arrows follow the track's direction — under RTL ArrowLeft increases and ArrowRight decreases; PageUp and PageDown step by ten steps; Home moves to `min` and End to `max`.",
 };

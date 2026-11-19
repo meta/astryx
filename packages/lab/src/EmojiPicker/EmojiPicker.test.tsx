@@ -257,7 +257,7 @@ describe('EmojiPicker', () => {
 
   it('loads the bundled set when no categories are passed', async () => {
     render(<EmojiPicker frequentEmojis={[]} onSelect={() => {}} />);
-    expect(screen.getByRole('status', {name: 'Loading emoji'})).toBeTruthy();
+    expect(screen.getByText('Loading emoji')).toBeTruthy();
     await act(async () => {
       for (let attempt = 0; attempt < 40; attempt++) {
         if (screen.queryAllByRole('grid').length > 0) {
@@ -272,5 +272,26 @@ describe('EmojiPicker', () => {
     // Keywords come through: `finish` finds the flag.
     fireEvent.change(search(), {target: {value: 'finish'}});
     expect(emojiNames()).toEqual(['Chequered flag']);
+  });
+
+  it('renders the bundled emoji load error inside a status region', async () => {
+    const loadFailedMessage = "More emoji couldn't be loaded.";
+
+    vi.resetModules();
+    vi.doMock('./emojiData', () => {
+      throw new Error('forced emoji data load failure');
+    });
+
+    const {EmojiPicker: FailingEmojiPicker} = await import('./EmojiPicker');
+
+    render(<FailingEmojiPicker frequentEmojis={[]} onSelect={() => {}} />);
+
+    const errorMessage = await screen.findByText(loadFailedMessage);
+
+    const isInsideStatusRegion = screen
+      .getAllByRole('status')
+      .some(status => status.contains(errorMessage));
+
+    expect(isInsideStatusRegion).toBe(true);
   });
 });

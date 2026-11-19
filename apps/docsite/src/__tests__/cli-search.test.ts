@@ -18,6 +18,7 @@ import type {SearchResponse} from '@astryxdesign/cli/api';
 import {GET} from '../app/api/search/route';
 import {searchResultHref} from '../lib/searchLinks.mjs';
 import type {SearchLinkTables} from '../lib/searchLinks.mjs';
+import {searchResultPresentation} from '../lib/cliSearchPresentation';
 import {
   createCliSearchSource,
   searchTarget,
@@ -99,7 +100,12 @@ describe('site search = astryx search', () => {
         expect(rest, query).toEqual(cliRest);
         expect(
           results.map(
-            ({href: _href, siteTitle: _siteTitle, ...result}) => result,
+            ({
+              href: _href,
+              siteTitle: _siteTitle,
+              siteCategory: _siteCategory,
+              ...result
+            }) => result,
           ),
           query,
         ).toEqual(cliResults);
@@ -197,13 +203,15 @@ describe('site search links', () => {
     }
   });
 
-  it("opens an integration's example block on its component page", () => {
-    const blocks = Object.entries(links.blocks).filter(([key]) =>
-      key.startsWith('-astryxdesign-'),
+  it("opens an integration's non-showcase block at its exact component example", () => {
+    const blocks = Object.entries(links.blocks).filter(
+      ([key, page]) =>
+        key.startsWith('-astryxdesign-') && page.includes('#example-'),
     );
     expect(blocks.length).toBeGreaterThan(0);
     for (const [key, page] of blocks) {
       const [, pkg, name] = /^-astryxdesign-([a-z]+)-(.+)$/.exec(key)!;
+      expect(page, key).toContain(`#example-${key}`);
       expect(
         searchResultHref(
           {
@@ -219,6 +227,34 @@ describe('site search links', () => {
     }
   });
 
+  it('folds a component showcase into the component destination', () => {
+    expect(
+      searchResultHref(
+        {
+          domain: 'template',
+          kind: 'block',
+          name: 'ButtonShowcase',
+          package: '@astryxdesign/core',
+        },
+        links,
+      ),
+    ).toBe('/components/Button');
+  });
+
+  it('opens a Core non-showcase block at its exact component example', () => {
+    expect(
+      searchResultHref(
+        {
+          domain: 'template',
+          kind: 'block',
+          name: 'ButtonFloating',
+          package: '@astryxdesign/core',
+        },
+        links,
+      ),
+    ).toBe('/components/Button#example-ButtonFloating');
+  });
+
   it(
     'titles doc results the way the site does, never with the docs-tree path',
     async () => {
@@ -228,14 +264,28 @@ describe('site search links', () => {
         'tokens spacing',
       ]) {
         for (const result of (await api(query)).data.results) {
-          if (result.domain !== 'doc') continue;
+          if (result.domain !== 'doc') {
+            continue;
+          }
           expect(result.siteTitle, `${query}: ${result.name}`).toBeTruthy();
           expect(result.siteTitle).not.toMatch(/Unorganized/);
+          const expectedCategory = links.categories[result.href];
+          if (expectedCategory) {
+            expect(result.siteCategory, `${query}: ${result.name}`).toBe(
+              expectedCategory,
+            );
+          }
         }
       }
     },
     SLOW,
   );
+
+  it('carries the destination page category for search presentation', () => {
+    expect(links.categories['/docs/tokens']).toBe('foundations');
+    expect(links.categories['/docs/typography']).toBe('foundations');
+    expect(links.categories['/docs/cli-component-lookups']).toBe('guide');
+  });
 
   it('opens a doc section at its anchor', () => {
     const href = searchResultHref(
@@ -278,9 +328,16 @@ describe('search panel order', () => {
   );
 
   it(
-    'lists each place once, with a label no other row has',
+    'lists each place once, with rendered text no other row has',
     async () => {
-      for (const query of ['dark mode', 'authoring', 'tokens spacing']) {
+      for (const query of [
+        'dark mode',
+        'authoring',
+        'tokens spacing',
+        'button variants',
+        'banner statuses',
+        'divider variants',
+      ]) {
         const {data} = await api(query);
         const source = createCliSearchSource(
           async () => new Response(JSON.stringify({data})),
@@ -288,11 +345,12 @@ describe('search panel order', () => {
         const items = await source.search(query);
         const hrefs = items.map(item => item.auxiliaryData.href);
         expect(new Set(hrefs).size, `${query}: ${hrefs}`).toBe(hrefs.length);
-        const docLabels = items
-          .filter(item => item.auxiliaryData.domain === 'doc')
-          .map(item => item.label);
-        expect(new Set(docLabels).size, `${query}: ${docLabels}`).toBe(
-          docLabels.length,
+        const renderedText = items.map(item => {
+          const {title, context} = searchResultPresentation(item.auxiliaryData);
+          return `${title} · ${context}`;
+        });
+        expect(new Set(renderedText).size, `${query}: ${renderedText}`).toBe(
+          renderedText.length,
         );
       }
     },

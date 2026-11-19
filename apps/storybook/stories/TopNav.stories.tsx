@@ -3,6 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
+import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
 import {Button} from '@astryxdesign/core/Button';
 import {
   HomeIcon,
@@ -96,6 +97,64 @@ export const WithLogo: Story = {
         <TopNavItem label="Overview" href="#" isSelected />
         <TopNavItem label="Analytics" href="#" />
         <TopNavItem label="Reports" href="#" />
+      </>
+    ),
+    endContent: (
+      <Button
+        label="Profile"
+        variant="ghost"
+        icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+    ),
+  },
+};
+
+/**
+ * A heading with a product menu. A press that slides across the menu's items
+ * acts on the item it lifts on, as every menu does.
+ */
+export const WithHeadingMenu: Story = {
+  args: {
+    label: 'Main navigation',
+    heading: (
+      <TopNavHeading
+        heading="Acme Suite"
+        logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+        menu={
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Analytics" onClick={() => {}} />
+            <NavHeadingMenuItem label="Billing" onClick={() => {}} />
+            <NavHeadingMenuItem label="Settings" onClick={() => {}} />
+          </NavHeadingMenu>
+        }
+      />
+    ),
+  },
+};
+
+/**
+ * A heading whose superheading and heading are separate links, beside a full
+ * set of nav items. In a narrow window the start region is crowded.
+ */
+export const IndependentHeadingLinks: Story = {
+  args: {
+    label: 'Main navigation',
+    heading: (
+      <TopNavHeading
+        superheading="Northwind workspace"
+        superheadingHref="#"
+        heading="Operations overview"
+        headingHref="#"
+        logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+      />
+    ),
+    startContent: (
+      <>
+        <TopNavItem label="Dashboard" href="#" isSelected />
+        <TopNavItem label="Reports" href="#" />
+        <TopNavItem label="Analytics" href="#" />
+        <TopNavItem label="Settings" href="#" />
       </>
     ),
     endContent: (

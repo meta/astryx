@@ -118,7 +118,7 @@ const AST_020_FR15: AstryxRecord = {
   standard: 'astryx',
   id: 'spec:AST-020',
   clause: 'FR15',
-  url: 'https://github.com/facebook/astryx/blob/577a62e5901911a24b5a485ac4c0bdf5fca4ef1f/docs/specs/AST-020/spec.md#L83-L92',
+  url: 'https://github.com/meta/astryx/blob/577a62e5901911a24b5a485ac4c0bdf5fca4ef1f/docs/specs/AST-020/spec.md#L83-L92',
   requirement:
     "Where a component part already plays an APG pattern's role, Astryx adopts that pattern's required parts for it: the role, the accessible name, the state and relationship properties, and activation by Tab plus Enter or Space. The pattern's optional keyboard extras — arrow-key movement between parts, Home and End — are adopted only where the component already acts as one composite control.",
 };

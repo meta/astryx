@@ -8,11 +8,19 @@
  *
  * This module has NO 'use client' directive. It is importable from SSR/RSC and
  * lets code resolve theme data by stable theme name without React context.
+ * Copies of Core on one React share the registry.
  */
 
 import type {DefinedTheme} from './defineTheme';
+import {sharedForReact} from '../utils/sharedForReact';
 
-const themeRegistry = new Map<string, DefinedTheme>();
+// Every copy of Core on one React shares this registry. A theme can hold React
+// elements (its icons), so a second React keeps its own.
+const themeRegistry = sharedForReact(
+  'theme/theme-registry/themes',
+  1,
+  () => new Map<string, DefinedTheme>(),
+);
 
 /**
  * Register a defined theme under its `name`.

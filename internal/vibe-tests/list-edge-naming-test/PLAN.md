@@ -1,13 +1,13 @@
 # List edge naming vibe test
 
 **Status:** ad-hoc · rounds 1–3 complete · recommendation shipped in PR #7592
-**Related:** [`../README.md`](../README.md) (Checker Protocol), [API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration), [Designing Vibe Tests](https://github.com/facebook/astryx/wiki/Designing-Vibe-Tests), [PR #7592](https://github.com/facebook/astryx/pull/7592)
+**Related:** [`../README.md`](../README.md) (Checker Protocol), [API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration), [Designing Vibe Tests](https://github.com/meta/astryx/wiki/Designing-Vibe-Tests), [PR #7592](https://github.com/meta/astryx/pull/7592)
 
 ---
 
 ## 1. The question
 
-[PR #7592](https://github.com/facebook/astryx/pull/7592) gives `List` one prop that
+[PR #7592](https://github.com/meta/astryx/pull/7592) gives `List` one prop that
 picks where each row's text, highlight, and dividers sit relative to the list's sides
 and a surrounding `Card`, `Section`, or `Dialog`. There are four looks:
 
@@ -25,7 +25,7 @@ against no API at all.
 
 ## 2. Design
 
-Four-ingredient intake per [Designing Vibe Tests](https://github.com/facebook/astryx/wiki/Designing-Vibe-Tests).
+Four-ingredient intake per [Designing Vibe Tests](https://github.com/meta/astryx/wiki/Designing-Vibe-Tests).
 
 **Goal and measure.** A naive agent is told what a layout needs and never told a prop or
 value name. Scored on correctness, invented props or styles, directness, and confidence
@@ -213,7 +213,7 @@ unrelated `align`.
 ## 4. Recommendation
 
 **Keep `edge` and one prop with four values. Rename look 1 from `inset` to `padded`. Keep
-`flush`, `outset`, and `bleed`.** Applied in [PR #7592](https://github.com/facebook/astryx/pull/7592),
+`flush`, `outset`, and `bleed`.** Applied in [PR #7592](https://github.com/meta/astryx/pull/7592),
 with the List docs covering §3.5 and the three gaps in §3.8.
 
 - One prop with four values, because recall produced it 6/6 and the looks exclude each

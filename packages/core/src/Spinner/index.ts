@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from Spinner component
@@ -12,8 +10,4 @@
  */
 
 export {Spinner} from './Spinner';
-export type {
-  SpinnerProps,
-  SpinnerSize,
-  SpinnerShade,
-} from './Spinner';
+export type {SpinnerProps, SpinnerSize, SpinnerShade} from './Spinner';

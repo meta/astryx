@@ -46,6 +46,7 @@ async function renderState(
   await waitFor(() =>
     expect(document.querySelector('[data-a11y-ready="true"]')).not.toBeNull(),
   );
+  await waitFor(() => expect(subjectFor(state)).toBeInTheDocument());
 }
 
 function subjectFor(state: CoreStatusMessageBindingState): Element {
@@ -130,14 +131,14 @@ describe('Core status-message binding inventory', () => {
     ).toEqual([
       'FieldStatus announcement channel',
       'ProgressBar',
-      'Spinner',
+      'Spinner announcement channel',
       'Toast announcement channel',
-      'Toast card',
     ]);
   });
 
   it('records every adjacent non-status or separately owned surface explicitly', () => {
     expect(CORE_STATUS_MESSAGE_EXCLUSIONS.map(entry => entry.part)).toEqual([
+      'toast card',
       'visible validation text',
       'aria-hidden decorative spinner',
       'chat notice or date separator',

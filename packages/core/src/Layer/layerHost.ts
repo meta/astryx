@@ -2,13 +2,16 @@
 
 /**
  * @file layerHost.ts
- * @input Uses the layer's intended inline parent element
- * @output Exports resolveLayerPortalTarget, the corrective portal target
+ * @input Uses the intended inline parent, renderer-managed roots and layer roots
+ * @output Exports the corrective portal resolver
  * @position Layer utility; used by useLayer to place the popover in the DOM
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Layer/layerHost.test.ts
  */
+
+import {isRendererManagedRoot} from '../privateAttributes/layerPortalBoundary.stylex';
+import {isLayerRoot} from '../privateAttributes/layerRoot.stylex';
 
 /**
  * Ancestors a layer must not be hosted inside.
@@ -102,9 +105,8 @@ const UNSAFE_HOSTS = new Set([
 /**
  * Return the corrective portal target for a layer's intended inline parent.
  *
- * A null result means the inline parent and all of its ancestors are safe, so
- * the layer should stay at its JSX position. Otherwise the result is the
- * nearest element outside every unsafe ancestor around that position.
+ * A null result means the layer stays inline. A corrective portal escapes
+ * unsafe ancestors and explicitly marked integration-managed DOM.
  *
  * Walking up from the actual render position (rather than the trigger, or
  * portaling to `document.body`) keeps the two things a layer inherits there:
@@ -132,13 +134,25 @@ export function resolveLayerPortalTarget(
   }
 
   let outermostUnsafe: HTMLElement | null = null;
+  let isTargetLayerOwned = false;
   let node: HTMLElement | null = inlineParent;
   while (node) {
     const tagName = node.tagName.toLowerCase();
     if (tagName === 'dialog') {
       break;
     }
+    if (isLayerRoot(node)) {
+      isTargetLayerOwned = true;
+    }
     if (UNSAFE_HOSTS.has(tagName)) {
+      outermostUnsafe = node;
+      // Escaping this ancestor also leaves any nearer layer-owned scope.
+      isTargetLayerOwned = false;
+    } else if (
+      outermostUnsafe !== null &&
+      isRendererManagedRoot(node) &&
+      !isTargetLayerOwned
+    ) {
       outermostUnsafe = node;
     }
     node = node.parentElement;

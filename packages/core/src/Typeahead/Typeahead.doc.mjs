@@ -45,6 +45,12 @@ const anatomy = [
       'Shared clear action that removes the selected item when hasClear is enabled.',
   },
   {
+    name: 'Popup surface',
+    required: false,
+    description:
+      'The layer the Dropdown opens in, above the page and anchored below the input.',
+  },
+  {
     name: 'Dropdown',
     required: false,
     description:
@@ -119,7 +125,7 @@ export const docs = {
       name: 'searchSource',
       type: 'SearchSource<T>',
       description:
-        'Data source providing search and bootstrap methods for populating the dropdown.',
+        'Data source providing search and bootstrap methods. `search(query, context)` may call `context.update(items)` to show matches it already has before it returns; the value it returns is the final list, and every list after the first for a query keeps the shown rows first and adds new rows after them.',
       required: true,
     },
     {
@@ -154,14 +160,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input.',
+      description:
+        'Disables the input. The field keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus, and the reason describes the field (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'maxMenuItems',
@@ -246,7 +253,7 @@ export const docs = {
       name: 'debounceMs',
       type: 'number',
       description:
-        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources.',
+        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources, and for a source that shows local matches through `context.update` and delays its own server request.',
       default: '150',
     },
     {
@@ -260,6 +267,18 @@ export const docs = {
       description: 'Callback when the dropdown opens or closes.',
     },
     {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, isEmptySearch, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange.",
+    },
+    {
+      name: 'handleRef',
+      type: 'React.Ref<BaseTypeaheadHandle>',
+      description:
+        'Imperative handle: open() opens the menu (a dialog at once; a listbox shows or loads its results) and close() closes it. There is no controlled open state; onOpenChange reports changes.',
+    },
+    {
       name: 'width',
       type: 'SizeValue',
       description:
@@ -267,8 +286,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'SVG icon component displayed at the start of the input.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'containerXstyle',
@@ -279,12 +298,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -308,7 +329,13 @@ export const docs = {
     targets: [
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
+      {className: 'astryx-typeahead-popup'},
       {className: 'astryx-typeahead-empty-state'},
+      {
+        className: 'astryx-typeahead-option',
+        visualProps: ['size'],
+        states: ['highlighted', 'selected'],
+      },
       {className: 'astryx-typeahead-item'},
     ],
   },
@@ -331,6 +358,11 @@ export const docs = {
         guidance: true,
         description:
           'Add a search delay for remote data sources to avoid excessive network requests.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
       },
       {
         guidance: true,
@@ -382,6 +414,11 @@ export const docsZh = {
           'Add a search delay for remote data sources to avoid excessive network requests.',
       },
       {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
+      },
+      {
         guidance: false,
         description:
           'Use for short, static option lists; use Selector for better discoverability.',
@@ -426,6 +463,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Add a search delay for remote data sources to avoid excessive network requests.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
       },
       {
         guidance: true,

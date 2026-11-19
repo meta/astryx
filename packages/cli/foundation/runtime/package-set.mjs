@@ -22,7 +22,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {findManifestPaths} from '../integrations/integrations.mjs';
+import {findManifestPaths} from '../integrations/manifest-paths.mjs';
 import {readJson} from '../release/project.mjs';
 import {cliBinOf, isVersionRange} from '../release/cache.mjs';
 import {isValidSemver, satisfiesRange} from '../env/semver.mjs';

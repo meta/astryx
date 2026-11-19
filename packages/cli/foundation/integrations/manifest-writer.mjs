@@ -13,7 +13,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {publishNewFile} from '../fs/publish-file.mjs';
-import jscodeshift from 'jscodeshift';
 import {assertWithin} from '../fs/path-safety.mjs';
 import {findManifestPaths, loadManifestObject} from './integrations.mjs';
 
@@ -97,8 +96,8 @@ function propertyNamed(property, name) {
 
 /**
  * Find the object literal an integration manifest exports.
- * @param {ReturnType<typeof jscodeshift.withParser>} j
- * @param {ReturnType<ReturnType<typeof jscodeshift.withParser>>} ast
+ * @param {ReturnType<typeof import('jscodeshift').default.withParser>} j
+ * @param {ReturnType<ReturnType<typeof import('jscodeshift').default.withParser>>} ast
  * @returns {any|null}
  */
 export function findManifestObject(j, ast) {
@@ -290,6 +289,9 @@ export async function patchIntegrationRoot(
   const source = manifestExists
     ? fs.readFileSync(manifestFile, 'utf-8')
     : 'export default {};\n';
+  // The code-rewrite toolkit loads only to patch a manifest. Finding one,
+  // which many commands do through this module, never needs it.
+  const {default: jscodeshift} = await import('jscodeshift');
   const j = jscodeshift.withParser('tsx');
   let ast;
   try {

@@ -13,9 +13,16 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {Project} from '../config/project.mjs';
-import {doctor} from '../../api/doctor/doctor.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../config/project.mjs')} */
+const {Project} = require('../config/project.mjs');
+/** @type {typeof import('../../api/doctor/doctor.mjs')} */
+const {doctor} = require('../../api/doctor/doctor.mjs');
+/** @type {typeof import('../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../test-utils/run-cli.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -33,7 +40,7 @@ let chartsManifest;
 
 beforeEach(() => {
   consumer = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-provider-conflict-'),
+    path.join(REPO_ROOT, '.astryx-provider-conflict-'),
   );
   const scope = path.join(consumer, 'node_modules', '@astryxdesign');
   fs.mkdirSync(scope, {recursive: true});

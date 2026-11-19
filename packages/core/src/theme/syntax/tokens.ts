@@ -19,7 +19,7 @@
  * to semantic tokens, so a syntax theme that does not set them keeps a
  * readable diff.
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 export const syntaxTokenDefaults = {

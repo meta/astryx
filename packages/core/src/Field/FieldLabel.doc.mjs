@@ -67,12 +67,13 @@ export const docs = {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon or rendered icon content before the label text. See `astryx docs icons` for semantic names.',
+        'Icon before the label text; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelTooltip',
       type: 'string',
-      description: 'Tooltip text for the info icon after the label.',
+      description:
+        'Help text for an info button after the label, named "About {label}". Hover and keyboard focus preview it; a tap, click, Enter, or Space opens it and never focuses or toggles the control.',
     },
     {
       name: 'description',
@@ -171,12 +172,13 @@ export const docsZh = {
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
-      description: '标签文本前的图标或已渲染图标内容。',
+      description: '标签文本前的图标或已渲染图标内容；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'labelTooltip',
       type: 'string',
-      description: '标签后信息图标的工具提示文本。',
+      description:
+        '标签后信息图标的工具提示文本。悬停即可显示；在触摸屏上点按图标即可打开，不会聚焦字段或切换控件；用鼠标点击图标则与点击标签其他部分一样激活控件。',
     },
     {
       name: 'description',
@@ -226,8 +228,8 @@ export const docsDense = {
     isDisabled: 'Use disabled label presentation.',
     isOptional: 'Show localized optional exception indicator.',
     isRequired: 'Show localized required exception indicator.',
-    labelIcon: 'Icon type or rendered icon content before label text.',
-    labelTooltip: 'Tooltip text for the info icon after the label.',
+    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    labelTooltip: 'Help text for the info button after the label.',
     description: 'Supporting content outside the accessible name.',
     descriptionID: 'ID for caller-owned aria-describedby wiring.',
     ref: 'Ref forwarded to the label element; group mode renders a span.',

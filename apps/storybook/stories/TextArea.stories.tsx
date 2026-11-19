@@ -796,3 +796,35 @@ export const VerticalFormAlignment: Story = {
     );
   },
 };
+
+/**
+ * Keyboard traits: a note that keeps Return as a line break but turns
+ * correction off for code-like text, and a caption field that capitalizes
+ * every word. Focus them on a phone to see the keyboard.
+ */
+export const KeyboardTraits: Story = {
+  render: () => {
+    const [snippet, setSnippet] = useState('');
+    const [caption, setCaption] = useState('');
+    return (
+      <div
+        style={{display: 'flex', flexDirection: 'column', gap: 16, width: 320}}>
+        <TextArea
+          label="Shell command"
+          value={snippet}
+          onChange={setSnippet}
+          autoCapitalize="none"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />
+        <TextArea
+          label="Photo caption"
+          value={caption}
+          onChange={setCaption}
+          rows={2}
+          autoCapitalize="words"
+        />
+      </div>
+    );
+  },
+};

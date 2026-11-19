@@ -7,12 +7,13 @@ import {createProgram} from '../index.mjs';
 import {buildManifest} from '../lib/manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {doc as fnDoc} from '../../../api/integration/integrationAdd.doc.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-add-controls-'),
+    path.join(REPO_ROOT, '.astryx-integration-add-controls-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),

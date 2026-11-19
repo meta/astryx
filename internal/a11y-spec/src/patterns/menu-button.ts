@@ -111,7 +111,7 @@ const AST_020_FR15: AstryxRecord = {
   standard: 'astryx',
   id: 'spec:AST-020',
   clause: 'FR15',
-  url: 'https://github.com/facebook/astryx/blob/878fad9d7ac23cd3f4c5def64595abd770bb01a3/docs/specs/AST-020/spec.md#L83-L92',
+  url: 'https://github.com/meta/astryx/blob/878fad9d7ac23cd3f4c5def64595abd770bb01a3/docs/specs/AST-020/spec.md#L83-L92',
   requirement:
     "Where a component part already plays an APG pattern's role, Astryx adopts that pattern's required parts for it: the role, the accessible name, the state and relationship properties, and activation by Tab plus Enter or Space.",
 };

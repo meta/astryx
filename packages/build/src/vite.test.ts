@@ -8,12 +8,19 @@
  */
 
 import {describe, it, expect, beforeAll, afterAll, vi} from 'vitest';
-import {mkdtempSync, mkdirSync, rmSync} from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import stylex from '@stylexjs/unplugin';
 import {astryxStylex, LIGHTNINGCSS_TARGETS} from './vite';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -178,6 +185,77 @@ describe('astryxStylex locale aliases', () => {
   });
 });
 
+describe('astryxStylex stylesheet subpaths', () => {
+  let rootDir: string;
+  let corePackage: string;
+
+  beforeAll(() => {
+    rootDir = mkdtempSync(path.join(tmpdir(), 'astryx-vite-sheets-'));
+    corePackage = path.join(rootDir, 'node_modules/@astryxdesign/core');
+    mkdirSync(corePackage, {recursive: true});
+    writeFileSync(
+      path.join(corePackage, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/core',
+        exports: {
+          '.': './src/index.ts',
+          './reset.css': {
+            types: './src/reset.css.d.ts',
+            default: './src/reset.css',
+          },
+          './astryx.css': {
+            types: './src/astryx.css.d.ts',
+            default: './dist/astryx.css',
+          },
+          './theme': './src/theme/index.ts',
+        },
+      }),
+    );
+  });
+
+  afterAll(() => {
+    rmSync(rootDir, {recursive: true, force: true});
+  });
+
+  it('resolves reset.css to its file in the source', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    expect(applyAlias(aliases, '@astryxdesign/core/reset.css')).toBe(
+      path.join(corePackage, 'src/reset.css'),
+    );
+  });
+
+  it('resolves the prebuilt stylesheet to an empty stylesheet, since StyleX compiles its rules', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    const replaced = applyAlias(aliases, '@astryxdesign/core/astryx.css');
+    expect(replaced).not.toContain(corePackage);
+    expect(path.basename(replaced)).toBe('replaced-stylesheet.css');
+    const css = readFileSync(replaced, 'utf8');
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('');
+  });
+
+  it('keeps every other subpath on the source alias', () => {
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    expect(applyAlias(aliases, '@astryxdesign/core/theme')).toBe(
+      path.join(corePackage, 'src/theme'),
+    );
+    expect(applyAlias(aliases, '@astryxdesign/core/Button')).toBe(
+      path.join(corePackage, 'src/Button'),
+    );
+  });
+
+  it('aliases only the prebuilt stylesheet, even when Core is not installed', () => {
+    const aliases = getInjectedConfig(path.join(tmpdir(), 'astryx-vite-none'))
+      .resolve.alias;
+    expect(
+      aliases
+        .filter(
+          (a: any) => typeof a.find === 'string' && a.find.endsWith('.css'),
+        )
+        .map((a: any) => a.find),
+    ).toEqual(['@astryxdesign/core/astryx.css']);
+  });
+});
+
 describe('astryxStylex optimizeDeps package discovery', () => {
   let rootDir: string;
 
@@ -250,6 +328,15 @@ describe('astryxStylex optimizeDeps package discovery', () => {
           'node:url',
         ],
       });
+      // SYNC: the same path rewrites build.mjs applies to dist/vite.mjs.
+      let bundled = readFileSync(outfile, 'utf8');
+      for (const file of ['source-stylesheet.js', 'replaced-stylesheet.css']) {
+        bundled = bundled.replaceAll(
+          `resolve(__dirname, "${file}")`,
+          `resolve(__dirname, "../src/${file}")`,
+        );
+      }
+      writeFileSync(outfile, bundled);
       const script = [
         `const {astryxStylex} = await import(${JSON.stringify(pathToFileURL(outfile).href)});`,
         `const plugin = astryxStylex({rootDir: ${JSON.stringify(rootDir)}})`,
@@ -270,5 +357,59 @@ describe('astryxStylex optimizeDeps package discovery', () => {
     } finally {
       rmSync(outfile, {force: true});
     }
+  });
+});
+
+describe('undefinedGeneratedVariables', () => {
+  it('reports a generated variable that is read but never declared', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{min-height:var(--astryx1abc2)}.b{color:var(--x9zz9z, red)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--astryx1abc2', '--x9zz9z']);
+  });
+
+  it('accepts a variable declared anywhere in the stylesheet', () => {
+    expect(
+      undefinedGeneratedVariables(
+        ':root{--astryx1abc2:4px}.a{padding:var(--astryx1abc2)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores dynamic-style and component variables, which carry a dash', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{width:var(--x-width)}.b{padding:var(--astryx-card-padding,8px)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('counts a declaration in any other stylesheet the build emits', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{padding:var(--xlarge)}',
+        ['astryx', 'x'],
+        [':root{--xlarge:24px}'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports only hash-shaped names: four to seven characters after the prefix', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{margin:var(--xl)}.b{gap:var(--xs1)}.c{inset:var(--x1abc2de)}.d{top:var(--x1abc2def)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--x1abc2de']);
+  });
+
+  it('checks only the prefixes it is given', () => {
+    expect(
+      undefinedGeneratedVariables('.a{color:var(--x1abc2)}', ['astryx']),
+    ).toEqual([]);
   });
 });

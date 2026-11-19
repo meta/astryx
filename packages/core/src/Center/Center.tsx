@@ -8,7 +8,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Center/Center.doc.mjs
- * - /packages/core/src/Center/Center.spec.md
+ * - /docs/specs/components/Center/Center.spec.md
  * - /packages/core/src/Center/Center.test.tsx
  * - /apps/storybook/stories/Center.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Center/ (showcase blocks)

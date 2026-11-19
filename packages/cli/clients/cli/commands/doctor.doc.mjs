@@ -15,10 +15,10 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Diagnose Astryx projects and integration packages',
   description:
-    'Runs read-only project health diagnostics by default: Node version, @astryxdesign/core ' +
+    'Runs project health diagnostics by default: Node version, @astryxdesign/core ' +
     'install and version alignment, theme packages, generated app themes when present, earlier copied-theme migration, config, integrations (every one astryx.config names must load, linked without a config entry, ' +
     'provider identity, contribution issues), agent docs, core peer dependencies, package manager, ' +
-    "the docs the CLI reads, the newest release the computer knows of, with the install and upgrade commands when the project's release is older, and every `astryx` command on the search path, warning when the first one is not the Astryx CLI or predates the hand-off. It writes nothing, but loading astryx.config runs that file's code. " +
+    "the docs the CLI reads, the newest release the computer knows of, with the install and upgrade commands when the project's release is older, and every `astryx` command on the search path, warning when the first one is not the Astryx CLI or predates the hand-off. Loading astryx.config runs that file's code. " +
     'The `integration` subcommands provide authoring checks for one integration package. ' +
     'Outside a project it checks the computer instead: the Node version, the release that answered, ' +
     "the newest release this computer knows of, with the command that upgrades the CLI installed for the computer when it is older, the astryx commands on the search path, the integrations installed for the computer (warning about one it skips), and whether the computer-level agent text (`{@command init --user}`) is present, matches this release, was edited, or is turned off (info only); when that text names `astryx` and no `astryx` command is on the search path, apart from a package runner's own copy, it says so and names the install step the text records, or npm's when it records none. " +

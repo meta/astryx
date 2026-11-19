@@ -15,18 +15,6 @@
    reset, astryx-base, astryx-theme so product styles always win. */
 @stylex;
 
-/* Disable overscroll bounce so the home hero's still-fixed (>=1024px) layers
-   can't show through past the top/bottom of the page. Below 1024px the hero
-   no longer pins anything past the fold (see HeroThemeReel's backdropGlow),
-   so this rule only needs to apply at desktop widths — leaving it unscoped
-   also silently disabled pull-to-refresh on every route, everywhere on
-   mobile, which is not what it was written for (#5392). */
-@media (min-width: 1024px) {
-  html {
-    overscroll-behavior-y: none;
-  }
-}
-
 /* Marketing-only custom properties for the docsite home page. These are
    NOT Astryx theming tokens — they're docsite-specific values that back the
    landing page's bento feature cards + section rhythm — so they live here
@@ -217,12 +205,10 @@ body[data-hero-dark] [data-home-page] .astryx-pagination-dot:focus-visible {
    home-page nav rules above (transparent nav / frosted bar) target every
    `.astryx-top-nav` on the page and leak into this embedded preview, leaving
    its nav transparent so a mismatched band shows through. Pin the embedded
-   preview's nav (and its header wrapper) to the themed body color so it reads
+   preview's nav to the themed body color so it reads
    as one continuous surface. !important + the data-attribute scope beat the
    home-page overrides without affecting the real top nav. */
-[data-themes-card-preview] .astryx-top-nav,
-[data-themes-card-preview] .astryx-layout-header,
-[data-themes-card-preview] :has(> .astryx-layout-header) {
+[data-themes-card-preview] .astryx-top-nav {
   background: var(--color-background-body) !important;
   backdrop-filter: none !important;
 }

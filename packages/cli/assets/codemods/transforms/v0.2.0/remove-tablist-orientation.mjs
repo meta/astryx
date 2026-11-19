@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Remove TabList orientation prop
- * @see https://github.com/facebook/astryx/issues/4231
+ * @see https://github.com/meta/astryx/issues/4231
  *
  * As of v0.2.0, TabList no longer accepts an `orientation` prop. The prop
  * was misleading: it only drove the keyboard-hint badge, not a real vertical

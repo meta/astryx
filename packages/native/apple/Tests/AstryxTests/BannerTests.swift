@@ -9,9 +9,12 @@ import Testing
   #expect(AstryxBannerStatus.allCases.map(\.iconName) == ["info", "warning", "error", "success"])
   for status in AstryxBannerStatus.allCases {
     #expect(style.icon(status.iconName) != nil)
-    #expect(style.tokens.color.value(named: status.groundToken) != nil)
-    #expect(style.tokens.color.value(named: status.iconToken) != nil)
   }
+  let color = Theme.default.light.color
+  #expect(AstryxBannerStatus.info.groundColor(color) == color.accentMuted)
+  #expect(AstryxBannerStatus.error.groundColor(color) == color.errorMuted)
+  #expect(AstryxBannerStatus.warning.iconColor(color) == color.warning)
+  #expect(AstryxBannerStatus.success.iconColor(color) == color.success)
 }
 
 @Test func aThemeReplacesASharedIcon() {

@@ -38,6 +38,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {LayerProvider} from '@astryxdesign/core/Layer';
 
 const GRID_CELL_SELECTOR = '[role="gridcell"]';
 
@@ -250,6 +251,18 @@ const categoryTree: DestinationNode[] = [
 ];
 
 const styles = stylex.create({
+  // Stands in for the app's bottom bar that LayerProvider's inset keeps the
+  // popup clear of.
+  appBar: {
+    position: 'fixed',
+    insetInline: 0,
+    insetBlockEnd: 0,
+    blockSize: 80,
+    backgroundColor: colorVars['--color-background-muted'],
+    borderBlockStartWidth: borderVars['--border-width'],
+    borderBlockStartStyle: 'solid',
+    borderBlockStartColor: colorVars['--color-border'],
+  },
   wrapper: {
     width: 340,
   },
@@ -409,8 +422,10 @@ const styles = stylex.create({
     width: 280,
     padding: spacingVars['--spacing-3'],
   },
+  // Bounded inside the centered story frame's 32px padding on each side, so
+  // the 320px captures measure the component rather than a frame overflow.
   auditMatrix: {
-    width: 'min(720px, calc(100vw - 32px))',
+    width: 'min(720px, calc(100vw - 64px))',
   },
   auditPopupContent: {
     width: 220,
@@ -686,38 +701,40 @@ export const FruitRipenessGrid: Story = {
   },
 };
 
+function TreeListWithSearchExample() {
+  const [value, setValue] = useState<DestinationValue>({
+    id: 'teams-design-systems-accessibility',
+    label: 'Accessibility',
+    path: '/Teams/Design systems/Accessibility',
+  });
+
+  return (
+    <VStack gap={4} xstyle={styles.wrapper}>
+      <ComplexSelector<DestinationValue>
+        label="Project destination"
+        description="Search and browse nested folders from one selector."
+        value={value}
+        onChange={setValue}
+        triggerLabel={formatDestinationValue(value)}
+        contentXstyle={styles.treeContent}>
+        {(selectedValue, onChange, close) => (
+          <TreeSearchContent
+            label="destinations"
+            value={selectedValue}
+            tree={destinationTree}
+            searchPlaceholder="Search folders or teams"
+            onChange={onChange}
+            close={close}
+          />
+        )}
+      </ComplexSelector>
+    </VStack>
+  );
+}
+
 export const TreeListWithSearch: Story = {
   name: 'Tree list with search',
-  render: () => {
-    const [value, setValue] = useState<DestinationValue>({
-      id: 'teams-design-systems-accessibility',
-      label: 'Accessibility',
-      path: '/Teams/Design systems/Accessibility',
-    });
-
-    return (
-      <VStack gap={4} xstyle={styles.wrapper}>
-        <ComplexSelector<DestinationValue>
-          label="Project destination"
-          description="Search and browse nested folders from one selector."
-          value={value}
-          onChange={setValue}
-          triggerLabel={formatDestinationValue(value)}
-          contentXstyle={styles.treeContent}>
-          {(selectedValue, onChange, close) => (
-            <TreeSearchContent
-              label="destinations"
-              value={selectedValue}
-              tree={destinationTree}
-              searchPlaceholder="Search folders or teams"
-              onChange={onChange}
-              close={close}
-            />
-          )}
-        </ComplexSelector>
-      </VStack>
-    );
-  },
+  render: () => <TreeListWithSearchExample />,
   parameters: {
     docs: {
       description: {
@@ -726,6 +743,23 @@ export const TreeListWithSearch: Story = {
       },
     },
   },
+};
+
+/**
+ * The same selector in an app whose bottom bar covers the block-end edge,
+ * declared once through LayerProvider's `inset`, so the popup stays clear of it.
+ */
+export const TreeListWithSearchAboveAppBar: Story = {
+  name: 'Tree list with search above an app bar',
+  render: () => (
+    <LayerProvider inset={{blockEnd: 80}}>
+      <TreeListWithSearchExample />
+      <div aria-hidden {...stylex.props(styles.appBar)} />
+    </LayerProvider>
+  ),
+  // The bar is fixed to the viewport, so on the docs page the story gets its
+  // own frame instead of covering the page.
+  parameters: {docs: {story: {inline: false, height: '360px'}}},
 };
 
 export const CategoryTreeSelector: Story = {
@@ -1022,6 +1056,49 @@ export const AuditMatrix: Story = {
       description: {
         story:
           'A bounded audit fixture for the built-in sizes, variants, busy, disabled, validation, overflow, and caller-rendered trigger paths. Browser evidence drives this one fixture through light, dark, RTL, interaction, and 320px states.',
+      },
+    },
+  },
+};
+
+// Disabled with an explanation tooltip. Hover or keyboard-focus the trigger to
+// see why it's disabled — the reason is announced to assistive tech via
+// aria-describedby, and the trigger stays focusable (activation is still
+// blocked). Use disabledMessage instead of wrapping a disabled ComplexSelector
+// in Tooltip: disabled controls swallow the pointer events a Tooltip wrapper
+// needs.
+export const DisabledWithMessage: Story = {
+  name: 'Disabled with message',
+  render: () => {
+    const value: FruitValue = {fruit: 'Apple', ripeness: 'Juicy'};
+
+    return (
+      <VStack gap={4} xstyle={styles.wrapper}>
+        <ComplexSelector<FruitValue>
+          label="Fruit blend"
+          value={value}
+          triggerLabel={formatFruitValue(value)}
+          isDisabled
+          disabledMessage="You need the Editor role to change this"
+          contentXstyle={styles.fruitContent}>
+          {(selectedValue, onChange, close) => (
+            <FruitRipenessMatrix
+              value={selectedValue}
+              onChange={nextValue => {
+                onChange(nextValue);
+                close();
+              }}
+            />
+          )}
+        </ComplexSelector>
+      </VStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A disabled selector that explains why. The reason shows as a tooltip on hover and keyboard focus and is linked through aria-describedby; the trigger stays focusable via aria-disabled while opening the popup stays blocked.',
       },
     },
   },

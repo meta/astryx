@@ -17,7 +17,7 @@ import {
   type MarkdownTransform,
   type MarkdownTransformContext,
 } from './plugins/protocol';
-import {isSafeMarkdownParserUrl} from './url';
+import {isSafeMarkdownParserUrl, normalizedMarkdownDestination} from './url';
 
 /* ------------------------------------------------------------------ *
  * Public mutable tree the adapted plugin observes
@@ -1086,7 +1086,7 @@ function fromRemarkNode(
         reject('a link destination was rejected by the navigation owner');
       }
       requireAbsentText(type, 'title', value.title);
-      fields.url = url;
+      fields.url = normalizedMarkdownDestination(url);
       fields.children = fromRemarkChildren(
         value.children,
         type,
@@ -1104,7 +1104,7 @@ function fromRemarkNode(
       if (typeof value.alt !== 'string') {
         reject('an image requires its text alternative');
       }
-      fields.url = url;
+      fields.url = normalizedMarkdownDestination(url);
       fields.alt = value.alt;
       break;
     }

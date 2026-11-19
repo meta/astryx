@@ -73,12 +73,12 @@ describe('coast', () => {
     expect(x!.at(0)).toBe(-30);
   });
 
-  it('reads the presentation value at the release time, and scale sets both scales', () => {
-    const {animator, reads} = at({scaleX: 1, scaleY: 1});
-    const curves = coast(animator, {scale: 0.5, scaleY: 0.2}, {at: 1234});
-    expect(Object.keys(curves).sort()).toEqual(['scaleX', 'scaleY']);
-    expect(curves.scaleX!.velocity(0)).toBeCloseTo(0.5, 9);
-    expect(curves.scaleY!.velocity(0)).toBeCloseTo(0.2, 9);
+  it('reads the presentation value at the release time, on the translate axes only', () => {
+    const {animator, reads} = at({x: 0, y: 0});
+    const curves = coast(animator, {x: 500, y: 200}, {at: 1234});
+    expect(Object.keys(curves).sort()).toEqual(['x', 'y']);
+    expect(curves.x!.velocity(0)).toBeCloseTo(500, 9);
+    expect(curves.y!.velocity(0)).toBeCloseTo(200, 9);
     expect(reads).toEqual([1234, 1234]);
   });
 

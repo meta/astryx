@@ -141,15 +141,82 @@ export function measureLogicalScrollAxis(
     return INACTIVE_AXIS_STATE;
   }
 
-  const isReversed = mapping[`${logicalAxis}Reversed`];
-  const logicalOffset = Math.min(
-    maxOffset,
-    Math.max(0, isReversed ? Math.abs(metrics.offset) : metrics.offset),
-  );
-
   return {
     isScrollable: true,
+    ...logicalEdges(
+      metrics.offset,
+      maxOffset,
+      mapping[`${logicalAxis}Reversed`],
+    ),
+  };
+}
+
+function logicalEdges(
+  offset: number,
+  maxOffset: number,
+  isReversed: boolean,
+): {atStart: boolean; atEnd: boolean} {
+  const logicalOffset = Math.min(
+    maxOffset,
+    Math.max(0, isReversed ? Math.abs(offset) : offset),
+  );
+  return {
     atStart: logicalOffset <= SCROLL_OVERFLOW_TOLERANCE,
     atEnd: logicalOffset >= maxOffset - SCROLL_OVERFLOW_TOLERANCE,
+  };
+}
+
+/** Where a scroll left one logical axis, read from geometry alone. */
+export interface LogicalScrollPosition {
+  /** Content exceeds the viewport by more than the shared tolerance. */
+  overflows: boolean;
+  atStart: boolean;
+  atEnd: boolean;
+  /**
+   * The offset's sign contradicts the mapping: negative on an axis the
+   * mapping reads forward, or positive on one it reads reversed. The writing
+   * mode or direction changed without the last full measurement seeing it
+   * (a stylesheet alone, for one), so the mapping is stale.
+   */
+  contradictsMapping: boolean;
+}
+
+/**
+ * Reads one logical axis after a scroll without reading computed style.
+ *
+ * A scroll moves the offset and nothing else: the writing-mode mapping and
+ * whether the computed overflow can scroll are the ones the last full
+ * measurement read, so the caller passes that mapping in. Only box geometry
+ * is read here, which costs nothing while layout is clean, as it is during a
+ * scroll; a computed-style read would force a style recalculation on every
+ * frame of the scroll whenever anything else on the page has dirtied style.
+ *
+ * Returns null when the viewport is disconnected or has no box (the caller
+ * keeps its last valid state, as a full measurement does).
+ */
+export function measureLogicalScrollPosition(
+  element: HTMLElement,
+  logicalAxis: LogicalScrollAxis,
+  mapping: LogicalAxisMapping,
+): LogicalScrollPosition | null {
+  if (
+    !element.isConnected ||
+    element.clientWidth <= 0 ||
+    element.clientHeight <= 0
+  ) {
+    return null;
+  }
+  const isX = mapping[logicalAxis] === 'x';
+  const isReversed = mapping[`${logicalAxis}Reversed`];
+  const offset = isX ? element.scrollLeft : element.scrollTop;
+  const maxOffset = isX
+    ? element.scrollWidth - element.clientWidth
+    : element.scrollHeight - element.clientHeight;
+  return {
+    overflows: maxOffset > SCROLL_OVERFLOW_TOLERANCE,
+    ...logicalEdges(offset, maxOffset, isReversed),
+    contradictsMapping: isReversed
+      ? offset > SCROLL_OVERFLOW_TOLERANCE
+      : offset < -SCROLL_OVERFLOW_TOLERANCE,
   };
 }

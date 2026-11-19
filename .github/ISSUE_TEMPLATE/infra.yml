@@ -10,7 +10,7 @@ body:
       value: |
         ## Before you submit
 
-        This template is for problems in the repository's **own tooling** — a flaky or misconfigured test, CI pipeline cost or reliability, build and dependency configuration. Read the [contributing guide](https://github.com/facebook/astryx/wiki/Contributing) before submitting.
+        This template is for problems in the repository's **own tooling** — a flaky or misconfigured test, CI pipeline cost or reliability, build and dependency configuration. Read the [contributing guide](https://github.com/meta/astryx/wiki/Contributing) before submitting.
 
         - A bug in an Astryx component → **Bug Report**
         - A new component, feature, or significant API change → **RFC**
@@ -65,7 +65,7 @@ body:
     attributes:
       label: Pre-submission Checklist
       options:
-        - label: I have read the [Contributing guide](https://github.com/facebook/astryx/wiki/Contributing)
+        - label: I have read the [Contributing guide](https://github.com/meta/astryx/wiki/Contributing)
           required: true
         - label: This is a problem in the repository's tooling, not a defect in a shipped component
           required: true

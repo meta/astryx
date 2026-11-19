@@ -13,6 +13,7 @@ import React from 'react';
 import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchEditorProps} from './types';
+import {pickDataAttributes} from '../utils/themeProps';
 
 /**
  * Default filter editor for PowerSearch.
@@ -30,6 +31,8 @@ export function PowerSearchFilterEditor({
   onCancel,
   saveButtonLabel,
   isReadOnly,
+  timezoneID,
+  ...rest
 }: PowerSearchEditorProps) {
   const config = useInternalConfig(configProp);
 
@@ -43,6 +46,8 @@ export function PowerSearchFilterEditor({
       onCancel={onCancel}
       saveButtonLabel={saveButtonLabel}
       isReadOnly={isReadOnly}
+      timezoneID={timezoneID}
+      dataAttributes={pickDataAttributes(rest)}
     />
   );
 }

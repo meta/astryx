@@ -26,7 +26,7 @@
  */
 
 import {use, type Context} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type StepperOrientation = 'horizontal' | 'vertical';
 export type StepperDensity = 'compact' | 'balanced' | 'spacious';
@@ -89,11 +89,20 @@ export interface StepperInternalContextValue extends StepperContextValue {
   summarySlot: HTMLElement | null;
 }
 
-export const StepperContext = createContext<StepperContextValue | null>(null);
+export const StepperContext =
+  createLayerScopedContext<StepperContextValue | null>(
+    'StepperContext',
+    1,
+    null,
+  );
 StepperContext.displayName = 'StepperContext';
 
 export const StepperInternalContext =
-  createContext<StepperInternalContextValue | null>(null);
+  createLayerScopedContext<StepperInternalContextValue | null>(
+    'StepperInternalContext',
+    1,
+    null,
+  );
 StepperInternalContext.displayName = 'StepperInternalContext';
 
 function useContextValue<T>(context: Context<T | null>, hookName: string): T {

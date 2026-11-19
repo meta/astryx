@@ -18,7 +18,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import React, {type ReactNode} from 'react';
+import React, {use, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -26,9 +26,10 @@ import {
   typeScaleVars,
   fontWeightVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {TopNavMegaMenuCloseContext, pickCloses} from './TopNavContext';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -69,6 +70,10 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-accent'],
     textDecoration: 'none',
+  },
+  // A transform needs a box: an inline span would not mirror.
+  linkArrow: {
+    display: 'inline-block',
   },
 });
 
@@ -146,6 +151,7 @@ export function TopNavMegaMenuFeaturedCard({
   ...rest
 }: TopNavMegaMenuFeaturedCardProps) {
   const LinkComponent = useLinkComponent();
+  const closePanel = use(TopNavMegaMenuCloseContext);
   return (
     <div
       ref={ref}
@@ -174,8 +180,21 @@ export function TopNavMegaMenuFeaturedCard({
           <span {...stylex.props(styles.description)}>{description}</span>
         )}
         {linkLabel && linkHref && (
-          <LinkComponent href={linkHref} {...stylex.props(styles.link)}>
-            {linkLabel} →
+          <LinkComponent
+            href={linkHref}
+            // Following the card's link with the keyboard, a finger or a pen
+            // ends the panel, as an item pick does.
+            // A custom link component may call `onClick()` without the event.
+            onClick={(event?: React.MouseEvent<HTMLElement>) => {
+              if (pickCloses(event?.currentTarget ?? null)) {
+                closePanel?.();
+              }
+            }}
+            {...stylex.props(styles.link)}>
+            {linkLabel}{' '}
+            {/* The arrow points toward the inline end, so it mirrors in RTL
+                (design:bidirectionality DR4); U+2192 is not bidi-mirrored. */}
+            <span {...stylex.props(styles.linkArrow, rtlStyles.mirror)}>→</span>
           </LinkComponent>
         )}
         {children}

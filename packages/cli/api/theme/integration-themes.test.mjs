@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeAdd} from './add/add.mjs';
 import {themeEject} from './eject/eject.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -63,7 +64,7 @@ export default {type: 'theme', name: '${slug}', displayName: '${slug === 'neutra
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-theme-integration-'),
+    path.join(REPO_ROOT, '.astryx-theme-integration-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
@@ -146,7 +147,7 @@ describe('package and integration themes', () => {
       {'tokens/colors.ts': "export const oceanBlue = '#0064e0';\n"},
     );
     const outsideDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-theme-outside-'),
+      path.join(REPO_ROOT, '.astryx-theme-outside-'),
     );
     try {
       const targetDir = path.join(tmpDir, 'src', 'themes', 'ocean');

@@ -1,8 +1,9 @@
 # Native component specs
 
-One short spec per native component, per language, kept in the component's own
-folder beside its implementation, the way core keeps `TabList.spec.md` next to
-`TabList.tsx`. The rules live in
+One short spec per native component, per language, kept beside the core
+component's spec in its folder under `docs/specs/components/`, so
+`docs/specs/components/TabList/` holds `TabList.spec.md` and
+`TabList.swift.spec.md` side by side. The rules live in
 [AST-093 (Native component guidelines)](../../../docs/specs/AST-093-native-component-guidelines/spec.md),
 which applies [AST-082 (Native-first surfaces)](../../../docs/specs/AST-082-native-first-surfaces/spec.md).
 
@@ -14,8 +15,12 @@ packages/native/
 │       └── library/           # rules every Swift component or build step shares
 └── apple/Sources/Astryx/
     └── <Name>/                # one folder per component, named as core's
-        ├── <Name>.swift       # declares <Name> in the Astryx module
-        └── <Name>.spec.md     # the component's spec, e.g. Button.spec.md
+        └── <Name>.swift       # declares <Name> in the Astryx module
+
+docs/specs/components/
+└── <ComponentRoot>/           # the folder core keeps the component in
+    ├── <Name>.spec.md         # the core contract
+    └── <Name>.swift.spec.md   # the Swift spec, e.g. Button.swift.spec.md
 ```
 
 Swift comes first. Kotlin and other languages get their own directory when
@@ -39,13 +44,15 @@ the same everywhere. A native spec never renames or changes it.
 
 ## Adding a spec
 
-1. Copy `TEMPLATE.md` to the component's folder as `<Name>.spec.md`, for
-   Swift `apple/Sources/Astryx/<Name>/<Name>.spec.md`.
+1. Copy `TEMPLATE.md` to the core component's folder under
+   `docs/specs/components/` as `<Name>.<language>.spec.md`, for Swift
+   `docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
 2. Fill every section. Write "None" rather than deleting one.
-3. Open a pull request that changes only files under `packages/native/`. A spec
-   can land on its own or with the component it describes.
+3. Open a pull request that changes only files under `packages/native/` and
+   native specs. A spec can land on its own or with the component it describes.
 
-Pull requests that change only `packages/native/`, written entirely by the
+Pull requests that change only `packages/native/` and native component specs
+(`docs/specs/components/**/<Name>.<language>.spec.md`), written entirely by the
 native group listed in AST-093 FR6, are approved once required checks pass, the
 review app finds no defect on the exact head, and a review against AST-082,
 AST-093, and the specs of the components they touch finds every defined

@@ -99,8 +99,8 @@ export const CIRCULAR_PROGRESS_EXCLUSIONS = [
   },
   {
     id: 'ring-geometry',
-    owner: 'CircularProgress.test.tsx size and dash-offset tests',
+    owner: 'CircularProgress.test.tsx size and half-ring turn tests',
     reason:
-      'Ring size, stroke, and the dash offset that draws the completed arc are paint geometry; this binding proves the programmatic value they illustrate.',
+      "Ring size, stroke, and the half-rings' turns that draw the completed arc are paint geometry; this binding proves the programmatic value they illustrate.",
   },
 ] as const;

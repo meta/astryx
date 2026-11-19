@@ -9,7 +9,7 @@ export const doc = {
   displayName: 'generateTonalPalette()',
   summary: 'Generate candidate tonal palette data without filesystem effects.',
   description:
-    'Runs the versioned astryx-oklch-v1 authoring recipe. The returned candidate ' +
+    'Runs the recipe the request names: astryx-oklch-v1 when it names none, so a request or config made before v2 keeps its colors, or astryx-oklch-v2, whose pale stops follow the vibrancy and each seed\'s own chroma. New palettes name v2: the theme editor records it in each config it makes, and a new config should too. A config keeps the recipe it records; to pin one, record "recipe": "astryx-oklch-v1" (or v2) in the palette config. The returned candidate ' +
     'contains exact hex values for review; it does not modify a theme, write files, ' +
     'perform semantic mapping, or make accessibility claims. Stop numbers remain ' +
     'stable across layouts, and requested decimal stops are emitted explicitly. ' +
@@ -29,7 +29,7 @@ export const doc = {
       name: 'input',
       type: 'TonalPaletteGenerationInput',
       description:
-        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), and neutral profile.',
+        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), neutral profile, and a dark chroma taper that mutes the dark edge of chromatic families.',
       required: true,
     },
   ],
@@ -43,7 +43,7 @@ export const doc = {
   throws: [
     {
       code: 'Error',
-      when: 'the request, family, seed, stop layout, mode, or anchor is invalid',
+      when: 'the request, family, seed, stop layout, mode, anchor, or dark chroma taper is invalid',
     },
   ],
   examples: [

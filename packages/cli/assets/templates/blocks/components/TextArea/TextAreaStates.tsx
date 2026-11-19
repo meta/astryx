@@ -10,7 +10,7 @@ export default function TextAreaStates() {
   const [requiredValue, setRequiredValue] = useState('');
 
   return (
-    <Stack direction="vertical" gap={4} style={{width: 400}}>
+    <Stack direction="vertical" gap={4} style={{width: 400, maxWidth: '100%'}}>
       <TextArea
         label="Required field"
         value={requiredValue}

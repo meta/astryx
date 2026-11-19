@@ -344,7 +344,9 @@ describe.each(OWNERS)(
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       rerender(<dialog open>{renderOwner(true)}</dialog>);
       await nextFrame();
-      const region = dialog.querySelector('[data-astryx-modal-busy-region]');
+      const region = dialog.querySelector(
+        '[data-astryx-modal-live-region="polite"]',
+      );
       expect(region).not.toBeNull();
       expect(region).toHaveAttribute('role', 'status');
       expect(region).toHaveAttribute('aria-live', 'polite');
@@ -370,7 +372,7 @@ describe.each(OWNERS)(
       await nextFrame();
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       expect(
-        dialog.querySelector('[data-astryx-modal-busy-region]'),
+        dialog.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
     });
@@ -436,7 +438,7 @@ describe.each(SEARCH_OWNERS)(
       await nextFrame();
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       expect(
-        dialog.querySelector('[data-astryx-modal-busy-region]'),
+        dialog.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
       vi.restoreAllMocks();
@@ -570,7 +572,7 @@ describe.each(SHEET_OWNERS)(
       await nextFrame();
       await nextFrame();
       expect(
-        sheet!.querySelector('[data-astryx-modal-busy-region]'),
+        sheet!.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
     });
@@ -801,7 +803,7 @@ describe('CommandPalette busy start inside its modal (spec:AST-086 FR8, FR3)', (
     return (
       document
         .querySelector('dialog[open]')
-        ?.querySelector('[data-astryx-modal-busy-region]') ?? null
+        ?.querySelector('[data-astryx-modal-live-region="polite"]') ?? null
     );
   }
 

@@ -45,6 +45,17 @@
  * @property {string} topic its route, the argument that opens it
  * @property {string} description
  * @property {string} package the package that owns it
+ * @property {DocsListChild[]} [children] the docs below it, present only for
+ *   a read that passed `depth` and only where the namespace has children
+ * @property {number} [childCount] how many docs sit right below it, where a
+ *   depth read stops here and it has docs below it
+ */
+
+/**
+ * One doc below a namespace on the topic list, as `astryx docs --depth` names
+ * it: everything a namespace read gives a child, plus the two fields every
+ * list row carries, so one row reads the same way wherever it came from.
+ * @typedef {DocsNodeChild & {topic: string, description: string, children?: DocsListChild[], childCount?: number}} DocsListChild
  */
 
 /**
@@ -234,6 +245,8 @@
  * @property {string} [lang]
  * @property {boolean} [zh]
  * @property {boolean} [dense]
+ * @property {boolean} [list] return the topic list, the same as giving no
+ *   topic; docs() refuses a topic or section beside it
  * @property {boolean} [index] return a topic's section index instead of its
  *   whole doc
  * @property {number | 'all'} [depth] how many levels below a docs-tree
@@ -244,6 +257,32 @@
  *   compact and full add its text
  * @property {string} [cwd] project directory whose configured integrations
  *   contribute topics; defaults to process.cwd()
+ */
+
+/**
+ * `astryx docs skills`: every Astryx skill this folder has.
+ * @typedef {object} DocsSkillsResponse
+ * @property {'docs.skills'} type
+ * @property {Array<{name: string, description: string, package: string}>} data
+ *   The project skill (`astryx-project`) in a project, the computer-level
+ *   skill (`astryx`), then each skill an integration declares on a doc
+  *   (`skill: {name, description}`), in load order. `package` is the package
+ *   that ships it.
+ * @property {{notes: Array<{package: string, message: string}>}} [meta]
+ *   `notes`: why each skill a package declares is left out (a skill rule it
+ *   breaks, a name another skill holds, a doc the docs tree withdrew, or a
+ *   docs folder that could not be read). Absent when none is.
+ */
+
+/**
+ * `astryx docs skills/<name>`: one skill's text, as agents read it.
+ * @typedef {object} DocsSkillResponse
+ * @property {'docs.skill'} type
+ * @property {string} package The package that ships it.
+ * @property {{name: string, description: string, text: string}} data
+ *   `text`: the skill's body, without its frontmatter: the project's agent-docs
+ *   block for `astryx-project`, the computer-level text for `astryx`, and the
+ *   doc that declares an integration skill, as `astryx docs` prints it.
  */
 
 export {};

@@ -191,7 +191,7 @@ describe('definePattern', () => {
       id: 'family:probes',
       clause: 'FR1',
       requirement: 'A probe MUST probe.',
-      url: `https://github.com/facebook/astryx/blob/${'a'.repeat(40)}/docs/families/probes.md`,
+      url: `https://github.com/meta/astryx/blob/${'a'.repeat(40)}/docs/families/probes.md`,
       ...overrides,
     });
 
@@ -220,16 +220,16 @@ describe('definePattern', () => {
       // Not public: a reviewer of this repository cannot open it, and it must
       // never appear in it.
       ['https://code.example.internal/astryx/docs/families/probes.md'],
-      ['http://github.com/facebook/astryx/blob/' + PIN + '/docs/x.md'],
+      ['http://github.com/meta/astryx/blob/' + PIN + '/docs/x.md'],
       // Every one of these moves out from under the quote.
-      ['https://github.com/facebook/astryx/blob/main/docs/x.md'],
-      ['https://github.com/facebook/astryx/blob/HEAD/docs/x.md'],
-      ['https://github.com/facebook/astryx/blob/develop/docs/x.md'],
-      ['https://github.com/facebook/astryx/blob/v1.2.3/docs/x.md'],
-      ['https://github.com/facebook/astryx/blob/refs/heads/main/docs/x.md'],
-      ['https://github.com/facebook/astryx/raw/' + PIN + '/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/main/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/HEAD/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/develop/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/v1.2.3/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/refs/heads/main/docs/x.md'],
+      ['https://github.com/meta/astryx/raw/' + PIN + '/docs/x.md'],
       // A short sha is ambiguous over a long enough history.
-      ['https://github.com/facebook/astryx/blob/abc1234/docs/x.md'],
+      ['https://github.com/meta/astryx/blob/abc1234/docs/x.md'],
     ])('refuses %s', url => {
       expect(
         pattern({expectations: [expectation({sources: [record({url})]})]}),
@@ -243,7 +243,7 @@ describe('definePattern', () => {
             expectation({
               sources: [
                 record({
-                  url: `https://github.com/facebook/astryx/blob/${PIN}/docs/families/probes.md#L1-L2`,
+                  url: `https://github.com/meta/astryx/blob/${PIN}/docs/families/probes.md#L1-L2`,
                 }),
               ],
             }),

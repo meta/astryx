@@ -89,9 +89,20 @@ export const ItemStates: Story = {
   render: () => <ItemStatesFixture />,
   play: async ({canvasElement}) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole('button', {name: 'Open item evidence'}),
-    );
+    const trigger = canvas.getByRole('button', {name: 'Open item evidence'});
+    const box = trigger.getBoundingClientRect();
+    // Press and release on the trigger itself. A click without coordinates
+    // releases at the page's corner. The open's own render can outlast the
+    // menu's settle delay on a loaded machine. After that delay, a release
+    // outside the trigger and the menu closes it.
+    await userEvent.pointer({
+      keys: '[MouseLeft]',
+      target: trigger,
+      coords: {
+        clientX: box.x + box.width / 2,
+        clientY: box.y + box.height / 2,
+      },
+    });
     const menu = await within(document.body).findByRole('menu');
     const scope = within(menu);
     await expect(scope.getAllByRole('menuitem')).toHaveLength(5);
