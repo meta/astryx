@@ -1,4 +1,4 @@
-Results for "delete" (20)
+Results for "delete" (20 of 21)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -35,6 +35,12 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/commands/theme-template
 parent:      pnpm exec astryx docs cli/commands
+name:        cli/skill-places
+section:     keep
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/skill-places keep
+parent:      pnpm exec astryx docs cli/skill-places --index
 name:        global/computer-agent-guide
 section:     choose
 domain:      doc
@@ -94,8 +100,3 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/IconButton
 command:     pnpm exec astryx component IconButton
-name:        ToggleButton
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ToggleButton
-command:     pnpm exec astryx component ToggleButton
