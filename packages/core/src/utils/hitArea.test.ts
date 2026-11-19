@@ -325,6 +325,60 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('stops at the field frame while keeping the input beside its clear button', () => {
+    document.body.innerHTML =
+      '<div id="field"><div id="frame" class="astryx-text-input">' +
+      '<input id="input"><button id="clear">Clear</button></div></div>' +
+      '<button id="button">Add</button>';
+    place(byId('field'), rect(0, 0, 104, 60));
+    place(byId('frame'), rect(0, 0, 100, 32));
+    place(byId('input'), rect(8, 6, 64, 20));
+    place(byId('clear'), rect(76, 8, 16, 16));
+    place(byId('button'), rect(104, 0, 32, 32));
+    const buttonInsets: HitInsets[] = [];
+    const clearInsets: HitInsets[] = [];
+    const stopButton = watchHitArea(byId('button'), insets =>
+      buttonInsets.push(insets),
+    );
+    const stopClear = watchHitArea(byId('clear'), insets =>
+      clearInsets.push(insets),
+    );
+    show(byId('button'), byId('clear'));
+    flush();
+    expect(buttonInsets.at(-1)?.left).toBe(2);
+    expect(clearInsets.at(-1)?.left).toBe(2);
+    stopClear();
+    stopButton();
+  });
+
+  it('resolves a cached input’s frame after it moves in and out of the field', () => {
+    document.body.innerHTML =
+      '<div id="frame" class="astryx-number-input"></div>' +
+      '<input id="input"><button id="button">Add</button>';
+    const frame = byId('frame');
+    const input = byId('input');
+    const button = byId('button');
+    place(frame, rect(0, 0, 100, 32));
+    place(input, rect(8, 6, 84, 20));
+    place(button, rect(104, 0, 32, 32));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(button, insets => heard.push(insets));
+    show(button);
+    flush();
+    expect(heard.at(-1)?.left).toBe(6);
+
+    frame.append(input);
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)?.left).toBe(2);
+
+    document.body.append(input);
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)?.left).toBe(6);
+    stop();
+  });
+
   it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
     // The layer opens from half size about the page origin, so every rect on
     // screen is half its layout box during the first pass.
