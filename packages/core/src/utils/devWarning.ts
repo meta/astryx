@@ -109,6 +109,41 @@ export function devPropError(
   return new Error(formatDevMessage(component, `\`${prop}\` ${message}`));
 }
 
+const missingCallbacks = new Map<string, (...args: unknown[]) => never>();
+
+/**
+ * Make a stand-in for a required callback prop that a caller left out. The
+ * stand-in throws {@link devPropError} when the component calls it, instead of
+ * a TypeError such as "onOpenChange is not a function". Each component, prop
+ * and message gets the same function on every render, so Effect dependencies
+ * stay stable.
+ *
+ * Use it only inside an inline `process.env.NODE_ENV !== 'production'` check,
+ * as for `devPropError`.
+ *
+ * @example
+ * ```
+ * if (process.env.NODE_ENV !== 'production' && typeof onOpenChange !== 'function') {
+ *   onOpenChange = devMissingCallback('Dialog', 'onOpenChange', 'is required.');
+ * }
+ * ```
+ */
+export function devMissingCallback(
+  component: string,
+  prop: string,
+  message: string,
+): (...args: unknown[]) => never {
+  const key = `${component}\u0000${prop}\u0000${message}`;
+  let callback = missingCallbacks.get(key);
+  if (callback == null) {
+    callback = () => {
+      throw devPropError(component, prop, message);
+    };
+    missingCallbacks.set(key, callback);
+  }
+  return callback;
+}
+
 const warnedKeys = new Set<string>();
 
 /**

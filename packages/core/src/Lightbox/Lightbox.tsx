@@ -105,6 +105,11 @@ import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
 import {useTruncation} from '../Text/useTruncation';
 import {Link} from '../Link/Link';
+import {devMissingCallback} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 /**
@@ -1147,6 +1152,16 @@ export function Lightbox({
   onKeyDown: onKeyDownProp,
   ...props
 }: LightboxProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'Lightbox',
+      'onOpenChange',
+      'is required to close the lightbox, for example onOpenChange={setIsOpen}. Lightbox has no onClose prop.',
+    );
+  }
   const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   // The last input in the viewer's own document, a Picture-in-Picture window's
