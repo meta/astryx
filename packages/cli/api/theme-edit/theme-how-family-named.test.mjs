@@ -233,6 +233,29 @@ describe('a lone color after a link, a group or bare labels', () => {
   }, 240_000);
 });
 
+describe('a lone color after a part that draws with the accent', () => {
+  it('is the accent when it has a hue, and the part fill when it has none', async () => {
+    const box = writes(await how('q0', 'rounded checkboxes, navy')).join('\n');
+    expect(box).toMatch(/accent '#1e3a8a'/);
+    for (const [ask, ink] of [
+      ['rounder buttons, white', '#ffffff'],
+      ['bigger buttons, black', '#000000'],
+      ['rounder buttons, gray', '#[0-9a-f]{6}'],
+    ])
+      expect(writes(await how('q0', ask)).join('\n')).toMatch(
+        new RegExp(`background-color '${ink}' --on button`),
+      );
+  }, 240_000);
+});
+
+describe('a family run that ends at a comma', () => {
+  it('keeps the font', async () => {
+    expect(
+      writes(await how('q0', 'headings in Lora, rounder cards')),
+    ).toContain('set q0 font Lora --on heading');
+  }, 240_000);
+});
+
 describe('a cue or text noun that starts its sentence', () => {
   it('reads the family as it does in lower case', async () => {
     for (const ask of ['Use Lora for headings', 'Headings in Lora'])

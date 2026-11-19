@@ -4579,7 +4579,9 @@ export function draftAnswer(ctx, env, question) {
               ROLE_WORDS.test(w) ||
               parts.some(([re]) => re.test(` ${w} `) || re.test(` ${w}s `))),
         );
-    const fam = String.raw`((?:[A-Z][\w'-]*(?:\s+|$)){1,3})`;
+    // (A family run ends at a space, the end, or a mark: "headings in Lora,
+    // rounder cards".)
+    const fam = String.raw`((?:[A-Z][\w'-]*(?:\s+|$|(?=[,;.:!?]))){1,3})`;
     // (A brief may start its sentence with the cue or the noun: "Use Lora
     // for headings", "Headings in Lora".)
     const textNoun = String.raw`(?:[Hh]eadings?|[Tt]itles?|[Bb]ody(?:\s+text)?|[Tt]ext|[Cc]opy)\b`;
@@ -8212,8 +8214,15 @@ export function draftAnswer(ctx, env, question) {
     const textOnly = (/** @type {string} */ on) =>
       /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
       !restFills(on).length;
+    // (A part with a state that fills with the accent, a checked box,
+    // draws with the accent too.)
+    const accentFill = (/** @type {string} */ on) =>
+      drawsAccent(on) ||
+      Object.values(C.MAP[on]?.at?.['background-color'] ?? {}).some(v =>
+        /--color-accent\b/.test(String(v)),
+      );
     const plainFill = (/** @type {string} */ on) =>
-      restFills(on).some(v => !/--color-accent\b/.test(v)) && !drawsAccent(on);
+      restFills(on).some(v => !/--color-accent\b/.test(v)) && !accentFill(on);
     // (A group is judged by the members the census has a record of.)
     // ("bold labels, dark gray": "labels" said bare reads two parts and
     // writes nothing until one is chosen, so the color is not given to it.)
@@ -8238,6 +8247,13 @@ export function draftAnswer(ctx, env, question) {
         return members.length > 0 && members.every(test);
       });
       return ok ? aspect : null;
+    };
+    /** Whether a color has no hue: white, black or a gray. @param {string | undefined} v */
+    const neutralInk = v => {
+      const rgb = parseColor(String(v ?? ''));
+      return Boolean(
+        rgb && Math.max(...rgb.slice(0, 3)) - Math.min(...rgb.slice(0, 3)) < 24,
+      );
     };
     const pieceOfList =
       j?.sep === 'comma' &&
@@ -8270,7 +8286,14 @@ export function draftAnswer(ctx, env, question) {
       !/\b(?:success|warnings?|danger|errors?|info|neutral|accents?|brand|primary|status(?:es)?|highlights?|page|background|text|borders?)\b/.test(
         c.text,
       )
-        ? takesItself('text', textOnly) || takesItself('background', plainFill)
+        ? takesItself('text', textOnly) ||
+          takesItself('background', plainFill) ||
+          // (White, black or a gray is never an accent: after a part that
+          // draws with the accent, "rounder buttons, white", it is that
+          // part's fill.)
+          (neutralInk(c.colors[0])
+            ? takesItself('background', accentFill)
+            : null)
         : null;
     if (own && !c.aspects.length && !ownLook) {
       c.parts = prevParts.map(p => ({...p}));

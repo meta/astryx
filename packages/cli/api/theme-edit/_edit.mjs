@@ -56,7 +56,6 @@ import {
   familyOf,
   wordTable,
   onlyMeans,
-  AUTO_SPREAD,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -7663,7 +7662,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !groupsOf(ctx)[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: lookCollapsed(
