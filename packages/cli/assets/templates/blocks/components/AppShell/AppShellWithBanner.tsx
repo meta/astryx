@@ -10,13 +10,13 @@ import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {
-  ChartBarIcon,
+  ChartIcon,
   FolderIcon,
   UsersIcon,
-  Cog6ToothIcon,
-} from '@heroicons/react/24/outline';
-import {HomeIcon} from '@heroicons/react/24/solid';
-import {CubeIcon} from '@heroicons/react/24/outline';
+  SettingsIcon,
+} from '@astryxdesign/template-icons';
+import {HomeIcon} from '@astryxdesign/template-icons/24/solid';
+import {PackageIcon} from '@astryxdesign/template-icons';
 
 export default function AppShellWithBanner() {
   return (
@@ -30,7 +30,9 @@ export default function AppShellWithBanner() {
             <TopNavHeading
               heading="App Shell"
               logo={
-                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
+                <NavIcon
+                  icon={<PackageIcon style={{width: 16, height: 16}} />}
+                />
               }
             />
           }
@@ -52,12 +54,12 @@ export default function AppShellWithBanner() {
               isSelected
               href="#"
             />
-            <SideNavItem label="Analytics" icon={ChartBarIcon} href="#" />
+            <SideNavItem label="Analytics" icon={ChartIcon} href="#" />
             <SideNavItem label="Projects" icon={FolderIcon} href="#" />
           </SideNavSection>
           <SideNavSection title="Organization">
             <SideNavItem label="Team" icon={UsersIcon} href="#" />
-            <SideNavItem label="Settings" icon={Cog6ToothIcon} href="#" />
+            <SideNavItem label="Settings" icon={SettingsIcon} href="#" />
           </SideNavSection>
         </SideNav>
       }

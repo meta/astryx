@@ -65,7 +65,9 @@ export function templateShow(
       template: match.dirName,
       description: match.description,
       type: match.type,
-      components: componentsInSource(source),
+      // With no set, the copy is the filled template: its components are the
+      // template's own, read with each placeholder as the icon it draws.
+      components: componentsInSource(icons ? source : withMedia),
       componentsToRead: answeredComponentsInSource(source, components),
       source,
       demoMediaReplaced,

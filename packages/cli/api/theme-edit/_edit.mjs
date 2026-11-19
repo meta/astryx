@@ -39,7 +39,6 @@ import {
   stateSpelling,
 } from './_normal.mjs';
 import {
-  AUTO_SPREAD,
   COMMON_STATES,
   CORNERS,
   CSS_PSEUDO_CLASSES,
@@ -57,6 +56,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -2361,8 +2361,7 @@ function leftOutParts(ctx, slug, data, sub, s) {
       ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
     );
     /** @param {string} m */
-    const only = m =>
-      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
+    const only = m => (onlyMeans(m) === 'member' ? ' --only' : '');
     if (pills.length)
       out.push({
         note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
@@ -6901,13 +6900,14 @@ async function changeOnce(
           })(),
         ]
       : []),
-    // A card's content takes one radius from Core, whatever its corners.
+    // On a Core that gives a part's content one radius (its derived entry
+    // has no `corners`), that content takes the first corner for all four.
     ...(sub === 'set' &&
     s.source === 'property' &&
     s.thing === 'border-radius' &&
     s.on &&
     (ctx.derived?.[s.on] ?? []).some(
-      d => d.property === 'borderRadius' && d.vars?.length,
+      d => d.property === 'borderRadius' && d.vars?.length && !d.corners,
     ) &&
     /\s|\//.test(String(s.value).trim())
       ? [
@@ -7044,10 +7044,10 @@ async function changeOnce(
     );
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
-  const family = s.on && s.only ? familyOf(s.on) : null;
+  const family =
+    s.on && s.only && onlyMeans(s.on) === 'member' ? familyOf(s.on) : null;
   if (
     family &&
-    AUTO_SPREAD.includes(family) &&
     (s.thing === 'spacing' ||
       /^--size-element-/.test(s.thing) ||
       /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
@@ -7368,7 +7368,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint: onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: r.changed,

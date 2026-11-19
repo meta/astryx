@@ -58,6 +58,13 @@ import {
   babelParser,
   babelParserRelease,
 } from '../runtime/lazy-dependencies.mjs';
+import {
+  PLACEHOLDER_MODULE,
+  placeholderLook,
+  placeholderMeaning,
+  placeholderSource,
+  placeholderTable,
+} from './template-placeholders.mjs';
 import {compareText} from '../text/compare-text.mjs';
 import {currentNonCoreBase} from '../bases/state.mjs';
 
@@ -2115,14 +2122,35 @@ function topLevelBindings(src) {
   }
   for (const statement of program.body) {
     if (statement.type === 'ImportDeclaration') {
-      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) {
+        // A filled placeholder (`TrashIcon as DeleteIcon`) reads as the
+        // library icon it imports, as the unfilled template does.
+        for (const specifier of statement.specifiers) {
+          if (specifier.type !== 'ImportSpecifier') continue;
+          const {imported} = specifier;
+          const name =
+            imported.type === 'Identifier' ? imported.name : imported.value;
+          if (drawsPlaceholder(specifier.local.name, name)) {
+            astryxImports.set(specifier.local.name, name);
+          }
+        }
+        continue;
+      }
+      // An icon placeholder names the library icon that draws it, as the
+      // template's copy renders it, so a placeholder never reads as a
+      // component name.
+      const look = placeholderLook(statement.source.value);
       for (const specifier of statement.specifiers) {
         if (specifier.type !== 'ImportSpecifier') continue;
         const {imported} = specifier;
-        astryxImports.set(
-          specifier.local.name,
-          imported.type === 'Identifier' ? imported.name : imported.value,
-        );
+        const name =
+          imported.type === 'Identifier' ? imported.name : imported.value;
+        const meaning = look == null ? null : placeholderMeaning(name);
+        const drawn =
+          meaning == null || look == null
+            ? null
+            : placeholderSource(meaning, look);
+        astryxImports.set(specifier.local.name, drawn?.export ?? name);
       }
       continue;
     }
@@ -2383,6 +2411,33 @@ function catalogNames(names) {
 }
 
 /**
+ * Whether a placeholder name stands for a library export: the table draws
+ * the placeholder's meaning with that export in some variant.
+ * @param {string} placeholder
+ * @param {string} exportName
+ * @returns {boolean}
+ */
+function drawsPlaceholder(placeholder, exportName) {
+  return placeholderDrawnNames(placeholder).includes(exportName);
+}
+
+/**
+ * The library exports that may draw a placeholder name, over every variant.
+ * @param {string} placeholder
+ * @returns {string[]}
+ */
+function placeholderDrawnNames(placeholder) {
+  const meaning = placeholderMeaning(placeholder);
+  if (meaning == null) return [];
+  const names = [];
+  for (const look of Object.keys(placeholderTable().looks)) {
+    const drawn = placeholderSource(meaning, look);
+    if (drawn) names.push(drawn.export);
+  }
+  return names;
+}
+
+/**
  * Every name componentsInSource can return for `src`, read without parsing
  * it, or null when it cannot be bounded so. It keeps the tag names a parse
  * would drop as page-local. It adds each name an `imported as local` pair
@@ -2398,6 +2453,10 @@ export function componentNameBound(src) {
   }
   const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
   const local = new Set(tags);
+  // A placeholder tag reads as the library icon that draws it.
+  const drawnIcons = src.includes(PLACEHOLDER_MODULE)
+    ? [...local].flatMap(placeholderDrawnNames)
+    : [];
   // A pair adds a name only when its local name is a tag. Most sources have
   // no `as` before a tag's name, so they skip the slower pair scan. Each
   // match restarts one character on: a `/*` in a comment can hide a pair.
@@ -2407,7 +2466,7 @@ export function componentNameBound(src) {
     asLocal.lastIndex = m.index + 1;
     pairs = local.has(m[1]);
   }
-  if (!pairs) return catalogNames(tags);
+  if (!pairs) return catalogNames([...tags, ...drawnIcons]);
   /** @type {string[]} */
   const imported = [];
   // Each match restarts one character on, so no pair hides inside another.
@@ -2422,5 +2481,10 @@ export function componentNameBound(src) {
     if (name.includes('\\')) return null;
     imported.push(name);
   }
-  return catalogNames([...tags, ...imported]);
+  return catalogNames([
+    ...tags,
+    ...imported,
+    ...drawnIcons,
+    ...imported.flatMap(placeholderDrawnNames),
+  ]);
 }

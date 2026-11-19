@@ -6,7 +6,9 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-import {PlusIcon} from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
+import {AddIcon} from '@astryxdesign/template-icons';
 
 const VARIANTS = [
   {variant: 'primary' as const, label: 'Primary'},
@@ -16,6 +18,8 @@ const VARIANTS = [
 ];
 
 export default function IconButtonFloating() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Stack direction="vertical" gap={4}>
       <Text type="supporting" color="secondary">
@@ -27,11 +31,30 @@ export default function IconButtonFloating() {
             key={variant}
             label={label}
             variant={variant}
-            icon={<Icon icon={PlusIcon} />}
+            icon={<Icon icon={AddIcon} />}
             elevation="high"
+            onClick={() =>
+              variant === 'destructive'
+                ? confirm.show({
+                    title: 'Run the destructive action?',
+                    description: "This demo won't change anything.",
+                    actionLabel: 'Continue',
+                    onAction: () => {
+                      confirm.hide();
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: the destructive action would run here',
+                      });
+                    },
+                  })
+                : showToast({
+                    body: `Demo: the ${label.toLowerCase()} action would run here`,
+                  })
+            }
           />
         ))}
       </Stack>
+      {confirm.element}
     </Stack>
   );
 }

@@ -70,6 +70,7 @@ import {
   systemFontFamilies,
   isSystemFamily,
   fontStack,
+  onlyMeans,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -4790,15 +4791,17 @@ function checkOne(
     });
   // --only is checked on a part this Core has; a part in other letters or
   // misspelt gets the part's own refusal first, with --only kept.
+  // (What --only means is the one rule the settings reader reads a saved
+  // one by: onlyMeans.)
   if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
-    const fam = s.on ? familyOf(s.on) : null;
-    if (!fam || FAMILIES[/** @type {string} */ (s.on)])
+    const means = onlyMeans(s.on);
+    if (means === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
+    if (means === 'own')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
@@ -7259,10 +7262,18 @@ function checkOne(
     // max() or clamp() giving one.
     if (s.on && ctx.derived && !WRAPPED_PARTS[s.on]) {
       const inCalc = calcVars(ctx.project);
+      // A radius entry with `corners` hands each corner its own variable, so
+      // one length per corner works there; a `/` radius still does not.
+      const eachCornerOneLength =
+        !v.includes('/') &&
+        splitTop(v.trim(), ' ').every(
+          x => oneLength(x) || /^[+-]?0+(?:\.0+)?$/.test(x.trim()),
+        );
       const hit = partsOf(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
           d =>
             d.property === camel(prop) &&
+            !(d.corners && eachCornerOneLength) &&
             (d.vars ?? []).some(x => inCalc.has(x.toLowerCase())),
         ),
       );

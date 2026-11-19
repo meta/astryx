@@ -55,6 +55,7 @@ import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
 import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports, importUses} from './value-uses.mjs';
+import {coreComponentOf} from '../discovery/core-elements.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -181,6 +182,12 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/**
+ * Each string a page's own file gives a Core component's prop
+ * (`<Button variant="danger">`), for the unknown-prop-value warning.
+ * @type {{component: string, prop: string, value: string, file: string, line: number}[]}
+ */
+const propValues = [];
 /** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
@@ -1307,6 +1314,22 @@ function pagePlugin(filename, browser = false) {
       BinaryExpression(/** @type {any} */ p) {
         if (browser || p.node.operator !== '+' || p.parentPath.isBinaryExpression({operator: '+'})) return;
         builtAddress(p);
+      },
+      JSXOpeningElement(/** @type {any} */ p) {
+        if (browser) return;
+        const component = coreComponentOf(p.node.name, p.scope);
+        if (!component) return;
+        for (const attr of p.node.attributes) {
+          if (attr.type !== 'JSXAttribute' || attr.name.type !== 'JSXIdentifier') continue;
+          const value =
+            attr.value?.type === 'StringLiteral'
+              ? attr.value.value
+              : attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'StringLiteral'
+                ? attr.value.expression.value
+                : null;
+          if (value === null) continue;
+          propValues.push({component, prop: attr.name.name, value, file: filename, line: attr.loc?.start.line ?? 0});
+        }
       },
       JSXText(/** @type {any} */ p) {
         if (browser) return;
@@ -2450,6 +2473,7 @@ try {
     remoteLiterals: [...remoteLiterals],
     remoteNamedOnly: [...namedOnlyLiterals].filter(url => !placedLiterals.has(url)),
     builtRemote,
+    propValues: propValues.map(v => ({...v, file: path.relative(path.dirname(entry), v.file).split(path.sep).join('/')})),
     logs,
     script: script?.code ?? null,
     scriptModules: script?.modules ?? 0,

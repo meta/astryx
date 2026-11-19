@@ -50,7 +50,7 @@ import {
   keptReason,
   managedFileState,
   removeManagedFile,
-  withHash,
+  renderSkillFile,
   writeNoFollow,
 } from './managed-skill-file.mjs';
 import {
@@ -207,7 +207,7 @@ export const STABLE_COMMANDS = Object.freeze([
  * When an agent should load the skill; the frontmatter `description`. One
  * sentence.
  */
-const SKILL_DESCRIPTION =
+export const COMPUTER_SKILL_DESCRIPTION =
   'Astryx, a design system and UI library, is available on this computer through the astryx command; use it when building or changing UI, choosing components, layout, styling or theming, working with a design system, or in any project that depends on @astryxdesign packages or mentions Astryx.';
 
 /**
@@ -299,6 +299,19 @@ export function skillCommandOf(content) {
 }
 
 /**
+ * The skill's text without its frontmatter and markers, as `astryx docs
+ * skills/astryx` prints it.
+ * @param {{command?: string, install?: string}} [options]
+ * @returns {string}
+ */
+export function renderComputerSkillBody({
+  command = computerAgentCommand(),
+  install = computerInstallStep(),
+} = {}) {
+  return bodyLines(command, install).join('\n');
+}
+
+/**
  * The full skill file.
  * @param {{command?: string, install?: string}} [options]
  * @returns {string}
@@ -307,21 +320,13 @@ export function renderComputerAgentText({
   command = computerAgentCommand(),
   install = COMPUTER_INSTALL_STEP,
 } = {}) {
-  return withHash(
-    [
-      '---',
-      'name: astryx',
-      // Quoted: the description holds `: ` and `;`, which strict YAML parsers
-      // can misread, and an agent tool that fails to parse drops the skill.
-      `description: ${JSON.stringify(SKILL_DESCRIPTION)}`,
-      '---',
-      '',
-      MARKER_START,
-      ...bodyLines(command, install),
-      MARKER_END,
-      '',
-    ].join('\n'),
-  );
+  return renderSkillFile({
+    name: 'astryx',
+    description: COMPUTER_SKILL_DESCRIPTION,
+    block: [MARKER_START, ...bodyLines(command, install), MARKER_END].join(
+      '\n',
+    ),
+  });
 }
 
 /**
