@@ -103,7 +103,12 @@ describe('changedTokens', () => {
         for (const prop of all)
           expect(
             changed.some(
-              x => x.startsWith(`${prop} `) || x.startsWith(`${prop}:`),
+              x =>
+                x.startsWith(`${prop} `) ||
+                x.startsWith(`${prop}:`) ||
+                // The root's derived values share one line.
+                (x.includes(' on the theme root') &&
+                  x.split(' on the theme root')[0].split(', ').includes(prop)),
             ),
             prop,
           ).toBe(true);

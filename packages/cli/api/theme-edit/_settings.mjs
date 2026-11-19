@@ -13723,8 +13723,15 @@ function partTokenChanges(before, after, modes) {
         `${prop} on ${where}${one ? '' : ` (${m})`}: ${ha[m] ?? 'unset'} -> ${hb[m] ?? 'unset'}`,
       );
   }
-  // Parts first; the root's derived values after them.
-  return [...out, ...onRoot];
+  // Parts first. The root's derived values (one per Card variant) fold into
+  // one line, so a palette change does not list a dozen private names.
+  if (onRoot.length === 0) return out;
+  const names = [...new Set(onRoot.map(line => line.split(' ')[0]))];
+  const modesMoved = order.filter(m => onRoot.some(l => l.includes(`(${m})`)));
+  return [
+    ...out,
+    `${names.join(', ')} on the theme root${modesMoved.length > 0 ? ` (${modesMoved.join(', ')})` : ''}: moved`,
+  ];
 }
 
 /**

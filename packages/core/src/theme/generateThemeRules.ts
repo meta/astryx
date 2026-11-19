@@ -1456,7 +1456,7 @@ function cardTintTextEntries(
   theme: ThemeRuleSource,
   sets: ReadonlySet<string>,
   setsInput: boolean,
-): Array<[string, string]> {
+): [string, string][] {
   const cardRules = withoutUnsetComponents(theme.components)?.card ?? {};
   const cardBase = Object.fromEntries(
     Object.entries(cardRules.base ?? {}).filter(
