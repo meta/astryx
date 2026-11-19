@@ -2769,8 +2769,11 @@ describe('final pass 5', () => {
       rm('src/app/again');
       // Past the files it reads, nothing is removed: see
       // theme-preview-importers.test.mjs, which reads a small tree.
-      // A temp file a killed command left goes with the full remove.
-      write('src/app/z1/.page.tsx.astryx-999999-abc123.tmp', 'x');
+      // A temp file a killed command left goes with the full remove. Its
+      // process id is above the largest one Linux gives (2 ** 22): a fixed
+      // id below it, such as 999999, can belong to a live process on a busy
+      // machine, and then the temp file rightly stays.
+      write(`src/app/z1/.page.tsx.astryx-${2 ** 22 + 7}-abc123.tmp`, 'x');
       await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'});
       expect(exists('src/app/z1')).toBe(false);
     } finally {
