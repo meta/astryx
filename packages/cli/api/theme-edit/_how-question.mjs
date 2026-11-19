@@ -27302,8 +27302,19 @@ export function draftAnswer(ctx, env, question) {
         // color every button's text reads on and no status variant stays
         // every button's.
         if (!lost.length && !status.length) continue;
+        // (A variant the answer gives its own fill, "except ghost ones",
+        // keeps that look.)
+        const ownLook = (/** @type {string} */ v) =>
+          o.some(
+            x =>
+              x !== st &&
+              x.on === st.on &&
+              x.when === `variant:${v}` &&
+              !x.state &&
+              /^background(?:-color)?$/.test(x.thing),
+          );
         const kept = variants.filter(
-          v => !lost.includes(v) && !status.includes(v),
+          v => !lost.includes(v) && !status.includes(v) && !ownLook(v),
         );
         if (!kept.length) continue;
         o.splice(i, 1, ...kept.map(v => ({...st, when: `variant:${v}`})));
