@@ -130,7 +130,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的辅助内容。可为字符串或 ReactNode。字符串只显示一行，过长时以省略号截断。要多行显示完整句子，请传入节点：description={<Text type="supporting">…</Text>}。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
+        '标签下方的辅助内容：字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
     },
     {
       name: 'endContent',

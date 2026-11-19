@@ -153,7 +153,7 @@ export const docsZh = {
       name: 'description',
       type: 'ReactNode',
       description:
-        '标签下方的次要内容。纯字符串只显示一行，过长时以省略号截断。要多行显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。节点自行控制换行和多行截断。',
+        '标签下方的次要内容：纯字符串只显示一行，过长时以省略号截断；要显示完整文本，请传入节点，例如 description={<Text type="supporting">…</Text>}。节点自行控制换行和多行截断。',
     },
     {
       name: 'startContent',
