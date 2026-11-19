@@ -144,9 +144,9 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 registerEnglishFallback(english);
 
 const styles = stylex.create({
-  // A lifted menu that fits whole on no side: capped to the room on its side,
-  // so the layer's own fallbacks never need to size it, and scrolled.
-  liftedMenuCap: (maxBlockSize: number) => ({maxBlockSize}),
+  // A lifted menu that fits whole on no side: its list, the menu's scroll
+  // container, is capped to the room on its side and scrolls the rest.
+  liftedMenuCap: (maxHeight: string) => ({maxHeight}),
   // Trigger wrapper. `position: relative` makes the containing block for the
   // absolutely positioned cursor anchor below. So the anchor point follows
   // the trigger, and scrolls with it, instead of the page. The iOS callout and
@@ -507,6 +507,10 @@ export function ContextMenu({
   // While a finger's menu is up on a lifted trigger: where the trigger
   // landed, and the menu's side and alignment against it.
   const liftRef = useRef<LiftFromTriggerResult | null>(null);
+  // The lifted menu's whole size, read once per open before a cap holds it.
+  const liftedMenuSizeRef = useRef<{height: number; width: number} | null>(
+    null,
+  );
   const [liftPlacement, setLiftPlacement] = useState<SurfacePlacement | null>(
     null,
   );
@@ -542,9 +546,9 @@ export function ContextMenu({
     // Mounted at the first open and kept (see the file header).
     lazyMount: true,
     keepsMountAfterShow: true,
-    // A lifted menu's side and any cap are the lift's own (surfacePlacement),
-    // so it fits where it opens. Keeping the anchor clear scrolls a capped
-    // menu and keeps the runtime's fallbacks off the lifted trigger.
+    // A lifted menu's side, slide and any cap are the lift's own
+    // (surfacePlacement), so it fits where it opens. Keeping the anchor clear
+    // keeps the runtime's fallbacks off the lifted trigger.
     keepsAnchorClear: liftPlacement != null,
     onHide: useCallback(() => {
       outsidePress.stop();
@@ -859,6 +863,7 @@ export function ContextMenu({
   const showLifted = useCallback(
     (lifted: LiftFromTriggerResult) => {
       liftRef.current = lifted;
+      liftedMenuSizeRef.current = null;
       setLiftPlacement(
         surfacePlacement(
           lifted.lifted,
@@ -885,22 +890,26 @@ export function ContextMenu({
     [layer],
   );
   // Syncs the menu's side with the browser's layout of the shown menu: its
-  // whole size picks its side and any cap, before the frame paints. The
-  // scroll height is the whole height when a cap already holds the menu, so
-  // a cap never feeds back into its own size.
+  // whole size picks its side, slide and any cap, before the frame paints.
+  // The size is read once per open, before a cap holds the menu, so a cap
+  // never feeds back into its own size and a later pass reads no layout.
   useIsomorphicLayoutEffect(() => {
     const lifted = liftRef.current;
     const menu = listRef.current?.closest<HTMLElement>('[popover]');
     if (lifted == null || liftPlacement == null || menu == null) {
       return;
     }
-    const height = menu.scrollHeight + (menu.offsetHeight - menu.clientHeight);
+    const size = liftedMenuSizeRef.current ?? {
+      height: menu.scrollHeight + (menu.offsetHeight - menu.clientHeight),
+      width: menu.offsetWidth,
+    };
+    liftedMenuSizeRef.current = size;
     const placement = surfacePlacement(
       lifted.lifted,
-      height,
+      size.height,
       lifted.viewport,
       contextMenu.lift.menuGap,
-      menu.offsetWidth,
+      size.width,
     );
     // Beside the lifted trigger, the anchor spans the menu's own block span,
     // so the start-aligned menu opens where the lift slid it. Above or below,
@@ -909,7 +918,7 @@ export function ContextMenu({
     const anchorHeight = `${
       placement.blockStart == null
         ? lifted.lifted.height
-        : (placement.maxBlockSize ?? height)
+        : (placement.maxBlockSize ?? size.height)
     }px`;
     if (lifted.anchor.style.top !== anchorTop) {
       lifted.anchor.style.top = anchorTop;
@@ -1087,7 +1096,12 @@ export function ContextMenu({
               ]
             : styles.menu,
           !usesBottomSheet &&
-            (hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom),
+            (hasOverflow || liftPlacement?.maxBlockSize != null
+              ? styles.touchPanYPinchZoom
+              : styles.touchPinchZoom),
+          !usesBottomSheet &&
+            liftPlacement?.maxBlockSize != null &&
+            styles.liftedMenuCap(`min(300px, ${liftPlacement.maxBlockSize}px)`),
           xstyle,
         ),
         className,
@@ -1240,11 +1254,7 @@ export function ContextMenu({
                 alignment: liftPlacement.alignment,
                 offset: contextMenu.lift.menuGap,
                 // The lift fades the menu in.
-                xstyle: [
-                  popoverXstyle,
-                  liftPlacement.maxBlockSize != null &&
-                    styles.liftedMenuCap(liftPlacement.maxBlockSize),
-                ],
+                xstyle: [popoverXstyle],
               }
             : {
                 placement: 'below',

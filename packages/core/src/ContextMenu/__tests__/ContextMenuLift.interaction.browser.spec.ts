@@ -540,13 +540,24 @@ for (const geometry of [
       throw new Error(JSON.stringify(lift));
     }
     const fit = await page.evaluate(() => {
-      const list = document.querySelector('[role="menu"]');
-      const popover = list?.closest('[popover]');
+      const list = document.querySelector<HTMLElement>('[role="menu"]');
+      const style = list == null ? null : getComputedStyle(list);
+      // The list is the menu's scroll container: a scroll range of its own,
+      // auto overflow, and a finger's pan. A clipping ancestor shows none of
+      // them.
+      let scrolledTo = 0;
+      if (list != null) {
+        list.scrollTop = 1000;
+        scrolledTo = list.scrollTop;
+        list.scrollTop = 0;
+      }
       return {
         natural: list?.scrollHeight ?? 0,
-        scrolls: [popover, list].some(
-          el => el != null && el.scrollHeight > el.clientHeight + 1,
-        ),
+        listScrollRange:
+          list == null ? 0 : list.scrollHeight - list.clientHeight,
+        listOverflowY: style?.overflowY ?? '',
+        listTouchAction: style?.touchAction ?? '',
+        scrolledTo,
         innerHeight,
       };
     });
@@ -568,7 +579,10 @@ for (const geometry of [
     expect(menu.y + menu.height, detail).toBeLessThanOrEqual(
       fit.innerHeight - GUTTER + 0.5,
     );
-    expect(fit.scrolls, detail).toBe(true);
+    expect(fit.listScrollRange, detail).toBeGreaterThan(1);
+    expect(fit.listOverflowY, detail).toBe('auto');
+    expect(fit.listTouchAction, detail).toContain('pan-y');
+    expect(fit.scrolledTo, detail).toBeGreaterThan(0);
     expect(preview.x + preview.width / 2, detail).toBeCloseTo(
       story.center.x,
       0,
@@ -579,6 +593,83 @@ for (const geometry of [
     );
   });
 }
+
+// A finger scrolls a capped lifted menu: a drag up on a row that shows
+// scrolls the list, and the menu stays open. The gesture is a real touch
+// scroll, which the list's touch-action governs.
+test('a finger dragging on a capped lifted menu scrolls its list, and the menu stays open', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'A touch scroll gesture needs the Chrome DevTools Protocol.',
+  );
+  await page.setViewportSize({width: 402, height: 360});
+  const story = await openLiftStory(page, (box, viewport) => ({
+    dx: 0,
+    dy: viewport.height / 2 - (box.y + box.height / 2),
+  }));
+  const lift = await liftAndSettle(page, story);
+  const row = await page.evaluate(() => {
+    const list = document.querySelector('[role="menu"]');
+    const popover = list?.closest('[popover]');
+    if (list == null || popover == null) {
+      return null;
+    }
+    const bottom = Math.min(
+      list.getBoundingClientRect().bottom,
+      popover.getBoundingClientRect().bottom,
+    );
+    const rows = [...list.querySelectorAll('[role="menuitem"]')].map(el =>
+      el.getBoundingClientRect(),
+    );
+    const shown = rows.filter(rect => rect.y + rect.height / 2 < bottom - 4);
+    const last = shown.at(-1);
+    return last == null
+      ? null
+      : {
+          x: last.x + last.width / 2,
+          y: last.y + last.height / 2,
+          hidden: rows.length - shown.length,
+        };
+  });
+  const detail = JSON.stringify({lift, row});
+  if (row == null) {
+    throw new Error(detail);
+  }
+  // The case holds: the menu is capped and shows fewer rows than it has.
+  expect(row.hidden, detail).toBeGreaterThan(0);
+  // A finger on the row drags up 120 px over about 200 ms, through the
+  // browser's own touch input, so the list's touch-action decides the pan.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: row.x, y: row.y}],
+  });
+  for (let step = 1; step <= 12; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: row.x, y: row.y - step * 10}],
+    });
+    await page.evaluate(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    });
+  }
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+  const after = await page.evaluate(() => {
+    const list = document.querySelector('[role="menu"]');
+    return {
+      scrollTop: list?.scrollTop ?? 0,
+      open: list?.closest('[popover]')?.matches(':popover-open') ?? false,
+    };
+  });
+  expect(after.scrollTop, detail).toBeGreaterThan(0);
+  expect(after.open, detail).toBe(true);
+});
 
 // Beside the trigger, on a phone in landscape: neither block side has room
 // for the whole menu, so it opens beside the trigger at its whole size,
