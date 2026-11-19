@@ -86,11 +86,23 @@ export function sectionKey(section) {
  * @returns {number}
  */
 function legacyTitleMatchIndex(sections, query) {
-  const lower = query.toLowerCase();
-  return sections.findIndex(section => {
-    const title = sourceTitle(section);
-    return typeof title === 'string' && title.toLowerCase().includes(lower);
-  });
+  return sections.findIndex(section => answersTitleQuery(section, query));
+}
+
+/**
+ * Does a section's authored title answer a 0.6.x title query: does the query
+ * appear in it, in any letter case? Merging and key checks share this test,
+ * so a pair the merge keeps is never one the key check refuses.
+ * @param {any} section
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function answersTitleQuery(section, query) {
+  const title = sourceTitle(section);
+  return (
+    typeof title === 'string' &&
+    title.toLowerCase().includes(query.toLowerCase())
+  );
 }
 
 /**
@@ -198,17 +210,36 @@ export function sectionKeyProblems(sections) {
 /**
  * Stamp every section with the key it is addressed by. Runs only after
  * extensions merge: a derived key must never take part in merge matching.
+ *
+ * When a section one package added already holds the key a title derives, a
+ * section another package added later in the doc takes `<provider
+ * key>-<title key>`, which names its own package. The section placed first
+ * keeps the plain key. Every other collision, one with the topic's own
+ * sections included, takes a numeric suffix.
  * @template {{sections: any[]}} T
  * @param {T} doc
+ * @param {{providerOf?: (section: any) => string | null | undefined}} [options]
+ *   `providerOf` names the package that added a section, or nothing for a
+ *   section of the topic itself
  * @returns {T}
  */
-export function withSectionKeys(doc) {
-  const reserved = new Set(
-    doc.sections
-      .map(section => section?.id)
-      .filter(id => typeof id === 'string' && SECTION_KEY_RE.test(id)),
-  );
+export function withSectionKeys(doc, {providerOf} = {}) {
+  /** @type {Map<string, any>} key -> the section that holds it */
+  const holders = new Map();
+  for (const section of doc.sections) {
+    const id = section?.id;
+    if (typeof id === 'string' && SECTION_KEY_RE.test(id) && !holders.has(id)) {
+      holders.set(id, section);
+    }
+  }
+  /** @type {Set<string>} */
   const used = new Set();
+  /** @param {string} key @param {number} index */
+  const taken = (key, index) =>
+    holders.has(key) ||
+    used.has(key) ||
+    (legacyTitleMatchIndex(doc.sections, key) !== -1 &&
+      legacyTitleMatchIndex(doc.sections, key) !== index);
   return {
     ...doc,
     sections: doc.sections.map((section, index) => {
@@ -216,20 +247,27 @@ export function withSectionKeys(doc) {
         used.add(section.id);
         return section;
       }
-      const base =
-        sectionTitleKey(sourceTitle(section)) || `section-${index + 1}`;
+      const titleKey = sectionTitleKey(sourceTitle(section));
+      let base = titleKey || `section-${index + 1}`;
+      const holder = holders.get(base);
+      const provider = providerOf?.(section);
+      const holderProvider = holder == null ? null : providerOf?.(holder);
+      if (
+        titleKey !== '' &&
+        provider != null &&
+        holderProvider != null &&
+        holderProvider !== provider
+      ) {
+        base = `${routeSegment(provider.replace(/^@/, ''))}-${titleKey}`;
+      }
       let key = base;
       let suffix = 2;
-      while (
-        reserved.has(key) ||
-        used.has(key) ||
-        (legacyTitleMatchIndex(doc.sections, key) !== -1 &&
-          legacyTitleMatchIndex(doc.sections, key) !== index)
-      ) {
+      while (taken(key, index)) {
         key = `${base}-${suffix}`;
         suffix += 1;
       }
       used.add(key);
+      if (!holders.has(key)) holders.set(key, section);
       return withSourceTitle({...section, id: key}, sourceTitle(section));
     }),
   };
