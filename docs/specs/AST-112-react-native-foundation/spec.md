@@ -764,12 +764,13 @@ record depends on an ask whose owner has not agreed to it.
   contracts become the private workspace package `packages/contracts`, built
   into each package and never published, and `@astryxdesign/native` is
   deprecated (`spec:AST-112` FR4, DEC-19).
-- `spec:AST-082` FR5, FR6, FR10, FR15, FR16, and FR19, and `spec:AST-093`,
-  which name `@astryxdesign/native` as the home of the platform contracts, the
-  Swift and Kotlin bindings, the `shared` condition, and `defineNativeTheme`,
-  move the platform contracts and the `shared` condition to the shared
-  contracts (DEC-19). Where the non-contract parts live after the deprecation
-  is OQ8.
+- `spec:AST-082` FR5, FR6, FR9, FR10, FR15, FR16, and FR19, and
+  `spec:AST-093`, which name `@astryxdesign/native` as the home of the platform
+  contracts, their documentation, the Swift and Kotlin bindings, the `ios`,
+  `android`, and `shared` type conditions, and `defineNativeTheme`, move the
+  platform contracts to the shared contracts (DEC-19). Which published package
+  carries the public type conditions and the other non-contract parts after
+  the deprecation is OQ8.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
   the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency, no peer dependency outside Astryx other than React and React Native, and no dependency on these packages from core or the CLI.
 
@@ -1058,6 +1059,8 @@ React Native lab under `./unstable/*` and moves to `./navigation` when web's
   contract first.
 - **OQ8 — Where do `@astryxdesign/native`'s non-contract parts live after its
   deprecation?** (`human-api`) The native theme definition
-  (`defineNativeTheme`) and the Swift binding need a published home once the
-  contracts move into `packages/contracts` (DEC-19). Options: a new
+  (`defineNativeTheme`), the Swift binding, and the public `ios`, `android`,
+  and `shared` type conditions that consumer configuration depends on
+  (`spec:AST-082` FR5) need a published home once the contracts move into
+  `packages/contracts` (DEC-19). Options: a new
   published native package; `@astryxdesign/core`; or each platform package.
