@@ -603,8 +603,10 @@ works on is `spec:AST-040` FR9's.
     Starting again is not a hand-off: the same copy runs, with the same
     arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
-    `astryx init --user` (FR8) and `astryx docs global` with its pages, the
-    docs of global mode itself, is never handed to a project's release: it is
+    `astryx init --user` (FR8), `astryx init --to` naming only places outside
+    the project (`user`, or folders outside it) with no feature beyond the
+    agent docs (FR8), and `astryx docs global` with its pages, the docs of
+    global mode itself, is never handed to a project's release: it is
     answered as outside a project wherever it runs, so those docs read the same
     inside a project whose release predates them, and its standard-error line
     says it answered for the computer.
