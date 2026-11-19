@@ -27502,7 +27502,39 @@ export function draftAnswer(ctx, env, question) {
   // sees what the theme has.
   {
     const unmet = result.find(d => d.unmet);
-    if (unmet && result.some(d => d !== unmet && d.options.length)) {
+    // ("… make them a bit smaller. Undo the heading change.": an undo of a
+    // change said earlier in the same ask takes that change back here; the
+    // rest of the ask stands.)
+    const part = unmet ? / on ([a-z0-9-]+)$/.exec(String(unmet.unmet))?.[1] : null;
+    const undone = part
+      ? result.filter(
+          d =>
+            d !== unmet &&
+            d.options.length &&
+            /** @type {any} */ (draftClause.get(d))?.parts?.some(
+              (/** @type {{on: string}} */ p) =>
+                p.on === part || (FAMILIES[part] ?? []).includes(p.on),
+            ),
+        )
+      : [];
+    if (unmet && undone.length) {
+      const gone = new Set(
+        undone.flatMap(d => d.options.flat()).map(st => JSON.stringify(st)),
+      );
+      for (const d of result)
+        d.options = d.options
+          .map(o => o.filter(st => !gone.has(JSON.stringify(st))))
+          .filter(o => o.length);
+      result.splice(
+        0,
+        result.length,
+        ...result.filter(d => d !== unmet && !undone.includes(d)),
+      );
+      result.push({
+        text: `the ${part} change said earlier in this ask is taken back by its undo, so it is not written`,
+        options: [],
+      });
+    } else if (unmet && result.some(d => d !== unmet && d.options.length)) {
       for (const d of result)
         if (d !== unmet && d.options.length) {
           d.text = `${d.text} (held back: the same ask takes back ${unmet.unmet}, which ${env.slug} does not set, so the theme is not as the ask expects; ask for this alone to get it)`;

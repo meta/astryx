@@ -233,17 +233,11 @@ const ROWS = [
       has: [
         'spacing less',
         'spacing less --on table-row',
-        '--text-heading-1-size 1.275rem',
-        '--text-heading-2-size 1.063rem',
-        '--text-heading-3-size 0.903rem',
-        '--text-heading-4-size 0.744rem',
-        '--text-heading-5-size 0.637rem',
-        '--text-heading-6-size 0.531rem',
         "background-color '#0f172a' --on app-shell-header",
       ],
       // (The top bar a sentence after the table is the app's, never the
-      // table's header.)
-      never: /--on table-header-cell/,
+      // table's header; the heading change the ask undoes is not written.)
+      never: /--on table-header-cell|--text-heading-\d-size/,
     },
   ],
   [
