@@ -195,7 +195,7 @@ INV5's budget is set from the 2026-11-09 measurement of virtua's Virtualizer plu
 Table's public windowing API changes only by the `initialViewportHeight`
 rename. `useTableRowsVirtualization` keeps `rowHeight` and renames
 `viewportHeight` to `initialViewportHeight`, which Table reads for the first frame only. Other
-options described for later (a callback scroll target, exact
+options (a callback scroll target, exact
 or estimated item sizes, an anchor) reach Table's public API only through a
 later owner decision.
 
