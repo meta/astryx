@@ -1131,19 +1131,18 @@ function generateComponentRules(
         for (const [pseudo, pseudoStyles] of nested) {
           // A pseudo-class block expands like its resting rule. A hovered
           // row's fill then reaches pinned cells through --table-row-overlay.
-          // A pseudo-element block (`::before`) is another box: a derived
-          // variable set there reaches only that box, never the element that
-          // reads it, so the declared size would be lost. It is written as
-          // authored.
-          // (CSS2's one-colon pseudo-elements, `:before` and the rest, too.)
+          // A pseudo-element block (`::before`) is another box. A derived
+          // variable set there never reaches the element that reads it, so
+          // the compiler writes the block as authored. This includes the CSS2
+          // one-colon forms (`:before`, `:after`, `:first-line`,
+          // `:first-letter`).
           const pseudoClass =
             pseudo.startsWith(':') &&
             !pseudo.includes('::') &&
             !/:(before|after|first-line|first-letter)(?![-\w])/i.test(pseudo);
-          // Like the resting rule, the boundary check reads the authored
-          // declarations first, so a rejected one is reported once, under
-          // the name the theme wrote, before any is lowered to a private
-          // variable.
+          // The boundary check reads the authored declarations first, as it
+          // does for the resting rule. So the author sees one warning for a
+          // rejected declaration, under the name the theme wrote.
           const pseudoLocation = `${location}[${JSON.stringify(pseudo)}]`;
           const accepted: [string, string][] = [];
           if (pseudoClass) {

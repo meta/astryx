@@ -229,7 +229,7 @@ export const docs = {
       name: 'isStriped',
       type: 'boolean',
       description:
-        "Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body rows. A theme restyles either stripe of a data-driven table through the `table-row` target's `parity` (odd or even); every row a striped table may stripe (body and footer rows, not the header row) carries the `striped` state. A pinned column (`useTableStickyColumns`) follows the row's stripe.",
+        "Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body and footer rows. A theme restyles either stripe of a data-driven table through the `table-row` target's `parity` (odd or even); every row a striped table may stripe (body and footer rows, not the header row) carries the `striped` state. A pinned column (`useTableStickyColumns`) follows the row's stripe.",
       default: 'false',
     },
     {

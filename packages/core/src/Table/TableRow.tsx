@@ -230,8 +230,8 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
-  // `striped` marks every row Core may stripe above, footer rows included;
-  // `parity` only a body row whose place Core knows.
+  // Every row Core may stripe carries `striped`, footer rows included. Only
+  // a body row whose place Core knows carries `parity`.
   return (
     <tr
       ref={ref}
