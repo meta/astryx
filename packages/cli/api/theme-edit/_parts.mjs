@@ -783,7 +783,10 @@ export function addCensusStates(project, parts) {
         for (const pair of cond.split(/\s/)[0].split(','))
           if (/^([a-z][\w-]*)=\1$/.test(pair)) {
             const name = pair.slice(0, pair.indexOf('='));
-            if (!props.has(name)) found.add(name);
+            // (A state of a part drawn on this part's element is that
+            // part's: only the part's own marks count, see walkMarkup.)
+            if (!props.has(name) && Object.hasOwn(rec.attrs ?? {}, name))
+              found.add(name);
           }
     for (const name of found) if (!t.states.includes(name)) t.states.push(name);
   }
@@ -1342,7 +1345,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, repeats: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, alone?: boolean, borrowed?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean, seenParts?: Record<string, number>}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1492,9 +1495,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         innerCorners: new Set(),
         media: false,
       });
-      if (ownsTarget)
+      // A data attribute another target on the element declares is this
+      // part's only when the part rides on that one: a part always drawn
+      // together with another (a list item on its Item) takes that one's
+      // states; a part also drawn on its own (a Button) never takes the
+      // states of a part drawn on it (a pagination cell's selected). Which
+      // is which is known once the whole census is read.
+      if (ownsTarget) {
+        const mine = targets.get(t);
+        if (named.length === 1) T.alone = true;
         for (const [k, v] of Object.entries(dataAttrs))
-          (T.attrs[k] ??= new Set()).add(v);
+          if (!mine || mine.props.includes(k) || mine.states.includes(k))
+            (T.attrs[k] ??= new Set()).add(v);
+          else ((T.borrowed ??= {})[k] ??= new Set()).add(v);
+      }
       // Core's media surface inside the part (a toast's inverted surface):
       // it sets the text tokens of what it holds from the on-dark color
       // where it is dark and the on-light color where it is light (Core's
@@ -1727,7 +1741,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),
       attrs: Object.fromEntries(
-        Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
+        Object.entries(
+          v.alone
+            ? v.attrs
+            : {
+                ...Object.fromEntries(
+                  Object.entries(v.borrowed ?? {}).map(([k, s]) => [
+                    k,
+                    new Set([...s, ...(v.attrs[k] ?? [])]),
+                  ]),
+                ),
+                ...v.attrs,
+              },
+        ).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
       ...(v.repeats?.size ? {repeats: [...v.repeats]} : {}),
