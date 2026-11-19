@@ -146,6 +146,7 @@ const triggerStyles = stylex.create({
     borderRadius: `max(0px, calc(var(--_dropdown-menu-radius, ${spacingVars['--spacing-2']}) - var(--_dropdown-menu-padding, ${spacingVars['--spacing-1']})))`,
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',

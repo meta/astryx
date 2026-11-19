@@ -77,6 +77,11 @@ const nextConfig = {
       '../../packages/cli/package.json',
       '../../packages/cli/api/**/*.json',
     ],
+    // The MCP endpoint runs `astryx mcp --docs-only` as a child process, which
+    // the tracer cannot follow. scripts/build-mcp-runtime.mjs installs the CLI
+    // and the documented Core there as plain files, so the function carries
+    // the whole folder.
+    '/mcp': ['./.mcp-runtime/**/*'],
   },
   // Packages the CLI imports for other commands but a search never loads
   // (bundlers, compilers, browsers, test runners), and built output and Core's

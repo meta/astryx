@@ -17,7 +17,7 @@ import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
+import {hasRecordedProject, recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
@@ -55,9 +55,8 @@ import {
   addBaseHelpText,
   baseHelpSettings,
   checkRun,
-  commandAvailable,
-  helpBase,
   runResolution,
+  servedSubcommands,
 } from './lib/base-gate.mjs';
 import {commandPath} from './lib/command-path.mjs';
 import {scanRootArgs} from './lib/root-args.mjs';
@@ -122,7 +121,8 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon use',
   'experimental icon new-set',
   'experimental icon new-definition',
-  'experimental render',
+  'experimental export',
+  'experimental import',
   // The groups answer --json with their own help, as the root does.
   'experimental theme',
   'experimental theme editor',
@@ -283,7 +283,7 @@ export async function loadProjectForHelp(argv = process.argv.slice(2), program) 
     if (hasRecordedProject(cwd)) return;
     if (!mayHaveIntegrations(cwd)) {
       // What loading this project would record: no declared command.
-      recordDeclaredCliCommands(cwd, []);
+      recordDeclaredSettings(cwd, []);
       return;
     }
     const {Project} = await import('../../foundation/config/project.mjs');
@@ -408,6 +408,8 @@ const commands = [
     path: './commands/experimental/index.mjs',
     register: 'registerExperimental',
   },
+  // Reads every command: its tools are the commands that answer with --json.
+  {name: 'mcp', path: './commands/mcp.mjs', register: 'registerMcp'},
   // Registered after every other command: the manifest lists the commands in
   // registration order.
   {name: 'manifest', path: './commands/manifest.mjs', register: 'registerManifest'},
@@ -417,8 +419,12 @@ const commands = [
 /** The name each registry entry registers, in registration order. */
 export const COMMAND_NAMES = Object.freeze(commands.map(cmd => cmd.name));
 
-/** Commands whose run reads every other command: the manifest lists them. */
-const READS_EVERY_COMMAND = new Set(['manifest']);
+/**
+ * Commands whose run reads every other command, through the manifest: the
+ * manifest lists them, and mcp serves them as tools. With a stored manifest
+ * (the published package), they read it and load no other command.
+ */
+const READS_EVERY_COMMAND = new Set(['manifest', 'mcp']);
 
 /**
  * The commands a run of the bin loads. Commander dispatches a run to its
@@ -426,8 +432,8 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
  * command: the root help when no stored list ships (a checkout; the published
- * package prints it from the list, see `printsRootHelp`), the manifest
- * when no stored manifest ships (the published package reads its own),
+ * package prints it from the list, see `printsRootHelp`), the manifest and
+ * mcp when no stored manifest ships (the published package reads its own),
  * `help <command>`, an unknown word, and a flag the root does not declare.
  * They print or read the whole list.
  *
@@ -443,7 +449,7 @@ export function commandsForArgs(program, argv) {
   const arg = scan.operand;
   if (arg != null) {
     return commands.some(cmd => cmd.name === arg) &&
-      (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
+      (!READS_EVERY_COMMAND.has(arg) || storedManifest() != null)
       ? new Set([arg])
       : null;
   }
@@ -558,7 +564,9 @@ function listStoredCommands(program, rows) {
   });
 }
 
-const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
+// `mcp` serves an agent until its client goes away: a line on stderr then
+// reaches no one.
+const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs', 'mcp']);
 
 /**
  * Is `cwd` inside the CLI's own source checkout while the CLI runs from it?
@@ -687,7 +695,7 @@ export async function createProgram({argv} = {}) {
       describeOption(new Option('--detail <level>'), [
         'Detail level for component, hook, and docs tree reads (e.g. docs cli/commands/build)',
         {commands: ['theme build'], text: ', and for theme build reports'},
-        '. Lists default to brief',
+        '. Lists default to brief, and a component read to compact',
         {
           commands: ['theme build'],
           text: '; theme build prints one line per built theme unless full, which adds the install example and font recipe',
@@ -809,6 +817,9 @@ export async function createProgram({argv} = {}) {
     if (actionCommand === program) return;
     const fullName = commandPath(actionCommand);
     if (JSON_SUPPORTED.has(fullName)) return;
+    // A renamed command's old name answers with the moved error's envelope.
+    const {RENAMED_PATHS} = await import('./lib/renamed-commands.mjs');
+    if (RENAMED_PATHS.has(fullName)) return;
     process.__xdsJsonHandled = true;
     // A group given a word it does not have reports an unknown subcommand and
     // lists the ones it has, in JSON as in text, even when a flag follows it.
@@ -818,9 +829,7 @@ export async function createProgram({argv} = {}) {
       // The suggestions name only what the run's base serves, so its
       // integrations load first.
       await loadProjectOnce();
-      const names = actionCommand.commands
-        .filter(child => commandAvailable(child, helpBase()))
-        .map(child => child.name());
+      const names = servedSubcommands(actionCommand).map(child => child.name());
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.
@@ -891,7 +900,7 @@ export async function createProgram({argv} = {}) {
       if (hasRecordedProject(cwd)) return;
       if (!mayHaveIntegrations(cwd)) {
         // What loading this project would record: no declared command.
-        recordDeclaredCliCommands(cwd, []);
+        recordDeclaredSettings(cwd, []);
         return;
       }
       const {Project} = await import('../../foundation/config/project.mjs');
@@ -917,11 +926,13 @@ export async function createProgram({argv} = {}) {
    * repository root — see isAstryxPromptInReach), remind the user/agent that
    * setup is missing.
    *
-   * `preAction` decides the line; `postAction` prints it after a command that
-   * succeeds, at most once a day per project, recorded in the per-user state
-   * as the daily hint is, and never under CI. An agent that leaves `init` to
-   * its person then sees it once, not before every command. Doctor reports
-   * the missing setup in its own check every time.
+   * `preAction` prints the line on stderr before the command's own output, at
+   * most once a day per project, recorded in the per-user state as the daily
+   * hint is, and never under CI. An agent that leaves `init` to its person
+   * then sees it once, not before every command. It comes first because
+   * agents often keep only the start of a long answer (`2>&1 | head`), and a
+   * line at the end is then lost for the whole day. Doctor reports the
+   * missing setup in its own check every time.
    *
    * Suppressed in --json: that is machine output with a strict clean stdout+stderr
    * contract (json-shim.test: "error envelopes have empty stderr"), and --json
@@ -932,29 +943,19 @@ export async function createProgram({argv} = {}) {
    * or one that neither installs nor declares Astryx), and inside the CLI's own
    * source checkout when it runs from there.
    */
-  /** @type {{root: string, line: string} | null} */
-  let setupReminder = null;
   /**
-   * Keep the reminder for `root` until the command ends.
+   * Print the reminder for `root` now, before the command's own output, at
+   * most once a day for that project: its first line is the reminder itself
+   * (`2>&1 | head -1` shows it), and one blank line follows it.
    * @param {string} root
    * @param {string} line
    */
   const remindSetup = (root, line) => {
-    setupReminder = {root, line};
+    if (isCi(process.env)) return;
+    if (takeNotice(`${SETUP_REMINDER_KEY}${root}`)) console.error(`${line.trim()}\n`);
   };
-  program.hook('postAction', () => {
-    try {
-      const reminder = setupReminder;
-      setupReminder = null;
-      if (reminder == null || process.exitCode || isCi(process.env)) return;
-      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
-    } catch {
-      // Never let the nudge break a command.
-    }
-  });
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
-      setupReminder = null;
       if (program.opts().json) return; // machine mode — keep --json output clean
       if (SETUP_NUDGE_EXEMPT.has(actionCommand.name())) return;
       const cwd = process.cwd();
@@ -1039,7 +1040,13 @@ export async function createProgram({argv} = {}) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);
-      mod[cmd.register](program, {jsonSupported: JSON_SUPPORTED, version: pkg.version});
+      // A run of one command passes its arguments, so a group can load only
+      // the subcommand they name.
+      await mod[cmd.register](program, {
+        jsonSupported: JSON_SUPPORTED,
+        version: pkg.version,
+        argv: loads != null ? argv : undefined,
+      });
     } catch (e) {
       // Command fails to load but CLI still works
       const reason = /** @type {any} */ (e).message;

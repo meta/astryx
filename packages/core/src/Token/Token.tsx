@@ -217,6 +217,7 @@ const sizeStyles = stylex.create({
   sm: {
     height: `calc(${sizeVars['--size-element-sm']} - 8px)`,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     paddingInline: spacingVars['--spacing-2'],
   },
   md: {

@@ -11,6 +11,8 @@
 
 import {
   astryxIconDefinitions,
+  discoverListsIconSet,
+  definitionRelatives,
   iconLookExport,
   iconSetKey,
   importLine,
@@ -66,10 +68,12 @@ export async function iconSetIcons({cwd, set}) {
  */
 export async function iconSearch(query, {cwd, set, limit}) {
   const {sets, withdrawn, choice} = await loadIconSets(cwd);
+  const noSet = sets.length === 0 && withdrawn.length === 0;
   return rankIconSets(sets, withdrawn, query, {
     set,
     limit,
     looks: projectLooks(choice),
+    discoverListsPacks: noSet && (await discoverListsIconSet(cwd)),
   });
 }
 
@@ -97,11 +101,17 @@ export function projectLooks(choice) {
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
- * @param {{set?: string, limit: number, looks?: Record<string, string>}} options
- *   `looks`: the look each set draws, by `<package>/<set>`
+ * @param {{set?: string, limit: number, looks?: Record<string, string>, discoverListsPacks?: boolean}} options
+ *   `looks`: the look each set draws, by `<package>/<set>`;
+ *   `discoverListsPacks`: discover lists an icon set the project could add
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
-export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
+export function rankIconSets(
+  sets,
+  withdrawn,
+  query,
+  {set, limit, looks = {}, discoverListsPacks = false},
+) {
   let searched = sets;
   if (set != null) {
     searched = setsNamed(sets, set);
@@ -109,7 +119,7 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
   }
   // A withdrawn set is installed: `--list` says why it cannot be used.
   if (sets.length === 0 && withdrawn.length === 0) {
-    return noIconSet(query, limit);
+    return noIconSet(query, limit, discoverListsPacks);
   }
   const ranked = rankIcons(searched, query, {words: true});
   // A word start (`start` for `star`) answers only when nothing matches a
@@ -123,9 +133,35 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
       matchCount: matches.length,
       matches: matches
         .slice(0, limit)
-        .map(match => inLook(match, searched, looks)),
+        .map(match => withRelatives(inLook(match, searched, looks), searched)),
     },
   };
+}
+
+/**
+ * A match with `relatives`: the other definitions in the groups of the
+ * definitions it draws, from Astryx's and its set's own, so a reader sees
+ * the related meanings and picks the one that fits. Absent when there are
+ * none. It never changes the ranking.
+ * @param {import('../icon.type.mjs').IconMatchEntry} match
+ * @param {Parameters<typeof rankIcons>[0]} sets
+ * @returns {import('../icon.type.mjs').IconMatchEntry}
+ */
+function withRelatives(match, sets) {
+  if (match.definitions.length === 0) return match;
+  const set = sets.find(
+    each => each.package === match.package && each.name === match.set,
+  );
+  const relatives = definitionRelatives(match.definitions, [
+    ...astryxIconDefinitions().definitions.map(each => each.doc),
+    ...(set?.definitions ?? []).map(
+      each =>
+        /** @type {{name: string, description: string, group?: string}} */ (
+          each.doc
+        ),
+    ),
+  ]);
+  return relatives.length > 0 ? {...match, relatives} : match;
 }
 
 /**
@@ -161,14 +197,12 @@ function inLook(match, sets, looks) {
  * by name with no set), and how to get a set.
  * @param {string} query
  * @param {number} limit
+ * @param {boolean} discoverListsPacks
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
-function noIconSet(query, limit) {
+function noIconSet(query, limit, discoverListsPacks) {
   const docs = astryxIconDefinitions().definitions.map(each => each.doc);
-  const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
-  const found = answeringMatches(
-    rankIcons([definitionSet(docs)], query, {words: true}),
-  ).map(match => /** @type {(typeof docs)[number]} */ (byId.get(match.id)));
+  const found = definitionMatches(query).map(match => match.doc);
   const ordered = [
     ...found.filter(doc => doc.builtIn),
     ...found.filter(doc => !doc.builtIn),
@@ -180,14 +214,36 @@ function noIconSet(query, limit) {
       matchCount: 0,
       matches: [],
       reason: 'No icon set is installed.',
-      definitions: ordered.slice(0, limit).map(doc => ({
-        name: doc.name,
-        builtIn: doc.builtIn === true,
-        description: doc.description,
-      })),
-      next: noIconSetNext(),
+      definitions: ordered.slice(0, limit).map(doc => {
+        const relatives = definitionRelatives([doc.name], docs);
+        return {
+          name: doc.name,
+          builtIn: doc.builtIn === true,
+          description: doc.description,
+          ...(doc.group ? {group: doc.group} : {}),
+          ...(relatives.length > 0 ? {relatives} : {}),
+        };
+      }),
+      next: noIconSetNext(discoverListsPacks),
     },
   };
+}
+
+/**
+ * The Astryx icon definitions that answer a query, each with its score,
+ * ranked as the search ranks a set's icons (FR6).
+ * @param {string} query
+ * @returns {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc, score: number}>}
+ */
+export function definitionMatches(query) {
+  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+  const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
+  return answeringMatches(
+    rankIcons([definitionSet(docs)], query, {words: true}),
+  ).map(match => ({
+    doc: /** @type {(typeof docs)[number]} */ (byId.get(match.id)),
+    score: match.score,
+  }));
 }
 
 /**

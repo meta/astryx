@@ -7,7 +7,7 @@
  *   renderer, the image and icon rewrites of the template previews, and the
  *   experimental DOCSITE_ICON_SET setting.
  * @output public/landing/template-previews/<slug>.html: each tile's template
- *   as one self-contained page with no script. `#light` or `#dark` in its URL
+ *   as one self-contained page with no script (it drops the render's). `#light` or `#dark` in its URL
  *   sets its color mode. src/generated/landingPreviews.ts: the themes card
  *   store's markup, which uses the site's own StyleX classes. The same
  *   markup as public/landing-previews.json, for a client-side
@@ -92,6 +92,11 @@ const COLOR_MODE_ANCHORS = '<a id="light" hidden></a><a id="dark" hidden></a>';
 
 const SOURCE_BLOCK =
   /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/u;
+/**
+ * The page's script, which the render puts after the embedded source. It
+ * holds no closing script tag of its own: the render escapes that.
+ */
+const PAGE_SCRIPT = /<script>[\s\S]*?<\/script>/u;
 
 /**
  * The page that the renderer renders for a tile: the template inside the
@@ -129,7 +134,8 @@ export function fontStylesheetOf(fontsCss) {
 
 /**
  * Turns a rendered page into a preview document. It drops the embedded
- * source, which only `render --reverse` reads, and loads the theme's fonts.
+ * source, which only `export --reverse` reads, and the page's script, since a
+ * preview is a picture of the page; it loads the theme's fonts.
  * It makes the page fill its frame, and lets the URL fragment set the color
  * mode. Search engines must not index the file.
  * @param {string} html
@@ -144,6 +150,7 @@ export function previewDocument(html, {fontStylesheet}) {
   ].join('');
   return html
     .replace(SOURCE_BLOCK, '')
+    .replace(PAGE_SCRIPT, '')
     .replace('</head>', `${head}</head>`)
     .replace(/<body[^>]*>/u, body => `${body}${COLOR_MODE_ANCHORS}`);
 }
@@ -172,7 +179,8 @@ export default function Preview() {
 
 /**
  * The markup of a rendered page that the landing page shows: the body,
- * without the embedded source that only `render --reverse` reads. The site's
+ * without the embedded source that only `export --reverse` reads, or the
+ * page's script. The site's
  * own stylesheet styles it, so the page's styles are not kept. Its images
  * load at low priority.
  * @param {string} html
@@ -180,7 +188,9 @@ export default function Preview() {
  */
 export function previewMarkup(html) {
   const body = /<body[^>]*>([\s\S]*)<\/body>/u.exec(html)?.[1] ?? '';
-  return finishSnapshotHtml(body.replace(SOURCE_BLOCK, '').trim());
+  return finishSnapshotHtml(
+    body.replace(SOURCE_BLOCK, '').replace(PAGE_SCRIPT, '').trim(),
+  );
 }
 
 /**
