@@ -857,7 +857,7 @@ which squares every pill, and a badge given corners of its own keeps them.
 Rejected: a color set on each badge variant by hand, which drifts from the theme's colors when they change.
 Rejected: small corners on every pill below pill corners, which switches and progress tracks keep as pills until the corners go square.
 
-### DEC-18 — A saved setting's reach is recorded, and growth is named
+### DEC-18 — A saved setting's reach is pinned, and growth is offered
 
 **Reference:** `spec:AST-050/DEC-18`
 **Decider:** maintainers under `josephfarina`'s delegation, `2026-11-18`
@@ -865,25 +865,28 @@ Rejected: small corners on every pill below pill corners, which switches and pro
 A theme the editor made saves settings, and a setting set on one member of a
 group styled alike, or on a group, reaches the group's members. Which parts
 that is can grow after the setting is saved: a later editor that widens a
-group, or a group that gains a member. A build then restyles parts the person
-never named, and the change they ran names nothing of it. So the build owns a
-`reached` field in `<slug>.settings.json`, as it owns `lifted`: for each
-setting that reaches past its own part, the parts it reached. A change whose
-build makes a saved setting reach parts its record does not hold says so in
-its first line, and its result lists each such setting (`widened`, additive
-in the JSON result) with the parts it now also reaches and the command that
-keeps it on its own part; a setting named on a group gets no such command, as
-it follows the group's members. Each growth is named once; the record then
-holds the new reach. A setting with no record yet is recorded as it reaches;
-the parts it reaches past what the editor that saved it gave it are named
-once the same way. `set … --only` on a setting the theme holds replaces the
-group version, so the look leaves the rest of the group, and a set without
+group, or a group that gains a member. A build would then restyle parts the
+person never named. So the build owns a `reached` field in
+`<slug>.settings.json`, as it owns `lifted`: for each setting that reaches
+past its own part, the parts it reached when it was made, by the setting's
+identity. The build, `show` and the previews keep each saved setting at that
+reach. Parts its group gains later are offered, never applied: the change
+whose build finds them lists each such setting once (`offered`, additive in
+the JSON result) with the parts it would also reach and the command that
+sets it again at its whole reach, and `show` lists them in its notes. The
+build records what it has offered (`offered`, a build-owned field like
+`lifted`). A setting saved with no record keeps the reach the editor that
+saved it gave it (its own part, or the whole group for a setting named on a
+group or on a member of inputs or checks), is recorded at its next
+build, and the rest of its group is offered. `set … --only` on a setting
+the theme holds replaces the group version, so the look leaves the rest of
+the group, and a set without
 `--only` replaces the `--only` version. `only` stays part of a setting's
 identity, so a theme saved with both versions still opens and builds as it
 did.
 
-Rejected: widening saved settings with no record, which changes a theme past
-what a command names.
+Rejected: applying a saved setting's grown reach and naming it once, which
+changes a theme past what a command names.
 Rejected: dropping `only` from a setting's identity, which makes a theme
 saved with both versions refuse every command.
 
