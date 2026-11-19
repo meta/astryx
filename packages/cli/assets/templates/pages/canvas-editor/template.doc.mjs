@@ -32,7 +32,7 @@ export const doc = {
     File: 'file',
     FoldVertical: 'alignMiddle',
     Frame: 'frame',
-    Grip: 'drag',
+    Grip: 'halftone',
     Group: 'group',
     Image: 'image',
     Italic: 'italic',

@@ -44,7 +44,7 @@ export const doc = {
     Search: 'search',
     SlidersHorizontal: 'adjustments',
     Table: 'table',
-    Table2: 'group',
+    Table2: 'groupRows',
     UserPlus: 'userAdd',
     X: 'close',
   },

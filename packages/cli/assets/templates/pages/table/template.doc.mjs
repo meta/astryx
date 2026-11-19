@@ -24,7 +24,7 @@ export const doc = {
     DocumentDuplicateIcon: 'copy',
     EllipsisHorizontalIcon: 'moreHorizontal',
     EnvelopeIcon: 'mail',
-    NoSymbolIcon: 'error',
+    NoSymbolIcon: 'block',
     PencilIcon: 'edit',
     TrashIcon: 'delete',
     UserPlusIcon: 'userAdd',

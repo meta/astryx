@@ -26,7 +26,7 @@ export const doc = {
     FireIcon: 'fire',
     GiftIcon: 'gift',
     GlobeAltIcon: 'globe',
-    HomeModernIcon: 'home',
+    HomeModernIcon: 'house',
     MagnifyingGlassIcon: 'search',
     MoonIcon: 'moon',
     ReceiptPercentIcon: 'discount',

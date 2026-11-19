@@ -14,6 +14,7 @@ import {describe, expect, it} from 'vitest';
 import {
   DEFAULT_PLACEHOLDER_LOOK,
   fillTemplatePlaceholders,
+  meaningWithFallbacks,
   PLACEHOLDER_MODULE,
   placeholderLook,
   placeholderMeaning,
@@ -208,5 +209,28 @@ describe('placeholders in template search', () => {
     const bound = componentNameBound(raw) ?? [];
     for (const name of parsedComponents(raw)) expect(bound).toContain(name);
     expect(bound).toContain(placeholderSource('delete', '24/outline')?.export);
+  });
+});
+
+describe('meaning fallbacks', () => {
+  it('names a fallback that is itself a table meaning and an icon definition', () => {
+    const definitions = astryxDefinitionsByName();
+    const bad = Object.entries(table.meanings)
+      .filter(([, entry]) => entry.fallback)
+      .filter(
+        ([, entry]) =>
+          !Object.hasOwn(
+            table.meanings,
+            /** @type {string} */ (entry.fallback),
+          ) || !definitions.has(/** @type {string} */ (entry.fallback)),
+      )
+      .map(([meaning]) => meaning);
+    expect(bad).toEqual([]);
+  });
+
+  it('tries a meaning, then its fallback', () => {
+    expect(meaningWithFallbacks('verified')).toEqual(['verified', 'success']);
+    expect(meaningWithFallbacks('delete')).toEqual(['delete']);
+    expect(meaningWithFallbacks('notAMeaning')).toEqual(['notAMeaning']);
   });
 });

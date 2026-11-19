@@ -14,7 +14,7 @@ export const doc = {
     ArrowPathIcon: 'refresh',
     ArrowsUpDownIcon: 'arrowsUpDown',
     CheckCircleIcon: 'success',
-    ClipboardDocumentCheckIcon: 'clipboard',
+    ClipboardDocumentCheckIcon: 'checklist',
     FunnelIcon: 'funnel',
     InboxIcon: 'inbox',
     MagnifyingGlassIcon: 'search',
