@@ -16,6 +16,7 @@ import {iconAdd} from './add/add.mjs';
 import {iconNewDefinition} from './new-definition/new-definition.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {answeringMatches, rankIcons, scoreIcon} from './_records.mjs';
+import {exportIconIndex, rankIconIndex} from './search/icon-index.mjs';
 import {
   completeGlyphs,
   definitionSource,
@@ -915,6 +916,38 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     expect((await search('dwelling')).matches[0]).toMatchObject({
       id: 'home',
       meaningImport: "import {HomeIcon} from '@acme/glyphs';",
+    });
+  });
+
+  it("names the set's own definition for a name it replaced", async () => {
+    const data = glyphsData();
+    cwd = writeIconSetProject(path.join(tmp, 'replaced'), {
+      packages: [
+        {
+          data: {...data, map: {...data.map, meteor: 'x'}},
+          definitions: {
+            orbit: definitionSource('orbit', {replaces: 'planet'}),
+            meteor: definitionSource('meteor', {replaces: 'orbit'}),
+          },
+        },
+      ],
+    });
+    const meteor = "import {XIcon as MeteorIcon} from '@acme/glyphs';";
+    for (const old of ['planet', 'orbit']) {
+      expect((await search(old)).matches[0], old).toMatchObject({
+        id: 'x',
+        meaningImport: meteor,
+      });
+      // A stored index carries the old names, so it names the same one.
+      const stored = await rankIconIndex(old, await exportIconIndex({cwd}));
+      expect(stored.data.matches[0], old).toMatchObject({
+        id: 'x',
+        meaningImport: meteor,
+      });
+    }
+    expect((await search('close')).matches[0]).toMatchObject({
+      id: 'x',
+      meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
     });
   });
 

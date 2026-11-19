@@ -31,6 +31,12 @@ import {
 } from '../_records.mjs';
 
 /**
+ * The old names of a set's own definitions: a live set's `definitionAliases`,
+ * or a stored set's `replacedDefinitions`.
+ * @typedef {Pick<Parameters<typeof rankIcons>[0][number], 'definitionAliases'> & {replacedDefinitions?: Array<{name: string, definition: string}>}} Replacements
+ */
+
+/**
  * Every icon of one set, by id: `--set <name> --all-icons`, so an author can read
  * a whole library's ids, words, and the definitions each icon draws.
  * @param {{cwd: string, set: string}} options
@@ -107,7 +113,7 @@ function withMeaningImports(matches, query, sets) {
     const key = own.length > 0 ? set : null;
     let rank = ranks.get(key);
     if (!rank) {
-      rank = meaningRank(query, own);
+      rank = meaningRank(query, set);
       ranks.set(key, rank);
     }
     return rank;
@@ -132,20 +138,25 @@ function withMeaningImports(matches, query, sets) {
 /**
  * The order of definition names for a query: the definitions that the
  * query matches, best first, then the built-in ones, then the rest. A set's
- * own definitions rank with Astryx's; on a shared name, Astryx's counts, as
- * in the icon ranking.
+ * own definitions rank with Astryx's, by their names, the names they
+ * replaced, and their words; on a shared name, Astryx's counts, as in the
+ * icon ranking.
  * @param {string} query
- * @param {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc}>} own
+ * @param {Parameters<typeof rankIcons>[0][number] | undefined} set the
+ *   match's set
  * @returns {(name: string) => number}
  */
-function meaningRank(query, own) {
+function meaningRank(query, set) {
+  const own = set?.definitions ?? [];
   const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
   const names = new Set(astryx.map(doc => doc.name));
   const docs = [
     ...astryx,
     ...own.map(each => each.doc).filter(doc => !names.has(doc.name)),
   ];
-  const matched = definitionMatches(query, docs).map(match => match.doc.name);
+  const matched = definitionMatches(query, docs, set).map(
+    match => match.doc.name,
+  );
   const place = new Map(matched.map((name, index) => [name, index]));
   const builtIn = new Set(
     astryx.filter(doc => doc.builtIn).map(doc => doc.name),
@@ -318,15 +329,18 @@ function noIconSet(query, limit, discoverListsPacks) {
  * the search ranks a set's icons (FR6): Astryx's, or the `docs` given.
  * @param {string} query
  * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} [docs]
+ * @param {Replacements} [replacements] the old names of a set's own
+ *   definitions among `docs`, so that a name they replaced answers too
  * @returns {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc, score: number}>}
  */
 export function definitionMatches(
   query,
   docs = astryxIconDefinitions().definitions.map(each => each.doc),
+  replacements = {},
 ) {
   const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
   return answeringMatches(
-    rankIcons([definitionSet(docs)], query, {words: true}),
+    rankIcons([definitionSet(docs, replacements)], query, {words: true}),
   ).map(match => ({
     doc: /** @type {(typeof docs)[number]} */ (byId.get(match.id)),
     score: match.score,
@@ -345,15 +359,20 @@ const definitionId = name =>
  * definition, so the icon ranking finds a definition by its name, its name
  * as words, and its own words, exactly as it finds a set's icon. The docs
  * are the set's own definitions too, so a set's definition answers to its
- * words as Astryx's do.
+ * words as Astryx's do. The set's old definition names come along, so a
+ * name that one of its definitions replaced answers as Astryx's old names
+ * do.
  * @param {import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc[]} docs
+ * @param {Replacements} replacements
  * @returns {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet}
  */
-function definitionSet(docs) {
+function definitionSet(docs, {definitionAliases, replacedDefinitions}) {
   return /** @type {any} */ ({
     name: 'definitions',
     package: '@astryxdesign/cli',
     definitions: docs.map(doc => ({doc})),
+    ...(definitionAliases ? {definitionAliases} : {}),
+    ...(replacedDefinitions ? {replacedDefinitions} : {}),
     data: {
       schemaVersion: 1,
       module: '@astryxdesign/cli',
