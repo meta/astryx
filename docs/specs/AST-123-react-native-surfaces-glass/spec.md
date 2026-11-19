@@ -92,12 +92,14 @@ and a token fill.
   native views that render it stay internal behind the library's components:
   - `Button` and `IconButton` take `surface`: `plain` (the default) keeps the
     paint their own record gives them, and `glass` draws chrome glass (FR7).
-    `surface` is a per-call-site appearance choice: each use picks native
-    glass or the plain look for its place (DEC-7).
+    `surface` is a per-call-site appearance choice: each use picks the glass
+    or the plain look for its place (DEC-7). It is a platform prop
+    typed from the shared contracts (`spec:AST-112/FR5`).
   - The bars, bar buttons, tab accessory, and search field paint chrome glass,
-    and the overlays the library builds and floating surfaces paint a
-    material; each takes its look from the theme's `material` member and the
-    accessibility settings (FR7, OQ5).
+    and the overlays the library builds and floating surfaces paint the
+    material FR7 chooses; each takes its look from the theme's `material`
+    member, the accessibility settings and, for floating surfaces and
+    overlays, `surfaceMaterial` (FR7, OQ5).
   - Theme intent: the theme's `material` member in `defineNativeTheme`, durable
     or in a `platforms.ios` or `platforms.android` entry (`spec:AST-082/FR10`),
     sets the look for every surface (FR7).
@@ -445,4 +447,5 @@ still decide how a `glass` surface paints (FR7).
   value it wrote, so the second bar to detach restores the first bar's value.
 - **OQ5 — Which surface-specific props do the bars, overlays, and floating
   surfaces take?** (`human-api`) Until that is decided, they take their look
-  from the theme's `material` member and the accessibility settings (FR7).
+  from the theme's `material` member, the accessibility settings and, for
+  floating surfaces and overlays, `surfaceMaterial` (FR7).
