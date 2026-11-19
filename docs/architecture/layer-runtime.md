@@ -266,8 +266,10 @@ time is kept.
 Once the anchor has left the viewport the runtime pins the layer's
 self-alignment `unsafe` toward the anchor, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. A layer that
-no person is using is hidden while its anchor is out of view, and the pin
-holds a layer that a person is using (`spec:AST-059` FR5; FR5 gap there).
+no person is using is hidden while the viewport clips its anchor, and the pin
+holds a layer that a person is using. Inside a scrolling panel, the browser
+hides a layer whose anchor the panel clips, in use or not (`spec:AST-059`
+FR5; FR5 gap there).
 Components pass no fallbacks of their own to an anchor-mode layer.
 
 Every one of these inputs is resolved by the browser's style and layout in the
