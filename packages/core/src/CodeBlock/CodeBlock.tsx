@@ -200,12 +200,13 @@ const styles = stylex.create({
   headerTitle: {
     display: 'flex',
     alignItems: 'center',
-    // The root is a <pre>, so the title would inherit its unbroken spacing
-    // and run under the header's controls. It wraps instead, at a space or,
-    // in a long file name, anywhere.
+    // The root is a <pre>, so the title inherits `white-space: pre` and
+    // stays on one line. A long title then runs under the header's controls.
+    // It wraps instead and keeps its own spacing.
     minWidth: 0,
-    whiteSpace: 'normal',
+    whiteSpace: 'pre-wrap',
     overflowWrap: 'anywhere',
+    '--_astryx-text-overflow-wrap': 'anywhere',
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
     fontWeight: fontWeightVars['--font-weight-medium'],
