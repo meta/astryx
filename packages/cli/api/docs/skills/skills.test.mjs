@@ -156,6 +156,42 @@ describe('docs skills', () => {
     expect(block.data.text).toMatch(/^<!-- ASTRYX:START -->/u);
   });
 
+  it('a skill on a placed guide reads that guide, and init writes it', async () => {
+    withIntegration({
+      'acme.doc.mjs': `export default {
+  type: 'namespace',
+  name: 'acme',
+  title: 'Acme',
+  summary: 'Everything about the Acme kit.',
+  slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}},
+};
+`,
+      'deploy.doc.mjs': `export default {
+  type: 'generic',
+  name: 'deploy',
+  title: 'Deploy the Acme kit',
+  description: 'How to deploy the Acme kit.',
+  placement: {parent: 'namespace:acme', slot: 'guides'},
+  skill: {name: 'acme-deploy', description: 'Use when you deploy a page that uses the Acme kit.'},
+  sections: [{id: 'steps', title: 'Steps', content: [{type: 'prose', text: 'Build, then ship the bundle.'}]}],
+};
+`,
+    });
+    const list = await docs('skills', undefined, {cwd: project});
+    expect(list.data.map(each => each.name)).toContain('acme-deploy');
+    const one = await docs('skills/acme-deploy', undefined, {cwd: project});
+    if (one.type !== 'docs.skill') throw new Error(one.type);
+    expect(one.data.text).toContain('# Deploy the Acme kit');
+    expect(one.data.text).toContain('Build, then ship the bundle.');
+    await init({to: 'skills'}, {cwd: project});
+    expect(read('.agents/skills/acme-deploy/SKILL.md')).toContain(
+      'Build, then ship the bundle.',
+    );
+    expect(read('.agents/skills/astryx-project/SKILL.md')).toContain(
+      'skills/acme-deploy',
+    );
+  });
+
   it('names the skills when the name is unknown', async () => {
     withIntegration({'entities.doc.mjs': skillDoc()});
     await expect(
