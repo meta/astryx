@@ -82,6 +82,7 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
+ * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, icons at 3:1, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {PaletteColorReader} reader
  * @property {(token: string, mode: PaletteMode) => string | undefined} [settingOf] The value a token is set to exactly in a mode, as written.
@@ -1611,18 +1612,21 @@ export function mapPalette(candidate, dials, fills, context) {
     put(
       names.icon,
       f.id,
-      each(m => {
-        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
-        const from = /** @type {StopRef} */ (fill[m]);
-        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
-        if (
-          own &&
-          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
-        ) {
-          return {...from, color: own};
-        }
-        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
-      }),
+      context.editor
+        ? each(m => {
+            const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+            const from = /** @type {StopRef} */ (fill[m]);
+            const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+            if (
+              own &&
+              Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >=
+                NON_TEXT
+            ) {
+              return {...from, color: own};
+            }
+            return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+          })
+        : text,
     );
     if (names.onMuted) {
       const onMuted = names.onMuted;

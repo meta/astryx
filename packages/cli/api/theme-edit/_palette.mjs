@@ -697,6 +697,8 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
   return {
     base,
     has: token => token in tokenDefaults,
+    // The editor's own rules (Core's context.editor).
+    editor: true,
     reader: {
       rgb: value =>
         /** @type {[number, number, number] | null} */ (parseColor(value)),

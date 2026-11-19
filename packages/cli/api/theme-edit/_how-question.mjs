@@ -22483,11 +22483,9 @@ export function draftAnswer(ctx, env, question) {
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       // A color dial counts when the step changes the shades made from it
       // (a warm gray has a little hue to take out), as set measures it.
-      const hasColor = seedsInEffect(
-        ctx.project.cwd,
-        env.slug,
-        env.data,
-      ).some(f => vibrancyMoves(f.dial, f.seed, 0, 100));
+      const hasColor = seedsInEffect(ctx.project.cwd, env.slug, env.data).some(
+        f => vibrancyMoves(f.dial, f.seed, 0, 100),
+      );
       const help =
         'vibrancy sets how saturated every generated color is (0 is gray, 100 the most vivid, 50 the default)';
       // Every accent the theme shows moves the way asked in saturation.
