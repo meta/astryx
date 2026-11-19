@@ -17652,58 +17652,67 @@ export function draftAnswer(ctx, env, question) {
         ? c.lengths.map(v => lengthPx(String(v))).find(n => n != null && n > 0)
         : undefined;
       const typed = typedPx != null ? `${typedPx}px` : null;
+      // ("warning text 10px bold": a size and a weight said together are
+      // both written, on each part.)
+      const props = [
+        ...(size ? ['font-size'] : []),
+        ...(c.aspects.includes('weight') || !size ? ['font-weight'] : []),
+      ];
+      /** @param {{on: string, when: string}} x @param {string} prop */
+      const linesFor = (x, prop) => {
+        // (Its text parts' tokens: the ones inside it that set the
+        // property, never its own controls or icons.)
+        const rec = C.MAP[one(x.on)];
+        const textInside = rec?.own?.[prop]
+          ? []
+          : (rec?.contains ?? []).filter(
+              (/** @type {string} */ k) =>
+                C.MAP[k]?.own?.[prop] &&
+                !(grouped['button-like'] ?? []).includes(k) &&
+                !/-icon$/.test(k),
+            );
+        const inner = [
+          ...new Set(
+            textInside.flatMap((/** @type {string} */ k) =>
+              Object.keys(C.MAP[k].own[prop].tokens ?? {}),
+            ),
+          ),
+        ].filter(t => t in TOKENS);
+        const held = [...heldTextTokens(one(x.on), prop), ...inner].filter(t =>
+          prop === 'font-size'
+            ? /^--(?:text-[a-z0-9-]+-size|font-size-[a-z0-9-]+)$/.test(t)
+            : /^--(?:text-[a-z0-9-]+-weight|font-weight-[a-z]+)$/.test(t),
+        );
+        const isSize = prop === 'font-size';
+        if (!held.length)
+          return [
+            isSize
+              ? set(prop, typed ?? (c.dir === 'less' ? 'smaller' : 'larger'), x)
+              : set(prop, c.neg ? 'normal' : 'bold', x),
+          ];
+        // (Each token its text reads, from its own size.)
+        return held.map(tok => {
+          const now = lengthPx(String(resolvedValue(tok) || ''));
+          const px = typedPx ?? (now ?? 14) * (c.dir === 'less' ? 0.875 : 1.15);
+          return isSize
+            ? set(tok, `${Math.round((px * 1000) / 16) / 1000}rem`, x)
+            : set(tok, c.neg ? '400' : '700', x);
+        });
+      };
+      // (Only the parts a line is written for are named.)
+      const offered = shows
+        .slice(0, 4)
+        .map(x => ({x, lines: props.flatMap(prop => linesFor(x, prop))}))
+        .filter(o => o.lines.length);
       push({
-        text: `no part draws only a status's text, so the whole theme's text is left as it is${shows.length ? `; the parts that show ${word} text, each in its ${word} look: ${shows.map(x => x.on).join(', ')} (one line each${typed ? `, each set to ${typed}` : ''})` : ''}`,
+        text: `no part draws only a status's text, so the whole theme's text is left as it is${offered.length ? `; the parts that show ${word} text, each in its ${word} look: ${offered.map(o => o.x.on).join(', ')} (one line each${typed ? `, each set to ${typed}` : ''})` : ''}`,
         // (A part whose text is drawn by elements inside it, a banner's
         // title and description, takes the token its text reads.)
-        options: shows.slice(0, 4).map(x => {
-          const prop = size ? 'font-size' : 'font-weight';
-          // (Its text parts' tokens: the ones inside it that set the
-          // property, never its own controls or icons.)
-          const rec = C.MAP[one(x.on)];
-          const textInside = rec?.own?.[prop]
-            ? []
-            : (rec?.contains ?? []).filter(
-                (/** @type {string} */ k) =>
-                  C.MAP[k]?.own?.[prop] &&
-                  !(grouped['button-like'] ?? []).includes(k) &&
-                  !/-icon$/.test(k),
-              );
-          const inner = [
-            ...new Set(
-              textInside.flatMap((/** @type {string} */ k) =>
-                Object.keys(C.MAP[k].own[prop].tokens ?? {}),
-              ),
-            ),
-          ].filter(t => t in TOKENS);
-          const held = [...heldTextTokens(one(x.on), prop), ...inner].filter(
-            t =>
-              size
-                ? /^--(?:text-[a-z0-9-]+-size|font-size-[a-z0-9-]+)$/.test(t)
-                : /^--text-[a-z0-9-]+-weight$/.test(t),
-          );
-          if (!held.length)
-            return [
-              size
-                ? set(
-                    prop,
-                    typed ?? (c.dir === 'less' ? 'smaller' : 'larger'),
-                    x,
-                  )
-                : set(prop, c.neg ? 'normal' : 'bold', x),
-            ];
-          // (Each token its text reads, from its own size.)
-          return held.map(tok => {
-            const now = lengthPx(String(resolvedValue(tok) || ''));
-            const px =
-              typedPx ?? (now ?? 14) * (c.dir === 'less' ? 0.875 : 1.15);
-            return size
-              ? set(tok, `${Math.round((px * 1000) / 16) / 1000}rem`, x)
-              : set(tok, c.neg ? '400' : '700', x);
-          });
-        }),
+        options: offered.map(o => o.lines),
         offer: true,
-        lookup: shows.length ? `${HOW} ${shows[0].on}` : `${HOW} --list parts`,
+        lookup: offered.length
+          ? `${HOW} ${offered[0].x.on}`
+          : `${HOW} --list parts`,
       });
       continue;
     }

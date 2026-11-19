@@ -134,6 +134,28 @@ describe('plain looks', () => {
       );
     expect(rs.some(r => /^not used/.test(r.text))).toBe(false);
   });
+  it("a status's text at a size and a weight writes both, and names only the parts it writes", async () => {
+    for (const [ask, writes] of [
+      ['warning text 10px bold', /size|font-size/],
+      ['success text bold', /weight/],
+    ]) {
+      const r = (await how('q0', String(ask))).find(
+        x => /no part draws only/.test(x.text) && x.commands.length,
+      );
+      const lines = (r?.commands ?? []).filter(c => /^set /.test(c));
+      expect(lines.join(' '), String(ask)).toMatch(/weight (?:bold|700)/);
+      expect(lines.join(' '), String(ask)).toMatch(writes);
+      // (Every part the answer names gets a line.)
+      const named = /each in its \w+ look: ([\w, -]+) \(/.exec(
+        String(r?.text),
+      )?.[1];
+      for (const part of String(named).split(', '))
+        expect(
+          lines.some(c => c.includes(`--on ${part} `)),
+          `${ask}: ${part}`,
+        ).toBe(true);
+    }
+  });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [
       ['success alerts with smaller text', 'success'],
