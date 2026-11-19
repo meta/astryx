@@ -218,7 +218,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input, before any tokens; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display at the start of the input, before any tokens; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {

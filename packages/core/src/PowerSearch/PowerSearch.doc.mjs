@@ -96,7 +96,7 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input, before any filter tokens; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element. Forwarded to the internal Tokenizer.',
+        'Icon to display at the start of the input, before any filter tokens; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element. Forwarded to the internal Tokenizer.',
       slotElements: [{__element: 'Icon', props: {icon: 'search', size: 'sm'}}],
     },
     {
@@ -561,7 +561,7 @@ export const docsDense = {
     isDisabled: 'Disables entire component.',
     status: 'Validation status object w/ type + optional message.',
     startIcon:
-      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+      'Icon at input start, before filter tokens. Forwarded to internal Tokenizer; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip shows on status icon.',
     maxTokenLength: 'Max char length for filter value display in tokens.',
