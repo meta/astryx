@@ -22,6 +22,7 @@ import {readDeclaredDependencies} from '../integrations/declared-dependencies.mj
 import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 import {findManifestPaths} from '../integrations/manifest-paths.mjs';
 import {babelParse} from '../runtime/lazy-dependencies.mjs';
+import {isCoreModule} from './core-elements.mjs';
 
 /** @type {Map<string, string>} */
 const declarationCache = new Map();
@@ -387,10 +388,7 @@ function coreModuleFile(coreRoot, fromFile, specifier) {
       path.dirname(fromFile),
       specifier.replace(/\.[cm]?jsx?$/, ''),
     );
-  } else if (
-    specifier === CORE_PACKAGE ||
-    specifier.startsWith(`${CORE_PACKAGE}/`)
-  ) {
+  } else if (isCoreModule(specifier)) {
     base = path.join(
       coreRoot,
       'src',
@@ -804,6 +802,7 @@ function typeWideningInterfaces(coreRoot, pascalName, prop) {
 }
 
 const CORE_PACKAGE = '@astryxdesign/core';
+
 /** A project's own TypeScript file, declarations included. */
 const SOURCE_FILE = /\.[cm]?tsx?$/;
 /** A declaration file, the only TypeScript an installed package publishes. */
@@ -829,15 +828,17 @@ const CANDIDATE_LIMIT = 2_000;
  * file whose text names Core in a `declare module` cannot be read or parsed,
  * or more than {@link CANDIDATE_LIMIT} files name it: the keys may then miss
  * some, and a caller must not take them as the whole set. Only those files
- * are parsed, so a broken page elsewhere changes nothing.
+ * are parsed, so a broken page elsewhere changes nothing. `files` are the
+ * files that augment Core, for a caller that reads them with TypeScript.
  * @param {string} projectDir the folder of the project's package.json
  * @param {string} file the page, whose tsconfig says what else TypeScript reads
- * @returns {{keys: Map<string, Set<string>>, complete: boolean}}
+ * @returns {{keys: Map<string, Set<string>>, complete: boolean, files: string[]}}
  */
 export function projectAugmentations(projectDir, file) {
   /** @type {Map<string, Set<string>>} */
   const keys = new Map();
-  const state = {candidates: 0, complete: true};
+  /** @type {{candidates: number, complete: boolean, files: string[]}} */
+  const state = {candidates: 0, complete: true, files: []};
   const roots = programRootsFor(file) ?? [];
   if (roots.some(root => placeInWalk(projectDir, root) === 'outside'))
     state.complete = false;
@@ -847,19 +848,18 @@ export function projectAugmentations(projectDir, file) {
     if (placeInWalk(projectDir, root) !== 'skipped') continue;
     const found = statOrNull(root);
     if (found?.isDirectory()) readTree(root, SOURCE_FILE, keys, state);
-    else if (
-      found?.isFile() &&
-      SOURCE_FILE.test(root) &&
-      readAugmentations(root, keys) === 'failed'
-    )
-      state.complete = false;
+    else if (found?.isFile() && SOURCE_FILE.test(root)) {
+      const read = readAugmentations(root, keys);
+      if (read === 'failed') state.complete = false;
+      else if (read === 'read') state.files.push(root);
+    }
   }
   if (state.complete) readTree(projectDir, SOURCE_FILE, keys, state);
   for (const dir of astryxDependencyDirs(projectDir)) {
     if (!state.complete) break;
     readTree(dir, DECLARATION_FILE, keys, state);
   }
-  return {keys, complete: state.complete};
+  return {keys, complete: state.complete, files: state.files};
 }
 
 /**
@@ -900,7 +900,7 @@ function astryxDependencyDirs(projectDir) {
  * @param {string} root
  * @param {RegExp} pattern
  * @param {Map<string, Set<string>>} keys
- * @param {{candidates: number, complete: boolean}} state
+ * @param {{candidates: number, complete: boolean, files: string[]}} state
  */
 function readTree(root, pattern, keys, state) {
   const folders = [root];
@@ -934,6 +934,7 @@ function readTree(root, pattern, keys, state) {
           state.complete = false;
           return;
         }
+        state.files.push(file);
       }
     }
   }
@@ -1008,8 +1009,7 @@ function readAugmentations(file, keys) {
     )
       continue;
     const target = statement.id.value;
-    if (target !== CORE_PACKAGE && !target.startsWith(`${CORE_PACKAGE}/`))
-      continue;
+    if (!isCoreModule(target)) continue;
     for (const member of statement.body?.body ?? []) {
       const declaration =
         member.type === 'ExportNamedDeclaration' ? member.declaration : member;

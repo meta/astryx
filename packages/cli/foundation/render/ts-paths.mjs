@@ -17,7 +17,7 @@
  *
  * @position foundation/render — used by page-worker.mjs, embedded-imports.mjs,
  *   the theme build's module loader (api/theme/build/build.mjs), and Doctor's
- *   icon-imports scan (api/doctor/_adapter.mjs)
+ *   icon-imports and Core props scans (api/doctor/_adapter.mjs)
  */
 
 import * as fs from 'node:fs';
@@ -369,6 +369,28 @@ export function programRootsFor(file) {
     if (typeof root === 'string') roots.push(configPath(root, config.typeRootsDir, configDir));
   }
   return roots;
+}
+
+/**
+ * The compiler options of the config TypeScript reads for a file (see
+ * configFor), through its `extends`, with `typeRoots` resolved to absolute
+ * folders, and that config's path, so files that share a config can share
+ * one program. Null when no config applies.
+ * @param {string} file absolute
+ * @returns {{file: string, options: Record<string, unknown>} | null}
+ */
+export function compilerOptionsFor(file) {
+  const found = configFor(file);
+  if (!found) return null;
+  const {config} = found;
+  const configDir = path.dirname(found.file);
+  const options = {...config.options};
+  if (Array.isArray(options.typeRoots)) {
+    options.typeRoots = options.typeRoots
+      .filter(root => typeof root === 'string')
+      .map(root => configPath(root, config.typeRootsDir, configDir));
+  }
+  return {file: found.file, options};
 }
 
 /**
