@@ -23,14 +23,4 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Order Detail',
-  icons: {
-    ArrowLeftIcon: 'arrowLeft',
-    CalendarIcon: 'calendar',
-    FlagIcon: 'flag',
-    FunnelIcon: 'funnel',
-    HandThumbUpIcon: 'thumbsUp',
-    HeartIcon: 'heart',
-    PencilSquareIcon: 'compose',
-    ViewColumnsIcon: 'viewColumns',
-  },
 };

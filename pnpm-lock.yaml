@@ -884,6 +884,9 @@ importers:
       '@astryxdesign/lab':
         specifier: '*'
         version: link:../lab
+      '@astryxdesign/template-icons':
+        specifier: '*'
+        version: link:../template-icons
       '@astryxdesign/theme-neutral':
         specifier: '*'
         version: link:../themes/neutral

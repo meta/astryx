@@ -208,3 +208,105 @@ export function fillTemplatePlaceholders(source) {
   }
   return {source: out, declared};
 }
+
+/**
+ * The meanings a source's placeholder imports name, in import order.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function placeholderMeaningsIn(source) {
+  if (!source.includes(PLACEHOLDER_MODULE)) return [];
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseTemplateSource(source);
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const meanings = [];
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    if (placeholderLook(node.source.value) == null) continue;
+    for (const specifier of node.specifiers) {
+      if (specifier.type !== 'ImportSpecifier') continue;
+      const meaning = placeholderMeaning(
+        specifier.imported.name ?? specifier.imported.value,
+      );
+      if (meaning && !meanings.includes(meaning)) meanings.push(meaning);
+    }
+  }
+  return meanings;
+}
+
+/**
+ * The problems in templates' placeholder imports, each with its fix: an
+ * import from a path that is not a look, a name that is not `<Meaning>Icon`
+ * for an icon definition, a meaning the table does not draw in that look, and
+ * an `icons` declaration left in the descriptor of a template that imports
+ * placeholders.
+ * @param {Array<{id: string, source: string, declared?: Record<string, string>}>} templates
+ * @param {{has: (name: string) => boolean}} definitions
+ * @returns {string[]}
+ */
+export function templatePlaceholderProblems(templates, definitions) {
+  const table = placeholderTable();
+  /** @type {string[]} */
+  const problems = [];
+  for (const {id, source, declared} of templates) {
+    if (!source.includes(PLACEHOLDER_MODULE)) continue;
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parseTemplateSource(source);
+    } catch {
+      continue;
+    }
+    let uses = false;
+    for (const node of ast.program.body) {
+      if (node.type !== 'ImportDeclaration') continue;
+      const module = node.source.value;
+      if (
+        module !== PLACEHOLDER_MODULE &&
+        !module.startsWith(`${PLACEHOLDER_MODULE}/`)
+      ) {
+        continue;
+      }
+      uses = true;
+      const look = placeholderLook(module, table);
+      if (look == null) {
+        problems.push(
+          `${id}: ${module} is not a look. Fix: import from ${PLACEHOLDER_MODULE} (24 outline) or its /24/solid, /20/solid, /16/solid or /lucide path.`,
+        );
+        continue;
+      }
+      for (const specifier of node.specifiers) {
+        const name =
+          specifier.type === 'ImportSpecifier'
+            ? (specifier.imported.name ?? specifier.imported.value)
+            : specifier.local.name;
+        const meaning =
+          specifier.type === 'ImportSpecifier'
+            ? placeholderMeaning(name)
+            : null;
+        if (!meaning || !definitions.has(meaning)) {
+          problems.push(
+            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon definition (astryx experimental icon <words> finds it), or add the definition in the same change.`,
+          );
+          continue;
+        }
+        if (!placeholderSource(meaning, look, table)) {
+          problems.push(
+            `${id}: ${name} has no ${look} icon in the template icon table. Fix: add one for "${meaning}" to packages/cli/assets/icons/template-icons.json and regenerate the package, or import it from another look.`,
+          );
+        }
+      }
+    }
+    if (uses && declared && Object.keys(declared).length > 0) {
+      problems.push(
+        `${id}: its descriptor still declares icons. Fix: remove \`icons\`; each placeholder import names its meaning.`,
+      );
+    }
+  }
+  return problems;
+}
