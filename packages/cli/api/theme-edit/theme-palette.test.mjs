@@ -1279,6 +1279,23 @@ describe('color settings, refused well', () => {
     expect(show.data.settings.some(s => s.thing === 'vibrancy')).toBe(false);
   });
 
+  it('names a hand edit made between two shows in one process', async () => {
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    expect(
+      (await themeEditShow('p', {cwd})).data.colorNotes.join(' '),
+    ).not.toContain('was edited by hand');
+    const before = read('tokens/p.palette.ts');
+    fs.writeFileSync(
+      file('tokens/p.palette.ts'),
+      before.replace('#7c3aed', '#7c3aee'),
+    );
+    expect(
+      (await themeEditShow('p', {cwd})).data.colorNotes.join(' '),
+    ).toContain('p.palette.ts was edited by hand');
+    fs.writeFileSync(file('tokens/p.palette.ts'), before);
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
   it('names the value a color replaced, and saves the value trimmed', async () => {
     await themeEditSet('p', 'accent', '#dc2626', {cwd});
     const r = await themeEditSet('p', 'accent', ' #16a34a\n', {cwd});

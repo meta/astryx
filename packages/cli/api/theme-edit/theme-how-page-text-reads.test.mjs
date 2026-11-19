@@ -91,6 +91,20 @@ describe('page text reads', () => {
     );
   }, 240_000);
 
+  it('a text color typed for the mode beside the page is kept, never overwritten', async () => {
+    for (const [ask, typed] of [
+      [
+        'page background #ffffff in dark mode, text #111111 in dark mode',
+        '#111111',
+      ],
+      ['in dark mode, page #f5f5f5 and text #1a1a1a', '#1a1a1a'],
+    ]) {
+      const lines = (await how(ask)).flatMap(r => r.commands).join('\n');
+      expect(lines).toContain(typed);
+      expect(lines).not.toMatch(/--color-text-primary '#000000'/);
+    }
+  }, 240_000);
+
   it('a page that keeps the theme text readable gets no text line', async () => {
     const rs = await how('dark mode page #1e1e2e');
     expect(rs.some(r => /^readable text on that page/.test(r.text))).toBe(

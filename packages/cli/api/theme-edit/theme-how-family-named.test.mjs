@@ -219,6 +219,29 @@ describe('a lone color after a piece', () => {
   }, 240_000);
 });
 
+describe('a lone color after a link, a group or bare labels', () => {
+  it('is the link text, the group fill, and nothing on bare labels', async () => {
+    const link = writes(await how('q0', 'bold links, red')).join('\n');
+    expect(link).not.toMatch(/background-color '#dc2626' --on link/);
+    expect(link).toMatch(/'#dc2626'/);
+    expect(writes(await how('q0', 'rounded inputs, white')).join('\n')).toMatch(
+      /'#ffffff' --on inputs/,
+    );
+    expect(
+      writes(await how('q0', 'bold labels, dark gray')).join('\n'),
+    ).not.toMatch(/--on field-label/);
+  }, 240_000);
+});
+
+describe('a cue or text noun that starts its sentence', () => {
+  it('reads the family as it does in lower case', async () => {
+    for (const ask of ['Use Lora for headings', 'Headings in Lora'])
+      expect(writes(await how('q0', ask))).toContain(
+        'set q0 font Lora --on heading',
+      );
+  }, 240_000);
+});
+
 describe('a frame said as a step from the value now', () => {
   it('stays on the member, never on its family group', async () => {
     const lines = writes(
