@@ -95,6 +95,9 @@ describe('the reader', () => {
       // (A path in a url() is never a color.)
       'url(/img/white/24)',
       'url(/a/white/24/x.png) no-repeat',
+      // (Nor is a quoted path: an image-set() source, a bare string.)
+      'image-set("/img/white/24/a.png" 1x)',
+      "'/img/red/50/a.png'",
     ])
       expect(read(v)).toEqual([]);
   });

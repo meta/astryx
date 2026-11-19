@@ -104,6 +104,8 @@ describe('a part in a container', () => {
     expect(writes(rs)).toEqual([
       "set ne color '#16a34a' --on side-nav-item --mode dark",
     ]);
+    // (The items are kept to the sidebar: no note says every link changes.)
+    expect(rs.some(r => /applies to every link/.test(r.text))).toBe(false);
   }, 120_000);
 });
 

@@ -10844,6 +10844,10 @@ export function draftAnswer(ctx, env, question) {
     for (const p of c.parts) if (p.on === 'link') p.on = item;
     delete c.container;
     delete c.placeStrict;
+    // (The items are kept to the holder already: a note that the links
+    // could not be kept to it no longer holds.)
+    for (let n = placeNotes.length - 1; n >= 0; n--)
+      if (placeNotes[n].c === c) placeNotes.splice(n, 1);
   }
   // "table row dividers", "the lines between table rows": the lines a
   // table draws between its rows (its cells' borders), never the Divider
@@ -18261,10 +18265,29 @@ export function draftAnswer(ctx, env, question) {
               (/** @type {any} */ x) => Object.keys(x.tokens ?? {}),
             ),
           );
+          // (A token set on the container reaches only what the container
+          // holds: the part answered, or a part inside it that reads the
+          // token. "tabs: blue links": a tab holds no link and no part
+          // inside it reads the link token, so nothing there would change.)
+          const readsTok = (
+            /** @type {string} */ t,
+            /** @type {string} */ tok,
+          ) =>
+            Object.values(C.MAP[t]?.own ?? {}).some(
+              (/** @type {any} */ x) => tok in (x.tokens ?? {}),
+            ) || tok in (C.MAP[t]?.inside ?? {});
+          const holdsPart = (FAMILIES[p.on] ?? [p.on]).some(
+            m =>
+              holds.has(m) ||
+              [...holds].some(h => (C.MAP[h]?.contains ?? []).includes(m)),
+          );
+          const reached = (/** @type {Step} */ st) =>
+            holdsPart || [...holds].some(h => readsTok(h, String(st.thing)));
           const scopable = (/** @type {Step} */ st) =>
             st.verb === 'set' &&
             /^--/.test(String(st.thing)) &&
             !boxReads.has(String(st.thing)) &&
+            reached(st) &&
             // (A token held under one of the part's variants cannot move to
             // the container: its --when names the part's variant.)
             (!st.when || st.on === box) &&
@@ -18276,6 +18299,16 @@ export function draftAnswer(ctx, env, question) {
             const dropped = kept.length < d.options.length;
             d.options = kept.map(o => o.map(st => ({...st, on: box})));
             d.text += ` (on ${box} only: the token is set on ${box}, which the parts inside it read; elsewhere it is as it was${dropped ? `; a whole-theme or ${p.on} setting would reach every ${p.on}, so none is offered` : ''})`;
+          } else if (
+            !holdsPart &&
+            d.options.flat().every(st => /^--/.test(String(st.thing))) &&
+            !d.options.flat().some(st => reached(st))
+          ) {
+            d = {
+              text: `${p.on} in ${box}: ${box} holds no ${p.on}, and nothing inside it reads ${[...new Set(d.options.flat().map(st => String(st.thing)))].join(', ')}, so a ${p.on} look there changes nothing; nothing is written`,
+              options: [],
+              lookup: `${HOW} ${box}`,
+            };
           } else {
             d = {
               text:
