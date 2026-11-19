@@ -25,6 +25,10 @@ const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 
 /** @type {string} */
 let dir;
+/** @type {string} */
+let compileCache;
+/** @type {string | undefined} */
+let previousCompileCache;
 
 /** @param {string} name @param {string | Buffer} content */
 const put = (name, content) => {
@@ -75,6 +79,12 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
+  // Every render starts a new page process, which compiles the same modules
+  // again. One compile cache for this file lets each later process reuse that
+  // work. A forked process takes this environment.
+  previousCompileCache = process.env.NODE_COMPILE_CACHE;
+  compileCache = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-compile-'));
+  process.env.NODE_COMPILE_CACHE = compileCache;
   dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom', 'recharts']);
   put('dot.png', PNG);
   put('page.tsx', PAGE);
@@ -85,6 +95,9 @@ beforeAll(async () => {
 
 afterAll(() => {
   removeLinkedFixture(dir);
+  if (previousCompileCache === undefined) delete process.env.NODE_COMPILE_CACHE;
+  else process.env.NODE_COMPILE_CACHE = previousCompileCache;
+  fs.rmSync(compileCache, {recursive: true, force: true});
 });
 
 describe('render(): page to one HTML file', () => {
