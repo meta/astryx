@@ -6942,7 +6942,7 @@ async function changeOnce(
   const ownSet = new Set(ownSourceTokens(cwd, slug));
   if (sourceSeed?.source)
     notes.push(
-      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (links, icons, the tints) grows from its color, ${sourceSeed.seed}, so this setting changes nothing you see; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
+      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (links, icons, the tints) grows from its color, ${sourceSeed.seed}, not from ${s.value}${!r.changed.length && !styled.length ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
     );
   if (ownWins.length)
     notes.push(

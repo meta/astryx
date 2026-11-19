@@ -180,4 +180,26 @@ describe('a family whose fill the source sets', () => {
       themeEditSet('x', 'vibrancy', '90', {cwd}),
     ).resolves.toBeTruthy();
   }, 240_000);
+
+  it('names the source color on a first set, which does change the shades', async () => {
+    if (unbuilt) return;
+    await withAccent('y', "['#9333ea', '#d8b4fe']");
+    const r = /** @type {any} */ (
+      await themeEditSet('y', 'accent', '#2563eb', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    const note = notes.find(n => /grows from its color, #9333ea/.test(n));
+    expect(note).toBeDefined();
+    expect(String(note)).not.toMatch(/changes nothing you see/);
+  }, 240_000);
+
+  it('names a gray source fill when it refuses vibrancy', async () => {
+    if (unbuilt) return;
+    await withAccent('z', "'#808080'");
+    await themeEditSet('z', 'neutral', '#808080', {cwd});
+    await themeEditSet('z', 'accent', '#9333ea', {cwd});
+    await expect(themeEditSet('z', 'vibrancy', '90', {cwd})).rejects.toThrow(
+      /z\.theme\.ts wins over the setting for accent/,
+    );
+  }, 240_000);
 });
