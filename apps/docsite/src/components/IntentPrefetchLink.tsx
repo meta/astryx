@@ -8,27 +8,35 @@
  * @input The props of the Next.js link, the link's pointer and focus events,
  *   and the connection's data-saving hints (lib/prefersReducedData.ts).
  * @output A real anchor that navigates on the client. The link downloads its
- *   destination when the pointer or the focus rests on it, or at a press.
+ *   destination when a mouse or pen pointer or the keyboard focus rests on
+ *   it, or at a mouse or pen press. A touch downloads nothing ahead.
  * @position The component that app/providers.tsx gives to LinkProvider.
  */
 
 import NextLink from 'next/link';
-import {useEffect, useRef, useState, type ComponentProps} from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type PointerEvent,
+} from 'react';
 import {prefersReducedData} from '../lib/prefersReducedData';
 
 /**
- * How long the pointer or the focus stays on a link before the link counts
- * as a likely destination. A pointer that only crosses a link, and a focus
- * that only passes it, leave sooner.
+ * How long the pointer or the keyboard focus stays on a link before the link
+ * counts as a likely destination. A pointer that only crosses a link, and a
+ * focus that only passes it, leave sooner.
  */
 export const INTENT_REST_MS = 100;
 
 /**
  * The Next.js link, which downloads its destination only for a visitor who
- * shows intent: the pointer or the keyboard focus rests on the link for
- * INTENT_REST_MS, or the visitor presses it. A link with intent keeps the
- * Next.js default prefetch. No link shows intent in a data-saving mode or on
- * a 2G connection. A `prefetch` prop from the caller replaces this behavior.
+ * shows intent: a mouse or pen pointer or the keyboard focus rests on the
+ * link for INTENT_REST_MS, or the visitor presses it with a mouse or a pen.
+ * A touch shows no intent. A link with intent keeps the Next.js default
+ * prefetch. No link shows intent in a data-saving mode or on a 2G connection.
+ * A `prefetch` prop from the caller replaces this behavior.
  */
 export function IntentPrefetchLink({
   prefetch,
@@ -56,6 +64,10 @@ export function IntentPrefetchLink({
     restTimer.current = window.setTimeout(showIntent, INTENT_REST_MS);
   };
   const endRest = () => window.clearTimeout(restTimer.current);
+  // A touch press comes too late to help a tap, and a scroll starts with the
+  // same press.
+  const isTouch = (event: PointerEvent<HTMLAnchorElement>) =>
+    event.pointerType === 'touch';
 
   return (
     <NextLink
@@ -63,7 +75,9 @@ export function IntentPrefetchLink({
       prefetch={prefetch !== undefined ? prefetch : hasIntent ? null : false}
       onPointerEnter={event => {
         onPointerEnter?.(event);
-        startRest();
+        if (!isTouch(event)) {
+          startRest();
+        }
       }}
       onPointerLeave={event => {
         onPointerLeave?.(event);
@@ -71,7 +85,11 @@ export function IntentPrefetchLink({
       }}
       onFocus={event => {
         onFocus?.(event);
-        startRest();
+        // A press moves the focus too. Only keyboard focus comes before the
+        // visitor chooses the link.
+        if (event.currentTarget.matches(':focus-visible')) {
+          startRest();
+        }
       }}
       onBlur={event => {
         onBlur?.(event);
@@ -79,7 +97,9 @@ export function IntentPrefetchLink({
       }}
       onPointerDown={event => {
         onPointerDown?.(event);
-        showIntent();
+        if (!isTouch(event)) {
+          showIntent();
+        }
       }}
     />
   );

@@ -52,12 +52,26 @@ function rest(ms: number) {
   });
 }
 
+/**
+ * Moves the focus to `link`. jsdom does not model `:focus-visible`, so the
+ * test gives the browser's answer: true for keyboard focus, false for the
+ * focus that a press gives.
+ */
+function focus(link: HTMLElement, from: 'keyboard' | 'press') {
+  const realMatches = link.matches.bind(link);
+  vi.spyOn(link, 'matches').mockImplementation(selector =>
+    selector === ':focus-visible' ? from === 'keyboard' : realMatches(selector),
+  );
+  fireEvent.focus(link);
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
   setConnection(undefined);
 });
@@ -89,9 +103,9 @@ describe('IntentPrefetchLink', () => {
     expect(link.dataset.prefetch).toBe(HELD);
   });
 
-  it('prefetches when the focus has rested on the link', () => {
+  it('prefetches when the keyboard focus has rested on the link', () => {
     const link = renderLink();
-    fireEvent.focus(link);
+    focus(link, 'keyboard');
     rest(INTENT_REST_MS - 1);
     expect(link.dataset.prefetch).toBe(HELD);
     rest(1);
@@ -100,9 +114,16 @@ describe('IntentPrefetchLink', () => {
 
   it('does not prefetch for a focus that only passes the link', () => {
     const link = renderLink();
-    fireEvent.focus(link);
+    focus(link, 'keyboard');
     rest(INTENT_REST_MS - 1);
     fireEvent.blur(link);
+    rest(INTENT_REST_MS * 10);
+    expect(link.dataset.prefetch).toBe(HELD);
+  });
+
+  it('does not prefetch for the focus that a press gives', () => {
+    const link = renderLink();
+    focus(link, 'press');
     rest(INTENT_REST_MS * 10);
     expect(link.dataset.prefetch).toBe(HELD);
   });
@@ -119,18 +140,37 @@ describe('IntentPrefetchLink', () => {
     expect(link.dataset.prefetch).toBe(NEXT_DEFAULT);
   });
 
-  it('prefetches at a press, with no rest', () => {
+  it.each(['mouse', 'pen'])(
+    'prefetches at a %s press, with no rest',
+    pointerType => {
+      const link = renderLink();
+      fireEvent.pointerEnter(link, {pointerType});
+      fireEvent.pointerDown(link, {pointerType});
+      expect(link.dataset.prefetch).toBe(NEXT_DEFAULT);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('does not prefetch at a touch press', () => {
     const link = renderLink();
-    fireEvent.pointerEnter(link);
-    fireEvent.pointerDown(link);
-    expect(link.dataset.prefetch).toBe(NEXT_DEFAULT);
+    fireEvent.pointerDown(link, {pointerType: 'touch'});
+    expect(link.dataset.prefetch).toBe(HELD);
+    rest(INTENT_REST_MS * 10);
+    expect(link.dataset.prefetch).toBe(HELD);
+  });
+
+  it('does not prefetch for a touch that stays on the link', () => {
+    const link = renderLink();
+    fireEvent.pointerEnter(link, {pointerType: 'touch'});
     expect(vi.getTimerCount()).toBe(0);
+    rest(INTENT_REST_MS * 10);
+    expect(link.dataset.prefetch).toBe(HELD);
   });
 
   it('does not prefetch after the pointer and the focus both leave', () => {
     const link = renderLink();
     fireEvent.pointerEnter(link);
-    fireEvent.focus(link);
+    focus(link, 'keyboard');
     fireEvent.pointerLeave(link);
     fireEvent.blur(link);
     rest(INTENT_REST_MS * 10);
@@ -154,7 +194,7 @@ describe('IntentPrefetchLink', () => {
     const link = renderLink();
     fireEvent.pointerEnter(link);
     rest(INTENT_REST_MS);
-    fireEvent.focus(link);
+    focus(link, 'keyboard');
     rest(INTENT_REST_MS);
     fireEvent.pointerDown(link);
     expect(link.dataset.prefetch).toBe(HELD);
@@ -196,6 +236,21 @@ describe('IntentPrefetchLink', () => {
     fireEvent.focus(link);
     fireEvent.blur(link);
     fireEvent.click(link);
+    for (const handler of Object.values(handlers)) {
+      expect(handler).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('calls the caller\u2019s handlers for a touch and for a press focus', () => {
+    const handlers = {
+      onPointerEnter: vi.fn(),
+      onPointerDown: vi.fn(),
+      onFocus: vi.fn(),
+    };
+    const link = renderLink(handlers);
+    fireEvent.pointerEnter(link, {pointerType: 'touch'});
+    fireEvent.pointerDown(link, {pointerType: 'touch'});
+    focus(link, 'press');
     for (const handler of Object.values(handlers)) {
       expect(handler).toHaveBeenCalledTimes(1);
     }
