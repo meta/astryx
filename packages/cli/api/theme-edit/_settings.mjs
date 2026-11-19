@@ -6441,9 +6441,10 @@ export function compileTheme(ctx, data, base) {
     if (kebab(prop) === 'box-shadow') v = withCoreShadowLayers(target, v);
     const b = block(s, target);
     // A gradient background for a variant, a state or a mode is written as
-    // the background longhands its value gives, never the background
-    // shorthand: its image layers, the positions, sizes and repeats a layer
-    // gives, and a layer that is a color alone as the color. A longhand set
+    // the background longhands its value gives: its image layers, the
+    // positions, sizes and repeats a layer gives, and a layer that is a
+    // color alone as the color. A layer with a word those longhands do not
+    // take (an attachment, a box) keeps the background shorthand as typed. A longhand set
     // on the whole part (its repeat, its size) stays in every variant and
     // state the gradient is written for. For one mode it goes into the
     // rule's block for that mode: the other mode keeps every image and
@@ -6509,7 +6510,14 @@ export function compileTheme(ctx, data, base) {
       ? undefined
       : (s.mode ??
         (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined));
-    if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
+    // (An image value, a gradient or a picture with words the longhands do
+    // not take, is no color: it stays one value in the mode's block.)
+    if (
+      mode &&
+      !s.when &&
+      !/gradient\(|url\(|image-set\(/i.test(String(v)) &&
+      variantsReading(ctx, target, prop, s.state).length
+    ) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
       // color in its block for that mode, so no variant takes another's and
@@ -8104,21 +8112,29 @@ export function backgroundColorLayer(value) {
 }
 
 /**
- * A background layer's image (a gradient or a `url()`) and the words beside
- * it, as the background longhands take them: position, size (after a
- * slash) and repeat. The image may come before or after those words, as
- * CSS allows. `other` holds the words that are none of those (an
- * attachment, an origin or clip box, a second image): a layer with any is
- * not written as these longhands.
+ * A background layer's image (a gradient, prefixed or not, a `url()` or an
+ * `image-set()`) and the words beside it, as the background longhands take
+ * them: position, size (after a slash) and repeat. The image may come
+ * before or after those words, as CSS allows. `other` holds the words that
+ * are none of those (an attachment, an origin or clip box, a second image),
+ * and every word of a layer of several words with no image this knows: a
+ * layer with any is not written as these longhands.
  * @param {string} layer
  * @returns {{image: string, position: string, size: string, repeat: string, other: string[]}}
  */
 function layerParts(layer) {
-  const IMAGE = /^(?:(?:repeating-)?(?:linear|radial|conic)-gradient|url)\(/i;
+  const IMAGE =
+    /^(?:(?:-(?:webkit|moz|o|ms)-)?(?:repeating-)?(?:linear|radial|conic)-gradient|url|(?:-webkit-)?image-set)\(/i;
   const all = splitTop(layer.trim(), ' ').filter(Boolean);
   const at = all.findIndex(w => IMAGE.test(w));
   if (at < 0)
-    return {image: layer, position: '', size: '', repeat: '', other: []};
+    return {
+      image: layer,
+      position: '',
+      size: '',
+      repeat: '',
+      other: all.length > 1 ? all : [],
+    };
   const rest = all.filter((_, i) => i !== at);
   const REPEAT = /^(repeat|no-repeat|repeat-x|repeat-y|space|round)$/i;
   const repeat = rest.filter(w => REPEAT.test(w)).join(' ');

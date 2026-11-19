@@ -2,9 +2,10 @@
 
 /**
  * @file A gradient written for a variant, a state or a mode is built as the
- * background longhands its value gives, never the background shorthand, so
- * a background longhand set on the whole part (its repeat, its size) still
- * applies there: a hover gradient on a button whose background is set not
+ * background longhands its value gives, so a background longhand set on the
+ * whole part (its repeat, its size) still applies there (a layer with a word
+ * those longhands do not take, an attachment or a box, keeps the background
+ * shorthand as typed): a hover gradient on a button whose background is set not
  * to repeat never tiles. A shorthand the build still writes there (a plain
  * `background` color) is named in the result when it resets such a
  * longhand. Checked on an editor theme over each official theme, and on a
@@ -189,6 +190,66 @@ describe('a stress theme of gradients', () => {
 });
 
 describe('beside a variant gradient', () => {
+  it(
+    'takes a prefixed gradient and an image-set() as the image, with the words beside them as their longhands',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('px', {cwd, like: 'neutral'});
+      const sel = '.astryx-button[data-variant="primary"]';
+      const scope = {cwd, on: 'button', when: 'variant:primary'};
+      await themeEditSet(
+        'px',
+        'background',
+        '-webkit-linear-gradient(top, #337ab7 0%, #265a88 100%) repeat-x',
+        scope,
+      );
+      let body = /** @type {{body: string}} */ (
+        rulesOn(css('px'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        '-webkit-linear-gradient(top, #337ab7 0%, #265a88 100%)',
+      );
+      expect(valueIn(body, 'background-repeat')).toBe('repeat-x');
+      expect(body).not.toMatch(/(?:^|[;\s])background:/);
+      await themeEditSet(
+        'px',
+        'background',
+        'linear-gradient(#337ab7, #265a88), image-set("dots.png" 1x) center / 10px 10px no-repeat',
+        scope,
+      );
+      body = /** @type {{body: string}} */ (
+        rulesOn(css('px'), 'button').find(r => r.selector === sel)
+      ).body;
+      expect(valueIn(body, 'background-image')).toBe(
+        'linear-gradient(#337ab7, #265a88), image-set("dots.png" 1x)',
+      );
+      expect(valueIn(body, 'background-position')).toBe('0% 0%, center');
+      expect(valueIn(body, 'background-size')).toBe('auto, 10px 10px');
+      expect(body).not.toMatch(/(?:^|[;\s])background:/);
+    },
+    T,
+  );
+
+  it(
+    'keeps a one-mode gradient with an attachment word one shorthand in that mode, never a color in each variant',
+    async () => {
+      if (unbuilt) return;
+      await themeEditNew('fx', {cwd, like: 'neutral'});
+      await themeEditSet(
+        'fx',
+        'background',
+        'linear-gradient(#0000aa, #000055) fixed',
+        {cwd, on: 'card', mode: 'dark'},
+      );
+      const built = css('fx');
+      expect(built).not.toMatch(/background-color:\s*linear-gradient/);
+      expect(built).toMatch(
+        /\[data-theme="dark"\][^{]*\{[^}]*background: linear-gradient\(#0000aa, #000055\) fixed/,
+      );
+    },
+    T,
+  );
+
   it(
     'splits a layer whose position, size and repeat come before its image, as CSS allows',
     async () => {
