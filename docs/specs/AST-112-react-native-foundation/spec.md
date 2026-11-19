@@ -723,10 +723,6 @@ record depends on an ask whose owner has not agreed to it.
 
 ## Current-state impact
 
-- `spec:AST-140` FR9 keeps the methods of system and React Native classes as
-  they are; DEC-22 admits a core replacement of such a method that calls
-  through, installs once and leaves other libraries' replacements working, and
-  that requirement follows it.
 - Two new packages under `packages/`: `@astryxdesign/react-native` and
   `@astryxdesign/react-native-expo`, canary-only (FR1, FR14).
 - `@astryxdesign/cli` runs the commands that `@astryxdesign/react-native` and
