@@ -80,7 +80,7 @@ export const docs = {
           items: [
             '`{@command build "<idea>"}`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
             '`{@command template <name> <path>}`: scaffold that template into the project, keep its frame and spacing, and replace its content',
-            '`{@command component <Name>}`: read props and examples for every component used',
+            '`{@command component <Name>}`: read the import, usage and props for every component used (one call can name several; `--detail full` prints the whole doc)',
           ],
         },
         {
@@ -165,14 +165,14 @@ npm run astryx -- docs tokens --dense`,
       content: [
         {
           type: 'prose',
-          text: 'For a shorter read, add `--detail brief` (one line per section) or `--detail compact`. `--dense` swaps in a shorter text where a doc ships one. Use them when pasting CLI output into a web-based AI tool like ChatGPT or Claude.',
+          text: 'For a shorter read, add `--detail brief` (one line per section). A component read is short by default; `--detail brief` cuts it to a one-line signature. `--dense` swaps in a shorter text where a doc ships one. Use them when pasting CLI output into a web-based AI tool like ChatGPT or Claude.',
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Short output for pasting into AI conversations',
           code: `{@command docs styling --full --detail brief}
-{@command component Dialog --detail compact}
+{@command component Dialog --detail brief}
 {@command docs principles --dense}`,
         },
       ],

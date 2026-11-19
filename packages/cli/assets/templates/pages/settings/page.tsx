@@ -76,7 +76,8 @@ export default function SettingsTemplate() {
       contentWidth={1440}
       header={
         <LayoutHeader hasDivider>
-          <HStack vAlign="center">
+          {/* On a narrow screen the search moves under the title instead of squeezing it. */}
+          <HStack vAlign="center" wrap="wrap" gap={2}>
             <StackItem size="fill">
               <Heading level={1}>Settings</Heading>
             </StackItem>
@@ -123,7 +124,7 @@ export default function SettingsTemplate() {
                 </TabList>
               </VStack>
             )}
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
                 <Heading level={3} accessibilityLevel={2}>
                   Basic information
@@ -171,7 +172,7 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
                 <Heading level={3} accessibilityLevel={2}>
                   Change password
@@ -217,7 +218,7 @@ export default function SettingsTemplate() {
 
             <Divider />
 
-            <Grid columns={{minWidth: 320}} gap={10}>
+            <Grid columns={{minWidth: 320, max: 3}} gap={10}>
               <VStack gap={1}>
                 <Heading level={3} accessibilityLevel={2}>
                   Advanced settings

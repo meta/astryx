@@ -21,6 +21,7 @@ import {
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
+  answeredComponentsInSource,
   pkgOf,
   replaceTemplateDemos,
 } from '../../../foundation/discovery/template-adapter.mjs';
@@ -36,8 +37,10 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], command?: string}} ctx
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}, command?: string}} ctx
  *   `iconSets`: the project's icon sets; without them the icons are unchanged.
+ *   `components`: how `astryx component` reads the project's components
+ *   (loadComponentLookup); without it the receipt names no component.
  *   `command`: the command that selects this template, without a path; the
  *   refusal of a path outside the project suggests it
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
@@ -49,6 +52,7 @@ export function templateCopy(
     cwd,
     overwrite = false,
     iconSets = NO_ICON_SETS,
+    components = {ownersOf: () => [], qualified: false},
     command = `astryx template ${match.dirName} --type ${match.type}`,
   },
 ) {
@@ -164,10 +168,8 @@ export function templateCopy(
 
   // Analyze what the template needs that the project lacks: external packages
   // and the StyleX compiler. Derived from the source's own imports.
-  const {notes, missingPackages, installCommand} = analyzeTemplateNeeds(
-    outputSource,
-    cwd,
-  );
+  const {notes, missingPackages, installCommand, installGuidance} =
+    analyzeTemplateNeeds(outputSource, cwd);
   const missing = missingPackages;
 
   const relOutput = scratch ? outputDir : path.relative(cwd, outputDir) || '.';
@@ -184,6 +186,8 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
+      components: answeredComponentsInSource(outputSource, components),
+      ...(installGuidance ? {installGuidance} : {}),
       ...(path.isAbsolute(targetPath) && !scratch
         ? {givenPath: targetPath}
         : {}),

@@ -66,7 +66,11 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
-    fontWeight: fontWeightVars['--font-weight-medium'],
+    // Arial, Helvetica, Liberation Sans, and Segoe UI have no 500 face, and
+    // CSS resolves a missing 500 to the regular face. Semibold resolves up to
+    // a heavier face, so the label stays heavier than its description with
+    // every font.
+    fontWeight: fontWeightVars['--font-weight-semibold'],
     color: colorVars['--color-text-secondary'],
     cursor: {
       default: 'pointer',

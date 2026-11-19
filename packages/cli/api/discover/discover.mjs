@@ -33,8 +33,10 @@ import {
   discoverPackages,
   findComponent,
   hasSources,
+  iconSetCoverage,
   keptSavedSearch,
   loadReadKinds,
+  optedIntoIconSets,
   officialDeclarations,
   STABLE_KINDS,
   officialFirst,
@@ -44,6 +46,7 @@ import {
   withDeclaredOfficial,
 } from './_adapter.mjs';
 import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
+export {iconSetCoverageOf} from './_icon-set-coverage.mjs';
 import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -195,24 +198,22 @@ export async function wouldAnswer(query, {type} = {}) {
  */
 
 /**
- * What discover searches over the saved copies: the packages the project
- * has, with the official packages declared in it, and every item those and
- * the copies list. `packages: null` when nothing is known: no copy reads
- * back, or discover answers every query with the list (FR1).
+ * The packages and items `discover <query>` searches when its sources answer
+ * from their saved copies: the packages the project has, with the official
+ * packages declared in it, and every item those and the copies list, icon
+ * sets included. Null when nothing is known: no copy reads back, or discover
+ * answers every query with the list (FR1). No source is called.
  * @param {import('../../foundation/config/project.mjs').Project} project
- * @returns {Promise<SavedSearchInput>}
  */
-async function savedSearchInput(project) {
-  const {packages: scanned} = await discoverPackages(project);
+async function savedItems(project) {
   const official = officialList({project});
   const saved = savedCatalog(project, {official});
-  if (saved == null) return {packages: null};
+  if (saved == null) return null;
+  const {packages: scanned} = await discoverPackages(project);
   const catalog = {sources: [], packages: saved};
   const declarations = officialDeclarations(project, official.packages);
   const integrations = await describeInstalled(project, scanned);
-  if (integrations.length === 0 && !hasSources(project)) {
-    return {packages: null};
-  }
+  if (integrations.length === 0 && !hasSources(project)) return null;
   const packages = withDeclaredOfficial(
     project,
     integrations,
@@ -226,6 +227,51 @@ async function savedSearchInput(project) {
     catalog,
     declaredDependencies(project),
     declarations.any,
+  );
+  return {packages, items};
+}
+
+/**
+ * Whether `astryx discover <query>` lists an item of `kind` the project
+ * could add, answered by discover's own search over the saved copies of the
+ * discover sources' catalogs. No source is called, so before a discover run
+ * has saved a copy the answer is false. Never throws.
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ * @param {string} query free text, as discover takes it
+ * @param {import('../../authoring/discover/type').DiscoverKind} kind
+ * @returns {Promise<boolean>}
+ */
+export async function listsToAdd(project, query, kind) {
+  try {
+    const saved = await savedItems(project);
+    if (saved == null) return false;
+    const {data} = await search(saved.packages, query, {
+      items: saved.items,
+      limit: DEFAULT_LIMIT,
+    });
+    return data.matches.some(match => match.kind === kind && !match.installed);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What discover searches over the saved copies (see {@link savedItems}),
+ * icon sets only where icon features are on. `packages: null` when nothing
+ * is known.
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ * @returns {Promise<SavedSearchInput>}
+ */
+async function savedSearchInput(project) {
+  const saved = await savedItems(project);
+  if (saved == null) return {packages: null};
+  const {packages} = saved;
+  // Discover lists the icon sets a project could add in every project, but
+  // search is a stable command: where icon features are off, its discover
+  // line never answers from an icon set (spec:AST-017 FR27).
+  const iconSets = optedIntoIconSets(project);
+  const items = saved.items.filter(
+    item => iconSets || item.kind !== 'icon-set',
   );
   // Only what the ranking reads is kept: the smaller the record, the less a
   // search spends reading it back.
@@ -274,7 +320,7 @@ function isSavedSearchInput(value) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
-  const {availableEntries, catalogState, searchItems, withLatest} =
+  const {availableEntries, catalogState, searchItems, shownEntry, withLatest} =
     await catalogView();
   // An experimental kind is read only in a project where it is on (spec:AST-017
   // FR27); only then does `--type` take it, or an error name it.
@@ -422,6 +468,8 @@ export async function discover(query, options = {}) {
       // Only an entry the official list supplied gets a pinned version.
       add: entry?.official ? addOfficial : add,
       installedAs,
+      iconSets: optedIntoIconSets(project),
+      coverageOf: iconSetCoverage,
     };
     if (!target.item) {
       const {detail} = await detailLeaf();
@@ -442,19 +490,27 @@ export async function discover(query, options = {}) {
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
-    if (officialOnly) {
+    // Suggest only what the page itself would show: never an installed
+    // package's icon set while icon features are off.
+    const shown =
+      entry &&
+      shownEntry(entry, {
+        installed: packages.some(p => p.name === target.name) || !!installedAs,
+        iconSets: context.iconSets,
+      });
+    if (officialOnly && shown) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_PACKAGE,
       );
     }
     // Only an installed package has docs to fall back to. For one that is
     // only in a source, the item is what is unknown, not the package.
-    if (entry && !isIntegration) {
+    if (shown && !isIntegration) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,
-        similarItems(entry, target.item),
+        similarItems(shown, target.item),
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }

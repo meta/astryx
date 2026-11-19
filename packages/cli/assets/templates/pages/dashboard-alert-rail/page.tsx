@@ -1506,7 +1506,7 @@ export default function ServiceHealthMonitorPage() {
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}
-              <Grid columns={{minWidth: 240, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 240, max: 4, repeat: 'fit'}} gap={3}>
                 {kpis.map(kpi => (
                   <KpiTile
                     key={kpi.key}
@@ -1517,7 +1517,7 @@ export default function ServiceHealthMonitorPage() {
               </Grid>
 
               {/* Time-series charts */}
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={3}>
+              <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={3}>
                 <MetricChart
                   title="Response latency"
                   subtitle="Percentile latency across all services (ms)"
