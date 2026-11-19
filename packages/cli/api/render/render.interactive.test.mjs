@@ -25,7 +25,7 @@ import {
   ESBUILD_MISSING,
   findEsbuild,
 } from '../../foundation/render/esbuild-dependency.mjs';
-import {RenderError, renderPage} from '../../foundation/render/render-page.mjs';
+import {CARRY_ATTR, RenderError, renderPage} from '../../foundation/render/render-page.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
@@ -569,7 +569,13 @@ export default function Page() {
 `,
     );
     await render('src/pictured.tsx', {cwd: dir, out: 'pictured.html'});
-    const dom = new JSDOM(read('pictured.html'), {
+    // The script reads the image from the first paint: the file carries it
+    // only where the markup shows it.
+    const html = read('pictured.html');
+    const pageScript = html.slice(html.lastIndexOf('<script>'));
+    expect(pageScript).not.toContain('data:image/png');
+    expect(html.split('data:image/png;base64,').length - 1).toBe(3);
+    const dom = new JSDOM(html, {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
     });
@@ -583,7 +589,318 @@ export default function Page() {
     );
     // The script drew them: they are not the first paint's elements.
     expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('./photo.png');
+    expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain(CARRY_ATTR);
     dom.window.close();
+    // The first paint's own attribute is the render's: the page comes back
+    // exactly, with no change reported.
+    const back = /** @type {any} */ (await render('pictured.html', {cwd: dir, reverse: true, out: 'pictured-back/pictured.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(read('pictured-back/pictured.tsx')).not.toContain(CARRY_ATTR);
+  }, 120_000);
+
+  it('reads each local image of a srcset the code builds from the first paint, so the file holds it once', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/pair/a.png', Buffer.concat([png, Buffer.from([1])]));
+    put('src/pair/b.png', Buffer.concat([png, Buffer.from([2])]));
+    put(
+      'src/pair/page.tsx',
+      `const a = './a.png';
+const b = './b.png';
+export default function Page() {
+  return (
+    <main>
+      <img srcSet={\`\${a} 1x, \${b} 2x\`} alt="Pair" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/pair/page.tsx', {cwd: dir, out: 'pair.html'});
+    const file = read('pair.html');
+    const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([png, Buffer.from([n])]).toString('base64')}`;
+    // Each image's data is in the file once: in the first paint's srcset.
+    for (const n of [1, 2]) expect(file.split(dataOf(n)).length - 1, String(n)).toBe(1);
+    const dom = new JSDOM(file, {runScripts: 'dangerously', pretendToBeVisual: true});
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const drawn = dom.window.document.querySelector(`#${ROOT_ID} img[alt="Pair"]`)?.getAttribute('srcset');
+    expect(drawn).toBe(`${dataOf(1)} 1x, ${dataOf(2)} 2x`);
+    dom.window.close();
+  }, 120_000);
+
+  it('reads no candidate from a whole src that holds a comma and a space, so a later image of a name inside it keeps its own data', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/comma/Logo, dark.png', Buffer.concat([png, Buffer.from([1])]));
+    put('src/comma/dark.png', Buffer.concat([png, Buffer.from([2])]));
+    put(
+      'src/comma/page.tsx',
+      `import {useState} from 'react';
+const DARK = 'dark.png';
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <img src="./Logo, dark.png" alt="Logo" />
+      <noscript><img src="dark.png" alt="Fallback" /></noscript>
+      <button onClick={() => setOpen(true)}>Show</button>
+      {open && <img src={DARK} alt="Later" />}
+    </main>
+  );
+}
+`,
+    );
+    await render('src/comma/page.tsx', {cwd: dir, out: 'comma.html'});
+    const file = read('comma.html');
+    expect(file).not.toContain('__astryxCandidate');
+    const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([png, Buffer.from([n])]).toString('base64')}`;
+    const dom = new JSDOM(file, {runScripts: 'dangerously', pretendToBeVisual: true});
+    const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await settle();
+    const doc = dom.window.document;
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Logo"]`)?.getAttribute('src')).toBe(dataOf(1));
+    /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
+    await settle();
+    expect(doc.querySelector(`#${ROOT_ID} img[alt="Later"]`)?.getAttribute('src')).toBe(dataOf(2));
+    dom.window.close();
+  }, 120_000);
+
+  it('marks nothing after markup a serializer never writes, so every later image keeps its own copy', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+    put('src/gate/before.png', png);
+    put('src/gate/after.png', Buffer.concat([png, Buffer.from([1])]));
+    const shapes = {
+      // astracat's two: an end tag for an element open below an svg root,
+      // and </foreignObject> with a <span> open.
+      'svg-unclosed': '<svg><rect width="1" height="1"/>',
+      'span-in-foreign': '<svg><foreignObject><span></foreignObject></span></foreignObject></svg>',
+      'stray-end': '<b>bold</i></b>',
+      cdata: '<svg><![CDATA[ a ]]></svg>',
+      'bogus-comment': '<?x ?>',
+      'self-closing-html': '<span/>text',
+      frameset: '<frameset></frameset>',
+      plaintext: '<plaintext>',
+      // astracat's two: a comment a browser ends at --!>, and a start tag
+      // inside a select that Firefox reads its own way.
+      'comment-bang': '<!-- note --!><textarea> --><img src="./after.png"><!-- </textarea> -->',
+      'select-xmp': '<select><xmp><textarea></xmp></select><img src="./after.png"></textarea>',
+    };
+    for (const [name, html] of Object.entries(shapes)) {
+      put(
+        `src/gate/${name}.tsx`,
+        `export default function Page() {
+  return (
+    <main>
+      <img src="./before.png" alt="Before" />
+      <div dangerouslySetInnerHTML={{__html: ${JSON.stringify(html)}}} />
+      <img src="./after.png" alt="After" />
+    </main>
+  );
+}
+`,
+      );
+      await render(`src/gate/${name}.tsx`, {cwd: dir, out: `gate-${name}.html`});
+      const file = read(`gate-${name}.html`);
+      const tag = (/** @type {string} */ alt) => file.match(new RegExp(`<img[^>]*alt="${alt}"[^>]*>`))?.[0] ?? '';
+      // The inner HTML's own image of after.png carries no mark either.
+      expect(file.match(new RegExp(`<img[^>]*${CARRY_ATTR}="[^"]*src:1`)), name).toBeNull();
+      // Before the shape the scanner and a browser agree: the mark stays.
+      expect(tag('Before'), name).toContain(CARRY_ATTR);
+      // After it nothing is marked.
+      if (name !== 'plaintext') expect(tag('After'), name).not.toContain(CARRY_ATTR);
+    }
+  }, 240_000);
+
+  it('keeps an image that a longer string or a <noscript> names, once the script draws the page', async () => {
+    put(
+      'src/shapes/photo.png',
+      Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64'),
+    );
+    put(
+      'src/shapes/page.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <img src="./photo.png" alt="Plain" />
+      <div data-k="inner" dangerouslySetInnerHTML={{__html: '<img src="./photo.png" alt="Inner">'}} />
+      <div data-k="css" style={{backgroundImage: 'url("./photo.png")', width: 4, height: 4}} />
+      <div data-k="bare" style={{backgroundImage: 'url(./photo.png)', width: 4, height: 4}} />
+      <noscript><img src="./photo.png" alt="Fallback" /></noscript>
+    </main>
+  );
+}
+`,
+    );
+    put(
+      'src/shapes/nested-template.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<template><template><i>inner</i></template><img src="./photo.png" alt="Kept"></template>'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    put(
+      'src/shapes/comment-textarea.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<!-- <img src="./photo.png" alt="Old"> -->'}} />
+      <div dangerouslySetInnerHTML={{__html: '<textarea><img src="./photo.png" alt="Text"></textarea>'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    put(
+      'src/shapes/raw-elements.tsx',
+      `const PATH = './photo.png';
+const IMG = '<img src="./photo.png" alt="Quoted">';
+const SHAPES = [
+  \`<iframe>\${IMG}</iframe>\`,
+  \`<xmp>\${IMG}</xmp>\`,
+  \`<noembed>\${IMG}</noembed>\`,
+  \`<noframes>\${IMG}</noframes>\`,
+  \`<?php \${IMG} ?>\`,
+  \`<!bogus \${IMG}>\`,
+  \`</ \${IMG}>\`,
+  \`<textarea></textareas>\${IMG}</textarea>\`,
+  \`<title></titles>\${IMG}</title>\`,
+  \`<iframe></iframes>\${IMG}</iframe>\`,
+  \`<script><!--<script>\${IMG}</script>x</script>\`,
+  \`<span data-tip='\${IMG}'>tip</span>\`,
+  \`<svg><![CDATA[ a > b \${IMG} ]]></svg>\`,
+  \`<x.y title='\${IMG}'>name</x.y>\`,
+  \`<math></svg><![CDATA[ a > \${IMG} ]]></math>\`,
+  '<frame src="./photo.png">',
+  \`<select><option>Photo \${IMG}</option></select>\`,
+  \`<textarea/>\${IMG}</textarea>\`,
+  \`<iframe/>\${IMG}</iframe>\`,
+  \`<title/>\${IMG}</title>\`,
+  \`<noscript/>\${IMG}</noscript>\`,
+  \`<template/>\${IMG}</template>\`,
+  \`<svg><foreignObject><div></svg><![CDATA[ a > \${IMG} ]]></div></foreignObject></svg>\`,
+  \`<svg><foreignObject><textarea/>\${IMG}</textarea></foreignObject></svg>\`,
+  \`<svg><desc><noscript/>\${IMG}</noscript></desc></svg>\`,
+  \`<svg><title><template/>\${IMG}</template></title></svg>\`,
+  \`<math><mi><iframe/>\${IMG}</iframe></mi></math>\`,
+  \`<math><mtext><style/>\${IMG}</style></mtext></math>\`,
+  \`<svg><p><title/>\${IMG}</title></svg>\`,
+  \`<svg><foreignObject><div></foreignObject><textarea/>\${IMG}</textarea></div></foreignObject></svg>\`,
+  \`<svg><desc></svg></desc><textarea/>\${IMG}</textarea>\`,
+  \`<math><mi><svg></math><textarea/>\${IMG}</textarea>\`,
+  \`<math><annotation-xml encoding="text/html"><textarea/>\${IMG}</textarea></annotation-xml></math>\`,
+];
+export default function Page() {
+  return (
+    <main>
+      {SHAPES.map(html => <div key={html} dangerouslySetInnerHTML={{__html: html}} />)}
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    // Other bytes, so other.png's data differs from photo.png's.
+    put('src/shapes/other.png', Buffer.concat([fs.readFileSync(path.join(dir, 'src/shapes/photo.png')), Buffer.from([0])]));
+    put(
+      'src/shapes/two-src.tsx',
+      `const OTHER = './other.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<img src="./photo.png" src="./other.png" alt="Two">'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={OTHER} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    put(
+      'src/shapes/alt-gt.tsx',
+      `const PHOTO = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <div dangerouslySetInnerHTML={{__html: '<img src="./photo.png" srcset="./photo.png 2x" alt="Step 1 > Step 2" width="72">'}} />
+      <p>{typeof document === 'undefined' ? '' : <img src={PHOTO} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    put(
+      'src/shapes/only-noscript.tsx',
+      `const PATH = './photo.png';
+export default function Page() {
+  return (
+    <main>
+      <noscript><img src={PATH} alt="Fallback" /></noscript>
+      <p>{typeof document === 'undefined' ? '' : <img src={PATH} alt="Drawn" />}</p>
+    </main>
+  );
+}
+`,
+    );
+    for (const [page, out] of [['src/shapes/page.tsx', 'shapes.html'], ['src/shapes/only-noscript.tsx', 'only-noscript.html'], ['src/shapes/nested-template.tsx', 'nested-template.html'], ['src/shapes/comment-textarea.tsx', 'comment-textarea.html'], ['src/shapes/raw-elements.tsx', 'raw-elements.html'], ['src/shapes/two-src.tsx', 'two-src.html'], ['src/shapes/alt-gt.tsx', 'alt-gt.html']]) {
+      await render(page, {cwd: dir, out});
+    }
+    /** @param {string} file */
+    const drawn = async file => {
+      const dom = new JSDOM(read(file), {runScripts: 'dangerously', pretendToBeVisual: true});
+      await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const root = /** @type {Element} */ (dom.window.document.getElementById(ROOT_ID));
+      const out = {
+        plain: root.querySelector('img[alt="Plain"]')?.getAttribute('src'),
+        inner: root.querySelector('[data-k="inner"] img')?.getAttribute('src'),
+        css: root.querySelector('[data-k="css"]')?.getAttribute('style'),
+        bare: root.querySelector('[data-k="bare"]')?.getAttribute('style'),
+        drawn: root.querySelector('img[alt="Drawn"]')?.getAttribute('src'),
+      };
+      dom.window.close();
+      return out;
+    };
+    const shapes = await drawn('shapes.html');
+    expect(shapes.plain).toMatch(/^data:image\/png;base64,/);
+    expect(shapes.inner).toMatch(/^data:image\/png;base64,/);
+    expect(shapes.css).toMatch(/url\("?data:image\/png;base64,/);
+    expect(shapes.bare).toMatch(/url\("?data:image\/png;base64,/);
+    // Only the whole string "./photo.png" is read from the first paint.
+    const script = read('shapes.html').slice(read('shapes.html').lastIndexOf('-->\n<script>'));
+    expect(script).not.toMatch(/["'(]__astryxCarried\[/);
+    expect(script).toContain('__astryxCarried[0]');
+    const onlyNoscript = await drawn('only-noscript.html');
+    expect(onlyNoscript.drawn).toMatch(/^data:image\/png;base64,/);
+    // An image inside a <template> that holds another <template> carries
+    // nothing the script can read either.
+    const nested = await drawn('nested-template.html');
+    expect(nested.drawn).toMatch(/^data:image\/png;base64,/);
+    // Nor does one inside a comment or a <textarea>'s text.
+    const quoted = await drawn('comment-textarea.html');
+    expect(quoted.drawn).toMatch(/^data:image\/png;base64,/);
+    // Nor inside <iframe>, <xmp>, <noembed> or <noframes> text, past a longer
+    // end tag (</textareas>), in a script's escaped text, inside another
+    // attribute's value, in a bogus comment (<?…>, <!…>, </ …>), inside a
+    // <select>, after a self-closing raw-text or template tag a browser
+    // opens anyway, or in CDATA a browser still reads as such.
+    expect(read('raw-elements.html')).not.toContain(CARRY_ATTR);
+    const raw = await drawn('raw-elements.html');
+    expect(raw.drawn).toMatch(/^data:image\/png;base64,/);
+    // With two src attributes, only the first, the one a browser keeps, is
+    // carried: the script's ./other.png keeps its own data.
+    expect(read('two-src.html')).toContain(`${CARRY_ATTR}="src:0"`);
+    expect(read('two-src.html')).not.toContain('src:1');
+    const two = await drawn('two-src.html');
+    expect(two.drawn).toMatch(/^data:image\/png;base64,/);
+    // An element's marks come once, after its last attribute, even when a
+    // value before them holds a '>'.
+    expect(read('alt-gt.html')).toMatch(new RegExp(`alt="Step 1 > Step 2" width="72" ${CARRY_ATTR}="src:0 srcset:1"`));
+    const altGt = await drawn('alt-gt.html');
+    expect(altGt.drawn).toMatch(/^data:image\/png;base64,/);
   }, 120_000);
 
   it("keeps a theme's rules for a part Core draws only after a click, and the part shows them", async () => {

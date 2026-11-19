@@ -40,6 +40,7 @@ import {
   saveProjectPlaces,
   writeSkillPlace,
 } from '../_adapter.mjs';
+import {keptText} from '../../../foundation/agent-docs/skill-place-files.mjs';
 import {savedName} from '../../../foundation/agent-docs/skill-places.mjs';
 import {computerAgentCommand} from '../../../foundation/agent-docs/computer-agent-text.mjs';
 import {user} from '../user/user.mjs';
@@ -264,13 +265,6 @@ async function applyAgents(cwd, options, invocation, data) {
   }
 }
 
-/** @type {Record<string, string>} */
-const SKILL_KEPT = {
-  edited:
-    'kept, edited since Astryx wrote it; delete it to get the current text',
-  'not-astryx': 'kept, not created by Astryx',
-  'pair-kept': "kept: the other copy of this place is not Astryx's, so neither copy is written",
-};
 
 /**
  * One receipt line for one skill file.
@@ -279,7 +273,7 @@ const SKILL_KEPT = {
  */
 function skillLine({path: shown, action, reason}) {
   if (action === 'kept')
-    return `[skip] Astryx skill: ${shown} ${SKILL_KEPT[reason ?? 'not-astryx']}`;
+    return `[skip] Astryx skill: ${shown} ${keptText(reason, 'delete it to get the current text')}`;
   if (action === 'unchanged')
     return `[ok] Astryx skill: ${shown} already current, nothing changed`;
   return `[ok] Astryx skill: ${shown} ${action}`;

@@ -185,7 +185,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   stylesheet at `./themes/<slug>.css`. A package that owns exactly one theme MAY
   instead export `./built` and `./theme.css`. When a theme needs fonts that are
   not system fonts, the package SHOULD export a font stylesheet at
-  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. The font
+  `./themes/<slug>.fonts.css`, or `./fonts.css` for a single theme. Beside each
+  theme, the package exports `colorModes`, the modes the theme draws:
+  `['light', 'dark']`, or `['light']` or `['dark']` for a theme that draws
+  one mode on every page. A theme that exports none draws both. The font
   stylesheet owns loading its fonts: it may ship the font files with
   `@font-face` rules or import them from a font service. An import MUST fail,
   naming what is missing, when a theme has no resolvable built module and
@@ -287,7 +290,9 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      font stylesheet the module imports, with an `@font-face` rule or a font
      service URL that names the family (a warning that names the family when
      this cannot be shown, as when the stylesheet imports a font service URL
-     that does not name it);
+     that does not name it); a Google Fonts or Bunny Fonts stylesheet `<link>` in
+     the app's page head (its HTML page, or a framework root layout or
+     document) that names the family also loads it;
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once;
   11. every setting of an added local theme shows as written, as its build
@@ -413,7 +418,17 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   add: delete each file the add wrote that still holds what it wrote, keep and
   name any changed, and uninstall the packages it installed that no theme
   still in the record is owned by or imports. It edits no application code (DEC-2) and adds no
-  configuration (`spec:AST-017/FR19`) (DEC-12).
+  configuration (`spec:AST-017/FR19`) (DEC-12). When the shared theme also
+  carries the theme editor's saved state for that theme (a folder holding
+  `<name>.settings.json`), the add copies it to the editor's folder for the
+  theme, `themes/<name>/`, so the theme editor opens it. That state is read
+  as data and never run: a settings file the editor's own checks refuse, or
+  a palette made with a recipe this CLI does not know (named with the CLI
+  update it needs), or more than one folder of it, is not copied and is
+  named, and the theme is still added; nor is it
+  copied into a folder that already holds editor state the add did not
+  write, which is left in place and named. The receipt lists the files
+  copied, and `theme remove` takes back the unchanged ones.
 
 ### Platform support
 
@@ -688,7 +703,10 @@ with install scripts off, because those are the theme's base (a project whose
 integration says how it adds packages gets that line instead); a package from
 anywhere else is the builder's call, so it is named, never installed. Nothing
 of the theme runs while it is added, so a theme arrives built, and the add is
-a copy the builder can see in full and undo with `theme remove`.
+a copy the builder can see in full and undo with `theme remove`. The
+editor's saved state travels with it when the bundle carries it, because the
+copy is the low-level output and that state is the high-level description
+the builder keeps editing.
 
 Rejected: routing the shared copy through `theme eject`, the author's fork verb.
 Rejected: installing every imported package, which runs scripts the builder never chose.

@@ -114,12 +114,18 @@ import {
 } from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -604,6 +610,20 @@ export function PowerSearch({
   presentation = 'adaptive',
   ...rest
 }: PowerSearchProps) {
+  if (process.env.NODE_ENV !== 'production' && configProp == null) {
+    throw devPropError(
+      'PowerSearch',
+      'config',
+      'is required: the fields people can filter by, for example config={{fields: [...]}}.',
+    );
+  }
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(filters)) {
+    throw devPropError(
+      'PowerSearch',
+      'filters',
+      'must be an array of the applied filters, for example filters={filters} with onChange={setFilters} and useState([]).',
+    );
+  }
   const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
@@ -1501,10 +1521,21 @@ export function PowerSearch({
     [handleFieldBlur],
   );
 
+  // The popover presentation's Tokenizer draws its own status icon; the sheet
+  // trigger's field draws this one.
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status: isSheetPresentation ? status : undefined,
+      statusVariant,
+    });
+
   if (isSheetPresentation) {
     const triggerDescribedBy =
       [
-        status?.message ? statusMessageId : null,
+        // The tooltip variant renders no message box; the info-tip's tooltip
+        // describes the trigger instead.
+        status?.message && statusVariant !== 'tooltip' ? statusMessageId : null,
+        statusTooltipDescribedBy,
         showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
       ]
         .filter(Boolean)
@@ -1597,7 +1628,9 @@ export function PowerSearch({
                 ) : null}
               </button>
             </div>
-            {(endContent || isRenderable(resultCountText)) && (
+            {(endContent ||
+              isRenderable(resultCountText) ||
+              isRenderable(statusIcon)) && (
               <div
                 ref={endLaneRef}
                 {...stylex.props(sheetTriggerStyles.endSection)}>
@@ -1607,6 +1640,7 @@ export function PowerSearch({
                   </span>
                 )}
                 {endContent}
+                {statusIcon}
               </div>
             )}
           </div>

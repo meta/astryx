@@ -292,7 +292,7 @@ const TEXT_UP_COLOR = 'var(--color-text-green, #0B991F)';
 const TEXT_DOWN_COLOR = 'var(--color-text-red, #F5394F)';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
 
 /** Tooltips and readouts have no room for cents. */

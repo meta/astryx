@@ -23,6 +23,8 @@ import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {formatSrcset, parseSrcset} from './srcset.mjs';
+import * as vm from 'node:vm';
 import postcss from 'postcss';
 import {importUrl} from '../fs/import-url.mjs';
 import {
@@ -34,12 +36,14 @@ import {
 } from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
-import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
+import {LINK_OUT, ROOT_ID, compactSource, imageSinks} from './client-bundle.mjs';
+import {remoteImages} from './remote-images.mjs';
 import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {carriedNameFor, embeddedPathProblem} from './embedded-files.mjs';
-import {scanHtml} from './html-reader.mjs';
+import {scanHtml, VOID} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -73,6 +77,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [remoteImages] - The https images the page names: each address fetched into the file, and each one left as the page wrote it, with why. Present when the page names a remote image and the render writes a file.
  */
 
 /** An error carrying a render error code. */
@@ -768,28 +773,166 @@ export function withoutAutofocus(markup) {
 }
 
 /**
+ * The render's own attribute on a first-paint element whose `src`, `srcset`
+ * or `poster` it carries: each attribute with the number of its value
+ * (`src:0 srcset:1`), so the page's script reads the value there
+ * ({@link withCarriedPaths}). Only the file's markup has it, never the page's
+ * source.
+ */
+export const CARRY_ATTR = 'data-astryx-carried';
+
+/** The name the script reads the markup's carried values from. */
+const CARRIED_VALUES = '__astryxCarried';
+
+/** The script's reader of one candidate of a carried `srcset`, by its place. */
+const CARRIED_CANDIDATE = '__astryxCandidate';
+
+/**
+ * The script's first statement: each value the markup carries, read from the
+ * first paint by its number before the script draws the page again.
+ */
+const CARRIED_PRELUDE =
+  `var ${CARRIED_VALUES}=(()=>{const v=[];for(const e of document.querySelectorAll('[${CARRY_ATTR}]'))` +
+  `for(const c of e.getAttribute('${CARRY_ATTR}').split(' ')){const [a,i]=c.split(':');v[+i]??=e.getAttribute(a)}return v})();`;
+
+/**
  * The page's script with each string the markup's rewrite replaced (an
- * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
- * same carried data, so the page the script draws shows what the first paint
- * showed. Only a quoted string that is exactly that value changes, never a
- * longer string that holds it.
+ * image's `src`, `poster` or `srcset`, as the page wrote it) read from the
+ * markup, which carries the same data, so the page the script draws shows
+ * what the first paint showed and the file holds that data once. A read
+ * replaces only a whole string token of the script whose value is exactly
+ * that path, found with a JavaScript parser. Every other place the path
+ * appears keeps the data itself: a longer string that holds it (inner HTML,
+ * a CSS `url()`), a value no first-paint element carries (an image the page
+ * shows only later), an object key, or a template a tag reads. A script the
+ * parser cannot read, or that would not parse with the reads, keeps the data
+ * everywhere.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} carried each value the first paint carries, with
+ *   the number its mark gives it
+ * @param {Set<string>} [srcsets] the carried values a `srcset` marks: only
+ *   their candidates are read by place
+ * @returns {string}
+ */
+export function withCarriedPaths(script, rewrites, carried, srcsets = new Set()) {
+  const inline = inlineCarried(script, rewrites);
+  const tokens = carriedTokens(script, rewrites, carried, srcsets);
+  if (tokens.length === 0) return inline;
+  // Each token to read becomes a mark no script holds (the script is built
+  // ASCII-only, so it never holds a raw private-use character), so the text
+  // pass below writes the data everywhere else; then each mark becomes its read.
+  let marked = '';
+  let at = 0;
+  for (const token of tokens) {
+    marked += `${script.slice(at, token.start)}\uE000${Array.isArray(token.index) ? token.index.join('.') : token.index}\uE001`;
+    at = token.end;
+  }
+  marked += script.slice(at);
+  const candidates = tokens.some(token => Array.isArray(token.index));
+  const read =
+    CARRIED_PRELUDE +
+    (candidates ? `var ${CARRIED_CANDIDATE}=(i,k)=>(${compactSource(parseSrcset)})(${CARRIED_VALUES}[i]??'')[k]?.url;` : '') +
+    inlineCarried(marked, rewrites).replace(/\uE000(\d+)(?:\.(\d+))?\uE001/g, (_, i, k, offset, all) =>
+      `${/[\w$]/.test(all[offset - 1] ?? '') ? ' ' : ''}${k === undefined ? `${CARRIED_VALUES}[${i}]` : `${CARRIED_CANDIDATE}(${i},${k})`}`,
+    );
+  try {
+    new vm.Script(read);
+    return read;
+  } catch {
+    return inline;
+  }
+}
+
+/**
+ * The string tokens of the script whose value is exactly a path the first
+ * paint carries, where a read can stand: not an object key, not a template a
+ * tag reads, not text the page shows (`children`). In script order.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @returns {{start: number, end: number, index: number | [number, number]}[]}
+ */
+function carriedTokens(script, rewrites, carried, srcsets) {
+  /** @type {Map<string, number | [number, number]>} */
+  const indexOf = new Map();
+  /** @param {string} value */
+  const quoted = value => !/["'`\\\n]/.test(value) && ['"', "'", '`'].some(q => script.includes(`${q}${value}${q}`));
+  for (const [was] of rewrites) {
+    const index = carried.get(was);
+    if (index !== undefined && quoted(was)) indexOf.set(was, index);
+  }
+  // A local path the script names that a carried srcset lists
+  // (`${a} 1x, ${b} 2x` built in code): read that candidate.
+  for (const [, i, written] of carriedSrcsets(carried, srcsets, rewrites)) {
+    written.forEach(({url}, k) => {
+      if (!indexOf.has(url) && rewrites.has(url) && !/^(https?:)?\/\//i.test(url) && quoted(url)) indexOf.set(url, [i, k]);
+    });
+  }
+  if (indexOf.size === 0) return [];
+  /** @type {any} */
+  let ast;
+  try {
+    ast = babelParser().parse(script, {sourceType: 'script', errorRecovery: false});
+  } catch {
+    return [];
+  }
+  /** @type {{start: number, end: number, index: number | [number, number]}[]} */
+  const found = [];
+  /** @param {any} node @param {any} parent */
+  const visit = (node, parent) => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, parent);
+      return;
+    }
+    if (typeof node.type !== 'string') return;
+    /** @type {string | undefined} */
+    let value;
+    if (node.type === 'StringLiteral') value = node.value;
+    else if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && parent?.type !== 'TaggedTemplateExpression') value = node.quasis[0]?.value?.cooked;
+    if (value !== undefined && indexOf.has(value)) {
+      const key = (parent?.type === 'ObjectProperty' || parent?.type === 'ObjectMethod' || parent?.type === 'ClassProperty') && parent.key === node;
+      const shown = parent?.type === 'ObjectProperty' && parent.value === node && !parent.computed && (parent.key?.name ?? parent.key?.value) === 'children';
+      if (!key && !shown) found.push({start: node.start, end: node.end, index: /** @type {number | [number, number]} */ (indexOf.get(value))});
+    }
+    for (const k of Object.keys(node)) {
+      if (k === 'loc' || k === 'start' || k === 'end' || k === 'extra' || k === 'leadingComments' || k === 'trailingComments') continue;
+      visit(node[k], node);
+    }
+  };
+  visit(ast.program, null);
+  return found.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * The script with each string that is exactly a path the markup's rewrite
+ * replaced written as the same data, and each CSS url() that names it too.
+ * Text the page shows (`children: "./photo.png"`) stays as written.
  * @param {string} script
  * @param {Map<string, string>} rewrites
  * @returns {string}
  */
-export function withCarriedPaths(script, rewrites) {
+function inlineCarried(script, rewrites) {
   let out = script;
   for (const [was, now] of rewrites) {
     if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
     for (const quote of ['"', "'", '`']) {
       const literal = `${quote}${was}${quote}`;
-      // Text the page shows (`children: "./photo.png"`) stays as written.
       out = out
         .split(literal)
         .map((part, i, parts) =>
           i === parts.length - 1 ? part : /\bchildren:\s*$/.test(part) ? `${part}${literal}` : `${part}${quote}${now}${quote}`,
         )
         .join('');
+    }
+    // A CSS url() in a style the script sets (`backgroundImage:
+    // "url(./bg.png)"`) names the same file. A data: URI with no space,
+    // quote or parenthesis needs no quotes in url().
+    if (/[\s()]/.test(now)) continue;
+    for (const form of [`url(${was})`, `url("${was}")`, `url('${was}')`]) {
+      out = out.split(form).join(`url(${now})`);
     }
   }
   return out;
@@ -859,14 +1002,16 @@ export function cssUrlRef(m) {
  * A reference is URL text: it names the file its percent-escapes decode to
  * (`a%20b.png` is "a b.png"), as a browser and the app's bundler read it.
  * A file that cannot be read (no permission) is `unreadable`.
- * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
+ * A remote file's `url` is the whole address the page wrote, its query too.
+ * @returns {null | {kind: 'remote', ref: string, url: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
  */
 export function assetRef(ref, at) {
   const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
   if (!clean) return null;
   if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
     return null;
-  if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean};
+  if (/^(https?:)?\/\//i.test(clean))
+    return {kind: 'remote', ref: clean, url: decodeAttr(ref).trim()};
   /** @type {string} */
   let named;
   try {
@@ -917,11 +1062,13 @@ function publicFolderOf(at) {
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, pageDir?: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>}} ctx
+ * @param {{dir: string, pageDir?: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>, carried?: Map<string, number>, srcsets?: Set<string>, remote?: Map<string, import('./remote-images.mjs').RemoteImage>}} ctx
  *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
  *   as it is and named, as a missing one is, rather than refused;
  *   `rewrites`: each attribute value the markup's rewrite replaced, as the
- *   page wrote it, with what it became
+ *   page wrote it, with what it became; `carried`: gets each one the markup
+ *   numbers for the page's script (none in a markup-only render); `remote`: the remote images fetched
+ *   for this render, by the address the page wrote
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
@@ -930,12 +1077,16 @@ function inlineAssets(text, kind, ctx) {
     if (!named) return null;
     const clean = named.ref;
     if (named.kind === 'remote') {
-      const key = `remote:${clean}`;
+      const fetched = ctx.remote?.get(named.url);
+      if (fetched && 'uri' in fetched) return fetched.uri;
+      // Keyed by the whole address, as the later-drawn pass keys it, so one
+      // image gets one warning.
+      const key = `remote:${named.url}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
         ctx.warnings.push({
           code: 'remote-asset',
-          message: `${clean} is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.`,
+          message: `${named.url} is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.${fetched ? ` The render could not fetch it: ${fetched.reason}.` : ''}`,
         });
       }
       return null;
@@ -981,41 +1132,297 @@ function inlineAssets(text, kind, ctx) {
     ctx.localAssets.add(found);
     return assetDataUri(found);
   };
-  /** @param {string} value */
-  const urls = value =>
+  return mapAssetRefs(text, kind, resolveRef, ctx.rewrites, ctx.carried, ctx.srcsets);
+}
+
+/**
+ * Where the first paint holds an https image's data, for the image sinks to
+ * read: the marked value that is the address, or else a marked `srcset` that
+ * lists it, with the candidate's place there.
+ * @param {string} url
+ * @param {Map<string, number> | undefined} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @param {Map<string, string>} rewrites
+ * @returns {[string, number] | [string, number, number] | null}
+ */
+function firstPaintRead(url, carried, srcsets, rewrites) {
+  if (!carried) return null;
+  const mark = carried.get(url);
+  if (mark !== undefined) return [url, mark];
+  for (const [, i, written] of carriedSrcsets(carried, srcsets, rewrites)) {
+    const k = written.findIndex(candidate => candidate.url === url);
+    if (k >= 0) return [url, i, k];
+  }
+  return null;
+}
+
+/**
+ * Each marked `srcset` value whose data lists the same number of candidates
+ * as the page wrote, with its mark: only such a value can give one
+ * candidate's data by its place. A `src` or `poster` that holds a comma and
+ * a space is one address, never a list.
+ * @param {Map<string, number>} carried
+ * @param {Set<string>} srcsets the carried values a `srcset` marks
+ * @param {Map<string, string>} rewrites
+ * @returns {Array<[string, number, import('./srcset.mjs').SrcsetCandidate[]]>}
+ */
+function carriedSrcsets(carried, srcsets, rewrites) {
+  /** @type {Array<[string, number, import('./srcset.mjs').SrcsetCandidate[]]>} */
+  const lists = [];
+  for (const [was, i] of carried) {
+    const now = rewrites.get(was);
+    if (!srcsets.has(was) || now === undefined) continue;
+    const written = parseSrcset(was);
+    if (parseSrcset(now).length === written.length) lists.push([was, i, written]);
+  }
+  return lists;
+}
+
+/** Elements whose content a browser running scripts builds no image of. */
+const UNBUILT = new Set(['noscript', 'template', 'select']);
+
+/**
+ * Where `text` holds markup a browser running scripts never makes elements
+ * of, as [start, end] pairs: a comment (a bogus one too), a CDATA section,
+ * the text of a raw-text element (`<textarea>`, `<iframe>`, `<xmp>` and the
+ * others the scanner names, everything after `<plaintext>`), and each
+ * outermost `<noscript>`, `<template>` or `<select>` (whose content Firefox's
+ * parser drops), which runs to its own close tag past any nested in it. The
+ * pieces are the HTML scanner's own.
+ * @param {string} text
+ * @returns {[number, number][]}
+ */
+function unread(text) {
+  /** @type {[number, number][]} */
+  const ranges = [];
+  /** @type {string[]} */
+  const open = [];
+  let start = 0;
+  for (const piece of scanHtml(text)) {
+    if (open.length === 0 && (piece.kind === 'comment' || piece.kind === 'cdata' || piece.kind === 'raw')) {
+      // A `<![CDATA[` the scanner reads as a bogus comment (outside a foreign
+      // root it tracks) can still be CDATA in a browser: range it to `]]>`.
+      const cdata = piece.kind === 'comment' && text.startsWith('<![CDATA[', piece.start);
+      const close = cdata ? text.indexOf(']]>', piece.start + 9) : -1;
+      ranges.push([piece.start, cdata ? (close < 0 ? text.length : close + 3) : piece.end]);
+      continue;
+    }
+    if ((piece.kind !== 'start' && piece.kind !== 'end') || !UNBUILT.has(piece.tag)) continue;
+    if (piece.kind === 'start') {
+      if (piece.selfClosing) continue;
+      if (open.length === 0) start = piece.start;
+      open.push(piece.tag);
+      continue;
+    }
+    const at = open.lastIndexOf(piece.tag);
+    if (at === -1) continue;
+    open.length = at;
+    if (open.length === 0) ranges.push([start, piece.end]);
+  }
+  if (open.length > 0) ranges.push([start, text.length]);
+  const off = offScript(text);
+  if (off >= 0) ranges.push([off, text.length]);
+  return ranges;
+}
+
+/** The tags a serializer writes inside a `<select>`. */
+const SELECT_CONTENT = new Set(['option', 'optgroup', 'hr']);
+
+/**
+ * Where `text` first holds a shape a serializer such as React's never writes,
+ * or -1: an end tag that does not close the element open last, CDATA, a
+ * bogus comment, a comment holding `--!>` (which also ends one), a
+ * self-closing HTML tag that is not void, `<plaintext>`, `<frameset>`, or a
+ * start tag inside a `<select>` other than option, optgroup or hr. Up to that point the scanner and a browser agree on the
+ * elements; past it they may not, so nothing after it marks a carried
+ * value, and each image there keeps its own copy in the script. A gap in
+ * the scanner then costs bytes, never a missing picture.
+ * @param {string} text
+ * @returns {number}
+ */
+function offScript(text) {
+  /** @type {string[]} */
+  const open = [];
+  for (const piece of scanHtml(text)) {
+    const written = text.slice(piece.start, piece.end);
+    if (piece.kind === 'cdata' || (piece.kind === 'comment' && (!written.startsWith('<!--') || written.includes('--!>')))) return piece.start;
+    if (piece.kind === 'start') {
+      if (piece.tag === 'plaintext' || piece.tag === 'frameset') return piece.start;
+      if (open.includes('select') && !SELECT_CONTENT.has(piece.tag)) return piece.start;
+      if (VOID.has(piece.tag)) continue;
+      if (written.endsWith('/>') && !piece.selfClosing) return piece.start;
+      if (!piece.selfClosing) open.push(piece.tag);
+    } else if (piece.kind === 'end') {
+      if (open[open.length - 1] !== piece.tag) return piece.start;
+      open.pop();
+    }
+  }
+  return -1;
+}
+
+
+/**
+ * Each reference to a file in markup (`src`, `poster`, `srcset`, and `url()`
+ * in a `style` attribute) or in CSS (`url()`), replaced by what `resolve`
+ * gives for it, or kept when it gives null.
+ * @param {string} text markup or CSS
+ * @param {'html' | 'css'} kind
+ * @param {(ref: string) => string | null} resolve
+ * @param {Map<string, string>} [rewrites] gets each attribute value replaced,
+ *   as the page wrote it, with what it became
+ * @param {Map<string, number>} [marked] number each replaced value in the
+ *   markup ({@link CARRY_ATTR}), so the page's script reads it there, and
+ *   add it to this map with its number
+ * @param {Set<string>} [srcsets] gets each marked value a `srcset` holds
+ */
+function mapAssetRefs(text, kind, resolve, rewrites, marked, srcsets) {
+  /**
+   * What each replaced value became, for the marks the first paint gets.
+   * @type {Map<string, string[]>}
+   */
+  const became = new Map();
+  /**
+   * Record a replaced value.
+   * @param {string} was
+   * @param {string} now
+   */
+  const carry = (was, now) => {
+    if (!rewrites) return;
+    if (!rewrites.has(was)) rewrites.set(was, now);
+    became.set(now, [...(became.get(now) ?? []), was]);
+  };
+  /**
+   * @param {string} value
+   * @param {boolean} [record] keep each rewrite, for a style the script sets
+   */
+  const urls = (value, record = false) =>
     value.replace(new RegExp(CSS_URL.source, 'g'), (whole, ...rest) => {
-      const uri = resolveRef(
-        cssUrlRef(/** @type {any} */ ({groups: rest.at(-1)})),
-      );
+      const ref = cssUrlRef(/** @type {any} */ ({groups: rest.at(-1)}));
+      const uri = resolve(ref);
+      if (uri && record && ref) rewrites?.set(ref, uri);
       return uri ? `url("${uri}")` : whole;
     });
   if (kind === 'css') return urls(text);
-  return text
+  const written = text
     // React writes `srcSet` as it is spelled in JSX; HTML reads attribute
     // names in any case.
     .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
-      const uri = resolveRef(ref);
-      if (uri) ctx.rewrites?.set(decodeAttr(ref), uri);
+      const uri = resolve(ref);
+      if (uri) carry(decodeAttr(ref), uri);
       return uri ? ` ${attr}="${uri}"` : whole;
     })
     .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
-      const parts = decodeAttr(set)
-        .split(',')
-        .map(part => {
-          const [ref, ...rest] = part.trim().split(/\s+/);
-          const uri = ref ? resolveRef(ref) : null;
-          return [uri ?? ref, ...rest].join(' ');
-        });
-      const rewritten = parts.join(', ');
-      if (rewritten !== decodeAttr(set)) ctx.rewrites?.set(decodeAttr(set), rewritten);
+      const value = decodeAttr(set);
+      let carried = false;
+      const candidates = parseSrcset(value).map(({url, descriptor}) => {
+        const uri = resolve(url);
+        if (uri) carried = true;
+        return {url: uri ?? url, descriptor};
+      });
+      if (!carried) return whole;
+      const rewritten = formatSrcset(candidates);
+      carry(value, rewritten);
       return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
     })
     .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
       // The attribute holds escaped text: rewrite the CSS it means, then
       // escape it again, so a data: URI's quotes cannot end the attribute.
-      const css = urls(decodeAttr(style));
+      const css = urls(decodeAttr(style), true);
       return ` style="${css.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
     });
+  return marked && rewrites && became.size > 0 ? withCarryMarks(written, became, rewrites, marked, srcsets ?? new Set()) : written;
+}
+
+/** The elements whose `src`, `srcset` or `poster` is an image the page shows. */
+const IMAGE_TAGS = new Set(['img', 'source', 'input', 'video']);
+
+/**
+ * The markup with each element a browser builds that shows a replaced value
+ * marked ({@link CARRY_ATTR}) with that value's number, once per element,
+ * after its last attribute. Only the first attribute of each name on a real
+ * `img`, `source`, `input` or `video` start tag counts, outside the ranges
+ * {@link unread} names; the pieces are the HTML scanner's own.
+ * @param {string} text
+ * @param {Map<string, string[]>} became what each value became, and the
+ *   values written that became it
+ * @param {Map<string, string>} rewrites
+ * @param {Map<string, number>} marked gets each marked value, with its number
+ * @param {Set<string>} srcsets gets each marked value a `srcset` holds
+ * @returns {string}
+ */
+function withCarryMarks(text, became, rewrites, marked, srcsets) {
+  const ranges = unread(text);
+  /** @type {Array<[number, string]>} */
+  const inserts = [];
+  for (const piece of scanHtml(text)) {
+    if (piece.kind !== 'start' || !IMAGE_TAGS.has(piece.tag) || piece.attrs.length === 0) continue;
+    if (ranges.some(([from, to]) => piece.start > from && piece.start < to)) continue;
+    /** @type {string[]} */
+    const marks = [];
+    const seen = new Set();
+    for (const [name, value] of piece.attrs) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      if (name !== 'src' && name !== 'srcset' && name !== 'poster') continue;
+      for (const was of became.get(decodeAttr(value)) ?? []) {
+        // The number stays the value's own, whatever later leaves the rewrites.
+        if (!marked.has(was)) marked.set(was, [...rewrites.keys()].indexOf(was));
+        if (name === 'srcset') srcsets.add(was);
+        marks.push(`${name}:${marked.get(was)}`);
+      }
+    }
+    if (marks.length > 0) inserts.push([/** @type {[string, string, number, number]} */ (piece.attrs.at(-1))[3], ` ${CARRY_ATTR}="${[...new Set(marks)].join(' ')}"`]);
+  }
+  let out = '';
+  let at = 0;
+  for (const [where, mark] of inserts) {
+    out += text.slice(at, where) + mark;
+    at = where;
+  }
+  return out + text.slice(at);
+}
+
+/** A remote file whose address names a type that is never an image. */
+const NOT_AN_IMAGE = /\.(woff2?|ttf|otf|eot|mp4|webm|mov|mp3|wav|ogg|css|[cm]?js|json|html?|pdf|txt|xml)$/i;
+
+/**
+ * The remote addresses markup or CSS names where an image goes, as the page
+ * wrote them: `src` and `srcset` of an image, `srcset` of a picture's
+ * source, `src` of an image button, a video's `poster`, and `url()` in a
+ * `style` attribute or a stylesheet, except an address that names a font,
+ * media or a document.
+ * @param {string} text
+ * @param {'html' | 'css'} kind
+ * @param {{dir: string, root: string}} at
+ * @returns {Set<string>}
+ */
+function remoteRefsIn(text, kind, at) {
+  /** @type {Set<string>} */
+  const found = new Set();
+  /** @param {string} ref */
+  const take = ref => {
+    const named = assetRef(ref, at);
+    if (named?.kind === 'remote' && !NOT_AN_IMAGE.test(named.ref)) found.add(named.url);
+    return null;
+  };
+  if (kind === 'css') {
+    mapAssetRefs(text, 'css', take);
+    return found;
+  }
+  for (const element of text.matchAll(/<([a-zA-Z][\w-]*)\b([^>]*)>/g)) {
+    const tag = element[1].toLowerCase();
+    const attrs = element[2];
+    for (const attr of attrs.matchAll(/\s(src|srcset|poster|style)="([^"]*)"/gi)) {
+      const name = attr[1].toLowerCase();
+      const image =
+        name === 'style' ||
+        (name === 'poster' && tag === 'video') ||
+        (name === 'srcset' && (tag === 'img' || tag === 'source')) ||
+        (name === 'src' && (tag === 'img' || (tag === 'input' && /\stype="image"/i.test(attrs))));
+      if (image) mapAssetRefs(` ${name}="${attr[2]}"`, 'html', take);
+    }
+  }
+  return found;
 }
 
 /**
@@ -1070,7 +1477,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0]}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -1089,7 +1496,10 @@ const SCHEME_CSS =
  *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
  *   resolves from); a page whose script cannot be built fails the render.
  *   `markupOnly` renders the markup and its styles without the script, for a
- *   caller that shows the markup itself (the theme editor); it writes no file.
+ *   caller that shows the markup itself (the theme editor); it writes no file
+ *   and reaches no network. The render fetches each https image the page
+ *   names, once, so the file carries it (remote-images.mjs; `remoteImages`:
+ *   the fetch and its time limits, for tests).
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -1185,6 +1595,9 @@ export async function renderPage(entry, options = {}) {
     });
   }
 
+  // The https images the page names, fetched once so the file carries them.
+  // A markup-only render reaches no network.
+  const remote = options.markupOnly ? null : remoteImages(options.remoteImages);
   const ctx = {
     dir,
     // A stylesheet's own folder replaces `dir` for its url()s; a warning
@@ -1196,11 +1609,37 @@ export async function renderPage(entry, options = {}) {
     localAssets: /** @type {Set<string>} */ (new Set()),
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
     rewrites: /** @type {Map<string, string>} */ (new Map()),
+    // The page's script reads the data the markup carries; a markup-only
+    // render has no script.
+    carried: options.markupOnly ? undefined : /** @type {Map<string, number>} */ (new Map()),
+    srcsets: /** @type {Set<string>} */ (new Set()),
+    remote: remote?.results,
+  };
+  /**
+   * Inline what `text` names, after fetching the remote images it names that
+   * no earlier text named.
+   * @param {string} text
+   * @param {'html' | 'css'} kind
+   * @param {typeof ctx} at
+   */
+  const inlineWithRemote = async (text, kind, at) => {
+    if (remote) await remote.get(remoteRefsIn(text, kind, at));
+    return inlineAssets(text, kind, at);
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
+  // The images the markup, the page's own CSS and its literals name are
+  // asked for together, so a machine with no network waits for one answer
+  // window, not one per text.
+  if (remote) {
+    await remote.get([
+      ...remoteRefsIn(markup, 'html', ctx),
+      ...(message.css ? remoteRefsIn(message.css, 'css', ctx) : []),
+      ...(typeof message.script === 'string' ? /** @type {string[]} */ (message.remoteLiterals ?? []) : []),
+    ]);
+  }
   try {
-    markup = inlineAssets(markup, 'html', ctx);
+    markup = await inlineWithRemote(markup, 'html', ctx);
     // React adds `<link rel="preload">` hints for images it renders; in one
     // static file they only fetch from the network, so they go.
     markup = markup.replace(/<link rel="preload"[^>]*\/?>/g, '');
@@ -1231,6 +1670,41 @@ export async function renderPage(entry, options = {}) {
   const used = classesIn(markup);
   /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
+  // https images the page's files name as literals that the first paint may
+  // not show (the next view, a feed after a click): fetched the same way, so
+  // the script draws them from the same carried data.
+  if (remote && script !== null) {
+    const literals = /** @type {string[]} */ (message.remoteLiterals ?? []);
+    const namedOnly = new Set(/** @type {string[]} */ (message.remoteNamedOnly ?? []));
+    await remote.get(literals);
+    for (const url of literals) {
+      const fetched = remote.results.get(url);
+      if (!fetched || 'uri' in fetched) continue;
+      // An address that counts only by an image word in a name around it
+      // (`imageUploadUrl`) can be an API's: when its server answers with
+      // another type (JSON, a page), the result lists it, with no warning.
+      // Any other later-drawn address warns, as in the first paint.
+      if (fetched.answered && namedOnly.has(url)) continue;
+      const key = `remote:${url}`;
+      if (ctx.counted.has(key)) continue;
+      ctx.counted.add(key);
+      warnings.push({
+        code: 'remote-asset',
+        message: `${url}, which the page's code names as an image, is loaded from the network when the script draws it, which a sandboxed page cannot reach; save it beside the page and import it instead. The render could not fetch it: ${fetched.reason}.`,
+      });
+    }
+  }
+  /** Built addresses named in a warning already. @type {Set<string>} */
+  const builtNamed = new Set();
+  for (const built of /** @type {{text: string, file: string, line: number}[]} */ (message.builtRemote ?? [])) {
+    const where = `${path.relative(dir, built.file).split(path.sep).join('/')}:${built.line}`;
+    if (builtNamed.has(`${where} ${built.text}`)) continue;
+    builtNamed.add(`${where} ${built.text}`);
+    warnings.push({
+      code: 'remote-asset',
+      message: `${built.text} (${where}) builds an image address in code, so the render cannot carry it: the file asks the network for it when the script draws it. Write the address whole, or save the image beside the page and import it.`,
+    });
+  }
   // The script draws what the markup does not show yet (a menu as it opens,
   // the next tab), so the rules every class name it holds needs stay too.
   // Core builds a part's class at run time from the part's name
@@ -1253,7 +1727,7 @@ export async function renderPage(entry, options = {}) {
     /** @type {string[]} */
     const packageSheets = [];
     /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
-    const sheet = (file, text) => {
+    const sheet = async (file, text) => {
       try {
         const own = expandImports(file, text, {
           warnings,
@@ -1262,7 +1736,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, kept, {states}), 'css', {
+        return await inlineWithRemote(cutCss(own, kept, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1277,20 +1751,21 @@ export async function renderPage(entry, options = {}) {
         );
       }
     };
-    sheetText.forEach((text, i) => {
-      css += sheet(sheetFiles[i], text);
-    });
+    for (const [i, text] of sheetText.entries()) {
+      css += await sheet(sheetFiles[i], text);
+    }
     for (const {
       file,
       css: text,
     } of /** @type {{file: string, css: string}[]} */ (
       message.importedCss ?? []
     )) {
-      css += sheet(file, text);
+      css += await sheet(file, text);
     }
     for (const spec of packageSheets)
       if (!sheets.includes(spec)) sheets.push(spec);
-    if (message.css) css += inlineAssets(message.css, 'css', ctx);
+    if (message.css) css += await inlineWithRemote(message.css, 'css', ctx);
+    remote?.done();
   } catch (e) {
     const err = /** @type {any} */ (e);
     if (err instanceof RenderAssetError)
@@ -1542,7 +2017,53 @@ export async function renderPage(entry, options = {}) {
   }
   // The script draws the page again with the paths the page wrote, so each
   // carried image keeps showing, the first paint's and the ones drawn later.
-  const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
+  // A local path becomes its data in the script. An https address stays as
+  // the page wrote it: the file's script gives the carried data where the
+  // browser takes an image's address (imageSinks), so a link, a text or the
+  // URL API still reads the page's own address.
+  // A remote address is one the render fetches: https, or one with no
+  // scheme (`//cdn.example.com/a.png`).
+  const remoteAddress = (/** @type {string} */ url) => /^(https?:)?\/\//i.test(url.trim());
+  /** @type {Map<string, string>} */
+  const localRewrites = new Map();
+  for (const [was, now] of ctx.rewrites) {
+    // A value is read as a `srcset` only when it lists a remote candidate:
+    // a local name may hold a comma and a space (`./Logo, dark.png`).
+    const written = /\s/.test(was.trim()) ? parseSrcset(was) : null;
+    if (!written?.some(candidate => remoteAddress(candidate.url))) {
+      if (!remoteAddress(was)) localRewrites.set(was, now);
+      continue;
+    }
+    // A `srcset` keeps its remote candidates as written.
+    const carried = parseSrcset(now);
+    if (written.length !== carried.length) continue;
+    const mixed = written.map((candidate, i) => (remoteAddress(candidate.url) ? candidate : carried[i]));
+    if (mixed.some((candidate, i) => candidate !== written[i])) localRewrites.set(was, formatSrcset(mixed));
+  }
+  // An https image the first paint shows and marks: the sink reads its data
+  // from that element, so the script holds no second copy of it.
+  /** @type {[string, string][]} */
+  const sinks = [];
+  /** @type {Array<[string, number] | [string, number, number]>} */
+  const reads = [];
+  for (const [url, fetched] of remote?.results ?? []) {
+    if (!('uri' in fetched)) continue;
+    const read = firstPaintRead(url, ctx.carried, ctx.srcsets, ctx.rewrites);
+    if (read) reads.push(read);
+    else sinks.push([url, fetched.uri]);
+  }
+  let pageScriptText = script === null ? null : withCarriedPaths(script, localRewrites, ctx.carried ?? new Map(), ctx.srcsets);
+  // The values the first paint carries are read once, before the sinks and
+  // the page's script that use them.
+  let prelude = reads.length > 0 ? CARRIED_PRELUDE : '';
+  if (pageScriptText?.startsWith(CARRIED_PRELUDE)) {
+    prelude = CARRIED_PRELUDE;
+    pageScriptText = pageScriptText.slice(CARRIED_PRELUDE.length);
+  }
+  const drawn =
+    pageScriptText === null
+      ? null
+      : prelude + (sinks.length + reads.length > 0 ? imageSinks(sinks, reads, CARRIED_VALUES) : '') + pageScriptText;
   // Paths are kept relative to the folder that holds every file: the page's
   // folder, or an ancestor when the page imports from above it, but never one
   // from which the page's own path holds a name a reverse refuses (a
@@ -1751,6 +2272,7 @@ export async function renderPage(entry, options = {}) {
       `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
       `${sourceBlock(path.basename(entry), embedded)}${scriptTag}</body></html>\n`;
   }
+  const remoteSummary = remote?.summary();
   return {
     html,
     files: embedded.map(f => f.path),
@@ -1768,5 +2290,6 @@ export async function renderPage(entry, options = {}) {
     ...(leftOut.length > 0 ? {notCarried: leftOut} : {}),
     fromSet: message.fromSet ?? [],
     ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
+    ...(remoteSummary && remoteSummary.fetched.length + remoteSummary.failed.length > 0 ? {remoteImages: remoteSummary} : {}),
   };
 }

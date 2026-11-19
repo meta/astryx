@@ -1025,8 +1025,12 @@ describe('every color decision is generator config', () => {
     expect(gray['--color-accent-muted'].dark.stop).toBe(80);
     // Segmented-control labels sit on the neutral track, not the tint:
     // their lift is picked against the track (here the base has no track
-    // color, so only the tint is lifted).
-    expect(Object.keys(gray)).toEqual(['--color-accent-muted']);
+    // color, so the track is not lifted). Top nav items sit on the pressed
+    // fill, which the neutral color sets, so it is lifted too.
+    expect(Object.keys(gray)).toEqual([
+      '--color-accent-muted',
+      '--color-overlay-pressed',
+    ]);
     const track = {
       light: {...withText.light, '--color-neutral': '#0000000f'},
       dark: {...withText.dark, '--color-neutral': '#ffffff1a'},

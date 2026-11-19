@@ -172,7 +172,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',

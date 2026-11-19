@@ -85,6 +85,9 @@ const SECONDARY_ON_TEAL = 'light-dark(#7b4200, #e4ad77)';
  */
 const LINK_ON_TINT = 'light-dark(#7d4e21, #d4a06a)';
 
+/** The color modes chocolate draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const chocolateTheme = defineTheme({
   name: 'chocolate',
 
@@ -272,8 +275,6 @@ export const chocolateTheme = defineTheme({
     '--radius-element': '0.625rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
-    // Chat surfaces stay rounder than cards.
-    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================

@@ -39,6 +39,9 @@ const matchaSyntax = defineSyntaxTheme({
   },
 });
 
+/** The color modes matcha draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const matchaTheme = defineTheme({
   name: 'matcha',
 
@@ -279,8 +282,6 @@ export const matchaTheme = defineTheme({
     '--radius-element': '12px',
     '--radius-container': '18px',
     '--radius-page': '42px',
-    // Chat surfaces stay rounder than cards.
-    '--radius-chat': '28px',
 
     // No explicit --font-size-* overrides — font sizes come from
     // typography.scale above, keeping the scale the single source of truth.
@@ -309,6 +310,14 @@ export const matchaTheme = defineTheme({
     button: {
       base: {
         borderRadius: 'var(--radius-full)',
+      },
+    },
+    // Secondary text on a pressed nav item takes the next stop in light: it
+    // reads on the pressed fill over the page, which the default top bar
+    // paints.
+    'top-nav-item': {
+      base: {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
     },
     // Secondary text on a coloured or muted card steps to the nearest neutral

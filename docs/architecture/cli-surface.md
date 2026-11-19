@@ -167,7 +167,9 @@ and remains available through explicit Core package selection.
   the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
-  The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and
+  The detail level never changes a component read's JSON. A field shown in
+  one section of the text projection is not repeated in another: a read of
+  one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and
   each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
@@ -1152,6 +1154,28 @@ URL another page serves.
 Rejected: naming a folder that holds `page.tsx` (an import of the folder does
 not resolve without an index file); writing an index file beside each scaffold
 (a second file that the template does not own).
+
+### DEC-18 — A render fetches the remote images a page names
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+A rendered page is one file that shows the page in any viewer, and a viewer
+that blocks the network cannot load an image the page names by its web
+address. So `astryx experimental export` fetches each image the page names by
+an `https` address, once, while the page renders, and the file carries it.
+That is the only request a render makes for the page itself. A fetch sends no
+cookies or credentials and takes only an image, by its content type and its
+bytes, up to the size a render carries of one file. Each image has a time
+limit for its first answer and one for its last byte, and all the images of
+one render have one more; when the network answers none of the first images
+a render asks for, it asks for no more. Any failure leaves the
+address as the page wrote it, with the warning a remote image gets, and the
+result names every address fetched and every one that was not. The embedded
+source keeps the addresses, so `--reverse` gives back the page as written.
+
+Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
+broken), and carrying a fetched image in the embedded source (the way back
+would no longer be the page as written).
 
 ## Verification
 

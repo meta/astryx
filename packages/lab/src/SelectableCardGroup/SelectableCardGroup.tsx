@@ -62,7 +62,7 @@ interface SingleSelection {
    * `single` (the default): a radio group, one value. `multiple`: a group of
    * checkboxes, any number of values.
    */
-  selectionMode?: 'single';
+  type?: 'single';
   /** The chosen card's value, or `null` while none is chosen. */
   value: string | null;
   /** Called with the value of the card the user chose. */
@@ -71,7 +71,7 @@ interface SingleSelection {
 
 /** Any number of chosen values. */
 interface MultipleSelection {
-  selectionMode: 'multiple';
+  type: 'multiple';
   /** The chosen cards' values. */
   value: ReadonlyArray<string>;
   /** Called with the new list of chosen values. The newest choice is last. */
@@ -164,7 +164,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     containerXstyle,
     containerClassName,
     containerStyle,
-    selectionMode: _selectionMode,
+    type: _type,
     value: _value,
     onChange: _onChange,
     ...rest
@@ -192,10 +192,10 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     description ? descriptionID : undefined,
     callerDescribedBy,
   );
-  const isMultiple = props.selectionMode === 'multiple';
+  const isMultiple = props.type === 'multiple';
 
   const context = useMemo<GroupContextValue>(() => {
-    if (props.selectionMode === 'multiple') {
+    if (props.type === 'multiple') {
       const {value, onChange} = props;
       return {
         inputType: 'checkbox',
@@ -227,7 +227,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
       },
     };
   }, [
-    props.selectionMode,
+    props.type,
     props.value,
     props.onChange,
     generatedName,
@@ -256,7 +256,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
         {...mergeProps(
           themeProps('selectable-card-group', {
             orientation,
-            selectionMode: isMultiple ? 'multiple' : 'single',
+            type: isMultiple ? 'multiple' : 'single',
           }),
           stylex.props(
             styles.group,
@@ -276,6 +276,15 @@ SelectableCardGroup.displayName = 'SelectableCardGroup';
 /**
  * One card of a SelectableCardGroup: a SelectableCard whose input, name and
  * selection come from the group.
+ *
+ * @example
+ * ```
+ * <SelectableCardGroup label="Plan" value={plan} onChange={setPlan}>
+ *   <SelectableCardGroupItem value="pro" label="Pro">
+ *     <Text type="body">Pro, $29 a month</Text>
+ *   </SelectableCardGroupItem>
+ * </SelectableCardGroup>
+ * ```
  */
 export function SelectableCardGroupItem({
   value,

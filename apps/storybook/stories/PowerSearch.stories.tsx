@@ -2041,6 +2041,7 @@ export const StatusVariantComparison: Story = {
   render: () => {
     const [a, setA] = useState<PowerSearchFilter[]>([]);
     const [b, setB] = useState<PowerSearchFilter[]>([]);
+    const [c, setC] = useState<PowerSearchFilter[]>([]);
     return (
       <div
         style={{display: 'flex', flexDirection: 'column', gap: 24, width: 400}}>
@@ -2060,6 +2061,15 @@ export const StatusVariantComparison: Story = {
           label="Detached"
           status={{type: 'error', message: 'Add at least one filter'}}
           statusVariant="detached"
+        />
+        <PowerSearch
+          config={basicConfig}
+          filters={c}
+          onChange={newFilters => setC([...newFilters])}
+          isLabelHidden={false}
+          label="Tooltip"
+          status={{type: 'error', message: 'Add at least one filter'}}
+          statusVariant="tooltip"
         />
       </div>
     );

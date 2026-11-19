@@ -7,6 +7,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useToast} from '@astryxdesign/core/Toast';
 import {CheckIcon} from '@heroicons/react/24/solid';
 
 const FEATURES = [
@@ -17,6 +18,7 @@ const FEATURES = [
 ];
 
 export default function SectionDefaultWithWash() {
+  const showToast = useToast();
   return (
     <Stack direction="vertical" gap={2}>
       <Section variant="section" padding={4}>
@@ -49,7 +51,13 @@ export default function SectionDefaultWithWash() {
               / month
             </Text>
           </Stack>
-          <Button label="Upgrade" variant="primary" />
+          <Button
+            label="Upgrade"
+            variant="primary"
+            onClick={() =>
+              showToast({body: 'Demo: the upgrade would start here'})
+            }
+          />
         </Stack>
       </Section>
     </Stack>

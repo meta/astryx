@@ -55,7 +55,7 @@ export const docs = {
             ],
             [
               "--radius-chat",
-              "var(--radius-container)"
+              "28px"
             ],
             [
               "--radius-full",

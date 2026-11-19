@@ -487,7 +487,8 @@ const ON_MUTED = officialStops('--color-on-info-muted');
  * The parts whose secondary text the official neutral theme lifts, with
  * the block it lifts it in and what the text sits on: the accent tint,
  * except under segmented-control labels, which sit on the translucent
- * neutral track (`--color-neutral`).
+ * neutral track (`--color-neutral`), and in top nav items, which sit on the
+ * pressed fill (`--color-overlay-pressed`) while pressed.
  */
 export const LIFT_PARTS = OFFICIAL.lifted.map(
   ([part, block]) =>
@@ -500,17 +501,23 @@ export const LIFT_PARTS = OFFICIAL.lifted.map(
 /**
  * What a lifted block's secondary text sits on: a card's own fill for a
  * card colour (the card variant rule lifts it there), the translucent
- * neutral track under segmented-control labels, else the accent tint.
+ * neutral track under segmented-control labels, the pressed fill under a
+ * top nav item, else the accent tint.
  * @param {string} part @param {string} block
  */
 function liftGround(part, block) {
   if (part === 'segmented-control-item') return '--color-neutral';
+  if (part === 'top-nav-item') return '--color-overlay-pressed';
   const color = part === 'card' ? /^variant:([\w-]+)$/.exec(block)?.[1] : null;
   return color ? `--color-background-${color}` : '--color-accent-muted';
 }
-/** What each lifted background is, and the parts on it, for notes. */
+/**
+ * What each lifted background is, and the parts on it, for notes. `pressed`
+ * marks a fill that is the press itself: it replaces the hover fill, so no
+ * hover draws over it.
+ */
 const LIFT_GROUNDS =
-  /** @type {Record<string, {what: string, parts: string}>} */ ({
+  /** @type {Record<string, {what: string, parts: string, pressed?: boolean}>} */ ({
     '--color-accent-muted': {
       what: 'the accent tint',
       parts: 'selected items and rows, a dropzone, numbered citations',
@@ -518,6 +525,11 @@ const LIFT_GROUNDS =
     '--color-neutral': {
       what: 'the neutral track',
       parts: 'segmented-control labels',
+    },
+    '--color-overlay-pressed': {
+      what: 'the pressed fill',
+      parts: 'top nav items',
+      pressed: true,
     },
     ...Object.fromEntries(
       LIFT_PARTS.filter(([part]) => part === 'card').map(([, block, g]) => {
@@ -2645,7 +2657,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     /** @type {Record<string, Partial<Record<Mode, StopRef>>>} */
     const found = {};
     for (const ground of new Set(LIFT_PARTS.map(([, , g]) => g))) {
-      const {what, parts} = LIFT_GROUNDS[ground];
+      const {what, parts, pressed} = LIFT_GROUNDS[ground];
       /**
        * The shade the base theme itself lifts this ground's text to in a
        * mode, when it gives one: the search starts there, so a change of
@@ -2699,7 +2711,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           break;
         }
         const seen = drawn(what, fillColor, surfaces(m, 'neutral'));
-        const hover = valueOf(m, '--color-overlay-hover');
+        const hover = pressed ? null : valueOf(m, '--color-overlay-hover');
         const on = [
           ...seen,
           ...(hover && alphaOf(hover) > 0
@@ -2765,7 +2777,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
             dials: ['accent', 'neutral'],
             note:
               b.r >= TEXT
-                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${from}, so it stays readable (${round(b.r)}:1) on ${what} and under a hover`
+                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${from}, so it stays readable (${round(b.r)}:1) on ${what}${pressed ? '' : ' and under a hover'}`
                 : `--color-text-secondary on ${parts} reads at only ${round(b.r)}:1 in ${m} on ${what} even at ${g.ramp[b.stop]}, the most contrasting gray (needs ${TEXT}:1): pick another accent or neutral, or set --color-text-secondary on those parts exactly`,
           });
       }
@@ -2850,7 +2862,7 @@ export function mappingRows(dial) {
         .filter(([g]) => !g.startsWith('--color-background-'))
         .map(
           ([, g]) =>
-            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,
+            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what}${g.pressed ? '' : ' and under a hover'}, as the official theme lifts it`,
         ),
       ...(Object.keys(LIFT_GROUNDS).some(g =>
         g.startsWith('--color-background-'),

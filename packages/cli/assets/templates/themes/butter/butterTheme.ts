@@ -48,7 +48,7 @@ const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[45]);
 const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
-  '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+  '--color-text-accent': lightDark(accent.light[35], yellow.dark[90]),
 };
 
 /**
@@ -208,7 +208,7 @@ const SECONDARY_BUTTON = {
   borderWidth: '1.5px',
   borderStyle: 'solid',
   borderColor: lightDark(accent.light[40], yellow.dark[90]),
-  color: lightDark(accent.light[40], yellow.dark[90]),
+  color: lightDark(accent.light[35], yellow.dark[90]),
   ':hover': {
     backgroundColor: lightDark(
       withAlpha(accent.light[40], '14'),
@@ -268,6 +268,9 @@ const INPUT_STATUS_VARS = {
     '--color-icon-error': red.light[60],
   },
 } as const;
+
+/** The color modes butter draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
 
 export const butterTheme = defineTheme({
   name: 'butter',
@@ -340,7 +343,9 @@ export const butterTheme = defineTheme({
     '--color-text-primary': [neutral.light[15], neutral.dark[90]],
     '--color-text-secondary': [neutral.light[45], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[70], neutral.dark[45]],
-    '--color-text-accent': [accent.light[40], yellow.dark[90]],
+    // Accent text reads at 4.5:1 on a pressed fill and on the accent tint
+    // (a current page), a step deeper than the accent fill.
+    '--color-text-accent': [accent.light[35], yellow.dark[90]],
     '--color-on-dark': neutral.light[100],
     '--color-on-light': neutral.light[15],
     '--color-on-accent': [neutral.light[100], neutral.light[15]],
@@ -488,8 +493,6 @@ export const butterTheme = defineTheme({
     '--radius-element': '0.5rem', // 8px
     '--radius-container': '0.75rem', // 12px
     '--radius-page': '1.5rem',
-    // Chat surfaces stay rounder than cards.
-    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -506,11 +509,6 @@ export const butterTheme = defineTheme({
   },
 
   components: withOwnFillText({
-    // The send button keeps the 16px corner it took from the 28px composer:
-    // a rounded square on Butter's 40px controls.
-    'chat-send-button': {
-      base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
-    },
     // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
     // accent tint) and under its hover. Selected rows, a dropzone's hint and
     // a numbered citation, all on that fill, use the nearest stop that clears
@@ -561,7 +559,7 @@ export const butterTheme = defineTheme({
     },
     'top-nav-item': {
       base: {
-        color: lightDark(accent.light[40], withAlpha(yellow.dark[90], 'cc')),
+        color: lightDark(accent.light[35], withAlpha(yellow.dark[90], 'cc')),
       },
       // Selected item: a darker Blue stop in light mode and full Butter Yellow
       // in dark mode, with no pill background. Weight + color carry emphasis.
@@ -579,8 +577,7 @@ export const butterTheme = defineTheme({
     button: {
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
-      // while the chat composer (which sets --_button-radius) gives them its
-      // 16px concentric corner.
+      // while the chat composer (which sets --_button-radius) rounds them fully.
       // Inline padding only. Button sets its own block padding and height.
       base: {
         paddingInline: 'var(--spacing-4)',
@@ -588,7 +585,7 @@ export const butterTheme = defineTheme({
       'variant:secondary': SECONDARY_BUTTON,
       // Ghost: same accent color as secondary, no background.
       'variant:ghost': {
-        color: lightDark(accent.light[40], yellow.dark[90]),
+        color: lightDark(accent.light[35], yellow.dark[90]),
       },
       'variant:destructive': {
         backgroundColor: lightDark(red.light[90], red.dark[80]),
@@ -736,8 +733,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Progress bar — pale track in light, warm brown in dark. Vivid
-    // semantic fills match the banner colors (Success / Warning / Error).
+    // Progress bar — pale track in light, warm brown in dark. Status fills take
+    // the theme's status roles, which reach 3:1 on that track.
     'progress-bar-track': {
       base: {
         backgroundColor: lightDark(neutral.light[85], neutral.dark[40]),
@@ -745,13 +742,41 @@ export const butterTheme = defineTheme({
     },
     'progress-bar-fill': {
       'variant:success': {
-        backgroundColor: green.light[70],
+        backgroundColor: 'var(--color-success)',
       },
       'variant:warning': {
-        backgroundColor: yellow.light[80],
+        backgroundColor: 'var(--color-warning)',
       },
       'variant:error': {
-        backgroundColor: red.light[60],
+        backgroundColor: 'var(--color-error)',
+      },
+      // The secondary text color (stop 70) reads under 3:1 on the dark track,
+      // so a neutral or disabled fill takes stop 80 there.
+      'variant:neutral': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+      'variant:disabled': {
+        backgroundColor: lightDark(
+          'var(--color-text-secondary)',
+          neutral.dark[80],
+        ),
+      },
+    },
+
+    // A status fill is the status color, so its mark takes that status's
+    // on-color.
+    'progress-bar-mark': {
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-success)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-warning)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-error)',
       },
     },
 

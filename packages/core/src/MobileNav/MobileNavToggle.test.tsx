@@ -276,6 +276,14 @@ describe('MobileNavToggle button, name, and icon', () => {
     );
   }
 
+  it('carries mobile-nav-toggle beside the Button target, and keeps a caller class', () => {
+    render(<ShellWithToggle className="caller" />);
+    const toggle = screen.getByTestId('page-menu');
+    expect(toggle).toHaveClass('astryx-mobile-nav-toggle');
+    expect(toggle).toHaveClass('astryx-button');
+    expect(toggle).toHaveClass('caller');
+  });
+
   it('is an icon-only ghost Button named by its label', () => {
     render(<ShellWithToggle />);
     const toggle = screen.getByTestId('page-menu');

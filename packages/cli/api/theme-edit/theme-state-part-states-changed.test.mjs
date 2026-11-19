@@ -342,13 +342,12 @@ describe("a part's piece Core has no part for", () => {
         /Core has no [a-z ]+ part of its own/,
       );
     }
-    const alert = await top('make the alert title larger', 'p');
-    expect(alert.commands).toEqual([
-      expect.stringMatching(/^set p --text-label-size [\d.]+rem --on banner$/),
+    const title = await top('make the citation title larger', 'p');
+    expect(title.commands).toEqual([
+      expect.stringMatching(/^set p font-size [\d.]+rem --on citation$/),
     ]);
-    expect(alert.text).toMatch(
-      // (Named by Core's part: an alert is the banner.)
-      /Core has no banner title part of its own, so this is for the whole banner/,
+    expect(title.text).toMatch(
+      /Core has no citation title part of its own, so this is for the whole citation/,
     );
   }, 240_000);
 });

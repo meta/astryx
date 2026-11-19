@@ -76,7 +76,7 @@ export const MultipleChoice: Story = {
     return (
       <SelectableCardGroup
         label="Add-ons"
-        selectionMode="multiple"
+        type="multiple"
         value={addOns}
         onChange={setAddOns}>
         {PLANS.map(p => (

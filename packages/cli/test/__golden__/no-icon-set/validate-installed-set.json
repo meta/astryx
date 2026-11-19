@@ -635,6 +635,17 @@
             ]
           },
           {
+            "name": "exitFullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "expand",
             "description": "<text>",
             "words": [
@@ -737,6 +748,17 @@
             "name": "frame",
             "description": "<text>",
             "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "fullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1612,11 +1634,19 @@
             },
             {
               "definition": "<text>",
-              "templates": 10
+              "templates": 11
             },
             {
               "definition": "<text>",
               "templates": 10
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
+            },
+            {
+              "definition": "<text>",
+              "templates": 9
             },
             {
               "definition": "<text>",
@@ -1644,7 +1674,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 7
+              "templates": 8
             },
             {
               "definition": "<text>",
@@ -1664,10 +1694,6 @@
             },
             {
               "definition": "<text>",
-              "templates": 7
-            },
-            {
-              "definition": "<text>",
               "templates": 6
             },
             {
@@ -1709,10 +1735,6 @@
             {
               "definition": "<text>",
               "templates": 6
-            },
-            {
-              "definition": "<text>",
-              "templates": 5
             },
             {
               "definition": "<text>",
@@ -1788,7 +1810,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 3
+              "templates": 4
             },
             {
               "definition": "<text>",
@@ -1964,7 +1986,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 1
+              "templates": 2
             },
             {
               "definition": "<text>",

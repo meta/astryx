@@ -198,22 +198,24 @@ export async function wouldAnswer(query, {type} = {}) {
  */
 
 /**
- * The packages and items `discover <query>` searches when its sources answer
- * from their saved copies: the packages the project has, with the official
- * packages declared in it, and every item those and the copies list, icon
- * sets included. Null when nothing is known: no copy reads back, or discover
- * answers every query with the list (FR1). No source is called.
+ * What discover searches over the saved copies: the packages the project
+ * has, with the official packages declared in it, and every item those and
+ * the copies list, icon sets only where icon features are on. `packages: null` when nothing is known: no copy reads
+ * back, or discover answers every query with the list (FR1).
  * @param {import('../../foundation/config/project.mjs').Project} project
+ * @returns {Promise<SavedSearchInput>}
  */
-async function savedItems(project) {
+async function savedSearchInput(project) {
+  const {packages: scanned} = await discoverPackages(project);
   const official = officialList({project});
   const saved = savedCatalog(project, {official});
-  if (saved == null) return null;
-  const {packages: scanned} = await discoverPackages(project);
+  if (saved == null) return {packages: null};
   const catalog = {sources: [], packages: saved};
   const declarations = officialDeclarations(project, official.packages);
   const integrations = await describeInstalled(project, scanned);
-  if (integrations.length === 0 && !hasSources(project)) return null;
+  if (integrations.length === 0 && !hasSources(project)) {
+    return {packages: null};
+  }
   const packages = withDeclaredOfficial(
     project,
     integrations,
@@ -222,57 +224,16 @@ async function savedItems(project) {
     official.packages,
   );
   const {searchItems} = await catalogView();
+  // Discover lists the icon sets a project could add in every project, but
+  // search is a stable command: where icon features are off, its discover
+  // line never answers from an icon set (spec:AST-017 FR27).
+  const iconSets = optedIntoIconSets(project);
   const items = searchItems(
     packages,
     catalog,
     declaredDependencies(project),
     declarations.any,
-  );
-  return {packages, items};
-}
-
-/**
- * Whether `astryx discover <query>` lists an item of `kind` the project
- * could add, answered by discover's own search over the saved copies of the
- * discover sources' catalogs. No source is called, so before a discover run
- * has saved a copy the answer is false. Never throws.
- * @param {import('../../foundation/config/project.mjs').Project} project
- * @param {string} query free text, as discover takes it
- * @param {import('../../authoring/discover/type').DiscoverKind} kind
- * @returns {Promise<boolean>}
- */
-export async function listsToAdd(project, query, kind) {
-  try {
-    const saved = await savedItems(project);
-    if (saved == null) return false;
-    const {data} = await search(saved.packages, query, {
-      items: saved.items,
-      limit: DEFAULT_LIMIT,
-    });
-    return data.matches.some(match => match.kind === kind && !match.installed);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * What discover searches over the saved copies (see {@link savedItems}),
- * icon sets only where icon features are on. `packages: null` when nothing
- * is known.
- * @param {import('../../foundation/config/project.mjs').Project} project
- * @returns {Promise<SavedSearchInput>}
- */
-async function savedSearchInput(project) {
-  const saved = await savedItems(project);
-  if (saved == null) return {packages: null};
-  const {packages} = saved;
-  // Discover lists the icon sets a project could add in every project, but
-  // search is a stable command: where icon features are off, its discover
-  // line never answers from an icon set (spec:AST-017 FR27).
-  const iconSets = optedIntoIconSets(project);
-  const items = saved.items.filter(
-    item => iconSets || item.kind !== 'icon-set',
-  );
+  ).filter(item => iconSets || item.kind !== 'icon-set');
   // Only what the ranking reads is kept: the smaller the record, the less a
   // search spends reading it back.
   return {

@@ -686,6 +686,22 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(303.5 82% 25%)',
       },
     },
+    'banner-message': {
+      base: {
+        backgroundColor: 'hsl(50.1 85% 62%)',
+        color: 'hsl(315.7 75% 12%)',
+        borderColor: 'hsl(339.7 85% 25%)',
+        outlineColor: 'hsl(259.7 74% 25%)',
+      },
+    },
+    'banner-title': {
+      base: {
+        backgroundColor: 'hsl(278.0 91% 55%)',
+        color: 'hsl(82.4 80% 12%)',
+        borderColor: 'hsl(346.0 70% 25%)',
+        outlineColor: 'hsl(284.8 85% 25%)',
+      },
+    },
     blockquote: {
       base: {
         backgroundColor: 'hsl(281.1 79% 50%)',
@@ -1318,6 +1334,26 @@ export const probeTheme = defineTheme({
         color: 'hsl(217.9 73% 12%)',
         borderColor: 'hsl(139.5 91% 25%)',
         outlineColor: 'hsl(167.1 89% 25%)',
+      },
+    },
+    'checkbox-list-item': {
+      base: {
+        backgroundColor: 'hsl(240.5 82% 52%)',
+        color: 'hsl(335.2 81% 12%)',
+        borderColor: 'hsl(190.4 85% 25%)',
+        outlineColor: 'hsl(147.3 88% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(291.8 91% 54%)',
+        color: 'hsl(283.0 78% 12%)',
+        borderColor: 'hsl(170.3 82% 25%)',
+        outlineColor: 'hsl(263.8 71% 25%)',
+      },
+      disabled: {
+        backgroundColor: 'hsl(4.9 82% 62%)',
+        color: 'hsl(169.5 72% 12%)',
+        borderColor: 'hsl(28.7 88% 25%)',
+        outlineColor: 'hsl(8.6 88% 25%)',
       },
     },
     citation: {
@@ -3338,12 +3374,28 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(200.1 91% 25%)',
       },
     },
+    'mobile-nav-close': {
+      base: {
+        backgroundColor: 'hsl(324.4 93% 50%)',
+        color: 'hsl(252.3 90% 12%)',
+        borderColor: 'hsl(111.3 86% 25%)',
+        outlineColor: 'hsl(207.0 94% 25%)',
+      },
+    },
     'mobile-nav-drawer': {
       base: {
         backgroundColor: 'hsl(188.1 70% 54%)',
         color: 'hsl(3.2 72% 12%)',
         borderColor: 'hsl(172.8 71% 25%)',
         outlineColor: 'hsl(156.2 92% 25%)',
+      },
+    },
+    'mobile-nav-toggle': {
+      base: {
+        backgroundColor: 'hsl(119.0 72% 61%)',
+        color: 'hsl(207.3 86% 12%)',
+        borderColor: 'hsl(323.6 86% 25%)',
+        outlineColor: 'hsl(26.8 83% 25%)',
       },
     },
     'more-menu': {

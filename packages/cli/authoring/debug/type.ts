@@ -215,6 +215,10 @@ export interface DebugEventProject {
   hasConfig: boolean | null;
   /** Whether `astryx init` has been run (the agent-docs marker is present). */
   initialized: boolean | null;
+  /**
+   * How many integrations the project's astryx.config names. Integrations
+   * loaded from dependencies the config does not name are not counted.
+   */
   integrationCount: number | null;
 }
 

@@ -127,7 +127,11 @@ import {
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
-import {removeEmptyFolder} from '../../foundation/fs/empty-folder.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  removeEmptyFolder,
+} from '../../foundation/fs/empty-folder.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
@@ -267,41 +271,7 @@ export function themeFiles(cwd, slug) {
   };
 }
 
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set([
-  '.DS_Store',
-  '.gitkeep',
-  'Thumbs.db',
-  'desktop.ini',
-]);
-
-/**
- * Whether `dir` holds nothing of anyone's: absent, empty, or only system
- * files (what `git rm -r` or a branch switch leaves). A path that is not a
- * folder, or one that does not read, is not empty.
- * @param {string} dir
- * @returns {boolean}
- */
-export function folderIsEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  try {
-    // A folder holding only empty folders (an empty tokens/) holds nothing
-    // either; a link is never followed.
-    return (
-      fs.lstatSync(dir).isDirectory() &&
-      fs
-        .readdirSync(dir)
-        .every(
-          n =>
-            FOLDER_JUNK.has(n) ||
-            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
-              folderIsEmpty(path.join(dir, n))),
-        )
-    );
-  } catch {
-    return false;
-  }
-}
+export {FOLDER_JUNK, folderIsEmpty};
 
 /**
  * Whether a dial takes a value of its own kind beside its named words (a
@@ -3981,12 +3951,7 @@ function blockOf(file, keys) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
   try {
-    const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(file, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript'],
-      })
-    );
+    const ast = parsedModule(fs.readFileSync(file, 'utf8'));
     for (const st of ast.program.body) {
       const decl = st.declaration?.declarations?.[0];
       /** @type {any} */
@@ -4024,6 +3989,40 @@ function blockOf(file, keys) {
     // No build yet, or not one this reads.
   }
   return out;
+}
+
+/**
+ * The modules blockOf parsed last, by their text: a command reads the same
+ * built module, settings and base for every part and scope, and parses each
+ * text once. A file whose text changed parses again.
+ * @type {Map<string, any>}
+ */
+const PARSED_MODULES = new Map();
+
+/** The texts PARSED_MODULES keeps. */
+const PARSED_MODULES_KEPT = 8;
+
+/**
+ * A module's syntax tree, parsed once for each text.
+ * @param {string} source
+ * @returns {any}
+ */
+export function parsedModule(source) {
+  const kept = PARSED_MODULES.get(source);
+  if (kept) {
+    PARSED_MODULES.delete(source);
+    PARSED_MODULES.set(source, kept);
+    return kept;
+  }
+  const ast = parseModule(source, {
+    sourceType: 'module',
+    plugins: ['typescript'],
+  });
+  PARSED_MODULES.set(source, ast);
+  const oldest = PARSED_MODULES.keys().next().value;
+  if (PARSED_MODULES.size > PARSED_MODULES_KEPT && oldest !== undefined)
+    PARSED_MODULES.delete(oldest);
+  return ast;
 }
 
 /**
@@ -5025,7 +5024,7 @@ const ROLE_OF_DIAL = /** @type {const} */ ({
  * token) must be written onto a part for it to show, because the base theme
  * draws that role there on its own:
  * - a variant named for the role in a color of the base's palette written
- *   out (butter's success badge, stone's success progress fill) points at
+ *   out (butter's success badge) points at
  *   the role's token, as Core draws that variant;
  * - a role token the base points at another token on a part (stone's
  *   success banner at its green) takes the theme's own value there

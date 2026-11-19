@@ -23,7 +23,6 @@ import {PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {projectIconSetCliWarning} from '../../foundation/integrations/cli-requirement.mjs';
 import {findLocalIconSet} from '../../foundation/discovery/icon-set-writer.mjs';
-import {ICON_PACK_QUERY} from '../../foundation/text/icon-set-next.mjs';
 import {
   templateIconMeanings,
   unmappedTemplateMeanings,
@@ -159,20 +158,6 @@ export async function authoring(step) {
 export async function loadIconSets(cwd) {
   const project = await Project.load(cwd);
   return project.iconSets({experimental: true});
-}
-
-/**
- * Whether `astryx discover "icon set"` lists an icon set the project in
- * `cwd` could add, read from the saved copies of its discover catalogs. No
- * discover source is called, so before a discover run has saved a copy this
- * is false.
- * @param {string} cwd
- * @returns {Promise<boolean>}
- */
-export async function discoverListsIconSet(cwd) {
-  const project = Project.lastLoaded(cwd) ?? (await Project.load(cwd));
-  const {listsToAdd} = await import('../discover/discover.mjs');
-  return listsToAdd(project, ICON_PACK_QUERY, 'icon-set');
 }
 
 /**

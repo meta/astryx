@@ -246,6 +246,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/** The color modes y2k draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const y2kTheme = defineTheme({
   name: 'y2k',
 
@@ -442,9 +445,6 @@ export const y2kTheme = defineTheme({
     '--radius-container': '0px',
     '--radius-page': '0px',
     '--radius-full': '0px',
-    // Set, so a theme that extends Y2K and sets its own container radius
-    // keeps square chat surfaces.
-    '--radius-chat': '0px',
 
     // =========================================================================
     // Shadows — warm cream neutral
@@ -514,6 +514,10 @@ export const y2kTheme = defineTheme({
     // weight + primary text color for emphasis. Hover/active keep the neutral
     // overlay from the base styles.
     'top-nav-item': {
+      // Secondary text on a pressed item takes the stop a selected row uses:
+      // it reads on the pressed fill over the lavender page, which the
+      // default top bar paints.
+      base: {'--color-text-secondary': LIFTED_ON_PAGE},
       selected: {
         backgroundColor: 'transparent',
         ':hover': {

@@ -18,7 +18,6 @@
 import {
   formatCliCommand,
   getCliInvocation,
-  prefixCliCommands,
 } from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {definitionCoverageText} from '../../../../foundation/text/definition-coverage.mjs';
@@ -58,6 +57,8 @@ import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
+import {noIconSetNext} from '../../../../foundation/text/icon-set-next.mjs';
+import {defaultVariantText} from '../../../../foundation/text/default-variant.mjs';
 
 /**
  * The lowest search score of a whole-word match: an exact name or meaning
@@ -67,10 +68,6 @@ const WHOLE_WORD = 80;
 
 /** How many missing icons an `add --all` receipt names in text. */
 const MISSING_SHOWN = 10;
-
-/** @param {unknown} value */
-const defaultVariantText = value =>
-  /** @type {{variant?: string} | null} */ (value)?.variant ?? '';
 
 /** @param {unknown} value */
 const variantsText = value => (Array.isArray(value) ? value.join('/') : '');
@@ -231,9 +228,7 @@ export function registerExperimentalIcon(group, program) {
                 list(others.map(each => `${each.name}: ${each.description}`)),
               ]
             : []),
-          text(
-            `[next] ${prefixCliCommands(result.data.next, getCliInvocation())}`,
-          ),
+          text(`[next] ${noIconSetNext(command => formatCliCommand(command))}`),
         );
         return answered;
       }
@@ -333,7 +328,7 @@ export function registerExperimentalIcon(group, program) {
         ? [
             text(
               sets.length === 0
-                ? `[next] ${prefixCliCommands(next, getCliInvocation())}`
+                ? `[next] ${noIconSetNext(command => formatCliCommand(command))}`
                 : `[warn] ${next}`,
             ),
           ]
@@ -343,6 +338,7 @@ export function registerExperimentalIcon(group, program) {
             records(
               sets.map(({coverage, ...set}) => ({
                 ...set,
+                default: defaultVariantText(set.default),
                 builtIn: `${coverage.builtIn.mapped}/${coverage.builtIn.total}`,
                 definitions: definitionCoverageText(coverage.astryx),
                 own: coverage.own,
@@ -366,7 +362,7 @@ export function registerExperimentalIcon(group, program) {
                   'project',
                   'description',
                 ],
-                format: {default: defaultVariantText, variants: variantsText},
+                format: {variants: variantsText},
               },
             ),
           ]

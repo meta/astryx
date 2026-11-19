@@ -502,7 +502,6 @@ export function MobileNav({
   className,
   style,
   onClick: onClickProp,
-  id: idProp,
   ref,
   ...rest
 }: MobileNavProps) {
@@ -577,7 +576,7 @@ export function MobileNav({
         active !== null &&
         active !== document.body &&
         !dialogRef.current?.contains(active);
-      const dialogIds = [dialogId, dialogRef.current?.id, idProp];
+      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
         hasOpenerFocus && active
           ? active
@@ -732,7 +731,7 @@ export function MobileNav({
   return (
     <dialog
       ref={useMergedRefs(ref, dialogRef)}
-      id={idProp ?? dialogId}
+      id={dialogId}
       {...mergeProps(
         themeProps('mobile-nav', {side: resolvedSide}),
         stylex.props(
@@ -795,6 +794,9 @@ export function MobileNav({
                   icon={<Icon icon="close" color="inherit" />}
                   onClick={() => onOpenChange(false)}
                   isIconOnly
+                  // A theme reaches the close button as its own part, so it
+                  // can draw it for the drawer it sits on.
+                  {...themeProps('mobile-nav-close')}
                 />
               </div>
 

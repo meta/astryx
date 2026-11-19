@@ -170,6 +170,14 @@ function tree(dir) {
   );
 }
 
+/**
+ * A theme editor settings file, as the editor saves one.
+ * @param {string} name
+ * @param {string} [mode]
+ */
+const SETTINGS = (name, mode = 'both') =>
+  `${JSON.stringify({name, like: 'neutral', mode, settings: []}, null, 2)}\n`;
+
 /** The theme files a theme folder holds, as entries for an archive. */
 function themeEntries(
   /** @type {string} */ prefix,
@@ -351,7 +359,7 @@ describe('theme add with a shared theme', () => {
     await themeAdd(path.join(shared, 'ocean'), {cwd: app});
     fs.writeFileSync(path.join(app, 'src/themes/ocean/ocean.css'), 'mine\n');
     const again = await themeRemove('ocean', {cwd: app});
-    expect(again.data.undo?.kept).toEqual(['ocean.css']);
+    expect(again.data.undo?.kept).toEqual(['src/themes/ocean/ocean.css']);
     expect(
       fs.readFileSync(path.join(app, 'src/themes/ocean/ocean.css'), 'utf8'),
     ).toBe('mine\n');
@@ -595,6 +603,271 @@ describe('theme add with a shared theme', () => {
     runs.length = 0;
     await themeAdd(path.join(shared, 'ocean'), {cwd: app});
     expect(runs.at(-1)?.args.at(-1)).toBe('--mode=skip-build');
+  });
+
+  it("keeps the theme editor's saved state with the copy, and theme remove takes it back", async () => {
+    const archive = path.join(shared, 'bundle.tgz');
+    fs.writeFileSync(
+      archive,
+      tgz({
+        ...themeEntries('bundle/app-copy/', 'sunset'),
+        'bundle/editor-theme/sunset.settings.json': SETTINGS('sunset'),
+        'bundle/editor-theme/sunset.theme.ts': 'export {};\n',
+        'bundle/editor-theme/tokens/sunset.palette.ts': 'export {};\n',
+      }),
+    );
+    const before = tree(app);
+    const result = await themeAdd(archive, {cwd: app});
+    expect(result.data.copy?.editor).toEqual({
+      from: 'bundle/editor-theme',
+      outputDir: 'themes/sunset',
+      files: expect.arrayContaining([
+        'sunset.settings.json',
+        'sunset.theme.ts',
+        'tokens/sunset.palette.ts',
+      ]),
+    });
+    expect(
+      fs.readFileSync(
+        path.join(app, 'themes/sunset/sunset.settings.json'),
+        'utf8',
+      ),
+    ).toBe(SETTINGS('sunset'));
+    expect(result.data.copy?.written).toEqual(
+      expect.arrayContaining(['themes/sunset/sunset.settings.json']),
+    );
+    await themeRemove('sunset', {cwd: app});
+    expect(tree(app)).toEqual(before);
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+  });
+
+  it('leaves editor state it did not write in place, and says so', async () => {
+    const mine = path.join(app, 'themes/ocean/ocean.settings.json');
+    fs.mkdirSync(path.dirname(mine), {recursive: true});
+    fs.writeFileSync(mine, SETTINGS('ocean', 'dark-only'));
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(/already holds editor state/),
+    });
+    expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
+    await themeRemove('ocean', {cwd: app});
+    expect(fs.readFileSync(mine, 'utf8')).toBe(SETTINGS('ocean', 'dark-only'));
+  });
+
+  it.each([
+    ['not JSON', 'not json', null, /is not JSON/],
+    [
+      'not editor settings',
+      JSON.stringify({name: 'ocean', settings: 'all of them'}),
+      null,
+      /is not editor settings this CLI reads/,
+    ],
+    [
+      'made with a palette recipe this CLI does not know',
+      null,
+      JSON.stringify({recipe: 'astryx-oklch-v99'}),
+      /palette recipe astryx-oklch-v99, which this CLI \(\S+\) doesn't know; update the CLI/,
+    ],
+  ])(
+    'adds the theme but not editor state %s, and says why',
+    async (_, settings, palette, why) => {
+      writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+      fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+        settings ?? SETTINGS('ocean'),
+      );
+      if (palette)
+        fs.writeFileSync(
+          path.join(shared, 'b', 'editor', 'palette.config.json'),
+          palette,
+        );
+      const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+      expect(result.data.default).toBe('ocean');
+      expect(result.data.copy?.editor).toMatchObject({
+        files: [],
+        notCopied: expect.stringMatching(why),
+      });
+      expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+    },
+  );
+
+  it.each([
+    ['carries no editor state', false],
+    ['carries editor state left out', true],
+  ])(
+    "a re-add that %s keeps the first add's editor files for remove",
+    async (_, leftOut) => {
+      const before = tree(app);
+      writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+      fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+        SETTINGS('ocean'),
+      );
+      await themeAdd(path.join(shared, 'b'), {cwd: app});
+      if (leftOut)
+        // (A file the add did not write makes the next add leave the folder.)
+        fs.writeFileSync(path.join(app, 'themes/ocean/notes.txt'), 'mine\n');
+      else fs.rmSync(path.join(shared, 'b', 'editor'), {recursive: true});
+      const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+      if (leftOut)
+        expect(again.data.copy?.editor?.notCopied).toMatch(/already holds/);
+      else expect(again.data.copy).not.toHaveProperty('editor');
+      const removed = await themeRemove('ocean', {cwd: app});
+      expect(removed.data.undo?.removed).toEqual(
+        expect.arrayContaining(['themes/ocean/ocean.settings.json']),
+      );
+      if (leftOut) fs.rmSync(path.join(app, 'themes'), {recursive: true});
+      expect(tree(app)).toEqual(before);
+    },
+  );
+
+  it('copies editor state into a folder of only system files, and keeps the copy maintained: false', async () => {
+    fs.mkdirSync(path.join(app, 'themes/ocean'), {recursive: true});
+    fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), '');
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    // (A shared descriptor under the editor's mark that says maintained.)
+    fs.writeFileSync(
+      path.join(shared, 'b', 'app-copy', 'oceanTheme.doc.mjs'),
+      "// Written by `astryx experimental theme editor show ocean` after every build.\n\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'ocean', displayName: 'ocean', description: 'The ocean theme.', maintained: true};\n",
+    );
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: ['ocean.settings.json'],
+    });
+    expect(result.data.copy?.editor).not.toHaveProperty('notCopied');
+    const doc = fs.readFileSync(
+      path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
+      'utf8',
+    );
+    expect(doc).toMatch(/^\/\/ Written by `astryx experimental theme editor/);
+    expect(doc).toMatch(/maintained: false/);
+  });
+
+  it('a failed add keeps a themes/<name>/ of system files it found there', async test => {
+    // (A folder it cannot write stops the record; root writes anyway.)
+    if (process.getuid?.() === 0) test.skip();
+    fs.mkdirSync(path.join(app, 'themes/ocean'), {recursive: true});
+    fs.writeFileSync(path.join(app, 'themes/ocean/.gitkeep'), '');
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor', 'tokens'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    fs.writeFileSync(path.join(shared, 'b', 'editor', 'tokens', 'p.ts'), '');
+    const before = tree(app);
+    const src = path.join(app, 'src');
+    fs.chmodSync(src, 0o555);
+    try {
+      await expect(
+        themeAdd(path.join(shared, 'b'), {cwd: app}),
+      ).rejects.toThrow();
+    } finally {
+      fs.chmodSync(src, 0o755);
+    }
+    expect(tree(app)).toEqual(before);
+    expect(fs.existsSync(path.join(app, 'themes/ocean/.gitkeep'))).toBe(true);
+    expect(fs.existsSync(path.join(app, 'themes/ocean/tokens'))).toBe(false);
+  });
+
+  it("a re-add replaces its own editor files beside a system file, keeps that file, and keeps the copy the editor's", async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    await themeAdd(path.join(shared, 'b'), {cwd: app});
+    fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), '');
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean', 'dark-only'),
+    );
+    const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(again.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(
+      fs.readFileSync(
+        path.join(app, 'themes/ocean/ocean.settings.json'),
+        'utf8',
+      ),
+    ).toBe(SETTINGS('ocean', 'dark-only'));
+    expect(fs.existsSync(path.join(app, 'themes/ocean/.DS_Store'))).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(app, 'src/themes/ocean/oceanTheme.doc.mjs'),
+        'utf8',
+      ),
+    ).toMatch(/^\/\/ Written by `astryx experimental theme editor/);
+  });
+
+  it("leaves the bundle's system files out of the editor copy, so a re-add after one changes still replaces it", async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    fs.mkdirSync(path.join(shared, 'b', 'editor'), {recursive: true});
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean'),
+    );
+    fs.writeFileSync(path.join(shared, 'b', 'editor', '.DS_Store'), 'a');
+    const first = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(first.data.copy?.editor?.files).toEqual(['ocean.settings.json']);
+    expect(fs.existsSync(path.join(app, 'themes/ocean/.DS_Store'))).toBe(false);
+    // (The system writes its own file there later.)
+    fs.writeFileSync(path.join(app, 'themes/ocean/.DS_Store'), 'b');
+    fs.writeFileSync(
+      path.join(shared, 'b', 'editor', 'ocean.settings.json'),
+      SETTINGS('ocean', 'dark-only'),
+    );
+    const again = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(again.data.copy?.editor).not.toHaveProperty('notCopied');
+    expect(
+      fs.readFileSync(
+        path.join(app, 'themes/ocean/ocean.settings.json'),
+        'utf8',
+      ),
+    ).toBe(SETTINGS('ocean', 'dark-only'));
+    expect(
+      fs.readFileSync(path.join(app, 'themes/ocean/.DS_Store'), 'utf8'),
+    ).toBe('b');
+  });
+
+  it('names two folders of editor state, and copies neither', async () => {
+    writeTheme(path.join(shared, 'b', 'app-copy'), 'ocean');
+    for (const dir of ['one', 'two']) {
+      fs.mkdirSync(path.join(shared, 'b', dir), {recursive: true});
+      fs.writeFileSync(
+        path.join(shared, 'b', dir, 'ocean.settings.json'),
+        SETTINGS('ocean'),
+      );
+    }
+    const result = await themeAdd(path.join(shared, 'b'), {cwd: app});
+    expect(result.data.copy?.editor).toMatchObject({
+      files: [],
+      notCopied: expect.stringMatching(
+        /2 folders with ocean\.settings\.json \(one, two\)/,
+      ),
+    });
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
+  });
+
+  it('adds no editor state when the shared theme carries none', async () => {
+    writeTheme(path.join(shared, 'ocean'), 'ocean');
+    const result = await themeAdd(path.join(shared, 'ocean'), {cwd: app});
+    expect(result.data.copy).not.toHaveProperty('editor');
+    expect(fs.existsSync(path.join(app, 'themes'))).toBe(false);
   });
 
   it("follows an integration's install guidance in place of the package manager", async () => {
