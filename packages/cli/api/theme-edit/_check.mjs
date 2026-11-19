@@ -7969,12 +7969,17 @@ function refuseRadioCorners(ctx, slug, s, data) {
       !x.state &&
       !x.mode,
   );
-  const round = !Number.isFinite(px) || px >= 9999;
-  const own = !round
-    ? setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s)
-    : saved
+  // (A step, "rounder" or "sharper", is no length: only "more" is round,
+  // and "less" gets no line, since a circle has no corner to sharpen.)
+  const step = Number.isFinite(px) ? null : String(s.value);
+  const round = step ? step === 'more' : px >= 9999;
+  const own = round
+    ? saved
       ? `${P} undo ${slug} border-radius --on ${s.on}`
-      : null;
+      : null
+    : step
+      ? null
+      : setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s);
   refuse(
     E.ERR_THEME_NO_EFFECT,
     `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.${round ? (saved ? ` ${slug} sets border-radius ${saved.value} on it; undoing that gives the circle back: ${String(own).replace(`${P} `, '')}.` : ` It is fully round already.`) : own ? ` A border-radius on it sets its shape: ${own.replace(`${P} `, '')}.` : ''}`,

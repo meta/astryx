@@ -188,4 +188,53 @@ describe('a tint word', () => {
     },
     T,
   );
+
+  for (const [q, part, state] of [
+    ['cards tinted blue with white text', 'card', ''],
+    [
+      'selected nav items tinted forest green with white text',
+      'top-nav-item',
+      '--state selected',
+    ],
+  ])
+    it(
+      `measures white text on ${q}`,
+      async test => {
+        needsBases(test);
+        const {data} = await themeEditHow(q, {cwd, theme: 'n'});
+        const whole = (data.results ?? []).find(r => /^all of it/.test(r.text));
+        expect(whole).toBeDefined();
+        const all = (whole?.commands ?? [])
+          .filter(c => / editor set /.test(c))
+          .map(c => c.replace(/^.* editor set \S+ /, ''));
+        const fills = all.filter(c =>
+          new RegExp(
+            `^background(?:-color)? .* --on ${part}\\b${state ? `.*${state}` : ''}`,
+          ).test(c),
+        );
+        expect(fills.length).toBeGreaterThan(0);
+        // (White over a 15% tint on the light page is under 1.5:1: the
+        // tint is deepened, or the text kept to the modes it reads in.)
+        const text = all.filter(
+          c => /'#ffffff'/.test(c) && new RegExp(`--on ${part}\\b`).test(c),
+        );
+        expect(text.length).toBeGreaterThan(0);
+        // (Each text line sits on a fill this answer gives: the variants
+        // that keep their own fill, the coloured cards, keep their text.)
+        for (const c of text) {
+          const when = /--when (\S+)/.exec(c)?.[1];
+          expect(
+            fills.some(f =>
+              when ? f.includes(`--when ${when}`) : !/--when/.test(f),
+            ),
+          ).toBe(true);
+        }
+        const deepened = fills.every(c => !/ 15%, transparent/.test(c));
+        if (!deepened) for (const c of text) expect(c).toMatch(/--mode dark/);
+        expect(whole?.text).toMatch(
+          /deepened to (?:\d+%|solid) so #ffffff text reads|#ffffff text on the .* would not read/,
+        );
+      },
+      T,
+    );
 });
