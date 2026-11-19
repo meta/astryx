@@ -13,8 +13,6 @@
  *   page gives Core components that Core's docs do not list.
  */
 
-import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {propsTypeTakes} from './prop-drift.mjs';
 
@@ -22,57 +20,15 @@ import {propsTypeTakes} from './prop-drift.mjs';
 const CORE_PACKAGE = '@astryxdesign/core';
 
 /**
- * For each component a Core subpath exports, the subpath: its types are a
- * small part of Core's, which TypeScript reads far faster than the whole
- * package. Read from the package's `exports` and each subpath's own
- * declarations; empty when the project has no Core installed.
- * @param {string} projectDir
- * @returns {Map<string, string>}
- */
-function subpathsByComponent(projectDir) {
-  /** @type {Map<string, string>} */
-  const subpaths = new Map();
-  /** @type {any} */
-  let manifest;
-  /** @type {string} */
-  let coreDir;
-  try {
-    const file = createRequire(path.join(projectDir, 'package.json')).resolve(`${CORE_PACKAGE}/package.json`);
-    coreDir = path.dirname(file);
-    manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return subpaths;
-  }
-  for (const [key, target] of Object.entries(manifest?.exports ?? {})) {
-    const types = /** @type {any} */ (target)?.types;
-    if (!/^\.\/[A-Z]\w*$/.test(key) || typeof types !== 'string') continue;
-    let text;
-    try {
-      text = fs.readFileSync(path.join(coreDir, types), 'utf8');
-    } catch {
-      continue;
-    }
-    for (const match of text.matchAll(/^export\s*\{([^}]*)\}/gm)) {
-      for (const part of match[1].split(',')) {
-        const name = part.trim().split(/\s+as\s+/).pop()?.trim();
-        if (name && /^[A-Z]/.test(name) && !subpaths.has(name)) subpaths.set(name, `${CORE_PACKAGE}/${key.slice(2)}`);
-      }
-    }
-  }
-  return subpaths;
-}
-
-/**
- * A module that exists only for this read: it names each component's props
- * type, imported from the module that declares it; the HTML and SVG elements
+ * A module that exists only for this read: it names each component, imported
+ * from Core's own module as the app imports it; the HTML and SVG elements
  * React's types know, whose prop names the read lists; and what JSX gives
  * every component (`React.JSX`, or the global `JSX` of older React types),
  * which a project's own declarations can widen (a `css` prop).
  * @param {string[]} components
- * @param {Map<string, string>} modules each component's module
  */
-function queryText(components, modules) {
-  const imports = components.map((name, i) => `import type {${name} as Component${i}Value} from '${modules.get(name) ?? CORE_PACKAGE}';`);
+function queryText(components) {
+  const imports = components.map((name, i) => `import type {${name} as Component${i}Value} from '${CORE_PACKAGE}';`);
   return [
     ...imports,
     "import type * as React from 'react';",
@@ -120,7 +76,7 @@ function isGeneric(ts, checker, type) {
 /**
  * Read Core's own published types with the project's TypeScript, as the
  * project's pages see them: Core and React resolved from the project folder,
- * each component from the Core subpath that exports it, with the files that
+ * each component from Core's own module, with the files that
  * augment Core's modules or React's JSX read too, and the type packages the
  * pages' config names (`types` and `typeRoots`; every package under the
  * type roots when it names none, as TypeScript reads them). Nothing is
@@ -141,7 +97,7 @@ function isGeneric(ts, checker, type) {
 export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props}) {
   const components = [...props.keys()];
   const file = path.join(projectDir, '__astryx_core_props__.ts');
-  const text = queryText(components, subpathsByComponent(projectDir));
+  const text = queryText(components);
   const strings = (/** @type {unknown} */ list) =>
     Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : undefined;
   const options = {

@@ -137,6 +137,12 @@ describe('doctor core-props', () => {
   it(
     "reads a project's own declaration that gives every component a prop, and judges no module or project on another JSX runtime",
     async () => {
+      // A prop the project's own types add to a Core component's props.
+      const augmented = await propsCheck({
+        'src/tab-ids.d.ts': "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps {\n    selectedID?: string;\n  }\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(augmented?.status).toBe('pass');
       // A string index on what JSX gives every component makes JSX take every name.
       const everyName = await propsCheck({
         'src/every-name.d.ts': "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicAttributes {\n      [name: string]: unknown;\n    }\n  }\n}\n",

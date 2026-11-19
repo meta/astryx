@@ -417,9 +417,10 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   source files than `doctor` reads,
   the check does not run and says why, whatever props the pages give. When
   there is a candidate and the types or the files that augment Core cannot
-  all be read, it reports no prop and says why. The warning names each
-  prop's file, line and component, and the documented prop that has the same
-  words when there is one. It never fails `doctor`.
+  all be read, it reports no prop and says why. The warning names up to
+  eight props, each with its file, line and component and the documented
+  prop that has the same words when there is one, and counts the rest. It
+  never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or
