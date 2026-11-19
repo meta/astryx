@@ -84,12 +84,22 @@ describe('corner steps, as the part shows them', () => {
     await themeEditUndo('t', {cwd});
   }, 240_000);
 
-  it('a step on a card covered by a group setting starts from the group value', async () => {
+  it('a step on a card with corners of its own starts from its own, whatever its group has', async () => {
     await themeEditSet('t', 'corners', '6px', {cwd, on: 'card'});
+    const alone = await themeEditSet('t', 'corners', 'more', {cwd, on: 'card'});
+    await themeEditUndo('t', {cwd});
+    await themeEditSet('t', 'corners', 'round', {cwd, on: 'containers'});
+    const r = await themeEditSet('t', 'corners', 'more', {cwd, on: 'card'});
+    expect(r.data.setting.value).toBe(alone.data.setting.value);
+    expect(r.data.setting.value).not.toBe('pill');
+    for (let i = 0; i < 3; i++) await themeEditUndo('t', {cwd});
+  }, 240_000);
+
+  it('a step on a card with no corners of its own starts from its group value', async () => {
     await themeEditSet('t', 'corners', 'round', {cwd, on: 'containers'});
     const r = await themeEditSet('t', 'corners', 'more', {cwd, on: 'card'});
     expect(r.data.setting.value).toBe('pill');
-    for (let i = 0; i < 3; i++) await themeEditUndo('t', {cwd});
+    for (let i = 0; i < 2; i++) await themeEditUndo('t', {cwd});
   }, 240_000);
 
   it('more on a member set alone at pill keeps it at pill', async () => {
