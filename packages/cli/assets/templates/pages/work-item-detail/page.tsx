@@ -576,7 +576,9 @@ function SubtasksSection({
           {subtasks.map(task => (
             <CheckboxListItem
               key={task.id}
-              label={task.title}
+              // A node label wraps; a string label is cut to one line, which
+              // leaves a phone showing a few words of each task.
+              label={<>{task.title}</>}
               isChecked={task.isDone}
               onCheck={isDone => onSetDone(task.id, isDone)}
               endContent={
