@@ -10,7 +10,9 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/MetadataList/MetadataList.doc.mjs
+ * - /packages/core/src/MetadataList/MetadataListItem.doc.mjs
  * - /packages/core/src/MetadataList/MetadataList.test.tsx
+ * - /packages/core/src/MetadataList/MetadataListItem.test.tsx
  * - /packages/core/src/MetadataList/index.ts
  * - /apps/storybook/stories/MetadataList.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/MetadataList/ (showcase blocks)
@@ -35,7 +37,10 @@ import {themeProps} from '../utils/themeProps';
 // =============================================================================
 
 export interface MetadataListItemProps extends BaseProps<HTMLDivElement> {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref forwarded to the item element: the label `dt` side by side, or the
+   * stacked wrapper.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * Content value for this metadata item.
@@ -58,6 +63,14 @@ export interface MetadataListItemProps extends BaseProps<HTMLDivElement> {
 // =============================================================================
 // Styles
 // =============================================================================
+
+// A value breaks a word only when the word is longer than its line, so a long
+// URL or ID wraps instead of overflowing. `overflow-wrap: break-word` keeps
+// each word's own width as the value's narrowest width, so a value in a row
+// (an amount beside its description) is never squeezed into breaking an
+// ordinary word or number. `word-break: break-word` would drop that narrowest
+// width to a single character.
+const VALUE_OVERFLOW_WRAP = 'break-word';
 
 const styles = stylex.create({
   // Label (dt) — inline (side-by-side with value)
@@ -82,13 +95,17 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     minHeight: 24,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
-  // Stacked layout wrapper (label on top)
+  // Stacked layout wrapper (label on top). A grid or flex item's narrowest
+  // width is its longest word unless it sets `min-width: 0`; without it, a URL
+  // or ID wider than the list would widen the wrapper past the list instead
+  // of wrapping inside it.
   stackedWrapper: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
+    minWidth: 0,
   },
   // Stacked label
   stackedLabel: {
@@ -101,6 +118,9 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     margin: 0,
     padding: 0,
+    // Like the side-by-side label: a label word longer than its column
+    // breaks instead of running into the next column.
+    wordBreak: 'break-word',
   },
   stackedValue: {
     color: colorVars['--color-text-primary'],
@@ -108,7 +128,7 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-body-leading'],
     margin: 0,
     padding: 0,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
   iconWrapper: {
     display: 'inline-flex',
@@ -123,7 +143,7 @@ const styles = stylex.create({
 // =============================================================================
 
 /**
- * A single labeled metadata value within an MetadataList.
+ * A single labeled metadata value within a MetadataList.
  *
  * Renders a `<dt>` / `<dd>` pair. Layout (side-by-side or stacked) is
  * determined by the parent MetadataList's label configuration.

@@ -23,6 +23,8 @@ import {
   bounceCurve,
   coastCurve,
   dragOffset,
+  nearestIndex,
+  offsetBounds,
   planRelease,
   projectRelease,
   reachesRow,
@@ -323,6 +325,29 @@ describe('past an end', () => {
     expect(plan.index).toBe(0);
     expect(plan.curve.velocity(0)).toBeCloseTo(-147.8, 6);
     expect(plan.curve.value(plan.curve.duration)).toBe(0);
+  });
+});
+
+describe('a looping wheel', () => {
+  const LOOPING: WheelLayout = {...MINUTES, looping: true};
+
+  it('has no ends: the offset is unbounded and a drag never rubber-bands', () => {
+    expect(offsetBounds(LOOPING)).toEqual({min: -Infinity, max: Infinity});
+    expect(dragOffset(59 * 32 + 50, LOOPING)).toBe(59 * 32 + 50);
+    expect(dragOffset(-50, LOOPING)).toBe(-50);
+  });
+
+  it('names any position, past either end of the list', () => {
+    expect(nearestIndex(61 * 32, LOOPING)).toBe(61);
+    expect(nearestIndex(-2 * 32, LOOPING)).toBe(-2);
+    expect(nearestIndex(61 * 32, MINUTES)).toBe(59);
+  });
+
+  it('coasts on past the last row instead of bouncing at it', () => {
+    const plan = planRelease(58 * 32, 1500, LOOPING);
+    expect(plan.kind).toBe('coast');
+    expect(plan.index).toBeGreaterThan(59);
+    expect(planRelease(58 * 32, 1500, MINUTES).kind).toBe('edge');
   });
 });
 

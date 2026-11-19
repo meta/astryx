@@ -92,7 +92,10 @@ Astryx keeps different facts in different places:
 - Component contracts describe aggregate behavior one component promises.
 - Module contracts describe an independently contractible public hook, plugin,
   utility, or subsystem owned by one component. Private implementation helpers do
-  not require records.
+  not require records. A new internal module or hook that another component can
+  import, such as a package `internal/` export or a hook used outside the
+  component that owns it, is not a private helper: until a record defines it, it
+  needs an owner decision (contract before escalation step 5, DEC-22).
 - An optional `Design decisions` table inside a component or module contract
   records durable visual intent local to that owner. It does not hold exact pixel
   tuning or rules shared across components.
@@ -816,8 +819,9 @@ Review and build should converge on the smallest ideal change that can land:
    change without asking the contributor to solve adjacent system design. An
    undeclared public API row is the exception: it goes to human review for an
    owner to accept, split, or remove (change coupling step 6).
-5. Escalate only a surviving, intentional `novel-human` delta or an undeclared
-   public API row. Record only the
+5. Escalate only a surviving, intentional `novel-human` delta, an undeclared
+   public API row, or a new internal module or hook that no record defines
+   (System model, DEC-22). Record only the
    exact decision needed for that delta; adjacent module behavior may stay
    uncontracted.
 
@@ -1419,6 +1423,20 @@ Rejected: a check that fails on status phrases, because the same words also desc
 **Decider:** `cixzhang`, `2026-11-09`
 
 The owner said: "I think for big prs like 3280 we need better guard rails around preventing tagalongs". A single large import once carried Item's row `onClick` and container click with no decision recorded. The rule above makes such a tag-along visible before merge. Rejected: relying on review to catch tag-alongs in large pull requests.
+
+### DEC-22 — An undefined internal module or hook needs an owner decision
+
+**Decider:** `cixzhang`, `2026-11-10`
+
+The owner said: "essentially we should not be approving anything where the api
+is ambiguous and undefined by the spec. Those got onhuman review". An
+undeclared public API row already goes to owner review. A new internal module
+or hook that other components can import is API between components too, so
+review requests changes for one that no record defines until an owner decides
+it, with the delta shown as usage, why it is needed, and why existing modules
+are not enough.
+
+Rejected: treating every internal module or hook as a private helper.
 
 ## Verification
 

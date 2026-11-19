@@ -30,7 +30,7 @@
  *   from inside this process, the way the cross-platform smoke workflow does,
  *   with no network.
  *
- * @position packages/cli/test-utils — used by test/global-local.test.mjs,
+ * @position packages/cli/test-utils — used by the test/global-local*.test.mjs files,
  *   and by the theme build test of a packed CLI with an older Core.
  */
 
@@ -45,6 +45,7 @@ import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
 import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
+import {scopedList} from './fixture-scope.mjs';
 
 /** This CLI package's folder. */
 export const CLI_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -391,23 +392,26 @@ function linkTree(from, to, shared = new Set(), rel = '') {
  * The copy leaves out the global copy's background Core step
  * (core-worker.mjs), as a release that predates it does, so no test's run
  * starts a download behind its back; `coreStep: true` keeps it.
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * `withoutCore: true` leaves `@astryxdesign/core` out of the packages the copy
+ * resolves, as a global install does: npm does not install an optional peer.
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string}}
  */
 export function placeCli(dir, version, options = {}) {
   const key = JSON.stringify([
     version,
     Boolean(options.coreStep),
+    Boolean(options.withoutCore),
     options.engines ?? null,
   ]);
   const ready = fs.existsSync(dir) ? undefined : pool.get(key)?.pop();
   if (ready) {
     fs.mkdirSync(path.dirname(dir), {recursive: true});
     fs.renameSync(ready.dir, dir);
-    placed.push({dir, key, record: ready.record});
+    scopedList('placed', placed).push({dir, key, record: ready.record});
   } else {
     buildCopy(dir, version, options);
-    placed.push({dir, key, record: treeRecord(dir)});
+    scopedList('placed', placed).push({dir, key, record: treeRecord(dir)});
   }
   return {dir, bin: path.join(dir, 'clients', 'cli', 'bin', 'astryx.mjs')};
 }
@@ -420,7 +424,8 @@ export function placeCli(dir, version, options = {}) {
 const pool = new Map();
 
 /**
- * Copies placed since the last {@link recyclePlacedCopies}.
+ * Copies placed outside a fixture scope since the last
+ * {@link recyclePlacedCopies}. A scope keeps its own list.
  * @type {{dir: string, key: string, record: Map<string, string>}[]}
  */
 const placed = [];
@@ -435,12 +440,19 @@ let pooledCount = 0;
  * A copy whose entries changed stays where it is, for its folder's removal.
  * So does every copy when `keep` is false: a step that is still running may
  * still use one.
- * @param {{keep?: boolean}} [options]
+ * `copies` names a fixture scope's own list; by default, the copies placed
+ * outside any scope. `besideOthers` says the test ran beside others, so a
+ * change to a shared file may be theirs.
+ * @param {{keep?: boolean, copies?: typeof placed, besideOthers?: boolean}} [options]
  * @throws {Error} when a test wrote into a file every copy shares. The pool is
  * then emptied, and the changed files are unpacked again from the tarball.
  */
-export function recyclePlacedCopies({keep = true} = {}) {
-  const copies = placed.splice(0);
+export function recyclePlacedCopies({
+  keep = true,
+  copies: list = placed,
+  besideOthers = false,
+} = {}) {
+  const copies = list.splice(0);
   if (packed && packedRecord) {
     const changed = changedPaths(
       packedRecord,
@@ -462,7 +474,7 @@ export function recyclePlacedCopies({keep = true} = {}) {
       restorePaths(packed, packedTarball, changed);
       packedRecord = treeRecord(packed, {contents: true});
       throw new Error(
-        `A test changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
+        `${besideOthers ? 'This test, or a test that ran beside it,' : 'A test'} changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
       );
     }
   }
@@ -497,7 +509,7 @@ export function recyclePlacedCopies({keep = true} = {}) {
  * Link a new copy of the packed CLI at `dir`, labeled `version`.
  * @param {string} dir
  * @param {string} version
- * @param {{engines?: Record<string, string>, coreStep?: boolean}} options
+ * @param {{engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} options
  */
 function buildCopy(dir, version, options) {
   const from = packedCli();
@@ -517,11 +529,44 @@ function buildCopy(dir, version, options) {
     pkgFile,
     `${JSON.stringify({...pkg, version, ...(options.engines ? {engines: options.engines} : {})}, null, 2)}\n`,
   );
+  if (options.withoutCore) {
+    linkPackagesExceptCore(
+      path.join(CLI_DIR, 'node_modules'),
+      path.join(dir, 'node_modules'),
+    );
+    return;
+  }
   fs.symlinkSync(
     path.join(CLI_DIR, 'node_modules'),
     path.join(dir, 'node_modules'),
     process.platform === 'win32' ? 'junction' : 'dir',
   );
+}
+
+/**
+ * Link each package folder of `from` into a new folder `to`, except
+ * `@astryxdesign/core`.
+ * @param {string} from
+ * @param {string} to
+ */
+function linkPackagesExceptCore(from, to) {
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.mkdirSync(to);
+  for (const name of fs.readdirSync(from)) {
+    if (name !== '@astryxdesign') {
+      fs.symlinkSync(path.join(from, name), path.join(to, name), type);
+      continue;
+    }
+    fs.mkdirSync(path.join(to, name));
+    for (const scoped of fs.readdirSync(path.join(from, name))) {
+      if (scoped === 'core') continue;
+      fs.symlinkSync(
+        path.join(from, name, scoped),
+        path.join(to, name, scoped),
+        type,
+      );
+    }
+  }
 }
 
 /**
@@ -605,7 +650,7 @@ const LAYOUTS = {
  * `astryx` command linked into its bin folder.
  * @param {keyof typeof LAYOUTS} layout
  * @param {string} version
- * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean}} [options]
+ * @param {{root?: string, engines?: Record<string, string>, coreStep?: boolean, withoutCore?: boolean}} [options]
  * @returns {{dir: string, bin: string, binDir: string}}
  */
 export function globalCli(layout, version, options = {}) {

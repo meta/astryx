@@ -27,15 +27,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Governing contract      | None. No prop, type, or behavior a person sees changes; each surface's own record keeps what it shows and when.                                                                                                                                                    |
-| System behavior         | A public import carries what renders without interaction. Surfaces revealed by interaction load on first intent (INV1–INV6). Opt-in capabilities are reachable only through their own import (INV7). A failing check holds both per entry (INV9, DEC-3).           |
-| End-user impact         | People load less JavaScript on every page. A page with one Heading carries no tooltip code; a Table that never windows carries no windowing code. The first open of a surface can wait for its module; the trigger, its name, and focus are there before it loads. |
-| Builder impact          | A component author puts surface rendering behind the shared module loader and capability code behind its own import. The check names the import chain that breaks a boundary.                                                                                      |
-| Compatibility/readiness | Additive and internal: no public API changes. Current-state impact lists today's crossings; the allowlist records each one until it is fixed.                                                                                                                      |
-| Review checks           | Reject a static import of a surface module or a capability module from a public import outside the allowlist; an `import()` of a touch module; a surface whose trigger loses its ARIA wiring, focus, or an early intent across the load; a layout shift on load.   |
-| Governing rules         | DEC-1, DEC-2, DEC-3; `architecture:react-component-runtime` INV13; `architecture:component-style-authoring` INV6; `spec:AST-080` DEC-5; `spec:AST-013` FR9.                                                                                                        |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Governing contract      | None. No prop, type, or behavior a person sees changes; each surface's own record keeps what it shows and when.                                                                                                                                                                                                                                  |
+| System behavior         | A public import carries what renders without interaction. Surfaces revealed by interaction load on first intent, except tooltip and hover-card surfaces, which load after the page's first paint (INV1–INV6, DEC-4). Opt-in capabilities are reachable only through their own import (INV7). A failing check holds both per entry (INV9, DEC-3). |
+| End-user impact         | People load less JavaScript on every page. A page with one Heading carries no tooltip code; a Table that never windows carries no windowing code. The first open of a surface can wait for its module; the trigger, its name, and focus are there before it loads.                                                                               |
+| Builder impact          | A component author puts surface rendering behind the shared module loader and capability code behind its own import. The check names the import chain that breaks a boundary.                                                                                                                                                                    |
+| Compatibility/readiness | Additive and internal: no public API changes. Current-state impact lists today's crossings; the allowlist records each one until it is fixed.                                                                                                                                                                                                    |
+| Review checks           | Reject a static import of a surface module or a capability module from a public import outside the allowlist; an `import()` of a touch module; a surface whose trigger loses its ARIA wiring, focus, or an early intent across the load; a layout shift on load.                                                                                 |
+| Governing rules         | DEC-1, DEC-2, DEC-3, DEC-4; `architecture:react-component-runtime` INV13; `architecture:component-style-authoring` INV6; `spec:AST-080` DEC-5; `spec:AST-013` FR9.                                                                                                                                                                               |
 
 This table is a review projection; the body below is authoritative.
 
@@ -97,22 +97,26 @@ one pending load per module, caches a success, and resets after a failure.
 
 ## Boundaries and invariants
 
-- **INV1 — Surfaces revealed by interaction load on first intent.** A public
+- **INV1 — Surfaces revealed by interaction load on first intent, tooltips and hover cards after first paint.** A public
   import reaches a surface module only through `import()` behind the shared
   module loader, never statically. This holds for the surface's own public
   component too: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
   `ContextMenu` imports carry their trigger contract, and their surface loads
-  as INV2 says. The eager part of an entry holds only the trigger contract:
+  as INV2 says, the `Tooltip` and `HoverCard` surfaces by its after-paint
+  rule. The eager part of an entry holds only the trigger contract:
   the ARIA attributes and ids INV3 requires, the intent listeners, and the
   loader call. A module inside a lazily loaded graph imports Core modules
   directly, never through a barrel (`scripts/core-single-bundle.test.mjs`).
-- **INV2 — Intent starts the load.** The load starts at the trigger's first
+- **INV2 — Intent starts the load, except for tooltips and hover cards.** The load starts at the trigger's first
   `pointerenter` from a mouse or pen, `focus`, `pointerdown` from any pointer,
   or open request (a controlled open, a keyboard shortcut, a context-menu
   invocation). The listeners use native events only; they recognize no
   gesture. A component's own record may start the load earlier at a named
-  moment after the page's first render. A load never starts during server
-  render or the render that hydrates server markup (`spec:AST-013` FR9).
+  moment after the page's first render. The `Tooltip` and `HoverCard`
+  surfaces do not wait for intent: their load starts after the page's first
+  paint, on every page that renders one of their triggers, and no input starts
+  it sooner or hurries it (DEC-4). A load never starts during server render or
+  the render that hydrates server markup (`spec:AST-013` FR9).
 - **INV3 — The trigger contract is complete before load.** The trigger's
   role, accessible name, and tab stop, and the ARIA its own record gives its
   closed state, are in server and hydrating markup and do not change when the
@@ -134,6 +138,9 @@ one pending load per module, caches a success, and resets after a failure.
   (`architecture:interaction-modality` INV8). Leaving, blurring, a scroll, or a
   press elsewhere before load drops a held hover or focus. A replayed intent
   arms the surface's dismissal as the same intent does on a loaded surface.
+  For a `Tooltip` or `HoverCard` surface, a hover made while it loads shows
+  the surface once the load has landed and the hover delay has passed, if the
+  pointer is still on the trigger; otherwise the next hover shows it.
 - **INV5 — The load moves nothing.** Loading changes no box in the page: the
   trigger's size, position, and content are the same before and after. No
   closed surface paints during the load. The surface paints in the top layer
@@ -166,55 +173,111 @@ one pending load per module, caches a success, and resets after a failure.
   scroll belongs to the loaded surface, which reads the `click` that follows
   a tap.
 - **INV9 — A check holds the boundaries per entry.** A CI check builds each
-  entry in the entry list (Text, Heading, Button, IconButton, Link, Table, and
-  each entry an owner adds) and walks its eager graph. It finds every
-  crossing the entry reaches and names the import chain that brings each one.
+  entry in the entry list (Text, Heading, Button, IconButton, Link, Table,
+  List, CheckboxList, Selector, DropdownMenu, and each entry an owner adds)
+  and walks its eager graph. For Text, Heading, Button, IconButton, Link and
+  Table, it finds every crossing the entry reaches and names the import chain
+  that brings each one. The crossings of List, CheckboxList, Selector and
+  DropdownMenu are not checked against the allowlist; the "Must not reach"
+  table below holds them.
   A crossing listed in the allowlist below passes, with its gzip cost
   printed. A crossing not listed fails (DEC-3). A listed crossing that no
   longer occurs fails until its row is removed. The check also prints each
   entry's eager gzip size, base against head. Adding a row to the allowlist
   needs the owner's approval in this record.
 
+  The check also holds each entry's whole eager graph, crossings included,
+  against the "Must not reach" table below. It fails when an entry reaches a
+  module its row lists, names the chain that brings it, and prints that
+  module's gzip cost to the entry. Against the base, it reports each row, row
+  entry or module a pull request removes.
+
+- **INV10 — An optional feature costs nothing where it is unused.** An
+  optional feature is behavior a caller turns on through a prop, an option or
+  a plugin, and that is off by default. It adds at most 0.3 KB gzip (KB as the
+  boundary check prints it, 1,024 bytes) of
+  first-load JavaScript to a page that renders its component without it, the
+  same wiring allowance as INV7. A larger feature takes INV7's route (its own
+  import) or a deferred load (DEC-1, DEC-4). A pull request that adds or grows
+  an optional feature reports that page's first-load gzip delta. A pull
+  request that grows a shared module reports the first-load gzip delta, for
+  apps that do not use the new code, on the four reference pages. Each
+  reference page is a production app bundle of the built packages that
+  imports exactly these Core components: the docs page Text, Heading, Link,
+  Card, Divider and List; the form page Button, IconButton, TextInput,
+  CheckboxInput, Text, Heading and Card; the menu page DropdownMenu,
+  ContextMenu, Button and Text; and the table page Table, Text and Button. A
+  pull request whose shared module none of these pages reaches adds a page
+  that imports a component that reaches it. Default behavior, CSS (`spec:AST-080` DEC-4 governs it),
+  tests, stories, docs and generated files are outside this rule (DEC-5).
+
+  Named entry: the shared theme lookup Spinner reads for a theme's `spinner`
+  indicator (`Indicator/useThemeIndicator` through `theme/useTheme` and
+  `theme/themeRegistry`) costs under 0.5 KB gzip on a page that renders only
+  Spinner, and under 0.1 KB on one that renders only TreeList.
+  It is not an unused feature: a page that renders an indicator a theme can
+  replace uses theming, and the lookup is how the theme reaches it
+  (`component:Indicator` DEC-1).
+
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                        |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
+| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 1.7 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 19.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
+| `Link/Link` → `Tooltip`                                           | Link                                           | 21.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 88.5 KB                | INV1       | cells without actions reach no menu module                                                             |
+| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.6 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine                               |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
 apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
 IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 123.5 KB eager.
+crossings brings the same module. Table carries 134.5 KB eager.
+
+### Must not reach
+
+Each row names modules an entry never reaches eagerly, because they belong to
+an optional feature the entry does not turn on (INV10). A module ending in `/`
+names a folder; any other name covers that module and the folder of that
+name. A folder match leaves out the base modules that live in surface folders
+(INV1). A row names only modules that exist in the source. A row joins the table only when it holds on `main`. Removing a row, or
+an entry or a module from one, needs the owner's approval in this record, as
+an allowlist row does.
+
+| Entry                  | Modules it must not reach eagerly (under `packages/core/src`) | Owning optional feature                         | Invariant | Since      |
+| ---------------------- | ------------------------------------------------------------- | ----------------------------------------------- | --------- | ---------- |
+| Text, Heading          | `gestures/`                                                   | Touch gestures (drag, swipe, pan, long press)   | INV10     | 2026-11-14 |
+| Text, Heading          | `motion/animator`                                             | The motion animator (animated presentation)     | INV10     | 2026-11-14 |
+| List, CheckboxList     | `List/listReorderEngine`                                      | Reordering (`createReorderable`)                | INV10     | 2026-11-14 |
+| List, CheckboxList     | `gestures/`                                                   | Touch gestures (reorder drag, swipe actions)    | INV10     | 2026-11-14 |
+| Selector, DropdownMenu | `gestures/`                                                   | Touch gestures (drag-to-dismiss sheets, swipes) | INV10     | 2026-11-14 |
 
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 4.6 KB gzip each, on pages whose text never
+  through the truncation tooltip, 1.7 KB gzip each, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
 - INV1 gap: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
   `ContextMenu` imports load their layer statically. `useTooltip`,
   `useHoverCard`, `usePopover`, and `ContextMenu` import the layer hook from
-  `Layer/useLayer`, and `DropdownMenu` reaches it through `usePopover`. These
-  five are not in INV9's entry list, so the check does not hold them; it
-  holds only the listed entries.
+  `Layer/useLayer`, and `DropdownMenu` reaches it through `usePopover`. The
+  check holds the crossings of none of these five: `Tooltip`, `HoverCard`,
+  `Popover`, and `ContextMenu` are not in INV9's entry list, and
+  `DropdownMenu` is an entry whose crossings are not checked.
 - INV1 gap: Button's and IconButton's imports reach the tooltip hook and the
-  layer runtime, 15.5 KB gzip, with or without a `tooltip` prop. Through
+  layer runtime, 19.5 KB gzip, with or without a `tooltip` prop. Through
   Button, Link, or their own code, 32 of Core's 95 component imports that are
   not surfaces carry 17–24 KB of tooltip code, and 52 carry at least 1 KB.
 - INV1 gap: Link's import reaches the Tooltip component and the layer
-  runtime, 17.6 KB gzip, with or without a `tooltip` prop.
-- INV1 gap: Table's import reaches the cell context menu, 78.2 KB gzip, for
+  runtime, 21.6 KB gzip, with or without a `tooltip` prop.
+- INV1 gap: Table's import reaches the cell context menu, 88.5 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
 - INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.0 KB gzip, for a Table that never windows.
+  windowing module, 3.6 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
   their description.
@@ -234,7 +297,7 @@ Review against this record when a change:
   module or a capability module;
 - adds an `import()`, a module loader, or an intent listener that starts one;
 - adds a surface revealed by interaction, or an opt-in capability; or
-- adds or removes an entry or an allowlist row.
+- adds or removes an entry, an allowlist row, or a "Must not reach" row.
 
 ## Owning code
 
@@ -267,6 +330,8 @@ surface that uses it (INV8).
 Rejected: loading each surface with its trigger, because every page pays for
 surfaces people never open.
 
+Amended for tooltips and hover cards by DEC-4.
+
 ### DEC-2 — Opt-in capabilities ship only through their own import
 
 **Reference:** `architecture:component-import-boundaries/DEC-2`
@@ -295,6 +360,45 @@ cannot merge, and no change is blocked by a crossing already listed.
 Rejected: a warn-only check that starts failing per entry once its rows are gone, because a new crossing can merge while its entry only warns.
 Rejected: rules held by review alone, because a crossing shows only in the built import graph, not in the changed lines.
 
+### DEC-4 — Tooltip and hover-card code loads after first paint on every page
+
+**Reference:** `architecture:component-import-boundaries/DEC-4`
+**Decider:** `cixzhang`, `2026-11-13`
+
+> "After first paint, on every page" — Owner decision, 2026-11-13 (Cindy)
+
+Tooltip and hover-card code loads in the background once the page has painted,
+so the page shows first and the first hover usually finds the code already
+loaded. This covers every Tooltip surface, including the truncation tooltip of
+Text and Heading and the `tooltip` of Button and Link, and the HoverCard
+surface. No input starts the load sooner or hurries it. A hover during the
+loading window still waits the surface's hover delay, counted from the
+pointer's entry, and shows when the load lands if the pointer is still on the
+trigger, or at the next hover (INV2, INV4). Other surfaces keep DEC-1.
+
+Rejected: loading on the first hover or focus, because the first hover then
+waits for the fetch.
+Rejected: loading with the page, because every page pays for code before
+anyone hovers.
+
+### DEC-5 — Unused optional features cost almost nothing
+
+**Reference:** `architecture:component-import-boundaries/DEC-5`
+**Decider:** `cixzhang`, `2026-11-13`
+
+> "Both rules" — Owner decision, 2026-11-13 (Cindy), on the size rules for
+> unused features and shared behavior code
+
+An app pays for an optional feature only when it uses it, and pays the least
+the feature can cost. A prop, option or plugin that is off by default adds no
+more than INV7's wiring allowance to a page that does not turn it on, and a
+growing shared module states what it costs the apps that do not use the new
+code (INV10).
+
+Rejected: keeping public-component-api INV19's advice to weigh resource cost,
+without a budget or a report, because a feature's cost to other apps then
+stays invisible.
+
 ## Open questions
 
 - **OQ1 — Is 0.3 KB the right wiring allowance for INV7?** Proposed from the
@@ -306,13 +410,14 @@ Rejected: rules held by review alone, because a crossing shows only in the built
 
 ## Verification
 
-| Invariant  | Evidence                                                                                                                                                                | Failure signal                                                                                                                                                             |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV7 | The entry-boundary check (INV9) with a positive control per kind: a fixture entry that imports a surface statically, and one that imports a capability                  | A listed entry reaches a surface or capability module statically outside the allowlist; a component reaches a capability module with `import()`; a positive control passes |
-| INV2       | Unit tests per surface: no load before intent; one load per intent kind (mouse or pen enter, focus, pointer down, open request); none during server render or hydration | A load before intent, during server render, or during hydration; an intent that starts no load; a gesture recognizer in the pre-load listeners                             |
-| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                | Closed-state trigger ARIA differs between server, hydration, and after load; an ARIA reference names a missing element; focus moves or content remounts on load            |
-| INV4       | Tests with a deferred loader: hover, tap, focus, and open request before load; leave, blur, and a later intent before load                                              | A held intent lost or replayed twice; a hover delay restarted at load; a stale intent opening after a newer one; a replayed tap without outside dismissal                  |
-| INV5       | Real-browser layout test: trigger box before and after load; no paint of a closed surface                                                                               | Any trigger box change; a closed surface painted; a false state during load                                                                                                |
-| INV6       | Tests with a rejecting loader                                                                                                                                           | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                        |
-| INV8       | `scripts/touch-support-bundle.test.mjs` extended over lazy chunks: two deferred surfaces and one base component on one page                                             | A second copy of a touch module on one page; an `import()` whose target is a touch module; a touch module in an entry's eager graph only for a deferred surface            |
-| INV9       | The check's own tests: a stale allowlist row, an unlisted crossing, and the printed import chain                                                                        | A crossing passes unlisted; a stale row passes; a failure without its import chain                                                                                         |
+| Invariant  | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Failure signal                                                                                                                                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV7 | The entry-boundary check (INV9) with a positive control per kind: a fixture entry that imports a surface statically, and one that imports a capability                                                                                                                                                                                                                                                                                                                             | An entry whose crossings are checked reaches a surface or capability module statically outside the allowlist; a component reaches a capability module with `import()`; a positive control passes                                                                     |
+| INV2       | Unit tests per surface: no load before intent; one load per intent kind (mouse or pen enter, focus, pointer down, open request); none during server render or hydration; Tooltip and HoverCard: a load after the first paint with no intent, and an early hover that does not start it                                                                                                                                                                                             | A load before intent, during server render, or during hydration; an intent that starts no load; a gesture recognizer in the pre-load listeners; a Tooltip or HoverCard load that waits for intent, starts before first paint, or starts sooner on an input           |
+| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                                                                                                                                                                                                                                                                                                                           | Closed-state trigger ARIA differs between server, hydration, and after load; an ARIA reference names a missing element; focus moves or content remounts on load                                                                                                      |
+| INV4       | Tests with a deferred loader: hover, tap, focus, and open request before load; leave, blur, and a later intent before load                                                                                                                                                                                                                                                                                                                                                         | A held intent lost or replayed twice; a hover delay restarted at load; a stale intent opening after a newer one; a replayed tap without outside dismissal                                                                                                            |
+| INV5       | Real-browser layout test: trigger box before and after load; no paint of a closed surface                                                                                                                                                                                                                                                                                                                                                                                          | Any trigger box change; a closed surface painted; a false state during load                                                                                                                                                                                          |
+| INV6       | Tests with a rejecting loader                                                                                                                                                                                                                                                                                                                                                                                                                                                      | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                                                                                                                  |
+| INV8       | `scripts/touch-support-bundle.test.mjs` extended over lazy chunks: two deferred surfaces and one base component on one page                                                                                                                                                                                                                                                                                                                                                        | A second copy of a touch module on one page; an `import()` whose target is a touch module; a touch module in an entry's eager graph only for a deferred surface                                                                                                      |
+| INV9       | The check's own tests: a stale allowlist row, an unlisted crossing, and the printed import chain                                                                                                                                                                                                                                                                                                                                                                                   | A crossing passes unlisted; a stale row passes; a failure without its import chain                                                                                                                                                                                   |
+| INV10      | The per-page first-load report from `pnpm size:pages` on INV10's four reference pages (docs, form, menu, table, each defined by its component set), base against head, for a page that renders each changed component without its optional feature; the entry-boundary check (INV9) against the "Must not reach" table, with its own tests: a fixture entry that reaches a listed module, a row for an entry the check does not build, and a removed row reported against the base | An unused optional feature adds more than 0.3 KB gzip of first-load JavaScript, or a pull request that grows a shared module reports no per-page delta; an entry reaches a module its "Must not reach" row lists and the check passes; a removed row is not reported |

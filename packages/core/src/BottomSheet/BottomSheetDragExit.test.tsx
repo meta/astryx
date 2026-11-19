@@ -5,8 +5,8 @@
  * @input BottomSheet, with the shared animator replaced by a recorder
  * @output Unit tests for the exit a drag's close plays. It starts the close
  *   spring from where the finger left the sheet, and a reopen takes it back.
- *   The scrim fades for as long as that close plays, decided before the
- *   scrim starts to clear. Under reduced motion no spring plays, and the
+ *   The scrim fades for as long as that close plays and along its spring,
+ *   decided before the scrim starts to clear. Under reduced motion no spring plays, and the
  *   sheet stays where the finger left it while it fades out. Each holds on a
  *   standalone sheet and on a switcher flow
  * @position The jsdom side of the drag exit; the Chromium release spec reads
@@ -344,6 +344,86 @@ it('fades the scrim for as long as the close plays when a drag closes the sheet'
   expect(scrimFade()).toBe(`${close.settleTime(SETTLE_THRESHOLD.y) * 1000}ms`);
 });
 
+/** The inline fade easing on the sheet's dialog, '' when none. */
+function scrimEasing(label = 'Sheet'): string {
+  const dialog = document.querySelector<HTMLDialogElement>(
+    `dialog[aria-label="${label}"]`,
+  );
+  return dialog?.style.getPropertyValue('--_sheet-scrim-easing') ?? '';
+}
+
+/** The value of CSS `linear()` easing text with evenly spaced stops at `x`. */
+function linearAt(easing: string, x: number): number {
+  const stops = /^linear\((.*)\)$/.exec(easing)![1].split(',').map(Number);
+  const at = x * (stops.length - 1);
+  const i = Math.min(Math.floor(at), stops.length - 2);
+  return stops[i] + (stops[i + 1] - stops[i]) * (at - i);
+}
+
+it('fades the scrim along the close spring when a drag closes the sheet', () => {
+  render(<Host />);
+  layOutSheet();
+  flickDown();
+  const [exit] = exits;
+  const distance = exit.values.y;
+  const close = solveSpring(toSpring(springs.sheetDismissSwipe), {
+    from: 0,
+    to: distance,
+    velocity: exit.options.velocity?.y,
+  });
+  const durationS = close.settleTime(SETTLE_THRESHOLD.y);
+  const easing = scrimEasing();
+  expect(easing).toMatch(/^linear\(/);
+  // At each moment of the close, the scrim has faded as far as the sheet has
+  // moved: a sheet already gone leaves no dim behind it.
+  // The close overshoots a little. Once the sheet is closed, the scrim stays
+  // clear.
+  let reachedS = Infinity;
+  for (let ms = 0; ms <= durationS * 1000; ms++) {
+    if (close.value(ms / 1000) >= distance) {
+      reachedS = ms / 1000;
+      break;
+    }
+  }
+  for (const fraction of [0, 0.05, 0.1, 0.25, 0.5, 1]) {
+    const atS = fraction * durationS;
+    const moved = atS >= reachedS ? 1 : close.value(atS) / distance;
+    expect(linearAt(easing, fraction)).toBeCloseTo(moved, 2);
+  }
+});
+
+it('clears the scrim as the sheet leaves view, before its close ends', () => {
+  render(<Host />);
+  layOutSheet();
+  const sheet = document.querySelector<HTMLElement>(
+    'dialog[aria-label="Sheet"] .astryx-bottom-sheet',
+  )!;
+  // The sheet's top sits 140 px above the bottom of the screen at release:
+  // the rest of its surface is below the screen.
+  vi.spyOn(sheet, 'getBoundingClientRect').mockReturnValue({
+    top: window.innerHeight - 140,
+  } as DOMRect);
+  flickDown();
+  const [exit] = exits;
+  const distance = exit.values.y;
+  expect(distance).toBeGreaterThan(140);
+  const close = solveSpring(toSpring(springs.sheetDismissSwipe), {
+    from: 0,
+    to: distance,
+    velocity: exit.options.velocity?.y,
+  });
+  const durationS = close.settleTime(SETTLE_THRESHOLD.y);
+  // The fade still lasts the whole close.
+  expect(scrimFade()).toBe(`${durationS * 1000}ms`);
+  const easing = scrimEasing();
+  // Each moment, the scrim has faded as far as the sheet has gone out of
+  // view, and it is clear once the sheet is.
+  for (const fraction of [0.02, 0.05, 0.1, 0.25, 0.5, 1]) {
+    const shownGone = Math.min(1, close.value(fraction * durationS) / 140);
+    expect(linearAt(easing, fraction)).toBeCloseTo(shownGone, 1);
+  }
+});
+
 /** Records each inline style property write, as `name: value`. */
 function recordStyleWrites(): string[] {
   const writes: string[] = [];
@@ -419,15 +499,17 @@ it("holds a switcher flow's sheet where the finger left it while a reduced-motio
   expectFadesInPlace(flickDownFromHeld('Steps'), 'Steps');
 });
 
-it("clears the scrim's fade duration when the drag exit ends", async () => {
+it("clears the scrim's fade when the drag exit ends", async () => {
   render(<Host />);
   layOutSheet();
   flickDown();
   expect(scrimFade()).not.toBe('');
+  expect(scrimEasing()).not.toBe('');
   await act(async () => {
     exits[0].finish();
   });
   expect(scrimFade()).toBe('');
+  expect(scrimEasing()).toBe('');
 });
 
 it("clears the scrim's fade duration when the sheet reopens during a drag exit", () => {

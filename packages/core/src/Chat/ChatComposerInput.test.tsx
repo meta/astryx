@@ -2486,3 +2486,11 @@ describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => 
     expect(announce.mock.calls).toEqual([['Looking up people…', 'polite']]);
   });
 });
+
+describe('ChatComposerInput empty line', () => {
+  it('gives the editable itself one line of height, so an empty input stays clickable', () => {
+    render(<ChatComposerInput label="Chat input" />);
+    const editable = screen.getByRole('textbox', {name: 'Chat input'});
+    expect(editable).toHaveStyle({minHeight: '22px'});
+  });
+});

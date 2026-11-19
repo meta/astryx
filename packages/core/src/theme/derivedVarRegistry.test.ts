@@ -86,17 +86,26 @@ const STRUCTURAL_VARS = new Set([
   // sticky-columns plugin: opaque backdrop (overridable) + the row overlay it
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
-  '--table-row-overlay',
   // The width a cell's row divider draws (0 on the last row), which a pinned
   // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
   // Private runtime plumbing, never authored by a theme.
   '--_table-row-divider-width',
+  // A header cell's inline inset, the room its content may grow into before
+  // its label truncates, and the last column's container edge inset that the
+  // room reads (Table/TableHeaderCell.tsx, Table/table.stylex.ts). Private
+  // runtime plumbing, never authored by a theme.
+  '--_table-header-inline',
+  '--_table-header-end-room',
+  '--_table-edge-inline-end',
   // A gliding row's divider, carried on the row for the glide
   // (Table/glidingDivider.ts). Private runtime plumbing.
   '--_table-row-glide-width',
   '--_table-row-glide-style',
   '--_table-row-glide-color',
   '--_table-row-glide-offset',
+  // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
+  // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
+  '--_table-cell-word-break',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
@@ -137,6 +146,12 @@ const STRUCTURAL_VARS = new Set([
   // Also beside it: how far above the viewport's bottom a layer ends while the
   // keyboard is up. Runtime geometry, never authored by a theme.
   '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
+  '--_sheet-scrim-easing',
 ]);
 
 /**
@@ -267,13 +282,16 @@ function discoverComponents(): ComponentInfo[] {
 // Known mapping: doc dir → registry key
 // ---------------------------------------------------------------------------
 
-const DIR_TO_REGISTRY_KEY: Record<string, string> = {
+// A component whose doc's derived entries span two targets (a switch's
+// field and thumb) maps to each, in the doc's order.
+const DIR_TO_REGISTRY_KEY: Record<string, string | string[]> = {
   Avatar: 'avatar',
   Banner: 'banner',
   BottomSheet: 'bottom-sheet',
   Button: 'button',
   Card: 'card',
   Chat: 'chat-composer',
+  CheckboxInput: 'checkbox-input',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -287,6 +305,8 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
+  Switch: ['switch-field', 'switch-thumb'],
+  Table: 'table-row',
   TextArea: 'text-area',
 };
 
@@ -324,6 +344,18 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // publication beside container().
   '--_container-corner-block-start',
   '--_container-corner-block-end',
+  // The container-padding record's block-edge bleed: a padding publisher
+  // gives its block padding only to a direct first or last Table.
+  '--_container-bleed-block-start',
+  '--_container-bleed-block-end',
+  // Badge FR5 and Button FR2: a primary or destructive Button passes its fill
+  // pair to a neutral Badge in its content, which paints the pair inverted.
+  '--_button-fill',
+  '--_button-on-fill',
+  // spec:AST-025 FR22: an adopter of the shared scroll-edge fade sets the
+  // clear band at the edge and the fade length on its viewport.
+  '--_scroll-fade-inset',
+  '--_scroll-fade-length',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
@@ -367,6 +399,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_avatar-group-overlap',
   '--_field-status-overlap',
   '--_codeblock-gutter-width',
+  // The page's direction, read with :dir(rtl) on the block root so the
+  // gutter mirrors; a theme has no direction to set.
+  '--_codeblock-direction',
   '--_tab-indicator-bottom',
   // Hit-area outset on a ::after overlay, and whether that overlay is
   // generated at all — `inset` and `content` on a pseudo-element are not
@@ -389,9 +424,13 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  // A checkbox row's touch press image, which an indicator that paints its
-  // own press inherits. The row writes it from the press paint above.
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',
@@ -525,21 +564,24 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
   for (const {dir, docDerived, docTargetKeys} of components) {
-    const key = DIR_TO_REGISTRY_KEY[dir];
-    if (!key || docDerived.length === 0) {
+    const mapped = DIR_TO_REGISTRY_KEY[dir];
+    if (!mapped || docDerived.length === 0) {
       continue;
     }
+    const keys = [mapped].flat();
+    const key = keys.join(', ');
 
     it(`${dir} (${key}): registry matches doc derived`, () => {
-      const registryEntries = derivedVarRegistry[key];
-      expect(registryEntries).toBeDefined();
-      expect(registryEntries).toEqual(docDerived);
+      for (const k of keys) expect(derivedVarRegistry[k]).toBeDefined();
+      expect(keys.flatMap(k => derivedVarRegistry[k] ?? [])).toEqual(
+        docDerived,
+      );
     });
 
     // generateThemeRules looks the registry up by the theme's components key,
     // so a key that is not one of the doc's targets never expands.
     it(`${dir} (${key}): registry key is a documented theming target`, () => {
-      expect(docTargetKeys).toContain(key);
+      for (const k of keys) expect(docTargetKeys).toContain(k);
     });
   }
 
@@ -550,23 +592,24 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       if (docDerived.length === 0) {
         continue;
       }
-      const key = DIR_TO_REGISTRY_KEY[dir];
-      if (!key) {
+      const mapped = DIR_TO_REGISTRY_KEY[dir];
+      if (!mapped) {
         missing.push(
           `${dir}: has theming.derived but no DIR_TO_REGISTRY_KEY mapping. ` +
             `Add the mapping and a derivedVarRegistry entry.`,
         );
-      } else if (!derivedVarRegistry[key]) {
-        missing.push(
-          `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
-        );
-      }
+      } else
+        for (const key of [mapped].flat())
+          if (!derivedVarRegistry[key])
+            missing.push(
+              `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
+            );
     }
     expect(missing).toEqual([]);
   });
 
   it('registry has no orphan entries', () => {
-    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY));
+    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY).flat());
     const orphans = Object.keys(derivedVarRegistry).filter(
       k => !validKeys.has(k),
     );

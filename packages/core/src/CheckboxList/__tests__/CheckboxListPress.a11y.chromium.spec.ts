@@ -4,10 +4,11 @@
  * @file CheckboxListPress.a11y.chromium.spec.ts
  * @input The CheckboxList Default story in a built Storybook (a layered
  *   stylesheet) and real touch input through CDP
- * @output Real-engine proof that a finger on a CheckboxList row's label and on
- *   its box press the same surface and paint the same pixels. The box fades
- *   with the row on the lift. A pen on a fine-pointer page, a pressed
- *   ClickableCard and an outer row paint none of the box's press
+ * @output Real-engine proof: a finger, a mouse and a pen on a CheckboxList
+ *   row's label or box press the row. They paint the same pixels. The box
+ *   fades with the row on the lift. A pressed ClickableCard and an outer
+ *   row paint none of the box's press. A read-only row paints no row press,
+ *   and its box keeps its own
  * @position Run with `pnpm test:a11y-contract`. Browser layer of the row's
  *   press surface; the jsdom layer is CheckboxList.test.tsx ("CheckboxListItem
  *   press surface").
@@ -95,6 +96,11 @@ async function untilStill(page: Page): Promise<void> {
   await expect.poll(async () => running(page)).toBe(0);
   await frames(page, 2);
 }
+
+/** Longer than the content-touch delay a press waits before it paints. */
+const HOLD_MS = 300;
+/** A quick tap. */
+const TAP_MS = 80;
 
 type RGB = [number, number, number];
 type Point = {x: number; y: number};
@@ -292,7 +298,7 @@ test.describe('CheckboxList row press', () => {
     expect(onBox.box).toEqual(onLabel.box);
   });
 
-  test('a mouse press runs no touch press, and the label and the box keep their own :active paint', async ({
+  test('a mouse on the label and a mouse on the box press the row at once', async ({
     browser,
   }) => {
     const reads = new Map<'label' | 'box', PressRead>();
@@ -318,7 +324,7 @@ test.describe('CheckboxList row press', () => {
         const at = row[where];
         await row.page.mouse.move(at.x, at.y);
         await row.page.mouse.down();
-        await untilStill(row.page);
+        await row.page.waitForTimeout(HOLD_MS);
         reads.set(where, {
           surface: await pressedSurface(row.page),
           box: await pixel(row.page, row.boxSample),
@@ -334,23 +340,25 @@ test.describe('CheckboxList row press', () => {
     if (rest == null || onLabel == null || onBox == null) {
       throw new Error('the presses were not read');
     }
-    // The touch press never runs for a mouse.
-    expect(onLabel.surface).toBeNull();
-    expect(onBox.surface).toBeNull();
-    // Mouse hover and `:active`: on the label the row paints and the box
-    // stays blank; on the box the box paints too.
+    // One press model for every pointer: the row takes a mouse's press
+    // wherever it lands, with no delay. It paints the row and the box over it
+    // either way.
+    expect(onLabel.surface).toBe('li');
+    expect(onBox.surface).toBe('li');
     expect(darker(onLabel.row, rest.row)).toBe(true);
-    expect(onLabel.box).toEqual(rest.box);
-    expect(darker(onBox.box, rest.box)).toBe(true);
-    expect(darker(onBox.row, rest.row)).toBe(true);
+    expect(darker(onLabel.box, rest.box)).toBe(true);
+    expect(onBox.row).toEqual(onLabel.row);
+    // The box under the mouse adds its own hover tint. So it is at least as
+    // dark as the box the press paints from the label.
+    expect(onBox.box.every((value, i) => value <= onLabel.box[i])).toBe(true);
   });
 
-  test('a pen on a fine-pointer page presses the box as a mouse does, never the row', async ({
+  test('a pen on a fine-pointer page presses the row as a mouse does', async ({
     browser,
   }) => {
-    // The row takes the press only under a coarse primary pointer. So on a
-    // fine-pointer page a pen presses the box itself and shows only the box's
-    // own `:active` paint. The row never paints a press.
+    // One press model for every pointer: on a fine-pointer page a pen presses
+    // the row through the press controller, as a mouse does. The box over it
+    // paints the same.
     const row = await openRow(
       browser,
       'core-checkboxlist--default',
@@ -372,13 +380,15 @@ test.describe('CheckboxList row press', () => {
           clickCount: 1,
           pointerType,
         });
+      const surfaces: (string | null)[] = [];
       const hold = async (pointerType: 'mouse' | 'pen'): Promise<RGB> => {
         await send('mouseMoved', pointerType);
         await send('mousePressed', pointerType);
-        await untilStill(row.page);
+        await row.page.waitForTimeout(HOLD_MS);
+        surfaces.push(await pressedSurface(row.page));
         const read = await pixel(row.page, row.boxSample);
         await send('mouseReleased', pointerType);
-        await untilStill(row.page);
+        await row.page.waitForTimeout(HOLD_MS);
         return read;
       };
       const rest = await pixel(row.page, row.boxSample);
@@ -387,29 +397,25 @@ test.describe('CheckboxList row press', () => {
       const pen = await hold('pen');
       await hold('mouse');
       const mouse = await hold('mouse');
+      expect(surfaces).toEqual(['li', 'li', 'li']);
       expect(darker(mouse, rest)).toBe(true);
       expect(pen).toEqual(mouse);
-      // On a fine-pointer page a pen presses the box, never the row. So right
-      // after a quick tap's lift, no row carries a press that would fade out.
-      const tap = async (
-        pointerType: 'mouse' | 'pen',
-      ): Promise<string | null> => {
+      // A quick tap's press leaves the row as a mouse tap leaves it: back at
+      // rest once the release has run (the press controller's clocks).
+      const tap = async (pointerType: 'mouse' | 'pen'): Promise<RGB> => {
         await send('mouseMoved', pointerType);
         await send('mousePressed', pointerType);
-        // A quick tap: the lift follows a few frames later.
-        await frames(row.page, 4);
+        await row.page.waitForTimeout(TAP_MS);
         await send('mouseReleased', pointerType);
-        const left = await rowPress(row.page);
-        await untilStill(row.page);
-        return left;
+        await row.page.waitForTimeout(HOLD_MS);
+        return pixel(row.page, row.rowSample);
       };
       // Each tap toggles the box, so the mouse taps twice: both reads see the
       // same checked state.
       const penTap = await tap('pen');
       await tap('mouse');
       const mouseTap = await tap('mouse');
-      expect(penTap).toBeNull();
-      expect(mouseTap).toBeNull();
+      expect(penTap).toEqual(mouseTap);
     } finally {
       await row.close();
     }
@@ -542,6 +548,41 @@ test.describe('CheckboxList row press', () => {
       expect(held.nested).toEqual(rest.nested);
     } finally {
       await row.close();
+    }
+  });
+
+  test('a read-only row paints no row press, and its box keeps its own press', async ({
+    browser,
+  }) => {
+    for (const where of ['label', 'box'] as const) {
+      const row = await openRow(
+        browser,
+        'core-checkboxlist--default&args=isReadOnly:!true',
+        'SMS',
+      );
+      try {
+        const rest = {
+          box: await pixel(row.page, row.boxSample),
+          row: await pixel(row.page, row.rowSample),
+        };
+        await row.press(row[where]);
+        await row.page.waitForTimeout(HOLD_MS);
+        // A read-only row takes no press. Its checkbox stays enabled, so a
+        // press on the box paints the box, and only the box.
+        expect(await pressedSurface(row.page)).toBe(
+          where === 'box' ? 'div' : null,
+        );
+        const box = await pixel(row.page, row.boxSample);
+        if (where === 'box') {
+          expect(darker(box, rest.box)).toBe(true);
+        } else {
+          expect(box).toEqual(rest.box);
+        }
+        expect(await pixel(row.page, row.rowSample)).toEqual(rest.row);
+        await row.lift(row[where]);
+      } finally {
+        await row.close();
+      }
     }
   });
 

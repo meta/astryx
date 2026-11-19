@@ -26,6 +26,10 @@
     {
       "name": "agent-doc",
       "reason": "item kind"
+    },
+    {
+      "name": "icon-set",
+      "reason": "item kind"
     }
   ]
 }

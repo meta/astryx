@@ -47,13 +47,6 @@ import {
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
-import {
-  registerEnglishFallback,
-  useComponentTranslator,
-} from '../i18n/useComponentTranslator';
-import english from '../i18n/generated-english/DateTimeInput/NativeTimeSegment.generated';
-
-registerEnglishFallback(english);
 
 const FRACTIONAL_SECONDS = /\.\d+$/;
 
@@ -92,6 +85,18 @@ export type NativeTimeSegmentProps = {
   isBusy: boolean;
   statusType?: InputStatusType;
   ariaDescribedBy?: string;
+  /** Whether the control shows its rejection of an edit outside `min`/`max`. */
+  isRejected: boolean;
+  /**
+   * Reports an edit outside `min`/`max`, and its end. Blur restores the
+   * committed time and keeps the rejection; an accepted or emptied edit ends
+   * it. The owner ends it when `value` changes.
+   */
+  onRejectedChange: (isRejected: boolean) => void;
+  /** Runs at Enter and blur, which show a rejection that waits for them. */
+  onCommit: () => void;
+  /** The rejection message that no shown status announces. */
+  alertMessage: string;
   /**
    * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
    * input, the field's semantic control (family:input-fields FR10). Focus and
@@ -124,40 +129,46 @@ export function NativeTimeSegment({
   isBusy,
   statusType,
   ariaDescribedBy,
+  isRejected,
+  onRejectedChange,
+  onCommit,
+  alertMessage,
   controlProps,
 }: NativeTimeSegmentProps) {
   const {
     onFocus: onFocusProp,
     onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
     ...inputProps
   } = controlProps ?? {};
-  const t = useComponentTranslator();
   const locale = useLocale();
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
 
-  const [rejectedValue, setRejectedValue] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
-  const lastCommitRef = useRef<string | null>(null);
+  // The text the control last committed, so a repeated native event does not
+  // commit it twice. Each entry belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // The value as last rendered, and an epoch that a value change while the
+  // control is unfocused moves on, retiring the last commit. Both are state:
+  // refs written here would keep a value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
     // Preserve the accepted DOM value while the OS wheel is open so an
     // optimistic rollback cannot replay that edit when the field blurs.
     if (!isFocused) {
-      lastCommitRef.current = null;
-    }
-    if (rejectedValue !== null) {
-      setRejectedValue(null);
+      setCommitEpoch(epoch => epoch + 1);
     }
   }
 
   const nativeValue = normalizeNativeTime(value) ?? '';
-  const isInputValid = rejectedValue === null;
+  const isInputValid = !isRejected;
   const overlayText = nativeValue
     ? formatLocaleTime(nativeValue, locale, hourFormat, false)
     : placeholder;
@@ -165,13 +176,17 @@ export function NativeTimeSegment({
 
   const commitValue = useCallback(
     (newValue: string) => {
-      if (isEffectivelyDisabled || lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        isEffectivelyDisabled ||
+        (last !== null && last.epoch === commitEpoch && last.text === newValue)
+      ) {
         return;
       }
 
       if (!newValue) {
-        lastCommitRef.current = newValue;
-        setRejectedValue(null);
+        lastCommitRef.current = {text: newValue, epoch: commitEpoch};
+        onRejectedChange(false);
         if (value !== undefined) {
           onChange(undefined);
         }
@@ -183,17 +198,25 @@ export function NativeTimeSegment({
         return;
       }
       if (!isTimeInRange(normalized, min, max)) {
-        setRejectedValue(newValue);
+        onRejectedChange(true);
         return;
       }
 
-      setRejectedValue(null);
-      lastCommitRef.current = newValue;
+      onRejectedChange(false);
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       if (normalized !== value) {
         onChange(normalized);
       }
     },
-    [isEffectivelyDisabled, max, min, onChange, value],
+    [
+      commitEpoch,
+      isEffectivelyDisabled,
+      max,
+      min,
+      onChange,
+      onRejectedChange,
+      value,
+    ],
   );
 
   const handleChange = useCallback(
@@ -252,20 +275,29 @@ export function NativeTimeSegment({
     const valueChangedWhileFocused =
       valueAtFocusRef.current !== null &&
       valueAtFocusRef.current !== nativeValue;
-    const wasRejected = rejectedValue !== null;
     valueAtFocusRef.current = null;
+    // The unfocused sync restores the committed time; the rejection stays.
     setIsFocused(false);
-    setRejectedValue(null);
     if (
       !valueChangedWhileFocused &&
-      !wasRejected &&
+      !isRejected &&
       domValue !== undefined &&
       domValue !== nativeValue
     ) {
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, rejectedValue]);
+    onCommit();
+  }, [commitValue, nativeValue, isRejected, onCommit]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        onCommit();
+      }
+    },
+    [onCommit],
+  );
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {
@@ -312,6 +344,7 @@ export function NativeTimeSegment({
           onChange={handleChange}
           onFocus={chainEventHandlers(handleFocus, onFocusProp)}
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
           step={60}
@@ -357,7 +390,7 @@ export function NativeTimeSegment({
         )}
       </span>
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.timeInput.invalidTime') : ''}
+        {alertMessage}
       </VisuallyHidden>
     </>
   );

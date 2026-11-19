@@ -16,6 +16,7 @@ import {
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const styles = stylex.create({
   pageWrapper: {
@@ -59,10 +60,10 @@ const styles = stylex.create({
   },
 });
 
-const SAMPLE_IMAGE = 'https://picsum.photos/seed/astryx-overlay/800/450';
-const SAMPLE_IMAGE_2 = 'https://picsum.photos/seed/astryx-overlay-2/800/450';
-const SAMPLE_IMAGE_3 = 'https://picsum.photos/seed/astryx-overlay-3/800/450';
-const SAMPLE_HERO = 'https://picsum.photos/seed/astryx-hero/1200/600';
+const SAMPLE_IMAGE = SAMPLE_IMAGES.lake800x450;
+const SAMPLE_IMAGE_2 = SAMPLE_IMAGES.beach800x450;
+const SAMPLE_IMAGE_3 = SAMPLE_IMAGES.city800x450;
+const SAMPLE_HERO = SAMPLE_IMAGES.canyon1200x600;
 
 const meta: Meta<typeof Overlay> = {
   title: 'Core/Overlay',
@@ -209,12 +210,12 @@ export const LoadingOverlay: Story = {
 export const GalleryGrid: Story = {
   render: () => {
     const images = [
-      {src: 'https://picsum.photos/seed/g1/400/400', title: 'Mountain Lake'},
-      {src: 'https://picsum.photos/seed/g2/400/400', title: 'Forest Path'},
-      {src: 'https://picsum.photos/seed/g3/400/400', title: 'Ocean Sunset'},
-      {src: 'https://picsum.photos/seed/g4/400/400', title: 'City Skyline'},
-      {src: 'https://picsum.photos/seed/g5/400/400', title: 'Desert Dunes'},
-      {src: 'https://picsum.photos/seed/g6/400/400', title: 'Snowy Peaks'},
+      {src: SAMPLE_IMAGES.lake400x400, title: 'Mountain Lake'},
+      {src: SAMPLE_IMAGES.forest400x400, title: 'Forest Path'},
+      {src: SAMPLE_IMAGES.beach400x400, title: 'Ocean Sunset'},
+      {src: SAMPLE_IMAGES.city400x400, title: 'City Skyline'},
+      {src: SAMPLE_IMAGES.desert400x400, title: 'Desert Dunes'},
+      {src: SAMPLE_IMAGES.snow400x400, title: 'Snowy Peaks'},
     ];
     return (
       <Grid columns={3} gap={4}>

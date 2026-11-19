@@ -38,10 +38,11 @@ export const doc = {
     },
     {
       label: 'For a lint or an audit script',
-      cli: 'astryx --json theme targets',
+      cli: 'astryx --json experimental theme targets',
     },
   ],
   outsideProject: 'same',
+  requires: ['themes.targets'],
   exitCodes: [
     {
       code: 0,

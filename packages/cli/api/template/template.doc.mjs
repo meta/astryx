@@ -89,7 +89,7 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination (relative to cwd) to scaffold the template into. Its presence switches a named lookup into a copy. ' +
+        'Destination inside cwd to scaffold the template into: a relative path, or an absolute path inside cwd, which is written as its relative path and reported as data.givenPath. An absolute path in the system temp folder (os.tmpdir(), or /tmp on a POSIX system) takes a scratch copy, reported with its absolute data.outputDir. Any other path outside cwd is refused with ERR_PATH_TRAVERSAL. Its presence switches a named lookup into a copy. ' +
         "A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block.",
     },
     {
@@ -115,17 +115,17 @@ export const doc = {
     {
       type: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media, and `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder for your own content.",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, `components` — a sorted summary of the component names it composes, without the ones almost every template uses (such as `Text` and `Button`), `componentsToRead` — the components the source renders that `astryx component` answers in the project, in first-use order, each in the form that command takes (`<package>/<Name>`, for the package the import names, in a project with an integration), to read in one `astryx component` call (empty when none), and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media, and `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder for your own content, and `isReady` — false when the template's doc sets `isReady: false`.",
     },
     {
       type: 'template.skeleton',
       description:
-        "A layout skeleton (structural tags with spatial annotations) plus the template's description and the components it composes.",
+        "A layout skeleton (structural tags with spatial annotations) plus the template's description, the components it composes, and `isReady`.",
     },
     {
       type: 'template.copy',
       description:
-        'A receipt after scaffolding the template into the project: the template id, output directory, written file name, file count, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing, or when several lockfiles leave the package manager undetermined; `missingPackages` still names the packages).',
+        'A receipt after scaffolding the template into the project, or as a scratch copy in the system temp folder: the template id, output directory (relative to the project; absolute for a scratch copy), written file name, file count, `givenPath` — the absolute path as given, present only when it was inside the project, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing, when several lockfiles leave the package manager undetermined, or when no `package.json` holds the folder, where an install would make the folder a project; `missingPackages` still names the packages), `installGuidance` — present only when a loaded integration gives `installGuidance`: how to add the missing packages in this project, followed instead of `installCommand`, `components` — the components the written file renders that `astryx component` answers in the project, in first-use order, each in the form that command takes (`<package>/<Name>`, for the package the import names, in a project with an integration), to read in one `astryx component` call (empty when none), and `isReady`.',
     },
     {
       type: 'template.cdn',
@@ -152,7 +152,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the copy target path is absolute or escapes the project root',
+      when: 'the copy target path is outside the project root and the system temp folder, or a link carries it out of either',
     },
     {
       code: 'ERR_FILE_EXISTS',
