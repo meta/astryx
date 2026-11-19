@@ -99,7 +99,7 @@ All five contracts belong to the platform's core: every binary has them.
 
 - **FR1 — The icon view shows an image mask in its first frame.** `Icon` draws
   an image icon through `AstryxIconView`, an internal native view behind the
-  component (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes `uri` and
+  component (`spec:AST-112/FR5`). The view takes `uri` and
   `scale` (a resolved asset: `Image.resolveAssetSource(source)`), `tintColor`,
   and `mirrored` (default false).
   - The view paints `tintColor` wherever the mask is opaque and scales the mask to
@@ -136,7 +136,7 @@ All five contracts belong to the platform's core: every binary has them.
     (OQ3).
 - **FR3 — The symbol view shows an SF Symbol (iOS).** `Icon` draws a system
   symbol through `AstryxSymbolView`, an internal native view behind the
-  component (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes
+  component (`spec:AST-112/FR5`). The view takes
   `systemName`, `pointSize`, `symbolColor`, `weight` (`ultraLight` through
   `black`, default `regular`), `mirrored`, and the effect props `effect`,
   `effectTrigger`, and `effectRepeat`.
@@ -225,7 +225,7 @@ All five contracts belong to the platform's core: every binary has them.
     and the JavaScript reference reader) draws and reports (`spec:AST-140/FR7`).
 - **FR7 — The vector view draws one scene on one native view.** `Icon` and
   `Vector` draw through `AstryxVectorView`, an internal native view behind them
-  (`spec:AST-112/FR5`, `spec:AST-112/FR21`). The view takes a scene and
+  (`spec:AST-112/FR5`). The view takes a scene and
   `isLargeContentImage`.
   - A new scene object sends the scene to the native view once; a re-render with
     the same object keeps the drawing as it is. Drawing happens on the UI
@@ -321,7 +321,7 @@ All five contracts belong to the platform's core: every binary has them.
 - Follows `spec:AST-112/FR9` and `spec:AST-082/FR17` on iOS: built-in names map
   onto SF Symbols by default, and an icon the app or theme defines replaces the
   default.
-- Follows `spec:AST-112` FR5 and FR21: the icon, symbol, and vector views are
+- Follows `spec:AST-112` FR5: the icon, symbol, and vector views are
   internal behind `Icon` and `Vector`.
 - Departs from `spec:AST-082` FR17 and DEC-10 while OQ1 is open: on Android, a
   theme's Android symbol entry and a built-in name without a symbol draw the
