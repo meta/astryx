@@ -702,7 +702,13 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
     }
   }
 
-  sections.push(...formatHookParameters(docs), ...formatHookReturns(docs));
+  // A hook's parameters print as its props do: one line each, with the
+  // description's first sentence; `--detail full` prints them whole.
+  if (docs.params?.length) {
+    sections.push('## Parameters\n');
+    sections.push(formatPropsList(docs.params) + '\n');
+  }
+  sections.push(...formatHookReturns(docs));
 
   if (docs.theming?.componentIcons?.length) {
     sections.push('## Component Icon Slots\n');

@@ -630,8 +630,12 @@ describe('a doc with params (a hook)', () => {
     );
   });
 
-  it('prints a Parameters section in compact output', () => {
-    expect(formatCompact(docs, 'useThing')).toContain(row);
+  it('prints each parameter as a props-style line in compact output', () => {
+    const out = formatCompact(docs, 'useThing');
+    expect(out).toContain(
+      '## Parameters\n\n- `id`: `string` **(required)** - The id.',
+    );
+    expect(out).not.toContain(row);
   });
 
   it('prints no Parameters section for a component', () => {
