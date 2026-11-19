@@ -102,7 +102,9 @@ describe('one-mode writes', () => {
       'linear-gradient(purple, teal)',
       {cwd, on: 'card', mode: 'dark'},
     );
-    expect(r.data.styled.join('\n')).not.toMatch(/\(removed\)/);
+    // (The longhand stays; only a value that read on the flat fill, such as
+    // a focus ring color picked for it, goes with that mode's fill.)
+    expect(r.data.styled.join('\n')).not.toMatch(/background[^\n]*\(removed\)/);
     expect(cssOf('f6')).toContain('#eeeeee');
   }, 240_000);
 });
@@ -151,8 +153,8 @@ describe('a link color', () => {
     if (needBases(ctx)) return;
     await themeEditNew('f7', {cwd, like: 'neutral'});
     await themeEditSet('f7', 'color', 'red', {cwd, on: 'link', mode: 'dark'});
-    const rules = [...cssOf('f7').matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter(
-      m => /--color-text-accent: red/.test(m[2]),
+    const rules = [...cssOf('f7').matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter(m =>
+      /--color-text-accent: red/.test(m[2]),
     );
     expect(rules.length).toBeGreaterThan(0);
     for (const m of rules) {
