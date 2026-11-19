@@ -841,7 +841,9 @@ const styles = stylex.create({
   // Flexible segment (below the node) — grows to fill the step height and
   // meets the next node's leading segment.
   otSegFlexV: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '0%',
     minHeight: spacingVars['--spacing-2'],
   },
   // Fixed leading segment (above the node) — its height offsets the node down
