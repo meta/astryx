@@ -327,7 +327,7 @@
  * @property {'icon.definitions'} type
  * @property {object} data
  * @property {string | null} data.set - The set `mapped` describes, as `<package>/<set>`: the one `set` names, else the project's main set, else the only set of the icon-set package the command runs in; null when there is none.
- * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, replaces?: string, templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `replaces`: the older definition it took the place of, whose name answers with it. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
+ * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, replaces?: string, templates: number, mapped?: boolean, fallback?: string}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `replaces`: the older definition it took the place of, whose name answers with it. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null. `fallback`: when it is not mapped, the definition's fallback the set maps, which a template icon with it draws by.
  */
 
 /**
@@ -335,7 +335,7 @@
  * name.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} IconTemplateMeanings
- * @property {Array<{definition: string, templates: number}>} unmapped - Each such definition and how many bundled templates use it, most used first, then by name; empty when the set maps them all.
+ * @property {Array<{definition: string, templates: number}>} unmapped - Each such definition and how many bundled templates use it, most used first, then by name, leaving out a definition whose fallback the set maps; empty when the set maps them all.
  */
 
 /**

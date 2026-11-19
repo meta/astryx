@@ -997,3 +997,93 @@ describe('mapTemplateIcons with placeholder imports (FR22)', () => {
     );
   });
 });
+
+describe('mapTemplateIcons with a meaning that falls back (FR23)', () => {
+  it("draws the fallback's icon when no set maps the meaning", () => {
+    const source = [
+      "import {CheckBadgeIcon} from '@heroicons/react/24/outline';",
+      'export const a = <CheckBadgeIcon />;',
+      '',
+    ].join('\n');
+    const withSuccess = /** @type {any} */ ({
+      ...SET,
+      data: {...SET.data, map: {...SET.data.map, success: 'home'}},
+    });
+    const result = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'verified'},
+    );
+    const today = mapTemplateIcons(
+      source,
+      {sets: [withSuccess], choice: {...SELECTED, set: withSuccess}},
+      {CheckBadgeIcon: 'success'},
+    );
+    expect(result.source).toBe(today.source);
+    expect(result.icons?.placeholder).toEqual([]);
+  });
+
+  it('tries the meaning, then its fallback, in each set before the next set', () => {
+    const source = [
+      "import {CheckBadgeIcon} from '@heroicons/react/24/outline';",
+      'export const a = <CheckBadgeIcon />;',
+      '',
+    ].join('\n');
+    const main = /** @type {any} */ ({
+      ...SET,
+      data: {...SET.data, map: {...SET.data.map, success: 'home'}},
+    });
+    const backup = /** @type {any} */ ({
+      name: 'brand',
+      package: '@acme/brand',
+      license: 'Apache-2.0',
+      data: {
+        schemaVersion: 1,
+        module: '@acme/brand',
+        map: {verified: 'seal'},
+        icons: [{id: 'seal', export: 'SealIcon', words: ['verified']}],
+      },
+    });
+    const result = mapTemplateIcons(
+      source,
+      {
+        sets: [main, backup],
+        choice: {
+          status: 'selected',
+          set: main,
+          configured: 'glyphs',
+          order: [main, backup],
+          reason: 'list',
+        },
+      },
+      {CheckBadgeIcon: 'verified'},
+    );
+    expect(result.source).toContain("from '@acme/glyphs'");
+    expect(result.source).not.toContain('@acme/brand');
+  });
+
+  it('keeps the meaning of each placeholder that one library icon draws', () => {
+    const source = [
+      "import {ReviewIcon, VerifiedIcon} from '@astryxdesign/template-icons';",
+      'export const a = <><ReviewIcon /><VerifiedIcon /></>;',
+      '',
+    ].join('\n');
+    const withBoth = /** @type {any} */ ({
+      ...SET,
+      data: {
+        ...SET.data,
+        map: {...SET.data.map, info: 'search', success: 'home'},
+      },
+    });
+    const result = mapTemplateIcons(
+      source,
+      {sets: [withBoth], choice: {...SELECTED, set: withBoth}},
+      {},
+    );
+    const targets = (result.icons?.mapped ?? []).map(
+      (/** @type {any} */ each) => JSON.stringify(each.target),
+    );
+    expect(targets).toHaveLength(2);
+    expect(new Set(targets).size).toBe(2);
+  });
+});

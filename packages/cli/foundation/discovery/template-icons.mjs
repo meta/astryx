@@ -74,6 +74,7 @@ import {generatedOrigins} from './icon-set-writer.mjs';
 import {compareText} from '../text/compare-text.mjs';
 import {
   fillTemplatePlaceholders,
+  meaningWithFallbacks,
   rewriteKeptImport,
 } from './template-placeholders.mjs';
 
@@ -1016,7 +1017,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         ? {
             ...fromSet,
             definitions: [
-              ...new Set([...(meant ? [meant] : []), ...fromSet.definitions]),
+              ...new Set([
+                ...(meant ? meaningWithFallbacks(meant) : []),
+                ...fromSet.definitions,
+              ]),
             ],
           }
         : meant
@@ -1024,7 +1028,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
               setName: null,
               export: imported,
               id: key,
-              definitions: [meant],
+              definitions: meaningWithFallbacks(meant),
             }
           : null;
       if (!record || (record.set && targets.includes(record.set))) continue;
