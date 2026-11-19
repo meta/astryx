@@ -1643,8 +1643,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
             /^border(-[a-z-]+)?-(width|style)$/.test(d.prop) ||
             (/^(height|width|block-size|inline-size)$/.test(d.prop) &&
               toks.has('--border-width')));
+        // A field's placeholder is not its text: a color read there (an
+        // input's ::placeholder in the secondary text color) is recorded
+        // apart, so a text color set on the part never repaints it.
         if (!ownsTarget)
-          for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
+          for (const k of toks)
+            (T.inside[k] ??= new Set()).add(
+              /::placeholder/.test(d.cond ?? '')
+                ? `placeholder ${d.prop}`
+                : d.prop,
+            );
         // (An element inside the part that sets an inherited text property
         // to a value of its own, a code block's lines keeping white-space
         // pre: that property set on the part never reaches its text.)
