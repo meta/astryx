@@ -1,0 +1,111 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Keeps the recorded interaction spec times (.github/playwright-leg-durations.json)
+# close to main, as node-record-refresh.yml does for the Node times. Once a
+# week it re-records the Chromium times from main's latest successful full
+# interaction run ("Interaction proofs of …") and the WebKit times from main's
+# latest successful WebKit weekly run, each leg's job log read on its own. When
+# the record changes, it opens one durations-only pull request on a fixed
+# branch, or force-updates that branch and refreshes the open one
+# (.github/scripts/interaction-record-refresh.mjs). Under nine in ten spec
+# files timed, the step summary carries an early warning; nothing fails on it.
+# It never pushes to main.
+
+name: Interaction test record refresh
+
+on:
+  schedule:
+    # Monday, after Sunday's WebKit weekly run and the daily full Chromium run.
+    - cron: '23 11 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+# One refresh at a time, so two runs never race on the branch.
+concurrency:
+  group: interaction-record-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Reads main's runs and their logs.
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # Each lane's latest successful full run of main, by the run name ci.yml
+      # gives it, and each of its legs' complete job log in a file of its own:
+      # the recorder costs each test by its gap from the line before it, so
+      # one leg's lines never run on from another's.
+      - name: Read the interaction leg logs of main's latest full runs
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          urls=()
+          read_lane() {
+            local lane=$1 title=$2 jobs=$3 run
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&branch=main&status=success&per_page=100" \
+              --jq "[.workflow_runs[] | select(.display_title | startswith(\"$title\"))][0].id // empty")
+            if [ -z "$run" ]; then
+              echo "::warning title=No ${lane} run::main has no successful '${title}…' run in its latest 100 dispatches; the ${lane} times stay as recorded."
+              return 0
+            fi
+            mkdir -p "$RUNNER_TEMP/$lane"
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+              --jq ".jobs[] | select(.name | test(\"$jobs\")) | .id" > "$RUNNER_TEMP/$lane-jobs.txt"
+            while read -r job; do
+              gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/$lane/$job.log"
+            done < "$RUNNER_TEMP/$lane-jobs.txt"
+            if [ -s "$RUNNER_TEMP/$lane-jobs.txt" ]; then
+              echo "$lane=true" >> "$GITHUB_OUTPUT"
+              urls+=("$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run")
+            fi
+          }
+          read_lane chromium 'Interaction proofs of ' '^pr-interaction \\([0-9]+/[0-9]+\\)$'
+          read_lane webkit 'WebKit weekly of ' '^pr-interaction-webkit \\([0-9]+/[0-9]+\\)$'
+          printf '%s\n' "${urls[@]}" > "$RUNNER_TEMP/run-urls.txt"
+
+      - name: Re-record the Chromium times
+        if: steps.runs.outputs.chromium == 'true'
+        run: node .github/scripts/playwright-legs.mjs record --key interaction-chromium --project chromium "$RUNNER_TEMP"/chromium/*.log
+
+      - name: Re-record the WebKit times
+        if: steps.runs.outputs.webkit == 'true'
+        run: node .github/scripts/playwright-legs.mjs record --key interaction-webkit --project webkit "$RUNNER_TEMP"/webkit/*.log
+
+      - name: Report the record's coverage
+        run: node .github/scripts/interaction-record-refresh.mjs coverage --key interaction-chromium --key interaction-webkit --github-summary
+
+      - name: Push the record to the refresh branch and open or refresh its pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .github/playwright-leg-durations.json; then
+            echo "The record already matches main's latest full runs."
+            exit 0
+          fi
+          # A branch that already carries this record keeps its commit, so a
+          # CI run on the open pull request stays current.
+          if git fetch --quiet origin refs/heads/ci/interaction-durations-refresh &&
+            git diff --quiet FETCH_HEAD -- .github/playwright-leg-durations.json; then
+            echo "The refresh branch already carries this record."
+          else
+            git add .github/playwright-leg-durations.json
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit --quiet -m 'ci: refresh the recorded interaction test times'
+            git push --force origin HEAD:refs/heads/ci/interaction-durations-refresh
+          fi
+          mapfile -t URLS < "$RUNNER_TEMP/run-urls.txt"
+          args=()
+          for url in "${URLS[@]}"; do [ -n "$url" ] && args+=(--run-url "$url"); done
+          node .github/scripts/interaction-record-refresh.mjs pr "${args[@]}"
