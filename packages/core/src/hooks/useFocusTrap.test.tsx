@@ -266,6 +266,46 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('last')).toHaveFocus();
   });
 
+  it('skips buttons with tabindex="-1" at either end of the Tab cycle', () => {
+    render(
+      <Trap>
+        <div role="toolbar" aria-label="Start">
+          <button type="button" tabIndex={-1}>
+            Bold
+          </button>
+          <button type="button" tabIndex={0} data-testid="first">
+            Italic
+          </button>
+        </div>
+        <button type="button" data-testid="middle">
+          Save
+        </button>
+        <div role="radiogroup" aria-label="View">
+          <button
+            type="button"
+            role="radio"
+            aria-checked="true"
+            tabIndex={0}
+            data-testid="last">
+            All
+          </button>
+          <button type="button" role="radio" aria-checked="false" tabIndex={-1}>
+            Mine
+          </button>
+        </div>
+      </Trap>,
+    );
+    const first = screen.getByTestId('first');
+    const last = screen.getByTestId('last');
+
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(last).toHaveFocus();
+  });
+
   it('keeps a programmatic focus target when the trap has no tabbable controls', () => {
     render(
       <Trap>
