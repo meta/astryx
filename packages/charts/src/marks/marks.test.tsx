@@ -172,6 +172,40 @@ describe('line', () => {
   });
 });
 
+describe('default curve', () => {
+  // Straight segments by default; a page asks for a smooth curve. A cubic
+  // segment shows up as a `C` command.
+  it('joins line points with straight segments', () => {
+    const {plot} = renderMarks([line('v')]);
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
+  it('joins area points with straight segments', () => {
+    const {plot} = renderMarks([area('v')]);
+    const paths = [...plot.querySelectorAll('path')];
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      const d = path.getAttribute('d') ?? '';
+      expect(d).toMatch(/^M/);
+      expect(d).not.toMatch(/C/);
+    }
+  });
+
+  it('joins band bounds with straight segments', () => {
+    const {plot} = renderMarks([band({upper: 'hi', lower: 'lo'})], BOUNDS);
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
+  it('still smooths a line when a page asks for it', () => {
+    const {plot} = renderMarks([line('v', {curve: 'monotone'})]);
+    expect(plot.querySelector('path')?.getAttribute('d') ?? '').toMatch(/C/);
+  });
+});
+
 describe('dot', () => {
   it('renders one circle per datum with the configured radius', () => {
     const {plot} = renderMarks([dot('v', {radius: 5})]);

@@ -12,6 +12,7 @@
 import {
   astryxDefinitionCoverage,
   astryxIconDefinitions,
+  discoverListsIconSet,
   ICON_USE_ORDER_COMMAND,
   noIconSetNext,
   iconSetKey,
@@ -50,7 +51,7 @@ export async function iconList({cwd}) {
             next: `${sets.length} icon sets are installed and none is your main set: run \`${ICON_USE_ORDER_COMMAND}\`.`,
           }
         : sets.length === 0 && withdrawn.length === 0
-          ? {next: noIconSetNext()}
+          ? {next: noIconSetNext(await discoverListsIconSet(cwd))}
           : {}),
       sets: sets.map(set => {
         const rank = order.indexOf(set);
