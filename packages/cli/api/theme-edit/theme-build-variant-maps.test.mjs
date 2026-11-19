@@ -146,4 +146,16 @@ describe('the style keys a variant map stands for', () => {
   ])('names %s by its own values', (_, key, value, keys) => {
     expect(variantMapKeys(key, value)).toEqual(keys);
   });
+
+  it.each([
+    ['a selectors block', 'selectors', {'&:hover': {backgroundColor: 'red'}}],
+    ['a selector key', '&:hover', {primary: {color: 'red'}}],
+    [
+      'keys that are selectors, not values',
+      'variant',
+      {'&:hover': {color: 'red'}, '[data-open]': {color: 'blue'}},
+    ],
+  ])('is no variant map for %s', (_, key, value) => {
+    expect(variantMapKeys(key, value)).toBeNull();
+  });
 });
