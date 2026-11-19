@@ -494,7 +494,7 @@ describe.skipIf(!POSIX)(
               expect(installs(again)).toBe(0);
               expect(again.lines).toEqual([
                 expect.stringMatching(
-                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
+                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes\); answering with CLI 9\.0\.[01] instead$/u,
                 ),
               ]);
             }
@@ -512,7 +512,7 @@ describe.skipIf(!POSIX)(
             age(3);
             const waiting = await version();
             expect(installs(waiting)).toBe(0);
-            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
+            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes or at once when npm's registry changes\)/u);
           }),
         );
 

@@ -357,10 +357,6 @@
       "status": "allowed",
       "reason": "Each copy writes the same reader text-size variables to the document root; the duplicate sync is idempotent."
     },
-    "packages/core/src/theme/generateThemeRules.ts:REACHABLE_MATCH_SET_CACHE": {
-      "status": "allowed",
-      "reason": "A memo cache; a second cache per copy changes no result."
-    },
     "packages/core/src/theme/generateThemeRules.ts:STATUS_ROLE_GENERATION_CACHE": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
@@ -368,6 +364,10 @@
     "packages/core/src/theme/generateThemeRules.ts:activeStatusRoleGeneration": {
       "status": "allowed",
       "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
+    },
+    "packages/core/src/theme/statusRoleDefaults.ts:REACHABLE_MATCH_SET_CACHE": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/theme/statusRoleDerivation.ts:coreCache": {
       "status": "allowed",

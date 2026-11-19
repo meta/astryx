@@ -85,6 +85,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -693,6 +694,13 @@ export function Dialog({
           ),
         ];
         for (const target of autofocusTargets) {
+          // A request belongs to its nearest dialog. One inside a nested
+          // dialog is that dialog's, open or closed: a closed one can still be
+          // laid out (a display utility class beats its closed state), and
+          // focus would then land in a dialog nobody can see.
+          if (target.closest('dialog') !== dialog) {
+            continue;
+          }
           // Only hiding inside the dialog makes a request ineligible: the
           // modal dialog is not part of an inert region around it.
           const hiddenAncestor = target.closest(
@@ -858,7 +866,11 @@ export function Dialog({
         styles.innerCorners,
         containerCornerStyles.publish,
       )}>
-      <DialogContext value={dialogContextValue}>{children}</DialogContext>
+      <DialogContext value={dialogContextValue}>
+        <LayoutContainerContext value="dialog">
+          {children}
+        </LayoutContainerContext>
+      </DialogContext>
     </div>
   );
 

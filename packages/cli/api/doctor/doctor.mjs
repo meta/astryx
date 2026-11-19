@@ -27,6 +27,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
+import {
+  oldTranspileCacheDir,
+  transpiledCacheDir,
+} from '../../foundation/env/user-dirs.mjs';
+import {SUBFOLDERS} from '../../foundation/fs/jiti-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -52,10 +57,13 @@ import {
   formatCliCommand,
   getCliInvocation,
   guessCliInvocation,
+  quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {
   chooseDeclaredCliCommand,
+  chooseDeclaredValue,
   declaredCliCommandsOf,
+  declaredValuesOf,
 } from '../../foundation/env/cli-command.mjs';
 import {
   findConfigPath,
@@ -76,6 +84,7 @@ import {
   guideEntry,
   overlayLanguages,
   projectTree,
+  templateLinkProblems,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
@@ -111,6 +120,8 @@ import {
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
+  packageInstallCommand,
+  packageInstallStep,
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
@@ -135,6 +146,7 @@ import {
   doctorStylesheetImports,
   doctorStylesheetAtRules,
   builtProjectRoot,
+  savedProjectSkillFiles,
 } from './_adapter.mjs';
 import {checkBuilt, linksCoreStylesheet} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
@@ -152,6 +164,9 @@ import {
  * @property {string} label - Human-readable check name.
  * @property {DoctorStatus} status
  * @property {string} message - One-line result summary.
+ * @property {string} [brief] - A short form of a long message, which text
+ *   output prints in its place. It names the command that prints the whole
+ *   message.
  * @property {string} [fix] - Actionable remediation, present when not 'pass'.
  *
  * @typedef {object} DoctorReport
@@ -171,6 +186,9 @@ import {
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
+ * @property {Array<{file: string, state: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileState}> | null} [projectSkillFiles]
+ *   The project skill files and their states, when astryx.config `skills.to`
+ *   saves no `agents-md` place; null otherwise.
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]|null} [integrations]
  *   Every integration the project loaded, or null when the project could not be
  *   read at all.
@@ -343,6 +361,34 @@ export function checkNodeVersion(ctx) {
 }
 
 /**
+ * An install step as fix text: the line in backticks, then its note.
+ * @param {{line: string, note: string | null}} step
+ */
+function stepText({line, note}) {
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
+ * The fix text for peers to install: the project's integration guidance when
+ * it gives one, followed by the versions the peers need, else one install
+ * command with each range.
+ * @param {string} cwd
+ * @param {string[]} names every peer to install, by name
+ * @param {string[]} targets the same peers, each with its range when it has one
+ * @returns {string}
+ */
+function peerInstallText(cwd, names, targets) {
+  const {installGuidance} = packageInstallCommand(names, cwd);
+  if (installGuidance) {
+    const versioned = targets.filter(t => !names.includes(t));
+    return versioned.length
+      ? `\`${installGuidance}\`, at these versions: ${versioned.join(', ')}`
+      : `\`${installGuidance}\``;
+  }
+  return stepText(packageInstallStep(targets, cwd));
+}
+
+/**
  * Check 2 — @astryxdesign/core is installed and resolvable from the project.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
@@ -368,7 +414,7 @@ export function checkCoreInstalled(ctx) {
       : {
           fix: install
             ? `Install the project's dependencies: \`${install}\`.`
-            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+            : `Install the design system: ${stepText(packageInstallStep(['@astryxdesign/core'], ctx.cwd))}.`,
         }),
   };
 }
@@ -1111,6 +1157,43 @@ export function checkAgentDocs(ctx) {
       ? `${refusal} Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.`
       : initFix;
 
+  // A project that keeps its Astryx guidance as a skill (astryx.config
+  // `skills.to` without `agents-md`) is judged by its skill files; its agent
+  // files are its own text.
+  const skillFiles = ctx.projectSkillFiles;
+  if (skillFiles) {
+    const current = skillFiles.filter(each => each.state === 'current');
+    const stale = skillFiles.filter(each => each.state === 'differs');
+    const kept = skillFiles.filter(each => each.state === 'edited' || each.state === 'foreign');
+    const list = (/** @type {typeof skillFiles} */ files) => files.map(each => shown(each.file)).join(', ');
+    const keptNote = kept.length > 0 ? ` Kept as they are (edited, or not written by Astryx): ${list(kept)}.` : '';
+    if (stale.length === 0 && current.length > 0) {
+      return {
+        id: 'agent-docs',
+        label: 'AI agent docs',
+        status: 'pass',
+        message: `The Astryx skill matches this release in ${list(current)} (astryx.config skills.to).${keptNote}`,
+      };
+    }
+    if (stale.length === 0 && kept.length > 0) {
+      return {
+        id: 'agent-docs',
+        label: 'AI agent docs',
+        status: 'info',
+        message: `The project keeps its Astryx guidance as a skill (astryx.config skills.to).${keptNote}`,
+      };
+    }
+    return {
+      id: 'agent-docs',
+      label: 'AI agent docs',
+      status: 'warn',
+      message:
+        stale.length > 0
+          ? `The Astryx skill is from another release in ${list(stale)}.${keptNote}`
+          : 'The project saves its Astryx guidance as a skill (astryx.config skills.to), and no skill file is there.',
+      fix: fixFor(`Run \`${getCliInvocation(ctx.cwd)} init\` to write the saved places.`),
+    };
+  }
   if (present.length === 0) {
     return {
       id: 'agent-docs',
@@ -1261,7 +1344,14 @@ export function checkPeerDeps(ctx) {
       label: '@astryxdesign/core peer dependencies',
       status: 'warn',
       message: `Peer dependency issues — ${problems.join('; ')}.`,
-      fix: `Install compatible peers: \`npm install ${targets.join(' ')}\`.`,
+      fix: `Install compatible peers: ${peerInstallText(
+        ctx.cwd,
+        [
+          ...missing.map(spec => spec.replace(/^(@?[^@]+)@.*$/, '$1')),
+          ...mismatched.map(m => m.name),
+        ],
+        targets,
+      )}.`,
     };
   }
 
@@ -1741,6 +1831,35 @@ export function checkPackageManager(ctx) {
   };
 }
 
+const TWIN_PROVIDER_FIX =
+  'Both manifests declare the same `providerId`. If they are one ' +
+  'integration installed under two names, keep one of the two ' +
+  'dependencies; if they are different integrations, give each its ' +
+  'own `providerId` in astryx.integration.*.';
+const NAMED_PROVIDER_FIX =
+  'Give each integration its own `providerId` in astryx.integration.*. ' +
+  "A renamed package may keep its predecessor's ID only when the " +
+  'predecessor is no longer installed.';
+
+/**
+ * The fix for a set of provider conflicts: the two-case advice for conflicts
+ * where both manifests declare the ID, the rename advice for the rest, and
+ * both, each named, when the project has some of each.
+ * @param {ReadonlyArray<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} conflicts
+ * @returns {string}
+ */
+function providerConflictFix(conflicts) {
+  const twins = conflicts.filter(
+    integration => integration.__providerConflict?.bothDeclare,
+  ).length;
+  if (twins === conflicts.length) return TWIN_PROVIDER_FIX;
+  if (twins === 0) return NAMED_PROVIDER_FIX;
+  return (
+    `Where both manifests declare the ID: ${TWIN_PROVIDER_FIX} ` +
+    `For the other conflicts: ${NAMED_PROVIDER_FIX}`
+  );
+}
+
 /**
  * Check 6b — every contributing integration owns its provider identity.
  *
@@ -1781,10 +1900,7 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix:
-        'Give each integration its own `providerId` in astryx.integration.*. ' +
-        "A renamed package may keep its predecessor's ID only when the " +
-        'predecessor is no longer installed.',
+      fix: providerConflictFix(conflicts),
     };
   }
 
@@ -2083,9 +2199,10 @@ export async function checkDocsTree(_ctx, options = {}) {
         }
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
-      // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names. A run whose base is not
-      // Core leaves Core's docs out; a link to one of them is not a problem.
+      // typed fields, reference and workflow blocks, and inline links, a
+      // template description's included. A reference block also includes all
+      // it names. A run whose base is not Core leaves Core's docs out; a link
+      // to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
@@ -2096,6 +2213,7 @@ export async function checkDocsTree(_ctx, options = {}) {
       const absent = target =>
         CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
       problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
+      problems.push(...(await templateLinkProblems(catalog, {absent})));
       problems.push(
         ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
@@ -2254,6 +2372,46 @@ export function checkCliCommand(ctx) {
     status: 'info',
     message: `No loaded integration declares a cliCommand, so printed commands start with \`${getCliInvocation(ctx.cwd)}\`.`,
   };
+}
+
+/**
+ * Install guidance: whether the loaded integrations agree on how this app
+ * adds a dependency. Left out when none gives any.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkInstallGuidance(ctx) {
+  const id = 'install-guidance';
+  const label = 'Install guidance';
+  const {
+    value: guidance,
+    conflict,
+    declared,
+  } = chooseDeclaredValue(
+    declaredValuesOf(ctx.integrations ?? [], 'installGuidance'),
+  );
+  if (conflict) {
+    const claims = declared
+      .map(entry => `${entry.package} (\`${entry.value}\`)`)
+      .join(', ');
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `Loaded integrations give different install guidance: ${claims}. Neither is used, so install steps use the package manager's command.`,
+      fix: 'Remove the integration that does not belong here, or have every package give the same `installGuidance` in its astryx.integration manifest.',
+    };
+  }
+  if (guidance) {
+    const packages = declared.map(entry => entry.package).join(', ');
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `Install steps follow the installGuidance of ${packages}: \`${guidance}\`.`,
+    };
+  }
+  return null;
 }
 
 /* ── outside a project: the computer ─────────────────────────────────── */
@@ -2743,19 +2901,81 @@ async function runComputerChecks(cwd) {
  * Where `search` and `build` keep their gathered catalog between runs, how
  * much it holds, and the most it and jiti's transpile cache hold; and, in a
  * run under Yarn Plug'n'Play's loader, that the run keeps none
- * (runsUnderPnp). Left out of a checkout, which keeps none.
+ * (runsUnderPnp). Left out of a checkout, which keeps none. The brief names
+ * only the folder, its entries and size, the command that prints the whole
+ * message, and the command that removes the kept folders.
+ * @param {Pick<DoctorContext, 'cwd'>} ctx
  * @returns {DoctorCheck | null}
  */
-export function checkGatherCache() {
+export function checkGatherCache(ctx) {
   const summary = gatherCacheSummary();
   if (summary == null) return null;
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const entries = `${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}`;
+  const kept = [summary.dir];
+  if (isDirectory(summary.transpiledDir)) kept.push(summary.transpiledDir);
   return {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    brief: `${entries} (${size}) in ${summary.dir}. \`${formatCliCommand('doctor --json', ctx.cwd)}\` lists every kept item and the size limits. To clear the caches, run: ${removeFolderCommand(kept)}.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list and whether the installed Core still matches the stored one, Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, discover's record of the integrations a project loads and what each adds, and what it searches in its sources' saved copies, which search's discover line reads, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${entries}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first; the transpile cache in ${summary.transpiledDir} keeps its copies in ${SUBFOLDERS} subfolders, each holding at most 1/${SUBFOLDERS} of that, and drops the copies made longest ago first.`,
   };
+}
+
+/**
+ * The single folder where earlier CLIs left jiti's own copies of transpiled
+ * code, which this CLI never reads, and the command that removes it. Found by
+ * one stat, never a listing: that folder can hold so many files that reading
+ * it takes minutes.
+ * @param {import('../../foundation/env/user-dirs.mjs').UserDirOptions} [options]
+ * @returns {DoctorCheck | null}
+ */
+export function checkOldTranspileCache(options) {
+  const dir = oldTranspileCacheDir(options);
+  try {
+    if (!fs.lstatSync(dir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const remove = removeFolderCommand(dir, options?.platform);
+  return {
+    id: 'old-transpile-cache',
+    label: 'Old transpile cache',
+    status: 'info',
+    message: `An earlier Astryx CLI left transpiled copies in ${dir}. This CLI keeps its copies in ${transpiledCacheDir(options)} and never reads the old folder.`,
+    fix: `To remove it, run: ${remove}. An earlier CLI that still runs on this computer makes it again.`,
+  };
+}
+
+/**
+ * The command that removes one or more folders and all they hold:
+ * PowerShell's on Windows, a POSIX shell's elsewhere, each path quoted as
+ * each shell reads it.
+ * @param {string | string[]} dirs
+ * @param {string} [platform]
+ * @returns {string}
+ */
+export function removeFolderCommand(dirs, platform = process.platform) {
+  const folders = (Array.isArray(dirs) ? dirs : [dirs]).map(dir =>
+    quoteCommandArgument(dir, platform),
+  );
+  return platform === 'win32'
+    ? `Remove-Item -Recurse -Force -LiteralPath ${folders.join(', ')}`
+    : `rm -rf ${folders.join(' ')}`;
+}
+
+/**
+ * Whether a path is a folder, by one stat.
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function isDirectory(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2782,7 +3002,9 @@ export const SYNC_CHECKS = [
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkInstallGuidance,
   checkGatherCache,
+  () => checkOldTranspileCache(),
 ];
 
 /**
@@ -2975,6 +3197,7 @@ export async function runChecks(options = {}) {
     cwd,
     nodeVersion: process.versions.node,
     coreDir,
+    projectSkillFiles: await savedProjectSkillFiles(cwd),
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
     addedThemePackages: addedThemePackages(cwd),

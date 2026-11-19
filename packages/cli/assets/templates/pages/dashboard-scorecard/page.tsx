@@ -537,7 +537,9 @@ function TrendChart({trend}: {trend: TrendSeries}) {
   return (
     <Card padding={5}>
       <VStack gap={6}>
-        <HStack hAlign="between" vAlign="center">
+        {/* On a narrow card the change line moves under the title instead of
+            squeezing both into slivers. */}
+        <HStack hAlign="between" vAlign="center" gap={2} wrap="wrap">
           <HStack gap={2}>
             <Heading level={3}>{trend.title}</Heading>
             <Heading level={3} color="secondary">
@@ -587,7 +589,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 cursor={{stroke: GRID_STROKE}}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -598,7 +600,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
@@ -634,7 +636,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 cursor={{stroke: GRID_STROKE}}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -644,7 +646,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
@@ -778,22 +780,26 @@ export default function ExecutiveReviewPage() {
           <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
             <VStack gap={1}>
               <Heading level={1}>Weekly Business Review</Heading>
-              <HStack gap={2} vAlign="center">
+              {/* On a narrow screen the generated date moves to its own line,
+                  whole, instead of squeezing into a sliver beside the period. */}
+              <HStack gap={2} vAlign="center" wrap="wrap">
                 <Text type="body" color="secondary">
                   {PERIOD_SUBTITLE[period]}
                 </Text>
-                <Text type="body" color="secondary">
-                  · Generated
-                </Text>
-                <Timestamp
-                  value="2026-06-30T08:00:00Z"
-                  format="date"
-                  type="body"
-                  color="secondary"
-                />
+                <HStack gap={2} vAlign="center">
+                  <Text type="body" color="secondary">
+                    · Generated
+                  </Text>
+                  <Timestamp
+                    value="2026-06-30T08:00:00Z"
+                    format="date"
+                    type="body"
+                    color="secondary"
+                  />
+                </HStack>
               </HStack>
             </VStack>
-            <HStack gap={3}>
+            <HStack gap={3} wrap="wrap">
               <SegmentedControl
                 label="Comparison period"
                 value={period}
@@ -845,16 +851,14 @@ export default function ExecutiveReviewPage() {
             {/* OKR attainment */}
             <VStack gap={6}>
               <SectionHeading title="Goal attainment" hint={okrSummary} />
-              <Card padding={6}>
-                <VStack gap={6}>
-                  {OKRS.map((okr, i) => (
-                    <VStack gap={6} key={okr.objective}>
-                      {i > 0 && <Divider />}
-                      <OkrRow okr={okr} />
-                    </VStack>
-                  ))}
-                </VStack>
-              </Card>
+              <VStack gap={6}>
+                {OKRS.map((okr, i) => (
+                  <VStack gap={6} key={okr.objective}>
+                    {i > 0 && <Divider />}
+                    <OkrRow okr={okr} />
+                  </VStack>
+                ))}
+              </VStack>
             </VStack>
 
             {/* Trend section: 2x2 grid */}
@@ -863,7 +867,12 @@ export default function ExecutiveReviewPage() {
                 title="Trends"
                 hint="Current vs. prior period · trailing 12 weeks"
               />
-              <Grid columns={{minWidth: 330, repeat: 'fit'}} gap={3}>
+              {/* `max` at the chart count changes no layout where a chart
+                  fits its 330px floor, and lets a lone chart shrink to a
+                  narrower phone column instead of overflowing it. */}
+              <Grid
+                columns={{minWidth: 330, repeat: 'fit', max: TRENDS.length}}
+                gap={3}>
                 {TRENDS.map(trend => (
                   <TrendChart key={trend.key} trend={trend} />
                 ))}

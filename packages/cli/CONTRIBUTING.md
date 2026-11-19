@@ -201,6 +201,7 @@ packages/cli/assets/templates/{name}/
 - No extra files — no CSS, no images, no other assets. Everything lives in `page.tsx`.
 - Images must use external URLs (e.g. Unsplash), not local imports.
 - All styles must use StyleX or inline styles, not separate CSS files.
+- Landmarks and headings: mark the page's content area as `<LayoutContent role="main">` (a page whose root is `Center`, with no content area, puts it on that root), and give the page exactly one level-1 heading, using `accessibilityLevel` when the look should stay. When a page is placed inside `AppShell`, drop the page's own `role="main"`: `AppShell` already provides the main landmark, and a second one is a defect.
 
 ### Adding a new option to an existing API function
 

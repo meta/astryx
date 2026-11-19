@@ -488,6 +488,8 @@ export const butterTheme = defineTheme({
     '--radius-element': '0.5rem', // 8px
     '--radius-container': '0.75rem', // 12px
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -504,6 +506,11 @@ export const butterTheme = defineTheme({
   },
 
   components: withOwnFillText({
+    // The send button keeps the 16px corner it took from the 28px composer:
+    // a rounded square on Butter's 40px controls.
+    'chat-send-button': {
+      base: {':where(.astryx-chat-composer *)': {borderRadius: '16px'}},
+    },
     // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
     // accent tint) and under its hover. Selected rows, a dropzone's hint and
     // a numbered citation, all on that fill, use the nearest stop that clears
@@ -572,7 +579,8 @@ export const butterTheme = defineTheme({
     button: {
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
-      // while the chat composer (which sets --_button-radius) rounds them fully.
+      // while the chat composer (which sets --_button-radius) gives them its
+      // 16px concentric corner.
       // Inline padding only. Button sets its own block padding and height.
       base: {
         paddingInline: 'var(--spacing-4)',
