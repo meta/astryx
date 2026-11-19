@@ -108,6 +108,19 @@ function controlsPage() {
   return c.png();
 }
 
+/** The controls page with a row of small square boxes (checks). */
+function checksPage() {
+  const c = canvas(400, 300);
+  for (let k = 0; k < 4; k++)
+    c.box({x: 20 + k * 90, y: 20, w: 80, h: 28, r: 4, edge: 1, edgeColor: [0, 80, 180], fill: [40, 150, 230], fillEnd: [10, 100, 205], label: true});
+  for (let k = 0; k < 2; k++)
+    c.box({x: 20 + k * 180, y: 70, w: 170, h: 28, r: 4, edge: 1, edgeColor: [190, 190, 190], fill: [255, 255, 255], label: true, labelAt: 'start'});
+  for (let k = 0; k < 4; k++)
+    c.box({x: 20 + k * 40, y: 120, w: 20, h: 20, r: 3, edge: 1, edgeColor: [120, 120, 120], fill: [255, 255, 255]});
+  c.box({x: 20, y: 160, w: 300, h: 120, r: 8, edge: 1, edgeColor: [200, 200, 200], fill: [250, 250, 250]});
+  return c.png();
+}
+
 describe('measuring boxes', () => {
   it('reads height, corners and edge width as drawn', () => {
     const {boxes} = /** @type {NonNullable<ReturnType<typeof measureBoxes>>} */ (measureBoxes(controlsPage()));
@@ -350,6 +363,28 @@ describe('how <picture>', () => {
     const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
     expect(commands.some((/** @type {string} */ c) => /--radius-element/.test(c))).toBe(false);
     expect(d.unsure.some((/** @type {any} */ u) => /^corners on button-like: the picture reads 4px .* sets corners 12px already, which stays/.test(u.text))).toBe(true);
+  });
+
+  it("gives the checks' box as width and height together, so a box stays square and a radio round", async () => {
+    await themeEditNew('pk', {cwd, like: 'neutral'});
+    fs.writeFileSync(path.join(cwd, 'checks.png'), encodePng(checksPage()));
+    const d = /** @type {any} */ ((await themeEditHow('checks.png', {cwd, theme: 'pk'})).data);
+    const lines = /** @type {string[]} */ (d.results.flatMap((/** @type {any} */ r) => r.commands)).filter(c => / --on (?:checks|checkbox-indicator|radio-indicator)\b/.test(c));
+    // Every height comes with a width of the same px, in the same scope.
+    for (const h of lines.filter(c => / set pk height /.test(c))) expect(lines).toContain(h.replace(' set pk height ', ' set pk width '));
+    // The size drawn (md, 24px in Core) moves to the picture's 20px.
+    expect(lines.some(c => / set pk width 20px --on checks --when size:md$/.test(c))).toBe(true);
+    expect(lines.some(c => / set pk height 20px --on checks --when size:md$/.test(c))).toBe(true);
+    expect(lines.some(c => / set pk height \S+ --on checks$/.test(c))).toBe(false);
+  });
+
+  it('keeps a spacing dial the theme sets, which already sizes the controls', async () => {
+    await themeEditNew('ps', {cwd, like: 'neutral'});
+    await themeEditSet('ps', 'spacing', 'compact', {cwd});
+    const d = /** @type {any} */ ((await themeEditHow('look.png', {cwd, theme: 'ps'})).data);
+    const commands = d.results.flatMap((/** @type {any} */ r) => r.commands);
+    expect(commands.some((/** @type {string} */ c) => /--size-element-md/.test(c))).toBe(false);
+    expect(d.unsure.some((/** @type {any} */ u) => /sets spacing compact already, which stays/.test(u.text))).toBe(true);
   });
 
   it('reads points with --at as before, with no traits', async () => {

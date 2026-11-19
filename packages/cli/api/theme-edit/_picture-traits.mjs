@@ -822,8 +822,9 @@ export function readTraits(pic, scale = 1) {
       step: {verb: 'set', thing: '--border-width', value: showPx(usualEdge)},
     });
   else fromBoxes('edges', 'button-like', controls, b => b.edge, 0, v => ({verb: 'set', thing: '--border-width', value: `${px(v)}px`}), v => `${px(v)}px`);
-  // Checks size.
-  fromBoxes('height', 'checks', groups.checks, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'checks'}), v => `${px(v)}px`);
+  // Checks size: the box, square or round, written as width and height per
+  // size where the theme is read (checksBoxSteps).
+  fromBoxes('box size', 'checks', groups.checks, b => b.h, 1, v => ({verb: 'set', thing: 'height', value: `${px(v)}px`, on: 'checks'}), v => `${px(v)}px`);
   // Surfaces: how containers sit on the page.
   const surfaceOf = (/** @type {Box} */ b) => (b.shadow !== 'none' ? 2 : b.edge > 0 ? 1 : 0);
   const SURFACE = ['flat', 'outlined', 'raised'];

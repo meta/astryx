@@ -19,6 +19,7 @@ import {
   COLOR_PROPS,
   COMMON_PROPERTIES,
   DIALS,
+  FAMILIES,
   GROUPS,
   HOW,
   LIKE,
@@ -42,6 +43,9 @@ import {
   themeSourceProblem,
   baseRedraws,
   groupsOf,
+  selfSizedBox,
+  selfSizedWhy,
+  sizesItsOwnBox,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -2206,15 +2210,97 @@ function pictureColors(file, cwd, at, count) {
 }
 
 /**
- * The aspect a setting changes, so a dial and the tokens it writes count as
- * one: corners (the corners dial and every radius token) and the control
- * size (its size tokens). Anything else is its own aspect.
+ * The aspects a setting changes, so a dial and the tokens it writes count as
+ * one: corners (the corners dial and every radius token), the control size
+ * (its size tokens, and the spacing dial, which scales control heights), the
+ * spacing tokens (and the spacing dial), the line height (the leading dial
+ * and the leading tokens), the text size (the text-size dial and the text
+ * size tokens), and the heading weight (the headings dial, and the type
+ * dial, which sets it). A checks size is its box: its width and its height.
+ * Anything else is its own aspect.
  * @param {string} thing
+ * @returns {string[]}
  */
-function aspectOf(thing) {
-  if (thing === 'corners' || /^--radius-/.test(thing)) return 'corners';
-  if (/^--size-element-/.test(thing)) return 'control-size';
-  return thing;
+function aspectsOf(thing) {
+  if (thing === 'corners' || /^--radius-/.test(thing)) return ['corners'];
+  if (/^--size-element-/.test(thing)) return ['control-size'];
+  if (thing === 'spacing') return ['control-size', 'spacing'];
+  if (/^--spacing-/.test(thing)) return ['spacing'];
+  if (
+    thing === 'leading' ||
+    /^--text-[\w-]*leading$|^--line-height/.test(thing)
+  )
+    return ['leading'];
+  if (thing === 'text-size' || /^--text-[\w-]*-size$/.test(thing))
+    return ['text-size'];
+  if (thing === 'headings' || thing === 'type') return ['heading-weight'];
+  if (thing === 'width' || thing === 'height') return ['box-size'];
+  return [thing];
+}
+
+/**
+ * The lines that give the checks a measured box: width and height at the
+ * same px on each member that sizes its own box (sizesItsOwnBox), so a box
+ * stays square and a radio stays round. The measured box is the size drawn;
+ * each size moves by the same step from its own box (selfSizedBox), with a
+ * `--when size:` line per size when the member has more than one, one
+ * `--on checks` line where every member has the same box, else a line per
+ * member. A size whose box the editor does not know keeps its own, named in
+ * `kept`. No steps, with why, when no size can be read.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting[]} settings
+ * @param {number} px the measured box
+ * @returns {{steps: import('./_how-commands.mjs').Step[], kept: string[], why?: undefined} | {steps?: undefined, kept?: undefined, why: string}}
+ */
+function checksBoxSteps(ctx, settings, px) {
+  const C = /** @type {any} */ (ctx).C;
+  const members = (FAMILIES.checks ?? []).filter(m => sizesItsOwnBox(C, m));
+  if (!members.length) return {why: 'no member of checks sets its own box'};
+  const drawn = selfSizedBox(ctx, settings, members[0]);
+  if (!drawn)
+    return {
+      why:
+        selfSizedWhy(ctx, settings, members[0]) ?? 'no size the editor knows',
+    };
+  const step = px - drawn.h;
+  const sizes = /** @type {string[]} */ (
+    C.variantValues(members[0])?.size ?? []
+  );
+  const each = sizes.length > 1 ? sizes : [undefined];
+  /** @type {import('./_how-commands.mjs').Step[]} */
+  const steps = [];
+  /** @type {string[]} */
+  const kept = [];
+  for (const sz of each) {
+    const boxes = members.map(m => ({
+      m,
+      box: selfSizedBox(ctx, settings, m, sz),
+    }));
+    const missing = boxes.find(x => !x.box);
+    if (missing) {
+      kept.push(
+        `${sz ? `size ${sz}: ` : ''}${selfSizedWhy(ctx, settings, missing.m, sz) ?? 'no size the editor knows'}`,
+      );
+      continue;
+    }
+    const first = /** @type {{w: number, h: number}} */ (boxes[0].box);
+    const same = boxes.every(x => x.box?.w === first.w && x.box?.h === first.h);
+    for (const g of same ? [{m: 'checks', box: first}] : boxes) {
+      const box = /** @type {{w: number, h: number}} */ (g.box);
+      const side = Math.max(1, Math.round(Math.max(box.w, box.h) + step));
+      const flags = {
+        on: g.m,
+        ...(g.m !== 'checks' ? {only: true} : {}),
+        ...(sz ? {when: `size:${sz}`} : {}),
+      };
+      steps.push(
+        {verb: 'set', thing: 'width', value: `${side}px`, ...flags},
+        {verb: 'set', thing: 'height', value: `${side}px`, ...flags},
+      );
+    }
+  }
+  if (!steps.length) return {why: kept.join('; ')};
+  return {steps, kept};
 }
 
 /**
@@ -2243,7 +2329,7 @@ async function pictureLook(cwd, name, read) {
     // control size tokens), unless the two are on different parts.
     const kept = own.find(
       s =>
-        aspectOf(s.thing) === aspectOf(step.thing) &&
+        aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
         (!s.on || !step.on || s.on === step.on),
     );
     if (kept) {
@@ -2253,9 +2339,20 @@ async function pictureLook(cwd, name, read) {
       });
       continue;
     }
-    const {commands, refused} = checked(env, [[step]]);
+    // A checks size is its box: width and height at the same px, per size.
+    const box =
+      step.on === 'checks' && step.thing === 'height'
+        ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
+        : null;
+    if (box?.why) {
+      unsure.push({
+        text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${box.why}, so the box is not written`,
+      });
+      continue;
+    }
+    const {commands, refused} = checked(env, [box?.steps ?? [step]]);
     results.push({
-      text: `${tr.trait} on ${tr.on}: ${tr.value}, read from ${tr.read}${tr.sure === 'about' ? ' (about: few boxes)' : ''}`,
+      text: `${tr.trait} on ${tr.on}: ${tr.value}, read from ${tr.read}${tr.sure === 'about' ? ' (about: few boxes)' : ''}${box?.kept?.length ? `; width and height at each size, by the same step; kept: ${box.kept.join('; ')}` : box?.steps ? '; width and height at each size, by the same step' : ''}`,
       commands,
       ...(refused.length ? {refused} : {}),
     });
