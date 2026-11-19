@@ -1292,9 +1292,9 @@ test('a push from rest after a heavy commit never skips into its curve', async (
   const travelled = frames.map(frame => 1 - frame.offset / width);
   const firstMoving = travelled.findIndex(share => share > 0.005);
   expect(firstMoving).toBeGreaterThanOrEqual(0);
-  // The reader starts in the task that commits the push. Its first frame
-  // paints the new screen at rest, and an input task's push starts at the
-  // frame after that, so the push moves by the third frame.
+  // The push starts on the first frame after the task. Chromium can run the
+  // first two frames after a long task on one frame time, so the card can
+  // still read at rest on the second read.
   expect(firstMoving).toBeLessThanOrEqual(2);
   // The spring's share after `ms` from rest (OMEGA, starting at
   // PUSH_VELOCITY), and the most the first moving frame may show: the time
