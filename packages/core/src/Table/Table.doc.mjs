@@ -139,10 +139,24 @@ export const docs = {
       {className: 'astryx-table-header'},
       {className: 'astryx-table-body'},
       {className: 'astryx-table-footer'},
-      {className: 'astryx-table-row', states: ['selected']},
+      {
+        className: 'astryx-table-row',
+        states: ['selected', 'striped'],
+        visualProps: ['parity'],
+      },
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
     ],
+    vars: [
+      {
+        name: '--table-row-overlay',
+        description:
+          "The row's current fill (its stripe, hover or selection wash), which a pinned column's cells replay over their opaque base. A theme's background on `table-row` sets it too, so a themed stripe or hover reaches pinned columns.",
+        default: 'unset (a pinned cell shows its base)',
+        private: true,
+      },
+    ],
+    derived: [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
     componentIcons: [
       {
         slot: 'table-sort-indicator',
@@ -214,7 +228,8 @@ export const docs = {
     {
       name: 'isStriped',
       type: 'boolean',
-      description: 'Applies a background wash to even-numbered rows.',
+      description:
+        "Stripes alternate rows (every other row, zebra striping): a background wash on the even-numbered body and footer rows. A theme restyles either stripe of a data-driven table through the `table-row` target's `parity` (odd or even); every row a striped table may stripe (body and footer rows, not the header row) carries the `striped` state. A pinned column (`useTableStickyColumns`) follows the row's stripe.",
       default: 'false',
     },
     {

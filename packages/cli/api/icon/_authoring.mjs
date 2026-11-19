@@ -553,9 +553,15 @@ export async function addIconSet(name, options) {
     const typescript = resolveProjectTypeScript([packageDir]);
     /** @type {Record<string, any>} */
     const packageAfter = pkgUpdate ? JSON.parse(pkgUpdate.contents) : pkg;
+    // npm refuses to publish a package whose package.json sets
+    // `"private": true`, such as an app that holds its own set. Peers, the
+    // strict check, and the public description are publishing steps, so its
+    // receipt leaves them out, and its notes end with the step that turns
+    // the set on.
+    const isPrivate = packageAfter.private === true;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.
-      ...(typescript?.ts
+      ...(typescript?.ts || isPrivate
         ? []
         : [
             typescript
@@ -566,10 +572,10 @@ export async function addIconSet(name, options) {
       // (architecture:cli-surface INV16), each as the exact change to make.
       ...[
         entryWiringNote(packageDir, packageAfter, generated),
-        peerNote(packageAfter),
-        typecheckNote(packageAfter),
+        isPrivate ? null : peerNote(packageAfter),
+        isPrivate ? null : typecheckNote(packageAfter),
       ].filter(note => note != null),
-      ...(options.description?.trim()
+      ...(options.description?.trim() || isPrivate
         ? []
         : [
             `The set's description is a placeholder ("${displayName} icons."): apps and discover show it. Pass --description when you create a set, or edit ${projectPath(path.relative(packageDir, docFile))}.`,
@@ -589,6 +595,11 @@ export async function addIconSet(name, options) {
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
+      ...(isPrivate
+        ? [
+            `When \`integration check\` passes, turn the set on in the app: \`astryx experimental icon use ${name}\`. Run it in the app's folder; when this package is not the app, install it in the app first.`,
+          ]
+        : []),
     ];
     if (missingNotice) {
       result.data.licenseNoticeMissing = missingNotice.receipt;
