@@ -502,26 +502,26 @@ const inv21Count = checkEnvironmentImports(
   'INV21', apiScopedFiles, API, INV21_KNOWN_GAPS,
 );
 
-// --- INV22 recorded-theme client seam ---
+// --- INV22 recorded-theme component seam ---
 //
-// Component metadata keeps the released package-field reader in its client
-// helper, but all generated-record discovery and loading belongs to the theme
-// subject. Pin that narrow seam so another adapter or foundation import cannot
-// bypass the API boundary unnoticed.
+// Component reads keep the released package-field reader in the component
+// subject's theme helper, but all generated-record discovery and loading
+// belongs to the theme subject. Pin that narrow seam so another adapter or
+// foundation import cannot bypass the API boundary unnoticed.
 const RESOLVE_THEME_HELPER = path.join(
   CLI,
-  'clients/cli/lib/resolve-theme.mjs',
+  'api/component/_theme.mjs',
 );
 const RESOLVE_THEME_ALLOWED_IMPORTS = new Set([
   'node:fs',
   'node:module',
   'node:path',
-  '../../../api/theme/theme.mjs',
+  '../theme/theme.mjs',
 ]);
 let clientHelperBoundaryCount = 0;
 if (!fs.existsSync(RESOLVE_THEME_HELPER)) {
   errors.push(
-    'INV22 client helper: clients/cli/lib/resolve-theme.mjs is missing — update this boundary check if it moved',
+    'INV22 component theme helper: api/component/_theme.mjs is missing — update this boundary check if it moved',
   );
 } else {
   clientHelperBoundaryCount++;
@@ -529,13 +529,13 @@ if (!fs.existsSync(RESOLVE_THEME_HELPER)) {
   for (const spec of imports) {
     if (!RESOLVE_THEME_ALLOWED_IMPORTS.has(spec)) {
       errors.push(
-        `INV22 client helper: resolve-theme.mjs imports ${spec} — generated-record access must go through api/theme/theme.mjs`,
+        `INV22 component theme helper: _theme.mjs imports ${spec} — generated-record access must go through api/theme/theme.mjs`,
       );
     }
   }
-  if (!imports.includes('../../../api/theme/theme.mjs')) {
+  if (!imports.includes('../theme/theme.mjs')) {
     errors.push(
-      'INV22 client helper: resolve-theme.mjs no longer imports api/theme/theme.mjs — keep generated-record access behind the theme subject entry',
+      'INV22 component theme helper: _theme.mjs no longer imports api/theme/theme.mjs — keep generated-record access behind the theme subject entry',
     );
   }
 }

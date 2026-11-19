@@ -45,7 +45,8 @@
     },
     "package": "@acme/kit",
     "import": "@acme/kit",
-    "sourceAvailable": true
+    "sourceAvailable": true,
+    "theme": null
   },
   "meta": {
     "answeredBy": {

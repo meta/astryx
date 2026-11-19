@@ -13,8 +13,10 @@
  * - Starts with `@` → npm package (require/import)
  * - Otherwise → try `@astryxdesign/theme-{name}`, then try as bare package name
  *
- * Returns the theme object's `variants` and `fonts` if available,
- * or null if no theme is configured or found.
+ * Returns the theme object's `name` and `fonts`, plus the loaded module's
+ * `themeVariants` export (custom component prop values that `astryx theme
+ * build` emits beside the built theme object), or null if no theme is
+ * configured or found.
  */
 
 import * as fs from 'node:fs';
@@ -73,51 +75,83 @@ function extractTheme(mod) {
 }
 
 /**
- * Print a theme warning as one inert line. The configured theme value and the
+ * A theme problem as one inert line. The configured theme value and the
  * generated record come from the checkout, so a newline, an escape sequence or
- * a bidi override in them must not rewrite the terminal. Control and format
- * characters print as U+FFFD.
+ * a bidi override in them must not rewrite the terminal that prints it.
+ * Control and format characters become U+FFFD.
  * @param {string} message
+ * @returns {string}
  */
-function warnTheme(message) {
-  console.warn(message.replace(/[\p{Cc}\p{Cf}]/gu, '\uFFFD'));
+function inertProblem(message) {
+  return message.replace(/[\p{Cc}\p{Cf}]/gu, '\uFFFD');
 }
 
-/** @param {unknown} mod @param {string} specifier */
-function resolvedThemeData(mod, specifier) {
+/**
+ * @typedef {(problem: string) => void} ThemeProblemSink
+ * Receives each reason a configured theme did not resolve, as one inert line.
+ */
+
+/**
+ * Read the custom-value metadata a built theme module exports as
+ * `themeVariants`: `{ [componentKey]: { [prop]: value[] } }`. It is a sibling
+ * of the theme object rather than a theme field, because build/CLI metadata
+ * stays outside `DefinedTheme` (docs/architecture/theme-authoring-contract.md).
+ * @param {any} mod
+ * @returns {Record<string, Record<string, string[]>> | null}
+ */
+function extractVariants(mod) {
+  const variants = mod?.themeVariants;
+  return variants && typeof variants === 'object' ? variants : null;
+}
+
+/**
+ * @param {unknown} mod
+ * @param {string} specifier
+ * @param {ThemeProblemSink} onProblem
+ */
+function resolvedThemeData(mod, specifier, onProblem) {
   const theme = extractTheme(mod);
   if (!theme) {
-    warnTheme(
-      `⚠ theme: loaded "${specifier}" but could not find a theme object`,
+    onProblem(
+      inertProblem(`loaded "${specifier}" but could not find a theme object`),
     );
     return null;
   }
   return {
     name: theme.name || null,
-    variants: theme.variants || null,
+    variants: extractVariants(mod),
     fonts: theme.fonts || null,
   };
 }
 
 /**
  * Resolve the active Astryx theme from the generated record, or from
- * `package.json#astryx.theme` when there is no generated module.
+ * `package.json#astryx.theme` when there is no generated module. A configured
+ * theme that does not resolve returns null and reports why to `onProblem`; it
+ * prints nothing. An unrelated error the theme module throws while loading
+ * propagates.
  *
  * @param {string} [cwd] Working directory (defaults to process.cwd())
- * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
+ * @param {{onProblem?: ThemeProblemSink}} [options]
+ * @returns {Promise<{variants?: Record<string, Record<string, string[]>>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
  */
-export async function resolveTheme(cwd = process.cwd()) {
-  // The theme API loads on first use: a command's JSON output never needs it.
-  const {resolveRecordedTheme} = await import('../../../api/theme/theme.mjs');
+export async function resolveTheme(cwd = process.cwd(), options = {}) {
+  const {onProblem = () => {}} = options;
+  // The theme API loads on first use: only a read that carries theme values
+  // needs it.
+  const {resolveRecordedTheme} = await import('../theme/theme.mjs');
   const loaded = await resolveRecordedTheme(cwd);
   if (loaded.configured) {
     if (!loaded.module) {
-      warnTheme(
-        `⚠ theme: ${loaded.problem ?? `could not resolve the generated default theme (${loaded.specifier})`}`,
+      onProblem(
+        inertProblem(
+          loaded.problem ??
+            `could not resolve the generated default theme (${loaded.specifier})`,
+        ),
       );
       return null;
     }
-    return resolvedThemeData(loaded.module, loaded.specifier);
+    return resolvedThemeData(loaded.module, loaded.specifier, onProblem);
   }
 
   // No generated module: keep the released package-field lookup byte-for-byte in
@@ -142,13 +176,15 @@ export async function resolveTheme(cwd = process.cwd()) {
   if (specifier.startsWith('.') || specifier.startsWith('/')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      warnTheme(`⚠ theme: could not resolve file "${specifier}" from ${cwd}`);
+      onProblem(
+        inertProblem(`could not resolve file "${specifier}" from ${cwd}`),
+      );
       return null;
     }
   } else if (specifier.startsWith('@')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      warnTheme(`⚠ theme: could not resolve package "${specifier}"`);
+      onProblem(inertProblem(`could not resolve package "${specifier}"`));
       return null;
     }
   } else {
@@ -157,12 +193,14 @@ export async function resolveTheme(cwd = process.cwd()) {
       tryLoadLegacyModule(conventional, cwd) ??
       tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      warnTheme(
-        `⚠ theme: could not resolve "${specifier}" (tried ${conventional} and ${specifier})`,
+      onProblem(
+        inertProblem(
+          `could not resolve "${specifier}" (tried ${conventional} and ${specifier})`,
+        ),
       );
       return null;
     }
   }
 
-  return resolvedThemeData(mod, specifier);
+  return resolvedThemeData(mod, specifier, onProblem);
 }

@@ -16,7 +16,6 @@ import {
   formatProps,
   formatBriefAll,
 } from '../lib/component-format.mjs';
-import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -60,6 +59,44 @@ const MARKDOWN = {lang: 'markdown'};
  *   | import('../../../api/component/component.type.mjs').ComponentDetailBlocksResponse
  * )} ComponentResult
  */
+
+/**
+ * The theme data the formatters read, from a result's `data.theme`: its name
+ * and the custom values the text marks with `*`. Null without a resolved
+ * theme.
+ *
+ * @param {import('../../../api/component/component.type.mjs').ComponentTheme | null | undefined} theme
+ * @returns {{name: string | null; variants: Record<string, Record<string, string[]>>} | null}
+ */
+function formatterTheme(theme) {
+  if (!theme || theme.problem !== null) return null;
+  return {name: theme.name, variants: theme.values};
+}
+
+/**
+ * Each problem a result's `data.theme` reports, once: a list or detail
+ * carries one, and a batch carries one on each found detail row.
+ *
+ * @param {ComponentResult} result
+ * @returns {string[]}
+ */
+function themeProblems(result) {
+  /** @type {Set<string>} */
+  const problems = new Set();
+  /** @param {any} theme */
+  const add = theme => {
+    if (theme?.problem) problems.add(theme.problem);
+  };
+  if (result.type === 'component.detail' || result.type === 'component.list')
+    add(result.data.theme);
+  if (result.type === 'component.batch') {
+    for (const row of result.data.results) {
+      if (row.status === 'found' && row.result.type === 'component.detail')
+        add(row.result.data.theme);
+    }
+  }
+  return [...problems];
+}
 
 /**
  * What the run answered with, read off the response the api returned.
@@ -107,7 +144,7 @@ function summarize(result) {
  * @param {import('../../../api/component/component.type.mjs').ComponentSingleResponse} result
  * @param {string} requestedName
  * @param {'full'|'compact'|'brief'} detail
- * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @param {ReturnType<typeof formatterTheme>} themeData
  * @param {string} [scopePackage] - the `--package` the read was scoped to
  * @returns {import('../formatters/index.mjs').Block[]}
  */
@@ -330,18 +367,16 @@ export function registerComponent(program) {
       // The api layer already resolved against core (result exists), so core is
       // present on this path; narrow away the null branch findCoreDir allows.
       const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
-      let themeData;
-      try {
-        themeData = await resolveTheme(process.cwd());
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message.split('\n', 1)[0]?.trim() || error.name
-            : String(error);
-        return cliError(`Could not load the recorded theme: ${message}`, {
-          code: ERROR_CODES.ERR_THEME_LOAD,
-        });
+      // A configured theme that did not resolve is a warning on stderr in
+      // text; JSON carries it as data.theme.problem and prints nothing.
+      for (const problem of themeProblems(result)) {
+        console.error(`⚠ theme: ${problem}`);
       }
+      const themeData = formatterTheme(
+        result.type === 'component.detail' || result.type === 'component.list'
+          ? result.data.theme
+          : null,
+      );
 
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
@@ -504,7 +539,11 @@ export function registerComponent(program) {
                   row.result,
                   row.selector,
                   detail,
-                  themeData,
+                  formatterTheme(
+                    row.result.type === 'component.detail'
+                      ? row.result.data.theme
+                      : null,
+                  ),
                   options.package,
                 ),
               );
