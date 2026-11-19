@@ -1602,6 +1602,48 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('reads, counts and warns about only the font faces the page draws text with', async () => {
+    const woff2 = (/** @type {string} */ tag) => Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(60, tag)]);
+    put('font-cut/fonts/used-latin.woff2', woff2('a'));
+    put('font-cut/fonts/used-greek.woff2', woff2('b'));
+    put('font-cut/fonts/used-cyrillic.woff2', woff2('c'));
+    put('font-cut/fonts/used-armenian.woff2', woff2('d'));
+    put(
+      'font-cut/fonts.css',
+      [
+        "@font-face { font-family: 'Used'; src: url(./fonts/used-latin.woff2) format('woff2'); unicode-range: U+0000-00FF; }",
+        "@font-face { font-family: 'Used'; src: url(./fonts/used-greek.woff2) format('woff2'); unicode-range: U+0370-03FF; }",
+        "@font-face { font-family: 'Used'; src: url(./fonts/used-cyrillic.woff2) format('woff2'); unicode-range: U+0400-045F; }",
+        "@font-face { font-family: 'Used'; src: url(./fonts/used-armenian.woff2) format('woff2'); unicode-range: U+0530-058F; }",
+        "@font-face { font-family: 'Never'; src: url(./fonts/gone.woff2) format('woff2'); }",
+        "@font-face { font-family: 'Remote'; src: url(https://fonts.example.com/remote.woff2) format('woff2'); }",
+        '.t { font-family: Used, sans-serif; }',
+      ].join('\n'),
+    );
+    put(
+      'font-cut/page.tsx',
+      "import './fonts.css';\nimport {useState} from 'react';\nexport default function Page() {\n  const [later, setLater] = useState(false);\n  return <p className=\"t\" onClick={() => setLater(true)}>{later ? 'Привет' : 'Hello'}</p>;\n}\n",
+    );
+    const r = /** @type {any} */ (await render('font-cut/page.tsx', {cwd: dir}));
+    const codes = r.data.warnings.map((/** @type {any} */ w) => w.code);
+    expect(codes).not.toContain('missing-asset');
+    expect(codes).not.toContain('remote-asset');
+    // Latin draws the first paint and Cyrillic only after the click; React
+    // DOM's own script holds Greek letters, so the Greek face stays too.
+    expect(r.data.images).toBe(3);
+    const html = fs.readFileSync(path.join(dir, 'font-cut/page.html'), 'utf8');
+    expect(html.match(/@font-face/g)).toHaveLength(3);
+    const back = /** @type {any} */ (await render('font-cut/page.html', {cwd: dir, reverse: true, out: 'font-cut-back/page.tsx'}));
+    expect(back.data.files).toEqual(
+      expect.arrayContaining([
+        'font-cut-back/fonts.css',
+        'font-cut-back/fonts/used-latin.woff2',
+        'font-cut-back/fonts/used-greek.woff2',
+        'font-cut-back/fonts/used-cyrillic.woff2',
+      ]),
+    );
+  }, 60_000);
+
   it('reads a root-relative image from the public/ folder of a site that shares its project', async () => {
     put('shared-site/public/pics/shoe.png', PNG);
     put('shared-site/src/page.tsx', 'export default function Page() { return <img src="/pics/shoe.png" alt="Shoe" />; }\n');
