@@ -26,6 +26,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
+import {observeResize} from '@astryxdesign/core/utils';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {listedLanguage} from '../codeLanguages';
 import {
@@ -68,8 +69,8 @@ const styles = stylex.create({
   cornerButton: {
     pointerEvents: 'auto',
   },
-  // A long label wraps and keeps its own spacing, as core CodeBlock's does
-  // (component:CodeBlock DEC-5); the header grows with it.
+  // A long label wraps and keeps its own spacing, as core CodeBlock's title
+  // does. The header grows with it.
   title: {
     fontSize: typeScaleVars['--text-supporting-size'],
     fontFamily: typographyVars['--font-family-code'],
@@ -208,15 +209,19 @@ function useReservedHeaderHeight(key: string, isHeader: boolean) {
     if (!isHeader || header == null || block == null) {
       return;
     }
-    const write = () => {
-      block.style.setProperty(HEADER_BLOCK_SIZE, `${header.offsetHeight}px`);
-    };
-    write();
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write);
-    observer?.observe(header);
+    // The size comes from the observer's entry, after layout and before
+    // paint, so no read here forces a layout. The call on registration is
+    // skipped: it runs at commit.
+    let isRegistered = false;
+    const unsubscribe = observeResize(header, entry => {
+      const blockSize = entry.borderBoxSize?.[0]?.blockSize;
+      if (isRegistered && blockSize != null) {
+        block.style.setProperty(HEADER_BLOCK_SIZE, `${blockSize}px`);
+      }
+    });
+    isRegistered = true;
     return () => {
-      observer?.disconnect();
+      unsubscribe();
       block.style.removeProperty(HEADER_BLOCK_SIZE);
     };
   }, [editor, key, isHeader]);
