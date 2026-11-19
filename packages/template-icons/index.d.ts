@@ -152,6 +152,7 @@ export {UserMinusIcon as UserRemoveIcon} from '@heroicons/react/24/outline';
 export {UsersIcon as UsersIcon} from '@heroicons/react/24/outline';
 export {CheckBadgeIcon as VerifiedIcon} from '@heroicons/react/24/outline';
 export {ViewColumnsIcon as ViewColumnsIcon} from '@heroicons/react/24/outline';
+export {WalletIcon as WalletIcon} from '@heroicons/react/24/outline';
 export {ExclamationTriangleIcon as WarningIcon} from '@heroicons/react/24/outline';
 export {BriefcaseIcon as WorkIcon} from '@heroicons/react/24/outline';
 export {WrenchScrewdriverIcon as WrenchIcon} from '@heroicons/react/24/outline';
