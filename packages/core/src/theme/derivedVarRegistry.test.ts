@@ -103,6 +103,9 @@ const STRUCTURAL_VARS = new Set([
   '--_table-row-glide-style',
   '--_table-row-glide-color',
   '--_table-row-glide-offset',
+  // The word-break a wrap cell takes for its table's layout (Table/BaseTable.tsx,
+  // Table/table.stylex.ts). Private runtime plumbing, never authored by a theme.
+  '--_table-cell-word-break',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
@@ -279,7 +282,9 @@ function discoverComponents(): ComponentInfo[] {
 // Known mapping: doc dir → registry key
 // ---------------------------------------------------------------------------
 
-const DIR_TO_REGISTRY_KEY: Record<string, string> = {
+// A component whose doc's derived entries span two targets (a switch's
+// field and thumb) maps to each, in the doc's order.
+const DIR_TO_REGISTRY_KEY: Record<string, string | string[]> = {
   Avatar: 'avatar',
   Banner: 'banner',
   BottomSheet: 'bottom-sheet',
@@ -300,7 +305,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   ProgressBar: 'progress-bar-mark',
   Section: 'section',
   SegmentedControl: 'segmented-control',
-  Switch: 'switch-field',
+  Switch: ['switch-field', 'switch-thumb'],
   Table: 'table-row',
   TextArea: 'text-area',
 };
@@ -559,21 +564,24 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
   for (const {dir, docDerived, docTargetKeys} of components) {
-    const key = DIR_TO_REGISTRY_KEY[dir];
-    if (!key || docDerived.length === 0) {
+    const mapped = DIR_TO_REGISTRY_KEY[dir];
+    if (!mapped || docDerived.length === 0) {
       continue;
     }
+    const keys = [mapped].flat();
+    const key = keys.join(', ');
 
     it(`${dir} (${key}): registry matches doc derived`, () => {
-      const registryEntries = derivedVarRegistry[key];
-      expect(registryEntries).toBeDefined();
-      expect(registryEntries).toEqual(docDerived);
+      for (const k of keys) expect(derivedVarRegistry[k]).toBeDefined();
+      expect(keys.flatMap(k => derivedVarRegistry[k] ?? [])).toEqual(
+        docDerived,
+      );
     });
 
     // generateThemeRules looks the registry up by the theme's components key,
     // so a key that is not one of the doc's targets never expands.
     it(`${dir} (${key}): registry key is a documented theming target`, () => {
-      expect(docTargetKeys).toContain(key);
+      for (const k of keys) expect(docTargetKeys).toContain(k);
     });
   }
 
@@ -584,23 +592,24 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       if (docDerived.length === 0) {
         continue;
       }
-      const key = DIR_TO_REGISTRY_KEY[dir];
-      if (!key) {
+      const mapped = DIR_TO_REGISTRY_KEY[dir];
+      if (!mapped) {
         missing.push(
           `${dir}: has theming.derived but no DIR_TO_REGISTRY_KEY mapping. ` +
             `Add the mapping and a derivedVarRegistry entry.`,
         );
-      } else if (!derivedVarRegistry[key]) {
-        missing.push(
-          `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
-        );
-      }
+      } else
+        for (const key of [mapped].flat())
+          if (!derivedVarRegistry[key])
+            missing.push(
+              `${dir} (${key}): has theming.derived but no derivedVarRegistry entry.`,
+            );
     }
     expect(missing).toEqual([]);
   });
 
   it('registry has no orphan entries', () => {
-    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY));
+    const validKeys = new Set(Object.values(DIR_TO_REGISTRY_KEY).flat());
     const orphans = Object.keys(derivedVarRegistry).filter(
       k => !validKeys.has(k),
     );
