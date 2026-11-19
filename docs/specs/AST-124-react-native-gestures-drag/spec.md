@@ -564,7 +564,14 @@ development; the accessibility actions keep every move reachable.
 
 - **OQ2 — What does `backGesture` do on Android?** (`human-design`) Options:
   `never` becomes a system-gesture exclusion over the frame (at most 200 dp per
-  edge); or Android keeps ignoring it and only `ownsEdge` excludes.
+  edge); or Android keeps ignoring it and only `ownsEdge` excludes. Leaning:
+  Android ignores `backGesture`; only a frame with `ownsEdge` turns off the
+  system back gesture over its bounds, within the system's 200 dp per edge, and
+  `backGesture` becomes iOS-only in the component records. Settled by: an
+  Android device test with gesture navigation and with three-button
+  navigation, in which a Carousel at its first item, a Slider at the screen
+  edge, and a Toast dragged toward an edge each keep the system back swipe
+  except over an `ownsEdge` frame.
 - **OQ3 — Which Astryx component is the public face of `AstryxPanZoomView`?**
   (`human-design`) No library component uses it. Options: a library component
   for maps or large diagrams renders it; or `spec:AST-112` FR5 exports it from
