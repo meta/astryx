@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'exitFullScreen',
+  group: 'resize',
   description: 'Leave full screen and go back to the normal view.',
   words: [
     'exit fullscreen',

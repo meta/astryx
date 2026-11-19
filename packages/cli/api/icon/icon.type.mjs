@@ -45,11 +45,22 @@
  */
 
 /**
+ * A definition in the same group as another (its family of related
+ * meanings), so a reader picks the one that fits.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconDefinitionRelative
+ * @property {string} definition - The related definition's name.
+ * @property {string} description - What it means.
+ */
+
+/**
  * One ranked icon match. When the project picks a look and the match's set
  * is in its list, `module`, `export`, and `import` draw that look; `look`
- * is present when the icon does not have it.
+ * is present when the icon does not have it. `relatives` is present when the
+ * groups of the definitions it draws have other members: those definitions,
+ * Astryx's and its set's own.
  * @experimental May change or be removed in a patch release.
- * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}}} IconMatchEntry
+ * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}, relatives?: IconDefinitionRelative[]}} IconMatchEntry
  */
 
 /**
@@ -60,6 +71,8 @@
  * @property {string} name - The definition's name.
  * @property {boolean} builtIn - Core draws it by name with no icon set.
  * @property {string} description - What the definition means.
+ * @property {string} [group] - Present when the definition names one: the family of related definitions it belongs to.
+ * @property {IconDefinitionRelative[]} [relatives] - Present when its group has other members: those definitions, so a reader picks the one that fits.
  */
 
 /**
@@ -309,7 +322,7 @@
  * @property {'icon.definitions'} type
  * @property {object} data
  * @property {string | null} data.set - The set `mapped` describes, as `<package>/<set>`: the one `set` names, else the project's main set, else the only set of the icon-set package the command runs in; null when there is none.
- * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
+ * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], group?: string, templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `group`: the family of related definitions it belongs to, present when it names one. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
  */
 
 /**

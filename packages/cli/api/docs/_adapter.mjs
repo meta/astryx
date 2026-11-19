@@ -1840,10 +1840,16 @@ export async function nodeContent(catalog, tree, node) {
 function typedDocIndex(tree) {
   let index = typedDocIndexes.get(tree);
   if (!index) {
+    const nodes = [...tree.nodes.values()].filter(each => each.ref?.selfDoc);
+    /** @type {Map<string, string>} */
+    const routes = new Map();
+    for (const each of nodes) {
+      const key = `${each.ref.selfDoc.type}:${each.ref.selfDoc.name}`;
+      if (!routes.has(key)) routes.set(key, each.route);
+    }
     index = cliDocIndex(
-      [...tree.nodes.values()].flatMap(each =>
-        each.ref?.selfDoc ? [each.ref.selfDoc] : [],
-      ),
+      nodes.map(each => each.ref.selfDoc),
+      (kind, name) => routes.get(`${kind}:${name}`) ?? null,
     );
     typedDocIndexes.set(tree, index);
   }

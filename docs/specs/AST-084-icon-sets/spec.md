@@ -219,7 +219,13 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   proposing it for every set is a pull request that copies its file into the
   CLI's folder. When names collide, Astryx's wins. The experimental
   `icon-definitions` namespace lists Astryx's definitions and, where icon
-  features are on, each installed set's own.
+  features are on, each installed set's own. A definition may name a
+  camelCase `group`: the family of related definitions it belongs to
+  (`notifications` for `notification`, `notificationActive`, and
+  `notificationOff`). A set's own definition may join an Astryx group or name
+  its own. Every Astryx group has two or more members. A group is information
+  only: no ranking reads it. A definition's docs page names its group and the
+  group's other members, each with the route that opens it.
 - **FR5 — The directory is the boundary.** Discovery reads the descriptor,
   data file, and definitions statically, never runs the icon module, and
   rejects a path that escapes the package (`spec:AST-039/FR5`, FR6).
@@ -229,7 +235,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 - **FR6 — `astryx experimental icon <words>` ranks icons by meaning.** It
   answers `icon.search`, each match with its `set`, `id`, `package`, `module`,
   `export`, `import` line, `words`, `definitions`, `variants`, `reason`, and
-  `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
+  `score`, and `relatives` when the groups (FR4) of the definitions it draws
+  have other members: each such definition, Astryx's and its set's own, as
+  `{definition, description}` (the text answer names at most four, under the
+  first match only). The score is 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
   leads), 60 when the query starts one of its words, 40 for a partial match
   (three letters or more inside a word), 20 for a word match (below). A word's
@@ -268,7 +277,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
-  definition (`icon.definitions`), each with `templates`, the number of
+  definition (`icon.definitions`), each with its `group` when it names one
+  and `templates`, the number of
   bundled templates whose `icons` name it (FR9). When a set is known (the
   one `--set` names, else the project's main set, else the only set of the
   icon-set package the command runs in), the answer names it as `set` and
@@ -277,7 +287,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `module`, `export`, and `import`, or, when its icon lacks the look, keeps
   its own and names both looks as `look`. With no set installed, the answer
   says so (`reason`), names the Astryx definitions that match
-  (`definitions`), built-in ones first, and says how to get a set (`next`).
+  (`definitions`), built-in ones first, each with its `group` and
+  `relatives` as a match has them, and says how to get a set (`next`).
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component
