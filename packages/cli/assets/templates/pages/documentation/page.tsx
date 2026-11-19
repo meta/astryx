@@ -210,10 +210,9 @@ const COMPONENT_CATEGORIES = [
 
 export default function DocumentationOverviewPage() {
   const showToast = useToast();
-  // The empty half keeps the hero text to a readable width on a wide screen.
-  // On a phone it would squeeze the title until a word breaks, so a phone
-  // drops it and narrows the card inset. Mobile first, so a page that runs no
-  // script gets the phone layout.
+  // On a phone, the spacer's gap squeezes the title until a word breaks. A
+  // phone drops the spacer and narrows the card inset. Mobile first, so a page
+  // that runs no script gets the phone layout.
   const isNarrow = useMediaQuery('(max-width: 640px)', true);
   return (
     <Layout
