@@ -316,8 +316,9 @@ const COLUMN_GAP = 12; // the column's gap={3}
 
 // The dropzone column next to the thumbnail. flexBasis:0 lets it shrink below
 // its intrinsic width instead of pushing the row wider than the form measure.
-// StackItem already resets min-width, so that half of the job is done for us.
-const coverColumn: CSSProperties = {flexBasis: 0};
+// The floor makes it wrap under the cover once it would be narrower than the
+// cover itself, so its buttons keep their labels on a phone.
+const coverColumn: CSSProperties = {flexBasis: 0, minWidth: COVER_WIDTH};
 // Fills what the buttons beneath it leave, so the column ends level with the
 // cover. A definite height rather than `height: 100%` or a flex-grow, because
 // Field sizes its control to content: there is no resolved height above the
