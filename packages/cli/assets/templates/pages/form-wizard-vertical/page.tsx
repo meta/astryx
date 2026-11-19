@@ -316,9 +316,9 @@ const COLUMN_GAP = 12; // the column's gap={3}
 
 // The dropzone column next to the thumbnail. flexBasis:0 lets it shrink below
 // its intrinsic width instead of pushing the row wider than the form measure.
-// The floor makes it wrap under the cover once it would be narrower than the
-// cover itself, so its buttons keep their labels on a phone.
-const coverColumn: CSSProperties = {flexBasis: 0, minWidth: COVER_WIDTH};
+// The floor is the column's own min-content width, its widest button, so the
+// column wraps under the cover before any button has to give up its label.
+const coverColumn: CSSProperties = {flexBasis: 0, minWidth: 'min-content'};
 // Fills what the buttons beneath it leave, so the column ends level with the
 // cover. A definite height rather than `height: 100%` or a flex-grow, because
 // Field sizes its control to content: there is no resolved height above the
