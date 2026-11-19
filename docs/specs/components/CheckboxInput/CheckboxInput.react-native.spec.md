@@ -32,7 +32,7 @@ system_specs:
 | Behavior                | One pressable row, the box and the field label beside it, is the one element a screen reader reaches: a checkbox named by its label, the required word and an error message, with the description, a warning or success message and the disabled reason as its hint (DEC-2). A press proposes the next boolean value through `onChange`. Disabled, read-only and loading rows refuse the press; a tap on a disabled row shows its reason.                                                           |
 | End-user impact         | A person taps anywhere on the row to change the choice, hears one checkbox with its state and everything that explains it, and finds out why a disabled box is unavailable by tapping it. The row keeps the platform's minimum touch target and grows with the text size.                                                                                                                                                                                                                           |
 | Builder impact          | An app passes core's props, and the same code renders on iOS and Android. The value stays controlled: the app owns it through `value` and `onChange`.                                                                                                                                                                                                                                                                                                                                               |
-| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged. Gaps are listed under Current-state impact.                                                                                                                                                                                                                                                                                                                                                                            |
 | Review checks           | Reject a web-only prop accepted and ignored, a row that reads as more than one element or reads its label twice, a press that changes a disabled, read-only or loading checkbox, a mixed value read as unchecked, a disabled reason that only sighted people can reach, a status message missing from the name or hint, a touch target below the platform minimum, a visual value not taken from the theme, or a third-party native dependency.                                                     |
 | Governing rules         | `component:CheckboxInput` FR1–FR7, FR13, FR14 and ORD1–ORD3; `spec:AST-021`; `spec:AST-085` FR1–FR3; `spec:AST-086` FR8; `design:user-states`; `spec:AST-082` FR3, FR4 and FR7; `spec:AST-093` FR2–FR4; DEC-1–DEC-3 below.                                                                                                                                                                                                                                                                          |
 
@@ -56,6 +56,15 @@ differently.
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- FR2, FR4 gap: a read-only row's hint carries no "Read only" word; the row
+  only refuses presses.
+- FR5 gap: the busy start is not announced; the row reads as busy only.
+- FR6 gap: a disabled reason opens on a long press, not on a completed tap.
+- FR7 gap: a status message present when the field mounts is not announced,
+  and a change of type with the same words is not announced again.
 
 ## Ownership boundary
 
@@ -193,7 +202,7 @@ scale; the box's own values are the CheckboxIndicator record's.
 ### Native pieces
 
 None. The row is React Native's own `Pressable`, and the box draws from theme
-tokens; its check glyph is an `Icon`, which the CheckboxIndicator record owns.
+tokens; its check glyph is the CheckboxIndicator record's.
 
 ## Family and system relationships
 
@@ -215,7 +224,7 @@ tokens; its check glyph is an `Icon`, which the CheckboxIndicator record owns.
 | FR3, ORD1, ORD2     | Unit tests of the press                                                                       | unchecked; checked; indeterminate; no `onChange`                                                                                                                              | a wrong next value, a mixed value read as unchecked, or a press that changes a checkbox with no `onChange` fails                                                                                                                      | `audit:react-native/CheckboxInput/behavior` |
 | FR4–FR6, ORD3       | Unit tests of blocked rows and the tooltip under a finger                                     | read-only; loading; disabled; disabled with a reason                                                                                                                          | a press that changes a blocked row, a missing busy or read-only state, a loading start not announced once, or a reason a tap does not open, or a long press that opens it fails                                                       | `audit:react-native/CheckboxInput/behavior` |
 | FR7, FR8            | Unit tests of status and optionality, inside and outside a `FormLayout`                       | error at mount and later; a warning that becomes an error with the same words; warning; success; a required default and an optional default; `isRequired`; `isOptional`; both | a warning in the name, a status silent at mount or after a type change, or announced twice for the same message and type, a marker that `component:FieldLabel` FR4 hides, or an unmarked checkbox required under a form default fails | `audit:react-native/CheckboxInput/fields`   |
-| FR9, AR3            | Unit tests of the box slot and placement; captures at the default and largest text sizes      | `sm`; `md`; a wrapped label; a stretching parent; a centring stack                                                                                                            | a box off the first line, a field wider than its container, or a cut label fails                                                                                                                                                      | `audit:react-native/CheckboxInput/layout`   |
+| FR9, AR3            | Unit tests of the box slot and placement; captures at the default and largest text sizes      | `sm`; `md`; a wrapped label; a stretching parent; a centring stack                                                                                                            | a box off the first line, a box that grows a one-line row or a label that does not wrap at the largest text size, a field wider than its container, or a cut label fails                                                              | `audit:react-native/CheckboxInput/layout`   |
 | FR10, AR4, AR5      | Unit tests of hit slop and the press target; keyboard checks                                  | each size; a blocked row; hardware keyboard focus                                                                                                                             | a target below the platform minimum, press feedback on a blocked row, or no focus ring fails                                                                                                                                          | `audit:react-native/CheckboxInput/layout`   |
 
 ## Decision log
