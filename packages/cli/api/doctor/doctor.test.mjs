@@ -333,7 +333,7 @@ describe('the core-installed check in a fresh clone', () => {
         configPath: null,
       }).fix,
     ).toBe(
-      'Install the design system: `npm install @astryxdesign/core`.',
+      'Install the design system: `npm install -E @astryxdesign/core@0.7.10`.',
     );
   });
 });
