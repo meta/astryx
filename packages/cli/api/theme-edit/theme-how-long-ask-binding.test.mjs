@@ -248,6 +248,14 @@ const ROWS = [
     },
   ],
   [
+    'a font said as a style of the type is that font',
+    {q: 'Helvetica-style type', has: ['font helvetica']},
+  ],
+  [
+    'a font said as a style of the headings is their font',
+    {q: 'Helvetica-style headings', has: ['font helvetica --on heading']},
+  ],
+  [
     'a style word said of the type is its likeness, never a color',
     {
       q: 'Charcoal-style bold system font, blue-purple selection',
