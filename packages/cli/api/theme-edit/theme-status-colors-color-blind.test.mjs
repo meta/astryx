@@ -109,6 +109,26 @@ describe('status colors for color-blind readers', () => {
     expect(JSON.stringify(r.data)).toMatch(/color-blind readers/);
   }, 240_000);
 
+  it('answers every color-vision word within 5 s, never asking again forever', async () => {
+    for (const ask of [
+      'cvd safe status colors',
+      'deuteranopia safe statuses',
+      'make it protanopia friendly',
+    ]) {
+      const started = Date.now();
+      const r = /** @type {any} */ (
+        await Promise.race([
+          themeEditHow(ask, {cwd, theme: 'cb'}),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${ask}: over 5 s`)), 5000),
+          ),
+        ])
+      );
+      expect(Date.now() - started, ask).toBeLessThan(5000);
+      expect(JSON.stringify(r.data), ask).toMatch(/color-blind readers/);
+    }
+  }, 60_000);
+
   it('keeps any change said beside a color-blind word', async () => {
     const texts = async (/** @type {string} */ ask) =>
       /** @type {any[]} */ (

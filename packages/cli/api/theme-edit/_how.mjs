@@ -1523,8 +1523,9 @@ function colorsAnswer(env, dialCommands) {
   ];
 }
 
-const COLOR_BLIND =
-  /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/;
+/** A word for color-vision deficiency, as a pattern's source. */
+const COLOR_BLIND_WORD = String.raw`(?:colou?r[- ]?blind\w*|colou?r[- ]vision|cvd|deuteran\w*|protan\w*|tritan\w*)`;
+const COLOR_BLIND = new RegExp(String.raw`\b${COLOR_BLIND_WORD}\b`);
 
 /**
  * An ask's pieces, split at commas and at an "and" that joins two asks
@@ -1536,7 +1537,9 @@ const COLOR_BLIND =
 function colorBlindPieces(q) {
   const pieces = q
     .split(
-      /[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}(?:colou?r[- ]?blind|cvd))/,
+      new RegExp(
+        String.raw`[,;:]|\s(?:and|plus|&)\s(?!(?:[\w-]+\s+){0,3}${COLOR_BLIND_WORD})`,
+      ),
     )
     .map(x => x.trim())
     .filter(Boolean);
@@ -1549,10 +1552,19 @@ function colorBlindPieces(q) {
   const own = (/** @type {string} */ x) => {
     const left = x
       .replace(
-        /\s*\b(?:that|which|so(?:\s+that)?|for|to)\s+(?:[\w-]+\s+){0,3}?colou?r[- ]?blind\w*(?:\s+[\w-]+){0,5}\s*$/i,
+        new RegExp(
+          String.raw`\s*\b(?:that|which|so(?:\s+that)?|for|to)\s+(?:[\w-]+\s+){0,3}?${COLOR_BLIND_WORD}(?:\s+[\w-]+){0,5}\s*$`,
+          'i',
+        ),
         '',
       )
-      .replace(/\bcolou?r[- ]?blind\w*(?:[- ](?:friendly|safe|proof))?/gi, '')
+      .replace(
+        new RegExp(
+          String.raw`\b${COLOR_BLIND_WORD}(?:[- ](?:friendly|safe|proof|readers?|users?|people))?`,
+          'gi',
+        ),
+        '',
+      )
       .replace(/\s+/g, ' ')
       .trim();
     // (What is left is a change unless it is only words about the ask
@@ -1573,7 +1585,9 @@ function colorBlindPieces(q) {
     .reduce((t, x, k) => t.replace(x, ` ${kept[k]} `), q)
     .replace(/\s+/g, ' ')
     .trim();
-  return {blind: true, rest};
+  // (The rest is asked again: one that still names color-blind readers
+  // would be asked forever, so it gets the color-blind answer alone.)
+  return {blind: true, rest: COLOR_BLIND.test(rest) ? '' : rest};
 }
 
 /**
