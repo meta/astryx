@@ -717,10 +717,11 @@ function readCandidates(doc: Document): Candidate[] {
 
 /**
  * Whether a tap can reach `element`. A touch nearer a neighbour that no tap
- * reaches is still the control's. Only the press asks: the measuring pass
- * reads no style, so such a neighbour still stops a hit area halfway, which
- * takes no tap from anyone. Opacity does not count: a control drawn at
- * opacity 0, such as a native input over its own drawn box, takes the tap.
+ * reaches is still the control's. Only the touch check asks. The measuring
+ * pass reads no style, so such a neighbour still stops a hit area halfway.
+ * That strip takes no tap from anyone. Opacity does not count: a control
+ * drawn at opacity 0, such as a native input over its own drawn box, takes
+ * the tap.
  */
 function takesTaps(element: Element): boolean {
   if (element.matches(':disabled') || element.closest('[inert]') != null) {
