@@ -37,7 +37,7 @@ const INPUT_KEYS: ReadonlyArray<string> = Object.freeze([
   'recipe',
 ]);
 
-/** Core's color reader: hex, rgb() and rgba(), and named colors. */
+/** Core's color reader: hex, rgb() and rgba(), black, white and transparent. */
 const coreReader: PaletteColorReader = {
   rgb: value => {
     const read = typeof value === 'string' ? parseColor(value) : null;
@@ -123,7 +123,7 @@ export function themePalette(input: ThemePaletteInput): ThemePalette {
     const read = typeof value === 'string' ? parseColor(value) : null;
     if (!read || read.a < 1) {
       throw new TypeError(
-        `themePalette(): ${id} is ${JSON.stringify(value)}, and a seed is one opaque color: a hex such as "#5b3cc4", rgb(), or a color name.`,
+        `themePalette(): ${id} is ${JSON.stringify(value)}, and a seed is one opaque color: a hex such as "#5b3cc4", rgb(), black or white.`,
       );
     }
     dials.push({id, seed: hex([read.r, read.g, read.b])});

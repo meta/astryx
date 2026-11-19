@@ -175,7 +175,7 @@ export interface ThemePaletteInput {
   danger?: string;
   /** The info status color. */
   info?: string;
-  /** Chroma from 0 (most muted) through 50 (default) to 100 (most vivid). */
+  /** Chroma as a whole number from 0 (most muted) through 50 (default) to 100 (most vivid). */
   vibrancy?: number;
   /** The recipe: `astryx-oklch-v1` when none is named. With a `neutral` seed it fixes the generated stops across upgrades; without one, stops picked against Core's default surfaces follow them. */
   recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';

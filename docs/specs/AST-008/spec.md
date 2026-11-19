@@ -253,7 +253,7 @@ TypeScript declaration metadata is not executable runtime behavior.
 - **FR19 — The palette input is opt-in, pinned, and yields to explicit
   tokens.** `themePalette(input)` from `@astryxdesign/core/palette` takes
   `accent`, `neutral`, `success`, `warning`, `danger`, and `info` seed colors
-  (each optional, at least one), `vibrancy` (0–100, default 50), and `recipe`.
+  (each optional, at least one), `vibrancy` (a whole number 0–100, default 50), and `recipe`.
   - A palette that names no recipe runs `astryx-oklch-v1`. With a `neutral`
     seed, a pinned recipe fixes the generated stops across package upgrades.
     Without one, whether an accent or status seed is also pinned in dark, and
