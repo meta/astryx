@@ -465,19 +465,37 @@ const styleValue = (style, property) =>
 /**
  * The width an SVG drawing fills on a phone when it scales to its box, or
  * null when it keeps a fixed width. A width in `style` wins over the `width`
- * attribute. A drawing with no width, or `auto`, fills its box; a percentage
- * width fills that share of it; a percentage `max-width` shrinks a wider
- * drawing to its box. Any other width is fixed.
+ * attribute. A drawing with no width, or `auto`, fills its box unless a pixel
+ * height fixes its size; a percentage width fills that share of it; a
+ * percentage `max-width` shrinks a wider drawing to its box. Any other width
+ * is fixed. Recharts surfaces are skipped: the render draws those charts at
+ * the widths a reader sees, so their text keeps its size.
  * @param {Record<string, string>} attrs the `svg` element's attributes
  * @returns {number | null}
  */
 function phoneDrawingWidth(attrs) {
-  const maxWidth = fraction(styleValue(attrs.style, 'max-width'));
-  if (maxWidth) return PHONE_DRAWING_WIDTH * Math.min(1, maxWidth);
+  if (/(?:^|\s)recharts-surface(?:\s|$)/.test(attrs.class ?? '')) return null;
   const width = styleValue(attrs.style, 'width') ?? attrs.width?.trim();
-  if (width == null || width === '' || width === 'auto') return PHONE_DRAWING_WIDTH;
+  const ownWidth = width == null ? null : pixelLength(width);
+  const maxWidth = fraction(styleValue(attrs.style, 'max-width'));
+  if (maxWidth) return Math.min(ownWidth ?? Infinity, PHONE_DRAWING_WIDTH * Math.min(1, maxWidth));
+  if (width == null || width === '' || width === 'auto') {
+    const height = styleValue(attrs.style, 'height') ?? attrs.height?.trim();
+    return height != null && pixelLength(height) != null ? null : PHONE_DRAWING_WIDTH;
+  }
   const share = fraction(width);
   return share ? PHONE_DRAWING_WIDTH * Math.min(1, share) : null;
+}
+
+/**
+ * @param {string} value a CSS or SVG length
+ * @returns {number | null} the length in pixels when it is a plain number or
+ *   a `px` value, else null
+ */
+function pixelLength(value) {
+  const match = /^\s*([\d.]+)(?:px)?\s*$/.exec(value);
+  const n = match ? Number(match[1]) : NaN;
+  return n > 0 ? n : null;
 }
 
 /**

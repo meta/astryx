@@ -198,6 +198,15 @@ describe('smallSvgText', () => {
     // A pixel width in the style keeps the drawing's size, even with no width attribute.
     expect(smallSvgText(drawing('viewBox="0 0 960 300" style="width:960px"', text))).toBeNull();
     expect(smallSvgText(drawing('viewBox="0 0 960 300" width="100%" style="width: 960px"', text))).toBeNull();
+    // A pixel height with no width fixes the drawing's size too.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" height="300"', text))).toBeNull();
+    // A percentage max-width never widens a drawing narrower than the phone.
+    expect(smallSvgText(drawing('viewBox="0 0 960 300" width="240" style="max-width:100%"', '<text font-size="30">Jan</text>'))).toEqual({count: 1, px: 8});
+  });
+
+  it('skips a recharts surface, which the render draws at the reader\'s width', () => {
+    const surface = 'class="recharts-surface" width="960" height="300" viewBox="0 0 960 300" style="width:100%;height:100%;display:block"';
+    expect(smallSvgText(drawing(surface, '<text font-size="12">Jan</text>'))).toBeNull();
   });
 
   it('counts each drawing once, nested drawings included', () => {
