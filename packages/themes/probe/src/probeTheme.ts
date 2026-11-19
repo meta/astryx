@@ -686,6 +686,22 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(303.5 82% 25%)',
       },
     },
+    'banner-message': {
+      base: {
+        backgroundColor: 'hsl(50.1 85% 62%)',
+        color: 'hsl(315.7 75% 12%)',
+        borderColor: 'hsl(339.7 85% 25%)',
+        outlineColor: 'hsl(259.7 74% 25%)',
+      },
+    },
+    'banner-title': {
+      base: {
+        backgroundColor: 'hsl(278.0 91% 55%)',
+        color: 'hsl(82.4 80% 12%)',
+        borderColor: 'hsl(346.0 70% 25%)',
+        outlineColor: 'hsl(284.8 85% 25%)',
+      },
+    },
     blockquote: {
       base: {
         backgroundColor: 'hsl(281.1 79% 50%)',

@@ -33,6 +33,7 @@ import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useScrollableArea} from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import type {
@@ -295,6 +296,7 @@ function TableScrollWrapper({
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
         hasBlockViewport && scrollWrapperStyles.blockViewport,
+        scrollEdgeFadeStyles(state.inline),
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
