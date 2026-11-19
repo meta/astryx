@@ -4580,15 +4580,17 @@ export function draftAnswer(ctx, env, question) {
               parts.some(([re]) => re.test(` ${w} `) || re.test(` ${w}s `))),
         );
     const fam = String.raw`((?:[A-Z][\w'-]*(?:\s+|$)){1,3})`;
-    const textNoun = String.raw`(?:headings?|titles?|body(?:\s+text)?|text|copy)\b`;
+    // (A brief may start its sentence with the cue or the noun: "Use Lora
+    // for headings", "Headings in Lora".)
+    const textNoun = String.raw`(?:[Hh]eadings?|[Tt]itles?|[Bb]ody(?:\s+text)?|[Tt]ext|[Cc]opy)\b`;
     question = String(question)
       .replace(
         new RegExp(
-          String.raw`(^|[,;:]\s*|\buse\s+)${fam}(?=(?:for\s+(?:the\s+)?)?(${textNoun}))`,
+          String.raw`(\b[Uu]se\s+|^|[,;:]\s*)${fam}(?=(?:for\s+(?:the\s+)?)?(${textNoun}))`,
           'g',
         ),
         (m, lead, run, noun) => {
-          const cue = /\buse\s+$/.test(lead);
+          const cue = /\b[Uu]se\s+$/.test(lead);
           if (cue && cued(run)) return `${lead}font ${run}`;
           if (!inCatalog(run)) return m;
           // (Said with no cue, a one-word name Fontsource only publishes,
@@ -8199,22 +8201,44 @@ export function draftAnswer(ctx, env, question) {
       ['button-like', 'accent-fills'].some(g =>
         (accentRoles[g] ?? []).includes(on),
       );
+    // (Judged from resting fills only: a link's press overlay, an `:active`
+    // fill, is no fill it paints at rest.)
+    /** A part's fills at rest. @param {string} on */
+    const restFills = on =>
+      Object.entries(C.MAP[on]?.at?.['background-color'] ?? {})
+        .filter(([k]) => !/:/.test(k))
+        .map(([, v]) => String(v).trim())
+        .filter(v => !/^(?:transparent|none|initial|inherit|unset)$/.test(v));
     const textOnly = (/** @type {string} */ on) =>
       /(?:^|-)(?:heading|title|label|link|text|description)s?$/.test(on) &&
-      !Object.keys(C.MAP[on]?.at?.['background-color'] ?? {}).length;
+      !restFills(on).length;
     const plainFill = (/** @type {string} */ on) =>
-      Object.entries(C.MAP[on]?.at?.['background-color'] ?? {}).some(
-        ([, v]) =>
-          !/^(?:transparent|none|initial|inherit)$/.test(String(v).trim()) &&
-          !/--color-accent\b/.test(String(v)),
-      ) && !drawsAccent(on);
+      restFills(on).some(v => !/--color-accent\b/.test(v)) && !drawsAccent(on);
+    // (A group is judged by the members the census has a record of.)
+    // ("bold labels, dark gray": "labels" said bare reads two parts and
+    // writes nothing until one is chosen, so the color is not given to it.)
+    const bareLabels =
+      prevParts.length === 1 &&
+      prevParts[0].on === 'field-label' &&
+      /\blabels?\b/.test(clauses[i - 1]?.text ?? '') &&
+      !clauses.some(o =>
+        /\b(?:field|form|input|checkbox|switch|radio|select)s?\b/.test(o.text),
+      );
     const takesItself = (
       /** @type {string} */ aspect,
       /** @type {(on: string) => boolean} */ test,
-    ) =>
-      prevParts.length > 0 &&
-      prevParts.every(p => (FAMILIES[p.on] ?? [p.on]).every(test)) &&
-      aspect;
+    ) => {
+      if (!prevParts.length || bareLabels) return null;
+      const ok = prevParts.every(p => {
+        // (For a fill, a member that draws none of its own, a date-time
+        // input whose boxes are its pieces, is not judged.)
+        const members = (FAMILIES[p.on] ?? [p.on]).filter(
+          m => C.MAP[m] && (aspect !== 'background' || restFills(m).length),
+        );
+        return members.length > 0 && members.every(test);
+      });
+      return ok ? aspect : null;
+    };
     const pieceOfList =
       j?.sep === 'comma' &&
       j.list == null &&
@@ -29374,6 +29398,19 @@ export function draftAnswer(ctx, env, question) {
       );
       for (const m of modes)
         for (const tok of ['--color-text-primary', '--color-text-secondary']) {
+          // (A text color the ask itself writes for this mode, in any of
+          // its lines, is the asker's: "page #ffffff in dark mode, text
+          // #111111 in dark mode" keeps the typed text.)
+          if (
+            result.some(o =>
+              o.options.some(opt =>
+                opt.some(
+                  x => !x.on && x.thing === tok && (!x.mode || x.mode === m),
+                ),
+              ),
+            )
+          )
+            continue;
           const now = String(current(tok, m) ?? '');
           const ink = parseColor(now);
           if (!ink || alphaOf(now) < 1 || ratio(ink, ground) >= 4.5) continue;

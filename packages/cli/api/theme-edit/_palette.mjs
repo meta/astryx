@@ -1803,8 +1803,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   if (!dialFamilies(data).length) return null;
   // One change asks for the mapping several times (to build, to check, to
   // say what changed), each with the same inputs: what it reads (the
-  // settings, the base, the color config and saved settings on disk, the
-  // theme's own token values) names it, and an answer is made once. A
+  // settings, the base, the color config, saved settings and generated
+  // palette on disk, the theme's own token values) names it, and an answer is made once. A
   // config that does not parse is read again each time, so it is named.
   const config = readText(path.join(cwd, paletteFiles(slug).config));
   if (config != null && !parsesAsJson(config))
@@ -1819,6 +1819,10 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       config,
       readText(path.join(cwd, 'themes', slug, `${slug}.settings.json`)),
       ownSourceTokenValues(cwd, slug),
+      // (The generated palette and its receipt: a hand edit there is the
+      // mapping's "was edited by hand" note.)
+      readText(path.join(cwd, paletteFiles(slug).palette)),
+      readText(path.join(cwd, paletteFiles(slug).receipt)),
     ]),
   );
   const kept = MAPPINGS.get(key);
