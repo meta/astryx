@@ -3,8 +3,8 @@
 /**
  * @file A weight said is the weight's way ("heavy condensed headings" is
  * heavy, never light); heavy is the heavy rung; a typeface's width,
- * "condensed", is named and never read as less room; a look's lead before
- * a colon names no part. Every line offered is run.
+ * "condensed", is named and never read as less room. Every line offered
+ * is run.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -83,13 +83,5 @@ describe('heading weight and width', () => {
     );
     expect(texts(rs)).toMatch(/condensed is a typeface's width/);
     expect(writes(await how('q0', 'condensed headings'))).toEqual([]);
-  }, 240_000);
-
-  it("a look's lead before a colon names no part", async () => {
-    const rs = await how(
-      'q0',
-      'page loud and fast: black background, neon green, heavy condensed headings',
-    );
-    expect(texts(rs)).not.toMatch(/no part is called "page loud"/);
   }, 240_000);
 });

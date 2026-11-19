@@ -13533,18 +13533,6 @@ export function draftAnswer(ctx, env, question) {
             ? {word: c.compound}
             : unknownSlot(c.text, Boolean(c.unknownSubject))
           : null;
-      // (A compound in a lead before a colon, "page loud and fast: black
-      // background, …", describes the look: its words are named with the
-      // rest not taken, never as a part.)
-      if (
-        slot &&
-        c.compound &&
-        slot.word === c.compound &&
-        new RegExp(
-          String.raw`\b${c.compound.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b[^,;.]*:`,
-        ).test(q)
-      )
-        continue;
       if (slot) {
         push({
           text: `no part is called "${slot.word}". Name one of them, or list the parts`,
@@ -28414,11 +28402,12 @@ export function draftAnswer(ctx, env, question) {
     );
     for (const w of new Set(qWords)) {
       // ("too playful", "less minimal", "not playful", "I don't want it
-      // busy", "without being loud", "keep it from looking busy": the feel
-      // is what the ask moves away from, never a move toward it.)
+      // busy", "without being loud", "keep it from looking busy", "tone
+      // down the busy look", "steer clear of loud": the feel is what the
+      // ask moves away from, never a move toward it.)
       if (
         new RegExp(
-          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing|from|stop|prevent)[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
+          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing|from|stop|prevent|reduce|rid\s+of|clear\s+of|instead\s+of|rather\s+than|(?:tone|dial|turn|calm|tamp|scale|cut|play|water)(?:s|d|ed|ing)?\s+(?:it\s+|things\s+)?(?:down|back))[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
         ).test(q.toLowerCase())
       )
         continue;
@@ -28427,9 +28416,14 @@ export function draftAnswer(ctx, env, question) {
           !ownDials.has(m.dial) &&
           !clauses.some(
             c =>
-              // ("bright red errors": a feel word said of a color, a status
-              // or the accent, describes that color.)
-              (c.parts.length || c.aspects.length || c.colors.length) &&
+              // ("bright red errors", "a bright accent": a feel word said
+              // of a color, a status or the accent, describes that color.)
+              (c.parts.length ||
+                c.aspects.length ||
+                c.colors.length ||
+                /\b(?:accent|neutral|brand|primary|success|warnings?|danger|errors?|info|status(?:es)?)\b/.test(
+                  c.text,
+                )) &&
               new RegExp(`\\b${w}\\b`).test(c.text),
           ),
       );

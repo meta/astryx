@@ -109,6 +109,20 @@ describe('status colors for color-blind readers', () => {
     expect(JSON.stringify(r.data)).toMatch(/color-blind readers/);
   }, 240_000);
 
+  it('keeps any change said beside a color-blind word', async () => {
+    const texts = async (/** @type {string} */ ask) =>
+      /** @type {any[]} */ (
+        /** @type {any} */ (await themeEditHow(ask, {cwd, theme: 'cb'})).data
+          .results ?? []
+      ).map(x => String(x.text));
+    const plain = await texts('make the success color more saturated');
+    const blind = await texts(
+      'make the success color more saturated for color-blind people',
+    );
+    expect(blind.some(t => /^color-blind readers/.test(t))).toBe(true);
+    for (const t of plain) expect(blind).toContain(t);
+  }, 240_000);
+
   it('answers the other asks said with a color-blind one, and never claims status color is backed by words everywhere', async () => {
     for (const ask of [
       'color-blind friendly statuses and a blue accent',
