@@ -415,6 +415,10 @@ describe('per-side border asks', () => {
         /^border-color '#eee #eee #ddd' --on button$/m,
       );
       expect(lines.join('\n')).not.toMatch(/--mode light/);
+      // (The answer says why, with the colors' contrast on the dark page.)
+      expect(await said('buttons border 2px #eee #eee #ddd')).toMatch(
+        /written for both modes, at \d+(?:\.\d)?:1 on the dark page/,
+      );
     },
     T,
   );
@@ -442,6 +446,31 @@ describe('per-side border asks', () => {
       ).toMatch(
         /^border-bottom '1px solid transparent' --on tab --state selected/m,
       );
+    },
+    T,
+  );
+
+  it(
+    'keeps a keyword color in a run of per-side colors',
+    async () => {
+      if (unbuilt) return;
+      expect(
+        (await first('tabs border-color #dddddd #dddddd transparent')).join(
+          '\n',
+        ),
+      ).toMatch(/^border-color '#dddddd #dddddd transparent' --on tab/m);
+    },
+    T,
+  );
+
+  it(
+    "never lists a part name's side word with a padding side list",
+    async () => {
+      if (unbuilt) return;
+      const lines = await first('top nav padding left and right 24px');
+      expect(lines.join('\n')).toMatch(/^padding-left 24px /m);
+      expect(lines.join('\n')).toMatch(/^padding-right 24px /m);
+      expect(lines.join('\n')).not.toMatch(/^padding-top /m);
     },
     T,
   );

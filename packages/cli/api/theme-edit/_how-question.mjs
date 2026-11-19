@@ -649,6 +649,36 @@ function joinSideLists(q) {
   );
 }
 
+/**
+ * The sides of the one side list a clause holds, joined by joinSideLists
+ * ("top & bottom"), in the order said; a side word outside it, a part's
+ * own name ("top nav"), is not one. Empty when the clause holds no list.
+ * @param {string} text
+ * @returns {Array<'top' | 'bottom' | 'left' | 'right'>}
+ */
+function listedSidesIn(text) {
+  const W = String.raw`(?:top|bottom|left|right|sides|above|below)`;
+  const m = new RegExp(String.raw`\b${W}(?:\s*&\s*${W})+\b`, 'i').exec(text);
+  if (!m) return [];
+  /** @type {Array<'top' | 'bottom' | 'left' | 'right'>} */
+  const out = [];
+  for (const w of m[0].toLowerCase().split(/\s*&\s*/)) {
+    const sides =
+      w === 'sides'
+        ? ['left', 'right']
+        : w === 'above'
+          ? ['top']
+          : w === 'below'
+            ? ['bottom']
+            : [w];
+    for (const x of /** @type {Array<'top' | 'bottom' | 'left' | 'right'>} */ (
+      sides
+    ))
+      if (!out.includes(x)) out.push(x);
+  }
+  return out;
+}
+
 /** The sides each count of per-side colors names, as CSS gives them out. */
 const SIDE_ORDER = /** @type {Record<number, string>} */ ({
   2: 'top and bottom, then left and right',
@@ -666,9 +696,20 @@ const SIDE_ORDER = /** @type {Record<number, string>} */ ({
  */
 function sideColorsIn(text) {
   const lower = text.toLowerCase();
-  const written = colorsFound(lower)
-    .filter(([at, v, typed]) => typed && lower.slice(at, at + v.length) === v)
-    .sort((a, b) => a[0] - b[0]);
+  // (A CSS keyword color in the run, "#ddd #ddd transparent", "white", is
+  // one of its sides, as typed; a run needs one written color, a hex or a
+  // color function, so a list of color words is never read as sides.)
+  const written = [
+    ...lower.matchAll(
+      /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)|\b[a-z]+\b/g,
+    ),
+  ]
+    .map(m => /** @type {[number, string]} */ ([m.index ?? 0, m[0]]))
+    .filter(
+      ([, v]) =>
+        /^[#a-z]/.test(v) &&
+        (v === 'transparent' || v === 'currentcolor' || parseColor(v) != null),
+    );
   for (let i = 0; i < written.length;) {
     let j = i;
     while (
@@ -679,7 +720,7 @@ function sideColorsIn(text) {
     )
       j++;
     const run = written.slice(i, j + 1);
-    if (run.length >= 2)
+    if (run.length >= 2 && run.some(([, v]) => /^#|\(/.test(v)))
       return run.length > 4
         ? null
         : run.map(([at, v]) => text.slice(at, at + v.length));
@@ -18306,10 +18347,7 @@ export function draftAnswer(ctx, env, question) {
       // "horizontal padding 20px", "padding top 12px": only those sides;
       // "padding top and bottom 6px": each side said.
       const side = named.prop === 'padding' ? sideIn(c) : null;
-      const listed =
-        named.prop === 'padding' && /&/.test(c.text)
-          ? [...new Set(c.text.match(/\b(?:top|bottom|left|right)\b/g))]
-          : [];
+      const listed = named.prop === 'padding' ? listedSidesIn(c.text) : [];
       const prop = !side
         ? named.prop
         : /^(left|right|top|bottom)$/.test(side)
@@ -23437,10 +23475,7 @@ export function draftAnswer(ctx, env, question) {
         };
         // "padding top and bottom 6px" (a side list kept whole): each side
         // said takes the length.
-        const listedSides =
-          !gap && /&/.test(c.text)
-            ? [...new Set(c.text.match(/\b(?:top|bottom|left|right)\b/g))]
-            : [];
+        const listedSides = gap ? [] : listedSidesIn(c.text);
         if (listedSides.length > 1 && px)
           return {
             text: `padding on the ${listedSides.join(' and ')}${where}: ${listedSides.map(x => `padding-${x}`).join(', ')} ${px}`,
