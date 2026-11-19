@@ -116,6 +116,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/** The color modes stone draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const stoneTheme = defineTheme({
   name: 'stone',
 

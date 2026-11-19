@@ -246,6 +246,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/** The color modes y2k draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const y2kTheme = defineTheme({
   name: 'y2k',
 
