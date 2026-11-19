@@ -685,7 +685,7 @@ function lightHalf(value) {
  * @param {Record<string, string>} [own] the tokens the theme's own source sets
  */
 function dialFamilies(data, own = {}) {
-  /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
+  /** @type {Array<{id: string, dial: string, seed: string, value: string, source: string | null}>} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
@@ -696,7 +696,14 @@ function dialFamilies(data, own = {}) {
     const inEffect =
       dial === 'neutral' ? null : seedOf(lightHalf(own[paletteToken(dial)]));
     const seed = inEffect ?? (s && seedOf(s.value));
-    if (s && seed) out.push({id: dial, dial, seed, value: s.value});
+    if (s && seed)
+      out.push({
+        id: dial,
+        dial,
+        seed,
+        value: s.value,
+        source: inEffect ? paletteToken(dial) : null,
+      });
   }
   return out;
 }
@@ -765,9 +772,10 @@ function savedSettings(cwd, slug) {
     return {
       settings: Array.isArray(data?.settings) ? data.settings : [],
       mode: typeof data?.mode === 'string' ? data.mode : null,
+      palette: typeof data?.palette === 'string' ? data.palette : null,
     };
   } catch {
-    return {settings: [], mode: null};
+    return {settings: [], mode: null, palette: null};
   }
 }
 
@@ -1206,7 +1214,11 @@ function planPalette(cwd, slug, data, base) {
   // so its colors never move with a CLI upgrade. Moving it is a choice
   // made in its config.
   const config = own ? {...existing} : {recipe: PALETTE_RECIPE_V2};
-  const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
+  const {
+    settings: saved,
+    mode: savedMode,
+    palette: savedPalette,
+  } = savedSettings(cwd, slug);
   // Every theme's palette has both modes: a one-mode theme keeps both
   // halves of its colors (its mode is the one the app's <Theme> is given),
   // and a region Core draws in the other mode reads the other half.
@@ -1251,16 +1263,25 @@ function planPalette(cwd, slug, data, base) {
     );
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
-  const savedSeeds = dialFamilies(
-    {settings: saved},
-    ownSourceTokenValues(cwd, slug),
-  );
+  // A config the editor wrote holds the seeds it gave, from the settings and
+  // the source as they were then: only a seed edited by hand is named.
+  const configHash = existing
+    ? sha256(fs.readFileSync(path.join(cwd, file)))
+    : null;
+  const configMine =
+    configHash != null &&
+    (data.palette === configHash ||
+      savedPalette === configHash ||
+      readWrittenRecord(cwd, slug)['palette.config.json'] === configHash);
+  const savedSeeds = configMine
+    ? []
+    : dialFamilies({settings: saved}, ownSourceTokenValues(cwd, slug));
 
   /**
    * One dial family: the author's family with the dial's seed and the
    * exact anchors of that seed in place of the old ones.
    * @param {any} prev
-   * @param {{id: string, seed: string}} f
+   * @param {{id: string, seed: string, source?: string | null}} f
    */
   const familyOf = (prev, f) => {
     const old = prev && typeof prev === 'object' ? prev : {};
@@ -1268,7 +1289,7 @@ function planPalette(cwd, slug, data, base) {
     const wasSaved = savedSeeds.find(x => x.id === f.id)?.seed;
     if (old.seed != null && wasSaved && !sameColor(old.seed, wasSaved))
       notes.push(
-        `${file}: the ${f.id} seed ${old.seed} there is replaced by your ${f.id} setting, ${f.seed}`,
+        `${file}: the ${f.id} seed ${old.seed} there is replaced by ${f.source ? `the ${f.source} your theme source sets` : `your ${f.id} setting`}, ${f.seed}`,
       );
     const gray = isGray(f.seed);
     const kind =
@@ -3049,7 +3070,9 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   const given = pal.families.find(x => x.dial === dial);
   if (given && isClipped(given.value))
     notes.push(
-      `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${seedOf(given.value)}, is used`,
+      given.source
+        ? `your ${dial} ${given.value} is outside the colors every screen shows (sRGB); the nearest one is ${seedOf(given.value)}, but the ${given.source} your theme source sets, ${given.seed}, is used`
+        : `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${seedOf(given.value)}, is used`,
     );
   for (const c of dialChecks(pal, dial, modes)) {
     if (c.note || !c.pass) notes.push(checkNote(c, dial));

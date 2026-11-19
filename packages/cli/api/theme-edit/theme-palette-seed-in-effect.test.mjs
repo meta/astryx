@@ -36,27 +36,38 @@ beforeAll(async () => {
   );
   unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) return;
-  /** @param {string} slug @param {string} accent */
-  const withAccent = async (slug, accent) => {
-    await themeEditNew(slug, {cwd, like: 'neutral'});
-    const file = path.join(cwd, `themes/${slug}/${slug}.theme.ts`);
-    fs.writeFileSync(
-      file,
-      fs
-        .readFileSync(file, 'utf8')
-        .replace(
-          `name: '${slug}',`,
-          `name: '${slug}',\n  tokens: {'--color-accent': ${accent}},`,
-        ),
-    );
-    await runCli(
-      ['experimental', 'theme', 'compile', `themes/${slug}/${slug}.theme.ts`],
-      {cwd},
-    );
-  };
   await withAccent('t', "['#9333ea', '#d8b4fe']");
   await withAccent('u', "['rgb(147, 51, 234)', 'rgb(216, 180, 254)']");
 }, 600_000);
+
+/**
+ * A new theme like neutral whose own source sets `--color-accent`.
+ * @param {string} slug
+ * @param {string} accent the token's value, as source text
+ */
+async function withAccent(slug, accent) {
+  await themeEditNew(slug, {cwd, like: 'neutral'});
+  await editSource(slug, text =>
+    text.replace(
+      `name: '${slug}',`,
+      `name: '${slug}',\n  tokens: {'--color-accent': ${accent}},`,
+    ),
+  );
+}
+
+/**
+ * Edits a theme's own source by hand and compiles it.
+ * @param {string} slug
+ * @param {(text: string) => string} edit
+ */
+async function editSource(slug, edit) {
+  const file = path.join(cwd, `themes/${slug}/${slug}.theme.ts`);
+  fs.writeFileSync(file, edit(fs.readFileSync(file, 'utf8')));
+  await runCli(
+    ['experimental', 'theme', 'compile', `themes/${slug}/${slug}.theme.ts`],
+    {cwd},
+  );
+}
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -100,6 +111,7 @@ describe('a family whose fill the source sets', () => {
       String(note),
     )?.[1];
     expect(hue(String(shade))).toBeGreaterThan(250);
+    expect(hue(String(shade))).toBeLessThan(300);
   }, 240_000);
 
   it('names no replaced seed when the file is set again', async () => {
@@ -109,6 +121,25 @@ describe('a family whose fill the source sets', () => {
     );
     const notes = /** @type {string[]} */ (r.data?.notes ?? []);
     expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
+  }, 240_000);
+
+  it('names no replaced seed when only the source fill changed since', async () => {
+    if (unbuilt) return;
+    await editSource('t', text =>
+      text.replace("['#9333ea', '#d8b4fe']", "['#16a34a', '#86efac']"),
+    );
+    const r = /** @type {any} */ (
+      await themeEditSet('t', 'accent', '#2563eb', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
+    const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+    const text = /--color-text-accent:\s*light-dark\((#[0-9a-f]{6}),/i.exec(
+      css,
+    )?.[1];
+    // (Green, as #16a34a is.)
+    expect(hue(String(text))).toBeGreaterThan(100);
+    expect(hue(String(text))).toBeLessThan(170);
   }, 240_000);
 
   it('reads a pair written with rgb() colors', async () => {
