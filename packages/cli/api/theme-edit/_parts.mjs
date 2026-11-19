@@ -612,7 +612,7 @@ function sweepRenders(themes) {
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} file name inside the render folder
  * @param {string} source
- * @param {Array<{name: string, from: string}>} [extra] files copied beside it
+ * @param {Array<{name: string, text: string}>} [extra] files written beside it
  * @param {{openLayers?: boolean}} [opts] `openLayers`: the overlays it shows
  *   or opens are drawn and added after its markup
  * @returns {Promise<{html: string, markup: string}>}
@@ -660,7 +660,7 @@ export async function renderGenerated(
     fs.writeFileSync(entry, stripTemplateAssetRefs(source));
     for (const x of extra) {
       fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
-      fs.copyFileSync(x.from, path.join(dir, x.name));
+      fs.writeFileSync(path.join(dir, x.name), x.text);
     }
     // The editor's pages render every component, and a busy machine slows
     // them down: they get three times the page limit.

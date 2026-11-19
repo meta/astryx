@@ -15,6 +15,8 @@ import {
   DEFAULT_PLACEHOLDER_LOOK,
   fillTemplatePlaceholders,
   meaningWithFallbacks,
+  placeholderMeaningsIn,
+  templatePlaceholderProblems,
   PLACEHOLDER_MODULE,
   placeholderLook,
   placeholderMeaning,
@@ -232,5 +234,63 @@ describe('meaning fallbacks', () => {
     expect(meaningWithFallbacks('verified')).toEqual(['verified', 'success']);
     expect(meaningWithFallbacks('delete')).toEqual(['delete']);
     expect(meaningWithFallbacks('notAMeaning')).toEqual(['notAMeaning']);
+  });
+});
+
+describe('templatePlaceholderProblems', () => {
+  const definitions = astryxDefinitionsByName();
+  const check = (/** @type {string} */ source, declared = {}) =>
+    templatePlaceholderProblems(
+      [{id: 'pages/demo', source, declared}],
+      definitions,
+    );
+
+  it('finds nothing wrong in good placeholder imports', () => {
+    expect(
+      check(
+        "import {DeleteIcon} from '@astryxdesign/template-icons';\nimport {StarIcon as StarSolid} from '@astryxdesign/template-icons/24/solid';\n",
+      ),
+    ).toEqual([]);
+  });
+
+  it('names an unknown meaning, with its fix', () => {
+    const [problem] = check(
+      "import {DeletIcon} from '@astryxdesign/template-icons';\n",
+    );
+    expect(problem).toMatch(/DeletIcon names no icon meaning\. Fix:/u);
+  });
+
+  it('names a path that is not a variant, with its fix', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons/32/solid';\n",
+    );
+    expect(problem).toMatch(/is not a variant\. Fix:/u);
+  });
+
+  it('names a meaning the look does not draw, with its fix', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons/lucide';\n",
+    );
+    expect(problem).toMatch(
+      /has no lucide icon in the template icon table\. Fix:/u,
+    );
+  });
+
+  it('names an icons declaration left beside placeholder imports', () => {
+    const [problem] = check(
+      "import {DeleteIcon} from '@astryxdesign/template-icons';\n",
+      {
+        TrashIcon: 'delete',
+      },
+    );
+    expect(problem).toMatch(/still declares icons\. Fix:/u);
+  });
+
+  it('reads the meanings a source imports', () => {
+    expect(
+      placeholderMeaningsIn(
+        "import {DeleteIcon, CloseIcon} from '@astryxdesign/template-icons';\nimport {DeleteIcon as D2} from '@astryxdesign/template-icons/20/solid';\n",
+      ),
+    ).toEqual(['delete', 'close']);
   });
 });

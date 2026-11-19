@@ -817,7 +817,15 @@ message}`) names each template or namespace doc that sets `stability`, and
   them with no extra step. Every table meaning is a definition, every icon
   exists in its library, and the package matches the table. The package is
   private to the repository; only template sources import it, and they resolve
-  it through the CLI package's dev dependency.
+  it through the CLI package's dev dependency. The template meanings
+  FR15 counts include the meanings a template's placeholder imports name. The
+  bundled-template declarations test fails on a placeholder import whose name
+  is not a definition, whose path is not a variant, or whose meaning the table
+  does not draw in that variant, and on an `icons` declaration left beside
+  placeholder imports. `packages/cli/scripts/migrate-template-icons.mjs` moves
+  a template from library imports to placeholders by its declared meanings,
+  and stops when the table draws a meaning with another icon, so no picture
+  changes.
 
 - **FR22 — Copies fill placeholders.** `astryx template` (printed or copied),
   the component showcase source and build's setup notes first replace each

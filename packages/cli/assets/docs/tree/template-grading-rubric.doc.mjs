@@ -411,7 +411,7 @@ export const docs = {
             [
               'Self-contained imports',
               '2',
-              'Every import resolves from the copied location through React, a public Astryx path, a public integration-package export, or an app dependency the template explicitly requires.',
+              "Every import resolves from the copied location through React, a public Astryx path, a public integration-package export, or an app dependency the template explicitly requires. A template's icon placeholder imports count as the icon-library imports its copy writes.",
             ],
             [
               'Realistic example data',
