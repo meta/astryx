@@ -464,6 +464,12 @@ function iconDefinitionSection(doc, index) {
       doc.words.map((/** @type {string} */ w) => `\`${w}\``).join(', '),
     ],
   ];
+  if (doc.replaces) {
+    rows.push([
+      'Replaces',
+      `\`${doc.replaces}\`: that name answers with this definition.`,
+    ]);
+  }
   if (doc.builtIn) {
     rows.push([
       'Built in',

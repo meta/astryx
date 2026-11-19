@@ -1576,7 +1576,8 @@ export function checkIntegrationCoreRange(ctx) {
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
- * other installed set that was withdrawn, with why.
+ * other installed set that was withdrawn, with why, and for each `map` key
+ * of an installed set that names a replaced definition.
  * Icon sets are experimental (spec:AST-017 FR27): only a project where the
  * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
@@ -1673,6 +1674,23 @@ export function checkIconSets(ctx) {
       status: 'warn',
       message: withdrawn.map(each => each.reason).join(' | '),
       fix: 'Run `astryx integration check` in the package that ships the set, or install its module.',
+    };
+  }
+  // A `map` key that names a replaced definition still maps its successor,
+  // so nothing breaks; the set's own package renames the key.
+  const renamed = sets.flatMap(set =>
+    (set.replacedKeys ?? []).map(
+      each =>
+        `${set.package}/${set.name} maps "${each.key}", which "${each.definition}" replaced`,
+    ),
+  );
+  if (renamed.length > 0) {
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `${renamed.join(' | ')}. Each entry maps the definition that replaced it.`,
+      fix: 'In the package that ships the set, rename each map key to the definition that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
     };
   }
   return {

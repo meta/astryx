@@ -56,6 +56,14 @@ export interface IconDefinitionDoc {
    */
   group?: string;
   /**
+   * The name of an older definition this one takes the place of. The old name
+   * keeps answering: a set's `map` key, a template's `icons` value, and a
+   * search for it all resolve to this definition, and `integration check`
+   * names each `map` key to rename. The old name must not be a definition any
+   * more.
+   */
+  replaces?: string;
+  /**
    * Marks the definition as experimental (spec:AST-017 FR27): the
    * `icon-definitions` listing shows it as `[experimental]`. Every icon
    * definition already belongs to the experimental icon-set feature.

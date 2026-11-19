@@ -21,6 +21,7 @@ import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';
 import {compareText} from '../text/compare-text.mjs';
+import {ReplacementAliases} from './replacement-aliases.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} IconDefinitionDoc */
 
@@ -92,19 +93,120 @@ export function readDefinitionsDir(dir, owner) {
   return {definitions, errors};
 }
 
-/** @type {{definitions: DiscoveredIconDefinition[], errors: Array<{file: string, message: string}>} | undefined} */
+/**
+ * One folder's definitions after `replaces`: the current ones, the ones a
+ * later definition replaced, and the old names that now answer with a
+ * current definition.
+ * @typedef {object} IconDefinitionFolder
+ * @property {DiscoveredIconDefinition[]} definitions the current definitions
+ * @property {DiscoveredIconDefinition[]} replaced definitions whose name a
+ *   later definition took over: their files keep their own old names
+ *   answering through the chain, and they are not definitions any more
+ * @property {ReplacementAliases} aliases each old name, pointing at the
+ *   definition that replaced it
+ * @property {Array<{file: string, message: string}>} errors
+ */
+
+/**
+ * Apply each definition's `replaces` to one folder's definitions. A name
+ * replaced twice answers with the newest definition: a replaced
+ * definition's file may stay, so its own old names keep answering too. One
+ * name has one successor, a built-in definition is never replaced (Core
+ * renders it by name), and every chain ends at a current definition.
+ * @param {{definitions: DiscoveredIconDefinition[], errors: Array<{file: string, message: string}>}} read
+ * @returns {IconDefinitionFolder}
+ */
+export function withReplacements({definitions, errors}) {
+  const problems = [...errors];
+  const byName = new Map(definitions.map(each => [each.doc.name, each]));
+  /** @type {Map<string, string>} replaced name → the definition replacing it */
+  const successors = new Map();
+  for (const {doc, file} of definitions) {
+    const old = doc.replaces;
+    if (old == null) continue;
+    const earlier = successors.get(old);
+    if (earlier != null) {
+      problems.push({
+        file,
+        message: `Icon definition "${doc.name}" replaces "${old}", which "${earlier}" already replaces. A name has one successor.`,
+      });
+    } else if (byName.get(old)?.doc.builtIn) {
+      problems.push({
+        file,
+        message: `Icon definition "${doc.name}" replaces the built-in definition "${old}". A built-in definition is a name Core renders, so nothing replaces it.`,
+      });
+    } else {
+      successors.set(old, doc.name);
+    }
+  }
+  const aliases = new ReplacementAliases();
+  for (const [old, next] of successors) aliases.record(old, next);
+  const current = definitions.filter(each => !successors.has(each.doc.name));
+  const currentNames = new Set(current.map(each => each.doc.name));
+  for (const [old, next] of successors) {
+    if (aliases.resolve(old, name => currentNames.has(name)) == null) {
+      problems.push({
+        file: /** @type {DiscoveredIconDefinition} */ (byName.get(next)).file,
+        message: `Icon definition "${next}" replaces "${old}", but the chain of replacements from "${old}" never reaches a current definition.`,
+      });
+    }
+  }
+  return {
+    definitions: current,
+    replaced: definitions.filter(each => successors.has(each.doc.name)),
+    aliases,
+    errors: problems,
+  };
+}
+
+/** @type {IconDefinitionFolder | undefined} */
 let astryx;
 
 /**
  * Astryx's own definitions, read once per process.
- * @returns {{definitions: DiscoveredIconDefinition[], errors: Array<{file: string, message: string}>}}
+ * @returns {IconDefinitionFolder}
  */
 export function astryxIconDefinitions() {
-  astryx ??= readDefinitionsDir(
-    ASTRYX_DEFINITIONS_DIR,
-    ASTRYX_DEFINITIONS_PACKAGE,
+  astryx ??= withReplacements(
+    readDefinitionsDir(ASTRYX_DEFINITIONS_DIR, ASTRYX_DEFINITIONS_PACKAGE),
   );
   return astryx;
+}
+
+/**
+ * The current definition a name answers with: the name itself when it is a
+ * current definition, else the definition that replaced it, following the
+ * chain. A set's own definitions answer first, then Astryx's.
+ * @param {string} name
+ * @param {{definitions?: Array<{doc: {name: string}}>, definitionAliases?: ReplacementAliases}} [set]
+ * @param {Pick<IconDefinitionFolder, 'definitions' | 'aliases'>} [folder]
+ *   Astryx's definitions
+ * @returns {string | undefined}
+ */
+export function currentDefinitionName(
+  name,
+  set,
+  folder = astryxIconDefinitions(),
+) {
+  const own = new Set((set?.definitions ?? []).map(each => each.doc.name));
+  if (own.has(name)) return name;
+  const fromOwn = set?.definitionAliases?.resolve(name, each => own.has(each));
+  if (fromOwn != null) return fromOwn;
+  const names = new Set(folder.definitions.map(each => each.doc.name));
+  return folder.aliases.resolve(name, each => names.has(each));
+}
+
+/**
+ * The old names that answer with a definition, the set's own and Astryx's.
+ * @param {string} name a current definition
+ * @param {{definitionAliases?: ReplacementAliases}} [set]
+ * @returns {string[]}
+ */
+export function replacedNamesOf(name, set) {
+  return [
+    ...(set?.definitionAliases?.aliasesOf(name) ?? []),
+    ...astryxIconDefinitions().aliases.aliasesOf(name),
+  ];
 }
 
 /**
