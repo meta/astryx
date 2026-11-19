@@ -179,13 +179,23 @@ describe('a button that acts, or whose press the scan cannot judge', () => {
     ['children the scan cannot read', '<Button label="Start">{children}</Button>'],
     ['an element prop the scan cannot read', '<Button label="Read" endContent={more} />'],
     ['content from a call', '<Button label="Go">{renderIcon()}</Button>'],
+    ['children or text', '<Button label="Start">{children ?? "Start"}</Button>'],
+    ['children in a fragment', '<Button label="Start"><>{children}</></Button>'],
   ])('%s', (_, body) => {
     expect(onPage(body)).toEqual([]);
+  });
+
+  it("content nested in Core's elements that the scan cannot read", () => {
+    const core = "import {Text, Badge} from '@astryxdesign/core';";
+    expect(onPage('<Button label="Start"><Text>{children}</Text></Button>', core)).toEqual([]);
+    expect(onPage('<Button label="Start" endContent={<Badge label="New">{extra}</Badge>} />', core)).toEqual([]);
   });
 
   it('text, a choice between texts, and an icon variable are content', () => {
     expect(onPage('<Button label="Go">{"Go now"}</Button>')).toEqual(['page.tsx:6 Go']);
     expect(onPage('<Button label="Go">{busy ? "Saving" : "Save"}</Button>')).toEqual(['page.tsx:6 Go']);
+    expect(onPage('<Button label="Go"><Text>{"Go now"}</Text></Button>', "import {Text} from '@astryxdesign/core';")).toEqual(['page.tsx:6 Go']);
+    expect(onPage('<Button label="Go">{busy && "Saving"}</Button>')).toEqual(['page.tsx:6 Go']);
     expect(onPage('<Button label="Edit" icon={PencilIcon} />', "import {PencilIcon} from 'lucide-react';")).toEqual(['page.tsx:6 Edit']);
   });
 });

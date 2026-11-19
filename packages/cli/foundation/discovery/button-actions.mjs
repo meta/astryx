@@ -875,6 +875,24 @@ function holdsActingContent(path, context) {
   }
   let acting = false;
   path.traverse({
+    // Content nested in the button's elements (`<Text>{children}</Text>`, a
+    // fragment, an element prop's element) may act as its own content may.
+    JSXExpressionContainer(/** @type {any} */ inner) {
+      if (acting) return;
+      const parent = inner.parent;
+      const inContent =
+        parent.type === 'JSXElement' || parent.type === 'JSXFragment'
+          ? parent.children.includes(inner.node)
+          : parent.type === 'JSXAttribute' && ELEMENT_PROPS.has(attributeName(parent)) && inner.parentPath.parentPath.parent !== path.node;
+      if (inContent && !plainContent(inner.node.expression, path, context)) {
+        acting = true;
+        inner.stop();
+      }
+    },
+    JSXSpreadChild(/** @type {any} */ inner) {
+      acting = true;
+      inner.stop();
+    },
     JSXElement(/** @type {any} */ inner) {
       if (acting) return;
       const target = referent(inner, context);
@@ -929,7 +947,8 @@ function plainContent(expression, path, context) {
     case 'ConditionalExpression':
       return plainContent(expression.consequent, path, context) && plainContent(expression.alternate, path, context);
     case 'LogicalExpression':
-      return plainContent(expression.right, path, context);
+      // `a && b` renders `b` or nothing; `a || b` and `a ?? b` may render `a`.
+      return (expression.operator === '&&' || plainContent(expression.left, path, context)) && plainContent(expression.right, path, context);
     default:
       return false;
   }
