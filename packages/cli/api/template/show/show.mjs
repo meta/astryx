@@ -12,17 +12,32 @@ import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
-  extractComponents,
+  answeredComponentsInSource,
+  componentsInSource,
   pkgOf,
-  replaceDemoMedia,
+  replaceTemplateDemos,
 } from '../../../foundation/discovery/template-adapter.mjs';
+import {
+  NO_ICON_SETS,
+  mapTemplateIcons,
+} from '../../../foundation/discovery/template-icons.mjs';
 
 /**
  * Build the `template.show` envelope for an already-resolved template.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
+ * @param {{iconSets?: Parameters<typeof mapTemplateIcons>[1], components?: {ownersOf: (name: string) => readonly string[], qualified: boolean, documents?: (pkg: string, name: string) => boolean}}} [options]
+ *   `iconSets`: the project's icon sets; without them the template's icons
+ *   are unchanged. `components`: how `astryx component` reads the
+ *   project's components; without it `componentsToRead` is empty.
  * @returns {import('../template.type.mjs').TemplateShowResponse}
  */
-export function templateShow(match) {
+export function templateShow(
+  match,
+  {
+    iconSets = NO_ICON_SETS,
+    components = {ownersOf: () => [], qualified: false},
+  } = {},
+) {
   if (!fs.existsSync(match.filePath)) {
     throw new AstryxError(
       `No source file found for template "${match.dirName}"`,
@@ -32,11 +47,16 @@ export function templateShow(match) {
   }
 
   // The source template.copy writes (spec:AST-028 FR7): a template printed and
-  // pasted must not keep a media path only Astryx's previews serve, and the
-  // caller is told how many it replaced, the way the copy receipt tells it.
-  const {source, demoMediaReplaced} = replaceDemoMedia(
-    fs.readFileSync(match.filePath, 'utf-8'),
-  );
+  // pasted must not keep demo content or a media path only Astryx's previews
+  // serve, and the caller is told how many it replaced, the way the copy
+  // receipt tells it.
+  const {
+    source: withMedia,
+    demoContentReplaced,
+    demoMediaReplaced,
+  } = replaceTemplateDemos(fs.readFileSync(match.filePath, 'utf-8'));
+  // Icons follow the project's icon set, as template.copy writes them.
+  const {source, icons} = mapTemplateIcons(withMedia, iconSets, match.icons);
 
   return {
     type: 'template.show',
@@ -45,9 +65,13 @@ export function templateShow(match) {
       template: match.dirName,
       description: match.description,
       type: match.type,
-      components: extractComponents(match.filePath),
+      components: componentsInSource(source),
+      componentsToRead: answeredComponentsInSource(source, components),
       source,
       demoMediaReplaced,
+      demoContentReplaced,
+      ...(icons ? {icons} : {}),
+      isReady: match.isReady !== false,
     },
   };
 }

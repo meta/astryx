@@ -8,24 +8,84 @@
 
 import {VStack} from '@astryxdesign/core/Layout';
 import {y2kTheme} from '@astryxdesign/theme-y2k/built';
-// `y2kPalettes` is only exported from the source entry, not /built.
-import {y2kPalettes} from '@astryxdesign/theme-y2k';
+import {palette as y2kModePalettes} from '../../../../../../../packages/themes/y2k/src/y2kPalettes.generated';
 import {ThemePalettePreview} from '@/components/ThemePalettePreview';
 import type {TonalColor} from '@/components/ThemePalettePreview';
 
 const CRIMSON = "'Crimson Text', Georgia, 'Times New Roman', serif";
 
+// Use the reviewed mode-aware ramps the maintained theme consumes, not the
+// frozen public compatibility snapshot.
 const TONAL_COLORS: TonalColor[] = [
-  {name: 'Y2K Neutral', sourceHex: '#c3b7ab', note: 'H=75 C=8', tones: y2kPalettes.neutral},
-  {name: 'Green', sourceHex: '#C5E17A', semantic: 'Success', tones: y2kPalettes.green},
-  {name: 'Red', sourceHex: '#FF9E9A', semantic: 'Error', tones: y2kPalettes.red},
-  {name: 'Yellow', sourceHex: '#FFCC55', semantic: 'Warning', tones: y2kPalettes.yellow},
-  {name: 'Blue', sourceHex: '#8ECFFF', tones: y2kPalettes.blue},
-  {name: 'Pink', sourceHex: '#FFA0C8', tones: y2kPalettes.pink},
-  {name: 'Purple', sourceHex: '#C0AAFF', tones: y2kPalettes.purple},
-  {name: 'Cyan', sourceHex: '#70E8D0', tones: y2kPalettes.cyan},
-  {name: 'Orange', sourceHex: '#FFAA66', tones: y2kPalettes.orange},
-  {name: 'Teal', sourceHex: '#78E0B0', tones: y2kPalettes.teal},
+  {
+    name: 'Y2K Neutral',
+    sourceHex: '#FFF6ED',
+    tones: y2kModePalettes.neutral.light,
+    dark: {tones: y2kModePalettes.neutral.dark},
+  },
+  {
+    name: 'Periwinkle',
+    sourceHex: '#CCCFFA',
+    tones: y2kModePalettes.accent.light,
+    dark: {tones: y2kModePalettes.accent.dark},
+  },
+  {
+    name: 'Green',
+    sourceHex: '#C5E17A',
+    semantic: 'Success',
+    tones: y2kModePalettes.green.light,
+    dark: {tones: y2kModePalettes.green.dark},
+  },
+  {
+    name: 'Red',
+    sourceHex: '#FF6F7A',
+    semantic: 'Error',
+    tones: y2kModePalettes.red.light,
+    dark: {tones: y2kModePalettes.red.dark},
+  },
+  {
+    name: 'Yellow',
+    sourceHex: '#FFD34F',
+    semantic: 'Warning',
+    tones: y2kModePalettes.yellow.light,
+    dark: {tones: y2kModePalettes.yellow.dark},
+  },
+  {
+    name: 'Blue',
+    sourceHex: '#00A8FF',
+    tones: y2kModePalettes.blue.light,
+    dark: {tones: y2kModePalettes.blue.dark},
+  },
+  {
+    name: 'Pink',
+    sourceHex: '#FF72B6',
+    tones: y2kModePalettes.pink.light,
+    dark: {tones: y2kModePalettes.pink.dark},
+  },
+  {
+    name: 'Purple',
+    sourceHex: '#A589FF',
+    tones: y2kModePalettes.purple.light,
+    dark: {tones: y2kModePalettes.purple.dark},
+  },
+  {
+    name: 'Cyan',
+    sourceHex: '#42D4D0',
+    tones: y2kModePalettes.cyan.light,
+    dark: {tones: y2kModePalettes.cyan.dark},
+  },
+  {
+    name: 'Orange',
+    sourceHex: '#FF9F4A',
+    tones: y2kModePalettes.orange.light,
+    dark: {tones: y2kModePalettes.orange.dark},
+  },
+  {
+    name: 'Teal',
+    sourceHex: '#48C99A',
+    tones: y2kModePalettes.teal.light,
+    dark: {tones: y2kModePalettes.teal.dark},
+  },
 ];
 
 const sectionTitle: React.CSSProperties = {
@@ -40,9 +100,33 @@ function DisplayTextSection() {
     <div>
       <h3 style={sectionTitle}>Display Text (Crimson Text)</h3>
       <VStack gap={2}>
-        <span style={{fontFamily: CRIMSON, fontSize: 83, fontWeight: 400, lineHeight: 1.15}}>Display 1</span>
-        <span style={{fontFamily: CRIMSON, fontSize: 67, fontWeight: 400, lineHeight: 1.15}}>Display 2</span>
-        <span style={{fontFamily: CRIMSON, fontSize: 53, fontWeight: 400, lineHeight: 1.2}}>Display 3</span>
+        <span
+          style={{
+            fontFamily: CRIMSON,
+            fontSize: 83,
+            fontWeight: 400,
+            lineHeight: 1.15,
+          }}>
+          Display 1
+        </span>
+        <span
+          style={{
+            fontFamily: CRIMSON,
+            fontSize: 67,
+            fontWeight: 400,
+            lineHeight: 1.15,
+          }}>
+          Display 2
+        </span>
+        <span
+          style={{
+            fontFamily: CRIMSON,
+            fontSize: 53,
+            fontWeight: 400,
+            lineHeight: 1.2,
+          }}>
+          Display 3
+        </span>
       </VStack>
     </div>
   );

@@ -24,7 +24,7 @@ import {
   focusVars,
   sizeVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {CODE_SYNTAX_CLASS} from './CodeSyntaxPlugin';
+import {CODE_SYNTAX_CLASS} from './internal/CodeSyntaxPlugin';
 import type {EditorThemeClasses} from 'lexical';
 
 // Document blocks follow core Markdown's typography, spacing, and measure
@@ -50,30 +50,75 @@ const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
 const RULE_SPACE = `calc(${spacingVars['--spacing-6']})`;
 const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
-// Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
-// 12px top padding by 8px, so its code starts 8px + control + 12px down.
-const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// Core CodeBlock's header overlaps the code's 12px top padding by 8px. So the
+// code starts 4px below the header. CodeBlockHeaderPlugin writes the header's
+// drawn height; one row is the fallback.
+const CODE_HEADER_SPACE = `calc(var(--_richtext-code-header-block-size, calc(2 * ${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']})) + ${spacingVars['--spacing-3']} - ${spacingVars['--spacing-2']})`;
+// A block that names no language has no header: core CodeBlock puts its copy
+// button in a column of its own at the inline end (8px, a small control, 8px),
+// beside the code rather than over it, so the code ends that much earlier.
+const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
-  // Lexical marks every top-level block `dir="auto"`, which picks each
-  // block's direction from its first strong character: a Hebrew paragraph in
-  // an English document flips to the right, an English one in an Arabic
-  // document to the left. Blocks take the direction of the surface around
-  // them instead, as core Markdown's do, and bidi inside a block still
-  // follows the Unicode algorithm (spec:AST-061 FR6).
-  providerDirection: {
+  // BlockDirectionPlugin writes a prose block's own direction onto it, so a
+  // block saying `ltr` or `rtl` keeps the UA rule and its caret, alignment,
+  // quote bar and insets all follow its text. `auto` means the block has no
+  // direction of its own — digits, punctuation, an image, nothing at all —
+  // and it follows the document, so an empty paragraph keeps its caret on a
+  // right-to-left document's start edge.
+  blockDirection: {
+    direction: {
+      default: null,
+      // A block whose own text decided nothing reads the way the document
+      // reads, at any depth, as `Markdown` resolves one against the
+      // provider. The surface root sets that direction from `:dir()`, so it
+      // arrives through a list or table that reads the other way, where
+      // `inherit` would hand the block its container's direction. Lexical
+      // leaves such a block at `dir="auto"` at the top level and writes no
+      // attribute below it, so both spellings mean the same thing; a block
+      // that did decide carries `ltr` or `rtl` and is left alone.
+      ':is([dir="auto"])': 'var(--_richtext-document-direction, inherit)',
+      ':not([dir])': 'var(--_richtext-document-direction, inherit)',
+    },
+  },
+  // A container orders its contents in its parent's direction whatever they
+  // hold: the document's at the top level, its wrapper item's when nested.
+  // It takes that direction unconditionally, so a `dir` arriving with a
+  // paste or an older stored document cannot turn a list's markers or a
+  // table's columns around.
+  surfaceDirection: {
     direction: 'inherit',
+  },
+  // A fenced code block is several lines under one element, and Lexical
+  // gives it no per-line node that could carry a direction. `plaintext`
+  // puts each line in its own bidi paragraph taking the direction of its
+  // own first strong character, so a Hebrew comment line reads
+  // right-to-left while `const x = 1;` keeps its semicolon at the end.
+  //
+  // Core Markdown reaches the same rule a different way: it renders fences
+  // through CodeBlock, which puts each line's code in its own `dir="auto"`
+  // element. RichText has no per-line node to carry one.
+  codeDirection: {
+    direction: 'inherit',
+    unicodeBidi: 'plaintext',
   },
   paragraph: {
     // The first block's leading margin would stack with the input inset, so
     // the first line aligns with TextArea and the empty-editor placeholder.
+    // A Markdown plugin block takes this style and is a decorator, so at
+    // either edge of the document it sits beside Lexical's zero-size caret
+    // boundary element (see `hr`) and takes no outer margin there either.
     marginBlockStart: {
       default: TEXT_BLOCK_SPACE,
       ':first-child': spacingVars['--spacing-0'],
+      ':is([data-lexical-decorator-boundary]:first-child + *)':
+        spacingVars['--spacing-0'],
     },
     marginBlockEnd: {
       default: TEXT_BLOCK_SPACE,
       ':last-child': spacingVars['--spacing-0'],
+      ':has(+ [data-lexical-decorator-boundary]:last-child)':
+        spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
     // The base reset gives every <p> body weight and primary color; a
@@ -198,7 +243,14 @@ const editorTheme = stylex.create({
       ':last-child': spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
-    paddingInlineStart: spacingVars['--spacing-6'],
+    // The inset lives on the item, not here. An `outside` marker is drawn
+    // beyond its item's own start edge, which is the opposite edge from the
+    // list's when the two directions disagree; an inset held by the list
+    // would reserve room on the side the marker is not on and let it escape
+    // the field. Held by the item it is always on the marker's side, and it
+    // costs the same measure either way, so a list whose items all agree
+    // with it wraps exactly where core Markdown wraps.
+    paddingInline: spacingVars['--spacing-0'],
     listStylePosition: 'outside',
   },
   ol: {
@@ -211,7 +263,9 @@ const editorTheme = stylex.create({
       ':last-child': spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
-    paddingInlineStart: spacingVars['--spacing-6'],
+    // The inset is on each item (see `ul`), so an outside marker always
+    // has room on its item's own start side.
+    paddingInline: spacingVars['--spacing-0'],
     listStylePosition: 'outside',
   },
   // Markers by depth (spec:AST-061 DEC-6): a list nested inside n lists, of
@@ -256,12 +310,13 @@ const editorTheme = stylex.create({
       ':has(ol)': 'none',
       ':is([data-richtext-task])': 'none',
     },
-    // A task item's text starts 28px in from the list's edge, after core's
-    // small checkbox (20px) and its 8px gap, like core Markdown's task lists:
-    // the item cancels the list's bullet indent and pads for the checkbox.
+    // A task item's text starts 28px in, after core's small checkbox (20px)
+    // and its 8px gap, like core Markdown's task lists.
     marginInlineStart: {
-      default: LIST_ROW_FLUSH,
-      ':is([data-richtext-task])': `calc(-1 * ${spacingVars['--spacing-6']})`,
+      default: spacingVars['--spacing-6'],
+      // A task item draws a checkbox inside its own padding instead of a
+      // marker, so it needs no room outside itself.
+      ':is([data-richtext-task])': LIST_ROW_FLUSH,
     },
     paddingInlineStart: {
       default: LIST_ROW_FLUSH,
@@ -310,6 +365,13 @@ const editorTheme = stylex.create({
   table: {
     borderCollapse: 'collapse',
     width: '100%',
+    // The grid's outer edge, matching core Markdown's table: the row and
+    // column lines stop at the table's rim, so without this the top, bottom,
+    // and sides stay open. `border-collapse: collapse` merges it with the
+    // cell lines into one 1px rule rather than doubling up at the edge.
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
   },
   tableRow: {
     borderBottomWidth: '1px',
@@ -328,12 +390,57 @@ const editorTheme = stylex.create({
     textAlign: 'start',
     verticalAlign: 'middle',
     overflowWrap: 'break-word',
+    // A line on every cell edge, as core Markdown's table draws with
+    // `dividers="grid"`. The row lines come from `tableRow`; this is the
+    // column half. The last column draws none, so the rim is the `table`
+    // rule's own border rather than two lines stacked at the edge — the
+    // same rule core `TableCell` follows (`:last-child` → 0).
+    borderInlineEndWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': 0,
+    },
+    borderInlineEndStyle: 'solid',
+    borderInlineEndColor: colorVars['--color-border'],
   },
   tableCellHeader: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
     color: colorVars['--color-text-secondary'],
   },
-  // Thematic breaks, drawn like core Markdown's rule.
+  // Cells in a table selection — dragging across cells, Shift+arrow between
+  // them, or selecting a row or column — are ringed, for the reason
+  // `hrSelected` gives: a person has to see what the next keystroke will
+  // replace. Lexical names this class on every highlighted cell and takes it
+  // off when the selection goes; left unnamed, a cell inside the selection is
+  // painted exactly like one outside it.
+  //
+  // A ring, not a background wash. A wash sits behind the cell's text and
+  // eats into its contrast, and no one token stays clear of the field in
+  // every theme: `--color-accent-muted` resolves to the field's own colour
+  // under Neutral dark, so the selection would be invisible there, and a
+  // 10% accent tint drops Neutral dark's header text from 5.65:1 to 4.25:1.
+  // The focus ring is drawn for exactly this job — it clears the field by
+  // 5.24:1 at worst across every shipped theme and mode — and sits beside
+  // the text rather than behind it, so no cell's contrast moves at all.
+  // `outline` takes no space, so the document's geometry is untouched
+  // (spec:AST-061 FR9), and the inset offset keeps each ring inside its own
+  // cell instead of bleeding over the neighbour it is not marking.
+  //
+  // `RichTextView` and a read-only editor ring a dragged cell selection too:
+  // Lexical's table pointer handler does not ask whether the surface is
+  // editable, and a person selects cells in a read surface to copy them, so
+  // seeing the selection is as right there. Both surfaces draw the same ring
+  // and neither moves a block, so they still render the same document the
+  // same way.
+  tableCellSelected: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  },
+  // Thematic breaks, drawn like core Markdown's rule. A rule is a decorator,
+  // and Lexical puts a zero-size caret boundary element beside a decorator at
+  // either edge of the document, so a rule there is not literally the first
+  // or last child; it still takes no outer margin.
   hr: {
     borderWidth: 0,
     borderTopWidth: borderVars['--border-width'],
@@ -342,10 +449,14 @@ const editorTheme = stylex.create({
     marginBlockStart: {
       default: RULE_SPACE,
       ':first-child': spacingVars['--spacing-0'],
+      ':is([data-lexical-decorator-boundary]:first-child + *)':
+        spacingVars['--spacing-0'],
     },
     marginBlockEnd: {
       default: RULE_SPACE,
       ':last-child': spacingVars['--spacing-0'],
+      ':has(+ [data-lexical-decorator-boundary]:last-child)':
+        spacingVars['--spacing-0'],
     },
   },
   // A selected rule (click, or arrow onto it) or Markdown plugin node (click)
@@ -380,13 +491,22 @@ const editorTheme = stylex.create({
         CODE_HEADER_SPACE,
     },
     paddingBlockEnd: spacingVars['--spacing-3'],
-    paddingInline: spacingVars['--spacing-4'],
+    paddingInlineStart: spacingVars['--spacing-4'],
+    paddingInlineEnd: {
+      // Room for the corner copy button CodeBlockHeaderPlugin draws over a
+      // block that names no language, so no line runs under it.
+      default: CODE_CORNER_SPACE,
+      ':is([data-language]:not([data-language="plaintext"]))':
+        spacingVars['--spacing-4'],
+    },
     // Sized like core Markdown's code frame: as wide as its longest line, at
     // least the prose measure (or the whole width when that is narrower), and
     // never wider than the editor, where long lines wrap.
     boxSizing: 'border-box',
     width: 'fit-content',
-    minWidth: `min(${PROSE_MEASURE}, 100%)`,
+    // At least the header's own width too, as core's frame grows to fit its
+    // header (CodeBlockHeaderPlugin writes it).
+    minWidth: `max(min(${PROSE_MEASURE}, 100%), min(var(--_richtext-code-header-inline-size, 0px), 100%))`,
     maxWidth: '100%',
     marginBlockStart: {
       default: WIDE_BLOCK_SPACE,
@@ -396,9 +516,11 @@ const editorTheme = stylex.create({
       default: WIDE_BLOCK_SPACE,
       ':last-child': spacingVars['--spacing-0'],
     },
+    // Long lines wrap exactly as core CodeBlock's wrapped lines do, so a code
+    // block is as tall here as in core Markdown (spec:AST-061 FR5, DEC-9).
     whiteSpace: 'pre-wrap',
-    // An unbroken token wider than the block (a long URL or hash) wraps too.
-    overflowWrap: 'anywhere',
+    wordBreak: 'break-all',
+    overflowWrap: 'break-word',
   },
 });
 
@@ -407,9 +529,16 @@ const editorTheme = stylex.create({
  * class-name strings, which `stylex.props(...).className` yields.
  */
 export function sharedEditorTheme(): EditorThemeClasses {
-  // A class for a block Lexical may mark `dir="auto"`.
+  // A class for a block Lexical can mark `dir="auto"`: it reads its own way
+  // once BlockDirectionPlugin has written a direction onto it, and follows
+  // the document while it still says `auto`.
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
-    stylex.props(...styles, editorTheme.providerDirection).className ?? '';
+    stylex.props(...styles, editorTheme.blockDirection).className ?? '';
+  // A class for a container — a list, a table and its parts — which orders
+  // its contents in its parent's direction: the document's at the top level,
+  // its wrapper item's when nested.
+  const container = (...styles: Array<stylex.StyleXStyles>): string =>
+    stylex.props(...styles, editorTheme.surfaceDirection).className ?? '';
   const className = (style: stylex.StyleXStyles): string =>
     stylex.props(style).className ?? '';
   return {
@@ -427,11 +556,13 @@ export function sharedEditorTheme(): EditorThemeClasses {
     },
     quote: block(editorTheme.quote),
     list: {
-      ul: block(editorTheme.ul),
-      ol: block(editorTheme.ol),
-      listitem: stylex.props(editorTheme.listItem).className,
+      ul: container(editorTheme.ul),
+      ol: container(editorTheme.ol),
+      // An item is prose: it reads the way its own text reads, and the
+      // document's way when its text decides nothing.
+      listitem: block(editorTheme.listItem),
       nested: {
-        listitem: stylex.props(editorTheme.listItem).className,
+        listitem: block(editorTheme.listItem),
       },
       // Lexical picks the class at `depth % 3` (spec:AST-061 DEC-6).
       ulDepth: [
@@ -454,17 +585,20 @@ export function sharedEditorTheme(): EditorThemeClasses {
       code: stylex.props(editorTheme.textCode).className,
     },
     // The plain class lets CodeSyntaxPlugin's highlight rules find code blocks.
-    code: `${block(editorTheme.code)} ${CODE_SYNTAX_CLASS}`,
+    code: `${container(editorTheme.code)} ${className(editorTheme.codeDirection)} ${CODE_SYNTAX_CLASS}`,
     hr: stylex.props(editorTheme.hr).className,
     hrSelected: stylex.props(editorTheme.hrSelected).className,
     // MarkdownExtensionsPlugin puts it on a selected plugin node.
     markdownExtensionSelected: stylex.props(editorTheme.hrSelected).className,
-    table: block(editorTheme.table),
+    table: container(editorTheme.table),
     // Lexical stamps rows and cells `dir="auto"` too, which would set a cell
     // of English text left-to-right inside a right-to-left document.
-    tableRow: block(editorTheme.tableRow),
-    tableCell: block(editorTheme.tableCell),
-    tableCellHeader: block(editorTheme.tableCellHeader),
-    tableScrollableWrapper: block(editorTheme.tableScrollableWrapper),
+    tableRow: container(editorTheme.tableRow),
+    tableCell: container(editorTheme.tableCell),
+    tableCellHeader: container(editorTheme.tableCellHeader),
+    // Added on top of the cell's own class by Lexical while the cell is in a
+    // table selection, so it carries no direction of its own.
+    tableCellSelected: className(editorTheme.tableCellSelected),
+    tableScrollableWrapper: container(editorTheme.tableScrollableWrapper),
   };
 }

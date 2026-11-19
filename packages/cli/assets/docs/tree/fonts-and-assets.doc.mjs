@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/fonts-and-assets`:
+ * @file `astryx docs authoring/building-blocks/themes/fonts-and-assets`:
  * ship a theme's optional font loader beside its built module and CSS.
  */
 
@@ -21,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A theme names its typefaces in `typography`: `body`, `heading`, and `code`, each with a `family` and `fallbacks`. These set the `--font-family-*` tokens every component reads. Always give real `fallbacks` so text stays readable before the font loads, or if it never does. `heading` inherits `family` and `fallbacks` from `body` when you omit them.',
+          text: "A theme names its typefaces in `typography`: `body`, `heading`, and `code`, each with a `family` and `fallbacks`. These set the `--font-family-*` tokens every component reads. Always give real `fallbacks` so text stays readable before the font loads, or if it never does. A heading with no `family` takes the body's whole font list; with its own `family`, only its own `fallbacks`; `fallbacks` with no `family` build nothing.",
         },
         {
           type: 'code',
@@ -61,7 +61,7 @@ export const oceanTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'The stylesheet can contain self-hosted `@font-face` rules or import a hosted stylesheet. A hosted `@import` is simple, but it delays loading compared with a preconnected `<link>`; choose that trade-off deliberately. If the app loads the same family outside the generated module, Doctor warns because it cannot prove the loader, but the warning does not fail the app.',
+          text: "The stylesheet can contain self-hosted `@font-face` rules or import a hosted stylesheet. A hosted `@import` is simple, but it delays loading compared with a preconnected `<link>`; choose that trade-off deliberately. Doctor warns when it cannot prove the loader, such as a hosted `@import`, but the warning does not fail the app. A Google Fonts or Bunny Fonts stylesheet `<link>` in the app's page head (`index.html`, or a Next.js root layout or `_document`) counts as loading the families it names.",
         },
         {
           type: 'code',
@@ -83,7 +83,7 @@ export const oceanTheme = defineTheme({
             'Load every weight and style the theme uses. Do not let the browser synthesize bold or italic.',
             'Include self-hosted font files and their licenses in the packed package.',
             'Keep CSS and font assets side-effectful so a bundler does not remove the loader.',
-            'Run `integration verify`; it fails when an exported font stylesheet or one of its packed files cannot resolve.',
+            'Run `integration verify`; it fails when an exported font stylesheet cannot resolve, but it does not check the font files the stylesheet names.',
           ],
         },
       ],

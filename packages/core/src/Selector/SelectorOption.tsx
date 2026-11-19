@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file SelectorOption.tsx
  * @output Exports SelectorOption component for custom option rendering
@@ -22,6 +24,10 @@ const embeddedStyles = stylex.create({
     paddingBlock: 0,
     paddingInline: 0,
     borderRadius: 0,
+    // The host row lays this out as a flex item, whose automatic minimum
+    // size is the full label width. Without the reset a long label runs
+    // past a narrow popover and is clipped instead of ellipsizing.
+    minWidth: 0,
   },
 });
 

@@ -36,7 +36,8 @@ export const doc = {
     },
     {
       flag: '--verbose',
-      description: "Also print each result's score and match reason",
+      description:
+        "Also print each result's score and match reason, and its whole description",
     },
   ],
   examples: [
@@ -51,6 +52,7 @@ export const doc = {
     },
     {label: 'Themes you can add', cli: 'astryx search warm --type theme'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {

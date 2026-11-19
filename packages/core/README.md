@@ -2,14 +2,26 @@
 
 Core UI components, theme system, and utilities for the Astryx design system. For project setup, see [Quick Start](#quick-start) below.
 
-> **Building with an AI agent?** Add the CLI, then run `init`:
+> **Setup is install, then `init`.** Add the CLI at Core's version and run `init` once, before you write UI:
 >
 > ```bash
-> npm install -D @astryxdesign/cli   # or: pnpm add -D / yarn add -D / bun add -d
-> npx astryx init                    # resolves to the CLI you just installed
+> npm install -D -E @astryxdesign/cli@<core version>   # or: pnpm add -D -E / yarn add -D -E / bun add -d --exact
+> npx @astryxdesign/cli init                           # asks no questions
 > ```
 >
-> `init` writes the Astryx component index into your `AGENTS.md`/`CLAUDE.md` so your agent discovers components, templates, and design tokens instead of guessing. Need a single command without installing? Use the scoped package directly — `npx @astryxdesign/cli <cmd>` (or `pnpm dlx`/`bunx @astryxdesign/cli`). Bare `npx astryx` only works once `@astryxdesign/cli` is a dependency; before that npm resolves it to an unrelated package. See [XDS CLI](#xds-cli).
+> Use the version of `@astryxdesign/core` you have. Keep `-E` when `package.json` pins Core exactly, as the starters do; leave it out when Core has a `^` or `~` range.
+>
+> `init` prints the getting-started steps (styles, theme) and saves the Astryx guide to your `AGENTS.md`/`CLAUDE.md`: components, templates, and design tokens, so any agent working in the project builds with Astryx instead of guessing. Read it before you write UI. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [Astryx CLI](#astryx-cli).
+
+> **Building with an AI agent?** Ask the Astryx CLI before you write code. These commands work with or without the install above:
+>
+> ```bash
+> npx @astryxdesign/cli build "<what you are building>"   # the template, blocks and components to start from
+> npx @astryxdesign/cli component <Name>                  # one component's props, variants and examples
+> npx @astryxdesign/cli doctor --built .                  # checks the setup and the code you wrote
+> ```
+>
+> The `.doc.mjs` files in this package are only part of what the CLI knows: it also has page templates, blocks and checks that no source file shows.
 
 ## Component Docs
 
@@ -21,7 +33,7 @@ npx @astryxdesign/cli component Button        # full docs for a component
 npx @astryxdesign/cli component --list        # list all components
 ```
 
-> Use the scoped `@astryxdesign/cli` to run without installing; bare `npx astryx` only resolves once the CLI is a dependency.
+> Use the scoped `@astryxdesign/cli`: it runs with or without installing, while the unscoped `astryx` resolves to an unrelated npm package until the CLI is a dependency.
 
 ## Page Layouts
 
@@ -31,7 +43,7 @@ panel slots into common page patterns (dashboards, settings, forms, detail pages
 Wrap them in your own app chrome (`AppShell`, `TopNav`, `SideNav`) to add
 global navigation.
 
-Requires `@astryxdesign/cli` (`npm install -D @astryxdesign/cli`):
+Requires `@astryxdesign/cli` at Core's version: `npm install -D -E @astryxdesign/cli@<core version>` (leave out `-E` when Core has a `^` or `~` range).
 
 ```bash
 astryx template --list              # browse all page and block templates
@@ -57,19 +69,19 @@ astryx discover                     # discover external Astryx packages
 astryx gap-report                   # report a missing capability
 ```
 
-> Prefix these with your runner: `npx astryx …` / `pnpm exec astryx …` once the CLI is installed, or `npx @astryxdesign/cli …` to run without installing.
+> Run these as `npx @astryxdesign/cli …`, or `pnpm exec astryx …` (or your package manager's equivalent) once the CLI is installed.
 
 ## Related Packages
 
-| Package                                                                                               | Description                                                   |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [`@astryxdesign/cli`](https://github.com/facebook/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
-| [`@astryxdesign/theme-neutral`](https://github.com/facebook/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
+| Package                                                                                           | Description                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
+| [`@astryxdesign/theme-neutral`](https://github.com/meta/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
 
 ## Resources
 
 - [Component Storybook](https://astryx.atmeta.com/storybook/)
-- [GitHub Repository](https://github.com/facebook/astryx)
+- [GitHub Repository](https://github.com/meta/astryx)
 
 ---
 
@@ -77,13 +89,15 @@ astryx gap-report                   # report a missing capability
 
 Astryx requires **React 19** or later (`react` and `react-dom` >= 19.0.0 are peer dependencies).
 
-Install Astryx and a theme:
+Install Astryx, a theme, and the CLI, then run `init` once:
 
 ```bash
 npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
+npm install -D @astryxdesign/cli
+npx @astryxdesign/cli init   # prints the getting-started steps; saves the Astryx guide to AGENTS.md
 ```
 
-Then pick your setup below based on your framework and styling approach.
+Then pick your setup below based on your framework and styling approach. The setup you pick wires the theme, so it replaces the theme step `init` prints.
 
 ### Next.js (simplest)
 
@@ -139,6 +153,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 
 No build plugins needed; Astryx ships pre-built CSS that works alongside Tailwind.
 
+This `globals.css` is the whole file for a new app. For an app that already uses Tailwind, keep its own `@import "tailwindcss"` and put the `@layer` line above it, as `astryx docs styling-libraries/tailwind` shows under "Add Astryx to an app that already uses Tailwind". A `@layer` line below the Tailwind import silently inverts the cascade.
+
 **`src/app/globals.css`**
 
 ```css
@@ -165,15 +181,18 @@ The `tailwind-theme.css` import maps system tokens to Tailwind utilities via `@t
 
 Some useful mappings:
 
-| Tailwind class                                            | Astryx token                                      |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| `text-primary` / `text-secondary`                         | `--color-text-primary` / `--color-text-secondary` |
-| `bg-surface` / `bg-card` / `bg-body`                      | `--color-background-surface` / `card` / `body`    |
-| `border-border` / `border-strong`                         | `--color-border` / `--color-border-emphasized`    |
-| `bg-success` / `text-error` / `text-warning`              | Status tokens                                     |
-| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid` | Hue palette (×10 hues)                            |
-| `rounded-sm` / `rounded-md` / `rounded-lg`                | `--radius-inner` / `element` / `container`        |
-| `shadow-sm` / `shadow-md` / `shadow-lg`                   | `--shadow-low` / `med` / `high`                   |
+| Tailwind class                                               | Astryx token                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `text-primary` / `text-secondary`                            | `--color-text-primary` / `--color-text-secondary`                |
+| `bg-surface` / `bg-card` / `bg-body`                         | `--color-background-surface` / `card` / `body`                   |
+| `border-border` / `border-strong`                            | `--color-border` / `--color-border-emphasized`                   |
+| `bg-info` / `bg-success` / `bg-warning` / `bg-error`         | Strong status fills (`--color-<status>`)                         |
+| `text-on-info` / `bg-info-muted` / `text-on-info-muted`      | Strong-fill content, pale fill, pale-fill content                |
+| `text-success` / `text-warning` / `text-error` / `text-info` | Status text on the page (`--color-text-*`; also `text-status-*`) |
+| `border-success` / `border-warning` / `border-error`         | Status borders (`--color-border-*`)                              |
+| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid`    | Hue palette (×10 hues)                                           |
+| `rounded-sm` / `rounded-md` / `rounded-lg`                   | `--radius-inner` / `element` / `container`                       |
+| `shadow-sm` / `shadow-md` / `shadow-lg`                      | `--shadow-low` / `med` / `high`                                  |
 
 Spacing references `var(--spacing-1)` as the base unit, so `p-4` = 16px, matching Astryx's `--spacing-4`. Arbitrary values still work as an escape hatch: `bg-[var(--color-background-surface)]`.
 

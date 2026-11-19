@@ -128,6 +128,20 @@ export const docs = {
       description: 'Description text displayed below the label.',
     },
     {
+      name: 'isOptional',
+      type: 'boolean',
+      description:
+        'Whether the group is optional. Shows the optional indicator after the group label, unless a surrounding FormLayout already makes fields optional by default.',
+      default: 'false',
+    },
+    {
+      name: 'isRequired',
+      type: 'boolean',
+      description:
+        'Whether the group needs at least one checked box. Shows the required indicator after the group label by the same rules as every input field. While no box is checked, the browser blocks submit and moves focus to the first box that is neither disabled nor read-only, with its own message. A disabled or read-only group requires nothing. Show your own error text through status. Mutually exclusive with isOptional.',
+      default: 'false',
+    },
+    {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
       description: 'Spacing density for list items.',
@@ -178,12 +192,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -221,6 +237,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
+      },
+      {
+        guidance: true,
+        description:
           'Write a group label that says what the choices represent: "Export formats" tells users more than "Options".',
       },
       {
@@ -242,6 +263,15 @@ export const docs = {
   },
   theming: {
     targets: [{className: 'astryx-checkbox-list'}],
+    vars: [
+      {
+        name: '--_checkbox-row-press-paint',
+        description:
+          "The press paint a row that owns its checkbox's press hands that checkbox's box: none at rest, and the press paint at the press's strength while the press controller presses that row, for every pointer. Set on the row by its own press arms; the box reads its nearest row's value, so a list placed in a row's content keeps its own rows' paint.",
+        default: 'none',
+        private: true,
+      },
+    ],
   },
 };
 
@@ -260,6 +290,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Turn on dividers (hasDividers) when items have helper text underneath; without them the labels and descriptions blur together.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
       },
       {
         guidance: true,
@@ -302,6 +337,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Turn on dividers (hasDividers) when items have helper text underneath; without them the labels and descriptions blur together.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an option description that is longer than one line as a node: description={<Text type="supporting">…</Text>}. A string description shows on one line, and the row cuts the remaining text with an ellipsis.',
       },
       {
         guidance: true,

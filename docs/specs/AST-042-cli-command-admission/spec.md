@@ -18,6 +18,14 @@ affects_consumer_docs: []
 
 # CLI command admission and programmatic parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/cli/clients/cli/**", "packages/cli/api/**"]
+}
+```
+
 ## Intent
 
 Agents learn the Astryx CLI from its help, its manifest, and their own notes, and
@@ -56,7 +64,9 @@ function, and the vocabulary that human-readable output may use.
   state, change files, contact the network, or produce a result field or effect
   that the function does not produce. A command that only groups subcommands is exempt, and so is a
   command that only describes the CLI itself, such as help, the version, or the
-  capability manifest. This requirement names `@astryxdesign/cli/api` because
+  capability manifest, and so is `astryx mcp`, which runs other commands
+  (`spec:AST-121` FR4) and reads only the agent docs `astryx init` renders, for
+  its instructions (`spec:AST-121` FR5). This requirement names `@astryxdesign/cli/api` because
   automation depends on it under `spec:AST-017` FR14.
 - **FR2 — The programmatic API is documented and tested.** Every function
   exported from `@astryxdesign/cli/api` MUST have reference documentation that

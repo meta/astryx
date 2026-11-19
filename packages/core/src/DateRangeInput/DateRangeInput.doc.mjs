@@ -45,14 +45,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disable the trigger and picker.',
+      description:
+        'Disable the trigger and picker. The trigger stays focusable and exposes `aria-disabled`; opening is blocked.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the trigger (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip.',
     },
     {
       name: 'value',
@@ -114,7 +115,7 @@ export const docs = {
       name: 'presets',
       type: 'Array<DateRangePreset>',
       description:
-        'Preset ranges shown as quick-select options beside the calendar. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
+        'Preset ranges shown as quick-select options beside the calendar, or above it when the two do not fit side by side. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
     },
     {
       name: 'hasClear',
@@ -163,6 +164,13 @@ export const docs = {
       description:
         'First day of week in the calendar. A number (0 = Sunday to 6 = Saturday) or a three-letter day name.',
       default: '0',
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "The calendar the trigger text and the popover calendar show, such as persian, hebrew, or buddhist. value, onChange, min, max, and presets stay Gregorian ISO dates. The field has no typed entry. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates and warns in development. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+      default: "the InternationalizationProvider's calendar, else 'gregory'",
     },
     {
       name: 'width',
@@ -240,7 +248,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
     anatomy: [
@@ -276,7 +284,8 @@ export const docs = {
       {
         name: 'Preset sidebar',
         required: false,
-        description: 'A list of preset range options beside the calendar.',
+        description:
+          'A list of preset range options beside the calendar, or above it when the two do not fit side by side.',
       },
       {
         name: 'Preset button',
@@ -344,7 +353,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
   },
@@ -356,7 +365,7 @@ export const docsDense = {
     isRequired: 'mark field required',
     isDisabled: 'disable trigger+picker',
     disabledMessage:
-      'reason shown in a tooltip on hover/focus when disabled; keeps trigger focusable via aria-disabled',
+      'reason shown in a tooltip on hover/focus when disabled; describes the trigger',
     value:
       'selected range {start, end} or null; import DateRange type from @astryxdesign/core/DateRangeInput (do not redeclare)',
     onChange: 'callback on range change; null on clear',
@@ -377,6 +386,8 @@ export const docsDense = {
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'tooltip via info icon at label end',
     numberOfMonths: 'months in calendar (default 2)',
+    calendar:
+      "calendar for the trigger text + popover calendar (default: provider's, else 'gregory'); values and presets stay Gregorian ISO; no typed entry; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian",
     weekStartsOn:
       'first day of week in calendar (0=Sunday, or name e.g. "mon")',
     changeAction:

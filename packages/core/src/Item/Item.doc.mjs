@@ -27,7 +27,11 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-item', visualProps: ['density', 'align']},
+      {
+        className: 'astryx-item',
+        visualProps: ['density', 'align'],
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-item-swipe-panel', visualProps: ['side']},
       {className: 'astryx-item-swipe-action', visualProps: ['variant']},
     ],
@@ -49,7 +53,7 @@ export const docs = {
       {
         name: '--_item-inset-inline',
         description:
-          'Inline inset of the row. Item derives its paddingInline from this variable, and List reads it to cancel the inset when edgeCompensation="inline". Set paddingInline on `item` in a theme and both stay in sync.',
+          'Inline inset of the row. Item derives its paddingInline from this variable, and List reads it to place rows for its edge treatments (edge="flush", "outset", and "bleed"). Set paddingInline on `item` in a theme and both stay in sync.',
         default: 'var(--spacing-2) (var(--spacing-3) for density="spacious")',
         private: true,
       },
@@ -118,8 +122,9 @@ export const docs = {
         },
         {
           name: 'align',
-          type: "'center' | 'start'",
-          description: 'Vertical alignment of start/end content slots.',
+          type: "'center' | 'start' | 'first-line'",
+          description:
+            "Vertical alignment of start/end content slots. 'center' centers each slot on the whole text block; 'start' lines up slot tops with the text's top; 'first-line' centers each slot on the label's first line, so a small mark stays level with the first line of a wrapped label. A slot taller than that line moves the text down. The `item` theme target reflects the value as `align`.",
           default: "'center'",
         },
         {
@@ -156,7 +161,7 @@ export const docs = {
           name: 'interactiveRef',
           type: 'RefObject<HTMLElement | null>',
           description:
-            "Ref to a nested control (e.g. a checkbox in startContent) that owns the item's keyboard access and action. The row becomes an enlarged click/tap target that delegates surface clicks to it (useClickableContainer) and renders no invisible button/anchor, so the row adds no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href; those are ignored when set.",
+            "Ref to a nested control (e.g. a checkbox in startContent) that owns the item's keyboard access and action. The row becomes an enlarged click/tap target that delegates surface clicks to it (useClickableContainer) and renders no invisible button/anchor, so the row adds no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href; those are ignored when set. While the row is selected it writes aria-current on the control unless the control has its own; do not set the row\'s value on the control yourself.",
         },
         {
           name: 'href',
@@ -191,32 +196,50 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disabled state.',
+          description:
+            'Disabled state. Interactive rows stay keyboard-reachable but cannot activate.',
           default: 'false',
+        },
+        {
+          name: 'swipe',
+          type: 'Swipe',
+          description:
+            "Swipe actions for touch, made by createSwipe({leading?, trailing?, swipeBehavior?}): the verbs a sideways drag uncovers on each side, outermost last, each `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`; `itemKey` is the `ListItem`'s, `undefined` on a plain `Item`. `leading` is uncovered by a drag toward the inline end, `trailing` toward the inline start. A finger, a pen or a trackpad's two-finger swipe drags the row; a mouse drag and a mouse wheel's notches never do, and a mostly vertical drag stays the scroller's. An open row closes on a touch tap on its own content, which activates nothing and paints no press, on a press elsewhere, when the list or page scrolls with focus outside it, and on Escape. The gesture is a touch accelerator and never a row's only path to a verb: a verb reachable only by swipe is unreachable by keyboard and by mouse, so every entry must also be reachable through the row's own content. Served on a row whose role permits interactive descendants (a listitem, a row with no role) and not on an option, a menu item, or a row that is the enlarged target of a native radio. The element containing the rows clips in the inline axis with overflow-inline: clip — List does; any other host does it once. `hasRemoval` only says the row holds out after the action fires instead of springing back. The swipe is the same on every device: a finger or a pen swipes the row whatever the primary pointer, a touchscreen laptop's included, and so does a trackpad's two-finger swipe, which moves the row with the fingers and lets it go at their speed; a mouse never does. The swipe's code comes with createSwipe, so a row given swipe is swipeable at its first paint and an app that never imports createSwipe ships none of it. Define the swipe once at module scope, or in useMemo when its handlers need component state. A new value with the same ids neither closes an open row nor restarts its settle; one with other ids closes it.",
         },
         {
           name: 'swipeActions',
           type: '{leading?: ItemSwipeAction[]; trailing?: ItemSwipeAction[]}',
           description:
-            "Swipe actions for touch: the verbs a sideways drag uncovers on each side, outermost last, each `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. `leading` is uncovered by a drag toward the inline end, `trailing` toward the inline start. A mouse never starts the drag and a mostly vertical drag stays the scroller's. The gesture is a touch accelerator and never a row's only path to a verb: a verb reachable only by swipe is unreachable by keyboard and by mouse, so every entry must also be reachable through the row's own content. Served on a row whose role permits interactive descendants (a listitem, a row with no role) and not on an option, a menu item, or a row that is the enlarged target of a native radio. The element containing the rows clips in the inline axis with overflow-inline: clip — List does; any other host does it once. `hasRemoval` only says the row holds out after the action fires instead of springing back. The gesture and its panels are loaded on demand the first time a row has swipe actions, so a row without them ships none of it.",
+            "Deprecated (DEP-0017): pass swipe={createSwipe({leading, trailing})} instead. Each entry is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. Still works, with the swipe's current behavior, loading the swipe the first time a row has it, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
         },
         {
           name: 'swipeBehavior',
           type: "'reveal' | 'commit'",
           description:
-            'What a swipe does. `reveal` rests the row open with every entry a real button and fires the outermost on a long drag or a fling; `commit` slides the row out and fires the outermost on release, with nothing resting and a presentational panel. `commit` fits one entry per side.',
+            "Deprecated (DEP-0017): pass swipeBehavior in createSwipe's options instead. Still works beside swipeActions, with the swipe's current behavior, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
           default: "'reveal'",
         },
         {
           name: 'ref',
-          type: 'React.Ref<HTMLDivElement>',
-          description: 'Ref forwarded to the root element.',
+          type: 'React.Ref<HTMLElement>',
+          description:
+            'Ref forwarded to the root element, whose type follows `as`.',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
-            'StyleX styles for layout customization. Must be a stylex.create() value.',
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'CSS class name(s) for the root element.',
+        },
+        {
+          name: 'style',
+          type: 'React.CSSProperties',
+          description: 'Inline styles for the root element.',
         },
         {
           name: 'data-testid',
@@ -248,7 +271,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use align="start" when start or end content is taller than a single line of text.',
+          'Use align="first-line" when a wrapping label sits beside a small mark (a status dot, a radio, a timestamp) that belongs to its first line. Use align="start" to line up the tops of a tall slot and the text.',
       },
       {
         guidance: true,
@@ -321,14 +344,15 @@ export const docsZh = {
         endContent:
           '在标签/描述区域之后渲染的内容，例如徽章、元数据、时间戳或操作按钮。',
         as: '根元素的 HTML 元素。',
-        align: '起始/结束内容插槽的垂直对齐方式。',
+        align:
+          "起始/结束内容插槽的垂直对齐方式：'center'（默认）、'start'（顶部对齐）或 'first-line'（以标签第一行为中心）。",
         density:
           '间距密度。"compact" 使用 4px 块内距，"balanced" 使用 8px，"spacious" 使用 12px 块内距和内联内距。',
         labelLines: '标签截断前的最大行数。',
         descriptionLines: '描述截断前的最大行数。',
         onClick: '点击处理函数。使项目可点击，具有按钮语义。',
         interactiveRef:
-          '指向嵌套控件（如 startContent 中的复选框）的 ref，该控件承载项目的键盘访问和操作。行成为更大的点击/触摸目标，将表面点击委托给该控件（useClickableContainer），且不渲染不可见按钮/锚点，因此行不会增加第二个 Tab 停留点（WCAG 4.1.2）。与 onClick/href 互斥——设置后二者将被忽略。',
+          '指向嵌套控件（如 startContent 中的复选框）的 ref，该控件承载项目的键盘访问和操作。行成为更大的点击/触摸目标，将表面点击委托给该控件（useClickableContainer），且不渲染不可见按钮/锚点，因此行不会增加第二个 Tab 停留点（WCAG 4.1.2）。与 onClick/href 互斥——设置后二者将被忽略。行被选中时，若控件没有自己的 aria-current，行会在控件上写入它；不要在控件上自行设置相同的值。',
         href: '链接 URL。通过不可见锚点元素使项目成为链接。',
         target:
           '链接目标。仅与 href 一起使用。target="_blank" 会自动添加 noopener noreferrer。',
@@ -363,7 +387,8 @@ export const docsZh = {
       },
       {
         guidance: true,
-        description: '当起始或结束内容高于单行文本时使用 align="start"。',
+        description:
+          '当换行标签旁边是属于其第一行的小标记（状态点、单选按钮、时间戳）时，使用 align="first-line"。使用 align="start" 让较高插槽与文本顶部对齐。',
       },
       {
         guidance: false,
@@ -426,7 +451,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'align="start" when start/end content is taller than one text line.',
+          'align="first-line" for a small mark beside a wrapping label; align="start" to top-align a tall slot with the text.',
       },
       {
         guidance: false,
@@ -458,14 +483,15 @@ export const docsDense = {
         endContent:
           'Content after label/description: badges, timestamps, actions.',
         as: 'Root HTML element.',
-        align: 'Vertical alignment of start/end content slots.',
+        align:
+          "Start/end slot alignment: 'center' (default), 'start' (tops), or 'first-line' (centered on the label's first line).",
         density:
           'Spacing: "compact" (4px), "balanced" (8px), or "spacious" (12px).',
         labelLines: 'Max label lines before truncation.',
         descriptionLines: 'Max description lines before truncation.',
         onClick: 'Click handler; enables button semantics.',
         interactiveRef:
-          "Ref to a nested control that owns the item's keyboard access/action; row delegates surface clicks to it (useClickableContainer), no invisible button/anchor, no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href.",
+          "Ref to a nested control that owns the item's keyboard access/action; row delegates surface clicks to it (useClickableContainer), no invisible button/anchor, no second tab stop (WCAG 4.1.2). Mutually exclusive with onClick/href. When selected, the row writes aria-current on the control.",
         href: 'Link URL; enables anchor semantics. Follows the shared navigation rule (see Link href).',
         target:
           'Link target, only with href. target="_blank" auto-adds noopener noreferrer.',

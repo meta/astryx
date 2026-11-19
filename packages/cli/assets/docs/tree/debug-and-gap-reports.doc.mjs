@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/debug-and-gap-reports`: receive a record
+ * @file `astryx docs authoring/building-blocks/configuration/debug-and-gap-reports`: receive a record
  * of each CLI run with `debug`, and handle `astryx gap-report` with
  * `gapReport`, both named exports of the integration manifest.
  */
@@ -23,7 +23,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Export a `debug` function from `astryx.integration.mjs`, and the CLI calls it once for each command run in an app that loads your package.',
+          text: 'Export a `debug` function from `astryx.integration.mjs`; the CLI calls it once per command run in an app loading your package.',
         },
         {
           type: 'code',
@@ -44,7 +44,7 @@ export default {
         },
         {
           type: 'prose',
-          text: 'The event is a `DebugEvent` with `command`, `outcome`, `exitCode`, `durationMs`, `error`, and more, its values scrubbed (`redacted: true`). Every field is in {@link generic:authoring}.',
+          text: 'The event is a `DebugEvent` with `command`, `outcome`, `exitCode`, `durationMs`, `error`, and more, its values scrubbed (`redacted: true`). Every field is in {@link schema:debug-event}.',
         },
         {
           type: 'prose',
@@ -52,11 +52,11 @@ export default {
         },
         {
           type: 'prose',
-          text: "An app records every command only when its `astryx.config` names `integrations` or `debug`, as listing your package does. Otherwise your handler runs only for commands that load the app's project, such as `component` and `docs`, and not for `--version` or a mistyped command. In an app whose config names neither word, each of those commands also prints a warning on stderr.",
+          text: "An app records every command only when its `astryx.config` names `integrations` or `debug`, as listing your package does. Otherwise your handler runs only for commands loading the app's project, such as `component` and `docs`, never for `--version` or a mistyped command. In an app whose config names neither word, those commands also print a stderr warning.",
         },
         {
           type: 'prose',
-          text: '`debug` is a named export, not a manifest field, so a CLI that does not know it ignores it and loads the rest of your manifest.',
+          text: '`debug` is a named export, not a manifest field, so an older CLI ignores it and loads the rest of your manifest.',
         },
       ],
     },
@@ -75,7 +75,7 @@ export default {
         },
         {
           type: 'prose',
-          text: 'From then on, your handler no longer runs in that app.',
+          text: 'Your handler then no longer runs in that app.',
         },
       ],
     },
@@ -85,7 +85,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Export a `gapReport` handler, and `astryx gap-report` in an app sends it each gap report, such as a missing component or variant. The handler files the report and returns a receipt.',
+          text: 'Export a `gapReport` handler, and `{@command gap-report}` in an app sends it each gap report, such as a missing component or variant. The handler files the report and returns a receipt.',
         },
         {
           type: 'code',
@@ -104,22 +104,11 @@ export const gapReport = {
         },
         {
           type: 'prose',
-          text: 'Every handler in the app gets every report, so check `report.target.package` and skip reports about other packages. The receipt `status` is one of:',
+          text: 'Every handler in the app gets every report, so check `report.target.package` and skip reports about other packages.',
         },
         {
-          type: 'table',
-          headers: ['`status`', 'Meaning'],
-          rows: [
-            [
-              '`filed`',
-              'You created or queued the report. Return `url` or `message`.',
-            ],
-            [
-              '`routed_only`',
-              'You point the caller to where to file it. `url` is required.',
-            ],
-            ['`skipped`', 'You chose not to act, for example on a duplicate.'],
-          ],
+          type: 'prose',
+          text: 'Every field is in {@link schema:gap-report-handler}.',
         },
         {
           type: 'prose',
@@ -138,7 +127,7 @@ export const gapReport = {
         {
           type: 'code',
           lang: 'bash',
-          code: "npx astryx gap-report AcmeCarousel --category missing_variant --reason 'Need a vertical layout'",
+          code: "{@command gap-report AcmeCarousel --category missing_variant --reason 'Need a vertical layout'}",
         },
         {
           type: 'code',
@@ -161,7 +150,7 @@ message:     Rerun with --confirm-public to file this report.`,
       content: [
         {
           type: 'prose',
-          text: "When the app has no `gapReport` handler at all, the CLI routes the report to the target package's `issuesUrl` from its manifest instead.",
+          text: "With no `gapReport` handler in the app, the CLI routes the report to the target package's manifest `issuesUrl`.",
         },
         {
           type: 'list',
@@ -175,6 +164,36 @@ message:     Rerun with --confirm-public to file this report.`,
         {
           type: 'prose',
           text: 'One handler anywhere in the app, from the app or from any package, turns the fallback off for every report. So does a listed package that fails to load: the CLI cannot tell whether it has a handler, so the report fails for that package instead of going to another tracker. See {@link command:gap-report}.',
+        },
+      ],
+    },
+    {
+      id: 'choose-a-destination',
+      title: 'Let the person choose where a report goes',
+      content: [
+        {
+          type: 'prose',
+          text: 'When an app loads packages naming their own `issuesUrl`, a report can go to the default (the handlers, or the fallback above) or to one of those packages. `{@command gap-report --list-categories}` and the receipt of a report filed without `--to` list every destination, with a line telling the agent to ask the person.',
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'An agent asks the person where to file. It never picks a package destination on its own.',
+            "`--to <package>` carries the person's choice: the report goes only to that package's `issuesUrl`, under the same `--confirm-public` rule, and no handler runs.",
+            'Without a choice, leave out `--to`; the report goes to the default.',
+            'A `--to` that names no destination fails before anything is sent and lists the destinations.',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: when users install your package for their computer, beside the global CLI, its `debug` function receives runs in folders outside any project too; inside a project, only if the project installs it. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

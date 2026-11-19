@@ -4,7 +4,7 @@
 
 /**
  * @file DropdownMenuDivider.tsx
- * @input Uses Divider, spacing tokens, themeProps
+ * @input Uses Divider, spacing tokens, themeProps; forwards host props to Divider
  * @output Exports DropdownMenuDivider component and DropdownMenuDividerProps
  * @position Sub-component; used inside DropdownMenu
  *
@@ -37,9 +37,9 @@ const styles = stylex.create({
 
 const THEME_CLASS_NAME = themeProps('dropdown-menu-divider').className;
 
-export interface DropdownMenuDividerProps extends Pick<
-  BaseProps,
-  'xstyle' | 'className' | 'style'
+export interface DropdownMenuDividerProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'role' | 'aria-orientation'
 > {
   /** Ref forwarded to the separator element. */
   ref?: React.Ref<HTMLDivElement>;
@@ -49,7 +49,9 @@ export interface DropdownMenuDividerProps extends Pick<
  * A horizontal rule separating groups of menu rows.
  *
  * Renders `role="separator"`, so it is never a stop in the menu's arrow-key
- * order. Equivalent to `{type: 'divider'}` in the `items` data API.
+ * order. Equivalent to `{type: 'divider'}` in the `items` data API. Host
+ * attributes (`id`, `data-*`, `aria-*`) and DOM handlers reach the separator;
+ * its role and orientation stay component-owned.
  *
  * @example
  * ```
@@ -65,9 +67,11 @@ export function DropdownMenuDivider({
   className,
   style,
   ref,
+  ...rest
 }: DropdownMenuDividerProps) {
   return (
     <Divider
+      {...rest}
       ref={ref}
       xstyle={[styles.divider, xstyle]}
       className={

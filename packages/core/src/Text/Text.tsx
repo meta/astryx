@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {use, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -47,15 +47,17 @@ import {
   truncationTooltipStyles,
 } from './text.stylex';
 import {useTruncation} from './useTruncation';
+import {
+  TruncationTooltip,
+  useTruncationTooltipInterest,
+} from './TruncationTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import type {LayerPlacement} from '../Layer';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-
-const LazyXDSTooltip = lazy(async () =>
-  import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
+import {TextClampContext} from './textClampContext';
 
 export type {TextType, TextSize};
 
@@ -260,20 +262,29 @@ export function Text({
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
 
-  // Truncation detection
-  const truncation = useTruncation({maxLines});
+  // Truncation detection. Only the tooltip reads the measured overflow, so
+  // with the tooltip off the text is clipped by CSS alone and nothing is
+  // measured or observed.
+  const truncation = useTruncation({
+    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+  });
 
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
+  // The tooltip mounts on the first hover, tap or focus, not with the text.
+  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
   // Ref for the text element (used as tooltip anchor)
   const textRef = useRef<HTMLElement>(null);
 
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
+  const isInClampedText = use(TextClampContext);
+  // A capsize block removes a multi-line clamp.
+  const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
@@ -313,21 +324,37 @@ export function Text({
           className,
           {...style, ...inlineStyle},
         )}
-        {...props}>
-        {children}
+        {...props}
+        onPointerEnter={composeEventHandlers(
+          tooltipInterest.onPointerEnter,
+          props.onPointerEnter,
+        )}
+        onPointerLeave={composeEventHandlers(
+          tooltipInterest.onPointerLeave,
+          props.onPointerLeave,
+        )}
+        onPointerDown={composeEventHandlers(
+          tooltipInterest.onPointerDown,
+          props.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
+        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
+        {/* Always mounted, so a change of maxLines keeps every child mounted. */}
+        <TextClampContext value={isClamped || isInClampedText}>
+          {children}
+        </TextClampContext>
       </Component>
-      {tooltipEnabled && (
-        <Suspense fallback={null}>
-          <LazyXDSTooltip
-            anchorRef={textRef}
-            content={
-              <span {...stylex.props(truncationTooltipStyles.content)}>
-                {truncation.fullText}
-              </span>
-            }
-            placement={tooltipPlacement}
-          />
-        </Suspense>
+      {tooltipEnabled && tooltipInterest.isWanted && (
+        <TruncationTooltip
+          anchorRef={textRef}
+          content={
+            <span {...stylex.props(truncationTooltipStyles.content)}>
+              {truncation.fullText}
+            </span>
+          }
+          placement={tooltipPlacement}
+          interest={tooltipInterest}
+        />
       )}
     </>
   );

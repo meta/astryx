@@ -27,6 +27,9 @@ const sameNameColorTokens = [
   '--color-overlay-hover',
   '--color-overlay-pressed',
   '--color-tint-hover',
+  '--color-info',
+  '--color-info-muted',
+  '--color-on-info',
   '--color-success',
   '--color-success-muted',
   '--color-on-success',
@@ -36,6 +39,10 @@ const sameNameColorTokens = [
   '--color-warning',
   '--color-warning-muted',
   '--color-on-warning',
+  '--color-on-info-muted',
+  '--color-on-success-muted',
+  '--color-on-warning-muted',
+  '--color-on-error-muted',
   '--color-border',
   '--color-on-dark',
   '--color-on-light',
@@ -68,6 +75,10 @@ async function compileBridge(): Promise<string> {
       token => `rounded-${suffix(token, '--radius-')}`,
     ),
     'bg-surface',
+    'text-status-info',
+    'text-status-success',
+    'text-status-warning',
+    'text-status-error',
   ]);
 }
 
@@ -97,6 +108,46 @@ describe('Tailwind theme bridge', () => {
     const css = await compileBridge();
 
     expect(css).toContain('background-color: var(--color-background-surface);');
+    expect(css).toContain('color: var(--color-text-info);');
+    expect(css).toContain('color: var(--color-text-success);');
+    expect(css).toContain('color: var(--color-text-warning);');
+    expect(css).toContain('color: var(--color-text-error);');
     expect(css).not.toContain('background-color: var(--color-surface);');
+  });
+
+  it('projects each status by paint property', async () => {
+    const compiler = await compile(`${bridgeCSS}\n@tailwind utilities;`);
+    for (const status of ['info', 'success', 'warning', 'error']) {
+      const text = `var(--color-text-${status})`;
+      const border = `var(--color-border-${status})`;
+      const fill = `var(--color-${status})`;
+      for (const [utility, expected] of [
+        [`text-${status}`, text],
+        [`decoration-${status}`, text],
+        [`placeholder-${status}`, text],
+        [`caret-${status}`, text],
+        [`border-${status}`, border],
+        [`divide-${status}`, border],
+        [`outline-${status}`, border],
+        [`ring-${status}`, border],
+        [`bg-${status}`, fill],
+        [`accent-${status}`, fill],
+        [`fill-${status}`, fill],
+        [`text-status-${status}`, text],
+      ]) {
+        expect([utility, compiler.build([utility])]).toEqual([
+          utility,
+          expect.stringContaining(expected),
+        ]);
+      }
+      // text-status-<status> is a text-only alias.
+      for (const utility of [
+        `bg-status-${status}`,
+        `border-status-${status}`,
+        `ring-status-${status}`,
+      ]) {
+        expect(compiler.build([utility])).not.toContain(`.${utility} {`);
+      }
+    }
   });
 });

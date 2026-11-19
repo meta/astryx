@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * Astryx Theme System
  *
@@ -18,8 +16,8 @@
 export {Theme} from './Theme';
 export {MediaTheme} from './MediaTheme';
 export type {MediaThemeProps, MediaThemeMode} from './MediaTheme';
+export {defineTheme, isDefinedTheme, tokenDefaults} from './defineTheme';
 export {
-  defineTheme,
   generateThemeCSS,
   generateOnMediaCSS,
   generateAdaptationCSS,
@@ -27,9 +25,7 @@ export {
   generateThemeRulesSplit,
   type ThemeCSSOutput,
   type ThemeRulesSplit,
-  isDefinedTheme,
-  tokenDefaults,
-} from './defineTheme';
+} from './generateThemeRules';
 export {
   registerTheme,
   getRegisteredTheme,
@@ -44,15 +40,19 @@ export type {
   TokenName,
   TokenValue,
   ComponentStyleMap,
+  StyleBlock,
   StyleOverrides,
 } from './defineTheme';
 
 // Ordered environment-conditioned theme adaptations
 export {
+  DEFAULT_COMPACT_DEFINITION,
   DEFAULT_WIDTH_BREAKPOINTS,
   WIDTH_BREAKPOINT_NAMES,
+  compactDefinition,
 } from './themeAdaptations';
 export type {
+  CompactDefinition,
   WidthBreakpointName,
   WidthBreakpoints,
   ThemeAdaptations,
@@ -101,6 +101,11 @@ export type {ColorScaleConfig, ColorScaleTokens} from './expandColorScale';
 
 export {expandMotionScale} from './expandMotionScale';
 export type {MotionScaleConfig, MotionScaleTokens} from './expandMotionScale';
+export type {
+  MotionCharacter,
+  ThemeMotionConfig,
+  ThemeMotionKnobs,
+} from './themeMotion';
 
 // Export token defaults and vars for use in custom components and themes
 export {

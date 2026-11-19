@@ -27,10 +27,12 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. Supports fixed column counts and responsive columns that reflow based on available width.',
+      'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. For columns that reflow on small screens, use `columns={{minWidth, max}}`; a numeric `columns` is exactly N columns at every width and never reflows.',
     bestPractices: [
-      { guidance: true, description: 'Use responsive columns for layouts that should adapt to screen size: `columns={{minWidth: 280}}`.' },
-      { guidance: true, description: 'Cap the column count with `max` to prevent rows from getting too wide on large screens.' },
+      { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: `columns={{minWidth: 240, max: 4}}` renders at most 4 columns, each at least 240px, and drops to one full-width column when narrow.' },
+      { guidance: false, description: 'Use `columns={4}` for a row that must work on small screens; a number never reflows and renders four narrow tracks on a phone. Reserve numbers for rows that must stay fixed, such as a 7-day week.' },
+      { guidance: true, description: 'Pair `minWidth` with `max` to cap the count on wide screens. In a container narrower than `minWidth`, one column shrinks to the container width, with or without `max`.' },
+      { guidance: true, description: '`{minWidth}` alone keeps each column at its track width, and a grid with fewer items than tracks keeps the empty tracks: two items in an 880px grid with `minWidth: 280` leave an empty third column. To let the items grow to fill the row, use `repeat: \'fit\'`, or set `max` to no more than the item count.' },
       { guidance: true, description: 'Use `repeat: \'fill\'` (the default) for consistent item widths. Use `\'fit\'` when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use `HStack` with wrapping for grids; use Grid instead.' },
@@ -54,12 +56,12 @@ export const docs = {
       ],
     },
   },
-  description: 'Grid container with fixed or responsive columns.',
+  description: 'Grid container with fixed or responsive columns; `{minWidth, max}` reflows, a number never does.',
   props: [
     {
       name: 'columns',
       type: "number | {minWidth: number, max?: number, repeat?: 'fill' | 'fit'}",
-      description: 'Column configuration. Use a number for fixed columns (e.g. `columns={3}`). Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
+      description: 'Column configuration. A number creates exactly N `1fr` tracks at every width and never reflows (e.g. `columns={3}`); a child\'s minimum content may widen its track. For columns that reflow on small screens, use `{minWidth, max}`. Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
     },
     {
       name: 'width',
@@ -97,16 +99,22 @@ export const docs = {
       description: 'Column spacing; overrides `gap` for the column axis.',
     },
     {
+      name: 'rowHeight',
+      type: 'number',
+      description:
+        'Height of each implicit row track in pixels. Pair with `GridSpan rows={N}` for masonry-style layouts.',
+    },
+    {
       name: 'align',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Vertical alignment of items.',
-      default: "'stretch'",
+      description:
+        'Vertical alignment of items (`align-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'justify',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Horizontal alignment of items.',
-      default: "'stretch'",
+      description:
+        'Horizontal alignment of items (`justify-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'children',
@@ -129,10 +137,12 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. Supports fixed column counts and responsive columns that reflow based on available width.',
+      'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. For columns that reflow on small screens, use `columns={{minWidth, max}}`; a numeric `columns` is exactly N columns at every width and never reflows.',
     bestPractices: [
-      { guidance: true, description: 'Use responsive columns for layouts that should adapt to screen size: `columns={{minWidth: 280}}`.' },
-      { guidance: true, description: 'Cap the column count with `max` to prevent rows from getting too wide on large screens.' },
+      { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: `columns={{minWidth: 240, max: 4}}` renders at most 4 columns, each at least 240px, and drops to one full-width column when narrow.' },
+      { guidance: false, description: 'Use `columns={4}` for a row that must work on small screens; a number never reflows and renders four narrow tracks on a phone. Reserve numbers for rows that must stay fixed, such as a 7-day week.' },
+      { guidance: true, description: 'Pair `minWidth` with `max` to cap the count on wide screens. In a container narrower than `minWidth`, one column shrinks to the container width, with or without `max`.' },
+      { guidance: true, description: '`{minWidth}` alone keeps each column at its track width, and a grid with fewer items than tracks keeps the empty tracks: two items in an 880px grid with `minWidth: 280` leave an empty third column. To let the items grow to fill the row, use `repeat: \'fit\'`, or set `max` to no more than the item count.' },
       { guidance: true, description: 'Use `repeat: \'fill\'` (the default) for consistent item widths. Use `\'fit\'` when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use `HStack` with wrapping for grids; use Grid instead.' },
@@ -146,10 +156,12 @@ export const docsDense = {
   description: 'CSS Grid-based layout w/ responsive column support.',
   usage: {
     anatomy,
-    description: 'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. Supports fixed column counts and responsive columns that reflow based on available width.',
+    description: 'A CSS grid layout container for arranging children in rows and columns. Use Grid for card galleries, dashboards, and any multi-column layout. For columns that reflow on small screens, use `columns={{minWidth, max}}`; a numeric `columns` is exactly N columns at every width and never reflows.',
     bestPractices: [
-      { guidance: true, description: 'Use responsive columns for layouts that should adapt to screen size: columns={{minWidth: 280}}.' },
-      { guidance: true, description: 'Cap the column count with max to prevent rows from getting too wide on large screens.' },
+      { guidance: true, description: 'Default to responsive columns for anything that must survive a phone: columns={{minWidth: 240, max: 4}} = at most 4 columns, each >= 240px, one full-width column when narrow.' },
+      { guidance: false, description: 'Use columns={4} for rows that must work on small screens; a number never reflows (4 narrow tracks on a phone). Numbers only for rows that must stay fixed, e.g. a 7-day week.' },
+      { guidance: true, description: 'Pair minWidth with max to cap the count on wide screens. In a container narrower than minWidth, one column shrinks to the container width, with or without max.' },
+      { guidance: true, description: '{minWidth} alone keeps column width; fewer items than tracks leave empty tracks (2 items, 880px, minWidth 280 -> empty 3rd column). To let items grow: repeat: \'fit\', or max <= item count.' },
       { guidance: true, description: 'Use repeat: \'fill\' (the default) for consistent item widths. Use \'fit\' when items should stretch to fill leftover space.' },
       { guidance: false, description: 'Write manual CSS grid; Grid handles spacing and responsive behavior for you.' },
       { guidance: false, description: 'Use HStack with wrapping for grids; use Grid instead.' },

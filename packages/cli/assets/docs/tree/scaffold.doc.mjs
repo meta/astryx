@@ -47,6 +47,7 @@ export const docs = {
           items: [
             'Build content-first and wrap each section in a Card, producing a padded scroll column',
             'Stretch prose, forms, or lists across a wide region instead of capping with contentWidth',
+            "Carry a template's 1440 frame or three-column grid over to a single short form, instead of capping the form at 640 in its own column",
             'SideNav when the nav is really filters or controls, or must hold wide elements like breadcrumbs',
             'TopNav when top-slot ownership is unclear, or the hierarchy is deep or still growing',
             'Both bars when the ecosystem layer is thin, so the second only wastes space',
@@ -132,7 +133,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Verify: you can state the reason in one sentence, and the choice still holds if the nav doubles in size. `npx astryx build "<idea>"` names the template to start from; scaffold it and the pairing is already wired up.',
+          text: 'Verify: you can state the reason in one sentence, and the choice still holds if the nav doubles in size. `{@command build "<idea>"}` names the template to start from; scaffold it and the pairing is already wired up.',
         },
       ],
     },

@@ -16,12 +16,15 @@ import {
   discoverComponents,
   discoverExternalComponentsGrouped,
   discoverValidIntegrationComponents,
+  familyMember,
   findComponentReadme,
   findExternalComponentDoc,
   resolveImportPath,
   resolveIntegrationImportPath,
 } from '../../../foundation/discovery/component-discovery.mjs';
-import {discoverExternalPackages} from '../../../foundation/fs/paths.mjs';
+import {EXACT_CODEC} from '../../../foundation/fs/exact-codec.mjs';
+import {persistedGather} from '../../../foundation/fs/gather-cache.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../../../foundation/fs/paths.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {
@@ -30,6 +33,7 @@ import {
   loadIntegrationsSafely,
   withOwnership,
 } from '../_adapter.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
@@ -42,7 +46,7 @@ import {
  * same way (`withOwnership`) so list and detail agree.
  * @param {{name: string, docsDir: string}} ext
  * @param {string} name
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {{zh: boolean, lang: string|null}} docOpts
  * @returns {Promise<string>}
  */
@@ -65,6 +69,33 @@ async function legacyImport(ext, name, coreDir, docOpts) {
  * @param {any} doc
  */
 const coreEntry = doc => ({name: doc.name, package: CORE_PACKAGE, ...doc});
+
+/**
+ * The full-level entry for a component documented as a member of its family's
+ * doc (VStack in Stack's doc): a component doc built from the member's own
+ * entry, under its own name, display name and import, shaped like every other
+ * full entry. Null when the doc is the component's own.
+ * @param {any} docs
+ * @param {string} name
+ * @param {string | null} coreDir
+ * @returns {any}
+ */
+function memberEntry(docs, name, coreDir) {
+  const member = familyMember(docs, name);
+  if (!member) return null;
+  return {
+    name,
+    package: CORE_PACKAGE,
+    displayName: member.displayName ?? name,
+    ...(docs.group ? {group: docs.group} : {}),
+    ...(docs.category ? {category: docs.category} : {}),
+    usage: member.usage ?? {description: member.description ?? ''},
+    props: member.props ?? [],
+    ...(member.examples ? {examples: member.examples} : {}),
+    ...(docs.theming ? {theming: docs.theming} : {}),
+    import: resolveImportPath(coreDir, name),
+  };
+}
 
 /**
  * The entry for a Core slot an integration component replaces
@@ -124,7 +155,7 @@ async function replacementEntry(replacement, detail, {zh, dense, lang}) {
  * Build the `component.list` envelope. The list taxonomy is collapsed: all
  * three detail levels emit ONE `component.list` type; the depth rides in
  * `data.detail` and the grouped map in `data.components`.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {object} opts
  * @param {string} opts.cwd
  * @param {string} [opts.category] - Filter to a single category (group key).
@@ -134,10 +165,49 @@ async function replacementEntry(replacement, detail, {zh, dense, lang}) {
  * @param {string|null} opts.lang
  * @returns {Promise<ComponentListResponse>}
  */
-export async function componentList(
-  coreDir,
-  {cwd, category, detail, zh, dense, lang},
-) {
+export async function componentList(coreDir, opts) {
+  const {cwd, category, detail, zh, dense, lang} = opts;
+  // A function of the files it reads (Core's component folders and docs, the
+  // integrations and their docs), which the kept gather stamps: a later run
+  // with every one unchanged reads the list back.
+  return /** @type {ComponentListResponse} */ (
+    await persistedGather(
+      [
+        'component-list',
+        realDir(cwd),
+        coreDir,
+        CLI_ROOT,
+        category ?? null,
+        detail,
+        zh,
+        dense,
+        lang,
+      ],
+      () => componentListNow(coreDir, opts),
+      COMPONENT_LIST_CODEC,
+    )
+  );
+}
+
+/** The component list, kept exactly, with the envelope's shape. */
+const COMPONENT_LIST_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    value.type === 'component.list' &&
+    value.data != null &&
+    typeof value.data.detail === 'string' &&
+    value.data.components != null &&
+    typeof value.data.components === 'object',
+};
+
+/**
+ * componentList, worked out now.
+ * @param {string | null} coreDir
+ * @param {Parameters<typeof componentList>[1]} options
+ * @returns {Promise<ComponentListResponse>}
+ */
+async function componentListNow(coreDir, {cwd, category, detail, zh, dense, lang}) {
   const components = discoverComponents(coreDir);
   // An active integration replacement takes its Core component's slot in
   // every list view (spec:AST-035 FR11); the Core original stays reachable
@@ -177,7 +247,11 @@ export async function componentList(
             entries.push({
               name: comp,
               package: CORE_PACKAGE,
-              description: docs.usage?.description || docs.description || '',
+              description:
+                familyMember(docs, comp)?.description ||
+                docs.usage?.description ||
+                docs.description ||
+                '',
               import: resolveImportPath(coreDir, comp),
             });
           } catch {
@@ -215,7 +289,8 @@ export async function componentList(
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
-            entries.push(coreEntry(await loadComponentDoc(readme, {zh, lang, dense})));
+            const docs = await loadComponentDoc(readme, {zh, lang, dense});
+            entries.push(memberEntry(docs, comp, coreDir) ?? coreEntry(docs));
           } catch {
             entries.push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
           }
@@ -269,7 +344,11 @@ export async function componentList(
             result[cat].push({
               name: comp,
               package: CORE_PACKAGE,
-              description: docs.usage?.description || docs.description || '',
+              description:
+                familyMember(docs, comp)?.description ||
+                docs.usage?.description ||
+                docs.description ||
+                '',
               import: resolveImportPath(coreDir, comp),
             });
           } catch {
@@ -310,7 +389,8 @@ export async function componentList(
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
-            result[cat].push(coreEntry(await loadComponentDoc(readme, {zh, lang, dense})));
+            const docs = await loadComponentDoc(readme, {zh, lang, dense});
+            result[cat].push(memberEntry(docs, comp, coreDir) ?? coreEntry(docs));
           } catch {
             result[cat].push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
           }
@@ -391,7 +471,7 @@ export async function componentList(
       });
     }
     for (const [key, members] of byGroup) {
-      members.sort((a, b) => a.name.localeCompare(b.name));
+      members.sort((a, b) => compareText(a.name, b.name));
       listData[key] = members;
     }
   }

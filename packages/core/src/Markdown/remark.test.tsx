@@ -1328,6 +1328,23 @@ const rejectionCases: RejectionCase[] = [
     reason: /rejected by the navigation owner/,
   },
   {
+    name: 'a data: link destination',
+    plugin: () => tree =>
+      mutateFirst(tree, 'link', node => {
+        node.url = 'data:image/png;base64,iVBORw0KGgo=';
+      }),
+    reason: /rejected by the navigation owner/,
+  },
+  {
+    name: 'a data: image source',
+    source: '![alt](/logo.png)',
+    plugin: () => tree =>
+      mutateFirst(tree, 'image', node => {
+        node.url = 'data:image/png;base64,iVBORw0KGgo=';
+      }),
+    reason: /rejected by the resource owner/,
+  },
+  {
     name: 'an image without its text alternative',
     source: '![alt](/logo.png)',
     plugin: () => tree =>
@@ -1420,6 +1437,36 @@ describe('Remark adapter — rejection matrix', () => {
       expect(reports[0]).not.toContain('Astryx heading');
     },
   );
+
+  it('stores a whitespace or padded URL from a Remark plugin in its normalized form', () => {
+    const setUrl = (type: string, url: string) =>
+      createMarkdownPlugin({
+        name: `remark-${type}-url`,
+        apiVersion: 1,
+        transform: createMarkdownRemarkTransform(() => tree => {
+          mutateFirst(tree, type, node => {
+            node.url = url;
+          });
+        }),
+      });
+    const blank = render(
+      <Markdown plugins={[setUrl('link', ' \t ')]}>{'[go](/docs)'}</Markdown>,
+    );
+    expect(blank.container.querySelector('a')).toBeNull();
+    expect(blank.container.textContent).toContain('go');
+    blank.unmount();
+    const image = render(
+      <Markdown plugins={[setUrl('image', ' ')]}>{'![pic](/a.png)'}</Markdown>,
+    );
+    expect(image.container.querySelector('img')).toBeNull();
+    expect(image.container.textContent).toContain('[pic]');
+    image.unmount();
+    expect(
+      parseMarkdown('[go](/docs)', {plugins: [setUrl('link', '  /x  ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: '/x'}]},
+    ]);
+  });
 
   it('renders readable source after a rejected transform', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});

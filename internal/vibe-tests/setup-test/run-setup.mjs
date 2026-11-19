@@ -25,6 +25,7 @@ import {
   validatePromptContracts,
 } from './setup-matrix.mjs';
 import {assertPublicArtifactSafe} from '../src/public-artifact.mjs';
+import {linkDirectory} from './linkDirectory.mjs';
 
 const EXP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const VIBE_DIR = path.resolve(EXP_DIR, '..');
@@ -119,7 +120,7 @@ function linkDependencies(depsDir, sandboxDir) {
   const source = path.join(depsDir, 'node_modules');
   const destination = path.join(sandboxDir, 'node_modules');
   if (copyDeps) copyDirectory(source, destination);
-  else run('cp', ['-al', source, destination], sandboxDir);
+  else linkDirectory(source, destination);
 }
 
 function installLoggingShim(sandboxDir) {

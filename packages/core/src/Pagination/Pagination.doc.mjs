@@ -9,6 +9,12 @@ const anatomy = [
       'Navigation landmark containing the current paging controls and optional page-size selector.',
   },
   {
+    name: 'Control row',
+    required: true,
+    description:
+      'The row that holds the previous/next, first/last and page-number buttons and the readout between them.',
+  },
+  {
     name: 'Page-size selector',
     required: false,
     description: 'Optional Selector for choosing how many items appear per page.',
@@ -88,7 +94,8 @@ export const docs = {
     {
       name: 'onChange',
       type: '(page: number) => void',
-      description: 'Called when the page changes.',
+      description:
+        'Called when the page changes. With getPageHref it also runs when a page link is activated: use it there for state or analytics, and do not navigate in it, because the link navigates.',
       required: true,
     },
     {
@@ -96,6 +103,18 @@ export const docs = {
       type: '(page: number) => void | Promise<void>',
       description:
         'Async action on page change. Fires after onChange and uses React transitions for built-in loading state.',
+    },
+    {
+      name: 'getPageHref',
+      type: '(page: number, pageSize?: number) => string',
+      description:
+        "Returns the URL of a page. When set, the page number, previous, next, first and last controls render as links to it, so a page opens in a new tab, its address can be copied, and it works before scripts load. onChange still runs when a link is activated. pageSize is the current page size when pageSize or pageSizeOptions is set. The dots, the page box and the page-size selector are not links. For a page-size choice, navigate in onPageSizeChange to the URL of page 1 with the new size, not in the onChange(1) that follows. When onChange navigates for the dots or the page box, leave getPageHref unset in the dots and input variants, or their arrow links navigate twice. In cursor pagination, map the page before or after the current one to the cursor's URL. The destination follows the shared navigation rule described on the Link `href` prop.",
+    },
+    {
+      name: 'as',
+      type: 'ComponentType',
+      description:
+        'Custom link component for the links getPageHref makes (e.g. Next.js Link). Overrides the LinkProvider default.',
     },
     {
       name: 'totalItems',
@@ -137,7 +156,7 @@ export const docs = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
+        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y' (add first/last buttons with hasFirstLast), 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
       default: "'pages'",
     },
     {
@@ -150,8 +169,8 @@ export const docs = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Only applies to the 'input' variant; omitted when the page count is unknown (cursor/hasMore pagination).",
-      default: 'true',
+        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Applies to the 'input' variant (shown unless false) and the 'compact' variant (shown only when true); other variants ignore it. Omitted when the page count is unknown (cursor/hasMore pagination).",
+      default: "true for 'input'; false for 'compact'",
     },
     {
       name: 'step',
@@ -195,6 +214,9 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
@@ -218,9 +240,11 @@ export const docs = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange when getPageHref is set; the link navigates, so keep onChange for state or analytics.' },
     ],
   },
 };
@@ -239,7 +263,8 @@ export const docsZh = {
     {
       name: 'onChange',
       type: '(page: number) => void',
-      description: '页码变化时调用。',
+      description:
+        '页码变化时调用。设置 getPageHref 后，激活页码链接时也会调用：可在其中更新状态或上报统计，但不要在其中导航，因为链接会自行导航。',
       required: true,
     },
     {
@@ -247,6 +272,18 @@ export const docsZh = {
       type: '(page: number) => void | Promise<void>',
       description:
         '页码变化时的异步操作。在 onChange 之后触发，使用 React transitions 实现内置加载状态。',
+    },
+    {
+      name: 'getPageHref',
+      type: '(page: number, pageSize?: number) => string',
+      description:
+        '返回某一页的 URL。设置后，页码、上一页、下一页、首页和末页控件渲染为指向该 URL 的链接，因此页面可在新标签页中打开、可复制地址，并在脚本加载前可用。激活链接时仍会调用 onChange。设置了 pageSize 或 pageSizeOptions 时，pageSize 为当前每页大小。点指示器、页码输入框和每页大小选择器不是链接。选择每页大小时，请在 onPageSizeChange 中导航到新大小下第 1 页的 URL，不要在随后的 onChange(1) 中导航。如果 onChange 为点指示器或页码输入框导航，请不要在 dots 和 input 变体中设置 getPageHref，否则其箭头链接会导航两次。游标分页时，将当前页的前一页或后一页映射到游标的 URL。目标地址遵循 Link `href` 属性所述的共享导航规则。',
+    },
+    {
+      name: 'as',
+      type: 'ComponentType',
+      description:
+        '用于 getPageHref 所生成链接的自定义链接组件（如 Next.js Link）。覆盖 LinkProvider 的默认值。',
     },
     {
       name: 'totalItems',
@@ -288,7 +325,7 @@ export const docsZh = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
+        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'（可通过 hasFirstLast 添加首页/末页按钮），'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
       default: "'pages'",
     },
     {
@@ -301,8 +338,8 @@ export const docsZh = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。仅适用于 'input' 变体；当页数未知（游标/hasMore 分页）时省略。",
-      default: 'true',
+        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。适用于 'input' 变体（除非设为 false 否则显示）和 'compact' 变体（仅在设为 true 时显示）；其他变体忽略此项。当页数未知（游标/hasMore 分页）时省略。",
+      default: "'input' 为 true；'compact' 为 false",
     },
     {
       name: 'step',
@@ -346,6 +383,9 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-list', visualProps: ['size', 'variant']},
+      {className: 'astryx-pagination-item', states: ['selected', 'first', 'last']},
+      {className: 'astryx-pagination-ellipsis'},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
@@ -361,9 +401,11 @@ export const docsZh = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange when getPageHref is set; the link navigates, so keep onChange for state or analytics.' },
     ],
   },
 };
@@ -382,16 +424,22 @@ export const docsDense = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange when getPageHref is set; the link navigates, so keep onChange for state or analytics.' },
     ],
   },
   propDescriptions: {
     page: 'Current page number (1-based).',
-    onChange: 'Called on page change.',
+    onChange:
+      'Called on page change. w/ getPageHref also runs when a page link is activated: use for state/analytics; do not navigate in it (the link navigates).',
     changeAction:
       'Async action on page change. Fires after onChange; uses React transitions for loading.',
+    getPageHref:
+      'URL of a page. Page number/prev/next/first/last render as links; onChange still runs on activation. pageSize = current size when pageSize or pageSizeOptions set. Dots, page box + page-size selector are not links. Page-size choice: navigate in onPageSizeChange, not in the onChange(1) that follows. If onChange navigates for dots/page box, leave unset in dots + input variants (arrow links would navigate twice). Cursor pagination: map the page before/after current to the cursor URL.',
+    as: 'Custom link component for getPageHref links (e.g. Next.js Link). Overrides LinkProvider.',
     totalItems: 'Total items. Calculates page count. Precedence over totalPages.',
     totalPages: 'Total pages. Use when page count known but not item count.',
     hasMore: 'More pages exist after current. For cursor-based pagination.',
@@ -400,7 +448,7 @@ export const docsDense = {
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
     variant: "Display between prev/next. 'input' = 'Page [n] / N' + first/last.",
     pageLabel: "Noun before the 'input' box (e.g. 'Page' or 'Row'). Navigation stays page-based. Default localized 'Page'.",
-    hasFirstLast: "Show first/last («/») buttons in the 'input' variant. Omitted when total unknown.",
+    hasFirstLast: "Show first/last («/») buttons. 'input' default true; 'compact' default false (opt in). Other variants ignore. Omitted when total unknown.",
     step: 'Pages the prev/next buttons advance per click. Clamped to range; < 1 or non-integer falls back to 1.',
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',

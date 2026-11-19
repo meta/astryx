@@ -20,7 +20,13 @@ import {mergeProps} from '../utils';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useCommandPaletteContext} from './CommandPaletteContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPaletteList.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   list: {
@@ -53,8 +59,10 @@ export interface CommandPaletteListProps extends BaseProps<HTMLDivElement> {
 }
 
 /**
- * Scrollable results container for the command palette.
- * Renders as a listbox for ARIA compliance.
+ * Scrollable results container for the command palette. Standalone composition
+ * renders as a listbox. Inside CommandPalette, listbox semantics are present
+ * only while selectable results exist; empty and pending states retain the same
+ * styled container without exposing an empty interactive popup.
  *
  * When used inside CommandPalette, automatically gets the correct
  * ID for aria-controls linking with the input.
@@ -81,17 +89,20 @@ export function CommandPaletteList({
   style,
   ...props
 }: CommandPaletteListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.commandPalette.list.label');
   const ctx = useCommandPaletteContext();
+  // Inside CommandPalette the list is a listbox only while it holds selectable
+  // results; standalone composition is always a listbox.
+  const hasListbox = ctx ? ctx.selectableItems.length > 0 : true;
 
   return (
     <div
       ref={ref}
       {...props}
-      id={ctx?.listId}
-      role="listbox"
-      aria-label={label}
+      id={ctx?.listId ?? props.id}
+      role={hasListbox ? 'listbox' : undefined}
+      aria-label={hasListbox ? label : undefined}
       {...mergeProps(
         themeProps('command-palette-list'),
         stylex.props(styles.list, xstyle),

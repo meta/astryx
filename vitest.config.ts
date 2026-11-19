@@ -3,9 +3,10 @@
 /**
  * @file vitest.config.ts
  * @input Uses vitest/config, @vitejs/plugin-react
- * @output Vitest configuration with jsdom, coverage, test setup, and the two
- *   test projects (`ui`, `node`)
- * @position Root test config and the actual test entry point. The two projects
+ * @output Vitest configuration with jsdom, coverage, test setup, the three
+ *   test projects (`ui`, `perf`, `node`), and the sequencer that splits
+ *   `--shard` legs
+ * @position Root test config and the actual test entry point. The projects
  *   under `test.projects` decide which files run where via their per-project
  *   include lists. The root-level `test` options (globals, environment,
  *   coverage, setupFiles, pool sizing) are inherited by projects that set
@@ -21,9 +22,28 @@
 import path from 'node:path';
 import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import stylexResolution from './scripts/stylex-module-resolution.cjs';
+import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
+import {
+  NODE_TEST_EXCLUDE,
+  NODE_TEST_INCLUDE,
+  SWIZZLE_PROOF_SLICES,
+} from './scripts/vitest-node-files.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
+// Some Node 25 releases leave the negative spelling out of this list, so the
+// check reads the positive one.
+const webStorageOff = process.allowedNodeEnvironmentFlags.has(
+  '--experimental-webstorage',
+)
+  ? ['--no-experimental-webstorage']
+  : [];
+// Times the Markdown helper pipeline against the empty one on the CPU clock.
+// CPU time still includes cache and memory-bandwidth contention from other
+// work, so this file runs alone in the `perf` project.
+const helperOverheadBenchmark =
+  'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
 
 export default defineConfig({
   plugins: [
@@ -35,7 +55,12 @@ export default defineConfig({
             {
               dev: true,
               enableDebugDataProp: false,
-              runtimeInjection: true,
+              // StyleX's runtime injection, plus each rule its dev runtime drops
+              // under a prelude with more than one condition (StyleX 0.19.0).
+              runtimeInjection: path.join(
+                rootDir,
+                'internal/test-utils/src/stylexInject.ts',
+              ),
               genConditionalClasses: true,
               treeshakeCompensation: true,
               aliases: {
@@ -44,10 +69,8 @@ export default defineConfig({
                 ],
                 '@astryxdesign/core': [path.join(rootDir, 'packages/core/src')],
               },
-              unstable_moduleResolution: {
-                type: 'commonJS',
-                rootDir: rootDir,
-              },
+              unstable_moduleResolution:
+                stylexResolution.stylexModuleResolution,
             },
           ],
         ],
@@ -85,13 +108,22 @@ export default defineConfig({
     // Increase worker heap to prevent OOM crashes on memory-heavy test files
     // (e.g. Chat composer tests with contentEditable + popover portals in
     // jsdom). Vitest 4 removed `poolOptions`; per-worker argv is now top-level.
-    execArgv: ['--max-old-space-size=4096'],
+    // Node 25 and later define their own `localStorage` global, which hides
+    // jsdom's; a Node that knows the flag turns its own off in the workers.
+    execArgv: ['--max-old-space-size=4096', ...webStorageOff],
+    // A `--shard` leg of the `node` project runs files chosen by their
+    // recorded time, not by count, so the slowest files never share a leg
+    // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).
+    sequence: {sequencer: DurationShardSequencer},
     // Test projects (migrated from vitest.workspace.ts). Partitioning rule
     // (nothing can fall through):
     //   - `ui`   = packages/core + packages/lab + packages/charts + packages/richtext
-    //              + packages/vega — need jsdom, the StyleX babel
+    //              + packages/vega and the Theme Showcase DOM suite — need
+    //              jsdom, the StyleX babel
     //              transform, and the jest-dom setup; inherit all of that from
     //              the root config via `extends: true`.
+    //   - `perf` = the helper-overhead benchmark, which `ui` excludes. It
+    //              inherits the root config too, and runs in a later group.
     //   - `node` = everything else (CLI, build tooling, scripts, internal
     //              utils, and app-level suites that need no DOM) — no DOM, no
     //              StyleX/babel transform, no jest-dom
@@ -123,7 +155,21 @@ export default defineConfig({
             'packages/charts/src/**/*.test.{ts,tsx,mjs}',
             'packages/richtext/src/**/*.test.{ts,tsx,mjs}',
             'packages/vega/src/**/*.test.{ts,tsx,mjs}',
+            'apps/docsite/src/__tests__/theme-showcase/**/*.test.{ts,tsx,mjs}',
           ],
+          exclude: [...configDefaults.exclude, helperOverheadBenchmark],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'perf',
+          // Groups run in order, so this one starts only after the other
+          // projects' files finish.
+          sequence: {groupOrder: 1},
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+          include: [helperOverheadBenchmark],
         },
       },
       {
@@ -133,6 +179,15 @@ export default defineConfig({
         // `resolve` — the root's aliases do not reach it.
         resolve: {
           alias: [
+            // Catalog templates import docs-only demo content from the
+            // docsite. The docsite tsconfig maps the same specifier.
+            {
+              find: /^@astryx-docs\/demo-content$/,
+              replacement: path.join(
+                rootDir,
+                'apps/docsite/src/templateDemoContent/demoContent.tsx',
+              ),
+            },
             // Theme packages resolve to `dist/`, which no test run builds. The
             // sandbox palette suite reads their palettes as a reference corpus,
             // so point the BARE specifier at the authored source. Subpath
@@ -151,6 +206,35 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // A visual gate that a test runs builds no theme into the checkout
+          // the other tests read at the same time; it names the themes that
+          // are not built instead (.github/scripts/visual-gate/lib/sources.mjs).
+          env: {ASTRYX_VISUAL_GATE_READ_ONLY: '1'},
+          // A fixture project resolves packages only from its own folders, never
+          // through the NODE_PATH pnpm's bin shim gives the worker.
+          setupFiles: ['./vitest.setup.node.mjs'],
+          // Prebuilt and plain-data modules load as Node loads them for the
+          // CLI, not through Vite's transform, which would otherwise inline
+          // every file: Core's built bundle (the workspace link resolves it
+          // outside node_modules; the theme build imports its root entry, all
+          // of Core and React: 0.9 s natively, 4.5 s inlined) and the
+          // `.doc.mjs` documentation modules the docs catalog imports by the
+          // hundred (doctor's first case: 0.7 s natively, 4.7 s inlined).
+          // Both grow several times over on a loaded box. Mocks keep working
+          // from inlined callers. The CLI's doc importers import doc files
+          // through `import-url.mjs`, which loads natively too, so its imports
+          // make no request to Vitest's main process. Each request waits in
+          // line behind every worker: `template --list` imports 771 doc files,
+          // 0.6 s alone and up to 26 s on a loaded box.
+          server: {
+            deps: {
+              external: [
+                /\/packages\/core\/dist\//,
+                /\.doc\.mjs$/,
+                /\/packages\/cli\/foundation\/fs\/import-url\.mjs$/,
+              ],
+            },
+          },
           // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
           // (real process boundary). Under the forks pool these cold-starts can
           // run long on a busy box; the 5s default testTimeout then flakes
@@ -166,28 +250,15 @@ export default defineConfig({
           // parallel workers) avoids concurrent clean-and-build collisions that
           // flake under Vitest 4's reworked pool.
           globalSetup: ['./vitest.global-setup.node.mjs'],
-          include: [
-            'packages/**/src/**/*.test.{ts,tsx,mjs}',
-            // The CLI dissolved its src/ wrapper (pillars live at the package
-            // root), so collect its colocated tests wherever they now live.
-            'packages/cli/**/*.test.{ts,tsx,mjs}',
-            'internal/**/*.test.{ts,tsx,mjs}',
-            'scripts/**/*.test.{ts,tsx,mjs}',
-            '.github/scripts/**/*.test.{ts,tsx,mjs}',
-            // Storybook config invariants (no DOM needed) — e.g. the
-            // workspace source-alias guard in .storybook/main.test.ts.
-            'apps/storybook/.storybook/**/*.test.{ts,tsx,mjs}',
-            // Sandbox page logic (palette generation, colour maths) — pure
-            // modules with no DOM, so they run here rather than in `ui`.
-            'apps/sandbox/src/**/*.test.{ts,tsx,mjs}',
-          ],
+          // The globs live in scripts/vitest-node-files.mjs, which the Node
+          // leg planner reads too.
+          include: NODE_TEST_INCLUDE,
           exclude: [
             ...configDefaults.exclude,
-            'packages/core/**',
-            'packages/lab/**',
-            'packages/charts/**',
-            'packages/richtext/**',
-            'packages/vega/**',
+            ...NODE_TEST_EXCLUDE,
+            ...(process.env.VITEST_SWIZZLE_PROOF_OWN_JOB === '1'
+              ? [SWIZZLE_PROOF_SLICES]
+              : []),
           ],
         },
       },

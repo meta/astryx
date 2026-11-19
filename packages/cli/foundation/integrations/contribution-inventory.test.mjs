@@ -8,11 +8,12 @@ import {
   compareIdentities,
   findSourceOnlyCandidates,
 } from './contribution-inventory.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-ci-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-ci-'));
 });
 
 afterEach(() => {

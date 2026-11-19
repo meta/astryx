@@ -1,11 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {expect} from 'storybook/test';
+import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
+import {VStack} from '@astryxdesign/core/Layout';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
 const meta: Meta<typeof MultiSelector> = {
@@ -28,7 +32,7 @@ const meta: Meta<typeof MultiSelector> = {
     description: {control: 'text'},
     placeholder: {control: 'text'},
     size: {control: 'radio', options: ['sm', 'md', 'lg']},
-    variant: {control: 'radio', options: ['input', 'ghost']},
+    variant: {control: 'radio', options: ['input', 'secondary', 'ghost']},
     presentation: {
       control: 'radio',
       options: ['popover', 'bottom-sheet', 'adaptive'],
@@ -391,6 +395,97 @@ export const GhostVariant: Story = {
           statusVariant="tooltip"
         />
         <Button label="Export" variant="ghost" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary variant for toolbar composition beside secondary buttons
+export const SecondaryVariant: Story = {
+  render: () => {
+    const [columns, setColumns] = useState<string[]>(['Name', 'Email']);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: 'max-content',
+        }}>
+        <Button label="Refresh" variant="secondary" />
+        <MultiSelector
+          label="Columns"
+          isLabelHidden
+          variant="secondary"
+          size="md"
+          width={180}
+          options={['Name', 'Email', 'Role', 'Status', 'Created']}
+          value={columns}
+          onChange={setColumns}
+          triggerDisplay="labels"
+          placeholder="Columns"
+        />
+        <Button label="Export" variant="secondary" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByRole('combobox', {name: 'Columns'});
+    const root = canvasElement.querySelector<HTMLElement>(
+      '.astryx-multi-selector[data-variant="secondary"]',
+    );
+    if (root == null) {
+      throw new Error('Secondary MultiSelector root not found');
+    }
+    const widthBefore = root.getBoundingClientRect().width;
+    expect(widthBefore).toBeCloseTo(180, 0);
+
+    await userEvent.click(trigger);
+    const listbox = within(document.body).getByRole('listbox');
+    await userEvent.click(within(listbox).getByRole('option', {name: /Role/}));
+    await waitFor(() =>
+      expect(root.getBoundingClientRect().width).toBeCloseTo(widthBefore, 0),
+    );
+    await userEvent.keyboard('{Escape}');
+    trigger.blur();
+  },
+};
+
+// Secondary trigger as the first, middle, and last member of an InputGroup:
+// it keeps its neutral fill and takes the group's row height and seam edges.
+export const SecondaryInInputGroup: Story = {
+  render: () => {
+    const selector = (label: string) => (
+      <MultiSelector
+        label={label}
+        isLabelHidden
+        variant="secondary"
+        options={['Name', 'Email', 'Role']}
+        value={['Name']}
+        onChange={() => {}}
+      />
+    );
+    return (
+      <div
+        data-secondary-input-group-matrix
+        style={{display: 'grid', gap: 16, width: 320}}>
+        <InputGroup label="Secondary first" isLabelHidden>
+          {selector('Columns first')}
+          <InputGroupText>cols</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary middle" isLabelHidden>
+          <InputGroupText>#</InputGroupText>
+          {selector('Columns middle')}
+          <InputGroupText>cols</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary last" isLabelHidden>
+          <InputGroupText>#</InputGroupText>
+          {selector('Columns last')}
+        </InputGroup>
       </div>
     );
   },
@@ -791,7 +886,7 @@ export const RowActions: Story = {
     const action = (label: string) => (
       <IconButton
         label={`Edit ${label}`}
-        icon="moreHorizontal"
+        icon={<Icon icon="moreHorizontal" />}
         variant="ghost"
         size="sm"
         tooltip={`Edit ${label}`}
@@ -854,7 +949,7 @@ export const RowActionsRtl: Story = {
               action: (
                 <IconButton
                   label="Edit Bug"
-                  icon="moreHorizontal"
+                  icon={<Icon icon="moreHorizontal" />}
                   variant="ghost"
                   size="sm"
                 />
@@ -869,4 +964,52 @@ export const RowActionsRtl: Story = {
       </div>
     );
   },
+};
+
+/**
+ * A Notes field, a button that is no Tab stop, as an unselected tab in a
+ * roving group is, and a MultiSelector, inside a container that takes focus.
+ */
+function MultiSelectorInContainer({tabIndex}: {tabIndex: number}) {
+  const [value, setValue] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  return (
+    <div
+      tabIndex={tabIndex}
+      data-testid="focusable-container"
+      style={{padding: 32}}>
+      <VStack gap={4}>
+        <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+        <MultiSelector
+          label="Fruits"
+          options={['Apple', 'Banana', 'Cherry']}
+          value={value}
+          onChange={setValue}
+        />
+      </VStack>
+    </div>
+  );
+}
+
+/**
+ * A MultiSelector inside a container that takes focus but is no control,
+ * such as a dialog's content box with `tabIndex={-1}`, below another field.
+ * A press inside the open list, or on the container, moves the browser's
+ * focus to that container.
+ */
+export const InsideFocusableContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <MultiSelectorInContainer tabIndex={-1} />,
+};
+
+/**
+ * A MultiSelector inside a container that is a Tab stop, such as a card with
+ * `tabIndex={0}`. A press on the container's padding focuses the container.
+ */
+export const InsideTabStopContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <MultiSelectorInContainer tabIndex={0} />,
 };

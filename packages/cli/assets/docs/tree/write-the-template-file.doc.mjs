@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/build-the-template/write-the-template-file`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/write-the-template-file`:
  * what gets copied, where the copied file lands, and the imports and
  * export a copied template needs.
  */
@@ -26,7 +26,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`astryx template` copies exactly one source file. It does not copy sibling helpers, stylesheets, fonts, icons, images, or media. Plan for that before you add supporting files.',
+          text: '`{@command template}` copies exactly one source file. It does not copy sibling helpers, stylesheets, fonts, icons, images, or media. Plan for that before you add supporting files.',
         },
         {
           type: 'table',
@@ -44,13 +44,13 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           code: `# Page: src/app/account/page.tsx
-npx astryx template acme-account src/app/account
+{@command template acme-account src/app/account}
 
 # Block: src/features/account/acme-stat-card.tsx
-npx astryx template acme-stat-card src/features/account
+{@command template acme-stat-card src/features/account}
 
 # Exact destination for either kind
-npx astryx template acme-stat-card src/features/account/StatusCard.tsx`,
+{@command template acme-stat-card src/features/account/StatusCard.tsx}`,
         },
         {
           type: 'prose',
@@ -91,8 +91,9 @@ npx astryx template acme-stat-card src/features/account/StatusCard.tsx`,
           lang: 'tsx',
           code: `import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
-import {HStack, VStack} from '@astryxdesign/core/Stack';
+import {HStack} from '@astryxdesign/core/HStack';
 import {Text} from '@astryxdesign/core/Text';
+import {VStack} from '@astryxdesign/core/VStack';
 import {AcmeStatusCard} from '@acme/astryx-widgets/components/AcmeStatusCard';
 
 const metrics = [
@@ -144,7 +145,7 @@ export default function AcmeAccountSummary() {
           type: 'list',
           style: 'unordered',
           items: [
-            'Add `use client` as the first statement only when hooks, event handlers, or browser APIs need a client boundary.',
+            'Add `use client` as the first statement only when hooks, event handlers, browser APIs, or a component passed as a prop, such as `icon={BellIcon}`, need a client boundary.',
             'Keep a static template server-compatible when it needs no client behavior.',
           ],
         },

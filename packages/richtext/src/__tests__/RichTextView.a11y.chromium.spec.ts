@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file RichTextView.a11y.chromium.spec.ts
@@ -13,7 +14,7 @@
  *   pnpm exec playwright test packages/richtext --project chromium
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -21,7 +22,7 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 
 const STORYBOOK_DIR = process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR;
-const STORY = 'lab-richtexteditor--markdown-serializers';
+const STORY = 'richtext-richtexteditor--markdown-serializers';
 const DOCUMENT = [
   'Paragraph text',
   '',

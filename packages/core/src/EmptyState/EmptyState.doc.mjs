@@ -12,7 +12,7 @@ export const docs = {
       name: 'title',
       type: 'string',
       description:
-        'Primary message rendered as an <h3> heading inside the empty state.',
+        'Primary message rendered as the configured heading level inside the empty state.',
       required: true,
     },
     {
@@ -81,6 +81,7 @@ export const docs = {
       { guidance: false, description: 'Use an EmptyState for error messages that require immediate action; use a Banner instead.' },
     ],
     anatomy: [
+      {name: 'Container', required: true, description: 'The centered root that owns spacing, reading order, and the compact layout variant.'},
       {name: 'Icon', required: false, description: 'A visual cue above the title that reinforces the context, like a search icon for no results.'},
       {name: 'Title', required: true, description: 'Primary message explaining what is empty: "No projects yet" not "No data".'},
       {name: 'Description', required: false, description: 'Additional context explaining why it is empty or what the user can do.'},
@@ -98,7 +99,7 @@ export const docsZh = {
       name: 'title',
       type: 'string',
       description:
-        '在空状态内部渲染为 <h3> 标题的主要信息。',
+        '在空状态内部按配置的标题级别渲染主要信息。',
       required: true,
     },
     {

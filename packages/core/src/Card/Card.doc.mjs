@@ -83,7 +83,7 @@ export const docs = {
       code: `
 import {Card} from '@astryxdesign/core/Card';
 import {Grid} from '@astryxdesign/core/Grid';
-import {VStack} from '@astryxdesign/core/Layout';
+import {VStack} from '@astryxdesign/core/VStack';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Text} from '@astryxdesign/core/Text';
 

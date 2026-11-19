@@ -74,20 +74,55 @@ function replaceBlock(content, name, block) {
   return content.replace(re, `${begin}\n\n${block}\n\n${end}`);
 }
 
+/**
+ * A command's `outsideProject` value for the commands table. A group that
+ * only holds subcommands declares none, so it shows its subcommands' value when
+ * they agree, and `by subcommand` when they differ.
+ * @param {any} command a manifest command
+ * @returns {string}
+ */
+function outsideProject(command) {
+  if (command.outsideProject) return `\`${command.outsideProject}\``;
+  /** @type {Set<string>} */
+  const values = new Set();
+  const walk = (/** @type {any[]} */ subs) => {
+    for (const sub of subs) {
+      if (sub.outsideProject) values.add(sub.outsideProject);
+      walk(sub.subcommands ?? []);
+    }
+  };
+  walk(command.subcommands ?? []);
+  return values.size === 1 ? `\`${[...values][0]}\`` : 'by subcommand';
+}
+
 async function build() {
   const manifest = getManifest();
   const commandRows = manifest.commands
     .filter((/** @type {any} */ c) => c.name !== 'manifest')
-    .map((/** @type {any} */ c) => [`\`${c.name}\``, c.description]);
+    .map((/** @type {any} */ c) => [`\`${c.name}\``, c.description, outsideProject(c)]);
 
   const errorCodes = await loadDoc('foundation/response/error-codes.doc.mjs');
-  const errorRows = errorCodes.members.map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
+  // Experimental codes are documented under `astryx docs cli/experimental`,
+  // not in the stable table (spec:AST-017 FR27).
+  const errorRows = errorCodes.members
+    .filter((/** @type {any} */ m) => m.stability !== 'experimental')
+    .map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
 
-  const responseTypes = await loadDoc('foundation/response/response-types.doc.mjs');
-  const rtRows = responseTypes.members.map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
+  const responseTypes = await loadDoc(
+    'foundation/response/response-types.doc.mjs',
+  );
+  // Experimental response types are documented under `astryx docs
+  // cli/experimental`, not in the stable table (spec:AST-017 FR27).
+  const rtRows = responseTypes.members
+    .filter((/** @type {any} */ m) => m.stability !== 'experimental')
+    .map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
 
   let content = fs.readFileSync(README, 'utf8');
-  content = replaceBlock(content, 'commands', table(['Command', 'Description'], commandRows));
+  content = replaceBlock(
+    content,
+    'commands',
+    table(['Command', 'Description', 'Outside a project'], commandRows),
+  );
   content = replaceBlock(content, 'error-codes', table(['Code', 'Meaning'], errorRows));
   content = replaceBlock(content, 'response-types', table(['Type', 'What `data` carries'], rtRows));
 

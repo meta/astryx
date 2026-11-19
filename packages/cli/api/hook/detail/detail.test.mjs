@@ -27,6 +27,17 @@ describe('hook.detail leaf', () => {
     expect(Array.isArray(res.data.returns)).toBe(true);
   }, SLOW);
 
+  it('resolves useCombobox from the Selector entry point with its field props and the requirements it names', async () => {
+    const res = await detail('useCombobox', {cwd: REPO});
+    expect(res.data.importPath).toBe('@astryxdesign/core/Selector');
+    expect(res.data.returns.map(entry => entry.name)).toEqual(
+      expect.arrayContaining(['getFieldProps', 'getListboxProps', 'getOptionProps']),
+    );
+    expect(res.data.usage.accessibility?.map(entry => entry.requirement)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7].map(n => `AST-075 FR${n}`),
+    );
+  }, SLOW);
+
   it('throws ERR_UNKNOWN_HOOK with fuzzy suggestions for an unknown hook', async () => {
     let err;
     try {

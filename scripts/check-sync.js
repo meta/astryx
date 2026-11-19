@@ -35,7 +35,7 @@ function addViolation(type, file, message) {
 }
 
 // A component source file is `XDS{Name}.tsx` today, or the bare `{Name}.tsx`
-// after the XDS-prefix migration (P2380608025, P4). Match both, excluding
+// after the XDS-prefix migration (phase 4). Match both, excluding
 // tests, `use*` hooks, and `*Context.*` files. As in component discovery, a
 // BARE-named file is only treated as a component when a sibling doc exists
 // (`{Name}.doc.mjs` or `XDS{Name}.doc.mjs`) — otherwise internal PascalCase

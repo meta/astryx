@@ -12,9 +12,10 @@ import {toEntry} from '../_adapter.mjs';
 import {hasKind} from '../_catalog-view.mjs';
 
 /**
- * Build the discover.list response. `data` lists installed integrations. An
- * empty `data` carries `meta.configured`, so callers can distinguish "nothing
- * configured" from "configured but nothing discovered". With discover sources,
+ * Build the discover.list response. `data` lists installed integrations and
+ * the official packages the project declares. A `data` with no integration
+ * carries `meta.configured`, so callers can distinguish "nothing configured"
+ * from "configured but nothing discovered". With discover sources,
  * `meta.available` lists what the project could add and `meta.sources` reports
  * what each source did.
  *
@@ -31,18 +32,24 @@ import {hasKind} from '../_catalog-view.mjs';
 export function list(packages, {configured, available, sources, type, only}) {
   const keep = (/** @type {Record<string, unknown>} */ entry) =>
     type == null || hasKind(entry, type);
-  const data =
+  const shown =
     only === 'available'
       ? []
-      : packages
-          .map(toEntry)
-          .filter(entry =>
-            keep(/** @type {Record<string, unknown>} */ (entry)),
-          );
+      : packages.filter(pkg =>
+          keep(/** @type {Record<string, unknown>} */ (toEntry(pkg))),
+        );
+  const data = shown.map(toEntry);
 
   /** @type {Record<string, unknown>} */
   const meta = {};
-  if (data.length === 0) meta.configured = configured;
+  // An official package the project declares is not an integration, so it
+  // never hides whether any integration is configured.
+  if (
+    !shown.some(
+      pkg => !(/** @type {{declaredOfficial?: true}} */ (pkg).declaredOfficial),
+    )
+  )
+    meta.configured = configured;
   if (sources !== undefined) {
     meta.available = only === 'installed' ? [] : (available ?? []).filter(keep);
     meta.sources = sources;

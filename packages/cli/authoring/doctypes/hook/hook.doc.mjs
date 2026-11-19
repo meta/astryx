@@ -16,7 +16,8 @@ export const doc = {
     'The doc-type for a standalone React hook (e.g. useMediaQuery, useFocusTrap, ' +
     'useOverflow) that gets its own `.doc.mjs`. Hooks that are part of a component API ' +
     "(e.g. useImperativeDialog) belong in that component's MultiComponentDoc `components` " +
-    "array instead. `HookDoc` is the hook-flavored view of the shared `type: 'function'` kind.",
+    "array instead. `HookDoc` is the hook-flavored view of the shared `type: 'function'` kind. " +
+    "`astryx hook` reads Core's hook docs only; an integration lists its hooks in a component doc's `components` array.",
   appliesTo: '{useX}.doc.mjs',
   fields: [
     {
@@ -195,14 +196,14 @@ export const docs = {
     description:
       'Subscribes to a CSS media query and re-renders when it changes. Use for responsive behavior that CSS alone cannot express, such as swapping components by breakpoint.',
   },
-  relatedHooks: ['useIsMobile'],
+  relatedHooks: ['useImageMode'],
 };`,
     },
   ],
   notes: [
     {
       type: 'prose',
-      text: 'When it loads, a hook doc may leave out `displayName`, and its `usage` is not checked. Write to the type anyway; it is the contract.',
+      text: '`parseDoc` accepts a stamped hook doc without `displayName` and does not check its `usage`, and `astryx hook` prints a hook doc without checking it at all. Write to the type anyway; it is the contract.',
     },
     {
       type: 'prose',
@@ -210,7 +211,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: "Only standalone hooks get their own file. A hook that is part of a component API is documented as an entry in that component's MultiComponentDoc `components` array (with `params`/`returns`), so it renders under the component.",
+      text: "A hook that is part of a component API is listed in that component's MultiComponentDoc `components` array: inline with `params`/`returns`, or by name with its own SubComponentDoc file, as Core's useTableSelection is.",
     },
   ],
 };

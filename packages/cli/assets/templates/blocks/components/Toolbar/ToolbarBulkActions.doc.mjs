@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Toolbar', 'Button', 'Icon', 'Badge', 'Table'],
+  icons: {ArchiveBoxIcon: 'archive', TrashIcon: 'delete'},
 };

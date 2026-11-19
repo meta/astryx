@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/docs/short-and-findable`: keep each read
- * short, lead each section with its summary, and write docs that search finds.
+ * @file `astryx docs authoring/building-blocks/docs/short-and-findable`:
+ * keep each read short, lead each section with its summary, and write docs
+ * that search finds.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -20,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Readers open one section at a time, so give each section one idea and keep it to about 30 lines. `npx astryx doctor` warns on any read over 32 KB.',
+          text: 'A long topic is read one section at a time, so give each section one idea and keep it to about 30 lines. `{@command doctor}` warns on any read over 32 KB.',
         },
         {
           type: 'list',
@@ -28,13 +29,13 @@ export const docs = {
           items: [
             'When a section needs a second idea, split it into two sections.',
             'Keep a topic to a few sections. When it grows past five, split it into more guides in your docs section.',
-            'A topic with more than one section reads as its section list. Readers open one section by its key, or the whole topic with `--full`.',
+            'A bare read prints the whole topic, and lists its sections instead only when the whole topic is over 16 KB of text. Readers list the sections with `--index` and open one section by its key.',
           ],
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '# The section list\nnpx astryx docs acme/deploying\n# One section\nnpx astryx docs acme/deploying check-before-you-ship\n# Everything\nnpx astryx docs acme/deploying --full',
+          code: '# The whole topic\n{@command docs acme/deploying}\n# The section list\n{@command docs acme/deploying --index}\n# One section\n{@command docs acme/deploying check-before-you-ship}',
         },
       ],
     },
@@ -58,7 +59,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'text',
-          code: 'build-before-you-ship  Build before you ship - Build the app, then upload the `dist` folder to your host.',
+          code: 'build-before-you-ship  Build before you ship - Build the app, then upload the `dist` folder.',
         },
       ],
     },
@@ -68,14 +69,14 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Search ranks a query that matches a whole title, or an identifier in backticks, above words in body text. Title each section with the task a reader searches for.',
+          text: 'In a topic with more than one section, search ranks a section whose title matches the query, or that names it in backticks, above words in body text. Title each section with the task a reader searches for.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             'Name the task in the words a reader types, such as "Deploy to production". Avoid titles such as "Overview" or "Details".',
-            'Write field names, file names, and error codes in backticks, such as `deployTarget`: search treats each one as a keyword.',
+            'Write field names, file names, and error codes in backticks, such as `deployTarget`: in a topic with more than one section, search treats each one as a keyword.',
             'Other words in the summary and body match too, but rank below titles and identifiers. The summary shows under each hit, so make it answer the query.',
           ],
         },
@@ -92,7 +93,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx search "place a doc" --type doc',
+          code: '{@command search "place a doc" --type doc}',
         },
         {
           type: 'list',

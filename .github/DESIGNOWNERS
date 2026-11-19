@@ -2,20 +2,19 @@
 # Design-team members. This list has three responsibilities:
 #
 # - Current design and theme specs, component/module Design decisions, and
-#   normative design assets may receive exact-head approval from any
-#   DESIGNOWNER. ENGOWNERS may approve every spec.
-# - A DESIGNOWNER author may attest an exact PR head by marking the PR ready for
-#   review. That evidence satisfies the design-approval group even in a mixed PR;
-#   every other applicable code or spec-owner group remains required. A
-#   classifier-proven appearance-only Core runtime change may also bypass the
-#   engineering review gate only when no other code reason applies. The
-#   existing gate may enable squash auto-merge only when every changed path is a
-#   recognized spec record and every required group and branch check passes.
+#   normative design assets may be approved by any DESIGNOWNER; an approval
+#   binds the spec content (architecture:knowledge-contracts DEC-14). ENGOWNERS
+#   may approve every spec.
+# - A DESIGNOWNER approves with a review or `/approve-spec <sha>`, like every
+#   other owner; in a mixed PR every other applicable code or
+#   spec-owner group remains required. A classifier-proven appearance-only Core
+#   runtime change may bypass the engineering review gate only when no other
+#   code reason applies. The gate decides approval only; it never enables
+#   auto-merge.
 # - Review tooling may use the list to frame design-authored changes.
 #
-# This is not general merge permission. A design attestation alone never
-# authorizes non-design records or mixed code/spec changes, and any code path
-# prevents the spec-only auto-merge path.
+# This is not general merge permission. Design approval alone never
+# authorizes non-design records or mixed code/spec changes.
 #
 # Uses the same @handle format as CODEOWNERS. Keep this list current.
 

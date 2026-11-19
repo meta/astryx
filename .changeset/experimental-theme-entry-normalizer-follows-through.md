@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor`: the input cleanup follows through. Quotes are mapped only where they delimit a value (curly quotes of one kind in any shape, such as „Inter“ or ‚Inter‘, «», ‹›, full-width quotes and backticks around a font name become straight ones, and a curly quote left unpaired is the straight one it stands for), and a quoted CSS string keeps what it holds, curly quotes, no-break spaces and a `;` included; a saved value is checked the same way, and quotes around a value are named as such. An entry pasted from JSON (`"accent": "#e11d48"`, `{"accent": "#e11d48"}`) or with copy debris (a trailing comma, a stray quote or bracket, a leading `=` or `:`, a second declaration after a `;` outside quotes) is read as the value; a quoted dial value suggests that value; a dash-like character inside a token name is its hyphen; `textSize` and `text_size` are text-size. A font stack is read as families: a trailing comma is dropped, a stack wrapped in one more pair of quotes is unwrapped, and an empty family is refused. `--mode` is cleaned like a value, and a near typo keeps `--mode` in the suggestion. A saved dial value with stray spaces, quotes, other letters or a pasted `corners: pill` is offered cleaned, read by the same input cleanup as typed values; a theme folder holding only empty folders counts as empty for `new`; a mistyped theme name in set or undo (`T`, `themes/t`, `./t`) suggests the same command with the theme's name.
+
+@josephfarina

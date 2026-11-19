@@ -2,7 +2,7 @@
 
 /**
  * @file DateLocaleConsistency.stories.tsx
- * @input InternationalizationProvider locale plus a fixed Gregorian date
+ * @input InternationalizationProvider locale plus a controlled Gregorian date or empty value
  * @output Side-by-side French and Thai date-formatting evidence
  * @position Storybook verification story for shared date semantics
  */
@@ -21,7 +21,7 @@ import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const meta = {
-  title: 'Foundations/Internationalization/Date consistency',
+  title: 'Core/Internationalization/Date consistency',
   parameters: {
     layout: 'padded',
   },
@@ -54,7 +54,7 @@ function LocaleDateExamples({locale}: {locale: Locale}) {
         </Text>
         <Calendar
           mode="single"
-          value={value}
+          value={value ?? null}
           onChange={setValue}
           focusDate="2026-08-01"
         />

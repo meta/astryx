@@ -128,6 +128,21 @@ describe('Divider', () => {
     expect(divider).not.toHaveAttribute('aria-labelledby');
   });
 
+  it.each([false, true, ''])('omits a label wrapper for %j', label => {
+    render(<Divider label={label} data-testid="divider" />);
+    const divider = screen.getByTestId('divider');
+    expect(divider).not.toHaveAttribute('aria-labelledby');
+    expect(divider.children).toHaveLength(1);
+  });
+
+  it('preserves a numeric zero label and uses it as the accessible name', () => {
+    render(<Divider label={0} data-testid="divider" />);
+    const divider = screen.getByTestId('divider');
+    expect(screen.getByText('0')).toBeInTheDocument();
+    expect(divider).toHaveAccessibleName('0');
+    expect(divider.children).toHaveLength(3);
+  });
+
   it('renders astryx-* class names for theme targeting', () => {
     render(
       <Divider variant="strong" orientation="vertical" data-testid="divider" />,

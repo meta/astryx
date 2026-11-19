@@ -115,9 +115,11 @@ export function parseRgb(value: string): RGBA | null {
  */
 export function parseColor(value: string): RGBA | null {
   const trimmed = value.trim();
-  const named = NAMED_COLORS[trimmed.toLowerCase()];
-  if (named) {
-    return {...named};
+  // A plain record answers `constructor` and `__proto__` from
+  // Object.prototype, so the lookup must test own properties.
+  const name = trimmed.toLowerCase();
+  if (Object.hasOwn(NAMED_COLORS, name)) {
+    return {...NAMED_COLORS[name]};
   }
   if (trimmed.startsWith('#')) {
     return parseHex(trimmed);

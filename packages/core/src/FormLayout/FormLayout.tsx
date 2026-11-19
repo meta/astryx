@@ -14,6 +14,7 @@
  * - /packages/core/src/FormLayout/FormLayout.doc.mjs (props table)
  * - /packages/core/src/FormLayout/index.ts (exports if types change)
  * - /packages/core/src/Field/FieldLabel.tsx (defaultOptionality indicator resolution)
+ * - /packages/core/src/Field/useEntryErrorBehavior.ts (defaultEntryErrorBehavior resolution)
  * - /apps/storybook/stories/FormLayout.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/FormLayout/ (showcase blocks)
  */
@@ -24,6 +25,7 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {
   FormLayoutContext,
+  type EntryErrorBehavior,
   type FormLayoutDirection,
   type FormOptionality,
 } from './FormLayoutContext';
@@ -60,6 +62,7 @@ const styles = stylex.create({
       display: 'flex',
       flexDirection: 'column',
       gap: spacingVars['--spacing-4'],
+      alignItems: 'stretch',
     },
   },
 });
@@ -81,10 +84,11 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    * Direction of field arrangement.
    *
    * - `'vertical'` — Fields stack top-to-bottom (default). Most common.
-   * - `'horizontal'` — Fields arrange left-to-right in equal-width columns
-   *   using CSS Grid. Each child occupies one equal column.
-   * - `'horizontal-labels'` — CSS Grid with labels to the left of inputs.
-   *   Collapses to vertical when the container is narrow (≤480px).
+   * - `'horizontal'` — Fields occupy one `1fr` CSS Grid track per child in
+   *   logical inline order.
+   * - `'horizontal-labels'` — CSS Grid with labels beside their inputs on the
+   *   inline-start side. Collapses to vertical when the viewport is narrow
+   *   (≤480px).
    *
    * @default 'vertical'
    */
@@ -101,7 +105,11 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    *   shows an indicator (the "required" one).
    * - `'required'` — fields read as required; only a field with `isOptional`
    *   shows an indicator (the "optional" one). Fields without `isOptional`
-   *   expose `aria-required` even though they show no indicator.
+   *   expose `aria-required` even though they show no indicator. Checkboxes,
+   *   switches and checkbox groups are the exception: an unchecked box, an off
+   *   switch or an empty group is an answer, so they take no required state
+   *   from the default. A checkbox or switch is required only through its own
+   *   `isRequired`.
    * - unset — today's behavior: `isRequired` and `isOptional` each show their
    *   own indicator independently.
    *
@@ -109,6 +117,25 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    * `'optional'`) shows nothing. An inner `FormLayout` shadows an outer one.
    */
   defaultOptionality?: FormOptionality;
+
+  /**
+   * When DateInput, DateTimeInput, TimeInput, and NumberInput fields in this
+   * layout show their own entry errors: a date, time, or number that the
+   * field rejects. It sets when the error shows, not when validation runs, so
+   * it is not React Aria's `validationBehavior` (native versus ARIA
+   * validation). It does not change a caller's `status`.
+   *
+   * - `'complete'` — each field shows the error at its own moment.
+   * - `'blur-or-enter'` — each field holds every sign of the error until the
+   *   person presses Enter or leaves the field.
+   * - unset — the same as `'complete'`.
+   *
+   * NumberInput shows its errors only at Enter or blur under both values.
+   * A field's own `entryErrorBehavior` wins. An inner `FormLayout` replaces
+   * the default for its fields, and unset there means `'complete'`. Content
+   * in a layer, such as a Dialog opened from the form, starts without it.
+   */
+  defaultEntryErrorBehavior?: EntryErrorBehavior;
 }
 
 // =============================================================================
@@ -137,6 +164,7 @@ export function FormLayout({
   children,
   direction = 'vertical',
   defaultOptionality,
+  defaultEntryErrorBehavior,
   xstyle,
   className,
   style,
@@ -144,14 +172,15 @@ export function FormLayout({
   ...props
 }: FormLayoutProps) {
   const contextValue = useMemo(
-    () => ({direction, defaultOptionality}),
-    [direction, defaultOptionality],
+    () => ({direction, defaultOptionality, defaultEntryErrorBehavior}),
+    [direction, defaultOptionality, defaultEntryErrorBehavior],
   );
 
   return (
     <FormLayoutContext value={contextValue}>
       <div
         ref={ref}
+        {...props}
         {...mergeProps(
           themeProps('form-layout', {direction}),
           stylex.props(
@@ -162,8 +191,7 @@ export function FormLayout({
           ),
           className,
           style,
-        )}
-        {...props}>
+        )}>
         {children}
       </div>
     </FormLayoutContext>

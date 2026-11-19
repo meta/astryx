@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Popover component and hook
@@ -17,4 +15,8 @@ export type {UsePopoverOptions, UsePopoverReturn} from './usePopover';
 
 // Popover component
 export {Popover} from './Popover';
-export type {PopoverProps, PopoverTriggerRenderProps} from './Popover';
+export type {
+  PopoverPresentation,
+  PopoverProps,
+  PopoverTriggerRenderProps,
+} from './Popover';

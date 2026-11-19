@@ -13,8 +13,7 @@ export const docs = {
   title: 'Layout spacing',
   placement: {parent: 'namespace:layout', slot: 'guides', order: 40},
   category: 'guide',
-  description:
-    'Hold one content line per region, then tune gaps and density.',
+  description: 'Hold one content line per region, then tune gaps and density.',
   keywords: [
     'alignment',
     'content line',
@@ -35,7 +34,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Hold one content line per region, then tune gaps and density. Alignment, Rhythm, and Density and size cover each step; these rules hold for all of them.',
+          text: 'Hold one content line per region, then tune gaps and density. Alignment, Rhythm, and Density and size each build on these rules.',
         },
         {
           type: 'list',

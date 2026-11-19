@@ -98,6 +98,8 @@ describe('themeEject released-copy compatibility', () => {
         entry: 'oceanTheme.ts',
         exportName: 'oceanTheme',
         files: EJECT_FILES,
+        missingPackages: [],
+        installCommand: null,
       },
     });
     expect(new Set(result.data.files)).toEqual(new Set(RELEASED_COPY_FILES));
@@ -111,6 +113,8 @@ describe('themeEject released-copy compatibility', () => {
       'entry',
       'exportName',
       'files',
+      'missingPackages',
+      'installCommand',
     ]);
   });
 

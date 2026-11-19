@@ -13,14 +13,12 @@
  *   core consumers pair it with.
  * @output Fails when a resolved foreground/background pair drops below 4.5:1.
  * @position Repo-level theme contrast guard, sibling of the other scripts/check-*.
- * @see https://github.com/facebook/astryx/issues/5505
+ * @see https://github.com/meta/astryx/issues/5505
  */
 
 import {describe, expect, it} from 'vitest';
-import {
-  stonePalettes,
-  stoneTheme,
-} from '../packages/themes/stone/src/stoneTheme.ts';
+import {palette as stoneModePalettes} from '../packages/themes/stone/src/stonePalettes.generated.ts';
+import {stoneTheme} from '../packages/themes/stone/src/stoneTheme.ts';
 import {
   compositeOver,
   contrastRatio,
@@ -28,8 +26,8 @@ import {
 import {parseColor} from '../packages/core/src/utils/color.ts';
 
 const MODES = [
-  {name: 'light', index: 0, secondaryTone: 40},
-  {name: 'dark', index: 1, secondaryTone: 70},
+  {name: 'light', mode: 'light', index: 0, secondaryTone: 40},
+  {name: 'dark', mode: 'dark', index: 1, secondaryTone: 70},
 ];
 
 /** WCAG 2.1 AA for normal-size text. */
@@ -72,9 +70,9 @@ function resolveSurface(name, modeIndex) {
 describe('Stone secondary text contrast', () => {
   it.each(MODES)(
     'uses canonical stone contrast tones in $name mode',
-    ({index, secondaryTone}) => {
+    ({index, mode, secondaryTone}) => {
       expect(resolveToken('--color-text-secondary', index)).toBe(
-        stonePalettes.neutral[secondaryTone],
+        stoneModePalettes.neutral[mode][secondaryTone],
       );
     },
   );

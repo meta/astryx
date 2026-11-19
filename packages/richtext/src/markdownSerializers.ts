@@ -17,9 +17,8 @@
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  *
  * NOTE: `@lexical/headless`, `@lexical/markdown`, and `lexical` are OPTIONAL
- * peer dependencies (this is a canary lab module). Install them to use these
- * helpers. `@lexical/headless` runs Lexical without a DOM, so these work in
- * Node / SSR contexts.
+ * peer dependencies. Install them to use these helpers. `@lexical/headless`
+ * runs Lexical without a DOM, so these work in Node / SSR contexts.
  */
 
 import {createHeadlessEditor} from '@lexical/headless';

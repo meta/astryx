@@ -27,19 +27,20 @@ export default function TokenizerIcon() {
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
 
   return (
-    <Stack direction="vertical" gap={2}>
-      <Text type="supporting" color="secondary">
-        Leading icon reinforces the search affordance
-      </Text>
-      <Tokenizer
-        label="Team Members"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={value}
-        onChange={items => setValue(items)}
-        startIcon={MagnifyingGlassIcon}
-        containerStyle={{width: 400}}
-      />
-    </Stack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <Stack direction="vertical" gap={2}>
+        <Text type="supporting" color="secondary">
+          Leading icon reinforces the search affordance
+        </Text>
+        <Tokenizer
+          label="Team Members"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={value}
+          onChange={items => setValue(items)}
+          startIcon={MagnifyingGlassIcon}
+        />
+      </Stack>
+    </div>
   );
 }

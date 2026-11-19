@@ -20,7 +20,7 @@ export const docs = {
     'swap',
   ],
   description:
-    'Decorative control visuals: the mark on a chosen option, the box a checkbox draws, the circle a radio draws. Rendered by Selector, CheckboxInput, RadioList, and menu selection rows. Replace one by name through defineTheme({indicators}) and every component drawing it follows.',
+    'Decorative control visuals: the mark on a chosen option, the box a checkbox draws, the circle a radio draws. Rendered by Selector, CheckboxInput, RadioList, and menu selection rows. Replace one by name through defineTheme({indicators}) and every component drawing it follows. Two names have no built-in: `spinner` (state `busy`) replaces the ring a Spinner turns, and `tree-disclosure` (states `collapsed` and `expanded`) replaces the chevron of a TreeList row.',
   components: [
     {
       name: 'CheckboxIndicator',
@@ -171,7 +171,7 @@ defineTheme({
       code: `// When the shape itself is wrong, hand the theme a component. It receives
 // {state, size, isDisabled, children} and nothing else.
 //
-// Use theme tokens, never raw values — run \`npx @astryxdesign/cli docs tokens\` for the
+// Use theme tokens, never raw values — run \`astryx docs tokens\` for the
 // full set. Color: --color-accent, --color-on-accent, --color-border,
 // --color-border-emphasized, --color-background-surface,
 // --color-background-muted. Radius: --radius-inner, --radius-full.
@@ -236,7 +236,7 @@ defineTheme({name: 'brand', indicators: {check: RadioIndicator}});`,
       {
         guidance: true,
         description:
-          'Use theme tokens for every color, radius, and border width in a replacement. Run `npx @astryxdesign/cli docs tokens` for the set.',
+          'Use theme tokens for every color, radius, and border width in a replacement. Run `astryx docs tokens` for the set.',
       },
       {
         guidance: true,
@@ -297,7 +297,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use theme tokens for every color, radius, and border width in a replacement. Run `npx @astryxdesign/cli docs tokens` for the set.',
+          'Use theme tokens for every color, radius, and border width in a replacement. Run `astryx docs tokens` for the set.',
       },
       {
         guidance: true,

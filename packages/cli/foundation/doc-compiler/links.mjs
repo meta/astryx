@@ -11,9 +11,16 @@
  *   with the doc's identity, route, title, summary, and command. A reference
  *   block in a topic section also carries the `content` it includes. A link
  *   that names no doc is a problem, never a guess.
- * @position Pure. The docs adapter owns the resolver (the project's docs tree
- *   and topic catalog) and applies this to every read and every doctor check.
+ *   Doc tokens render here too (renderTokens), so text and JSON carry the
+ *   same commands.
+ * @position Pure, apart from reading which package manager the working
+ *   directory's project uses, for `{@pm}` tokens. The docs adapter owns the
+ *   resolver (the project's docs tree and topic catalog) and applies this to
+ *   every read and every doctor check.
  */
+
+import {renderCommandTokens} from './doc-syntax.mjs';
+import {docPackageManager} from '../env/package-manager.mjs';
 
 /** The kinds a link can name: every authored doc kind. */
 export const LINK_KINDS = new Set([
@@ -47,10 +54,12 @@ const CODE_SPAN = /(`[^`]*`)/;
  * @typedef {object} DocLink
  * @property {string} target the target as written: `[<provider>:]<kind>:<name>`
  * @property {string} id the doc's identity (a DocId)
- * @property {string} route what `astryx docs <route>` opens
+ * @property {string | null} route what `astryx docs <route>` opens; null for a
+ *   component, page, or block doc, which no docs route opens
  * @property {string} title
  * @property {string} summary
- * @property {string} command the command that opens it, `astryx docs <route>`
+ * @property {string} command the command that opens it: `astryx docs <route>`,
+ *   or `astryx component` or `astryx template` for a component, page, or block
  */
 
 /**
@@ -63,6 +72,8 @@ const CODE_SPAN = /(`[^`]*`)/;
  * @property {string} target the target as written
  * @property {string} message
  * @property {string} [section] the key of the section the link sits in
+ * @property {string} [field] the field the link sits in, outside any section:
+ *   `description`, or a path such as `props[2].description`
  * @property {true} [include] the problem is in a `reference` block, which
  *   includes content rather than linking to it: a reader loses that content,
  *   so the authoring check fails on it
@@ -89,7 +100,11 @@ export function parseLinkTarget(target) {
     };
   }
   const parts = target.trim().split(':');
-  if (parts.length < 2 || parts.length > 3 || parts.some(p => p.trim() === '')) {
+  if (
+    parts.length < 2 ||
+    parts.length > 3 ||
+    parts.some(p => p.trim() === '')
+  ) {
     return {error: `"${target}" is not \`[<provider>:]<kind>:<name>\``};
   }
   const provider = parts.length === 3 ? parts[0].trim() : null;
@@ -106,13 +121,13 @@ export function parseLinkTarget(target) {
 }
 
 /**
- * Text with each inline link replaced by its name, for indexes that must not
- * read the link syntax as words.
+ * Text with each inline link replaced by its name and each doc token by its
+ * command, for indexes that must not read the syntax as words.
  * @param {string} text
  * @returns {string}
  */
 export function unlinkText(text) {
-  return text
+  return String(renderTokens(text))
     .split(CODE_SPAN)
     .map(part =>
       part.startsWith('`')
@@ -123,6 +138,179 @@ export function unlinkText(text) {
           }),
     )
     .join('');
+}
+
+/**
+ * Text with its doc tokens rendered (doc-syntax.mjs): `{@command …}` as the
+ * bare `astryx …` command, which text output then starts with the reader's
+ * runner the way it starts every command, and `{@pm …}` in the package
+ * manager of the project the CLI runs in. JSON readers get runnable commands,
+ * the way they did before docs wrote tokens.
+ * @param {unknown} text
+ * @param {string | null} [lang] the code block's language for a block's body
+ * @returns {any}
+ */
+export function renderTokens(text, lang = null) {
+  if (typeof text !== 'string' || !text.includes('{@')) return text;
+  return renderCommandTokens(
+    text,
+    {stem: 'astryx', pm: docPackageManager(process.cwd())},
+    lang,
+  );
+}
+
+/**
+ * Text with each inline link replaced by the command that opens its doc. A
+ * link written inside code ticks is shown as written: it documents the syntax,
+ * it does not link. A link that names no doc prints as written: text that was
+ * never meant as a link reads the way it did, and doctor names the problem.
+ * @param {unknown} text
+ * @param {(target: string) => Promise<DocLink | null>} find
+ * @returns {Promise<any>}
+ */
+async function resolveInline(text, find) {
+  if (typeof text !== 'string') return text;
+  if (!text.includes('{@link')) return renderTokens(text);
+  let out = '';
+  for (const part of text.split(CODE_SPAN)) {
+    if (part.startsWith('`')) {
+      out += part;
+      continue;
+    }
+    let last = 0;
+    for (const match of part.matchAll(INLINE_LINK)) {
+      const link = await find(match[1]);
+      const at = /** @type {number} */ (match.index);
+      out += part.slice(last, at);
+      out += link ? `\`${link.command}\`` : match[0];
+      last = at + match[0].length;
+    }
+    out += part.slice(last);
+  }
+  return renderTokens(out);
+}
+
+/**
+ * The fields of a doc that hold text a reader reads, where a link resolves:
+ * a description or summary, an example's label, and each value of a
+ * `propDescriptions` overlay. Every other string is a name, a type, a
+ * default, or code, and is shown as written.
+ */
+const TEXT_FIELDS = new Set(['description', 'summary', 'label']);
+
+/** Fields that hold code or data, never text: nothing below them links. */
+const CODE_FIELDS = new Set([
+  'code',
+  'playground',
+  'slotElements',
+  'registry',
+  'keywords',
+]);
+
+/**
+ * Every text field of a doc object, in authored order, by the same rules
+ * {@link linkFields} resolves links by: the strings a reader reads, never a
+ * name, type, default, or code.
+ * @param {unknown} doc
+ * @returns {{field: string, text: string}[]}
+ */
+export function textFields(doc) {
+  /** @type {{field: string, text: string}[]} */
+  const out = [];
+  /**
+   * @param {unknown} value
+   * @param {string} at
+   * @param {boolean} text
+   */
+  const walk = (value, at, text) => {
+    if (typeof value === 'string') {
+      if (text) out.push({field: at, text: value});
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => walk(item, `${at}[${i}]`, false));
+      return;
+    }
+    if (value == null || typeof value !== 'object') return;
+    for (const [key, field] of Object.entries(value)) {
+      const path = at === '' ? key : `${at}.${key}`;
+      if (CODE_FIELDS.has(key)) continue;
+      if (key === 'propDescriptions' && field && typeof field === 'object') {
+        for (const [prop, description] of Object.entries(field)) {
+          walk(description, `${path}.${prop}`, true);
+        }
+      } else {
+        walk(field, path, TEXT_FIELDS.has(key));
+      }
+    }
+  };
+  walk(doc, '', false);
+  return out;
+}
+
+/**
+ * Resolve every inline link in the text fields of a doc object, such as a
+ * component doc or a topic's summary fields (spec:AST-047 FR9): its
+ * description, its usage and best practices, each prop's and example's
+ * description, at any depth. Code and code ticks show link syntax as written.
+ * @template T
+ * @param {T} doc
+ * @param {LinkResolver} resolve
+ * @returns {Promise<{doc: T, problems: LinkProblem[]}>}
+ */
+export async function linkFields(doc, resolve) {
+  /** @type {LinkProblem[]} */
+  const problems = [];
+  /**
+   * @param {unknown} value
+   * @param {string} at the field path, e.g. `usage.bestPractices[0].description`
+   * @param {boolean} text whether a string here is text
+   * @returns {Promise<any>}
+   */
+  const walk = async (value, at, text) => {
+    if (typeof value === 'string') {
+      if (!text) return value;
+      return resolveInline(value, async target => {
+        const found = await resolve(target);
+        if ('problem' in found) {
+          problems.push({target, message: found.problem, field: at});
+          return null;
+        }
+        return found;
+      });
+    }
+    if (Array.isArray(value)) {
+      const out = [];
+      for (let i = 0; i < value.length; i++) {
+        out.push(await walk(value[i], `${at}[${i}]`, false));
+      }
+      return out;
+    }
+    if (value == null || typeof value !== 'object') return value;
+    /** @type {Record<string, unknown>} */
+    const out = {};
+    for (const [key, field] of Object.entries(value)) {
+      const path = at === '' ? key : `${at}.${key}`;
+      if (CODE_FIELDS.has(key)) {
+        out[key] = field;
+      } else if (
+        key === 'propDescriptions' &&
+        field &&
+        typeof field === 'object'
+      ) {
+        /** @type {Record<string, unknown>} */
+        const described = {};
+        for (const [prop, description] of Object.entries(field)) {
+          described[prop] = await walk(description, `${path}.${prop}`, true);
+        }
+        out[key] = described;
+      } else {
+        out[key] = await walk(field, path, TEXT_FIELDS.has(key));
+      }
+    }
+    return out;
+  };
+  return {doc: await walk(doc, '', false), problems};
 }
 
 /**
@@ -154,30 +342,7 @@ export async function linkBlocks(blocks, resolve, at = {}, include) {
    * @param {unknown} text
    * @returns {Promise<any>}
    */
-  const linkText = async text => {
-    if (typeof text !== 'string' || !text.includes('{@link')) return text;
-    let out = '';
-    // A link written inside code ticks is shown as written: it documents the
-    // syntax, it does not link.
-    for (const part of text.split(CODE_SPAN)) {
-      if (part.startsWith('`')) {
-        out += part;
-        continue;
-      }
-      let last = 0;
-      for (const match of part.matchAll(INLINE_LINK)) {
-        const link = await find(match[1]);
-        const at = /** @type {number} */ (match.index);
-        out += part.slice(last, at);
-        // A link that names no doc prints as written: text that was never
-        // meant as a link reads the way it did, and doctor names the problem.
-        out += link ? `\`${link.command}\`` : match[0];
-        last = at + match[0].length;
-      }
-      out += part.slice(last);
-    }
-    return out;
-  };
+  const linkText = text => resolveInline(text, find);
   /**
    * @param {unknown[]} values
    * @returns {Promise<any[]>}
@@ -249,7 +414,8 @@ export async function linkBlocks(blocks, resolve, at = {}, include) {
           }
           if (Array.isArray(step.references)) {
             const links = [];
-            for (const target of step.references) links.push(await find(target));
+            for (const target of step.references)
+              links.push(await find(target));
             linked.links = links;
           }
           steps.push(linked);
@@ -257,6 +423,12 @@ export async function linkBlocks(blocks, resolve, at = {}, include) {
         content.push({...block, steps});
         break;
       }
+      case 'code':
+        content.push({
+          ...block,
+          code: renderTokens(block.code, block.lang ?? ''),
+        });
+        break;
       case 'collection':
         problems.push({
           target: `collection:${block.source?.slot ?? ''}`,

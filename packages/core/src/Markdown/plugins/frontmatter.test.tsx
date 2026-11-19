@@ -117,6 +117,31 @@ describe('createMarkdownFrontmatter', () => {
     ).not.toThrow();
   });
 
+  it('accepts the decoded fields record as metadata (identity parse)', () => {
+    const fields = createMarkdownFrontmatter({
+      name: 'fields',
+      parse: record => record,
+    });
+    const source = '---\ntitle: Release notes\n__proto__: kept\n---\n# Shipped';
+
+    const parsed = fields.parse(source);
+    expect(parsed).toEqual({
+      status: 'match',
+      contentStart: source.indexOf('# Shipped'),
+      metadata: {title: 'Release notes', ['__proto__']: 'kept'},
+    });
+    if (parsed.status !== 'match') {
+      throw new Error('expected a frontmatter match');
+    }
+    // A field named like a prototype key stays an ordinary own field.
+    expect(Object.hasOwn(parsed.metadata, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(parsed.metadata)).toBe(Object.prototype);
+
+    const root = parseMarkdownAst(source, {plugins: [fields.plugin]});
+    expect(fields.getMetadata(root)).toEqual(parsed.metadata);
+    expect(JSON.stringify(root)).not.toContain('title: Release notes');
+  });
+
   it('returns a transform plugin that composes in the ordered pipeline', () => {
     expectTypeOf<MarkdownTransform>().toBeFunction();
     const root = parseMarkdownAst(SOURCE, {plugins: [documentMetadata.plugin]});

@@ -12,23 +12,35 @@
  * Every leaf is also re-exported for direct scripting use.
  */
 
+import {
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {
   CORE_PACKAGE,
-  requireCoreDir,
+  coreContentDir,
   loadIntegrationsSafely,
   resolveOwners,
+  scopeIntegrationMember,
   classifyScope,
   assertUnambiguousOwners,
   resolveLegacyExternalDoc,
+  legacyExternalKeeps,
   resolveCoreSourcePath,
   resolveUnscopedDoc,
+  withExampleBlockPointer,
+  withOtherCommandHint,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
   installedComponentPackageVersion,
   resolveComponentReplacement,
+  unscopedComponentOwners,
+  linkComponentResponse,
+  linkBlockDescriptions,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -128,7 +140,7 @@ function parseComponentSelector(value, packageScope) {
  * version. Its structured suggestion points at the command that can discover
  * the requested package release.
  * @param {{package?: string, version?: string}} target
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @returns {void}
  */
@@ -200,7 +212,7 @@ function batchFailure(selector, error) {
  * @param {string|null} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {Promise<import('./component.type.mjs').ComponentBatchResponse>}
  */
 async function componentBatch(selectors, options, coreDir) {
@@ -239,7 +251,7 @@ async function componentBatch(selectors, options, coreDir) {
  * @param {boolean} [options.source]
  * @param {boolean} [options.showcase]
  * @param {boolean} [options.blocks]
- * @param {'full'|'compact'|'brief'} [options.detail] - Defaults to 'full' for a single component, 'brief' for list views (list/category/no name), matching the CLI.
+ * @param {'full'|'compact'|'brief'} [options.detail] - The level of a list view's entries; defaults to 'brief' for list views (list/category/no name) and 'full' otherwise. A named component's JSON is the same at every level; only the CLI's text projection (default 'compact' for a component read) depends on it.
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
@@ -254,6 +266,29 @@ async function componentBatch(selectors, options, coreDir) {
  * )>}
  */
 export async function component(name, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  // Every read resolves the links in the doc text it returns (spec:AST-047
+  // FR9); a batch's results are each a read of their own. Doc tokens render
+  // for the project in `cwd`. A call's lookups walk the same source tree, so
+  // the call reads each directory once.
+  return withListingCache(() =>
+    runWithDocPackageManager(
+      docPackageManager(cwd),
+      async () =>
+        /** @type {any} */ (
+          await linkComponentResponse(await componentRead(name, options), cwd)
+        ),
+    ),
+  );
+}
+
+/**
+ * {@link component}, with each `{@link}` in its doc text as written.
+ * @param {string|string[]} [name]
+ * @param {Parameters<typeof component>[1]} [options]
+ * @returns {ReturnType<typeof component>}
+ */
+async function componentRead(name, options = {}) {
   const {
     cwd = process.cwd(),
     list = false,
@@ -272,9 +307,9 @@ export async function component(name, options = {}) {
   const selectorList = Array.isArray(name) ? name : null;
   const noName = selectorList == null && !name;
 
-  // Default detail level mirrors the CLI (see commands/component/index.mjs):
-  // single-component views default to 'full', list-style views (--list,
-  // --category, or no name) default to 'brief' (scannable name lists).
+  // List-style views (--list, --category, or no name) default to 'brief'
+  // (scannable name lists). A named read returns the same JSON at every
+  // level; the CLI picks its text level (see commands/component.mjs).
   // An explicit array remains a batch even when it is empty or a caller also
   // passes a list-only option.
   const isListView =
@@ -306,7 +341,7 @@ export async function component(name, options = {}) {
     );
   }
 
-  const coreDir = requireCoreDir(cwd);
+  const coreDir = coreContentDir(cwd);
 
   // A public API caller could pass a non-string category; the list leaf does
   // `category.toLowerCase()`, so guard it up front (same class as the name
@@ -354,7 +389,7 @@ export async function component(name, options = {}) {
       requireInstalledSelectorVersion(target, coreDir, loadedIntegrations);
     }
     if (target.name !== name || target.package !== packageScope) {
-      return component(target.name, {...options, package: target.package});
+      return componentRead(target.name, {...options, package: target.package});
     }
     name = target.name;
   }
@@ -393,7 +428,10 @@ export async function component(name, options = {}) {
         dirName,
       );
       if (replacement?.package === packageScope) {
-        return component(replacement.name, {...options, package: packageScope});
+        return componentRead(replacement.name, {
+          ...options,
+          package: packageScope,
+        });
       }
     }
     const scoped = classifyScope(packageScope, {
@@ -421,20 +459,57 @@ export async function component(name, options = {}) {
       // a showcase, so skip discovery entirely.
       if (showcase) {
         return scoped.kind === 'core'
-          ? componentDetailShowcase(dirName, {cwd, name, ownerPackage: owner.package})
-          : componentDetailShowcase(dirName, {cwd, name, resolve: false, ownerPackage: owner.package});
+          ? componentDetailShowcase(dirName, {
+              cwd,
+              name,
+              ownerPackage: owner.package,
+            })
+          : componentDetailShowcase(dirName, {
+              cwd,
+              name,
+              resolve: false,
+              ownerPackage: owner.package,
+            });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, owner.package);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, owner.package),
+          cwd,
+        );
       }
-      const docs = await loadComponentDoc(owner.docPath, docOpts);
+      const loaded = await loadComponentDoc(owner.docPath, docOpts);
+      // A family member reads as that member, scoped the way the unscoped
+      // lookup scopes it: an integration member by its own entry, a Core
+      // sub-component (HStack in the Stack doc) by scopeSubComponent.
+      const sub =
+        scoped.kind === 'core'
+          ? scopeSubComponent(loaded, dirName, coreDir)
+          : null;
+      if (sub) {
+        if (props) {
+          return componentDetailProps(
+            {props: sub.matchingComponent.props},
+            owner.package,
+          );
+        }
+        return componentDetail(sub.scoped, owner, dirName, coreDir);
+      }
+      const docs =
+        scoped.kind === 'integration'
+          ? scopeIntegrationMember(loaded, owner, dirName)
+          : loaded;
       if (props) return componentDetailProps(docs, owner.package);
       return componentDetail(docs, owner, dirName, coreDir);
     }
 
     // Legacy `pkg.astryx.docs` external package.
     if (showcase) {
-      return componentDetailShowcase(dirName, {cwd, name, packageScope, ownerPackage: packageScope});
+      return componentDetailShowcase(dirName, {
+        cwd,
+        name,
+        packageScope,
+        ownerPackage: packageScope,
+      });
     }
     const extDocPath = resolveLegacyExternalDoc(scoped.ext, dirName);
     if (extDocPath) {
@@ -447,7 +522,10 @@ export async function component(name, options = {}) {
         });
       }
       if (blocks) {
-        return componentDetailBlocks(dirName, cwd, scoped.ext.name);
+        return linkBlockDescriptions(
+          await componentDetailBlocks(dirName, cwd, scoped.ext.name),
+          cwd,
+        );
       }
       const docs = await loadComponentDoc(extDocPath, docOpts);
       if (props) return componentDetailProps(docs, scoped.ext.name);
@@ -475,18 +553,20 @@ export async function component(name, options = {}) {
     dirName,
   );
   if (replacement) {
-    return component(replacement.name, {
+    return componentRead(replacement.name, {
       ...options,
       package: replacement.package,
     });
   }
 
+  // The owner rule runs first, over valid and invalid owners alike.
+  const ruled = unscopedComponentOwners(owners);
   // Invalid integration metadata does not create ambiguity against a valid
-  // owner. Keep raw owners only when no doc owner is valid, so an integration-
+  // owner. Keep ruled owners only when no doc owner is valid, so an integration-
   // only component still exposes its source and returns ERR_INVALID_DOC for
   // detail instead of degrading to an unrelated unknown-component error.
   const validOwners = [];
-  for (const owner of owners) {
+  for (const owner of ruled) {
     if (owner.package === CORE_PACKAGE) {
       validOwners.push(owner);
       continue;
@@ -498,7 +578,12 @@ export async function component(name, options = {}) {
       // Project/Doctor report invalid metadata; it is not an effective owner.
     }
   }
-  const effectiveOwners = validOwners.length > 0 ? validOwners : owners;
+  const loadable = validOwners.length > 0 ? validOwners : ruled;
+  // A legacy docs package's exact doc keeps its name over an export name a doc
+  // records, as Core and file-named owners do.
+  const effectiveOwners = legacyExternalKeeps(cwd, dirName, loadable)
+    ? []
+    : loadable;
 
   // ── Ambiguity: owned by MORE THAN ONE valid package, no --package ──
   assertUnambiguousOwners(effectiveOwners, dirName);
@@ -510,13 +595,22 @@ export async function component(name, options = {}) {
   ) {
     const owner = effectiveOwners[0];
     if (source) {
-      return componentDetailSource(dirName, owner.sourcePath, {name, ownerPackage: owner.package});
+      return componentDetailSource(dirName, owner.sourcePath, {
+        name,
+        ownerPackage: owner.package,
+      });
     }
     if (showcase) {
       // Integration components don't carry showcases — fail without scanning.
-      return componentDetailShowcase(dirName, {cwd, name, resolve: false, ownerPackage: owner.package});
+      return componentDetailShowcase(dirName, {
+        cwd,
+        name,
+        resolve: false,
+        ownerPackage: owner.package,
+      });
     }
-    const docs = await loadComponentDoc(owner.docPath, docOpts);
+    const loaded = await loadComponentDoc(owner.docPath, docOpts);
+    const docs = scopeIntegrationMember(loaded, owner, dirName);
     if (props) return componentDetailProps(docs, owner.package);
     return componentDetail(docs, owner, dirName, coreDir);
   }
@@ -531,15 +625,40 @@ export async function component(name, options = {}) {
     );
   }
   if (showcase) {
-    return componentDetailShowcase(dirName, {cwd, name, ownerPackage: CORE_PACKAGE});
+    return componentDetailShowcase(dirName, {
+      cwd,
+      name,
+      ownerPackage: CORE_PACKAGE,
+    });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+    loadedIntegrations,
+  }).catch(async error => {
+    const pointed = await withExampleBlockPointer(error, dirName, {
+      coreDir,
+      cwd,
+    });
+    // A block's pointer already names `astryx template`.
+    throw pointed === error
+      ? await withOtherCommandHint(error, dirName, {
+          coreDir,
+          cwd,
+          loadedIntegrations,
+        })
+      : pointed;
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────
   if (blocks) {
-    return componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage);
+    return linkBlockDescriptions(
+      await componentDetailBlocks(dirName, cwd, resolved.resolvedOwnerPackage),
+      cwd,
+    );
   }
 
   // ── Sub-component scoping ────────────────────────────────────
@@ -548,7 +667,10 @@ export async function component(name, options = {}) {
   const sub = scopeSubComponent(docs, dirName, coreDir);
   if (sub) {
     if (props)
-      return componentDetailProps({props: sub.matchingComponent.props}, resolved.resolvedOwnerPackage);
+      return componentDetailProps(
+        {props: sub.matchingComponent.props},
+        resolved.resolvedOwnerPackage,
+      );
     return componentDetail(
       sub.scoped,
       {

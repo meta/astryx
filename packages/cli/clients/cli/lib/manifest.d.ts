@@ -23,6 +23,11 @@ export interface ManifestOption {
   default?: unknown;
   /** True for `--no-foo` style negation flags. */
   negate?: boolean;
+  /** Platform steps the option cannot run without. */
+  requires?: string[];
+  /** Whether the run's base serves the option; on every command option,
+   *  absent on the global options, which every base serves. */
+  available?: boolean;
 }
 
 /** A positional argument. */
@@ -31,6 +36,8 @@ export interface ManifestArgument {
   required: boolean;
   variadic: boolean;
   description: string;
+  /** Platform steps a value of the argument cannot run without, by value. */
+  requires?: Record<string, string[]>;
 }
 
 /** A single command (possibly with subcommands). */
@@ -50,6 +57,18 @@ export interface ManifestCommand {
   examples?: string[];
   /** Documented exit codes: the process exit status and when it occurs. */
   exitCodes?: {code: number; when: string}[];
+  /**
+   * What the command does in a folder outside any project: `same` gives the
+   * answer it gives in a new project; `refuse` writes nothing and fails, naming
+   * the app project or integration package it needs; `own` does something
+   * else, which its docs state. Absent on a group that only holds subcommands.
+   */
+  outsideProject?: 'same' | 'refuse' | 'own';
+  /** Platform steps the command cannot run without. Absent when it needs none. */
+  requires?: string[];
+  /** Whether the run's base serves the command. A group is available when any
+   *  of its subcommands is. */
+  available: boolean;
   /** Nested subcommands (e.g. `theme build` under `theme`). */
   subcommands?: ManifestCommand[];
 }
@@ -64,8 +83,12 @@ export interface CLIManifest {
   commands: ManifestCommand[];
   /** Sorted list of fully-qualified command names that support `--json`. */
   jsonSupported: string[];
+  /** What a run may do beyond its command (the hand-off, the daily update check, the agent skill), and the docs topic that explains it. */
+  globalMode: {docs: string; summary: string};
   /** Flat index of response `type` discriminators keyed by command name. */
   responseTypes: Record<string, string[]>;
+  /** The base the run reads, and the platform steps it serves. */
+  base: {name: string; version: string | null; steps: string[]};
 }
 
 /** The `astryx manifest --json` envelope. */

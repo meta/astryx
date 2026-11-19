@@ -176,8 +176,9 @@ describe('the reported defect: docs tokens --dense (#2182)', () => {
     for (const options of [{}, {dense: true}, {zh: true}]) {
       const result = await docs('theme', null, options);
       const rendered = JSON.stringify(result.data.sections);
+      // The command, as `{@command …}` or bare `astryx …`: both print it.
       expect(rendered).toContain(
-        'astryx theme palette generate palette.config.json --out palette.generated.ts',
+        'theme palette generate palette.config.json --out palette.generated.ts',
       );
       expect(rendered).toContain(
         "import {palette} from './palette.generated';",

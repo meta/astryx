@@ -8,6 +8,7 @@
  * none of them touch the integration system, the filesystem, or a source. This
  * adapter does: it resolves the project's installed integrations and what each
  * one adds, calls every discover source and keeps a saved copy of each answer,
+ * reads the official list the CLI carries after them,
  * locates and loads a component's doc, and names the package manager's add
  * command. Keeping that I/O here (INV21) is what lets `list`, `detail`,
  * `detail/doc`, `detail/item`, and `search` stay pure projections.
@@ -16,24 +17,64 @@
  *   foundation/integrations, the discovery loaders, and discover sources.
  */
 
+import {projectIntegrationSkills} from '../docs/_adapter.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
-import {Project} from '../../foundation/config/project.mjs';
 import {
-  scanAllPackages,
-  findComponentInPackages,
-} from './_package-scanner.mjs';
+  Project,
+  availableComputerIntegrations,
+} from '../../foundation/config/project.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {
+  addVerbFor,
+  projectAddCommand,
+} from '../../foundation/release/notices.mjs';
+import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {collectIdentities} from '../../foundation/integrations/contribution-inventory.mjs';
-import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
+import {
+  packageDocNames,
+  packageDocSections,
+  projectTree,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {astryxDefinitionCoverage} from '../../foundation/discovery/icon-definition-discovery.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
+import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
-import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
+import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
+import {
+  CLI_ROOT,
+  findInstalledPackage,
+  realDir,
+} from '../../foundation/fs/paths.mjs';
+import {EXACT_CODEC} from '../../foundation/fs/exact-codec.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {
+  DISCOVER_KINDS,
+  parseDiscoverCatalog,
+} from '../../authoring/discover/parse.mjs';
 import {AstryxError} from '../error.mjs';
+import {CORE_PACKAGE_NAME} from '../../foundation/release/project.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000;
+
+/** The name the official list goes by, as a source and on each of its entries. */
+export const OFFICIAL_SOURCE_NAME = 'Astryx';
+
+/** Where the official list comes from: the CLI package that carries it. */
+const OFFICIAL_SOURCE_FROM = '@astryxdesign/cli';
+
+/** The official list, generated from the repository when the CLI is built. */
+export const OFFICIAL_LIST_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'discover',
+  'official-packages.json',
+);
 
 const DEPENDENCY_FIELDS = [
   'dependencies',
@@ -49,14 +90,54 @@ const DEPENDENCY_FIELDS = [
  */
 
 /**
+ * An official package as this CLI lists it (spec:AST-051 FR11), with what its
+ * add command pins (FR2): the project's Core version, the Core range the
+ * project declares, or the latest release; with none, it pins nothing.
+ * @typedef {DiscoverPackage & {pin?: string}} OfficialPackage
+ */
+
+/**
+ * The official packages the project's package.json declares: the real package
+ * name of each, mapped to the name it is installed under (an npm alias such as
+ * `"my-theme": "npm:@astryxdesign/theme-gothic@0.7.0"` installs under
+ * `my-theme`). `dependency` holds those declared in dependencies,
+ * devDependencies or optionalDependencies, which make a package the project's
+ * own; `any` adds peerDependencies, which only keep it from being offered.
+ * @typedef {{dependency: Map<string, string>, any: Set<string>}} OfficialDeclarations
+ */
+
+/**
+ * The official list as this CLI reads it. `error` says why the file could not
+ * be read; the list is then empty and discover reports it like a failed source.
+ * @typedef {{packages: OfficialPackage[], error?: string}} OfficialList
+ */
+
+/**
  * An installed integration with what it adds, per kind. `components` is the
  * scanned component list the discover leaves have always used.
  * @typedef {ScannedPackage & {
  *   templates?: string[],
  *   docs?: string[],
+ *   docSections?: Record<string, string[]>,
  *   themes?: string[],
  *   codemods?: string[],
+ *   skills?: string[],
+ *   iconSets?: string[],
+ *   iconSetDetails?: IconSetSummary[],
+ *   withdrawnIconSets?: Array<{name: string, reason: string}>,
  * }} InstalledPackage
+ */
+
+/**
+ * What discover shows about one installed icon set (spec:AST-084 FR17).
+ * @typedef {object} IconSetSummary
+ * @property {string} name
+ * @property {string} displayName
+ * @property {string} description
+ * @property {string} license
+ * @property {number} iconCount
+ * @property {{variant?: string}} [default]
+ * @property {string[]} definitions the icon definitions its `map` covers
  */
 
 /**
@@ -64,7 +145,8 @@ const DEPENDENCY_FIELDS = [
  * @typedef {object} SourceState
  * @property {string} name the source's own name, or where it came from when it
  *   gave none
- * @property {string} from `astryx.config`, or the integration that exports it
+ * @property {string} from `astryx.config`, the integration that exports it, or
+ *   `@astryxdesign/cli` for the official list
  * @property {'fresh' | 'saved' | 'failed'} status
  * @property {string} [generatedAt]
  * @property {boolean} [complete]
@@ -73,9 +155,10 @@ const DEPENDENCY_FIELDS = [
  */
 
 /**
- * Everything every source returned, merged. When two sources list the same
- * package, the earlier source's entry is kept.
- * @typedef {{sources: SourceState[], packages: Array<DiscoverPackage & {source: string}>}} CatalogResult
+ * Everything every source returned, merged, the official list last. When two
+ * sources list the same package, the earlier source's entry is kept. `official`
+ * marks an entry the official list supplied.
+ * @typedef {{sources: SourceState[], packages: Array<DiscoverPackage & {source: string, official?: true}>}} CatalogResult
  */
 
 /**
@@ -98,8 +181,7 @@ function validateDocs(docs) {
     return 'docs.name is missing or not a string';
   if (!d.usage || typeof d.usage.description !== 'string')
     return 'docs.usage.description is missing or not a string';
-  if (d.props && !Array.isArray(d.props))
-    return 'docs.props must be an array';
+  if (d.props && !Array.isArray(d.props)) return 'docs.props must be an array';
   if (d.components && !Array.isArray(d.components))
     return 'docs.components must be an array';
   if (d.usage?.bestPractices && !Array.isArray(d.usage.bestPractices))
@@ -118,10 +200,11 @@ function validateDocs(docs) {
  * configured" (`false`) from "configured but nothing discovered" (`true`),
  * which the list leaf surfaces as `meta`.
  *
+ * @param {Project} [project] the project, when the caller has loaded it
  * @returns {Promise<{packages: ScannedPackage[], configured: boolean, project: Project}>}
  */
-export async function discoverPackages() {
-  const project = await Project.load();
+export async function discoverPackages(project) {
+  project ??= await Project.load();
   const loadedIntegrations =
     /** @type {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} */ (
       project.loadedIntegrations
@@ -139,6 +222,7 @@ export async function discoverPackages() {
     return {packages: [], configured: loadedIntegrations.length > 0, project};
   }
 
+  const {scanAllPackages} = await import('./_package-scanner.mjs');
   const packages = scanAllPackages(
     [],
     /** @type {ScannedPackage[]} */ (/** @type {unknown} */ (explicitPackages)),
@@ -146,10 +230,51 @@ export async function discoverPackages() {
   return {packages, configured: true, project};
 }
 
+/** A terminal escape sequence: CSI (`ESC [ … final`), OSC, or a two-byte one. */
+const ESCAPE_SEQUENCE =
+  // eslint-disable-next-line no-control-regex
+  /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
+/**
+ * Every other control or format character: C0, C1, and the bidirectional and
+ * zero-width marks that would reorder or hide a printed line.
+ */
+const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * The `description` in the package.json of an installed package, so the list
+ * says what an installed integration is, as it does for one a source lists.
+ * The text is the package's own, so terminal escape sequences and control
+ * and format characters are removed; a blank one is left out.
+ * @param {string | undefined} packageDir
+ * @returns {string | undefined}
+ */
+export function packageDescription(packageDir) {
+  if (!packageDir) return undefined;
+  let raw;
+  try {
+    raw = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    )?.description;
+  } catch {
+    return undefined;
+  }
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw
+    .replace(ESCAPE_SEQUENCE, '')
+    .replace(CONTROL_CHARACTER, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean || undefined;
+}
+
 /**
  * Every integration the project loads, with what it adds. An integration with
  * no components root is included with `components: []`; one that failed to
  * load is left out (the integration-issues nudge and Doctor report it).
+ *
+ * Describing them reads every integration's templates, themes and codemods
+ * and the project's whole docs catalog, so the answer is kept between runs
+ * while every file it read is unchanged (foundation/fs/gather-cache.mjs).
  *
  * @param {Project | undefined} project
  * @param {ScannedPackage[]} scanned the packages {@link discoverPackages} found
@@ -157,7 +282,32 @@ export async function discoverPackages() {
  */
 export async function describeInstalled(project, scanned) {
   if (project == null) return scanned;
+  return /** @type {Promise<InstalledPackage[]>} */ (
+    persistedGather(
+      ['discover-installed', realDir(project.cwd), optedIntoIconSets(project)],
+      () => describeInstalledFresh(project, scanned),
+      INSTALLED_CODEC,
+    )
+  );
+}
+
+/**
+ * The installed packages describeInstalled names, worked out from the files.
+ * @param {Project} project
+ * @param {ScannedPackage[]} scanned
+ * @returns {Promise<InstalledPackage[]>}
+ */
+async function describeInstalledFresh(project, scanned) {
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
+  const docs = await projectDocs(project);
+  // The skills its docs declare, as the docs tree and the skill places keep
+  // them.
+  let declaredSkills = /** @type {Array<{name: string, package: string}>} */ ([]);
+  try {
+    declaredSkills = (await projectIntegrationSkills(project.cwd)).skills;
+  } catch {
+    // A docs tree that cannot be read lists no skills.
+  }
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -174,20 +324,113 @@ export async function describeInstalled(project, scanned) {
       );
     // Components come from the scan above; loading every component doc again
     // here would only slow the list down.
+    // Icon sets are read below, only where icon features are on.
+    // Docs are named from the project's docs catalog, below.
     const {identities} = await collectIdentities({
       ...integration,
       components: undefined,
+      iconSets: undefined,
+      docs: undefined,
     });
+    // Icon sets are listed the way every icon surface sees them: a set that
+    // is invalid or whose module does not resolve answers nothing (FR9).
+    // They are experimental (spec:AST-017 FR27), so discover lists them only
+    // where the icon feature gate is on.
+    const {sets, withdrawn} = optedIntoIconSets(project)
+      ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
+      : {sets: [], withdrawn: []};
+    const description = packageDescription(integration.__packageDir);
     installed.push({
       ...base,
+      ...(description ? {description} : {}),
       templates: identities.templates.map(t => t.id),
-      docs: identities.docs,
+      // Each doc by the name `astryx docs` opens it by, not the name on its
+      // file: a doc that adds sections to `theme` opens as `theme`, and names
+      // the sections it adds there, so a reader can open one straight away.
+      docs: docs
+        ? packageDocNames(docs.catalog, docs.tree, integration.name)
+        : [],
+      ...docSectionsOf(
+        docs
+          ? await packageDocSections(docs.catalog, docs.tree, integration.name)
+          : {},
+      ),
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
+      skills: declaredSkills
+        .filter(each => each.package === integration.name)
+        .map(each => each.name),
+      iconSets: sets.map(set => set.name),
+      iconSetDetails: sets.map(set => ({
+        name: set.name,
+        displayName: set.displayName,
+        description: set.description,
+        license: set.license,
+        iconCount: set.data.icons.length,
+        ...(set.data.default ? {default: set.data.default} : {}),
+        definitions: [...Object.keys(set.data.map ?? {})].sort(),
+      })),
+      // Never listed; named only to say why a lookup of one answers nothing.
+      ...(withdrawn.length > 0
+        ? {
+            withdrawnIconSets: withdrawn.map(each => ({
+              name: each.name,
+              reason: each.reason,
+            })),
+          }
+        : {}),
     });
   }
   return installed;
 }
+
+/**
+ * The `docSections` field, when a package adds sections to any doc another
+ * package owns; nothing otherwise, so every other entry reads as it did.
+ * @param {Record<string, string[]>} sections
+ * @returns {{docSections?: Record<string, string[]>}}
+ */
+function docSectionsOf(sections) {
+  return Object.keys(sections).length > 0 ? {docSections: sections} : {};
+}
+
+/**
+ * The project's docs catalog and tree, as a docs read builds them, so discover
+ * names each doc the way `astryx docs` opens it. Null when no integration
+ * ships docs, so there is nothing to name and nothing is built, or when they
+ * cannot be built: a docs read then answers from the CLI's own topics alone,
+ * so no integration doc opens.
+ * @param {Project} project
+ * @returns {Promise<{catalog: import('../../foundation/discovery/docs-discovery.mjs').DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree} | null>}
+ */
+async function projectDocs(project) {
+  if (
+    !project.loadedIntegrations.some(
+      integration => !integration.__loadError && integration.docs,
+    )
+  ) {
+    return null;
+  }
+  try {
+    const catalog = await project.docs();
+    return {catalog, tree: await projectTree(catalog)};
+  } catch {
+    return null;
+  }
+}
+
+/** The installed packages, kept exactly, with the shape they need. */
+const INSTALLED_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    Array.isArray(value) &&
+    value.every(
+      (/** @type {any} */ pkg) =>
+        pkg != null &&
+        typeof pkg.name === 'string' &&
+        Array.isArray(pkg.components),
+    ),
+};
 
 /**
  * Whether the project has any discover source: its own `discover` config field,
@@ -196,11 +439,55 @@ export async function describeInstalled(project, scanned) {
  * @returns {boolean}
  */
 export function hasSources(project) {
+  if (doorSources().length > 0) return true;
   if (project == null) return false;
   if (typeof project.config?.discover === 'function') return true;
   return project.loadedIntegrations.some(
     i => i.__discover != null || i.__discoverError != null,
   );
+}
+
+/** Where a discover source a host passed comes from (spec AST-081 FR1). */
+const DOOR_SOURCE = 'the host';
+
+/**
+ * The discover sources the host that started this run passed, if any.
+ * @returns {readonly DiscoverSource[]}
+ */
+function doorSources() {
+  return /** @type {readonly DiscoverSource[]} */ (
+    hostedRun()?.discoverSources ?? []
+  );
+}
+
+/** The source name of a package installed for the computer. */
+const COMPUTER_SOURCE = 'installed for this computer';
+
+/**
+ * The integrations installed for the computer that a project could add, as
+ * available entries with the project's install command (spec AST-081 FR12).
+ * Empty outside a project, where they load instead.
+ * @param {Project | undefined} project
+ * @param {Array<{name: string}>} installed
+ * @param {Set<string>} declared
+ * @returns {Promise<import('./discover.type.mjs').DiscoverAvailableEntry[]>}
+ */
+export async function computerAvailableEntries(project, installed, declared) {
+  const cwd = project?.cwd ?? process.cwd();
+  if (isOutsideProject(cwd)) return [];
+  // The same command doctor names: in the project spec:AST-040 FR9 defines,
+  // and none where FR9 finds no project.
+  const add = projectAddCommand(cwd);
+  const have = new Set([...installed.map(pkg => pkg.name), ...declared]);
+  return (await availableComputerIntegrations(cwd, have)).map(c => ({
+    name: c.name,
+    package: c.name,
+    components: [],
+    ...(c.version ? {version: c.version} : {}),
+    ...(c.description ? {description: c.description} : {}),
+    source: COMPUTER_SOURCE,
+    ...(add ? {install: add(c.name)} : {}),
+  }));
 }
 
 /**
@@ -226,22 +513,172 @@ export function declaredDependencies(project) {
 }
 
 /**
- * The command that adds a package with the project's package manager. Discover
- * only prints it; it never runs it.
+ * The nearest package.json at or above the project's folder, read. Discover
+ * runs from any folder of a project; this is the project's own manifest.
  * @param {Project | undefined} project
+ * @returns {{dir: string, pkg: Record<string, any>} | null}
+ */
+function nearestManifest(project) {
+  let dir = project?.cwd ?? process.cwd();
+  for (;;) {
+    const file = path.join(dir, 'package.json');
+    if (fs.existsSync(file)) {
+      try {
+        return {dir, pkg: JSON.parse(fs.readFileSync(file, 'utf8'))};
+      } catch {
+        return null;
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/** The fields that make a declared package the project's own. */
+const OWN_DEPENDENCY_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+];
+
+/**
+ * The package a dependency entry installs: its own name, or the target of an
+ * npm alias (`npm:<name>@<range>`).
+ * @param {string} name
+ * @param {unknown} spec
+ * @returns {string}
+ */
+function declaredPackage(name, spec) {
+  if (typeof spec !== 'string' || !spec.startsWith('npm:')) return name;
+  const target = spec.slice('npm:'.length);
+  const at = target.indexOf('@', 1);
+  return at > 0 ? target.slice(0, at) : target;
+}
+
+/**
+ * What the project's own package.json, the nearest one above the folder
+ * discover runs in, declares among the official packages.
+ * @param {Project | undefined} project
+ * @param {OfficialPackage[]} official
+ * @returns {OfficialDeclarations}
+ */
+export function officialDeclarations(project, official) {
+  const names = new Set(official.map(pkg => pkg.package));
+  /** @type {OfficialDeclarations} */
+  const declared = {dependency: new Map(), any: new Set()};
+  const manifest = nearestManifest(project);
+  if (manifest == null) return declared;
+  for (const field of DEPENDENCY_FIELDS) {
+    for (const [local, spec] of Object.entries(manifest.pkg?.[field] ?? {})) {
+      const real = declaredPackage(local, spec);
+      if (!names.has(real)) continue;
+      declared.any.add(real);
+      if (
+        OWN_DEPENDENCY_FIELDS.includes(field) &&
+        !declared.dependency.has(real)
+      )
+        declared.dependency.set(real, local);
+    }
+  }
+  return declared;
+}
+
+/**
+ * One part of a semver range: an optional comparator and a version that may
+ * use `x` or `*` wildcards.
+ */
+const RANGE_PART =
+  /^(?:[<>]=?|=|\^|~)?v?(?:\d+|[xX*])(?:\.(?:\d+|[xX*])){0,2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
+
+/**
+ * Whether a dependency spec is a semver range every supported package manager
+ * resolves: comparators, wildcards, `||` and hyphen ranges. A dist-tag, path,
+ * URL, alias or workspace protocol is not.
+ * @param {string} spec
+ * @returns {boolean}
+ */
+function isSemverRange(spec) {
+  const parts = spec
+    .trim()
+    .split(/\s*\|\|\s*|\s+/u)
+    .filter(part => part !== '-');
+  return parts.length > 0 && parts.every(part => RANGE_PART.test(part));
+}
+
+/**
+ * The project's Core: the installed copy's version, else what its own
+ * package.json declares (a fresh clone before install): an exact `version`, or
+ * a semver `range`. Neither, for a declaration no package manager can pin
+ * against, such as a path or a dist-tag. Null when the project has no Core.
+ * @param {Project | undefined} project
+ * @returns {{version?: string, range?: string} | null}
+ */
+function projectCore(project) {
+  const installed = installedVersion(project, '@astryxdesign/core');
+  if (installed) return {version: installed};
+  const manifest = nearestManifest(project);
+  for (const field of OWN_DEPENDENCY_FIELDS) {
+    const spec = manifest?.pkg?.[field]?.['@astryxdesign/core'];
+    if (typeof spec !== 'string') continue;
+    // A space after an operator (`~ 0.6.8`, `>= 0.6.8 < 0.7.0`) is allowed by
+    // node-semver; join each operator to its version before reading the spec.
+    const range = spec.trim().replace(/([<>]=?|=|\^|~)\s+/gu, '$1');
+    const exact = range.replace(/^=/u, '');
+    if (isValidSemver(exact)) return {version: exact};
+    return isSemverRange(range) ? {range} : {};
+  }
+  return null;
+}
+
+/**
+ * Newest first: by release number, then a release before its prereleases.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function newerFirst(a, b) {
+  const byNumber = semverCompare(b, a);
+  if (byNumber !== 0) return byNumber;
+  const aRelease = !a.includes('-');
+  if (aRelease !== !b.includes('-')) return aRelease ? -1 : 1;
+  return b.localeCompare(a, 'en', {numeric: true});
+}
+
+/**
+ * The command that adds a package with the project's package manager. Discover
+ * only prints it; it never runs it. Asked for one version, it adds that
+ * version. Given the official list, it otherwise pins an official package to
+ * what its entry names (spec:AST-051 FR2): the project's Core version or
+ * declared Core range, else the latest release. A range is quoted, because
+ * `^`, `<`, `>`, `|` and spaces mean something to a shell.
+ * @param {Project | undefined} project
+ * @param {{official?: OfficialPackage[]}} [options]
  * @returns {(name: string, version?: string) => string}
  */
-export function addCommand(project) {
-  const pm = detectPackageManager(project?.cwd ?? process.cwd());
-  const verb =
-    pm === 'pnpm'
-      ? 'pnpm add'
-      : pm === 'yarn'
-        ? 'yarn add'
-        : pm === 'bun'
-          ? 'bun add'
-          : 'npm install';
-  return (name, version) => `${verb} ${version ? `${name}@${version}` : name}`;
+export function addCommand(project, {official = []} = {}) {
+  const cwd = project?.cwd ?? process.cwd();
+  const byName = new Map(official.map(pkg => [pkg.package, pkg]));
+  // An Astryx package at one version is saved exactly in a project that pins
+  // its Core to one version (see addVerbFor): that pin is about Astryx's
+  // release. Any other package is saved as the package manager saves it.
+  /** @param {string} name @param {string | null} version */
+  const verb = (name, version) =>
+    addVerbFor(cwd, name.startsWith('@astryxdesign/') ? version : null);
+  return (name, version) => {
+    const pin = byName.get(name)?.pin;
+    // The guidance names the same version the command would add.
+    const guidance = installGuidanceFor(
+      [version ? `${name}@${version}` : pin ? `${name}@${pin}` : name],
+      cwd,
+    );
+    if (guidance != null) return guidance;
+    if (version) return `${verb(name, version)} ${name}@${version}`;
+    if (!pin) return `${verb(name, null)} ${name}`;
+    return isValidSemver(pin)
+      ? `${verb(name, pin)} ${name}@${pin}`
+      : `${verb(name, null)} "${name}@${pin}"`;
+  };
 }
 
 /**
@@ -250,26 +687,13 @@ export function addCommand(project) {
  * @returns {string}
  */
 export function defaultCacheDir() {
-  const home = os.homedir();
-  if (process.platform === 'win32') {
-    return path.join(
-      process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'),
-      'astryx',
-      'Cache',
-    );
-  }
-  if (process.platform === 'darwin') {
-    return path.join(home, 'Library', 'Caches', 'astryx');
-  }
-  return path.join(
-    process.env.XDG_CACHE_HOME || path.join(home, '.cache'),
-    'astryx',
-  );
+  return userCacheDir();
 }
 
 /**
  * @param {string} cacheDir
- * @param {string} from
+ * @param {string} from the source's key: its `from` label, with the host for
+ *   a host's source
  * @param {{package?: string, version?: string}} request
  */
 function savedCopyPath(cacheDir, from, request) {
@@ -282,15 +706,34 @@ function savedCopyPath(cacheDir, from, request) {
 }
 
 /**
+ * A source's catalog with its icon sets, which discover lists in every
+ * project (spec:AST-084 FR17). With icon features off, a malformed icon-set
+ * item never fails a source: the catalog is then read as a CLI without icon
+ * sets reads it, with the kind and its fields unknown (spec:AST-051 FR7).
+ * @param {unknown} value
+ * @param {string} label
+ * @param {boolean} iconSets icon features are on in the project
+ */
+function parseCatalog(value, label, iconSets) {
+  if (iconSets) return parseDiscoverCatalog(value, label, {iconSets: true});
+  try {
+    return parseDiscoverCatalog(value, label, {iconSets: true});
+  } catch {
+    return parseDiscoverCatalog(value, label);
+  }
+}
+
+/**
  * @param {string} file
  * @param {string} label
+ * @param {boolean} iconSets icon features are on in the project
  */
-function readSavedCopy(file, label) {
+function readSavedCopy(file, label, iconSets) {
   try {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       savedAt: String(saved.savedAt),
-      catalog: parseDiscoverCatalog(saved.catalog, label),
+      catalog: parseCatalog(saved.catalog, label, iconSets),
     };
   } catch {
     return null;
@@ -320,8 +763,9 @@ function writeSavedCopy(file, catalog) {
  * @param {{package?: string, version?: string}} request
  * @param {string} label
  * @param {number} timeoutMs
+ * @param {boolean} iconSets icon features are on in the project
  */
-async function callSource(source, request, label, timeoutMs) {
+async function callSource(source, request, label, timeoutMs, iconSets) {
   const controller = new AbortController();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -340,15 +784,148 @@ async function callSource(source, request, label, timeoutMs) {
       ),
       timedOut,
     ]);
-    return parseDiscoverCatalog(answer, label);
+    return parseCatalog(answer, label, iconSets);
   } finally {
     clearTimeout(timer);
   }
 }
 
 /**
- * Call every discover source — the project's `discover` first, then each
- * integration's in load order — once per distinct function. A source that
+ * The project's root: the folder that holds its config, or the folder the
+ * project loaded from when it has none.
+ * @param {Project} project
+ * @returns {string}
+ */
+function projectRoot(project) {
+  return project.configPath ? path.dirname(project.configPath) : project.cwd;
+}
+
+/**
+ * Where each discover source comes from, in call order: the project's
+ * `discover` first, then each integration's in load order, then each a host
+ * passed. `key` names a source's saved copies when it differs from `from`.
+ * @param {Project | undefined} project
+ * @returns {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>}
+ */
+function sourceOrigins(project) {
+  const fromDoor = doorSources();
+  /** @type {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>} */
+  const origins = [];
+  if (typeof project?.config?.discover === 'function') {
+    // A project's own source is the project's: its saved copies are kept per
+    // project root, the folder that holds the config, so one project's
+    // catalog never answers for another's and every folder in a project
+    // reads the same copy.
+    origins.push({
+      from: 'astryx.config',
+      key: `astryx.config\n${realDir(projectRoot(project))}`,
+      source: project.config.discover,
+    });
+  }
+  for (const integration of project?.loadedIntegrations ?? []) {
+    if (integration.__discoverError) {
+      origins.push({
+        from: integration.name,
+        error: integration.__discoverError,
+      });
+    } else if (integration.__discover) {
+      origins.push({from: integration.name, source: integration.__discover});
+    }
+  }
+  // Every tool that carries the CLI reports its sources as the host's, so
+  // their saved copies are kept per host, by the root that holds its CLI
+  // (spec:AST-051 FR8).
+  const host = hostedRun()?.startingRoot ?? '';
+  fromDoor.forEach((source, index) => {
+    const from =
+      fromDoor.length === 1 ? DOOR_SOURCE : `${DOOR_SOURCE} (${index + 1})`;
+    origins.push({from, key: `${from}\n${host}`, source});
+  });
+  return origins;
+}
+
+/**
+ * The packages discover lists from the saved copies of the discover sources'
+ * full catalogs, read without calling a source, and the official packages no
+ * source covers, as discover adds them. Null when no source has a saved copy.
+ * A copy is read as saved: it was checked before it was saved, and checking
+ * it again costs more than a hint may. A caller treats a copy that does not
+ * read as unknown.
+ * @param {Project | undefined} project
+ * @param {{cacheDir?: string, official?: OfficialList}} [options]
+ *   `official`: the list {@link officialList} read; read here when absent
+ * @returns {CatalogResult['packages'] | null}
+ */
+export function savedCatalog(
+  project,
+  {cacheDir = defaultCacheDir(), official = officialList({project})} = {},
+) {
+  /** @type {CatalogResult['packages']} */
+  const packages = [];
+  /** @type {Set<unknown>} */
+  const read = new Set();
+  /** @type {Set<string>} */
+  const seen = new Set();
+  let saved = false;
+  for (const {from, key = from, source} of sourceOrigins(project)) {
+    if (source == null || read.has(source)) continue;
+    read.add(source);
+    const file = savedCopyPath(cacheDir, key, {});
+    if (!fs.existsSync(file)) continue;
+    /** @type {import('../../authoring/discover/type').DiscoverCatalog} */
+    const catalog = JSON.parse(fs.readFileSync(file, 'utf8')).catalog;
+    saved = true;
+    for (const pkg of catalog.packages) {
+      if (seen.has(pkg.package)) continue;
+      seen.add(pkg.package);
+      packages.push({...pkg, source: catalog.source.name});
+    }
+  }
+  if (!saved) return null;
+  return [...packages, ...officialNotCovered(packages, official)];
+}
+
+/**
+ * What `discover <query>` searches when its sources answer from their saved
+ * copies, worked out by `build` and kept between runs while every file it
+ * read is unchanged (foundation/fs/gather-cache.mjs), so search's discover
+ * line reads one kept record instead of scanning the project and parsing
+ * the copies on every run. Null when no source of the project has a saved
+ * copy of its full catalog; the copies are only looked for then, never read.
+ * @template T
+ * @param {(project: Project) => Promise<T>} build
+ * @param {(value: unknown) => boolean} valid the shape a kept value needs
+ * @returns {Promise<T | null>}
+ */
+export async function keptSavedSearch(build, valid) {
+  // The project the run already loaded, when it did: search loads it first.
+  const project = Project.lastLoaded() ?? (await Project.load());
+  const cacheDir = defaultCacheDir();
+  const copies = sourceOrigins(project)
+    .filter(origin => origin.source != null)
+    .map(({from, key = from}) => savedCopyPath(cacheDir, key, {}));
+  if (!copies.some(file => fs.existsSync(file))) return null;
+  return /** @type {Promise<T>} */ (
+    persistedGather(
+      [
+        'discover-saved-search',
+        // The run folder, not the project root: what discover counts as
+        // declared is read from the folder the command runs in.
+        realDir(project.cwd),
+        optedIntoIconSets(project),
+      ],
+      () => build(project),
+      // Plain strings and arrays: kept and read back as they are, with no
+      // walk over the record on every search.
+      {encode: value => value, decode: value => value, valid},
+    )
+  );
+}
+
+/**
+ * Call the discover sources — the project's `discover` first, then each
+ * integration's in load order, then each a host passed, named as the host's
+ * (spec AST-081 FR1, AST-051 FR6) — once per distinct function. A source that
  * throws, times out, or returns an invalid catalog falls back to its saved copy;
  * with none, it is reported and adds nothing. The others always count.
  *
@@ -358,33 +935,27 @@ async function callSource(source, request, label, timeoutMs) {
  * @param {{cacheDir?: string, timeoutMs?: number}} [options]
  * @returns {Promise<CatalogResult>}
  */
-export async function callSources(project, request = {}, options = {}) {
+async function callOwnSources(project, request = {}, options = {}) {
   const {cacheDir = defaultCacheDir(), timeoutMs = SOURCE_TIMEOUT_MS} = options;
   /** @type {CatalogResult} */
   const result = {sources: [], packages: []};
-  if (project == null) return result;
+  const fromDoor = doorSources();
+  if (project == null && fromDoor.length === 0) return result;
+  const iconSets = optedIntoIconSets(project);
 
-  /** @type {Array<{from: string, source?: DiscoverSource, error?: string}>} */
-  const origins = [];
-  if (typeof project.config?.discover === 'function') {
-    origins.push({from: 'astryx.config', source: project.config.discover});
-  }
-  for (const integration of project.loadedIntegrations) {
-    if (integration.__discoverError) {
-      origins.push({from: integration.name, error: integration.__discoverError});
-    } else if (integration.__discover) {
-      origins.push({from: integration.name, source: integration.__discover});
-    }
-  }
+  const origins = sourceOrigins(project);
 
   /** @type {Set<unknown>} */
   const called = new Set();
   /** @type {Set<string>} */
   const seen = new Set();
   const ask = request.package
-    ? {package: request.package, ...(request.version ? {version: request.version} : {})}
+    ? {
+        package: request.package,
+        ...(request.version ? {version: request.version} : {}),
+      }
     : {};
-  for (const {from, source, error} of origins) {
+  for (const {from, key = from, source, error} of origins) {
     if (source == null) {
       result.sources.push({name: from, from, status: 'failed', error});
       continue;
@@ -393,11 +964,11 @@ export async function callSources(project, request = {}, options = {}) {
     called.add(source);
 
     const label = `the discover source from ${from}`;
-    const file = savedCopyPath(cacheDir, from, ask);
+    const file = savedCopyPath(cacheDir, key, ask);
     /** @type {import('../../authoring/discover/type').DiscoverCatalog} */
     let catalog;
     try {
-      catalog = await callSource(source, ask, label, timeoutMs);
+      catalog = await callSource(source, ask, label, timeoutMs, iconSets);
       writeSavedCopy(file, catalog);
       result.sources.push({
         name: catalog.source.name,
@@ -408,9 +979,14 @@ export async function callSources(project, request = {}, options = {}) {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const saved = readSavedCopy(file, label);
+      const saved = readSavedCopy(file, label, iconSets);
       if (saved == null) {
-        result.sources.push({name: from, from, status: 'failed', error: message});
+        result.sources.push({
+          name: from,
+          from,
+          status: 'failed',
+          error: message,
+        });
         continue;
       }
       catalog = saved.catalog;
@@ -433,6 +1009,310 @@ export async function callSources(project, request = {}, options = {}) {
   return result;
 }
 
+/**
+ * Call every discover source (see {@link callOwnSources}), then read the
+ * official list (spec:AST-051 FR11). The list comes last, so a source keeps
+ * its entry for an official package, or for any package of the same
+ * integration (FR7); the list adds the official packages no source covers.
+ * The result stays in source order; discover puts official packages first
+ * only where it shows them ({@link officialFirst}).
+ *
+ * @param {Project | undefined} project
+ * @param {{package?: string, version?: string}} [request]
+ * @param {{cacheDir?: string, timeoutMs?: number, official?: OfficialList}} [options]
+ *   `official`: the list {@link officialList} read; read here when absent
+ * @returns {Promise<CatalogResult>}
+ */
+export async function callSources(project, request = {}, options = {}) {
+  const {official = officialList({project}), ...rest} = options;
+  const own = await callOwnSources(project, request, rest);
+  const added = officialNotCovered(own.packages, official, request);
+  return {
+    sources: [
+      ...own.sources,
+      official.error
+        ? {
+            name: OFFICIAL_SOURCE_NAME,
+            from: OFFICIAL_SOURCE_FROM,
+            status: 'failed',
+            error: official.error,
+          }
+        : {
+            name: OFFICIAL_SOURCE_NAME,
+            from: OFFICIAL_SOURCE_FROM,
+            status: 'fresh',
+            complete: true,
+          },
+    ],
+    // Source order: the first entry per integration is the one discover
+    // keeps. Official packages are put first only where discover shows them.
+    // Icon sets a project could add are listed in every project, so an app
+    // can compare them before it picks one (spec:AST-084 FR17).
+    packages: [...own.packages, ...added],
+  };
+}
+
+/**
+ * The official packages no source's entry covers, as catalog packages. A
+ * source's entry wins for its package and for the integration it publishes
+ * under any name (FR7), so a fork or mirror keeps its place.
+ * @param {CatalogResult['packages']} packages the sources' packages
+ * @param {OfficialList} official
+ * @param {{package?: string}} [request] keep only this package
+ * @returns {CatalogResult['packages']}
+ */
+function officialNotCovered(packages, official, request = {}) {
+  const seen = new Set(
+    packages.flatMap(pkg => [pkg.package, pkg.integration, ...pkg.aliases]),
+  );
+  /** @type {CatalogResult['packages']} */
+  const added = [];
+  for (const {pin: _pin, ...pkg} of official.packages) {
+    if (seen.has(pkg.package)) continue;
+    if (request.package && pkg.package !== request.package) continue;
+    added.push({...pkg, source: OFFICIAL_SOURCE_NAME, official: true});
+  }
+  return added;
+}
+
+/**
+ * The experimental item kinds a catalog may list (spec:AST-017 FR27):
+ * `icon-set`, read only where the icon feature gate is on.
+ */
+export const EXPERIMENTAL_KINDS = /** @type {const} */ (['icon-set']);
+
+/** The item kinds every project reads: the catalog kinds, less experimental ones. */
+export const STABLE_KINDS = DISCOVER_KINDS.filter(
+  kind =>
+    !(/** @type {readonly string[]} */ (EXPERIMENTAL_KINDS).includes(kind)),
+);
+
+/**
+ * The item kinds `--type` takes in the project at the working directory, or
+ * the stable kinds when it cannot be read.
+ * @returns {Promise<readonly string[]>}
+ */
+export async function loadReadKinds() {
+  return readKinds(await Project.load().catch(() => undefined));
+}
+
+/**
+ * The item kinds `--type` takes in this project: every stable kind, and the
+ * experimental ones where icon features are on.
+ * @param {Project | undefined} project
+ * @returns {readonly string[]}
+ */
+export function readKinds(project) {
+  return optedIntoIconSets(project) ? DISCOVER_KINDS : STABLE_KINDS;
+}
+
+/**
+ * Whether discover reads icon sets in this project: the icon feature gate.
+ * @param {Project | undefined} project
+ */
+export function optedIntoIconSets(project) {
+  return iconFeatureGate(project).on;
+}
+
+/**
+ * Official packages first, in the official list's order; the rest keep theirs.
+ * @template T
+ * @param {T[]} items
+ * @param {OfficialPackage[]} official
+ * @param {(item: T) => string} nameOf
+ * @returns {T[]}
+ */
+export function officialFirst(items, official, nameOf) {
+  const order = new Map(official.map((pkg, index) => [pkg.package, index]));
+  const rank = (/** @type {T} */ item) => order.get(nameOf(item)) ?? order.size;
+  return [...items].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * The official list this CLI carries (spec:AST-051 FR11). The file holds no
+ * versions; each entry takes them from this CLI and the project:
+ *
+ * - Its latest release is the newest release this CLI knows: its own version
+ *   on a release CLI, or the project's Core version when that is a newer
+ *   release.
+ * - A package released with Core lists a release CLI's own version and the
+ *   project's Core version (installed, else declared exactly), so each,
+ *   the latest release included, can be looked up. Its add command pins the project's Core version, else the Core range
+ *   the project declares, else the latest release; nothing on a canary CLI in
+ *   a project with no Core, which may have been published without it.
+ * - A canary-only package is listed only by a canary CLI, as a prerelease at
+ *   the project's Core version when that is a prerelease, else at the CLI's
+ *   own version when the project has no Core. It is not listed beside a
+ *   released or declared Core, which it cannot be installed with.
+ *
+ * @param {{file?: string, version?: string, project?: Project}} [options] the
+ *   list file and the CLI version to read it for, both defaulting to this
+ *   CLI's own, and the project whose Core decides the versions
+ * @returns {OfficialList}
+ */
+export function officialList({
+  file = OFFICIAL_LIST_FILE,
+  version,
+  project,
+} = {}) {
+  try {
+    const cli = version ?? packageVersion(CLI_ROOT);
+    if (cli == null) throw new Error('the CLI package names no version');
+    const core = project == null ? null : projectCore(project);
+    const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const canaryCli = /-canary\./u.test(cli);
+    /** @type {(v: string | undefined) => v is string} */
+    const isRelease = v => v != null && !v.includes('-');
+    const latest =
+      [cli, core?.version].filter(isRelease).sort(newerFirst)[0] ?? null;
+    /** @type {OfficialPackage[]} */
+    const packages = [];
+    for (const pkg of list.packages) {
+      /** @type {string[]} */
+      let listed = [];
+      /** @type {string | null} */
+      let entryLatest = null;
+      /** @type {string | undefined} */
+      let pin;
+      if (pkg.canaryOnly === true) {
+        if (!canaryCli) continue;
+        if (core == null) pin = cli;
+        else if (core.version && !isRelease(core.version)) pin = core.version;
+        else continue;
+        listed = [pin];
+      } else if (pkg.releasedWithCore === true) {
+        entryLatest = latest;
+        listed = [
+          ...new Set(
+            [isRelease(cli) ? cli : undefined, core?.version].filter(
+              /** @returns {v is string} */ v => v != null,
+            ),
+          ),
+        ].sort(newerFirst);
+        // The project's Core version, else the plain range it declares, else
+        // the latest release (spec:AST-051 FR11): a Core declared as
+        // `workspace:*`, a `file:` path or a dist-tag, and not installed,
+        // still gets a pin.
+        pin =
+          core == null
+            ? canaryCli
+              ? undefined
+              : cli
+            : (core.version ?? core.range ?? entryLatest ?? undefined);
+      }
+      packages.push({
+        package: pkg.package,
+        integration: pkg.package,
+        aliases: [],
+        ...(pkg.description ? {description: pkg.description} : {}),
+        latest: entryLatest,
+        versions: listed.map(v => ({
+          version: v,
+          publishedAt: null,
+          prerelease: v.includes('-'),
+          status: 'ok',
+        })),
+        contributions: pkg.contributions,
+        ...(pin ? {pin} : {}),
+      });
+    }
+    return {packages};
+  } catch (err) {
+    return {
+      packages: [],
+      error: `the official list could not be read (${err instanceof Error ? err.message : String(err)})`,
+    };
+  }
+}
+
+/**
+ * What the project has: its installed integrations plus each official package
+ * its own package.json declares as a dependency whose entry the official list
+ * supplied, official packages first. A declared official package that a source
+ * lists stays as that source shows it (FR7). One that failed to load as an
+ * integration stays out. A declared one takes what it adds from the list and
+ * its version from the copy the project installed, under an npm alias too.
+ *
+ * @param {Project | undefined} project
+ * @param {InstalledPackage[]} installed from {@link describeInstalled}
+ * @param {CatalogResult} catalog
+ * @param {OfficialDeclarations} declared from {@link officialDeclarations}
+ * @param {OfficialPackage[]} official the official list, for the order
+ * @returns {Array<InstalledPackage & {declaredOfficial?: true}>}
+ */
+export function withDeclaredOfficial(
+  project,
+  installed,
+  catalog,
+  declared,
+  official,
+) {
+  const loaded = new Set(project?.loadedIntegrations.map(i => i.name) ?? []);
+  /** @type {Array<InstalledPackage & {declaredOfficial?: true}>} */
+  const added = [];
+  for (const pkg of catalog.packages) {
+    const local = declared.dependency.get(pkg.package);
+    if (!pkg.official || local == null || loaded.has(pkg.package)) continue;
+    const version = installedVersion(project, local);
+    added.push(
+      /** @type {InstalledPackage & {declaredOfficial: true}} */ (
+        /** @type {unknown} */ ({
+          name: pkg.package,
+          category: pkg.package,
+          ...(version ? {version} : {}),
+          ...(pkg.description ? {description: pkg.description} : {}),
+          ...itemLists(pkg.contributions),
+          declaredOfficial: true,
+        })
+      ),
+    );
+  }
+  return officialFirst([...installed, ...added], official, pkg => pkg.name);
+}
+
+/**
+ * Group contributions into the entry fields, one list per kind that has any.
+ * `components` is always present, like on a scanned package.
+ * @param {DiscoverPackage['contributions']} contributions
+ * @returns {Record<string, string[]>}
+ */
+function itemLists(contributions) {
+  /** @type {Record<string, string[]>} */
+  const lists = {components: []};
+  for (const [kind, field] of KIND_FIELDS) {
+    const names = contributions.filter(c => c.kind === kind).map(c => c.name);
+    if (names.length > 0) lists[field] = names;
+  }
+  return lists;
+}
+
+/**
+ * The version in a package directory's package.json, if it names one.
+ * @param {string} dir
+ * @returns {string | undefined}
+ */
+function packageVersion(dir) {
+  try {
+    const {version} = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    return typeof version === 'string' && version ? version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The version of `name` the project installed, if it installed it.
+ * @param {Project | undefined} project
+ * @param {string} name
+ * @returns {string | undefined}
+ */
+function installedVersion(project, name) {
+  const dir = findInstalledPackage(project?.cwd ?? process.cwd(), name);
+  return dir == null ? undefined : packageVersion(dir);
+}
+
 /** The list and detail entry fields for each item kind, in display order. */
 export const KIND_FIELDS = /** @type {const} */ ([
   ['component', 'components'],
@@ -441,6 +1321,7 @@ export const KIND_FIELDS = /** @type {const} */ ([
   ['theme', 'themes'],
   ['codemod', 'codemods'],
   ['agent-doc', 'agentDocs'],
+  ['icon-set', 'iconSets'],
 ]);
 
 /**
@@ -454,6 +1335,7 @@ export function toEntry(pkg) {
   /** @type {Record<string, unknown>} */
   const entry = {
     name: pkg.name,
+    package: pkg.name,
     category: pkg.category,
     components: pkg.components,
     version: pkg.version,
@@ -465,6 +1347,8 @@ export function toEntry(pkg) {
     const values = /** @type {Record<string, unknown>} */ (pkg)[field];
     if (Array.isArray(values) && values.length > 0) entry[field] = values;
   }
+  if (pkg.docSections) entry.docSections = pkg.docSections;
+  if (pkg.skills?.length) entry.skills = pkg.skills;
   if (pkg.latest) entry.latest = pkg.latest;
   return /** @type {import('./discover.type.mjs').DiscoverListEntry} */ (entry);
 }
@@ -473,9 +1357,10 @@ export function toEntry(pkg) {
  * Locate a component's doc file within the given packages (case-insensitive).
  * @param {ScannedPackage[]} packages
  * @param {string} name
- * @returns {ComponentResolution | null}
+ * @returns {Promise<ComponentResolution | null>}
  */
-export function findComponent(packages, name) {
+export async function findComponent(packages, name) {
+  const {findComponentInPackages} = await import('./_package-scanner.mjs');
   return findComponentInPackages(packages, name);
 }
 
@@ -493,7 +1378,10 @@ export async function loadValidatedDoc(result, {lang, zh}) {
   try {
     docs = await loadDocs(
       result.docPath,
-      /** @type {{zh?: boolean, dense?: boolean, lang?: string}} */ ({zh, lang}),
+      /** @type {{zh?: boolean, dense?: boolean, lang?: string}} */ ({
+        zh,
+        lang,
+      }),
     );
   } catch (e) {
     throw new AstryxError(
@@ -510,4 +1398,68 @@ export async function loadValidatedDoc(result, {lang, zh}) {
       ERROR_CODES.ERR_INVALID_DOC,
     );
   return docs;
+}
+
+/**
+ * The not-found error with Core's match for the query in its suggestions:
+ * the first Core component or hook `astryx search` gives in `cwd`, as the
+ * lookups' shared hint (foundation/suggest/other-command.mjs) names it, after
+ * discover's own near names, when
+ * search answers the whole query with it by a name or keyword: one word at
+ * search's keyword strength, or every word of a longer query
+ * (api/search/_score.mjs). A Core entry search found only through prose, or
+ * through some of the words, is too weak a match to name. The error is
+ * unchanged when search gives no such entry, or fails.
+ * @param {AstryxError} err
+ * @param {string} query
+ * @param {string} cwd
+ * @returns {Promise<AstryxError>}
+ */
+export async function withCoreMatch(err, query, cwd) {
+  try {
+    const [
+      {search, tokenizeQuery, spellIdentifiers},
+      {FULL_COVERAGE_SCORE, STRONG_TOKEN_SCORE},
+      {hintFor, MATCH_TIER},
+    ] = await Promise.all([
+      import('../search/search.mjs'),
+      import('../search/_score.mjs'),
+      import('../../foundation/suggest/other-command.mjs'),
+    ]);
+    const {results} = (await search(query, {cwd})).data;
+    const core = results.find(
+      r =>
+        (r.domain === 'component' || r.domain === 'hook') &&
+        r.package === CORE_PACKAGE_NAME,
+    );
+    const strong =
+      tokenizeQuery(spellIdentifiers(query)).length > 1
+        ? FULL_COVERAGE_SCORE
+        : STRONG_TOKEN_SCORE;
+    if (!core || core.score < strong) return err;
+    const command = /** @type {'component' | 'hook'} */ (core.domain);
+    // The hint names another command, so it follows discover's own near
+    // names rather than taking the place of one.
+    return new AstryxError(
+      err.message,
+      [
+        ...(err.suggestions ?? []),
+        hintFor(command, core.name, undefined, MATCH_TIER.words).hint,
+      ],
+      err.code,
+    );
+  } catch {
+    return err;
+  }
+}
+
+/**
+ * How many of the icon definitions this CLI ships a set's definitions cover,
+ * of how many: the coverage `experimental icon --list` reports as
+ * `coverage.astryx`.
+ * @param {string[]} definitions
+ * @returns {{mapped: number, total: number}}
+ */
+export function iconSetCoverage(definitions) {
+  return astryxDefinitionCoverage(definitions);
 }

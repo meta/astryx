@@ -18,6 +18,40 @@ const GUARD = ':where(:not(:disabled,[aria-disabled="true"]))';
 
 ruleTester.run('no-hover-on-disabled', rule, {
   valid: [
+    // The escape hatch for a pseudo-element hover key: the component keeps the
+    // disabled case out in JS and says so on the one key.
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          hoverOnPointer: {
+            '@media (hover: hover)': {
+              // eslint-disable-next-line rule-to-test/no-hover-on-disabled -- only applied when !isDisabled
+              ':hover::after': {backgroundColor: 'red'},
+            },
+          },
+        });
+      `,
+    },
+    // A pseudo-element WITHOUT hover is not this rule's concern.
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          card: {'::after': {backgroundColor: 'transparent'}},
+        });
+      `,
+    },
+    // Hover on an ancestor styling a pseudo-element stays out of scope, like
+    // any other ancestor hover.
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          cell: {':is(tr:hover *)::after': {backgroundColor: 'red'}},
+        });
+      `,
+    },
     // The guarded form, property-first.
     {
       code: `
@@ -118,7 +152,9 @@ ruleTester.run('no-hover-on-disabled', rule, {
         });
       `,
     },
-    // A pseudo-ELEMENT has to stay last, so the guard goes before it.
+    // A pseudo-ELEMENT key is reported but never autofixed: StyleX 0.19.0
+    // ranks the guarded form below a plain `::after` rule, so the fix would
+    // turn a disabled-hover lint into a hover that never paints.
     {
       code: `
         import * as stylex from '@stylexjs/stylex';
@@ -126,13 +162,46 @@ ruleTester.run('no-hover-on-disabled', rule, {
           tab: {opacity: {default: 0, ':hover::after': 1}},
         });
       `,
-      errors: [{messageId: 'unguardedHover'}],
-      output: `
+      errors: [{messageId: 'unguardedHoverPseudoElement'}],
+    },
+    {
+      code: `
         import * as stylex from '@stylexjs/stylex';
         const styles = stylex.create({
-          tab: {opacity: {default: 0, ':hover${GUARD}::after': 1}},
+          tab: {opacity: {default: 0, ':hover::before': 1}},
         });
       `,
+      errors: [{messageId: 'unguardedHoverPseudoElement'}],
+    },
+    // A condition-first pseudo-element key is held to the same standard.
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          card: {':hover::after': {'@media (hover: hover)': {backgroundColor: 'red'}}},
+        });
+      `,
+      errors: [{messageId: 'unguardedHoverPseudoElement'}],
+    },
+    // An already guarded pseudo-element key is reported too: it is the shape
+    // the old autofix produced, and it silently loses to a plain `::after`.
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          card: {backgroundColor: {default: 'transparent', ':hover${GUARD}::after': 'red'}},
+        });
+      `,
+      errors: [{messageId: 'guardedHoverPseudoElement'}],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          card: {backgroundColor: {default: 'transparent', ':hover:not(:disabled)::after': 'red'}},
+        });
+      `,
+      errors: [{messageId: 'guardedHoverPseudoElement'}],
     },
     // A double-quoted key is rewritten single-quoted: the guard carries its
     // own double quotes.

@@ -370,7 +370,7 @@ export const PREVIEW_PLAN: ReadonlyArray<PreviewRow> = [
   },
   {
     id: 'drawer',
-    component: 'Drawer (lab)',
+    component: 'Drawer',
     group: 'Overlays & layers',
     verdict: 'PARTIAL',
     motionCost: 'idle',
@@ -597,12 +597,12 @@ export const PREVIEW_PLAN: ReadonlyArray<PreviewRow> = [
     today: 'Nothing.',
     gap: 'No hover or active transition, unlike every sibling nav item.',
     shows:
-      'A tint transition at the state token, beside the untransitioned original.',
+      'A tint transition at the state token (--duration-fast on --ease-standard), gated to fine pointers that hover, beside the untransitioned original.',
     hardCase:
       'Hover on a touch device, where a tap fires a false hover. The rubric requires this to be gated to fine pointers, and this is the cheapest place to prove the gate works.',
     controls: ['duration', 'pointer type', 'reduced motion'],
     status: 'built',
-    rig: 'TintRig',
+    rig: 'NavTintRig',
     priority: 3,
     measurementNote: null,
   },
@@ -616,7 +616,7 @@ export const PREVIEW_PLAN: ReadonlyArray<PreviewRow> = [
     today: 'Marker slide plus item tint.',
     gap: 'Animates top and height, which thrashes layout.',
     shows:
-      'The same marker on transform and on top/height, with a paint-cost readout.',
+      "The same marker on transform and on top/height, at reading pace and at a fast scroll rate. useAnimator keeps velocity through an interrupted move, but it has one scale, not scaleY, so it cannot stretch the marker to an item's height.",
     hardCase:
       'Scroll-linked movement. The marker moves on every scroll frame, so a layout-triggering property here costs more than anywhere else in the audit.',
     controls: ['duration', 'technique', 'scroll rate'],

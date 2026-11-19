@@ -15,12 +15,12 @@
  */
 
 export const TEMPLATE_LEDGER_URL =
-  'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json';
+  'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json';
 
 export const TEMPLATE_LEDGER_FETCH_TIMEOUT_MS = 10_000;
 
 export const TEMPLATE_RUBRIC_URL =
-  'https://github.com/facebook/astryx/wiki/Contributing-Templates#template-grading-rubric';
+  'https://github.com/meta/astryx/wiki/Contributing-Templates#template-grading-rubric';
 
 export type TemplateAuditGrade = 'A' | 'B' | 'C' | 'D' | 'F';
 
@@ -149,11 +149,11 @@ function historicalAudit({
     evidence: [
       {
         label: 'Historical merge-commit audit claim',
-        href: `https://github.com/facebook/astryx/commit/${sha}`,
+        href: `https://github.com/meta/astryx/commit/${sha}`,
       },
       {
         label: `Pull request #${pr}`,
-        href: `https://github.com/facebook/astryx/pull/${pr}`,
+        href: `https://github.com/meta/astryx/pull/${pr}`,
       },
     ],
     notes:

@@ -8,7 +8,16 @@ import {describe, expect, it} from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   classifyReviewSignalPaths,
+  composeReviewGate,
+  hasWritePermission,
+  normalizeReviewApp,
+  readCodeGate,
+  readSpecGate,
   resolveReviewApprovals,
+  TRAINER_WAITING_TEXT,
+  needsTrainerPass,
+  trainerPassed,
+  OWNER_CLEARED_TEXT,
 } = require('./review-signal-decision.cjs');
 
 const head1 = '1111111111111111111111111111111111111111';
@@ -18,6 +27,22 @@ const approval = (login, commitId, state = 'APPROVED') => ({
   commit_id: commitId,
   state,
 });
+const APP = 'review-app[bot]';
+const appReview = (commitId, state = 'APPROVED') => ({
+  user: {login: APP, type: 'Bot'},
+  commit_id: commitId,
+  state,
+});
+const resolveWithApp = (reviews, {authorHasWrite = true, ...rest} = {}) =>
+  resolveReviewApprovals({
+    reviews,
+    headSha: head2,
+    engOwners: ['engineer'],
+    designOwners: ['designer'],
+    reviewApp: APP,
+    authorHasWrite,
+    ...rest,
+  });
 
 describe('review-signal exact-head approvals', () => {
   it('does not let an H1 engineering approval clear H2', () => {
@@ -30,6 +55,7 @@ describe('review-signal exact-head approvals', () => {
       }),
     ).toEqual({
       codeApproved: false,
+      codeApprovedBy: null,
       codeWithdrawn: false,
       designApproved: false,
     });
@@ -45,6 +71,7 @@ describe('review-signal exact-head approvals', () => {
       }),
     ).toEqual({
       codeApproved: false,
+      codeApprovedBy: null,
       codeWithdrawn: false,
       designApproved: false,
     });
@@ -64,6 +91,7 @@ describe('review-signal exact-head approvals', () => {
       }),
     ).toEqual({
       codeApproved: true,
+      codeApprovedBy: 'owner',
       codeWithdrawn: false,
       designApproved: true,
     });
@@ -82,6 +110,7 @@ describe('review-signal exact-head approvals', () => {
       }),
     ).toEqual({
       codeApproved: false,
+      codeApprovedBy: null,
       codeWithdrawn: true,
       designApproved: false,
     });
@@ -101,6 +130,7 @@ describe('review-signal exact-head approvals', () => {
       }),
     ).toEqual({
       codeApproved: true,
+      codeApprovedBy: 'owner',
       codeWithdrawn: false,
       designApproved: false,
     });
@@ -166,5 +196,267 @@ describe('review-signal exact-head approvals', () => {
       },
     );
     expect(typeof mod.exports.resolveReviewApprovals).toBe('function');
+  });
+});
+
+describe('review-app approval for write-access authors', () => {
+  it('clears the code gate for a write-access author on the exact head', () => {
+    expect(resolveWithApp([appReview(head2)])).toEqual({
+      codeApproved: true,
+      codeApprovedBy: 'review-app',
+      codeWithdrawn: false,
+      designApproved: false,
+    });
+  });
+
+  it('blocks again when a later exact-head verdict requests changes or is dismissed', () => {
+    for (const state of ['CHANGES_REQUESTED', 'DISMISSED']) {
+      expect(
+        resolveWithApp([appReview(head2), appReview(head2, state)]),
+      ).toEqual({
+        codeApproved: false,
+        codeApprovedBy: null,
+        codeWithdrawn: true,
+        designApproved: false,
+      });
+    }
+  });
+
+  it('clears again when the latest exact-head verdict approves after a request for changes', () => {
+    expect(
+      resolveWithApp([appReview(head2, 'CHANGES_REQUESTED'), appReview(head2)])
+        .codeApprovedBy,
+    ).toBe('review-app');
+  });
+
+  it('ignores a later app comment, which is not a verdict', () => {
+    expect(
+      resolveWithApp([appReview(head2), appReview(head2, 'COMMENTED')])
+        .codeApproved,
+    ).toBe(true);
+  });
+
+  it('still needs an engineering owner when the author lacks write access', () => {
+    expect(resolveWithApp([appReview(head2)], {authorHasWrite: false})).toEqual(
+      {
+        codeApproved: false,
+        codeApprovedBy: null,
+        codeWithdrawn: false,
+        designApproved: false,
+      },
+    );
+    expect(
+      resolveWithApp([appReview(head2), approval('engineer', head2)], {
+        authorHasWrite: false,
+      }).codeApprovedBy,
+    ).toBe('owner');
+  });
+
+  it('does not carry an app approval of an earlier head to a new head', () => {
+    expect(resolveWithApp([appReview(head1)])).toEqual({
+      codeApproved: false,
+      codeApprovedBy: null,
+      codeWithdrawn: false,
+      designApproved: false,
+    });
+  });
+
+  it("keeps an engineering owner's exact-head request for changes over an app approval", () => {
+    expect(
+      resolveWithApp([
+        approval('engineer', head2, 'CHANGES_REQUESTED'),
+        appReview(head2),
+      ]),
+    ).toEqual({
+      codeApproved: false,
+      codeApprovedBy: null,
+      codeWithdrawn: true,
+      designApproved: false,
+    });
+  });
+
+  it('ignores the app when REVIEW_APP is unset or malformed', () => {
+    for (const reviewApp of ['', undefined, 'not-a-bot', '  ']) {
+      expect(resolveWithApp([appReview(head2)], {reviewApp}).codeApproved).toBe(
+        false,
+      );
+    }
+  });
+
+  it('ignores a non-Bot account that matches the configured login', () => {
+    expect(
+      resolveWithApp([
+        {user: {login: APP, type: 'User'}, commit_id: head2, state: 'APPROVED'},
+      ]).codeApproved,
+    ).toBe(false);
+  });
+
+  it('treats only write and admin as write access', () => {
+    expect(hasWritePermission({permission: 'admin'})).toBe(true);
+    expect(hasWritePermission({permission: 'write'})).toBe(true);
+    for (const response of [
+      {permission: 'read'},
+      {permission: 'none'},
+      {permission: 'triage'},
+      {},
+      null,
+      undefined,
+    ]) {
+      expect(hasWritePermission(response)).toBe(false);
+    }
+  });
+
+  it('normalizes the configured app login and rejects non-bot values', () => {
+    expect(normalizeReviewApp(' Review-App[bot] ')).toBe('review-app[bot]');
+    expect(normalizeReviewApp('review-app')).toBe('');
+    expect(normalizeReviewApp(undefined)).toBe('');
+  });
+});
+
+describe('the review gate text for the spec half', () => {
+  const codeWait = 'Waiting on code review: community contribution';
+  const trusted = (context, description, state = 'pending') => ({
+    context,
+    state,
+    description,
+    target_url: 'https://github.com/meta/astryx/actions/runs/7/attempts/1',
+    creator: {login: 'github-actions[bot]'},
+  });
+  const reconciling = trusted(
+    'spec-owner-approval',
+    'Reconciling exact head abcdef1.',
+  );
+  const approvedMirror = trusted(
+    'spec-owner-approval',
+    'Mirrors review-required · spec ok (@owner)',
+    'success',
+  );
+  const waitingMirror = trusted(
+    'spec-owner-approval',
+    'Mirrors review-required · spec waiting (eng)',
+  );
+  const gateFor = (statuses, codeGated = true) =>
+    composeReviewGate({
+      codeGated,
+      codeDescription: codeGated ? codeWait : 'Review complete.',
+      spec: readSpecGate(statuses),
+    });
+
+  it('asks for nothing before the spec half is decided on a new head', () => {
+    for (const statuses of [[], [reconciling]]) {
+      expect(gateFor(statuses)).toEqual({
+        state: 'pending',
+        description: `${codeWait} (+ spec check)`,
+      });
+    }
+  });
+
+  it('shows an approval of this head as carried while a run checks it again', () => {
+    const statuses = [reconciling, approvedMirror];
+
+    expect(gateFor(statuses)).toEqual({
+      state: 'pending',
+      description: `${codeWait} · spec approval carried (verifying)`,
+    });
+    expect(gateFor(statuses, false)).toMatchObject({
+      state: 'pending',
+      description: '⏳ Spec approval carried (verifying)',
+    });
+  });
+
+  it('asks for nothing while a run checks a head that needed no owner approval', () => {
+    const decidedWithoutApprovers = trusted(
+      'spec-owner-approval',
+      'Mirrors review-required · spec ok',
+      'success',
+    );
+
+    expect(gateFor([reconciling, decidedWithoutApprovers]).description).toBe(
+      `${codeWait} (+ spec check)`,
+    );
+  });
+
+  it('still asks for approval when the last decision on this head waits', () => {
+    expect(gateFor([reconciling, waitingMirror]).description).toBe(
+      `${codeWait} (+ spec approval)`,
+    );
+    expect(gateFor([waitingMirror]).description).toBe(
+      `${codeWait} (+ spec approval)`,
+    );
+  });
+
+  it('reads the code half back from every spec suffix', () => {
+    for (const suffix of [
+      ' (+ spec approval)',
+      ' (+ spec check)',
+      ' · spec approval carried (verifying)',
+    ]) {
+      expect(
+        readCodeGate([trusted('review-required', `${codeWait}${suffix}`)]),
+      ).toEqual({gated: true, description: codeWait});
+    }
+  });
+});
+
+describe("a trainer pass for the review app's own pull requests", () => {
+  const HEAD = 'a'.repeat(40);
+  const review = (login, state, commitId = HEAD) => ({
+    user: {login, type: 'User'},
+    state,
+    commit_id: commitId,
+  });
+
+  it('applies only to a pull request the review app opened', () => {
+    expect(
+      needsTrainerPass({
+        author: 'Review-App[bot]',
+        reviewApp: 'review-app[bot]',
+      }),
+    ).toBe(true);
+    expect(
+      needsTrainerPass({
+        author: 'dependabot[bot]',
+        reviewApp: 'review-app[bot]',
+      }),
+    ).toBe(false);
+    expect(
+      needsTrainerPass({author: 'contributor', reviewApp: 'review-app[bot]'}),
+    ).toBe(false);
+    expect(needsTrainerPass({author: 'review-app[bot]', reviewApp: ''})).toBe(
+      false,
+    );
+  });
+
+  it("passes on an engineering owner's latest approval of the exact head only", () => {
+    const engOwners = ['engineer'];
+    const passed = reviews =>
+      trainerPassed({reviews, headSha: HEAD, engOwners});
+    expect(passed([])).toBe(false);
+    expect(passed([review('engineer', 'APPROVED')])).toBe(true);
+    expect(passed([review('engineer', 'APPROVED', 'b'.repeat(40))])).toBe(
+      false,
+    );
+    expect(passed([review('someone', 'APPROVED')])).toBe(false);
+    expect(
+      passed([
+        review('engineer', 'APPROVED'),
+        review('engineer', 'CHANGES_REQUESTED'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('clears with the text review-clear owns, so review-clear re-gates a withdrawn trainer pass', () => {
+    const clear = readFileSync(
+      fileURLToPath(new URL('../workflows/review-clear.yml', import.meta.url)),
+      'utf8',
+    );
+    expect(clear).toContain(`const OWNER_CLEARED = '${OWNER_CLEARED_TEXT}';`);
+  });
+
+  it('waits with a code-review description that review-clear owns', () => {
+    expect(TRAINER_WAITING_TEXT.startsWith('Waiting on code review:')).toBe(
+      true,
+    );
+    expect(TRAINER_WAITING_TEXT.length).toBeLessThanOrEqual(140);
   });
 });

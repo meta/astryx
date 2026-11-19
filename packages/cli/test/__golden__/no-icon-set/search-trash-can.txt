@@ -1,0 +1,15 @@
+Results for "trash can" (3)
+name:        Icon
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Icon
+command:     pnpm exec astryx component Icon
+name:        IconButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/IconButton
+command:     pnpm exec astryx component IconButton
+name:        ButtonWithIcon
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ButtonWithIcon --type block

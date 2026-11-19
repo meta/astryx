@@ -45,7 +45,7 @@ describeFieldInputParts('ComplexSelector', {
       {content}
     </ComplexSelector>
   ),
-  getControl: () => screen.getByRole('button', {name: 'Fruit'}),
+  getControl: () => screen.getByRole('combobox', {name: 'Fruit'}),
   // No shipped InputGroup support (family:input-fields adoption table).
   inGroup: false,
 });
@@ -64,7 +64,7 @@ describe('ComplexSelector FR10 targets', () => {
     );
     const ids = (
       screen
-        .getByRole('button', {name: 'Fruit'})
+        .getByRole('combobox', {name: 'Fruit'})
         .getAttribute('aria-describedby') ?? ''
     ).split(' ');
     expect(ids).toContain('caller-help');
@@ -84,7 +84,7 @@ describe('ComplexSelector FR10 targets', () => {
         {content}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
     const controlBox = document.querySelector('.fr10-control') as HTMLElement;
     expect(controlBox).toHaveClass('astryx-complex-selector');
     expect(controlBox).toContainElement(trigger);
@@ -114,7 +114,7 @@ describe('ComplexSelector FR10 targets', () => {
         {content}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
     fireEvent.click(trigger);
     expect(targets).toEqual([trigger]);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -135,7 +135,7 @@ describe('ComplexSelector FR10 targets', () => {
         {content}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
     fireEvent.click(trigger);
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -153,7 +153,7 @@ describe('ComplexSelector FR10 targets', () => {
     );
     const controlBox = container.querySelector('.fr10-control') as HTMLElement;
     fireEvent.click(controlBox);
-    expect(screen.getByRole('button', {name: 'Fruit'})).toHaveAttribute(
+    expect(screen.getByRole('combobox', {name: 'Fruit'})).toHaveAttribute(
       'aria-expanded',
       'true',
     );
@@ -174,7 +174,7 @@ describe('ComplexSelector FR10 targets', () => {
         {content}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     // The caller still sees the ArrowDown the trigger used to open the popup.
@@ -199,7 +199,7 @@ describe('ComplexSelector FR10 renderTrigger', () => {
         {content}
       </ComplexSelector>,
     );
-    const opener = screen.getByRole('button', {name: 'Open'});
+    const opener = screen.getByRole('combobox', {name: 'Fruit'});
     fireEvent.click(opener);
     expect(opener).toHaveAttribute('aria-expanded', 'true');
   });
@@ -224,7 +224,7 @@ describe('ComplexSelector FR10 renderTrigger', () => {
         {content}
       </ComplexSelector>,
     );
-    const opener = screen.getByRole('button', {name: 'Open'});
+    const opener = screen.getByRole('combobox', {name: 'Fruit'});
     expect(opener).toHaveAttribute('data-testid', 'opener');
     expect(opener).toHaveAttribute('aria-details', 'details-id');
     expect(ref.current).toBe(opener);

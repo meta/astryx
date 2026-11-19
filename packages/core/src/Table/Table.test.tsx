@@ -961,6 +961,38 @@ describe('Table', () => {
     expect(wrapper.style.overscrollBehaviorX).toBe('auto');
   });
 
+  it('names the scroll region after its table, not a generic "Table" (AST-025)', () => {
+    render(
+      <>
+        <Table aria-label="Orders" data={users} columns={columns} />
+        <h2 id="refunds-title">Refunds</h2>
+        <Table aria-labelledby="refunds-title" data={users} columns={columns} />
+        <h2 id="returns-title">Returns</h2>
+        <Table
+          aria-label="Ignored label"
+          aria-labelledby="returns-title"
+          data={users}
+          columns={columns}
+        />
+        <Table data={users} columns={columns} />
+      </>,
+    );
+    expect(screen.getByRole('group', {name: 'Orders'})).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Refunds'})).toHaveAttribute(
+      'aria-labelledby',
+      'refunds-title',
+    );
+    // With both, the region is named as the table is: by aria-labelledby.
+    expect(screen.getByRole('table', {name: 'Returns'})).toBeInTheDocument();
+    const returns = screen.getByRole('group', {name: 'Returns'});
+    expect(returns).not.toHaveAttribute('aria-label');
+    expect(
+      screen.queryByRole('group', {name: 'Ignored label'}),
+    ).not.toBeInTheDocument();
+    // An unnamed table keeps the generic fallback.
+    expect(screen.getAllByRole('group', {name: 'Table'})).toHaveLength(1);
+  });
+
   it('preserves scroll-wrapper HTML attributes from plugins', () => {
     const plugin: TablePlugin<User> = {
       transformScrollWrapper: props => ({
@@ -976,6 +1008,24 @@ describe('Table', () => {
     render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
     const wrapper = screen.getByRole('region', {name: 'Orders'});
     expect(wrapper).toHaveAttribute('tabindex', '2');
+  });
+
+  it("composes a plugin's scroll-wrapper className with the wrapper's own", () => {
+    const plugin: TablePlugin<User> = {
+      transformScrollWrapper: props => ({
+        ...props,
+        htmlProps: {
+          ...props.htmlProps,
+          className: 'plugin-wrapper',
+        },
+      }),
+    };
+    render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
+    const wrapper = screen.getByRole('group', {name: 'Table'});
+    // The plugin's class reaches the scroll container, beside the wrapper's
+    // own theme target.
+    expect(wrapper).toHaveClass('plugin-wrapper');
+    expect(wrapper).toHaveClass('astryx-table-scroll-wrapper');
   });
 
   it('contains overscroll only while the table scrolls', () => {

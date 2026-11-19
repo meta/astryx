@@ -8,5 +8,5 @@ colors  Colors - Cards use the core tokens.
 
 Read one section: pnpm exec astryx docs acme-guide <section>
 Read everything:  pnpm exec astryx docs acme-guide --full
-Up: pnpm exec astryx docs unorganized
+Up: pnpm exec astryx docs guides
 Previous: pnpm exec astryx docs working-with-ai

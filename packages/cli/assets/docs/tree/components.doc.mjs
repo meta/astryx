@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components`: guides for adding and
+ * @file `astryx docs authoring/building-blocks/components`: guides for adding and
  * documenting components in an integration package.
  */
 
@@ -20,4 +20,10 @@ export const docs = {
       accepts: {kinds: ['generic', 'namespace']},
     },
   },
+  blocks: [
+    {
+      type: 'prose',
+      text: 'In global mode: components from an integration installed for the computer show up outside projects; inside a project, only components from integrations the project installs. See {@link namespace:global} and {@link generic:global-integrations}.',
+    },
+  ],
 };

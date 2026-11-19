@@ -40,7 +40,8 @@ export const docs = {
     {
       name: 'label',
       type: 'ReactNode',
-      description: 'Optional label centered on the divider.',
+      description:
+        'Optional label centered on the divider. Numeric zero is preserved; null, booleans, and empty strings render no label.',
     },
     {
       name: 'variant',
@@ -92,7 +93,8 @@ export const docsZh = {
     {
       name: 'label',
       type: 'ReactNode',
-      description: '居中显示在分隔线上的可选标签。',
+      description:
+        '居中显示在分隔线上的可选标签。数字 0 会保留；null、布尔值和空字符串不渲染标签。',
     },
     {
       name: 'variant',
@@ -143,7 +145,7 @@ export const docsDense = {
   },
   propDescriptions: {
     orientation: 'divider orientation',
-    label: 'optional centered label on divider',
+    label: 'optional centered label; preserves 0; null/boolean/"" omit it',
     variant: 'visual weight of divider line',
     isFullBleed: 'extend to container edges w/ negative margins',
     xstyle: 'StyleX styles for layout; must be stylex.create() value',

@@ -17,7 +17,7 @@ exports[`FormLayout > matches snapshot for horizontal direction 1`] = `
 
 exports[`FormLayout > matches snapshot for horizontal-labels direction 1`] = `
 <div
-  class="astryx-form-layout FormLayout__styles.base xdt5ytf FormLayout__styles.horizontalLabels xrvj5dj x1pmbctz xlaq8a2 x7a106z xedohl4 x1rpgqan x1a1jff"
+  class="astryx-form-layout FormLayout__styles.base xdt5ytf FormLayout__styles.horizontalLabels xrvj5dj x1pmbctz xlaq8a2 x7a106z xedohl4 x1rpgqan x1a1jff x1q32nj3"
   data-direction="horizontal-labels"
   data-testid="layout"
 >

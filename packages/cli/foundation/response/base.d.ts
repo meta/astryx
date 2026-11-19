@@ -34,6 +34,36 @@ export interface CLIError {
   error: string;
   code: ErrorCode;
   suggestions?: Suggestion[];
+  /**
+   * What the command had already done when it failed, present only on errors
+   * from a command that changes files before it can fail (for example the
+   * `upgrade.run` data of a failed `astryx upgrade`). The error is still an
+   * error: branch on `code`.
+   */
+  receipt?: Record<string, unknown>;
+  /**
+   * What a refused run needs, present only on `ERR_BASE_CAPABILITY`: the
+   * command, the option or argument value that declared the step, the steps
+   * it requires and the ones the run's base does not serve, why, and the base.
+   */
+  requirement?: BaseRequirement;
+}
+
+/** The `requirement` member of an `ERR_BASE_CAPABILITY` error. */
+export interface BaseRequirement {
+  /** The command as a user types it after `astryx`, e.g. `theme build`. */
+  command: string;
+  /** The option's long flag, when an option declared the step. */
+  option: string | null;
+  /** The argument and value, when an argument value declared the step. */
+  argument: {name: string; value: string} | null;
+  requires: string[];
+  missing: string[];
+  /** `not-declared`: no declared adapter exports the step. `failed-to-load`:
+   *  the declared adapter module does not load; `module` names it. */
+  reason: 'not-declared' | 'failed-to-load';
+  module?: string;
+  base: {name: string; version: string | null};
 }
 
 /** Returned by the fallback hook for commands without --json support. */
@@ -45,8 +75,9 @@ export interface CLIUnsupportedError {
 
 /**
  * A success response: a `type` discriminator, the `package` that owns what the
- * response is about, its `data` payload, and an optional `meta` sidecar
- * (emitted as a sibling of `data`, never merged in). `--json` prints it with
+ * response is about, its `data` payload, and an optional `meta` object
+ * (emitted as a sibling of `data`, never merged in) that carries
+ * `answeredBy` and fields such as `deprecations`. `--json` prints it with
  * `apiVersion` added (see `parseResponse`).
  *
  * `package` is present when the response is about one thing: one component,
@@ -56,11 +87,35 @@ export interface CLIUnsupportedError {
  * Structural by design — there is no central union of every response `type`.
  * A specific command narrows `data` via its own return type.
  */
+/**
+ * Which copy of the CLI answered a run (spec AST-081 FR5): carried in `meta`
+ * on every successful machine-readable result of a release that has it.
+ * - `project`: the project's own CLI.
+ * - `starting`: the copy that started the run, in a project with no CLI of
+ *   its own.
+ * - `matched`: the release equal to the project's Core, when the project's
+ *   own CLI cannot start, from the per-user cache or the copy that started
+ *   the run.
+ * - `carried`: outside a project, the copy that started the run, with the Core
+ *   it carries.
+ * - `fallback`: the matched release could not be obtained, so the copy that
+ *   started the run answered instead.
+ */
+export interface AnsweredBy {
+  /** The answering CLI's version. */
+  cli: string;
+  /** The Core the run pairs with, or `null` when there is none. */
+  core: string | null;
+  copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback';
+  /** The run's base, present only when it is not Core; `core` is then `null`. */
+  base?: {name: string; version: string | null};
+}
+
 export interface CLIResponse {
   type: string;
   package?: string;
   data: unknown;
-  meta?: Record<string, unknown>;
+  meta?: {answeredBy?: AnsweredBy} & Record<string, unknown>;
 }
 
 /** Wrap any response type to include possible error shapes. */

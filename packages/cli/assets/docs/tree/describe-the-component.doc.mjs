@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components/describe-the-component`:
+ * @file `astryx docs authoring/building-blocks/components/describe-the-component`:
  * choose and maintain the ComponentDoc shape that matches a component's public
  * source.
  */
@@ -37,7 +37,7 @@ export const docs = {
       items: [
         'Change the source and its `.doc.mjs` together.',
         'Update the doc whenever the public name, import, behavior, props, defaults, examples, or accessibility requirements change.',
-        '`integration verify` checks the doc shape and packed import, but it cannot prove the prose still matches the component.',
+        '`integration verify` checks the doc shape and packed import, and `doctor integration components` compares each props table with the component\'s TypeScript props ({@link generic:check-the-props}). Neither can prove the prose still matches the component.',
       ],
     },
     {
@@ -51,7 +51,7 @@ export const docs = {
     {
       type: 'code',
       lang: 'bash',
-      code: 'npx astryx component AcmeCarousel',
+      code: '{@command component AcmeCarousel}',
     },
   ],
 };

@@ -12,8 +12,6 @@ import {cleanup, render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {
   RADIO_GROUP_PATTERN,
-  checkAccessibilitySpec,
-  createJsdomHarness,
   expectAccessibilitySpec,
   summarize,
   unmatchedKnownFailures,
@@ -34,8 +32,10 @@ function subjectFor(state: RadioGroupBindingRow): Element {
   });
 }
 
-async function expectState(state: RadioGroupBindingRow): Promise<void> {
-  await expectAccessibilitySpec({
+async function expectState(
+  state: RadioGroupBindingRow,
+): Promise<BindingResult> {
+  return expectAccessibilitySpec({
     spec: RADIO_GROUP_PATTERN,
     binding: state.binding,
     state: state.id,
@@ -49,36 +49,24 @@ async function expectState(state: RadioGroupBindingRow): Promise<void> {
   });
 }
 
-async function checkState(state: RadioGroupBindingRow): Promise<BindingResult> {
-  return checkAccessibilitySpec({
-    spec: RADIO_GROUP_PATTERN,
-    binding: state.binding,
-    state: state.id,
-    facts: state.facts,
-    knownFailures: RADIO_GROUP_KNOWN_FAILURES,
-    mount: async () => {
-      render(RADIO_GROUP_STATE_RENDERS[state.id]());
-      return createJsdomHarness({subject: subjectFor(state)});
-    },
-    unmount: cleanup,
-  });
-}
-
 describe('the shared radio-group pattern, jsdom lane', () => {
+  // Each state renders and checks once. The summary reads these results, so
+  // the suite does not check every state a second time in one long test.
+  const results: BindingResult[] = [];
+
   it.each(
     RADIO_GROUP_BINDING_STATES.map(
       state =>
         [`${state.binding} [${state.id}]`, state.summary, state] as const,
     ),
   )('%s — %s', async (_id, _summary, state) => {
-    await expectState(state);
+    results.push(await expectState(state));
   });
 
-  it('runs the DOM layer and reports higher layers as unrun', async () => {
-    const results: BindingResult[] = [];
-    for (const state of RADIO_GROUP_BINDING_STATES) {
-      results.push(await checkState(state));
-    }
+  it('runs the DOM layer and reports higher layers as unrun', () => {
+    expect(results.map(result => result.state)).toEqual(
+      RADIO_GROUP_BINDING_STATES.map(state => state.id),
+    );
     const report = summarize(RADIO_GROUP_PATTERN, results);
     expect(report.counts.pass).toBeGreaterThan(0);
     expect(report.unrunLayers).toEqual(['accessibility-tree', 'real-browser']);
@@ -102,6 +90,8 @@ describe('the radio-group binding inventory', () => {
     expect([...bound].sort()).toEqual([
       'DropdownMenuRadioGroup',
       'DropdownMenuRadioItem',
+      'Pagination dot',
+      'Pagination dots',
       'RadioList',
       'RadioListItem',
       'SegmentedControl',
@@ -130,10 +120,6 @@ describe('the radio-group binding inventory', () => {
       },
       {
         owner: 'TabMenu overflow choices',
-        classification: 'out-of-scope',
-      },
-      {
-        owner: 'Pagination dots',
         classification: 'out-of-scope',
       },
       {
@@ -201,6 +187,8 @@ describe('the radio-group binding inventory', () => {
       const expected =
         state.binding !== 'SegmentedControl' &&
         state.binding !== 'DropdownMenuRadioGroup' &&
+        state.binding !== 'Pagination dots' &&
+        state.binding !== 'Pagination dot' &&
         state.id !== 'segmented-option-selected-hidden-label';
       return state.facts.visibleLabel !== expected;
     }).map(state => state.id);

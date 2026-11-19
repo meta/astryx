@@ -36,6 +36,12 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     textAlign: 'center' as const,
+    // Lets an unbroken token (a path or URL echoed into the message) wrap
+    // instead of setting the centered line's minimum width, which pushes text
+    // past both inline edges where neither side can scroll to it.
+    overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
 });
 
@@ -52,13 +58,14 @@ export interface CommandPaletteEmptyProps extends BaseProps<HTMLDivElement> {
  * - `emptyBootstrapText`: no search term and bootstrap() returns nothing
  * - `emptySearchText`: a search query returned no results
  *
- * Can also be composed manually inside a custom render function.
+ * Can also be composed as a standalone empty result surface. Render actionable
+ * empty content outside listbox and option semantics.
  *
  * @example
  * ```
  * <CommandPalette
- *   emptyBootstrapText={<CommandPaletteEmpty>Start typing to search</CommandPaletteEmpty>}
- *   emptySearchText={<CommandPaletteEmpty>No results found</CommandPaletteEmpty>}
+ *   emptyBootstrapText="Start typing to search"
+ *   emptySearchText="No results found"
  *   searchSource={source}
  * />
  * ```

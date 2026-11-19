@@ -4,7 +4,7 @@
 
 /**
  * @file Overlay.tsx
- * @input Uses React, useOverlay
+ * @input Uses React, useOverlay; forwards host props to the container
  * @output Exports Overlay component
  * @position Overlay system component; thin wrapper over useOverlay
  *
@@ -17,7 +17,7 @@
 
 import type {ReactNode, Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {mergeProps} from '../utils';
+import {composeEventHandlers, mergeProps} from '../utils';
 import {useOverlay} from './useOverlay';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayScope, overlayContainerStyles} from './overlay.markers.stylex';
@@ -31,10 +31,7 @@ import type {
 } from './OverlayScrim';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-export interface OverlayProps extends Pick<
-  BaseProps<HTMLDivElement>,
-  'xstyle' | 'className' | 'style'
-> {
+export interface OverlayProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the container element. */
   ref?: Ref<HTMLDivElement>;
   /** Base content (image, card, video, etc.). */
@@ -84,6 +81,9 @@ export function Overlay({
   className,
   style,
   ref,
+  onClick: onClickProp,
+  onMouseUp: onMouseUpProp,
+  ...rest
 }: OverlayProps) {
   const overlay = useOverlay({
     content,
@@ -94,8 +94,13 @@ export function Overlay({
     align,
   });
 
-  // Border radius: mirror first child's radius onto the wrapper.
-  // Only the component needs this — hook consumers have their own radius.
+  // Copies the first child's radius onto the wrapper, so the scrim clips to
+  // the media's rounded corners. This is a layout read of the mounted DOM, and
+  // no user interaction causes it. It runs again when a hidden Activity shows
+  // the wrapper, because the child can change while it is hidden. A ref
+  // callback runs again when a caller's ref changes identity, so it cannot
+  // keep this once-per-show timing. A useOverlay consumer sets the radius on
+  // its own element.
   useIsomorphicLayoutEffect(() => {
     const el = overlay.containerRef.current;
     if (!el) {
@@ -114,6 +119,7 @@ export function Overlay({
 
   return (
     <div
+      {...rest}
       ref={useMergedRefs(ref, overlay.containerRef)}
       {...mergeProps(
         themeProps('overlay'),
@@ -121,8 +127,17 @@ export function Overlay({
         className,
         style,
       )}
-      onClick={overlay.containerProps.onClick}
-      onMouseUp={overlay.containerProps.onMouseUp}>
+      // The touch toggle runs before the caller's handler: Overlay promises no
+      // cancellation, so a caller preventDefault() cannot stop it
+      // (architecture:public-component-api INV7).
+      onClick={composeEventHandlers(
+        overlay.containerProps.onClick,
+        onClickProp,
+      )}
+      onMouseUp={composeEventHandlers(
+        overlay.containerProps.onMouseUp,
+        onMouseUpProp,
+      )}>
       {children}
       {overlay.element}
     </div>

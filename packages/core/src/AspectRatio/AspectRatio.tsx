@@ -9,7 +9,6 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/AspectRatio/AspectRatio.doc.mjs
  * - /packages/core/src/AspectRatio/AspectRatio.test.tsx
- * - /packages/core/src/reset.css (AspectRatio fit baseline rules)
  * - /apps/storybook/stories/AspectRatio.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/AspectRatio/ (showcase blocks)
  */
@@ -91,13 +90,12 @@ export interface AspectRatioProps extends BaseProps<HTMLDivElement> {
    *   (`object-fit: contain`).
    * - `center`: child keeps its natural size, centered in the box.
    *
-   * `cover`/`contain` child sizing ships as zero-specificity baseline rules
-   * in `reset.css`, keyed on the `data-astryx-aspect-ratio-override`
-   * attribute the component sets on the child's direct parent. Any styles
-   * the child sets itself still win, so children that already size
-   * themselves keep their behavior. When omitted, the child is left
-   * unstyled (the pre-existing contract). `fit` is structural, not visual,
-   * so it is not exposed on the theming surface.
+   * `cover`/`contain` size the child from the component's own styles, in
+   * the `astryx-base` cascade layer. Styles in a later layer (Tailwind
+   * utilities, `astryx-theme`), unlayered CSS, and inline styles on the
+   * child still win. When omitted, the child is left unstyled (the
+   * pre-existing contract). `fit` is structural, not visual, so it is not
+   * exposed on the theming surface.
    *
    * @example
    * ```
@@ -140,14 +138,32 @@ const styles = stylex.create({
     height: '100%',
   },
   // fit="center" centers the child at its natural size from the wrapper —
-  // no styles on the child itself. The `cover`/`contain` child sizing can't
-  // live here (StyleX has no descendant selectors); it ships as baseline
-  // rules in reset.css keyed on the `data-astryx-aspect-ratio-override`
-  // attribute the wrapper carries (see below).
+  // no styles on the child itself.
   childCenter: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // `cover`/`contain` must style the child itself (`object-fit` only applies
+  // on the replaced element), and StyleX has no child selector. The
+  // `:not([stylex-hack])` pseudo-class always matches, so StyleX accepts the
+  // key and emits `.x:not([stylex-hack]) > *`, a direct-child rule in the
+  // `astryx-base` layer like every other component style.
+  childFill: {
+    ':not([stylex-hack]) > *': {
+      width: '100%',
+      height: '100%',
+    },
+  },
+  childCover: {
+    ':not([stylex-hack]) > :is(img, video)': {
+      objectFit: 'cover',
+    },
+  },
+  childContain: {
+    ':not([stylex-hack]) > :is(img, video)': {
+      objectFit: 'contain',
+    },
   },
 });
 
@@ -234,14 +250,18 @@ export function AspectRatio({
         style,
       )}
       {...props}>
-      {/* The marker attribute carries the fit value so the reset.css child
-          sizing can use direct-child selectors on this wrapper — the child's
-          actual parent — without depending on AspectRatio's internal
-          structure or on the theming surface (fit is structural, not
-          themeable). The name is namespaced to avoid collisions. */}
+      {/* The marker attribute carries the fit value. No Astryx style keys on
+          it any more, but earlier releases documented it, so product CSS may
+          still target it. */}
       <div
         data-astryx-aspect-ratio-override={fit}
-        {...stylex.props(styles.child, fit === 'center' && styles.childCenter)}>
+        {...stylex.props(
+          styles.child,
+          fit === 'center' && styles.childCenter,
+          (fit === 'cover' || fit === 'contain') && styles.childFill,
+          fit === 'cover' && styles.childCover,
+          fit === 'contain' && styles.childContain,
+        )}>
         {children}
       </div>
     </div>

@@ -18,6 +18,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React, {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -1108,5 +1109,82 @@ describe('empty-operator token with an Editor override', () => {
 
     expect(screen.getByTestId('custom-empty-editor')).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Enter on a focused footer button (#7437)', () => {
+  const validFilter: PowerSearchFilter = {
+    field: 'status',
+    operator: 'is',
+    value: {type: 'string', value: 'example'},
+  };
+
+  function Harness({
+    onSave,
+    onCancel,
+  }: {
+    onSave: (filter: PowerSearchFilter | null) => void;
+    onCancel: () => void;
+  }) {
+    const internalConfig = useInternalConfig(testConfig);
+    return (
+      <PowerSearchEditPopover
+        config={internalConfig}
+        filter={validFilter}
+        mode="edit"
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  it('cancels without saving when Cancel has focus', async () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={onCancel} />);
+
+    screen.getByRole('button', {name: 'Cancel'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('deletes the filter when Delete has focus', async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={() => {}} />);
+
+    screen.getByRole('button', {name: 'Delete'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(null);
+  });
+
+  it('saves once when Apply has focus', async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={() => {}} />);
+
+    screen.getByRole('button', {name: 'Apply'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(validFilter);
+  });
+
+  it('still cancels on Escape when a button has focus', async () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={onCancel} />);
+
+    screen.getByRole('button', {name: 'Delete'}).focus();
+    await user.keyboard('{Escape}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

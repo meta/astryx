@@ -10,7 +10,7 @@
  * @output Exports RichTextView component and RichTextViewProps
  * @position Read-only renderer for serialized Lexical editor state, exposed to
  *   assistive technology as document content rather than a form field;
- *   experimental (richtext), exported from @astryxdesign/richtext
+ *   exported from @astryxdesign/richtext
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/richtext/src/RichTextEditor.test.tsx
@@ -35,13 +35,15 @@ import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
 import {ContentEditable} from '@lexical/react/LexicalContentEditable';
 import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
 import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
-import {TableScrollRegionPlugin} from './TableScrollRegionPlugin';
-import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
-import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
-import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
-import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
+import {TableScrollRegionPlugin} from './internal/TableScrollRegionPlugin';
+import {TableColumnFloorPlugin} from './internal/TableColumnFloorPlugin';
+import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
+import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
+import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
-import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
+import {TaskCheckboxPlugin} from './internal/TaskCheckboxPlugin';
 import type {
   AnyLexicalExtension,
   Klass,
@@ -55,6 +57,10 @@ import {DEFAULT_NODES} from './editorNodes';
 
 const styles = stylex.create({
   root: {
+    // The document's own direction, read where the surface sits. A block
+    // whose text decides nothing reads this rather than inheriting, so a
+    // list or table that reads the other way cannot change it.
+    '--_richtext-document-direction': {default: 'ltr', ':dir(rtl)': 'rtl'},
     width: '100%',
     // Holds the code block headers and task checkboxes drawn over the
     // content.
@@ -119,6 +125,14 @@ export interface RichTextViewProps extends BaseProps {
    * serializable props.
    */
   markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
    * Additional read-only plugins to render inside the composer (e.g. hover
    * cards, decorators).
@@ -202,6 +216,7 @@ export function RichTextView({
   value,
   nodes,
   markdownExtensions,
+  codeLanguages,
   plugins,
   namespace = 'astryx-view',
   onParseError,
@@ -323,8 +338,9 @@ export function RichTextView({
         />
         {/* After the content, so the copy buttons and checkboxes follow it
             in tab order. */}
-        <CodeBlockHeaderPlugin />
-        <CodeSyntaxPlugin />
+        <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+        <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+        <BlockDirectionPlugin />
         {markdownExtensions != null && markdownExtensions.length > 0 ? (
           <MarkdownExtensionsPlugin
             extensions={markdownExtensions}

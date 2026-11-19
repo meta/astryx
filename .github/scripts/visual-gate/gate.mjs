@@ -53,16 +53,18 @@ import {
   emptyVisualPlanMessage,
   exceedsPrVisualShotLimit,
   existingComponentBaselinePlan,
+  probeBaselineStories,
   readStoryIndex,
   readThemeCatalog,
   resolvePrVisualTotalShotLimit,
   storiesInPackages,
   summarizeBaselineAccounting,
+  visualComponentScope,
   withThemeMetadata,
 } from './lib/plan.mjs';
 import {renderReport} from './lib/report.mjs';
 import {accept, incomparable, readBaseline} from './lib/baseline.mjs';
-import {loadConfig, loadThemeOverrides, loadThemingTargets} from './lib/sources.mjs';
+import {loadConfig, loadThemeOverrides, loadThemingTargets, readOnlyGate} from './lib/sources.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -81,6 +83,9 @@ const captureIdentity = () => ({
   runId: process.env.ASTRYX_VISUAL_RUN_ID ?? process.env.GITHUB_RUN_ID ?? null,
   runAttempt:
     process.env.ASTRYX_VISUAL_RUN_ATTEMPT ?? process.env.GITHUB_RUN_ATTEMPT ?? null,
+  // pr-visual's default touched check (spec:AST-030 FR12) says so, so the
+  // pull-request comment can name the label for the full suite.
+  ...(process.env.ASTRYX_VISUAL_SCOPE === 'touched' ? {scope: 'touched'} : {}),
 });
 
 const config = loadConfig(REPO_ROOT);
@@ -99,14 +104,25 @@ const sample = flag('sample') ? Number(flag('sample')) : null;
 /** Restrict the plan to story ids containing any of these — for debugging a shot, never for a gate run. */
 const only = (flag('only') ?? '').split(',').filter(Boolean);
 /** For the `component` tier: the components a PR touched. */
-const components = (flag('components') ?? '').split(',').filter(Boolean);
+let components = (flag('components') ?? '').split(',').filter(Boolean);
+/**
+ * For the `component` tier: the folders the touched modules reach (reverse
+ * dependents, spec:AST-030 FR13), audited where they have a stable story.
+ */
+const dependents = (flag('dependents') ?? '').split(',').filter(Boolean);
+/**
+ * Exit code that asks the caller for the whole plan instead: nothing the scope
+ * reaches has a stable story. An over-budget focused plan writes the
+ * `skipped` verdict, which the workflow also answers with the whole plan.
+ */
+const BROADEN_EXIT_CODE = 3;
 /** For the `theme-matrix` tier: only these shipped themes changed. */
 const matrixThemes = (flag('themes') ?? '').split(',').filter(Boolean);
 const explicitMaxShots = has('max-shots') ? flag('max-shots') : null;
 if (has('max-shots') && explicitMaxShots === undefined) {
   throw new Error('--max-shots requires a value.');
 }
-const maxShots = resolvePrVisualTotalShotLimit({
+let maxShots = resolvePrVisualTotalShotLimit({
   explicitMaxShots,
   components,
   matrixThemes,
@@ -130,6 +146,7 @@ if (
     has('no-scout') ||
     planFile ||
     components.length ||
+    dependents.length ||
     matrixThemes.length ||
     only.length ||
     sample)
@@ -188,6 +205,11 @@ function storybookBuildSha() {
   return fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8').trim() || null : null;
 }
 
+// The themes a read-only gate could not read because they are not built
+// (lib/sources.mjs READ_ONLY_ENV). The verdict names them.
+/** @type {string[]} */
+const themesNotBuilt = [];
+
 /**
  * @param {{scoutOnly?: boolean}} [options] `scoutOnly` returns the scout's
  *   story list instead of a plan; `null` when this plan scouts nothing.
@@ -201,7 +223,7 @@ async function plan({scoutOnly = false} = {}) {
   }
   const [targets, allThemeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {notBuilt: themesNotBuilt}),
   ]);
   const themeOverrides = releasePlanInputs
     ? Object.fromEntries(
@@ -227,6 +249,27 @@ async function plan({scoutOnly = false} = {}) {
     config.defaultTheme,
   );
   const themeStories = baselineVisualStories(stories, baselineManifest);
+  if (dependents.length > 0) {
+    const scope = visualComponentScope(stories, components, dependents);
+    if (scope.dropped.length > 0) {
+      console.log(`Reverse dependents with no stable story: ${scope.dropped.join(', ')}`);
+    }
+    components = scope.components;
+    if (components.length === 0) {
+      // Nothing the scope reaches has a stable story: the caller runs the
+      // whole plan rather than an empty one.
+      console.log('No touched component or reverse dependent has a stable story; asking for the whole plan.');
+      process.exit(BROADEN_EXIT_CODE);
+    }
+    maxShots = resolvePrVisualTotalShotLimit({
+      explicitMaxShots,
+      components,
+      matrixThemes,
+      tiers,
+      configuredLimit: config.prVisualShotLimit,
+      safetyLimit: config.visualPlanSafetyLimit,
+    });
+  }
 
   let observations;
   const scouts =
@@ -293,6 +336,7 @@ async function plan({scoutOnly = false} = {}) {
     matrixThemes,
     themeStories,
     probeTheme: config.probeTheme,
+    baselineStories: probeBaselineStories(baselineManifest, config.probeTheme),
   });
   if (tiers.includes('component')) {
     shots = existingComponentBaselinePlan(shots, baselineManifest);
@@ -462,6 +506,7 @@ async function check() {
         tiers,
         components,
         ...(releasePlan ? {releasePlan} : {}),
+        ...(readOnlyGate() ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()} : {}),
       },
       counts: {total: shots.length, unchanged: 0, changed: 0, added: 0, removed: 0, failed: 0},
       components,
@@ -536,7 +581,7 @@ async function check() {
 
   const [targets, themeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {notBuilt: themesNotBuilt}),
   ]);
   const targeting = analyzeTargeting({
     observedTargets: manifest.observedTargets,
@@ -556,6 +601,7 @@ async function check() {
       baselineExists: exists,
       components,
       ...(baselineAccounting ? {baselineAccounting} : {}),
+      ...(readOnlyGate() ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()} : {}),
     },
   });
 

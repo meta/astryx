@@ -24,6 +24,7 @@ export const doc = {
     {label: 'List posts', cli: 'astryx blog'},
     {label: 'Read one post', cli: 'astryx blog introducing-astryx --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {code: 1, when: 'unknown slug, or the feed or a post cannot be fetched'},

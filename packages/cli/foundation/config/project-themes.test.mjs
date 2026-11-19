@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Project} from './project.mjs';
 import {BUNDLED_THEME_PACKAGE} from '../discovery/theme-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -40,7 +41,7 @@ export default {type: 'theme', name: '${slug}', displayName: 'Ocean', descriptio
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-project-themes-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-project-themes-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({

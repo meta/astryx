@@ -10,7 +10,16 @@
       "package": "@acme/kit",
       "added": false,
       "default": false,
-      "source": "package"
+      "source": "package",
+      "owner": "@acme/kit",
+      "installed": true
     }
-  ]
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
 }

@@ -1,0 +1,238 @@
+{
+  "note": "Identical across arms. No generation prompt names a prop, a value, or the words padding, inset, edge, margin, or align. Ground truth (`correct`) is for scoring only and never reaches a generating agent. Canonical look keys: inset, flush, outset, bleed; arm B names inset 'padded' and outset 'hanging'.",
+  "arms": {
+    "a": {
+      "doc": "docs/arm-a.md",
+      "values": {
+        "inset": "inset",
+        "flush": "flush",
+        "outset": "outset",
+        "bleed": "bleed"
+      },
+      "prop": "edge"
+    },
+    "b": {
+      "doc": "docs/arm-b.md",
+      "values": {
+        "inset": "padded",
+        "flush": "flush",
+        "outset": "hanging",
+        "bleed": "bleed"
+      },
+      "prop": "edge"
+    },
+    "c": {
+      "doc": "docs/arm-c.md",
+      "prop": "rowAlignment",
+      "round": 2,
+      "values": {
+        "inset": "inset",
+        "flush": "flush",
+        "outset": "outset",
+        "bleed": "bleed"
+      }
+    },
+    "d": {
+      "doc": "docs/arm-d.md",
+      "prop": "edge",
+      "round": 3,
+      "values": {
+        "inset": "padded",
+        "flush": "flush",
+        "outset": "outset",
+        "bleed": "bleed"
+      }
+    },
+    "both": {
+      "doc": "docs/arm-both.md",
+      "prop": "edge",
+      "round": 3,
+      "values": {
+        "inset": "padded",
+        "flush": "flush",
+        "outset": "outset",
+        "bleed": "bleed"
+      },
+      "deprecated": {
+        "prop": "edgeCompensation",
+        "value": "inline",
+        "look": "outset"
+      }
+    },
+    "main": {
+      "doc": "docs/arm-main.md",
+      "prop": "edgeCompensation",
+      "round": 3,
+      "values": {
+        "outset": "inline"
+      }
+    },
+    "none": {
+      "doc": "docs/arm-none.md",
+      "prop": null,
+      "round": 3,
+      "values": {}
+    }
+  },
+  "preamble": "You are running a vibe test.\n\nYou have NO prior knowledge of the system under test. Do NOT use prior knowledge of any specific library, tool, product, or convention. Do NOT use any other tool: do not search, read other files, browse, run code, or look anything up. Everything you may use is in this task.",
+  "generation": {
+    "output": "## Output\n\nReply with exactly three parts:\n1. Your code, in one ```tsx fenced block.\n2. One line: `Confidence: N/5`.\n3. `Notes:` what you reached for first, where you hesitated, anything you wanted but couldn't find, and any workarounds you used.",
+    "prompts": [
+      {
+        "id": "p1",
+        "correct": "flush",
+        "why": "No container; text and dividers on the heading's line. Only flush does that outside a container.",
+        "text": "Build the ingredients section of a recipe page: an 'Ingredients' heading followed by a list of six ingredients, each with its amount as smaller secondary text, with a thin line between ingredients. The section sits directly on the page, not inside a card. The ingredient names and the lines between them must start exactly where the heading's text starts, so the heading and the list read as one tidy column."
+      },
+      {
+        "id": "p2",
+        "correct": "bleed",
+        "why": "Lines touch the card's borders while names stay on the title's line.",
+        "text": "Build an order summary card: a card titled 'Items' listing the five products in an order, each with its price on the right, with a thin line between products. Like rows in a table, each line should run all the way across the card, touching the card's left and right borders, while the product names stay lined up exactly with the card's title."
+      },
+      {
+        "id": "p3",
+        "correct": "flush",
+        "why": "In a card, names and lines start on the title's line and stop short of the borders.",
+        "text": "Build an 'Emergency contacts' card: a card with that title and a list of three people, each with their phone number as smaller secondary text, with a thin line between people. The names and the lines between them should both start exactly where the title's text starts, and the lines must stop the same distance short of the card's right border as they start from its left border; they should not touch the card's borders."
+      },
+      {
+        "id": "p4",
+        "correct": "outset",
+        "why": "Names on the title's line; the highlight reaches a little past them without touching the borders.",
+        "text": "Build a folder picker inside a card titled 'Folders': Inbox, Drafts, Sent, and Archive, each with an icon, each clickable, with the current folder highlighted. The folder icons and names must line up exactly with the card's title. The highlight behind a folder should extend a little past the icon and name on both sides, so it doesn't look cramped, but it must not touch the card's borders."
+      },
+      {
+        "id": "p5",
+        "correct": "bleed",
+        "why": "The highlight touches the card's borders while labels stay on the title's line.",
+        "text": "Build an account settings menu inside a card titled 'Account': Profile, Security, Notifications, and Billing, each clickable to open its page. When the pointer is over an item, its highlight should stretch the full width of the card, touching both of the card's side borders, while the item labels stay lined up exactly with the card's title."
+      },
+      {
+        "id": "p6",
+        "correct": "unset",
+        "why": "Negative control: nothing to line up with, so the default is right. Writing the default value explicitly is acceptable but not direct.",
+        "text": "Build the contents of a 'Recent files' popup: a list of the five most recently opened files, each with its last-opened date as smaller secondary text, each clickable to open the file. Assume the popup itself already exists; build only what goes inside it. Nothing else in the popup sits next to the list: there is no title or other text it needs to line up with."
+      },
+      {
+        "id": "p7",
+        "correct": "conflict",
+        "why": "No container, but the names must be on the heading's line and the highlight must reach past them. No value alone does both: outset needs a container. Credit for noticing and choosing a documented answer (wrap the heading and list in a Section or Card and use outset, or pick flush or the default and name the tradeoff). Claiming outset works here, or custom margins, is wrong.",
+        "text": "Build the project navigation for a page sidebar: a 'Projects' heading directly on the sidebar (not inside a card), followed by five projects, each clickable, with the current project highlighted. The project names must line up exactly with the heading's text, and the highlight should extend a little past each name on both sides so it doesn't look cramped."
+      }
+    ]
+  },
+  "recall": {
+    "doc": "docs/arm-recall.md",
+    "samples": 6,
+    "note": "One agent writes the API it expects and uses it for three tasks, because naming a coherent set is the realistic act.",
+    "scenarios": ["p1", "p4", "p5"],
+    "output": "## Output\n\nReply with:\n1. `API:` how you would expect this library to let you choose a look: the TypeScript prop declaration(s) on `List`, with types and defaults, and one line per look saying what selects it.\n2. One ```tsx block per task, labeled Task 1, Task 2, and Task 3.\n3. `Naming notes:` the names you considered and rejected, and why."
+  },
+  "reading": {
+    "note": "No reference. The agent meets one value in code and predicts the result. Two samples for each arm-specific value, one each for the shared flush and bleed.",
+    "samples": {
+      "inset": 2,
+      "padded": 2,
+      "outset": 2,
+      "hanging": 2,
+      "flush": 1,
+      "bleed": 1
+    },
+    "snippet": "```tsx\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading} from '@astryxdesign/core/Text';\nimport {List, ListItem} from '@astryxdesign/core/List';\n\nexport function TeamCard({onOpen}: {onOpen: (id: string) => void}) {\n  return (\n    <Card>\n      <Heading level={3}>Team</Heading>\n      <List __PROP__=\"__VALUE__\" hasDividers>\n        <ListItem label=\"Ada Lovelace\" description=\"Engineer\" onClick={() => onOpen('ada')} />\n        <ListItem label=\"Grace Hopper\" description=\"Admiral\" onClick={() => onOpen('grace')} isSelected />\n      </List>\n    </Card>\n  );\n}\n```",
+    "questions": "You have no documentation for this design system. From the code alone, predict what it renders.\n\n1. text: Do the names \"Ada Lovelace\" and \"Grace Hopper\" start (a) exactly in line with the heading \"Team\", (b) a little after it, or (c) a little before it?\n2. highlight: Where does the selected row's highlight start and end horizontally: (a) exactly at the start and end of the row's text, (b) a little beyond the text but not reaching the card's borders, or (c) at the card's left and right borders?\n3. dividers: Where does the line between the two rows start and end: (a) exactly at the start and end of the row's text, (b) a little beyond the text but not reaching the card's borders, or (c) at the card's left and right borders?\n4. otherValues: Which other values do you think `__PROP__` accepts?\n\nReply with one JSON object and nothing else: {\"text\": \"a|b|c\", \"highlight\": \"a|b|c\", \"dividers\": \"a|b|c\", \"otherValues\": [\"...\"], \"confidence\": 1-5, \"reasoning\": \"one or two sentences\"}",
+    "correct": {
+      "inset": {
+        "text": "b",
+        "highlight": "b",
+        "dividers": "b"
+      },
+      "flush": {
+        "text": "a",
+        "highlight": "a",
+        "dividers": "a"
+      },
+      "outset": {
+        "text": "a",
+        "highlight": "b",
+        "dividers": "b"
+      },
+      "bleed": {
+        "text": "a",
+        "highlight": "c",
+        "dividers": "c"
+      }
+    }
+  },
+  "judge": {
+    "dimensions": {
+      "correctness": "The rendered result matches `correct` for the prompt.",
+      "hallucination": "No props, values, or components the reference does not document. 5 = none.",
+      "directness": "No unrequested code, wrappers, or custom styles; does not restate defaults.",
+      "calibration": "Stated confidence matches correctness; doubts named where the reference was unclear."
+    },
+    "tieBreak": "Fewer misreads and invented props, then plainer words."
+  },
+  "round2": {
+    "note": "Round 2 adds the recall probe's most common prop name (arm C, rowAlignment with arm A's values) to the use probe, and gives the reading probe more samples where round 1 split or was thin: the default's name, the prop name, and flush. The `union` condition adds the type an editor shows on hover.",
+    "use": {
+      "arms": ["c"]
+    },
+    "reading": [
+      {
+        "prop": "edge",
+        "value": "inset",
+        "samples": 4
+      },
+      {
+        "prop": "edge",
+        "value": "padded",
+        "samples": 4
+      },
+      {
+        "prop": "edge",
+        "value": "inset",
+        "union": ["inset", "flush", "outset", "bleed"],
+        "samples": 3
+      },
+      {
+        "prop": "edge",
+        "value": "padded",
+        "union": ["padded", "flush", "outset", "bleed"],
+        "samples": 3
+      },
+      {
+        "prop": "edge",
+        "value": "flush",
+        "samples": 2
+      },
+      {
+        "prop": "rowAlignment",
+        "value": "inset",
+        "samples": 3
+      },
+      {
+        "prop": "rowAlignment",
+        "value": "padded",
+        "samples": 3
+      },
+      {
+        "prop": "rowAlignment",
+        "value": "outset",
+        "samples": 2
+      },
+      {
+        "prop": "rowAlignment",
+        "value": "bleed",
+        "samples": 2
+      }
+    ],
+    "unionHint": "Your editor shows this type when you hover the prop: `__PROP__?: __UNION__`. There is no other documentation."
+  },
+  "round3": {
+    "note": "Round 3 adds the arms a review asked for, with the same seven use prompts. Main baseline: the released List, whose only edge prop is edgeCompensation. Natural reach: no edge API and no anti-pattern, to see what agents reach for unaided. Both names: the shipped names plus the deprecated edgeCompensation, as the docs read during its compatibility window. Arm D, the shipped names alone, is the control the both-names arm is compared against.",
+    "use": {
+      "arms": ["d", "both", "main", "none"]
+    }
+  }
+}

@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -25,6 +26,34 @@ import type {
   ScheduleCategory,
   SchedulePlugin,
 } from './types';
+
+/** Fires a popover toggle event of `type` to the closed state. */
+function fireCloseToggle(layer: HTMLElement, type: 'beforetoggle' | 'toggle') {
+  const event = new Event(type);
+  Object.defineProperty(event, 'newState', {value: 'closed'});
+  fireEvent(layer, event);
+}
+
+/**
+ * A pointer press on `button` while `openTrigger`'s popover is open, as a
+ * browser runs it: the press's light dismiss starts the popover's hide
+ * (`beforetoggle`) before its click, and the hide ends (`toggle`) after it.
+ */
+function pressWithLightDismiss(button: HTMLElement, openTrigger: HTMLElement) {
+  const layer = document.getElementById(
+    openTrigger.getAttribute('aria-controls') ?? '',
+  ) as HTMLElement;
+  fireEvent.pointerDown(button);
+  // A popover the press itself closed is no longer open for the browser.
+  const isOpen = openTrigger.getAttribute('aria-expanded') === 'true';
+  if (isOpen) {
+    fireCloseToggle(layer, 'beforetoggle');
+  }
+  fireEvent.click(button);
+  if (isOpen) {
+    act(() => fireCloseToggle(layer, 'toggle'));
+  }
+}
 
 describe('createEventFromISO', () => {
   it('creates all-day PlainDate events from date-only ISO strings', () => {
@@ -63,12 +92,12 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         {year: 2026, month: 8, day: 22},
-        'UTC',
         {
           year: 'numeric',
           calendar: 'buddhist',
         },
         'en',
+        'gregory',
       ),
     ).toBe('2026');
   });
@@ -78,9 +107,9 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         date,
-        'UTC',
         {month: 'long', year: 'numeric'},
         'th-TH',
+        'gregory',
       ),
     ).toBe(
       new Intl.DateTimeFormat('th-TH', {
@@ -252,6 +281,11 @@ describe('Schedule', () => {
       />,
     );
 
+    expect(
+      screen
+        .getByLabelText('Loading events')
+        .parentElement?.closest('[aria-hidden="true"]'),
+    ).toBeNull();
     await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
     const [start, end] = loader.mock.calls[0];
     expect(typeof start).toBe('number');
@@ -259,6 +293,11 @@ describe('Schedule', () => {
     expect(start).toBe(Date.UTC(2026, 4, 13));
     expect(end).toBe(Date.UTC(2026, 4, 14));
     expect(await screen.findByText('Loaded event')).toBeInTheDocument();
+    expect(
+      screen
+        .getByLabelText('Loading events')
+        .parentElement?.closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
   });
 
   it('renders list view grouped by localized day', async () => {
@@ -634,6 +673,103 @@ describe('Schedule', () => {
   });
 });
 
+describe('Schedule across a midnight that daylight saving skips', () => {
+  // Both zones spring forward at local midnight: the day starts at 01:00.
+  const cases = [
+    {
+      timezoneID: 'America/Santiago',
+      date: Date.UTC(2026, 8, 8, 15),
+      week: [
+        'Sunday, September 6, 2026',
+        'Monday, September 7, 2026',
+        'Tuesday, September 8, 2026',
+        'Wednesday, September 9, 2026',
+        'Thursday, September 10, 2026',
+        'Friday, September 11, 2026',
+        'Saturday, September 12, 2026',
+      ],
+    },
+    {
+      timezoneID: 'America/Havana',
+      date: Date.UTC(2026, 2, 10, 15),
+      week: [
+        'Sunday, March 8, 2026',
+        'Monday, March 9, 2026',
+        'Tuesday, March 10, 2026',
+        'Wednesday, March 11, 2026',
+        'Thursday, March 12, 2026',
+        'Friday, March 13, 2026',
+        'Saturday, March 14, 2026',
+      ],
+    },
+  ];
+  const renderPopover = () => null;
+  const dayGroups = () =>
+    screen
+      .getAllByRole('group')
+      .map(group => group.getAttribute('aria-label') ?? '')
+      .filter(name => /, \d{4}$/u.test(name));
+
+  it.each(cases)(
+    'keeps seven days in the week and one in the day view in $timezoneID',
+    ({timezoneID, date, week}) => {
+      const {unmount} = render(
+        <Schedule
+          view={createScheduleWeeklyView({renderPopover})}
+          events={[]}
+          date={date}
+          timezoneID={timezoneID}
+        />,
+      );
+      expect(dayGroups()).toEqual(week);
+      unmount();
+      render(
+        <Schedule
+          view={createScheduleDayView({renderPopover})}
+          events={[]}
+          date={date - 2 * 24 * 60 * 60 * 1000}
+          timezoneID={timezoneID}
+        />,
+      );
+      expect(dayGroups()).toEqual([week[0]]);
+    },
+  );
+
+  it('keeps seven days in the week and one in the day view that end at the skipped midnight', () => {
+    // Santiago's week of Sunday, August 30, 2026 ends on Saturday, September 5;
+    // its end is the start of September 6, a midnight that never happens.
+    const timezoneID = 'America/Santiago';
+    const date = Date.UTC(2026, 8, 5, 15);
+    const {unmount} = render(
+      <Schedule
+        view={createScheduleWeeklyView({renderPopover})}
+        events={[]}
+        date={date}
+        timezoneID={timezoneID}
+      />,
+    );
+    expect(dayGroups()).toEqual([
+      'Sunday, August 30, 2026',
+      'Monday, August 31, 2026',
+      'Tuesday, September 1, 2026',
+      'Wednesday, September 2, 2026',
+      'Thursday, September 3, 2026',
+      'Friday, September 4, 2026',
+      'Saturday, September 5, 2026',
+    ]);
+    unmount();
+    render(
+      <Schedule
+        view={createScheduleDayView({renderPopover})}
+        events={[]}
+        date={date}
+        timezoneID={timezoneID}
+      />,
+    );
+    expect(dayGroups()).toEqual(['Saturday, September 5, 2026']);
+  });
+});
+
 describe('sortEvents', () => {
   it('sorts mixed all-day and instant events by start time', () => {
     const sortedEvents = sortEvents(
@@ -829,11 +965,10 @@ describe('Schedule event popover', () => {
     // attribute rather than through the accessibility tree.
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
-    // A pointer press on another block closes the popover ahead of the
-    // browser's light dismiss; the click that follows opens the pressed block.
-    fireEvent.pointerDown(later);
-    expect(earlier).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(later);
+    // A pointer press on another block: the browser's light dismiss closes
+    // the popover as the press ends, and the click that follows opens the
+    // pressed block.
+    pressWithLightDismiss(later, earlier);
     expect(earlier).toHaveAttribute('aria-expanded', 'false');
     expect(later).toHaveAttribute('aria-expanded', 'true');
     expect(dialogOf(later)).toHaveAttribute('aria-label', 'Later sync');
@@ -1132,11 +1267,10 @@ describe('Schedule month overflow', () => {
     ]);
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
-    // A press on another day's button closes the popover ahead of the
-    // browser's light dismiss; the click that follows opens that day.
-    fireEvent.pointerDown(friday);
+    // A press on another day's button: the browser's light dismiss closes the
+    // popover as the press ends, and the click that follows opens that day.
+    pressWithLightDismiss(friday, wednesday);
     expect(wednesday).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(friday);
     expect(friday).toHaveAttribute('aria-expanded', 'true');
     expect(dialogOf(friday)).toHaveAttribute(
       'aria-label',
@@ -1403,7 +1537,16 @@ describe('Schedule month event popover', () => {
     expect(event).toHaveTextContent('Bravo sync details');
     expect(more).toHaveAttribute('aria-expanded', 'true');
 
-    fireEvent.keyDown(event, {key: 'Escape'});
+    // A press on "+N more" while its handed event is open shows the day's
+    // list again in the same gesture.
+    pressWithLightDismiss(more, more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(openDialog()).toHaveAttribute(
+      'aria-label',
+      'Wednesday, May 13, 2026',
+    );
+
+    fireEvent.keyDown(openDialog(), {key: 'Escape'});
     expect(more).toHaveAttribute('aria-expanded', 'false');
   });
 

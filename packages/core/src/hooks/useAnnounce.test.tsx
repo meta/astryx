@@ -48,18 +48,78 @@ describe('useAnnounce', () => {
     },
   );
 
-  it('preserves multiple same-frame announcements until explicitly cleared', () => {
+  it.each(['polite', 'assertive'] as const)(
+    'joins %s messages announced in the same frame, in order (AST-086 FR9)',
+    politeness => {
+      vi.useFakeTimers();
+      try {
+        const {result} = renderHook(() => useAnnounce());
+        result.current('3 results', politeness);
+        result.current('Filter applied', politeness);
+        const region =
+          politeness === 'polite' ? politeRegion()! : assertiveRegion()!;
+        const write = vi.spyOn(region, 'textContent', 'set');
+        act(() => {
+          vi.advanceTimersByTime(50);
+        });
+        // One write exposes both; neither is dropped or exposed alone.
+        expect(write.mock.calls).toEqual([['3 results Filter applied']]);
+        write.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('keeps an identical message repeated in the same frame once (AST-086 FR9)', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('1 result');
+      result.current('Filter applied');
+      result.current('1 result');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(politeRegion()!.textContent).toBe('1 result Filter applied');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a new announcement for a message after the joined one is exposed (AST-086 FR9)', () => {
     vi.useFakeTimers();
     try {
       const {result} = renderHook(() => useAnnounce());
       result.current('First');
       result.current('Second');
-      const write = vi.spyOn(politeRegion()!, 'textContent', 'set');
       act(() => {
         vi.advanceTimersByTime(50);
       });
-      expect(write.mock.calls).toEqual([['First'], ['Second']]);
-      write.mockRestore();
+      expect(politeRegion()).toHaveTextContent('First Second');
+      result.current('Third');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(politeRegion()!.textContent).toBe('Third');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears messages joined but not yet exposed (AST-086 FR9)', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('First');
+      result.current('Second');
+      result.current('');
+      result.current('Third');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      // The clear dropped First and Second; only the later message is exposed.
+      expect(politeRegion()!.textContent).toBe('Third');
     } finally {
       vi.useRealTimers();
     }

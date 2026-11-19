@@ -25,13 +25,13 @@ export const docs = {
     },
     {
       name: 'icon',
-      type: 'IconType',
-      description: 'Icon displayed in the outline (unselected) variant. See `astryx docs icons` for valid semantic names.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed in the outline (unselected) variant; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'selectedIcon',
-      type: 'IconType',
-      description: 'Icon displayed when the item is selected (filled variant). See `astryx docs icons` for valid semantic names.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed when the item is selected (filled variant); pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isSelected',
@@ -90,7 +90,7 @@ export const docs = {
     {
       name: 'children',
       type: 'ReactNode',
-      description: 'Sub-items for nesting.',
+      description: 'Sub-items for nesting. Nested items span the full width of the nav list, like top-level items; their content is indented one step per nesting level.',
       slotElements: [
         {
           __element: 'SideNavItem',
@@ -134,13 +134,13 @@ export const docsZh = {
     },
     {
       name: 'icon',
-      type: 'IconType',
-      description: '轮廓（未选中）变体中显示的图标。',
+      type: 'ReactNode | IconType',
+      description: '轮廓（未选中）变体中显示的图标；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'selectedIcon',
-      type: 'IconType',
-      description: '选中时显示的图标（填充变体）。',
+      type: 'ReactNode | IconType',
+      description: '选中时显示的图标（填充变体）；可传语义图标名称（如 \'search\'，见 `astryx docs icons`）、图标组件或图标元素。',
     },
     {
       name: 'isSelected',
@@ -203,8 +203,8 @@ export const docsDense = {
   propDescriptions: {
     label: 'Item label.',
     as: 'Custom link component.',
-    icon: 'Icon displayed in outline (unselected) variant.',
-    selectedIcon: 'Icon displayed when item selected (filled variant).',
+    icon: 'Icon displayed in outline (unselected) variant; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    selectedIcon: 'Icon displayed when item selected (filled variant); semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     isSelected: 'Marks this item as current page.',
     isDisabled: 'Disabled state.',
     href: 'Navigation URL.',
@@ -213,7 +213,7 @@ export const docsDense = {
       'Passive right-side content only (badges, counts). Interactive controls go in actions.',
     actions:
       'Row-level secondary controls (icon buttons, menus) rendered as siblings of the primary element, after the expand/collapse toggle and before nested children in DOM/focus order. Inherit the row control size via SizeContext (explicit size wins). Hidden when rail collapsed. Passive content goes in endContent; interactive content goes here.',
-    children: 'Sub-items for nesting.',
+    children: 'Sub-items for nesting. Nested rows stay full width; content indents one step per level.',
     collapsible: 'Enables collapse for items w/ children. true=uncontrolled, object=controlled mode.',
     size: "Row size variant: 'sm' | 'md' | 'lg'.",
   },

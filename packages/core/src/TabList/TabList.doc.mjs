@@ -11,6 +11,10 @@ export const docs = {
   playground: {
     defaults: {
       value: 'tab-1',
+      children: [
+        {__element: 'Tab', props: {value: 'tab-1', label: 'Overview'}},
+        {__element: 'Tab', props: {value: 'tab-2', label: 'Activity'}},
+      ],
     },
   },
   theming: {
@@ -115,7 +119,7 @@ export const docs = {
       },
     ],
     description:
-      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page, with overflow items handled by a built-in "more" menu.',
+      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page. A strip narrower than its tabs scrolls horizontally and keeps the selected tab in view.',
     bestPractices: [
       { guidance: true, description: 'Keep tab labels short and descriptive so users can quickly scan available sections.' },
       { guidance: true, description: 'Leave overflow handling on: a strip narrower than its tabs scrolls, and the selected tab is kept in view. Use TabMenu when you want a curated group of extra options rather than a scrolling strip.' },
@@ -138,7 +142,7 @@ export const docs = {
 export const docsZh = {
   usage: {
     description:
-      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page, with overflow items handled by a built-in "more" menu.',
+      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page. A strip narrower than its tabs scrolls horizontally and keeps the selected tab in view.',
     bestPractices: [
       { guidance: true, description: 'Keep tab labels short and descriptive so users can quickly scan available sections.' },
       { guidance: true, description: 'Leave overflow handling on: a strip narrower than its tabs scrolls, and the selected tab is kept in view. Use TabMenu when you want a curated group of extra options rather than a scrolling strip.' },
@@ -162,7 +166,7 @@ export const docsDense = {
   description: 'Tab strip w/ overflow scrolling; nav landmark by default, WAI-ARIA tabs pattern under role="tablist".',
   usage: {
     description:
-      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page, with overflow items handled by a built-in "more" menu.',
+      'TabList provides tab-style navigation for organizing content into categorized sections. Use it to let users switch between related views without leaving the page. A strip narrower than its tabs scrolls horizontally and keeps the selected tab in view.',
     bestPractices: [
       { guidance: true, description: 'Keep tab labels short and descriptive so users can quickly scan available sections.' },
       { guidance: true, description: 'Leave overflow handling on: a strip narrower than its tabs scrolls, and the selected tab is kept in view. Use TabMenu when you want a curated group of extra options rather than a scrolling strip.' },

@@ -23,7 +23,7 @@ export const docs = {
     ],
     anatomy: [
       {name: 'Photo', required: false, description: 'The profile image, loaded from the src URL. Shown when available.'},
-      {name: 'Initials', required: false, description: 'The first letter, digit or emoji of the first and last words of the name; punctuation is skipped. Shown when no photo is available. A name with no letters, digits or emoji shows the default icon instead.'},
+      {name: 'Initials', required: false, description: 'The first letter, digit or emoji of the first and last words of the name; punctuation is skipped. Shown when no photo is available. A name with no letters, digits or emoji shows the default icon instead. Like the photo, the initials are part of the picture: assistive technology reads the name, not the letters.'},
       {name: 'Default icon', required: false, description: 'A generic person silhouette. Shown when there is no photo or name.'},
       {name: 'Status dot', required: false, description: 'A small indicator in the bottom-right corner showing availability (online, away, busy). Each variant pairs colour with a distinct shape so status does not rely on colour alone.'},
     ],
@@ -67,8 +67,10 @@ export const docs = {
     },
     {
       name: 'size',
-      type: "'xsm' | 'sm' | 'md' | 'lg' | 'xl' | number",
-      description: "Avatar size. Use a named size ('xsm' 20px, 'sm' 24px, 'md' 36px, 'lg' 48px, 'xl' 128px) or a numeric pixel value. Avatar shares Icon's abbreviated scale, but its tiers are larger because avatars align with media rather than glyphs. Inside an AvatarGroup the group's size wins and this prop is ignored.",
+      type:
+        "'xsm' | 'sm' | 'md' | 'lg' | 'xl' | 16 | 20 | 24 | 32 | 36 | 40 | 48 | 60 | 64 | 72 | 96 | 128 | 144 | 180",
+      description:
+        "Avatar size: named sizes are 'xsm' (20px), 'sm' (24px), 'md' (36px), 'lg' (48px), and 'xl' (128px); numeric sizes must be one of the pixel values listed in the type. Inside an AvatarGroup, the group's size always overrides this prop, including when the group uses its default size.",
       default: "'md'",
     },
     {
@@ -169,7 +171,7 @@ export const docsDense = {
     fallbackSrc: 'fallback image when primary fails',
     name: 'user name for initials and alt text',
     alt: 'alt text; falls back to name',
-    size: "avatar size. Named ('xsm' 20px, 'sm' 24px, 'md' 36px, 'lg' 48px, 'xl' 128px) or numeric px. An AvatarGroup's size overrides it.",
+    size: "named sizes: 'xsm' 20px, 'sm' 24px, 'md' 36px, 'lg' 48px, 'xl' 128px; numeric px restricted to values listed in the type. AvatarGroup's size always wins, default included.",
     status:
       'corner content for status indicators; AvatarStatusDot reports its `label`, composed into the avatar accessible name ("Jane Doe, Online"), at any nesting depth',
     tooltip:

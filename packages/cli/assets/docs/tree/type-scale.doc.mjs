@@ -2,7 +2,8 @@
 
 /**
  * @file `astryx docs typography/type-scale`: line height, semantic type scale,
- * display text, headings and text components, and custom type scales.
+ * display text, headings and text components, custom type scales, and the
+ * reader's text size on iOS.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -14,13 +15,15 @@ export const docs = {
   placement: {parent: 'namespace:typography', slot: 'guides', order: 20},
   category: 'foundations',
   description:
-    'Line height, semantic type scale tokens, display text, Heading and Text components, and custom type scales via defineTheme.',
+    "Line height, semantic type scale tokens, display text, Heading and Text components, custom type scales via defineTheme, and following the reader's text size on iOS.",
   keywords: [
     'line height',
     'leading',
     'defineTheme',
     'base',
     'ratio',
+    'dynamic type',
+    'text size',
   ],
 
   sections: [
@@ -76,7 +79,7 @@ export const docs = {
           type: 'code',
           lang: 'tsx',
           label: 'Heading for document structure',
-          code: `import {Heading} from '@astryxdesign/core';
+          code: `import {Heading} from '@astryxdesign/core/Heading';
 
 // Heading levels map to semantic tokens: level 1 → --text-heading-1-*
 <Heading level={1}>Page Title</Heading>
@@ -96,7 +99,7 @@ export const docs = {
           type: 'code',
           lang: 'tsx',
           label: 'Text for body, label, and display text',
-          code: `import {Text} from '@astryxdesign/core';
+          code: `import {Text} from '@astryxdesign/core/Text';
 
 <Text type="body">Body text at the base scale.</Text>
 <Text type="large">Emphasized body text.</Text>
@@ -121,7 +124,7 @@ export const docs = {
           type: 'code',
           lang: 'tsx',
           label: 'Customizing the type scale via defineTheme',
-          code: `import {defineTheme} from '@astryxdesign/core';
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
 
 // Adjust the entire ramp holistically with base and ratio
 const editorialTheme = defineTheme({
@@ -140,6 +143,20 @@ const denseTheme = defineTheme({
     scale: { base: 12, ratio: 1.125 },          // compact / data-dense UI
   },
 });`,
+        },
+      ],
+    },
+    {
+      id: 'dynamic-type',
+      title: "Following the reader's text size on iOS",
+      content: [
+        {
+          type: 'prose',
+          text: "On iPhone, readers pick a text size in Settings (Display & Text Size, then Larger Text), and native apps grow or shrink their text with it. Every theme does the same in Safari on iPhone, which exposes that choice through `font: -apple-system-body`: each font size follows the reader's choice on the curve of the iOS text style it plays, so body text scales like Body, `heading-1` like Title 1 and display text like Large Title, and every role keeps its order. A size the theme fixes at a length, such as a 12px supporting size, scales on the curve of the step it reads by default; a size in `em` or `%` follows its parent, and one that reads a variable follows that variable. At the default size every font size is the theme's own. The family, spacing, radius and the root font size never change, line heights keep their ratios, text inputs keep their 16px floor on iOS, and on Android the system font scale grows every font size through `env(preferred-text-scale)` where the browser reports it; browsers with neither see no change. There is nothing to turn on: no theme option, prop or document attribute.",
+        },
+        {
+          type: 'prose',
+          text: 'Fixed-height controls such as the text inputs keep their height, so their text can overflow at the accessibility sizes. A labelled `Button` grows with its label.',
         },
       ],
     },

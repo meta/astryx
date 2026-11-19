@@ -11,7 +11,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {useState} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {useTreeFocus} from './useTreeFocus';
 
 interface Node {
@@ -262,6 +262,43 @@ describe('useTreeFocus activation + typeahead', () => {
     expect(screen.getByTestId('c')).toHaveFocus();
   });
 
+  it('typeahead matches whole text for a direct caller, even when an item carries aria-labelledby and the options smuggle the internal flag', () => {
+    function LabelledTree() {
+      // An untyped options object trying to reach the internal flag through
+      // the public hook: it must have no effect.
+      const smuggled = {
+        hasRovingTabIndex: true,
+        matchLabelledBy: true,
+      } as Record<string, unknown>;
+      const {treeRef, handleKeyDown, handleFocus} =
+        useTreeFocus<HTMLUListElement>(smuggled);
+      return (
+        <ul
+          ref={treeRef}
+          role="tree"
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}>
+          <li role="treeitem" tabIndex={0} data-testid="first">
+            First
+          </li>
+          <li
+            role="treeitem"
+            tabIndex={-1}
+            aria-labelledby="lbl"
+            data-testid="labelled">
+            <span>zz</span> <span id="lbl">Budget</span>
+          </li>
+        </ul>
+      );
+    }
+    render(<LabelledTree />);
+    const tree = screen.getByRole('tree');
+    screen.getByTestId('first').focus();
+    // Released behavior: the text content ("zz Budget") is what matches.
+    fireEvent.keyDown(tree, {key: 'z'});
+    expect(screen.getByTestId('labelled')).toHaveFocus();
+  });
+
   it('typeahead cycles through same-letter matches on repeated presses', () => {
     const nodes: Node[] = [
       {id: 'apple', label: 'Apple', level: 1},
@@ -278,6 +315,58 @@ describe('useTreeFocus activation + typeahead', () => {
     // A repeat must cycle, not extend the query to "aa" (as useTypeahead does).
     fireEvent.keyDown(tree, {key: 'a'});
     expect(screen.getByTestId('avocado')).toHaveFocus();
+  });
+
+  it('typeahead ignores accents, stroked letters and Turkish i (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'dung', label: 'Dung', level: 1},
+      {id: 'dao', label: 'Đào', level: 1},
+      {id: 'izmir', label: 'İzmir', level: 1},
+      {id: 'isparta', label: 'Isparta', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    screen.getByTestId('dung').focus();
+
+    fireEvent.keyDown(tree, {key: 'd'});
+    expect(screen.getByTestId('dao')).toHaveFocus();
+
+    // A fresh query (the typed buffer resets on its own after a pause).
+    cleanup();
+    render(<Tree collapsed={nodes} />);
+    screen.getByTestId('dung').focus();
+    fireEvent.keyDown(screen.getByRole('tree'), {key: 'i'});
+    expect(screen.getByTestId('izmir')).toHaveFocus();
+  });
+
+  it('typeahead ignores a combining mark typed first, as useTypeahead does (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'anna', label: 'Anna', level: 1},
+      {id: 'ava', label: 'Ava', level: 1},
+      {id: 'bo', label: 'Bo', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    screen.getByTestId('bo').focus();
+    fireEvent.keyDown(tree, {key: '\u0301'});
+    fireEvent.keyDown(tree, {key: 'a'});
+    expect(screen.getByTestId('anna')).toHaveFocus();
+    // The mark never entered the buffer, so a repeat cycles to the next "a".
+    fireEvent.keyDown(tree, {key: 'a'});
+    expect(screen.getByTestId('ava')).toHaveFocus();
+  });
+
+  it('typeahead prefers the exact match for a typed mark (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'dung', label: 'Dung', level: 1},
+      {id: 'dao', label: 'Đào', level: 1},
+      {id: 'izmir', label: 'İzmir', level: 1},
+      {id: 'isparta', label: 'Isparta', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    fireEvent.keyDown(tree, {key: 'đ'});
+    expect(screen.getByTestId('dao')).toHaveFocus();
   });
 
   it('typeahead searches from the top when no treeitem has focus', () => {

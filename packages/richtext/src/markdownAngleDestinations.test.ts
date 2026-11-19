@@ -164,6 +164,35 @@ describe('angle-bracket destination edges', () => {
     expect(richLinks(exported)).toEqual([{url: '<b', title: null}]);
   });
 
+  it('writes a reference-like `&` in an angle destination and its title so it reads back', () => {
+    const editor = newEditor();
+    editor.update(
+      () => {
+        $getRoot()
+          .clear()
+          .append(
+            $createParagraphNode().append(
+              $createLinkNode('https://e.com/a b&amp;c', {
+                title: 'x &copy; y',
+              }).append($createTextNode('x')),
+            ),
+          );
+      },
+      {discrete: true},
+    );
+    const exported = editor
+      .getEditorState()
+      .read(() => $exportMarkdownKeepingSource([...DEFAULT_TRANSFORMERS]));
+    // Import decodes character references in a destination and a title, so
+    // the `&` that would start one is written as a reference itself.
+    expect(exported).toBe(
+      '[x](<https://e.com/a b&#38;amp;c> "x &#38;copy; y")',
+    );
+    expect(richLinks(exported)).toEqual([
+      {url: 'https://e.com/a b&amp;c', title: 'x &copy; y'},
+    ]);
+  });
+
   it('stores no unsafe address, however an angle destination is written', () => {
     let state = 40;
     const random = () => {

@@ -31,9 +31,17 @@ export type GridAlignment = 'start' | 'center' | 'end' | 'stretch';
 /**
  * Column configuration for Grid.
  *
- * - `number` — fixed equal-width columns (e.g. `columns={3}`)
+ * A number means exactly N `1fr` tracks at every width; it never reflows, so
+ * `columns={4}` on a phone renders four narrow tracks. A child's minimum
+ * content can widen its track beyond an equal fraction. For columns that reflow
+ * on small screens, use the object form: `{minWidth: 240, max: 4}` renders at
+ * most four columns, each at least 240px, and fewer when the container is
+ * narrower.
+ *
+ * - `number` — exactly N `1fr` tracks (e.g. `columns={3}`); never reflows
  * - `object` — responsive columns based on minimum child width:
- *   - `minWidth` — minimum width (px) for each column track
+ *   - `minWidth` — minimum width (px) for each column track; in a container
+ *     narrower than `minWidth`, one track shrinks to the container width
  *   - `repeat` — `'fill'` (default) preserves empty tracks for consistent widths;
  *     `'fit'` collapses empty tracks so items stretch to fill
  *   - `max` — caps the maximum number of columns. The grid stretches to 100%
@@ -53,9 +61,12 @@ export interface GridProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLDivElement>;
   /**
-   * Column configuration.
-   * - `number` — fixed equal-width columns
-   * - `{minWidth, max?, repeat?}` — responsive columns
+   * Column configuration. A number creates exactly N `1fr` tracks and never
+   * reflows; a child's minimum content may widen its track. For columns that
+   * reflow on small screens, use `{minWidth, max}`.
+   * - `number` — exactly N `1fr` tracks at every width
+   * - `{minWidth, max?, repeat?}` — responsive columns with a px floor and an
+   *   optional cap
    *
    * @see GridColumns
    */
@@ -119,14 +130,16 @@ export interface GridProps extends BaseProps<HTMLDivElement> {
   rowHeight?: number;
 
   /**
-   * Vertical alignment of grid items (align-items).
-   * @default 'stretch'
+   * Vertical alignment of grid items (align-items). Unset leaves the browser
+   * default, `normal`, which stretches items that have no natural size or
+   * aspect ratio.
    */
   align?: GridAlignment;
 
   /**
-   * Horizontal alignment of grid items (justify-items).
-   * @default 'stretch'
+   * Horizontal alignment of grid items (justify-items). Unset leaves the browser
+   * default, `normal`, which stretches items that have no natural size or
+   * aspect ratio.
    */
   justify?: GridAlignment;
 
@@ -407,7 +420,9 @@ export function Grid({
         columnGap,
       );
     } else {
-      gridTemplateColumns = `repeat(${repeatMode}, minmax(${columns.minWidth}px, 1fr))`;
+      // `min(100%, …)` lets a lone track shrink to a container narrower than
+      // `minWidth` instead of overflowing it.
+      gridTemplateColumns = `repeat(${repeatMode}, minmax(min(100%, ${columns.minWidth}px), 1fr))`;
     }
   } else if (typeof columns === 'number' && columns > 0) {
     // Fixed columns mode
@@ -446,6 +461,7 @@ export function Grid({
   return (
     <div
       ref={ref}
+      {...props}
       {...mergeProps(
         themeProps('grid', {columns: columnsVariant, gap, align, justify}),
         stylex.props(
@@ -461,8 +477,7 @@ export function Grid({
         ),
         className,
         {...style, ...inlineStyle},
-      )}
-      {...props}>
+      )}>
       {children}
     </div>
   );

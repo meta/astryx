@@ -20,7 +20,7 @@ beforeEach(() => {
     JSON.stringify({
       name: 'app',
       private: true,
-      dependencies: {'@acme/themes': '^1.0.0'},
+      dependencies: {'@acme/themes': '^1.0.0', '@astryxdesign/core': '*'},
     }),
   );
   const packageDir = path.join(tmpDir, 'node_modules', '@acme', 'themes');
@@ -99,7 +99,7 @@ describe('theme add cleanup lifecycle', () => {
         change: {action: 'add', slug: 'ocean', changed: true},
       },
     });
-    expect(payload.meta).toBeUndefined();
+    expect(Object.keys(payload.meta)).toEqual(['answeredBy']);
   });
 
   it('keeps --import as an accepted no-op with the same response', async () => {
@@ -151,7 +151,7 @@ describe('theme add cleanup lifecycle', () => {
     expect(result.status, result.stderr).toBe(0);
     const payload = JSON.parse(result.stdout);
     expect(payload).toMatchObject({type: 'theme.list'});
-    expect(payload.meta).toBeUndefined();
+    expect(Object.keys(payload.meta)).toEqual(['answeredBy']);
     expect(payload.data.some(theme => theme.slug === 'broken')).toBe(false);
     expect(Object.keys(payload.data[0]).sort()).toEqual([
       'description',
@@ -224,5 +224,30 @@ describe('theme add cleanup lifecycle', () => {
     expect(result.stdout).toMatch(/compatibility no-op/i);
     expect(result.stdout).toContain('theme eject <slug> [path] [--overwrite]');
     expect(result.stdout).not.toMatch(/^\s+-f, --overwrite/m);
+  });
+});
+
+describe('theme remove of the only added theme', () => {
+  it('deletes the module and prints the wiring the app root must drop', async () => {
+    const added = await runCli(
+      ['theme', 'add', 'ocean', '--package', '@acme/themes'],
+      tmpDir,
+    );
+    expect(added.status, added.stderr).toBe(0);
+
+    const result = await runCli(['theme', 'remove', 'ocean'], tmpDir);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/^moduleRemoved:\s+true$/m);
+    expect(result.stdout).toContain(
+      'Removed ocean, the only added theme, and deleted src/astryx-themes.ts.',
+    );
+    expect(result.stdout).toContain(
+      "import {themes, defaultThemeSlug} from './astryx-themes';",
+    );
+    expect(result.stdout).toContain('<Theme theme={themes[defaultThemeSlug]}>');
+    expect(fs.existsSync(path.join(tmpDir, 'src/astryx-themes.ts'))).toBe(
+      false,
+    );
   });
 });

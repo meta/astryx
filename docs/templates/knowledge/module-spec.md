@@ -17,19 +17,19 @@ references: [architecture:<surface>, design:<surface>, spec:AST-000/DEC-0]
 
 # <PublicName> module contract
 
-<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, research, or project status (what is built so far, what goes first) in the record. A requirement gap reads `<FR or INV id> gap: <observable mismatch>`; one line such as `Status: in progress` may say the record is still in progress. See docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `<Exact public API, concept, or syntax delta; write “None” when none changes.>`                                                                    |
-| Behavior                | `<Observable governing behavior, including the decisive default, boundary, or precedence rule.>`                                                   |
-| End-user impact         | `<Who is affected, in what state, and what improves, worsens, or remains unchanged.>`                                                              |
-| Builder impact          | `<Migration and each new caller choice; write “None” when there is no new burden.>`                                                                |
-| Compatibility/readiness | `<Default compatibility; additive/breaking status; authority and implementation state; material evidence still pending.>`                          |
-| Review checks           | `<Reject specific contradictions, invalid states, wrong-owner APIs, or lost boundaries/precedence/evidence distinctions already forbidden below.>` |
-| Governing rules         | `<Canonical owners and only the current clauses needed to justify this projection.>`                                                               |
+| Area                    | Contract                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `<Exact public API, concept, or syntax delta; write “None” when none changes.>`                                                                                 |
+| Behavior                | `<Observable governing behavior, including the decisive default, boundary, or precedence rule.>`                                                                |
+| End-user impact         | `<Who is affected, in what state, and what improves, worsens, or remains unchanged.>`                                                                           |
+| Builder impact          | `<Migration and each new caller choice; write “None” when there is no new burden.>`                                                                             |
+| Compatibility/readiness | `<Default compatibility; additive/breaking status; authority; requirement gaps as <FR or INV id> gap: <observable mismatch>; material evidence still pending.>` |
+| Review checks           | `<Reject specific contradictions, invalid states, wrong-owner APIs, or lost boundaries/precedence/evidence distinctions already forbidden below.>`              |
+| Governing rules         | `<Canonical owners and only the current clauses needed to justify this projection.>`                                                                            |
 
 This table is a review projection; the body below is authoritative.
 

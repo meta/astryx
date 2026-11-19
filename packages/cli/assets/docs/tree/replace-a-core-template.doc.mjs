@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/document-the-template/replace-a-core-template`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template/replace-a-core-template`:
  * deliberately replace one Core template through template metadata.
  */
 
@@ -31,7 +31,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Sharing a Core id without `replaces` does not replace Core. It makes the bare id ambiguous, so `astryx template <id>` fails until the app adds `--package`, and `doctor integration templates` reports an accidental collision.',
+            'Sharing a Core id without `replaces` does not replace Core. It makes the bare id ambiguous, so `{@command template <id>}` fails until the app adds `--package`, and `doctor integration templates` reports an accidental collision.',
             'A replacement can keep the Core id or use its own. `replaces` is what makes it the default.',
           ],
         },
@@ -48,13 +48,13 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx --json template --list --package @astryxdesign/core',
+          code: 'astryx --json template --list --package @astryxdesign/core',
         },
         {
           type: 'code',
           lang: 'javascript',
           label: 'templates/acme-app-shell.doc.mjs',
-          code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
+          code: `/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */
 export default {
   type: 'page',
   name: 'acme-app-shell',
@@ -67,10 +67,8 @@ export default {
 };`,
         },
         {
-          type: 'reference',
-          target: 'schema:template-doc',
-          projection: {fields: ['replaces']},
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:template-doc}.',
         },
         {
           type: 'prose',
@@ -84,7 +82,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Declare the CLI floor from the field above as an optional peer ({@link generic:versioning}).',
+          text: 'Declare the CLI floor that `integration verify` names as an optional peer ({@link generic:versioning}).',
         },
         {
           type: 'code',
@@ -103,7 +101,7 @@ export default {
         },
         {
           type: 'prose',
-          text: '`integration verify` reports `replaces_needs_cli` when that peer is missing or too old. Without it, an older CLI drops that template and hides your doc topics.',
+          text: '`integration verify` reports `replaces_needs_cli` when that peer is missing or too old. Without it, published 0.6.3 and earlier drop that template and hide your doc topics.',
         },
       ],
     },
@@ -115,10 +113,10 @@ export default {
           type: 'code',
           lang: 'bash',
           code: `# Receives the active replacement
-npx astryx template shell-side-nav src/app
+{@command template shell-side-nav src/app}
 
 # Receives the original Core template
-npx astryx template shell-side-nav --package @astryxdesign/core src/app`,
+{@command template shell-side-nav --package @astryxdesign/core src/app}`,
         },
         {
           type: 'prose',
@@ -142,7 +140,7 @@ npx astryx template shell-side-nav --package @astryxdesign/core src/app`,
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx doctor integration templates',
+          code: '{@command doctor integration templates}',
         },
         {
           type: 'table',

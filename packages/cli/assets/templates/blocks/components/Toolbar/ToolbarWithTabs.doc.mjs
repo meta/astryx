@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Toolbar', 'TabList', 'Button', 'Icon', 'Card', 'Section'],
+  icons: {PlusIcon: 'add'},
 };

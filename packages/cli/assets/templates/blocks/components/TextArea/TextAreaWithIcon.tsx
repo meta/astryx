@@ -10,7 +10,7 @@ export default function TextAreaWithIcon() {
   const [value, setValue] = useState('');
 
   return (
-    <div style={{width: 400}}>
+    <div style={{width: 400, maxWidth: '100%'}}>
       <TextArea
         label="Meeting notes"
         description="Capture key decisions and action items."

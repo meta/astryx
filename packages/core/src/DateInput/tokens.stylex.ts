@@ -4,7 +4,9 @@
  * @file tokens.stylex.ts
  * @input StyleX variable and constant definitions
  * @output Exports DateInput layout constants and derived geometry
- * @position Lab component tokens consumed by DateInput.tsx, MonthScroller.tsx, Wheel.tsx, MonthYearWheels.tsx
+ * @position Core touch-picker geometry consumed by the DateInput touch surface
+ *   (TouchDateField, MonthScroller, Wheel, MonthYearWheels) and by the
+ *   DateTimeInput and TimeInput touch fields
  *
  * The picker's whole geometry derives from two numbers, which is what makes
  * the fixed height and the scroll snapping exact:

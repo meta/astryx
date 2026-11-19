@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file Button.a11y.chromium.spec.ts
@@ -27,7 +28,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   BUTTON_PATTERN,
   blockingResults,

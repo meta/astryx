@@ -107,6 +107,8 @@ function createSubject(element: Element): Subject {
     },
     textContent: async () =>
       (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    descendantCount: async selector =>
+      element.querySelectorAll(selector).length,
     currentExists: async () => element.isConnected,
     isConnected: async () => element.isConnected,
     computed: async () =>
@@ -194,6 +196,11 @@ export function createJsdomHarness(options: JsdomHarnessOptions): Harness {
       unobservable('real-browser', 'a real pointer activation'),
     abortedPress: async () =>
       unobservable('real-browser', 'a real pointer press'),
+    clickBeside: async () =>
+      unobservable('real-browser', 'a real pointer click beside the subject'),
+    hover: async () => unobservable('real-browser', 'a real pointer hover'),
+    pointerAway: async () =>
+      unobservable('real-browser', 'a real pointer moving away'),
     typeText: async () =>
       unobservable('real-browser', 'real keyboard text entry'),
     clearText: async () =>

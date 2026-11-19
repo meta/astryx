@@ -9,9 +9,10 @@
  *   `linkUtils`.
  * @output Exports `RichTextEditorAutoLinkPlugin` and its props type, plus the
  *   default `DEFAULT_LINK_MATCHERS`.
- * @position Experimental (lab). Drop into RichTextEditor's `plugins` slot to
- *   auto-linkify URLs and emails as they are typed or pasted. Requires
- *   `AutoLinkNode` to be registered (it is, by default).
+ * @position @astryxdesign/richtext. Drop into RichTextEditor's `plugins` slot to
+ *   auto-linkify URLs and emails as they are typed or pasted, except inside
+ *   a code block. Requires `AutoLinkNode` to be registered (it is, by
+ *   default).
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports / barrel)
@@ -19,8 +20,8 @@
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (story)
  *
- * NOTE: Experimental `@astryxdesign/richtext` component (canary). `lexical` and
- * `@lexical/*` are OPTIONAL peer dependencies — install them to use this.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them
+ * to use this.
  *
  * COMPATIBILITY: the plugin is deliberately a thin pass-through so an
  * application with its own link conventions can adopt it without forking. It
@@ -28,9 +29,8 @@
  * and new-tab defaults, so a consumer supplies a richer matcher set — an
  * application-specific identifier or ticket syntax, say — through the
  * `matchers` prop without changing the contract. An application needing a
- * hardened transform (expanded separators, code-block exclusion) substitutes
- * its own plugin in the same slot; astryx stays on the upstream
- * `AutoLinkPlugin`.
+ * hardened transform (expanded separators, say) substitutes its own plugin in
+ * the same slot; astryx stays on the upstream `AutoLinkPlugin`.
  */
 
 import {
@@ -38,6 +38,8 @@ import {
   createLinkMatcherWithRegExp,
   type LinkMatcher,
 } from '@lexical/react/LexicalAutoLinkPlugin';
+import {$isCodeNode} from '@lexical/code';
+import type {ElementNode} from 'lexical';
 import {URL_MATCHER, EMAIL_MATCHER, sanitizeUrl} from './linkUtils';
 
 /**
@@ -71,6 +73,10 @@ export const DEFAULT_LINK_MATCHERS: LinkMatcher[] = [
     return match ? {...match, attributes: NEW_TAB_LINK_ATTRIBUTES} : null;
   },
 ];
+
+// Text in a code block is never linked. The upstream plugin registers again
+// when this array changes. Keep it a module constant.
+const EXCLUDE_PARENTS: ((parent: ElementNode) => boolean)[] = [$isCodeNode];
 
 export interface RichTextEditorAutoLinkPluginProps {
   /**
@@ -108,7 +114,13 @@ export function RichTextEditorAutoLinkPlugin({
   matchers = DEFAULT_LINK_MATCHERS,
   onChange,
 }: RichTextEditorAutoLinkPluginProps) {
-  return <AutoLinkPlugin matchers={matchers} onChange={onChange} />;
+  return (
+    <AutoLinkPlugin
+      matchers={matchers}
+      onChange={onChange}
+      excludeParents={EXCLUDE_PARENTS}
+    />
+  );
 }
 
 RichTextEditorAutoLinkPlugin.displayName = 'RichTextEditorAutoLinkPlugin';
