@@ -590,8 +590,8 @@ inside a frame, a custom element or an open shadow root can keep the keyboard
 up, so focus that moves there predicts no hide. A ride starts once the task
 that delivers Safari's report ends, so work inside that task delays it; work
 after it does not. Safari on iOS's schedule loads with the touch runtime after
-the page's first paint; until then, Safari on iOS moves in one step, as
-before. WebKit's touch capabilities select this schedule, never the user
+the page's first paint; until then, Safari on iOS moves in one step.
+WebKit's touch capabilities select this schedule, never the user
 agent. Simulator evidence gates merge, and a physical iPhone gates release
 (DEC-3).
 
