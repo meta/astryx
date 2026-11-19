@@ -72,6 +72,23 @@ const compileOwn = slug => compile(`themes/${slug}/${slug}.theme.ts`);
 
 describe('variants written as a map of values to blocks', () => {
   it(
+    'a variants wrapper inside a style block names the inner style keys; selectors and an empty key keep their own advice',
+    () => {
+      plain(
+        "components: {button: {'size:lg': {variants: {variant: {secondary: {borderColor: 'red'}}}}, 'variant:primary': {'': {a: {color: 'red'}}}}, card: {selectors: {':hover': {color: 'red'}}}}",
+      );
+      const p = json(['theme', 'build', 'plain/p.ts']);
+      expect(p.status).toBe(0);
+      const warnings = p.env.data.warnings.join('\n');
+      expect(warnings).toContain("'variant:secondary': {…}");
+      expect(warnings).not.toContain('variants:variant');
+      expect(warnings).not.toContain('selectors::hover');
+      expect(warnings).not.toContain("':a'");
+      expect(warnings).toContain('name the property or the pseudo key');
+    },
+    T,
+  );
+  it(
     'get one warning, at the line, naming the style keys that write them',
     () => {
       plain(
