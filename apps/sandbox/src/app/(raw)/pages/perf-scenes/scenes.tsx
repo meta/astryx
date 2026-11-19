@@ -5,7 +5,7 @@
 /**
  * @file scenes.tsx
  * @input A scene id
- * @output The five perf scenes, each a deterministic composition of Core
+ * @output The six perf scenes, each a deterministic composition of Core
  *   components that marks the document ready once it has committed
  * @position The scenes the perf driver measures in Chromium
  *   (apps/sandbox/perf/scenes.perf.spec.ts). Each scene renders the same
@@ -272,12 +272,46 @@ function OverlayChurnScene() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Tooltip Buttons
+// ---------------------------------------------------------------------------
+
+const TOOLTIP_BUTTONS = Array.from({length: 500}, (_, index) => index + 1);
+
+// Every Button has a tooltip, so each one mounts its own layer hooks. The
+// re-render gives every Button a new label, so each one renders again.
+function TooltipButtonsScene() {
+  useSceneReady();
+  const [round, setRound] = useState(0);
+  return (
+    <VStack gap={3}>
+      <Button
+        label="Re-render buttons"
+        variant="secondary"
+        onClick={() => setRound(value => value + 1)}
+      />
+      <HStack gap={1} wrap="wrap">
+        {TOOLTIP_BUTTONS.map(index => (
+          <Button
+            key={index}
+            label={`Item ${index}.${round}`}
+            size="sm"
+            variant="ghost"
+            tooltip={`Item ${index} details`}
+          />
+        ))}
+      </HStack>
+    </VStack>
+  );
+}
+
 const SCENES: Readonly<Record<PerfSceneId, () => React.ReactNode>> = {
   'comments-panel': CommentsPanelScene,
   table: TableScene,
   'tree-list': TreeListScene,
   markdown: MarkdownScene,
   'overlay-churn-settled': OverlayChurnScene,
+  'tooltip-buttons': TooltipButtonsScene,
 };
 
 export function PerfScene({scene}: {scene: PerfSceneId}) {
