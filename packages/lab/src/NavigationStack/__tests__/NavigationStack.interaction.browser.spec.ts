@@ -1292,8 +1292,10 @@ test('a push from rest after a heavy commit never skips into its curve', async (
   const travelled = frames.map(frame => 1 - frame.offset / width);
   const firstMoving = travelled.findIndex(share => share > 0.005);
   expect(firstMoving).toBeGreaterThanOrEqual(0);
-  // Moving by the second frame after the task.
-  expect(firstMoving).toBeLessThanOrEqual(1);
+  // The reader starts in the task that commits the push. Its first frame
+  // paints the new screen at rest, and an input task's push starts at the
+  // frame after that, so the push moves by the third frame.
+  expect(firstMoving).toBeLessThanOrEqual(2);
   // The spring's share after `ms` from rest (OMEGA, starting at
   // PUSH_VELOCITY), and the most the first moving frame may show: the time
   // since the frame before it (or since the block ended), plus one frame.
