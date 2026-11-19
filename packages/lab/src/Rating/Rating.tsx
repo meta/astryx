@@ -319,7 +319,7 @@ export function Rating({
           return (
             <StarGlyph
               key={star}
-              size={size}
+              sizeStyle={styles[size]}
               fill={fill}
               isDisabled={isDisabled}
             />
@@ -425,7 +425,7 @@ export function Rating({
             focusOutlineStyles.focusVisible,
           )}>
           <StarGlyph
-            size={size}
+            sizeStyle={styles[size]}
             fill={star <= rating ? 1 : 0}
             isInteractive={isEditable}
             isDisabled={isDisabled}
@@ -440,13 +440,14 @@ Rating.displayName = 'Rating';
 
 // A fractional star fills from the inline start.
 // The :dir(rtl) clip mirrors it in CSS.
+// The size style comes from Rating, which reflects `size` to themes.
 function StarGlyph({
-  size,
+  sizeStyle,
   fill,
   isDisabled = false,
   isInteractive = false,
 }: {
-  size: RatingSize;
+  sizeStyle: stylex.StyleXStyles;
   fill: number;
   isDisabled?: boolean;
   isInteractive?: boolean;
@@ -456,7 +457,7 @@ function StarGlyph({
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      {...stylex.props(styles.glyph, styles[size])}>
+      {...stylex.props(styles.glyph, sizeStyle)}>
       <path
         d={STAR_PATH}
         {...stylex.props(
