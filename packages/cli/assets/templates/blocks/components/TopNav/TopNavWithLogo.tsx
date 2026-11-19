@@ -6,9 +6,11 @@ import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useToast} from '@astryxdesign/core/Toast';
 import {CubeIcon, UserCircleIcon} from '@heroicons/react/24/outline';
 
 export default function TopNavWithLogo() {
+  const showToast = useToast();
   return (
     <TopNav
       label="Main navigation"
@@ -32,6 +34,9 @@ export default function TopNavWithLogo() {
           variant="ghost"
           icon={<UserCircleIcon />}
           isIconOnly
+          onClick={() =>
+            showToast({body: 'Demo: your profile menu would open here'})
+          }
         />
       }
     />
