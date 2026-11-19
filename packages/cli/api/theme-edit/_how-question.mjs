@@ -12530,13 +12530,18 @@ export function draftAnswer(ctx, env, question) {
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
   for (const c of clauses)
-    if (c.aspects.some(a => a === 'border' || a === 'corners'))
+    if (
+      c.aspects.some(a =>
+        ['border', 'corners', 'shadow', 'background', 'outline'].includes(a),
+      )
+    )
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
-        // (A row that frames the part's controls as one strip takes both,
-        // so its corners follow its border.)
+        // (A row that frames the part's controls as one strip takes its
+        // border, corners, shadow, fill and outline: one strip together.)
         const frame = rowFrameOf(ctx, p.on);
         if (frame) return [{...p, on: frame}];
+        if (!c.aspects.some(a => a === 'border' || a === 'corners')) return [p];
         const own = C.MAP[p.on]?.own ?? {};
         const inner = (
           c.aspects.includes('corners')

@@ -8085,6 +8085,29 @@ function checkOne(
         );
       }
     }
+    // A shadow, fill or outline on a part that paints no box of its own,
+    // whose controls sit in a row that frames them as one strip: the row
+    // takes it, as it takes the strip's border and corners. On the outer
+    // part it draws a box as wide as the whole bar around them.
+    if (
+      !unset &&
+      /^(?:box-shadow|background(?:-color)?|outline)(?:-|$)/.test(prop) &&
+      partsOf(ctx, s).length === 1
+    ) {
+      const part = partsOf(ctx, s)[0];
+      const own = ctx.C.MAP[part]?.own ?? {};
+      const frame = Object.keys(own).some(k =>
+        /^(?:border(?!.*radius)|background)/.test(k),
+      )
+        ? null
+        : rowFrameOf(ctx, part);
+      if (frame)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part} paints no box of its own; its controls sit side by side in ${frame}, which frames them as one strip, so set ${prop} on ${frame}. On ${part} it draws a box as wide as the whole bar around them.`,
+          {run: [setLine(slug, prop, v, {...s, on: frame, only: undefined})]},
+        );
+    }
     // A border on a part that draws none itself, whose edges are drawn by
     // parts of its own inside it (a date-time input's date and time boxes):
     // those parts take it.
