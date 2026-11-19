@@ -16,6 +16,11 @@ import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 
+// A field in the sheet presentation loads the sheet module on mount, and the
+// load runs past the test that started it. The file loads it before any test
+// runs, so no load is still running when the test environment is torn down.
+await import('./TokenizerBottomSheet');
+
 const h = {hidden: true} as const;
 const MESSAGE = 'Select at least one member';
 

@@ -15,6 +15,11 @@ import userEvent from '@testing-library/user-event';
 import {PowerSearch} from './PowerSearch';
 import type {PowerSearchConfig} from './types';
 
+// A field in the sheet presentation loads the sheet module on mount, and the
+// load runs past the test that started it. The file loads it before any test
+// runs, so no load is still running when the test environment is torn down.
+await import('./PowerSearchBottomSheet');
+
 const h = {hidden: true} as const;
 const MESSAGE = 'Add at least one filter';
 
