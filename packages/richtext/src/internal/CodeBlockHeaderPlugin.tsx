@@ -239,9 +239,13 @@ function naturalWidth({header, title}: HeaderParts, label: number): number {
 
 /**
  * The width of `title`'s text on one line, in its own font, or null where no
- * canvas measures text (a DOM without layout). Core measures text the same
- * way in its virtualization internals, which RichText may not import (only a
- * package entry is public), so this small copy stays here.
+ * canvas measures text (a DOM without layout). The font is built from its
+ * longhands, because Chromium returns an empty `font` shorthand when the text
+ * inherits a font-variant, font-feature-settings or font-kerning value the
+ * shorthand cannot hold; letter spacing is added per character. Core's
+ * logical-position measure in its table internals works the same way, and
+ * RichText may not import those internals (only a package entry is public),
+ * so this small copy stays here.
  */
 function oneLineWidth(
   title: HTMLSpanElement,
@@ -254,8 +258,18 @@ function oneLineWidth(
   if (context == null) {
     return null;
   }
-  context.font = getComputedStyle(title).font;
-  return context.measureText(title.textContent ?? '').width;
+  const style = getComputedStyle(title);
+  if (style.fontSize === '' || style.fontFamily === '') {
+    return null;
+  }
+  context.font = [style.fontStyle, style.fontWeight, style.fontSize]
+    .filter(part => part !== '')
+    .concat(style.fontFamily)
+    .join(' ');
+  const text = title.textContent ?? '';
+  const spacing =
+    style.letterSpacing === 'normal' ? 0 : parseFloat(style.letterSpacing) || 0;
+  return context.measureText(text).width + spacing * text.length;
 }
 
 /**
@@ -277,11 +291,9 @@ export function CodeBlockHeaderPlugin({
   // The block's top padding reserves the height, and its least width is the
   // header's own.
   const headersRef = useRef(new Map<string, HeaderParts>());
-  // Measures a label's one-line width; made on first use.
   const canvasRef = useRef<CanvasRenderingContext2D | null | undefined>(
     undefined,
   );
-  // The measure frame's scheduler, which the Effect below fills.
   const scheduleRef = useRef<(() => void) | null>(null);
   const registerHeader = useCallback(
     (key: string, parts: HeaderParts) => {
