@@ -49,6 +49,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {NOT_AN_IMAGE, showsImage} from './image-attributes.mjs';
 import {parseSrcset} from './srcset.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
+import {packageResolveHooks} from './package-resolve-hooks.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
@@ -1478,6 +1479,12 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
     data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
   });
 }
+// Imports between the files of an installed package resolve by path (a
+// Node without in-thread hooks resolves them itself). The hook answers only
+// relative imports inside a package, and single-copy-hooks.mjs answers only
+// package names, so neither changes what the other resolves.
+const registerHooks = /** @type {any} */ (Module).registerHooks;
+if (typeof registerHooks === 'function') registerHooks(packageResolveHooks());
 
 /** What the StyleX compiler reads as a theme or constants file, by name. */
 const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
