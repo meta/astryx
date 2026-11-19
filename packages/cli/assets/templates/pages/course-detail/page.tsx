@@ -305,23 +305,17 @@ const FACTS = [
   {icon: GlobeAltIcon, label: COURSE.language, detail: 'with English captions'},
   {icon: BoltIcon, label: 'Self-paced or cohort', detail: 'you set the pace'},
 ];
-const PREVIEW_LESSONS = [
-  {
-    title: 'What a language model can and cannot promise',
-    length: '12 min',
-    note: 'Free preview',
-  },
-  {
-    title: 'The working setup: SDK, keys, and a scratchpad',
-    length: '18 min',
-    note: 'Free preview',
-  },
-  {
-    title: 'Tokens, temperature, and the cost dial',
-    length: '18 min',
-    note: 'Free preview',
-  },
-];
+// The dialog lists the syllabus's preview lessons, so the badges are the
+// single source of truth and the copy cannot drift from them.
+const PREVIEW_LESSONS = MODULES.flatMap(module =>
+  module.lessons
+    .filter(lesson => lesson.badge === 'Preview')
+    .map(lesson => ({
+      title: lesson.title,
+      length: lesson.duration,
+      note: 'Free preview',
+    })),
+);
 const STAR_COUNTS = [
   {stars: 5, count: 1042},
   {stars: 4, count: 186},
@@ -506,7 +500,7 @@ function CourseHead() {
             onClick={() => setPreviewOpen(true)}
           />
           <Text type="supporting" color="secondary">
-            Three preview lessons · no card needed
+            {PREVIEW_LESSONS.length} preview lessons · no card needed
           </Text>
         </HStack>
       </VStack>
@@ -520,7 +514,7 @@ function CourseHead() {
           header={
             <DialogHeader
               title="Preview lessons"
-              subtitle="The first three lessons are free — no card needed."
+              subtitle={`The first ${PREVIEW_LESSONS.length} lessons are free — no card needed.`}
               hasDivider
               onOpenChange={setPreviewOpen}
             />
@@ -967,6 +961,14 @@ function ReviewsSection() {
     const next = fold(value.trim());
     setQuery(value);
     if (!next) {
+      // Clearing the query swaps "No reviews match …" for the rating's own
+      // result, so that result is announced too.
+      const count = matchReviews('', rating).length;
+      announce(
+        count === 0
+          ? 'No reviews carry this rating'
+          : `${count} ${count === 1 ? 'review' : 'reviews'}`,
+      );
       return;
     }
     const count = matchReviews(next, rating).length;
@@ -1182,8 +1184,8 @@ function ClosingBand() {
               Watch lesson one tonight. Decide in the morning.
             </Heading>
             <Text type="body" color="secondary">
-              Three preview lessons are free, the project ships with your
-              enrolment, and the first cohort starts in March.
+              {PREVIEW_LESSONS.length} preview lessons are free, the project
+              ships with your enrolment, and the first cohort starts in March.
             </Text>
             <HStack gap={2} wrap="wrap">
               <Button
