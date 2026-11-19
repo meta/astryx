@@ -11,10 +11,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
+import {getDlxPrefix} from '../env/package-manager.mjs';
 import {recordDeclaredSettings, runWithCliDoor} from '../env/cli-command.mjs';
 import {
   NOTICE_INTERVAL_MS,
   availableLine,
+  cliUpdateStep,
   globalBehind,
   globalUpgradeCommand,
   noticeLines,
@@ -35,6 +37,7 @@ import {
   tryStateLock,
   updateGlobalState,
 } from './global-state.mjs';
+import {_resetRunChoice, recordRunChoice} from './run-context.mjs';
 import {
   CLI_VERSION,
   cleanupFixtures,
@@ -516,6 +519,178 @@ describe('projectLag from a tool folder inside a project', () => {
     const fromTool = projectLag({cwd: tool, current: '0.7.0', stateDir});
     expect(fromTool).toMatchObject({root: app, current: '0.7.2'});
     expect(fromTool?.upgrade).toBe(`cd ${app} && ${fromApp?.upgrade}`);
+  });
+});
+
+describe('cliUpdateStep', () => {
+  it("in a project, moves the project's CLI and Core together, then names the bare codemod run", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const self = {version: '0.7.2', root: path.join(app, 'cli')};
+    // The newest release known: the install the update notice names.
+    const stateDir = checked('0.7.3');
+    const lag = projectLag({cwd: app, current: '0.7.1', stateDir});
+    expect(cliUpdateStep({cwd: app, self, stateDir})).toEqual({
+      install: lag?.install,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: null,
+      runs: false,
+    });
+    // Not known yet: the same install, at the latest release, and a project
+    // that pins Core to one version keeps its pins.
+    expect(cliUpdateStep({cwd: app, self, stateDir: tempDir('state')})).toEqual(
+      {
+        install:
+          'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+        upgrade: 'astryx upgrade --from 0.7.1 --apply',
+        folder: null,
+        runs: false,
+      },
+    );
+    // A project that declares a range keeps a range.
+    const ranged = project(tempDir(), {'@astryxdesign/core': '^0.7.1'});
+    writeJson(path.join(ranged, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(ranged, '0.7.1');
+    expect(
+      cliUpdateStep({cwd: ranged, self, stateDir: tempDir('state')}).install,
+    ).toBe('npm install @astryxdesign/core@latest @astryxdesign/cli@latest');
+  });
+
+  it('installs the latest release when the newest known one is not newer than the CLI that ran', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const stateDir = checked('0.7.3');
+    for (const version of ['0.7.3', '0.7.4']) {
+      expect(
+        cliUpdateStep({
+          cwd: app,
+          self: {version, root: path.join(app, 'cli')},
+          stateDir,
+        }).install,
+      ).toBe(
+        'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+      );
+    }
+  });
+
+  it("from a tool folder inside a project, runs in the project's folder", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    const tool = path.join(app, 'tools', 'codegen');
+    writeJson(path.join(tool, 'package.json'), {name: 'codegen'});
+    expect(
+      cliUpdateStep({
+        cwd: tool,
+        self: {version: '0.7.2', root: path.join(app, 'cli')},
+        stateDir: tempDir('state'),
+      }),
+    ).toEqual({
+      install: `cd ${app} && npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest`,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: app,
+      runs: false,
+    });
+  });
+
+  it('outside a project, updates the copy that ran', () => {
+    const outside = tempDir();
+    const prefix = tempDir('prefix');
+    const global = path.join(
+      prefix,
+      'lib',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(global, {recursive: true});
+    writeJson(path.join(global, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    expect(
+      cliUpdateStep({cwd: outside, self: {version: '0.7.2', root: global}}),
+    ).toEqual({
+      install: globalUpgradeCommand(global),
+      upgrade: null,
+      folder: null,
+      runs: false,
+    });
+    // A package runner's copy: nothing installed it, so the newest runs.
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    const dlx = getDlxPrefix(outside);
+    // The run's own command after the newest release (the runner the run
+    // came through, its user agent, else npx).
+    expect(
+      cliUpdateStep({
+        cwd: outside,
+        self: {version: '0.7.2', root: runner},
+        argv: ['theme', 'palette', 'generate', 'my palette.json'],
+      }),
+    ).toEqual({
+      install: `${dlx} @astryxdesign/cli@latest theme palette generate 'my palette.json'`,
+      upgrade: null,
+      folder: null,
+      runs: true,
+    });
+    // With no arguments to repeat, a place for the command.
+    expect(
+      cliUpdateStep({
+        cwd: outside,
+        self: {version: '0.7.2', root: runner},
+        argv: [],
+      }).install,
+    ).toBe(`${dlx} @astryxdesign/cli@latest <command>`);
+  });
+
+  it("outside a project, repeats the run's command only when the bin started the run", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    const dlx = getDlxPrefix(outside);
+    const self = {version: '0.7.2', root: runner};
+    const argv = process.argv;
+    process.argv = [argv[0], 'host.mjs', '--port', '4000', '--watch'];
+    try {
+      // Driven in-process, the arguments are the host program's own.
+      _resetRunChoice();
+      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
+        `${dlx} @astryxdesign/cli@latest <command>`,
+      );
+      process.argv = [argv[0], 'astryx', 'theme', 'palette', 'generate'];
+      recordRunChoice(/** @type {any} */ ({copy: 'carried', answer: 'self'}));
+      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
+        `${dlx} @astryxdesign/cli@latest theme palette generate`,
+      );
+    } finally {
+      process.argv = argv;
+      _resetRunChoice();
+    }
   });
 });
 
