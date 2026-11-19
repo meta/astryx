@@ -66,8 +66,6 @@ import {
   Download,
   // Aliased: a bare `File` would shadow the DOM type the image picker reads.
   File as FileIcon,
-  FlipHorizontal2,
-  FlipVertical2,
   FoldVertical,
   Frame,
   Grip,
@@ -97,8 +95,10 @@ import {
   TextAlignStart,
   // The angle mark for the Rotation field. Not `Angle`: that landed in
   // lucide after the version this repo pins, and a template has to build
-  // against the pack the consumer actually gets.
+  // against the icon set the consumer actually gets.
   TriangleRight,
+  TrianglesCenterlineDashedHorizontal,
+  TrianglesCenterlineDashedVertical,
   Type,
   Underline,
   Undo2,
@@ -2654,7 +2654,12 @@ export default function CanvasEditor() {
                               tooltip="Flip horizontally"
                               size="sm"
                               variant="ghost"
-                              icon={<Icon icon={FlipHorizontal2} size={ICON} />}
+                              icon={
+                                <Icon
+                                  icon={TrianglesCenterlineDashedVertical}
+                                  size={ICON}
+                                />
+                              }
                             />
                             <IconButton
                               label="Flip vertically"
@@ -2667,7 +2672,12 @@ export default function CanvasEditor() {
                               tooltip="Flip vertically"
                               size="sm"
                               variant="ghost"
-                              icon={<Icon icon={FlipVertical2} size={ICON} />}
+                              icon={
+                                <Icon
+                                  icon={TrianglesCenterlineDashedHorizontal}
+                                  size={ICON}
+                                />
+                              }
                             />
                           </InspectorRow>
                         </InspectorSection>
