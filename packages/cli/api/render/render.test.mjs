@@ -1792,6 +1792,30 @@ describe('render(): every write stays inside the current folder', () => {
     expect(rel.stdout).not.toContain('about:blank');
   }, 60_000);
 
+  it('warns that an SVG use of a file beside the page loads from outside the file, even when the source carries that file', async () => {
+    put('beside/icons.svg', '<svg xmlns="http://www.w3.org/2000/svg"><symbol id="check" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></symbol></svg>');
+    put('beside/page.tsx', 'export default function Page() { return <main><h1>Icons</h1><svg><use href="./icons.svg#check" /></svg></main>; }\n');
+    const r = /** @type {any} */ (await render('beside/page.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.message)).toContain(
+      'The page renders a <use> that loads ./icons.svg#check, which a sandboxed page cannot reach and which loads from outside the file; remove it from the page.',
+    );
+    expect(r.data.checks.outside).toEqual(['./icons.svg#check']);
+  }, 60_000);
+
+  it('notes the script on the bytes line only when the script is more than half the file', async () => {
+    const NOTE = ' (most is the script: the page as a live app, with React and the packages it imports)';
+    put('note/small.tsx', 'export default function Page() { return <main><h1>Small</h1></main>; }\n');
+    // An inlined image of about 2 MB makes the script less than half the file.
+    put('note/big.png', Buffer.concat([PNG, Buffer.alloc(1_500_000, 7)]));
+    put('note/big.tsx', 'export default function Page() { return <main><h1>Big</h1><img src="./big.png" alt="" /></main>; }\n');
+    for (const [page, noted] of /** @type {const} */ ([['note/small.tsx', true], ['note/big.tsx', false]])) {
+      const cli = await runCli(['experimental', 'export', page], {cwd: dir});
+      expect(cli.status, page).toBe(0);
+      const line = cli.stdout.split('\n').find(l => l.startsWith('bytes:')) ?? '';
+      expect(line.endsWith(NOTE), page).toBe(noted);
+    }
+  }, 120_000);
+
   it('carries a srcset of local images as data: URIs, and the file still stands alone', async () => {
     put('srcset/dot.png', PNG);
     put('srcset/dot2.png', PNG);
@@ -1809,7 +1833,7 @@ describe('render(): every write stays inside the current folder', () => {
     );
     const r = /** @type {any} */ (await render('many/page.tsx', {cwd: dir}));
     expect(r.data.warnings.map((/** @type {any} */ w) => w.message)).toContain(
-      'The page renders a <div> that loads https://img.example/set.png, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.',
+      'The page renders a <div> that loads https://img.example/set.png, which a sandboxed page cannot reach and which loads from outside the file; remove it from the page.',
     );
     expect(r.data.checks.outside).toHaveLength(13);
     // An --out outside the current folder is shown as its absolute path, once.
