@@ -56,7 +56,6 @@ import {
   familyOf,
   wordTable,
   pageColorNote,
-  AUTO_SPREAD,
   onlyMeans,
 } from './_tables.mjs';
 import {
@@ -7841,7 +7840,8 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: !groupsOf(ctx)[s.on ?? ''] && AUTO_SPREAD.includes(group),
+            onlyHint:
+              !groupsOf(ctx)[s.on ?? ''] && onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: lookCollapsed(

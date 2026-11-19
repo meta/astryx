@@ -1710,7 +1710,7 @@ export function settingsProblem(
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     if (s.only === true && !onlyReads(s))
-      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group, not a group itself`;
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group (${s.on ? `not the ${s.on} group itself` : 'it names no part'})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list. An entry with a twin is named
@@ -2326,19 +2326,6 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       if (read) s.only = true;
       else delete s.only;
     } else if (s.only === false) delete s.only;
-    // An `only` on a part styled on its own (an editor that took --only
-    // there saved it): kept as saved, and built as without it, which is
-    // what it means there; said once.
-    if (
-      s.only === true &&
-      typeof s.on === 'string' &&
-      typeof s.thing === 'string' &&
-      onlyMeans(s.on) === 'own' &&
-      !onlyFits(s)
-    )
-      notes.push(
-        `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} was saved with only, which changes nothing there (${s.on} is styled on its own already; only ${AUTO_SPREAD.join(' and ')} spread to their group), so it is built as without it`,
-      );
     if (!['dial', 'token', 'property'].includes(s.source)) {
       const typed = typeof s.source === 'string' ? s.source.trim() : '';
       const read = typed
@@ -2369,7 +2356,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
 /**
  * An `only` that means nothing where it is saved (on a part styled on its
  * own, onlyMeans: an editor that took --only there saved it) is read as
- * without it, which is how the build applies it, and said once. Read so, an entry can fall on the place of another
+ * without it, which is how the build applies it, and said once with the
+ * line that removes it. Read so, an entry can fall on the place of another
  * (a plain one beside it): the later one is the one the build shows, so it
  * is kept, and the earlier one is named.
  * @param {any} data
@@ -2385,7 +2373,9 @@ function readMeaninglessOnly(data, notes) {
       typeof s.thing !== 'string' ||
       s.only !== true ||
       typeof s.on !== 'string' ||
-      onlyMeans(s.on) !== 'own'
+      onlyMeans(s.on) !== 'own' ||
+      // (A height or padding on a bar: --only keeps it off the row it holds.)
+      onlyFits(s)
     )
       continue;
     delete s.only;
@@ -4575,7 +4565,7 @@ export function partsOf(ctx, s) {
         return Array.isArray(vals) && vals.map(String).includes(value);
       });
   };
-  if (fam && AUTO_SPREAD.includes(fam) && !s.only)
+  if (fam && onlyMeans(s.on) === 'member' && !s.only)
     return spread(
       (groupsOf(ctx)[fam] ?? [])
         .filter(has)
