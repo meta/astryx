@@ -174,6 +174,13 @@ const SECONDARY_SELECTOR = {
   },
 } as const;
 
+/**
+ * Gothic draws one color mode, dark, in light and dark pages alike. Tools
+ * read this to judge it in that mode; the build writes it into the built
+ * module.
+ */
+export const colorModes = ['dark'] as const;
+
 export const gothicTheme = defineTheme({
   name: 'gothic',
 

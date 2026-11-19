@@ -39,6 +39,9 @@ const neutralLocalTokens: Record<string, TokenValue> = {
   '--astryx-theme-neutral-color-status-fill-accent': ['#0074e2', '#6d9cfe'],
 };
 
+/** The color modes neutral draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
+
 export const neutralTheme = defineTheme({
   name: 'neutral',
   localTokens: neutralLocalTokens,
