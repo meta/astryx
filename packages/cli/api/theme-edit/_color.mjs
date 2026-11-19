@@ -29,7 +29,7 @@ import {
   mixSide,
   readColor,
 } from '../../foundation/color/css-color.mjs';
-import {contrastRatio} from '../theme/palette/generate/color.mjs';
+import {contrastRatio, ratioDown} from '../theme/palette/generate/color.mjs';
 
 export {splitTop};
 export {
@@ -168,7 +168,7 @@ export function colorProblem(value) {
  * @returns {string}
  */
 export function ratioWords(r) {
-  return (Math.floor(r * 100 + 1e-9) / 100).toFixed(2);
+  return ratioDown(r).toFixed(2);
 }
 
 /**
