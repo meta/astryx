@@ -138,7 +138,7 @@ export const LOCK = [
   [
     'pagination: 6px radius, 1px #dee2e6 border, and the active page #0d6efd with white text',
     [],
-    ['button', 'pagination', 'pagination-dot'],
+    ['pagination', 'pagination-item', 'pagination-dot'],
   ],
   [
     'tabs: 2px #4f46e5 underline on the selected tab, #6b7280 text on the rest, 14px medium text',
@@ -403,7 +403,7 @@ export const LOCK = [
   [
     'pagination: 6px radius, rounder cards, compact tables, 1px #dee2e6 border, and the active page #0d6efd with white text',
     [],
-    ['button', 'pagination', 'pagination-dot'],
+    ['pagination', 'pagination-item', 'pagination-dot'],
   ],
   [
     'tabs: 2px #4f46e5 underline on the selected tab, rounder cards, compact tables, #6b7280 text on the rest, 14px medium text',
