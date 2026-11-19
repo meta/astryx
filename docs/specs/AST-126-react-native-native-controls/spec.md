@@ -27,13 +27,12 @@ A developer who builds a notes app or a chat screen with Astryx writes
 `<PasteButton>` once. Where the operating system has its own control, the
 person using the app gets that control: UIKit's button, slider, text field,
 segmented control, date picker and paste control on iOS, Material 3's button,
-text field and picker dialogs on Android. The app or its theme can ask for
-Astryx's drawn control instead. The component's API, words,
+text field and picker dialogs on Android. The component's API, words,
 states and accessibility stay the same, the theme's accent and mode reach the
 system control, and where the system has no equivalent the component draws its
 own Astryx control. This record owns the native controls that make this
-possible: their native contracts, how the library chooses
-between the system control and its own, and how they behave.
+possible: their native contracts, where each system control exists and which
+shapes it shows, and how they behave.
 
 The controls are part of the platform layer of `spec:AST-112` and follow the
 shared platform rules of `spec:AST-140`: registration (`spec:AST-140/FR1`),
@@ -71,10 +70,10 @@ and React Native as required dependencies (`spec:AST-082/FR13`). Per piece:
 
 | Native piece             | Kind                                       | Astryx components that use it                                                                                 | What a person sees                                                                                                   |
 | ------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `AstryxNativeButton`     | native component (Fabric Native Component) | `Button` when `render` resolves to `system` and the button's shape is one the system button shows (FR2)       | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
-| `AstryxNativeSlider`     | native component (Fabric Native Component) | `Slider` when `render` resolves to `system`; `MediaScrubber`, which asks for it through `Slider`              | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
-| `AstryxNativeTextField`  | native component (Fabric Native Component) | `TextInput` when `render` resolves to `system` and the field's shape is one the system box shows (FR2)        | The system text box inside Astryx's label, description and status                                                    |
-| `AstryxSegmentedControl` | native component (Fabric Native Component) | `SegmentedControl` when `render` resolves to `system`                                                         | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
+| `AstryxNativeButton`     | native component (Fabric Native Component) | `Button`, in the shapes the system button shows (FR2)                                                         | The system button: UIButton.Configuration on iOS, a Material 3 button on Android                                     |
+| `AstryxNativeSlider`     | native component (Fabric Native Component) | `Slider`; `MediaScrubber`, which asks for it through `Slider`                                                 | UISlider on iOS; the drawn Astryx slider on Android                                                                  |
+| `AstryxNativeTextField`  | native component (Fabric Native Component) | `TextInput`, in the shapes the system box shows (FR2)                                                         | The system text box inside Astryx's label, description and status                                                    |
+| `AstryxSegmentedControl` | native component (Fabric Native Component) | `SegmentedControl`, in the shapes it shows (FR2)                                                              | UISegmentedControl on iOS; the drawn Astryx segments on Android and at large text sizes                              |
 | `AstryxDatePickerView`   | native component (Fabric Native Component) | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on iOS when `presentation` resolves to native     | UIDatePicker's compact pill in the field, or the inline calendar or wheels in the library's sheet                    |
 | `AstryxDatePicker`       | native module (Turbo Native Module)        | `DateInput`, `TimeInput`, `DateTimeInput`, `DateRangeInput` on Android when `presentation` resolves to native | The Astryx field, which opens Material 3's date, date range or time dialog                                           |
 | `AstryxPasteControl`     | native component (Fabric Native Component) | `PasteButton` on iOS 16 and later, in an app's own runtime                                                    | The system paste control, which pastes with no permission prompt; elsewhere the library Button with the word "Paste" |
@@ -103,37 +102,23 @@ edit through React Native's `TextInput` directly.
   native piece has an availability probe. Where it answers false (the app opted
   out, an older binary, or the OS has no equivalent), the component draws its
   Astryx control (FR14).
-- **FR2 — How the controls map onto `render`.** `render` and `surface` are
-  defined in `spec:AST-112/FR21`. Button, Slider, MediaScrubber, TextInput,
-  SegmentedControl and PasteButton take `render`:
-  - `system` is this record's native control where a host exists here;
-    otherwise the component draws its own control and warns once per component
-    in development.
-  - `drawn` is the component's own Astryx control.
-  - `auto`, the default, is the system control wherever a host exists
-    (`spec:AST-082/FR11`), and the component's own control elsewhere,
-    silently. The theme's `render.default` overrides it for these six
-    components.
-  - The date family keeps `spec:AST-043`'s `presentation` as its own value:
-    its `native` value maps to `render: 'system'` and `adaptive-native` to
-    `render: 'auto'` (OQ3). It resolves only as `spec:AST-043` FR1 to FR3
-    say; the theme's `render.default` applies to the six components above.
+- **FR2 — Where each system control exists and what it shows.**
   - A host exists when the probe of FR1 answers true and the OS has an
     equivalent: Button and TextInput on iOS and Android; Slider,
-    SegmentedControl and the date view on iOS; the date dialogs on Android.
-    PasteButton's `auto` is the system paste control wherever one exists
-    (FR8).
-  - A component draws its own control for a shape the system control cannot
-    show, whatever `render` says: Button as a toggle, with
-    `surface="glass"`, inside a connected group, or with an icon on Android; TextInput
-    inside an `InputGroup`, or with a start icon on Android;
-    Slider vertical, with marks, or with a disabled reason, and with the tooltip
-    value on iOS unless the theme's `render.default` is `system`; SegmentedControl
-    with a disabled reason, with a segment that shows both an icon and a label,
-    at large text sizes (AX1 and up), or once the control's fitting width
-    exceeds its room (DEC-2). An icon stays visible whichever control renders.
-  - Switching `render` keeps the value. A text field that is focused when its
-    `render` switches loses focus, and `onBlur` runs.
+    SegmentedControl and the date view on iOS; the date dialogs on Android;
+    and PasteButton's system paste control wherever the OS has one (FR8).
+  - The system controls do not show these shapes, and the component draws its
+    own control for them: Button as a toggle, with `surface="glass"`, inside a
+    connected group, or with an icon on Android; TextInput inside an
+    `InputGroup`, or with a start icon on Android; Slider vertical, with marks,
+    or with a disabled reason, and with the tooltip value on iOS;
+    SegmentedControl with a disabled reason, with a segment that shows both an
+    icon and a label, at large text sizes (AX1 and up), or once the control's
+    fitting width exceeds its room (DEC-2). An icon stays visible whichever
+    control draws it.
+  - A move between the system control and the component's own control keeps
+    the value. A text field that is focused when it moves loses focus, and
+    `onBlur` runs.
   - FR2 gap: `Switch`'s system presentation is React Native's own `Switch`,
     apart from this group's appearance mapping (FR11) and contract baseline
     (FR15); see OQ6.
@@ -410,10 +395,10 @@ FR7's results.
 - Departs from `spec:AST-082/FR11` on Android: Slider and SegmentedControl,
   and a Button or TextInput with an icon, draw the Astryx control where
   Material 3 has its own. OQ2 asks whether this stands.
-- Follows `spec:AST-082/FR11`'s native-first default for `auto` (OQ7). The
-  date family follows `spec:AST-043`'s `presentation` (OQ3).
+- Follows `spec:AST-082/FR11`'s native-first default (OQ7), and the date
+  family follows `spec:AST-043`'s `presentation`.
 - Extends `spec:AST-043`'s `presentation`, with the values `DateInput` takes,
-  to `DateRangeInput` on React Native (OQ3).
+  to `DateRangeInput` on React Native.
 - iOS's button and text field draw UIButton and UITextField; whether they wrap
   the shared Swift controls of `spec:AST-112/FR10` is OQ9.
 
@@ -422,7 +407,7 @@ FR7's results.
 | Contract | Verification                                                                                                               | Representative states                                                                                                                                                                                                                               | Mutation or failure expectation                                                                                                                  |
 | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | FR1      | Built app without any opt-in: binary symbols and the probes; unit tests of the entry through the `./testing` doubles       | default link, gesture views included; opted out where an opt-out exists; each probe                                                                                                                                                                 | A default build lacks a control, or an opted-out build answers a probe true                                                                      |
-| FR2      | Unit tests of the `render` resolution and of each component's shape rules                                                  | `render` `auto`, `system` and `drawn`; the theme's `render.default`; no host; the date family's `presentation` with no `render`; each ineligible shape, icons on Android and an icon-and-label segment included; a focused field switching `render` | A wrong control, a missing or repeated development warning, a system control for an ineligible shape, or a lost value                            |
+| FR2      | Unit tests of host detection and of each component's shape rules                                                           | a host and no host on each platform; each ineligible shape, icons on Android and an icon-and-label segment included; a focused field moving between the system control and its own control; a value set in one control and read back from the other | A system control where no host exists, a system control for an ineligible shape, or a lost value                                                 |
 | FR3      | Simulator and emulator checks of each variant, size and style                                                              | each variant; loading; disabled; a drag past the press slop                                                                                                                                                                                         | A wrong system style, a press after the slop, a press that does not reach `onClick`, or no development warning for `systemImage` on Android      |
 | FR4      | Simulator drag and VoiceOver checks; UI-thread frame check                                                                 | a drag; step snapping; a value during a drag; an accessibility step; right to left                                                                                                                                                                  | More than one value per interval, a missing commit, a held value applied before release, or JavaScript run per frame                             |
 | FR5      | Simulator and emulator checks of each style and status; unit tests of the handle                                           | bordered and filled; each status; secure entry; focus and blur                                                                                                                                                                                      | A wrong border or caret colour, a filled box on Android, a handle that misses focus, or no development warning for an iOS-only member on Android |
@@ -446,11 +431,8 @@ FR7's results.
 **Decider:** imdreamrunner, 2026-11-17
 
 An app writes one component and gets the system control or the Astryx control
-from the same props, chosen by the component's `render`, whose `auto` on the
-six components of FR2 the theme's `render.default` overrides.
-Wherever the system has the control it is the default, and the app or its
-theme can ask for the Astryx control instead. The native controls stay
-internal behind the components (`spec:AST-112/FR5`).
+from the same props. The native controls stay internal behind the components
+(`spec:AST-112/FR5`).
 
 ### DEC-2 — A shape the system control cannot show draws the Astryx control
 
@@ -494,8 +476,8 @@ tap, so the person decides each paste.
 - **OQ1 — Do the controls whose ecosystem counterpart covers the capability
   stay platform contracts?** (`human-design`) The text editing of
   `AstryxNativeTextField` is React Native's own, and the slider, segmented
-  control and paste control have maintained counterparts in the ecosystem; their gap is the theme,
-  the `render` axis and the dependency set. Options: keep all
+  control and paste control have maintained counterparts in the ecosystem; their gap is the theme
+  and the dependency set. Options: keep all
   of them as platform contracts; or keep the ones with a capability gap
   (Button, SegmentedControl, the date pickers) and draw the text box around
   React Native's `TextInput`.
@@ -505,21 +487,13 @@ tap, so the person decides each paste.
   Slider and SegmentedControl; or the drawn Astryx controls on Android. Android
   has no system paste control, so PasteButton draws its Button there in either
   case.
-- **OQ3 — Does the date family take `render`?** (`human-api`) Options: amend
-  `spec:AST-043` so `presentation` names only the Astryx surfaces and `render`
-  picks system or drawn (its `native` becomes `render: 'system'`, its
-  `adaptive-native` becomes `render: 'auto'`); or keep `spec:AST-043`'s
-  `presentation` on React Native, as FR2 states, and give the date family no
-  `render`. Either way, `DateRangeInput` takes the same choice as `DateInput`,
-  which `spec:AST-043` does not list.
 - **OQ6 — Does Switch get a native contract?** (`human-design`) Options: an
   Astryx switch contract over UISwitch and Material 3's switch, with this
   group's appearance mapping and named features; or React
   Native's own `Switch`, tinted by the library, as its system presentation.
 - **OQ7 — Does React Native depart from `spec:AST-082/FR11`'s native-first
-  default?** (`human-design`) Options: no, as FR2 states (the system control
-  wherever a host exists, unless the app or its theme asks for the Astryx
-  control); or yes, with an amendment to `spec:AST-082`: the Astryx control
+  default?** (`human-design`) Options: no (the system control wherever a host
+  exists); or yes, with an amendment to `spec:AST-082`: the Astryx control
   unless a theme or the app asks for native.
 - **OQ9 — Do the iOS button and text field wrap the shared Swift controls?**
   (`checkable`) `spec:AST-112/FR10` asks the platform to wrap a shared native
