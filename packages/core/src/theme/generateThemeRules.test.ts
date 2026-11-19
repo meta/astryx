@@ -1597,6 +1597,26 @@ describe('derived var expansion', () => {
   });
 });
 
+describe('the room between a control and its label', () => {
+  it.each([
+    ['checkbox-input', '--_checkbox-input-gap'],
+    ['switch-field', '--_switch-field-gap'],
+  ])('routes gap on %s to its row (no raw gap on the field)', (target, v) => {
+    const theme = defineTheme({
+      name: `test-derived-${target}-gap`,
+      components: {[target]: {base: {gap: '3px'}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes(`.astryx-${target}`),
+    );
+    expect(rule).toBeDefined();
+    expect(rule).toContain(`${v}: 3px`);
+    // The field also holds the status message: a raw gap there would space
+    // the row from the status instead of the box from its label.
+    expect(rule).not.toMatch(/[{;]\s*gap: 3px/);
+  });
+});
+
 describe('brutalist-style derived expansion', () => {
   it('button borderRadius emits --_button-radius for pill shape', () => {
     const theme = defineTheme({

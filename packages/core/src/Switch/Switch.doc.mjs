@@ -211,6 +211,16 @@ export const docs = {
       },
       {className: 'astryx-switch-label'},
     ],
+    vars: [
+      {
+        name: '--_switch-field-gap',
+        description:
+          'Room between the switch and its label; set by gap on the switch-field target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [{property: 'gap', vars: ['--_switch-field-gap'], replaces: true}],
   },
   usage: {
     accessibility: [
@@ -395,6 +405,16 @@ export const docsZh = {
       },
       {className: 'astryx-switch-label'},
     ],
+    vars: [
+      {
+        name: '--_switch-field-gap',
+        description:
+          'Room between the switch and its label; set by gap on the switch-field target',
+        default: 'var(--spacing-2)',
+        private: true,
+      },
+    ],
+    derived: [{property: 'gap', vars: ['--_switch-field-gap'], replaces: true}],
   },
   usage: {
     description:
