@@ -244,7 +244,8 @@ export function registerBuild(program) {
         text(
           start
             ? 'Start from the TEMPLATE and build its parts with COMPONENTS. A BLOCK EXAMPLE shows how a part is built.\n' +
-                'Changing a page you already have? Keep it, and add components; read a block example when it helps.'
+                'Changing a page you already have? Keep it, and add components; read a block example when it helps.\n' +
+                'Check it at phone width: rows wrap, and a wide table scrolls inside its card.'
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
