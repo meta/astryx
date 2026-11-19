@@ -596,6 +596,10 @@ const RUNNERS = {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
+  'scripts/migrate-template-icons.mjs': {
+    runs: 'Prettier, to format a template file the migration rewrites when the file was formatted before (build tooling, not shipped)',
+    sites: ['require(prettier)'],
+  },
   'scripts/generate-manifest.mjs': {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
