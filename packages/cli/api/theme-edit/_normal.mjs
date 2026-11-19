@@ -1852,7 +1852,8 @@ function dialWords(key) {
  * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
  * offered.
  * A line read whole that offers one of several typed values (`padding-top
- * 2px` for `2px 15px 3px`) carries the tokens it offers.
+ * 2px` for `2px 15px 3px`) carries the tokens it offers; a line that reads
+ * the whole value carries none, so a part alone is still not offered.
  * @param {Array<true | number[] | {oneOf: number[]} | false>} reads
  * @param {string} typed
  * @param {string} [thing] the setting typed (its numbers' reading)
@@ -1874,13 +1875,16 @@ export function coversTyped(reads, typed, thing = '', offered = []) {
   const typedCount = new Map();
   for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
   for (const r of reads) if (Array.isArray(r)) r.forEach(carry);
-  for (const [i, r] of reads.entries())
-    if (r === true && offered[i] != null)
-      for (const w of tokensOf(
-        String(offered[i]).replace(/^(["'])(.*)\1$/, '$2'),
-      ))
-        if ((carried.get(w) ?? 0) < (typedCount.get(w) ?? 0))
-          carried.set(w, (carried.get(w) ?? 0) + 1);
+  // (Only a line that offers fewer tokens than were typed: a line that
+  // reads the whole value never makes a part alone offerable beside it.)
+  for (const [i, r] of reads.entries()) {
+    if (r !== true || offered[i] == null) continue;
+    const own = tokensOf(String(offered[i]).replace(/^(["'])(.*)\1$/, '$2'));
+    if (own.length >= T.length) continue;
+    for (const w of own)
+      if ((carried.get(w) ?? 0) < (typedCount.get(w) ?? 0))
+        carried.set(w, (carried.get(w) ?? 0) + 1);
+  }
   // A line whose one token may be any of several takes one the others
   // left.
   for (const r of reads)

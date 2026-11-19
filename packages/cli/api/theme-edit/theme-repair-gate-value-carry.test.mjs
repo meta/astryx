@@ -300,6 +300,10 @@ describe('the repair gate offers only lines that carry the whole typed value', (
     expect(coversTyped([true, [1]], '2px 15px', '', ['2px', '15px'])).toBe(
       true,
     );
+    // (A line that reads the whole value never lets a part alone through.)
+    expect(
+      coversTyped([true, [0]], 'Inter 600', '', ['Inter 600', 'Inter']),
+    ).toBe(false);
     expect(
       readsTyped({
         offered: '#1f2937',
