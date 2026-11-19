@@ -155,15 +155,20 @@ export default function Page() {
 // What a viewer may do in the frame it shows a file in: cancel every link to a
 // place in the page on its way down and scroll to the place itself, leaving
 // the frame's address as it is. One does it from the document, one from the
-// window.
-const hostScrolls =
-  target => `<script>${target}.addEventListener('click', function (event) {
+// window, and one adds its document listener only once the frame's document
+// has loaded, as an artifact viewer's frame script does.
+const hostScrolls = (target, whenLoaded = false) => {
+  const listen = `${target}.addEventListener('click', function (event) {
   var link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
   if (!link) return;
   event.preventDefault();
   var place = document.getElementById(link.getAttribute('href').slice(1));
   if (place) place.scrollIntoView({block: 'start'});
-}, true);</script>`;
+}, true);`;
+  return whenLoaded
+    ? `<script>document.addEventListener('DOMContentLoaded', function () { ${listen} });</script>`
+    : `<script>${listen}</script>`;
+};
 
 /**
  * The steps a reader takes, and what each shows in the app. Each step names
@@ -450,6 +455,7 @@ describe.runIf(BROWSER_STEP)(
           '',
           hostScrolls('document'),
           hostScrolls('window'),
+          hostScrolls('document', true),
         ]) {
           const viewer = await context.newPage();
           /** @type {string[]} */
@@ -490,9 +496,11 @@ describe.runIf(BROWSER_STEP)(
           }
           // A link the page cancels or handles itself keeps the page where it
           // is; a link in a card that stops the click still moves.
-          const where = host
-            ? `viewer cancels on the ${host.includes('document.') ? 'document' : 'window'}`
-            : 'plain frame';
+          const where = !host
+            ? 'plain frame'
+            : host.includes('DOMContentLoaded')
+              ? 'viewer cancels on the document once it has loaded'
+              : `viewer cancels on the ${host.includes('<script>document.') ? 'document' : 'window'}`;
           expect(shown, where).toEqual([
             'Members page | No panel | #members',
             'Settings page | No panel | #settings',

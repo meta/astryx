@@ -126,17 +126,20 @@ const moveTo = link => {
 // unless the page cancelled the click, by preventDefault, \`returnValue =
 // false\` or an onclick handler that returns false.
 //
-// This runs before any of the page's own modules, so its listeners come after
-// the ones the frame that hosts the file set up and before the page's. A
-// cancel made before the click reaches this script's listener on the window,
-// or before it reaches its marker on the document, comes from the host (a
-// viewer that scrolls to the place itself and leaves the address alone), not
-// from the page: it holds the browser's own move, and the file still moves,
-// so a page that routes on its address sees the new place. A cancel from the
-// page's own listeners, on the window and the document included, keeps the
-// page's way.
+// This runs before any of the page's own modules. A cancel made before the
+// click reaches this script's listener on the window, or before it reaches its
+// marker on the document, comes from the frame that hosts the file (a viewer
+// that scrolls to the place itself and leaves the address alone), not from the
+// page: it holds the browser's own move, and the file still moves, so a page
+// that routes on its address sees the new place. A viewer may add its document
+// listener only once the frame's document has loaded, after this script ran,
+// so the marker goes on the document at that point: after the viewer's
+// listener, and before the listeners the page adds once it is mounted. A
+// cancel from the page's own listeners keeps the page's way.
 const pastHost = new WeakSet();
-document.addEventListener('click', event => pastHost.add(event), true);
+const markPastHost = () => document.addEventListener('click', event => pastHost.add(event), true);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markPastHost, {once: true});
+else markPastHost();
 window.addEventListener('click', event => {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
   if (!link || !movesInFile(event, link)) return;
