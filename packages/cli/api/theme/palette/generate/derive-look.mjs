@@ -284,7 +284,7 @@ export function deriveLookColors({
      */
     (id, m, stop) => ({
       stop,
-      color: String(palette[id][m][stop]),
+      color: palette[id][m][stop],
     });
   /**
    * The stop nearest `start` that reads at `needs` on every ground,

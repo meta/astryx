@@ -1908,7 +1908,7 @@ export function mapPalette(candidate, dials, fills, context) {
         const v =
           exactOf(k, m) ??
           tokens[k]?.[m]?.color ??
-          t.colorIn(String(base?.[m]?.[k] ?? ''), m);
+          t.colorIn(base?.[m]?.[k] ?? '', m);
         return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
       };
     const derived = deriveLookColors({
