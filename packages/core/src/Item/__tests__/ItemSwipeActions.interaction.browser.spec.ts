@@ -238,10 +238,20 @@ async function recordFrames(row: Locator): Promise<void> {
     // counts against.
     const drawn: number[] = [];
     let last = Number.NaN;
+    // When the gesture last wrote the row's style. The gesture writes a lead
+    // in flight in its own frame callback, which can run after this read in
+    // the same frame. This read then shows the value the gesture wrote one
+    // frame before, so the frame is dated by that write, not by the read.
+    let written = Number.NaN;
+    new MutationObserver(() => {
+      written = performance.now();
+    }).observe(node, {attributes: true, attributeFilter: ['style']});
     const sample = () => {
       // One time for the frame, whether it shows a new travel or not.
-      const at = performance.now();
-      drawn.push(at);
+      const now = performance.now();
+      drawn.push(now);
+      const at = Number.isNaN(written) ? now : written;
+      written = Number.NaN;
       const style = getComputedStyle(node);
       const travel =
         parseFloat(style.getPropertyValue('--_item-swipe-travel') || '0') +
