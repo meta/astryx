@@ -84,6 +84,7 @@ import {
   edgeCopies,
   heldVariantsOf,
   placementHolds,
+  missedDrawnAs,
   borderFrames,
   undoArgs,
   isCheckNote,
@@ -2481,17 +2482,33 @@ export function unreadableReach(named, reached, newProblems) {
  */
 function embeddedReach(ctx, slug, data, s, parts) {
   if (!s.on || s.source !== 'property' || !parts.length) return [];
+  // (A part drawn as it that the rule misses is not reached: missedDrawnAs.)
+  const missed = missedDrawnAs(ctx, s);
   const prop = kebab(String(s.thing));
   /** @type {Record<string, any>} */
   const MAP = ctx.C?.MAP ?? {};
   /** @type {Array<{part: string, as: string, keep: string}>} */
   const out = [];
   for (const [part, rec] of Object.entries(MAP)) {
-    if (!ctx.project.target.has(part) || parts.includes(part)) continue;
+    if (
+      !ctx.project.target.has(part) ||
+      parts.includes(part) ||
+      missed.includes(part)
+    )
+      continue;
     const as = (rec?.drawnAs ?? []).find((/** @type {string} */ t) =>
       parts.includes(t),
     );
     if (!as) continue;
+    // (A variant's look reaches only the parts drawn in that variant: a
+    // ghost button's look reaches a calendar's ghost arrows, never a part
+    // drawn as a primary button.)
+    const [axis, wanted] = s.when ? String(s.when).split(':') : [];
+    if (
+      axis &&
+      !(/** @type {string[]} */ (rec?.attrs?.[axis] ?? [])).includes(wanted)
+    )
+      continue;
     if (
       data.settings.some(
         x =>
@@ -7412,6 +7429,15 @@ async function changeOnce(
   // line that keeps it as Core draws it (its own entry wins over the
   // part's).
   const embedded = sub === 'set' ? embeddedReach(ctx, slug, data, s, parts) : [];
+  // (Parts drawn as this part that its rule misses: they draw the property
+  // with no variable a theme sets, so nothing reaches them there. Said, with
+  // no line, rather than counted as reached.)
+  const missedAs =
+    sub === 'set' && s.on ? missedDrawnAs(ctx, s) : [];
+  if (missedAs.length)
+    notes.push(
+      `${s.thing} on ${s.on} does not reach ${missedAs.join(', ')}: drawn as ${s.on}, ${missedAs.length > 1 ? 'they draw' : 'it draws'} ${s.thing} with no variable a theme sets, so Core gives no way to change it there`,
+    );
   if (embedded.length)
     notes.push(
       `also reaches ${embedded.map(x => x.part).join(', ')}, which ${embedded.length > 1 ? 'are' : 'is'} drawn as ${[...new Set(embedded.map(x => x.as))].join(', ')} inside ${embedded.length > 1 ? 'their components' : 'its component'}; to keep ${embedded.length > 1 ? 'one' : 'it'} as it was: ${embedded.map(x => `\`${x.keep}\``).join(', ')}`,

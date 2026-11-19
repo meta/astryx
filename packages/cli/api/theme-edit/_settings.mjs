@@ -4565,7 +4565,8 @@ export function groupReachesByDefault(name) {
  */
 export function spreads(ctx, s) {
   return Boolean(
-    s.on && (groupsOf(ctx)[s.on] || (!s.only && reachGroupOf(ctx, s))),
+    s.on &&
+      (groupsOf(ctx)[s.on] || (!s.only && reachGroupOf(ctx, s))),
   );
 }
 
@@ -5388,6 +5389,45 @@ function reachedPartsOf(ctx, s) {
     );
   }
   return [s.on];
+}
+
+/**
+ * The parts drawn as a setting's part (a clickable card is drawn as a
+ * card) that the part's rule does not reach: the part draws the property
+ * through a variable of its own (`--astryx-card-padding`), and the part
+ * drawn as it reads no such variable, so Core gives a theme no way to set
+ * it there. Parts that read the variable take the part's rule.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing' | 'source'>} s
+ * @returns {string[]}
+ */
+export function missedDrawnAs(ctx, s) {
+  if (!s.on || s.source !== 'property') return [];
+  /** @type {Record<string, any>} */
+  const MAP = /** @type {any} */ (ctx).C?.MAP ?? {};
+  const prop = kebab(String(s.thing));
+  /** A part's values for the property and its longhands (padding-top). @param {string} part */
+  const valuesOf = part =>
+    Object.entries(MAP[part]?.at ?? {})
+      .filter(([k]) => k === prop || k.startsWith(`${prop}-`))
+      .flatMap(([, byCond]) => Object.values(byCond ?? {}));
+  /** The variables a part's own values for the property read. @param {string} part */
+  const varsOf = part =>
+    new Set(
+      valuesOf(part).flatMap(v =>
+        [...String(v).matchAll(/var\(\s*(--astryx-[\w-]+)/g)].map(m => m[1]),
+      ),
+    );
+  const own = [...varsOf(String(s.on))];
+  if (!own.length) return [];
+  return Object.keys(MAP).filter(
+    p =>
+      p !== s.on &&
+      ctx.project.target.has(p) &&
+      (MAP[p]?.drawnAs ?? []).includes(s.on) &&
+      valuesOf(p).length > 0 &&
+      !own.some(v => varsOf(p).has(v)),
+  );
 }
 
 /**
