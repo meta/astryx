@@ -41,6 +41,8 @@ describe('generate step', () => {
     expect(pkg.scripts.generate).toContain(
       'node scripts/generate-landing-template-previews.mjs',
     );
-    expect(pkg.scripts.build).toMatch(/^pnpm generate && next build/u);
+    expect(pkg.scripts.build).toMatch(
+      /^pnpm generate && (?:node [\w./-]+ && )*next build/u,
+    );
   });
 });

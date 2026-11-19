@@ -2,7 +2,8 @@
 
 'use client';
 
-import {Fragment, useState, useMemo, useEffect} from 'react';
+import {Fragment, useState, useMemo} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Layout, LayoutHeader, LayoutContent} from '@astryxdesign/core/Layout';
 import {TopNav} from '@astryxdesign/core/TopNav';
@@ -20,7 +21,9 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Button} from '@astryxdesign/core/Button';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Card} from '@astryxdesign/core/Card';
-import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {StackItem, VStack, HStack} from '@astryxdesign/core/Stack';
+import {useHotkeys} from '@astryxdesign/core/hooks';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   PlayIcon,
   MagnifyingGlassIcon,
@@ -72,6 +75,12 @@ const FILE_TREE: TreeListItemData[] = [
 type MenuEntry = [label: string, shortcut: string];
 
 const MENU_WIDTH = 280;
+
+// The search asks for 240px and is the one bar item that narrows on a phone,
+// so the actions and the menu button stay in view.
+const searchStyles = stylex.create({
+  field: {width: 240},
+});
 
 const MENUS: {label: string; groups: MenuEntry[][]}[] = [
   {
@@ -179,19 +188,16 @@ const COMMANDS = [
 ];
 
 export default function ShellNav() {
+  const showToast = useToast();
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const searchSource = useMemo(() => createStaticSource(COMMANDS), []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsPaletteOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Both combos on every platform, as the page has always accepted.
+  const openPalette = () => setIsPaletteOpen(true);
+  useHotkeys([
+    {keys: 'meta+k', onPress: openPalette, allowInInputs: true},
+    {keys: 'ctrl+k', onPress: openPalette, allowInInputs: true},
+  ]);
 
   return (
     <>
@@ -229,25 +235,47 @@ export default function ShellNav() {
             }
             endContent={
               <>
-                <Stack onClick={() => setIsPaletteOpen(true)}>
+                <StackItem
+                  size="fill"
+                  xstyle={searchStyles.field}
+                  onClick={() => setIsPaletteOpen(true)}>
                   <TextInput
                     label="Search files and commands"
                     isLabelHidden
                     size="sm"
-                    width={240}
+                    width="100%"
                     startIcon={MagnifyingGlassIcon}
                     placeholder="Search files and commands…"
                     value=""
                     onChange={() => {}}
                   />
-                </Stack>
+                </StackItem>
                 <IconButton
                   label="Run project"
                   tooltip="Run"
                   variant="ghost"
                   icon={<Icon icon={PlayIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the project would run here',
+                      uniqueID: 'run',
+                    })
+                  }
                 />
-                <Button label="Share" variant="secondary" />
+                <StackItem>
+                  <Button
+                    label="Share"
+                    variant="secondary"
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: sharing would start here',
+                        uniqueID: 'share',
+                      })
+                    }
+                  />
+                </StackItem>
               </>
             }
           />

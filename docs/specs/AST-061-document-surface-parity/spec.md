@@ -18,6 +18,21 @@ affects_consumer_docs: [Markdown, RichTextEditor, RichTextView]
 
 # Markdown document surface parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/core/src/i18n/firstStrongDirection.ts",
+    "packages/richtext/src/internal/firstStrongDirection.ts",
+    "packages/core/src/Markdown/blockDirection.ts",
+    "packages/richtext/src/internal/BlockDirectionPlugin.tsx",
+    "packages/richtext/src/internal/BlockDirectionPlugin.test.tsx",
+    "packages/richtext/src/editorTheme.ts"
+  ]
+}
+```
+
 <!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
@@ -170,14 +185,41 @@ clause, for its own output, except where FR7 names
 a link title and FR7 names character references. `RichTextEditor` and
 `RichTextView` are governed by FR2–FR11 for the
 constructs they render; their default editor theme follows FR2 and FR3.
-Implementation gap: `Markdown` and RichText lay every block out in the
-provider's direction (FR6, and FR5's opposite-edge clause); RichText's `direction: inherit` override in
-`editorTheme.ts` is part of that gap.
-Fenced code lines take the frame's direction on both surfaces, so neither
-meets FR6's per-line rule yet. `component:CodeBlock` keeps a code block's
-direction unchanged (FR9) and leaves the ordering inside a line to the
-platform text engine, so closing this gap changes that record as well as the
-surfaces.
+Each surface reads a block's direction with a first-strong classifier that
+approximates Bidi_Class from script and category. `Markdown` uses the one in
+`packages/core/src/i18n`; the RichText surfaces keep their own copy, because
+Core's internal entry points are reserved for Core and Lab, and each copy
+carries a SYNC comment naming the other so a correction reaches both.
+
+The surfaces apply that answer differently, because their documents are
+different things. `Markdown` renders from an abstract syntax tree it owns
+and resolves each block as it renders, which is what `Markdown/blockDirection.ts`
+does. The RichText surfaces render from Lexical's editor state, which the
+caller stores and reopens, and which a keystroke changes in place: the
+direction has to be written onto the node inside the update that changed the
+text, so it belongs to that keystroke's own undo step, and it has to be
+stored so a reopened document reads as it was written. A render-time
+resolver cannot do either, so `BlockDirectionPlugin.tsx` registers the
+transforms that write it, and `RichTextEditor` and `RichTextView` mount it.
+
+Both surfaces give a prose block the direction of its own text, and a block
+with no strongly directional character the provider's.
+
+Both meet FR6's per-line rule for fenced code, by different means.
+`Markdown` renders fences through `component:CodeBlock`, which puts each
+line's code in a `dir="auto"` element inside a left-to-right viewport, with
+the gutter following the page (`component:CodeBlock` FR16). RichText has no
+per-line node to carry a direction, so its theme gives the block
+`unicode-bidi: plaintext`, which puts each line in its own bidi paragraph
+and takes that line's first strong character. A line with no strong
+character reads left to right on both.
+
+FR5 gap: the two surfaces hold a list's themed inset in different places.
+`Markdown` pads the list on its start side; RichText insets each item on its
+own start side, which is the side that item's marker is drawn on. The text
+starts agree for a list whose items all read with it, and differ by one inset
+for an item that reads against it, which is also where `Markdown` draws that
+item's marker outside the list.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.

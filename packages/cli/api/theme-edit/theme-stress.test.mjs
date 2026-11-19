@@ -530,7 +530,7 @@ describe('round 4', () => {
       await themeEditUndo('s', {cwd, thing});
     const n = await themeEditSet('s', 'neutral', '#64748b', {cwd});
     expect(n.data.notes.join(' ')).toMatch(
-      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body '#ffffff' --mode light/,
+      /the page background follows it too.*--color-background-body '#ffffff' --mode light/,
     );
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 240_000);

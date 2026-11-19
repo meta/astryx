@@ -636,7 +636,10 @@ describe('integration template discovery', () => {
         ]),
       );
     }
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -662,7 +665,10 @@ describe('integration template discovery', () => {
         }),
       ]),
     );
-    const selected = await template('shell-side-nav', {show: true, cwd: tmpDir});
+    const selected = await template('shell-side-nav', {
+      show: true,
+      cwd: tmpDir,
+    });
     expect(selected.data.template).toBe('shell-side-nav');
   });
 
@@ -688,7 +694,10 @@ describe('integration template discovery', () => {
     const discovered = await discoverAllWithErrors(tmpDir);
     expect(discovered.errors).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({template: 'acme-shell', replacementTarget: 'dashboard'}),
+        expect.objectContaining({
+          template: 'acme-shell',
+          replacementTarget: 'dashboard',
+        }),
       ]),
     );
   });
@@ -1210,7 +1219,7 @@ describe('build names a start its command selects', () => {
     expect(kit.data.start).toMatchObject({
       name: 'acme-app-shell',
       command:
-        'astryx template shell-side-nav --type page src/pages/acme-app-shell',
+        'astryx template shell-side-nav --type page src/pages/acme-app-shell.tsx',
     });
     const selected = await template('shell-side-nav', {
       type: 'page',
@@ -1230,7 +1239,7 @@ describe('build names a start its command selects', () => {
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
       command:
-        'astryx template contact-form --type page src/pages/contact-form',
+        'astryx template contact-form --type page src/pages/contact-form.tsx',
     });
     const selected = await template('contact-form', {
       type: 'page',
@@ -1279,5 +1288,4 @@ describe('build names a start its command selects', () => {
     });
     expect(secondTemplate.data.source).toContain('Final chain replacement');
   }, 30_000);
-
 });

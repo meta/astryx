@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'tablet',
+  group: 'devices',
   description: 'A tablet device, or a tablet-sized view.',
   words: ['ipad', 'device', 'tablet view'],
 };

@@ -39,11 +39,17 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
     return test.skip();
   }
   await themeEditNew('t', {cwd, like: 'neutral'});
+  // The lifted rules, not the base theme's own coloured-card secondary
+  // text, which its card rule sets for each card colour.
   /** @param {string} css */
   const lifts = css =>
-    [...css.matchAll(/--color-text-secondary: (light-dark\([^;]*\));/g)]
-      .slice(1)
-      .map(m => m[1]);
+    [
+      ...css.matchAll(
+        /\n {2}([^{\n]+) \{\s*--color-text-secondary: (light-dark\([^;]*\));/g,
+      ),
+    ]
+      .filter(m => !/^\.astryx-card\[data-variant=/.test(m[1]))
+      .map(m => m[2]);
   const before = lifts(
     fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
   );

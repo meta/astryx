@@ -4,6 +4,6 @@
 export default {
   type: 'icon-definition',
   name: 'mail',
-  description: 'Email or a message inbox.',
+  description: 'Email, or an email inbox.',
   words: ['email', 'envelope', 'message'],
 };

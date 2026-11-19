@@ -32,6 +32,7 @@ import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {KIND_GROUPS, TOPIC_LEVELS, topicLevel} from './generated-levels.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export {routeSegment};
 
@@ -76,6 +77,7 @@ export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * @property {string} summary
  * @property {string | null} group the discovery group adoption reads, or null
  * @property {DocPlacement | undefined} placement
+ * @property {string[]} [keywords] the search keywords a guide declares
  * @property {any} [ref] what a reader needs to open the doc, carried as given
  */
 
@@ -99,6 +101,7 @@ export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * @property {string | null} [category] the topic's sidebar group:
  *   `foundations` puts it in Foundations; anything else, in Guides
  * @property {string} source where the topic comes from, for diagnostics
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string[]} [aliases] every other name the topic answers to: the
  *   topics it replaced, directly or through a chain
  */
@@ -117,7 +120,8 @@ export {KIND_GROUPS, TOPIC_LEVELS, topicLevel};
  * @property {string} name
  * @property {string} title
  * @property {string} summary
- * @property {string[]} [keywords] an authored namespace's search keywords
+ * @property {string[]} [keywords] the search keywords an authored namespace,
+ *   a guide, or a flat topic declares; a typed doc's are on its `ref.selfDoc`
  * @property {string | null} parent the parent's route; null at the top
  * @property {string | null} slot the parent slot this node sits in
  * @property {number | null} order
@@ -565,6 +569,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
         name: doc.name,
         title: doc.title,
         summary: doc.summary,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         parent: home.parentRoute,
         slot: home.slot,
         order: home.order,
@@ -611,6 +616,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
           name: topic.name,
           title: topic.title,
           summary: topic.summary,
+          ...(Array.isArray(topic.keywords) ? {keywords: topic.keywords} : {}),
           parent: level.route,
           slot: 'topics',
           order: i,
@@ -788,12 +794,14 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
  * assets/docs/tree, and, unless left out, every typed self-doc with its
  * `namespace` group. A file that fails to load or parse is a diagnostic, never
  * a thrown error.
- * @param {{selfDocs?: boolean, dir?: string}} [options]
+ * @param {{selfDocs?: boolean, dir?: string, allRoots?: boolean}} [options]
+ *   `allRoots`: every root, as a run on Core reads them, whatever the base
  * @returns {Promise<{namespaces: TreeNamespaceInput[], docs: TreeDocInput[], diagnostics: CompilerDiagnostic[]}>}
  */
 export async function loadTreeInputs({
   selfDocs = true,
   dir = TREE_DOCS_DIR,
+  allRoots = false,
 } = {}) {
   /** @type {TreeNamespaceInput[]} */
   const namespaces = [];
@@ -858,6 +866,7 @@ export async function loadTreeInputs({
         name: doc.name,
         title: doc.title,
         summary: doc.description,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         group: null,
         placement: doc.placement,
         ref: {topicFile: file},
@@ -905,7 +914,49 @@ export async function loadTreeInputs({
       });
     }
   }
+  if (dir === TREE_DOCS_DIR && !allRoots && currentNonCoreBase()) {
+    return {...onlyCliRoots(namespaces, docs), diagnostics};
+  }
   return {namespaces, docs, diagnostics};
+}
+
+/**
+ * The tree inputs under a root namespace that describes the CLI itself
+ * (`describes: 'cli'`). Every other root describes Core, so its namespaces
+ * and guides show only in a run whose base is Core. A doc that names no
+ * parent is a CLI self-doc that a namespace adopts by its group, and stays.
+ * @param {TreeNamespaceInput[]} namespaces
+ * @param {TreeDocInput[]} docs
+ * @returns {{namespaces: TreeNamespaceInput[], docs: TreeDocInput[]}}
+ */
+function onlyCliRoots(namespaces, docs) {
+  /** @param {DocPlacement | undefined} placement */
+  const parentOf = placement =>
+    typeof placement?.parent === 'string' &&
+    placement.parent.startsWith('namespace:')
+      ? placement.parent.slice('namespace:'.length)
+      : undefined;
+  /** @type {Map<string, TreeNamespaceInput['doc']>} */
+  const byName = new Map(namespaces.map(ns => [ns.doc.name, ns.doc]));
+  /** @param {string} name */
+  const describesCli = name => {
+    const seen = new Set();
+    let current = byName.get(name);
+    while (current != null && !seen.has(current.name)) {
+      seen.add(current.name);
+      const parent = parentOf(current.placement);
+      if (parent == null) return current.describes === 'cli';
+      current = byName.get(parent);
+    }
+    return false;
+  };
+  return {
+    namespaces: namespaces.filter(ns => describesCli(ns.doc.name)),
+    docs: docs.filter(doc => {
+      const parent = parentOf(doc.placement);
+      return parent == null || describesCli(parent);
+    }),
+  };
 }
 
 /** The discovery group every icon definition doc belongs to. */

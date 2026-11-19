@@ -11,8 +11,13 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {isAppShell} from './words.mjs';
-import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {isAppShell, keywordUnits, phrasesIn, terms} from './words.mjs';
+import {
+  blendOrder,
+  blendSummary,
+  namedOutright,
+  weighStart,
+} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -28,6 +33,20 @@ import {blendOrder, blendSummary, weighStart} from './weights.mjs';
  * padding, which composing from components does not.
  */
 const FALLBACK_STARTS = ['shell-top-nav', 'blank'];
+
+/**
+ * Whether an idea names one of a shell variant's own keywords as a whole
+ * phrase. The default app shell needs no such words.
+ * @param {{name: string} | null | undefined} page
+ * @param {string} idea
+ * @param {readonly {name: string, keywords?: readonly string[]}[]} catalog
+ */
+function namesShellVariant(page, idea, catalog) {
+  if (!page || page.name === FALLBACK_STARTS[0]) return true;
+  const doc = catalog.find(t => t.name === page.name);
+  const units = keywordUnits(doc?.keywords ?? [], terms);
+  return phrasesIn(terms(idea), units, {oneWord: true}).size > 0;
+}
 
 /**
  * A page template as the kit names it: the command that selects exactly that
@@ -50,15 +69,23 @@ export const asTemplate = (t, to = null) => ({
  * null for a whole page.
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {boolean} inPage whether the start is the page the idea names
+ * @param {{variant?: string | null, base?: string | null}} [away] for a part
+ *   that starts from the app shell although it names a page family: the
+ *   variant page the idea names, else the family's base page, which does not
+ *   lead
  * @returns {string | null}
  */
-function placement(kind, inPage) {
+function placement(kind, inPage, away = {}) {
   if (kind === 'edit')
-    return 'the idea changes a page you already have, so keep it and add blocks to it; a new page starts from the app shell.';
+    return 'the idea changes a page you already have, so keep it and add components to it; a new page starts from the app shell.';
   if (kind === 'part')
     return inPage
       ? 'the idea is a part of a page, so it starts from the page it names.'
-      : 'the idea is a part of a page and names no page, so it starts from the app shell.';
+      : away.variant
+        ? `the idea is a part of \`${away.variant}\`, a variant page; a part starts from a family's base page only when that page leads, so it starts from the app shell.`
+        : away.base
+          ? `the idea is a part of a page in \`${away.base}\`'s family; a part starts there only when \`${away.base}\` leads, so it starts from the app shell.`
+          : 'the idea is a part of a page and names no page, so it starts from the app shell.';
   return null;
 }
 
@@ -148,7 +175,8 @@ function liftFromShell(ranked, kind, catalog, idea) {
  *   is scaffolded to, quoted for a shell; null when none is known
  * @param {string | null} [unready] a not-ready page template the idea names
  *   and search matched directly; the reason says it is not ready yet
- * @returns {Omit<BuildStart, 'alternatives'> | null}
+ * @param {Set<string>} [pieceWords] the last word of each component's name
+ * @returns {Omit<BuildStart, 'alternatives' | 'isReady'> | null}
  */
 export function chooseStart(
   ranked,
@@ -159,6 +187,7 @@ export function chooseStart(
   idea,
   placeOf = () => null,
   unready = null,
+  pieceWords = new Set(),
 ) {
   const direct = directMatch ? pages[0].name : null;
   // The reason never denies a match the same response reports: a direct
@@ -177,7 +206,7 @@ export function chooseStart(
     direct && direct !== startName
       ? `Search matched \`${direct}\` by name, but ${place}`
       : place[0].toUpperCase() + place.slice(1);
-  const proposed = pickStart(ranked, kind);
+  const proposed = pickStart(ranked, kind, pieceWords);
   // The checked-in word weights (weights.mjs), blended with the ranker's
   // scores, decide the start of a whole page, so it can differ from the
   // ranker's own pick, its head-noun family included. A part or an edit starts
@@ -191,14 +220,23 @@ export function chooseStart(
       : undefined;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
-  const pick =
+  const kept =
     weighed === undefined
       ? proposed
       : weighed === null
         ? isAppShell(proposed) || (proposed && direct)
           ? proposed
           : null
-        : (ranked.find(r => r.name === weighed) ?? proposed);
+        : undefined;
+  // A part, an edit or a kept shell starts from a shell variant only when the
+  // idea names that variant's own keywords; otherwise it starts from the
+  // default app shell.
+  const pick =
+    kept === undefined
+      ? (ranked.find(r => r.name === weighed) ?? proposed)
+      : isAppShell(kept) && !direct && !namesShellVariant(kept, idea, catalog)
+        ? null
+        : kept;
   // An idea that would start on the app shell starts from the blend's best page
   // when the decision's whole-page probability is at least 0.30. A direct match,
   // ready or not, keeps the start and reason it already has.
@@ -233,14 +271,29 @@ export function chooseStart(
       const nearest =
         (ranked[0]?.name === shell.name && ranked[0].hits > 0) ||
         (weighed === null && !!proposed && proposed.family !== 'Shell');
-      const place = placement(kind, false);
+      // A part placed on a family whose variant leads (DEC-13): the reason
+      // names the variant when the idea names it by its own name, else the
+      // family's base page, and says why build did not start there.
+      const lead = ranked[0];
+      const onVariant =
+        kind === 'part' && lead?.familyNamed && !lead.base && !isAppShell(lead);
+      const variant =
+        onVariant && namedOutright([lead.name], idea, catalog)[0]
+          ? lead.name
+          : null;
+      const base = onVariant
+        ? (ranked.find(r => r.base && r.family === lead.family)?.name ?? null)
+        : null;
+      const place = placement(kind, false, {variant, base});
       return {
         ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
           ? notReady(shell.name)
           : place
-            ? placed(place, shell.name)
+            ? variant && variant === direct
+              ? place[0].toUpperCase() + place.slice(1)
+              : placed(place, shell.name)
             : direct
               ? weighed === null
                 ? `Search matched \`${direct}\` by name, but the app shell is the closer start.`

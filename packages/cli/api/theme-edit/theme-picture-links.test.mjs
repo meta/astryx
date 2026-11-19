@@ -32,14 +32,14 @@ vi.mock('./_preview.mjs', async importOriginal => {
   ).stubRenders(real);
   return {
     ...stubbed,
-    screenshot: async (
+    screenshots: async (
       /** @type {any} */ _project,
-      /** @type {string} */ _html,
-      /** @type {string} */ png,
-    ) => {
-      fs.writeFileSync(png, 'png');
-      return {ok: true};
-    },
+      /** @type {Array<{png: string}>} */ jobs,
+    ) =>
+      jobs.map(({png}) => {
+        fs.writeFileSync(png, 'png');
+        return {ok: true};
+      }),
   };
 });
 
