@@ -88,7 +88,7 @@ describe('secondary text on the accent tint', () => {
   it("is Core's precomputed value for Core's tokens", () => {
     expect(selectedTintTextVars['--_selected-text-secondary']).toBeDefined();
     const core = coreSelectedTintText();
-    expect(core).toBe('light-dark(#4A5C6B, #B0B5BB)');
+    expect(core).toBe('light-dark(#445564, #B0B5BB)');
     expect(
       lowestRatio(colorDefaults as Record<string, string>, pair(core)),
     ).toBeGreaterThanOrEqual(4.5);
