@@ -3509,6 +3509,58 @@ function bordersBeyondCore(ctx, data, s, part) {
   );
 }
 
+/**
+ * The look a part has by default: its documented default variant, as
+ * `variant:<value>`, when the part records that variant.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @returns {string | undefined}
+ */
+function defaultLook(ctx, part) {
+  const values = ctx.C.variantValues(part)?.variant ?? [];
+  if (!values.length) return undefined;
+  for (const info of Object.values(ctx.project?.components ?? {})) {
+    if (!info?.targets?.some(t => t.className === `astryx-${part}`)) continue;
+    const v = String(info.props?.variant?.default ?? '').replace(/['"]/g, '');
+    if (values.includes(v)) return `variant:${v}`;
+  }
+  return undefined;
+}
+
+/**
+ * Whether every border side a part draws at rest in a look is cleared on
+ * its first child: a seam with the sibling before it (a button group's
+ * join), never a line around the part.
+ * @param {any} C
+ * @param {string} part
+ * @param {string | undefined} when
+ */
+function seamOnly(C, part, when) {
+  const v = String(when ?? '').replace(/^variant:/, '');
+  const blank = (/** @type {unknown} */ x) =>
+    /^\s*(?:0(?:px)?|none)\s*$/.test(String(x));
+  const drawn = Object.entries(C.MAP[part]?.at ?? {})
+    .filter(([prop]) => /^border(?:-[a-z-]+)?-width$/.test(prop))
+    .flatMap(([, rules]) =>
+      Object.entries(/** @type {Record<string, unknown>} */ (rules))
+        .filter(
+          ([sel, val]) =>
+            !/[\s:]/.test(sel) &&
+            !blank(val) &&
+            (!v ||
+              !/(?:^|,)variant=/.test(sel) ||
+              sel.split(',').includes(`variant=${v}`)),
+        )
+        .map(([sel]) => [rules, sel]),
+    );
+  return (
+    drawn.length > 0 &&
+    drawn.every(([rules, sel]) =>
+      blank(/** @type {any} */ (rules)[`${sel} :first-child`]),
+    )
+  );
+}
+
 /** A border color: one color, one per side, or one side's. */
 export const BORDER_COLOR_PROP =
   /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color$/;
@@ -3605,13 +3657,30 @@ export function borderFor(ctx, slug, data, s) {
   )
     return null;
   const parts = partsOf(ctx, s);
+  /**
+   * Whether the part draws a border where the color is asked. With no
+   * --when, that is the look the part has by default, its documented
+   * default variant (a card's default draws one; a button's secondary draws
+   * only the seam with the button before it in a group, cleared on the
+   * first child, which is no line around it).
+   * @param {string} t
+   */
+  const draws = t => {
+    const when = s.when ?? defaultLook(ctx, t);
+    const at = {...s, when};
+    const line =
+      drawsLine(ctx.C, [t], 'border', null, when) ||
+      (s.state && drawsLine(ctx.C, [t], 'border', s.state, when));
+    return (
+      (line && (s.when || !seamOnly(ctx.C, t, when))) ||
+      bordersBeyondCore(ctx, data, at, t)
+    );
+  };
   if (
     !parts.length ||
     parts.some(
       t =>
-        drawsLine(ctx.C, [t], 'border', null, s.when) ||
-        (s.state && drawsLine(ctx.C, [t], 'border', s.state, s.when)) ||
-        bordersBeyondCore(ctx, data, s, t) ||
+        draws(t) ||
         // (Any none the theme sets there, a whole one or one side's: the
         // color is saved as written, and no border is brought.)
         borderTurnedOff(ctx, data, s, t) != null,

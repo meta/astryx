@@ -363,3 +363,21 @@ describe('a part whose side is cleared only on its last child', () => {
     T,
   );
 });
+
+describe('a border color for every look of a part only some looks draw a border for', () => {
+  it(
+    'brings the border, so every look shows the color',
+    async () => {
+      const r = await themeEditSet('t', 'border-color', '#dddddd', {
+        cwd,
+        on: 'button',
+      });
+      expect(r.data.notes.join('\n')).toContain('added a');
+      expect(css()).toMatch(
+        /\.astryx-button \{\s*border: var\(--border-width\) solid transparent;/,
+      );
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
+});
