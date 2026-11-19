@@ -51,9 +51,9 @@ export const overflowStyles = stylex.create({
 export const wrapStyles = stylex.create({
   cell: {
     overflow: 'hidden',
-    // Break a word only when it cannot fit its column. In automatic layout
-    // (children mode) a zero max-width or a break at any letter holds every
-    // column at one letter.
+    // Break a word only when it cannot fit its column. A zero max-width or a
+    // break at any letter lets automatic layout shrink a column below its
+    // longest word.
     overflowWrap: 'break-word',
   },
 });
