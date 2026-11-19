@@ -536,6 +536,7 @@ describe('cliUpdateStep', () => {
       upgrade: 'astryx upgrade --from 0.7.1 --apply',
       folder: null,
       runs: false,
+      newest: null,
     });
     // Not known yet: the same install, at the latest release, and a project
     // that pins Core to one version keeps its pins.
@@ -546,6 +547,7 @@ describe('cliUpdateStep', () => {
         upgrade: 'astryx upgrade --from 0.7.1 --apply',
         folder: null,
         runs: false,
+        newest: null,
       },
     );
     // A project that declares a range keeps a range.
@@ -592,6 +594,7 @@ describe('cliUpdateStep', () => {
       upgrade: 'astryx upgrade --from 0.7.1 --apply',
       folder: app,
       runs: false,
+      newest: null,
     });
   });
 
@@ -617,6 +620,7 @@ describe('cliUpdateStep', () => {
       upgrade: null,
       folder: null,
       runs: false,
+      newest: null,
     });
     // A package runner's copy: nothing installed it, so the newest runs.
     const runner = path.join(
@@ -648,6 +652,7 @@ describe('cliUpdateStep', () => {
       upgrade: null,
       folder: null,
       runs: true,
+      newest: '0.7.3',
     });
     // With no arguments to repeat, a place for the command.
     expect(
@@ -684,6 +689,7 @@ describe('cliUpdateStep', () => {
         upgrade: null,
         folder: null,
         runs: false,
+        newest: null,
       });
     }
   });
@@ -764,7 +770,7 @@ describe('the commands notices print go through the command-name picker (spec AS
     });
   });
 
-  it("use a host's door for a package runner's run step outside a project", () => {
+  it("name no command outside a project when a host's door starts the run", () => {
     const outside = tempDir();
     const runner = path.join(
       tempDir('runner'),
@@ -777,14 +783,27 @@ describe('the commands notices print go through the command-name picker (spec AS
     fs.mkdirSync(runner, {recursive: true});
     const self = {version: '0.7.2', root: runner};
     runWithCliDoor('host astryx', () => {
-      expect(
-        cliUpdateStep({
-          cwd: outside,
-          self,
-          stateDir: checked('0.7.3'),
-          argv: ['theme', 'palette', 'generate'],
-        }).install,
-      ).toBe('host astryx theme palette generate');
+      // The door runs the CLI the host carries, so the step names the newer
+      // release known and no command.
+      for (const [stateDir, newest] of [
+        [checked('0.7.3'), '0.7.3'],
+        [tempDir('state'), null],
+      ]) {
+        expect(
+          cliUpdateStep({
+            cwd: outside,
+            self,
+            stateDir: /** @type {string} */ (stateDir),
+            argv: ['theme', 'palette', 'generate'],
+          }),
+        ).toEqual({
+          install: null,
+          upgrade: null,
+          folder: null,
+          runs: false,
+          newest,
+        });
+      }
     });
   });
 

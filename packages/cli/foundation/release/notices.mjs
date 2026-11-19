@@ -47,6 +47,7 @@ import {
   commandInFolder,
   detectPackageManager,
   getCliInvocation,
+  guessCliInvocation,
   installDependenciesCommand,
   quoteCommandArgument,
 } from '../env/package-manager.mjs';
@@ -818,9 +819,12 @@ export function addCliCommand(root, version) {
  * (`runs`), with the run's own arguments when the bin started the run
  * (`<command>` otherwise, or when there are none to repeat), as nothing
  * installed it. With no release known to be newer than that copy, the step
- * installs the newest CLI for the computer.
+ * installs the newest CLI for the computer. A run that a host's door or an
+ * integration's declared command started gets no command (`install` is
+ * null): that command runs the CLI the host carries, so the step names only
+ * the newer release known (`newest`), or none.
  * @param {{cwd: string, self?: {version: string, root: string}, stateDir?: string, argv?: string[]}} options
- * @returns {{install: string, upgrade: string | null, folder: string | null, runs: boolean}}
+ * @returns {{install: string | null, upgrade: string | null, folder: string | null, runs: boolean, newest: string | null}}
  */
 export function cliUpdateStep({
   cwd,
@@ -836,31 +840,46 @@ export function cliUpdateStep({
         upgrade: null,
         folder: null,
         runs: false,
+        newest: null,
+      };
+    }
+    const latest = knownLatest(stateDir);
+    const newer =
+      latest && isBehind(self.version, latest.version) ? latest.version : null;
+    // A host's door or an integration's declared command starts the CLI it
+    // carries, so no command printed here reaches a newer release: the step
+    // names the release the run needs and no command.
+    if (getCliInvocation(cwd) !== guessCliInvocation(cwd)) {
+      return {
+        install: null,
+        upgrade: null,
+        folder: null,
+        runs: false,
+        newest: newer,
       };
     }
     // A package runner may start the CLI package only at a version, through
     // the command-name picker (spec AST-081 FR5). With no newer release
     // known, the step installs the newest CLI for the computer instead.
-    const latest = knownLatest(stateDir);
-    if (!latest || !isBehind(self.version, latest.version)) {
+    if (newer == null) {
       return {
         install: `npm i -g ${LATEST}`,
         upgrade: null,
         folder: null,
         runs: false,
+        newest: null,
       };
     }
     const args = argv.length
       ? argv.map(arg => quoteCommandArgument(arg)).join(' ')
       : '<command>';
-    const stem = getCliInvocation(cwd, {
-      release: {version: latest.version, own: false},
-    });
+    const stem = getCliInvocation(cwd, {release: {version: newer, own: false}});
     return {
       install: `${stem} ${args}`,
       upgrade: null,
       folder: null,
       runs: true,
+      newest: newer,
     };
   }
   const root = target.moved
@@ -880,6 +899,7 @@ export function cliUpdateStep({
     upgrade: `astryx upgrade --from ${current} --apply`,
     folder: target.moved ? root : null,
     runs: false,
+    newest: null,
   };
 }
 

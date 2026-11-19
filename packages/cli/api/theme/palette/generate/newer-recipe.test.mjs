@@ -129,6 +129,28 @@ describe('a palette a newer CLI made', () => {
     expect(envelope).toContain('"astryx upgrade --from 0.7.1 --apply"');
   });
 
+  it('a run a host door started outside a project names the release it needs and no command', async () => {
+    write('palette.config.json', {
+      recipe: NEWER,
+      families: [{id: 'accent', seed: '#5b3cc4'}],
+    });
+    const error = await runWithCliDoor('acme astryx', async () =>
+      refusal(() => themePaletteGenerate('palette.config.json', {}, {cwd})),
+    );
+    expect(error.code).toBe(ERROR_CODES.ERR_PALETTE_GENERATION);
+    expect(error.message).toMatch(
+      /Update the Astryx CLI that runs this command to (\S+ or newer|the newest release), then run the command again\. Nothing was changed\.$/,
+    );
+    expect(error.suggestions ?? []).toEqual([]);
+    const envelope = JSON.stringify(
+      toErrorEnvelope(error, error.suggestions, error.code),
+    );
+    expect(envelope).not.toContain('acme astryx');
+    expect(envelope).not.toMatch(
+      /(npx|pnpm dlx|yarn dlx|bunx) @astryxdesign\/cli/,
+    );
+  });
+
   it('any other unknown recipe keeps the refusal of the generator', () => {
     write('palette.config.json', {
       recipe: 'dusty',
