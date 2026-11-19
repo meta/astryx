@@ -14,7 +14,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Standard element sizes used across interactive components.
@@ -26,7 +26,11 @@ export type ElementSize = 'sm' | 'md' | 'lg';
  *
  * `null` means no container is providing a size — components use their own default.
  */
-export const SizeContext = createContext<ElementSize | null>(null);
+export const SizeContext = createLayerScopedContext<ElementSize | null>(
+  'SizeContext',
+  1,
+  null,
+);
 SizeContext.displayName = 'SizeContext';
 
 /**

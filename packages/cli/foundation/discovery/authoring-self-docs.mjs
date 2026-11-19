@@ -15,9 +15,9 @@
  *   the self-doc tests fail.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {
   DOC_OUTPUT_BUDGET_BYTES,
@@ -43,6 +43,7 @@ export const AUTHORING_SELF_DOCS = [
   'debug/debug.doc.mjs',
   'gap-report/gap-report.doc.mjs',
   'discover/discover.doc.mjs',
+  'example/example.doc.mjs',
   'codemod/codemod.doc.mjs',
   'identity/identity.doc.mjs',
   'doctypes/base/graph-fields.doc.mjs',
@@ -75,7 +76,7 @@ export function discoverAuthoringSelfDocSources(root = AUTHORING_ROOT) {
   const found = [];
   /** @param {string} dir */
   const walk = dir => {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dir)) {
       if (entry.name === 'node_modules' || entry.name.startsWith('__'))
         continue;
       const full = path.join(dir, entry.name);
@@ -229,7 +230,12 @@ export function buildAuthoringReferenceDoc(docs) {
     placement: {parent: 'namespace:authoring', slot: 'reference', order: 10},
     title: 'Field reference',
     category: 'guide',
-    keywords: ['authoring reference', 'field reference', 'every field'],
+    keywords: [
+      'authoring',
+      'authoring reference',
+      'field reference',
+      'every field',
+    ],
     description:
       'Every file an integration author writes, field by field: the integration manifest, astryx.config, codemods, identity, and each doc type. The guides that use them are the rest of {@link namespace:authoring}.',
     sections: docs

@@ -226,3 +226,28 @@ describe('theme add cleanup lifecycle', () => {
     expect(result.stdout).not.toMatch(/^\s+-f, --overwrite/m);
   });
 });
+
+describe('theme remove of the only added theme', () => {
+  it('deletes the module and prints the wiring the app root must drop', async () => {
+    const added = await runCli(
+      ['theme', 'add', 'ocean', '--package', '@acme/themes'],
+      tmpDir,
+    );
+    expect(added.status, added.stderr).toBe(0);
+
+    const result = await runCli(['theme', 'remove', 'ocean'], tmpDir);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/^moduleRemoved:\s+true$/m);
+    expect(result.stdout).toContain(
+      'Removed ocean, the only added theme, and deleted src/astryx-themes.ts.',
+    );
+    expect(result.stdout).toContain(
+      "import {themes, defaultThemeSlug} from './astryx-themes';",
+    );
+    expect(result.stdout).toContain('<Theme theme={themes[defaultThemeSlug]}>');
+    expect(fs.existsSync(path.join(tmpDir, 'src/astryx-themes.ts'))).toBe(
+      false,
+    );
+  });
+});

@@ -7,14 +7,22 @@
  * this file into the resolved version folder.
  */
 
-import migrateCodeBlockTokenizerToLanguage, {
-  meta as migrateCodeBlockTokenizerToLanguageMeta,
-} from './migrate-codeblock-tokenizer-to-language.mjs';
+import migrateItemSwipeActionsToSwipe, {
+  meta as migrateItemSwipeActionsToSwipeMeta,
+} from './migrate-item-swipe-actions-to-swipe.mjs';
+import preserveChatRadius, {
+  meta as preserveChatRadiusMeta,
+} from './preserve-chat-radius.mjs';
 
 export default [
   {
-    name: 'migrate-codeblock-tokenizer-to-language',
-    transform: migrateCodeBlockTokenizerToLanguage,
-    meta: migrateCodeBlockTokenizerToLanguageMeta,
+    name: 'migrate-item-swipe-actions-to-swipe',
+    transform: migrateItemSwipeActionsToSwipe,
+    meta: migrateItemSwipeActionsToSwipeMeta,
+  },
+  {
+    name: 'preserve-chat-radius',
+    transform: preserveChatRadius,
+    meta: preserveChatRadiusMeta,
   },
 ];

@@ -12,7 +12,7 @@ export const docs = {
 
   usage: {
     description:
-      'Overlay layers action or supporting content over media, cards, video, or other bounded surfaces with an optional scrim and reveal behavior.',
+      'Overlay layers action or supporting content over media, cards, video, or other bounded surfaces with an optional scrim and reveal behavior. Host attributes and DOM handlers (id, data-*, aria-*) reach the root element.',
     bestPractices: [
       {
         guidance: true,
@@ -193,7 +193,7 @@ export const docsDense = {
   description: 'layered content over media/card surfaces with scrim + hover/focus/controlled reveal',
   usage: {
     description:
-      'Overlay layers compact actions or supporting content over media, cards, or bounded surfaces with optional dark/light scrim and hover/focus/controlled reveal.',
+      'Overlay layers compact actions or supporting content over media, cards, or bounded surfaces with optional dark/light scrim and hover/focus/controlled reveal. Host attributes and DOM handlers reach the root element.',
     bestPractices: [
       {guidance: true, description: 'Use for short contextual actions/labels tied to the underlying surface.'},
       {guidance: true, description: 'Keep content compact and legible over the scrim.'},

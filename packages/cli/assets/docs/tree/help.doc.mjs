@@ -9,7 +9,7 @@ export const docs = {
   placement: {parent: 'namespace:authoring', slot: 'guides', order: 40},
   title: 'Help',
   summary: 'Find a CLI message and how to fix it.',
-  keywords: ['help', 'troubleshooting', 'error'],
+  keywords: ['authoring', 'help', 'troubleshooting', 'error'],
   slots: {
     guides: {title: 'Help', accepts: {kinds: ['generic']}},
   },

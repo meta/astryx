@@ -24,7 +24,8 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {AnnounceRenderedText} from '../hooks/AnnounceRenderedText';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({
@@ -53,6 +54,7 @@ const styles = stylex.create({
   },
   titleCompact: {
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
   },
   description: {
     margin: 0,
@@ -64,6 +66,7 @@ const styles = stylex.create({
   },
   descriptionCompact: {
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
   },
   textGroup: {
     display: 'flex',

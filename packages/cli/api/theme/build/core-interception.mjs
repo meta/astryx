@@ -67,7 +67,7 @@
  * SYNC: packages/cli/api/theme/build/build.mjs (importThemeModule)
  */
 
-import {createRequire} from 'node:module';
+import Module, {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
@@ -95,6 +95,10 @@ const retainedLineageByReference = new WeakMap();
  * @property {(theme: any) => boolean} observed - Whether authored input was captured.
  * @property {(theme: any) => void} retain - Retain capture before stripping.
  * @property {(theme: any) => any} parentOf - Exact authored `extends` value.
+ * @property {(theme: any) => any} inputOf - The raw `defineTheme()` argument
+ *   that produced a theme, or undefined.
+ * @property {any[]} inputs - Every `defineTheme()` argument in call order,
+ *   recorded before Core reads it, so an input Core refuses is seen too.
  * @property {(theme: any) => any[]} lineageOf - Every raw input that fed a
  *   theme, following its own `extends` chain and spread provenance.
  * @property {(theme: any) => any[]} unobservedIn - Lineage members this
@@ -236,12 +240,15 @@ function mergeGenerativeAxes(inherited, own) {
  * standalone builds with current Core do not.
  *
  * @param {any} coreThemeModule - The installed `@astryxdesign/core/theme` namespace.
- * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace.
+ * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace,
+ *   or a function that loads it. A function is called once, on first use.
  * @returns {CoreInterception}
  */
 export function interceptCore(coreThemeModule, coreRootModule) {
   /** @type {WeakMap<object, ThemeLineage>} */
   const byReference = new WeakMap();
+  /** @type {any[]} */
+  const inputs = [];
 
   /** @param {any} value @param {ThemeLineage} lineage */
   const mark = (value, lineage) => {
@@ -280,6 +287,7 @@ export function interceptCore(coreThemeModule, coreRootModule) {
       ...namespace,
       /** @param {any} input */
       defineTheme(input) {
+        inputs.push(input);
         const result = real.call(namespace, input);
         mark(result, {input, result});
         return result;
@@ -287,14 +295,38 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     };
   };
 
-  return {
-    modules: {
-      '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
-      // Falls back to the theme namespace only when the root could not be
-      // imported at all; a partial root is better than none, and a core
-      // missing its own root entry is already broken.
-      '@astryxdesign/core': wrapNamespace(coreRootModule ?? coreThemeModule),
+  const modules = {
+    '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  };
+  /** @type {any} */
+  let wrappedRoot;
+  let rootRead = false;
+  // jiti reads a virtual module only when a theme imports its specifier. So
+  // the root, which loads all of Core, loads only for a theme that asks.
+  Object.defineProperty(modules, '@astryxdesign/core', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      if (!rootRead) {
+        const root =
+          typeof coreRootModule === 'function'
+            ? coreRootModule()
+            : coreRootModule;
+        // Falls back to the theme namespace only when the root could not be
+        // imported at all; a partial root is better than none, and a core
+        // missing its own root entry is already broken.
+        wrappedRoot = wrapNamespace(root ?? coreThemeModule);
+        rootRead = true;
+      }
+      return wrappedRoot;
     },
+  });
+
+  return {
+    modules,
+    inputs,
+    // prettier-ignore
+    inputOf(theme) { return lineageFor(theme)?.input; },
 
     // prettier-ignore
     observed(theme) { return wasObserved(theme, byReference); },
@@ -451,28 +483,19 @@ export function interceptCore(coreThemeModule, coreRootModule) {
         return {covered, undo: () => {}};
       }
 
-      for (const specifier of [
-        '@astryxdesign/core/theme',
-        '@astryxdesign/core',
-      ]) {
-        /** @type {any} */
-        let cjs;
-        try {
-          cjs = createRequire(fromFile)(specifier);
-        } catch {
-          // A specifier that CommonJS cannot resolve cannot be used by a `.cjs`
-          // source dependency either, so it creates no unobserved path.
-          continue;
-        }
-
+      const requireFromTheme = createRequire(fromFile);
+      /**
+       * Wraps `defineTheme` on a CommonJS exports object in place, so a call
+       * from a `.cjs` dependency is recorded. False when it cannot be wrapped.
+       * @param {any} cjs
+       */
+      const wrap = cjs => {
         const real = cjs?.defineTheme;
-        if (typeof real !== 'function') continue;
+        if (typeof real !== 'function') return true;
         const descriptor = Object.getOwnPropertyDescriptor(cjs, 'defineTheme');
         if (!descriptor || !(descriptor.writable || descriptor.configurable)) {
-          covered = false;
-          continue;
+          return false;
         }
-
         try {
           Object.defineProperty(cjs, 'defineTheme', {
             ...descriptor,
@@ -485,16 +508,84 @@ export function interceptCore(coreThemeModule, coreRootModule) {
           undo.push(() =>
             Object.defineProperty(cjs, 'defineTheme', descriptor),
           );
+          return true;
         } catch {
           // ESM namespace exotic objects may report a writable descriptor but
           // still reject redefinition. This is a real coverage failure, not an
           // absent CommonJS entry: a `.cjs` dependency can call the function
           // while the recorder cannot wrap it.
-          covered = false;
+          return false;
+        }
+      };
+
+      // An entry that CommonJS cannot resolve or load cannot be used by a
+      // `.cjs` source dependency either, so it creates no unobserved path. It
+      // is skipped, as are the entries of a package config CommonJS cannot
+      // read. Throwing instead would fail every theme beside such an install.
+      /** @param {string} specifier @returns {string | null} */
+      const resolveEntry = specifier => {
+        try {
+          return requireFromTheme.resolve(specifier);
+        } catch {
+          return null;
+        }
+      };
+      const themeFile = resolveEntry('@astryxdesign/core/theme');
+      const rootFile = resolveEntry('@astryxdesign/core');
+
+      // The theme subpath is small, so it is wrapped now.
+      if (themeFile) {
+        /** @type {any} */
+        let themeExports = null;
+        try {
+          themeExports = requireFromTheme(themeFile);
+        } catch {
+          // A dependency that requires it fails the same way.
+        }
+        if (themeExports && !wrap(themeExports)) covered = false;
+      }
+
+      // The root loads all of Core, so it is wrapped only once this load
+      // requires it. Every CommonJS require goes through `Module._load`,
+      // which is watched for the load's duration. The watch reads the require
+      // cache, where the root's file is keyed by its real path. So any
+      // request that loads that file counts, however it is spelled. A load
+      // that never requires the root leaves no path through it to observe.
+      if (rootFile) {
+        /** @type {any} */
+        const loader = Module;
+        /** Wraps the root once its file has run; false until then. */
+        const wrapLoadedRoot = () => {
+          const loaded = loader._cache[rootFile];
+          // A CommonJS module is cached before its body runs, so a require
+          // inside the root's own body sees it partly built.
+          if (!loaded?.loaded) return false;
+          if (!wrap(loaded.exports)) covered = false;
+          return true;
+        };
+        if (!wrapLoadedRoot()) {
+          const load = loader._load;
+          /** @this {any} @param {...any} args */
+          const watch = function (...args) {
+            const exports = load.apply(this, args);
+            if (loader._load === watch && wrapLoadedRoot()) {
+              loader._load = load;
+            }
+            return exports;
+          };
+          loader._load = watch;
+          // Theme loads never overlap: each caller awaits one at a time. The
+          // watch is still removed only while it is the one installed.
+          undo.push(() => {
+            if (loader._load === watch) loader._load = load;
+          });
         }
       }
       return {
-        covered,
+        /** Read after the load: a root required during it counts. */
+        get covered() {
+          return covered;
+        },
         undo() {
           for (const restore of undo.reverse()) {
             try {
@@ -507,4 +598,28 @@ export function interceptCore(coreThemeModule, coreRootModule) {
       };
     },
   };
+}
+
+/**
+ * The interception with `extra` virtual modules added, each replacing a
+ * module of the same specifier. The modules are copied by descriptor, so the
+ * root entry stays lazy: a spread would read its getter, which loads all of
+ * Core and React for a theme that never imports the root.
+ * @param {CoreInterception} interception
+ * @param {Record<string, any>} extra
+ * @returns {CoreInterception}
+ */
+export function withVirtualModules(interception, extra) {
+  const modules = Object.defineProperties(
+    {},
+    Object.getOwnPropertyDescriptors(interception.modules),
+  );
+  for (const [specifier, namespace] of Object.entries(extra))
+    Object.defineProperty(modules, specifier, {
+      value: namespace,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  return {...interception, modules};
 }

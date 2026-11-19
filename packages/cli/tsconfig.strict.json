@@ -6,7 +6,12 @@
     "checkJs": true,
     "noEmit": true,
     "types": ["node"],
-    "strict": true
+    "strict": true,
+    "paths": {
+      "@astryx-docs/demo-content": [
+        "../../apps/docsite/src/templateDemoContent/demoContent.tsx"
+      ]
+    }
   },
   "include": [
     "api/**/*.mjs",
@@ -31,5 +36,5 @@
     "test/authoring-types/**/*.mjs",
     "test/authoring-types/**/*.ts"
   ],
-  "exclude": ["**/*.test.mjs"]
+  "exclude": ["**/*.test.mjs", "assets/preview-app/**"]
 }

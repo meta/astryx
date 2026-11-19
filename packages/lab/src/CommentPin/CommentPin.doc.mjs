@@ -122,7 +122,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Disables activation with native button semantics. Useful for a pending anchor before its thread exists.',
+        'Disables activation: the pin exposes aria-disabled, keeps its tab stop, and blocks every activation path. Useful for a pending anchor before its thread exists.',
       default: 'false',
     },
     {
@@ -164,7 +164,7 @@ export const docs = {
         category: 'Keyboard',
         criterion: '2.1.1 Keyboard',
         description:
-          'CommentPin is one native button. Tab reaches an enabled pin; Enter and Space activate it. A disabled pin uses native disabled semantics and is removed from sequential focus order.',
+          'CommentPin is one native button. Tab reaches an enabled pin; Enter and Space activate it. A disabled pin stays in the tab order and is announced as disabled through aria-disabled, and every activation path is blocked.',
       },
       {
         name: 'Selected state and name',
@@ -323,7 +323,8 @@ export const docsZh = {
     isDimmed:
       '其他标记被选中时降低此标记的视觉突出度，但不禁用操作；未选中任何标记时不应降低。',
     isResolved: '所代表的线程是否都已解决；已解决的标记除非被选中否则不渲染。',
-    isDisabled: '使用原生按钮语义禁用激活。',
+    isDisabled:
+      '通过 aria-disabled 禁用激活：保留 Tab 焦点，拦截所有激活路径。',
     onClick: '由产品拥有的激活处理函数。',
     xstyle: '根按钮的 StyleX 布局样式；由宿主决定内容上方或边距中的位置。',
   },
@@ -369,7 +370,8 @@ export const docsDense = {
     isDimmed:
       'controlled de-emphasis for non-selected siblings only while another pin is selected; remains interactive',
     isResolved: 'resolved pins render nothing unless selected',
-    isDisabled: 'native disabled marker',
+    isDisabled:
+      'disabled marker: aria-disabled, keeps its tab stop, blocks every activation path',
     onClick: 'host activation handler',
     xstyle: 'root layout/positioning styles; marker owns no coordinates',
   },

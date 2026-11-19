@@ -27,6 +27,7 @@ import {
   packageReferenceProblems,
 } from '../docs/_adapter.mjs';
 import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverIntegrationComponents,
   discoverOwnedComponents,
@@ -56,12 +57,8 @@ import {
 } from './validate-integration.mjs';
 import {rootProblem} from '../../foundation/integrations/validate-contributions.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-
-/** @param {string} value */
-export function shellArg(value) {
-  if (/^[A-Za-z0-9@/._-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /**
  * The provider ID a package without a name is checked under: a valid bare
@@ -88,9 +85,12 @@ function unnamedShown(message) {
  * @param {string} cwd
  */
 async function resolveIntegration(pkg, cwd) {
+  // The checks read the integration and its issues, never the notes the
+  // shipped-import check adds, so it is left out: it parses every module the
+  // package ships and may ask npm what it packs.
   const resolved = pkg
-    ? await validateInstalledIntegration(pkg, cwd)
-    : await validateLocalIntegration(cwd);
+    ? await validateInstalledIntegration(pkg, cwd, {shippedImports: false})
+    : await validateLocalIntegration(cwd, {shippedImports: false});
   const integration = resolved.found ? resolved.integration : undefined;
   if (!integration) return resolved;
   // A root that is not a readable folder is reported in the issues; the
@@ -154,6 +154,16 @@ function addErrors(issues, errors, code) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
  */
 export async function integrationTemplateConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => templateConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
+ */
+async function templateConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -209,7 +219,7 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
   }
   for (const matches of coreById.values()) {
     matches.sort((a, b) =>
-      `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`),
+      compareText(`${a.type}:${a.name}`, `${b.type}:${b.name}`),
     );
   }
 
@@ -273,7 +283,8 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
     }
   }
   conflicts.sort((a, b) =>
-    `${a.id}:${'relationship' in a ? a.relationship : ''}`.localeCompare(
+    compareText(
+      `${a.id}:${'relationship' in a ? a.relationship : ''}`,
       `${b.id}:${'relationship' in b ? b.relationship : ''}`,
     ),
   );
@@ -291,6 +302,16 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
  */
 export async function integrationComponentConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => componentConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
+ */
+async function componentConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -372,7 +393,7 @@ export async function integrationComponentConflicts(pkg, options = {}) {
         'If you keep it, always select it with --package.',
       command: `${run} component ${shellArg(component.name)} --package ${shellArg(name)}`,
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   return {
     type: 'integration.component-conflicts',
@@ -387,6 +408,16 @@ export async function integrationComponentConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
  */
 export async function integrationDocConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => docConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
+ */
+async function docConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -535,9 +566,7 @@ export async function integrationDocConflicts(pkg, options = {}) {
     }
   }
   findings.sort((a, b) =>
-    `${a.topic}:${a.relationship}`.localeCompare(
-      `${b.topic}:${b.relationship}`,
-    ),
+    compareText(`${a.topic}:${a.relationship}`, `${b.topic}:${b.relationship}`),
   );
 
   // The same graph checks `astryx doctor` runs in a project: the namespaces

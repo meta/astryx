@@ -1,0 +1,14 @@
+{
+  "interaction-chromium": {
+    "version": 1,
+    "environments": ["4a2d86799445"]
+  },
+  "interaction-webkit": {
+    "version": 1,
+    "environments": ["77ffb4fb39da"]
+  },
+  "a11y-contracts": {
+    "version": 1,
+    "environments": ["4a2d86799445"]
+  }
+}

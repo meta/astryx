@@ -39,7 +39,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Traps focus within a container element following the WAI-ARIA dialog focus trap pattern. Listens to focus events on the document and redirects focus back into the container if it escapes via keyboard navigation. Handles both Tab and Shift+Tab wrapping. When the trap deactivates or unmounts, focus is restored to the element that was focused before activation, unless focus was already moved elsewhere or never entered the trap (so popups that keep focus on their trigger, like comboboxes, are unaffected). Mouse clicks outside the container are not intercepted; use a light-dismiss handler for that.',
+      'Traps focus within a container element following the WAI-ARIA dialog focus trap pattern. Listens to focus events on the document and redirects focus back into the container if a Tab from inside it moves focus out. Handles both Tab and Shift+Tab wrapping. A Tab pressed while focus is outside the container is left to the page, so an open non-modal surface never takes over the focus order of the page. When the trap deactivates or unmounts, focus is restored to the element that was focused before activation, unless focus was already moved elsewhere or never entered the trap (so popups that keep focus on their trigger, like comboboxes, are unaffected). Mouse clicks outside the container are not intercepted; use a light-dismiss handler for that.',
     bestPractices: [
       { guidance: true, description: 'Call focusFirst() when opening a dialog/modal to move focus into the trapped region.' },
       { guidance: true, description: 'Provide an onEscape callback to close the dialog when Escape is pressed.' },
@@ -56,7 +56,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Traps focus within container element following WAI-ARIA dialog focus trap pattern. Listens to document focus events + redirects focus back into container if it escapes via keyboard navigation. Handles both Tab + Shift+Tab wrapping. Mouse clicks outside container not intercepted; use light-dismiss handler for that.',
+    'Traps focus within container element following WAI-ARIA dialog focus trap pattern. Listens to document focus events + redirects focus back into container if a Tab from inside moves focus out. Handles both Tab + Shift+Tab wrapping. Tab pressed while focus outside container left to the page. Mouse clicks outside container not intercepted; use light-dismiss handler for that.',
   paramDescriptions: {
     options: 'config for focus trap.',
     'options.isActive': 'whether focus trap currently active.',
@@ -68,7 +68,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Traps focus within container element following WAI-ARIA dialog focus trap pattern. Listens to document focus events + redirects focus back into container if it escapes via keyboard navigation. Handles both Tab + Shift+Tab wrapping. On deactivate/unmount, restores focus to the element focused before activation unless focus already moved elsewhere or never entered the trap. Mouse clicks outside container not intercepted; use light-dismiss handler for that.',
+      'Traps focus within container element following WAI-ARIA dialog focus trap pattern. Listens to document focus events + redirects focus back into container if a Tab from inside moves focus out. Handles both Tab + Shift+Tab wrapping. Tab pressed while focus outside container left to the page. On deactivate/unmount, restores focus to the element focused before activation unless focus already moved elsewhere or never entered the trap. Mouse clicks outside container not intercepted; use light-dismiss handler for that.',
     bestPractices: [
       { guidance: true, description: 'Call focusFirst() when opening dialog/modal to move focus into trapped region.' },
       { guidance: true, description: 'Provide onEscape callback to close dialog when Escape pressed.' },

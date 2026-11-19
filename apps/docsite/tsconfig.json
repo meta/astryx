@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@astryx-docs/demo-content": [
+        "./src/templateDemoContent/demoContent.tsx"
       ]
     }
   },

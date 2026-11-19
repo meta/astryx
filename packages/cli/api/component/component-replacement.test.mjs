@@ -17,6 +17,7 @@ import {integrationComponentConflicts} from '../integration/authoring-checks.mjs
 import {GAP_REPORT_CATEGORIES, gapReport} from '../gap-report/gap-report.mjs';
 import {Project} from '../../foundation/config/project.mjs';
 import {COMPONENT_REPLACES_CLI} from '../../foundation/integrations/cli-requirement.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 const FLOOR = {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`};
@@ -26,7 +27,7 @@ let tmpDir;
 beforeEach(() => {
   // Under the repository so the project resolves the workspace's Core.
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-component-replacement-'),
+    path.join(REPO_ROOT, '.astryx-component-replacement-'),
   );
 });
 

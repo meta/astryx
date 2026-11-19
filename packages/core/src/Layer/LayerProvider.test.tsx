@@ -8,11 +8,15 @@
  *   (spec:AST-059 FR6, DEC-5)
  */
 
+import {useEffect} from 'react';
 import {describe, expect, it} from 'vitest';
-import {fireEvent, render} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {LayerProvider} from './LayerProvider';
+// The toast viewport these cases read registers itself as its module loads.
+import '../Toast/ToastViewport';
 import {useLayer} from './useLayer';
 import {layerInsetProperties} from './layerInset';
+import {useToast} from '../Toast/useToast';
 
 function AnchoredLayer() {
   const layer = useLayer({mode: 'context'});
@@ -37,6 +41,16 @@ function PortaledLayer() {
       {layer.render(<span>Layer</span>, {placement: 'below'})}
     </p>
   );
+}
+
+function ShowsThree() {
+  const showToast = useToast();
+  useEffect(() => {
+    for (const body of ['One', 'Two', 'Three']) {
+      showToast({body, isAutoHide: false});
+    }
+  }, [showToast]);
+  return null;
 }
 
 describe('LayerProvider inset (spec:AST-059 FR6)', () => {
@@ -139,5 +153,39 @@ describe('LayerProvider inset (spec:AST-059 FR6)', () => {
       viewport.style.getPropertyValue('--astryx-layer-inset-block-end'),
     ).toBe('56px');
     expect(viewport.style.insetInlineStart).toBe('');
+  });
+});
+
+describe('LayerProvider toast configuration', () => {
+  it('passes toast.maxVisible to the toast viewport', async () => {
+    render(
+      <LayerProvider toast={{maxVisible: 2}}>
+        <ShowsThree />
+      </LayerProvider>,
+    );
+    expect(await screen.findByText('Three')).toBeInTheDocument();
+    expect(screen.getByText('Two')).toBeInTheDocument();
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+  });
+
+  it('keeps one toast viewport and the outer toast configuration under a nested provider without inset', async () => {
+    const {container} = render(
+      <LayerProvider toast={{maxVisible: 1}}>
+        <span data-testid="outer">outer</span>
+        <LayerProvider toast={{maxVisible: 5}}>
+          <span data-testid="app">app</span>
+          <ShowsThree />
+        </LayerProvider>
+      </LayerProvider>,
+    );
+    expect(await screen.findByText('Three')).toBeInTheDocument();
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+    expect(
+      container.querySelectorAll('[popover="manual"]:not([id])'),
+    ).toHaveLength(1);
+    // The nested provider adds no element around its children.
+    expect(screen.getByTestId('app').parentElement).toBe(
+      screen.getByTestId('outer').parentElement,
+    );
   });
 });

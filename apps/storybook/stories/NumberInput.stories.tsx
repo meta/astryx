@@ -224,6 +224,14 @@ export const FormattedDisplay: Story = {
 };
 
 export const WithNumberSteppers: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The compact steppers are shown on fine pointers and hidden on coarse pointers, regardless of viewport width. Direct entry and arrow-key stepping remain available.',
+      },
+    },
+  },
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? 2);
     return <NumberInput {...args} value={value} onChange={setValue} />;

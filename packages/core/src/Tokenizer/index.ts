@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Tokenizer component
@@ -16,6 +14,7 @@ export type {
   TokenizerProps,
   TokenizerSize,
   TokenizerOverflowBehavior,
+  TokenizerPresentation,
   TokenizerChange,
   TokenizerHandle,
   TokenizerStatus,

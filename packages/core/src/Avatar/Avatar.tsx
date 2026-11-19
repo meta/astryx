@@ -5,7 +5,7 @@
 /**
  * @file Avatar.tsx
  * @input Uses React, HTMLAttributes, ReactNode, useState, useRef; useTooltip
- *   (Tooltip hook) for the optional name-on-hover tooltip; useTranslator (i18n)
+ *   (Tooltip hook) for the optional name-on-hover tooltip; useComponentTranslator (i18n)
  * @output Exports Avatar component, AvatarProps, AvatarSize types
  * @position Core implementation; consumed by index.ts
  *
@@ -50,7 +50,14 @@ import {useTooltip} from '../Tooltip/useTooltip';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Avatar/Avatar.generated';
+
+registerEnglishFallback(english);
 
 /**
  * The offset ratio for positioning elements on a circle's edge at 45°.
@@ -187,11 +194,26 @@ const styles = stylex.create({
     // `.astryx-avatar-fallback` class target (font size through its size
     // variant, `.astryx-avatar-fallback.<size>`), so the defaults here are
     // plain values with no internal-var seam. See Avatar.doc.mjs theming.
+    // Primary text: secondary text on the neutral tint falls below 4.5:1 in
+    // dark mode.
     backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-secondary'],
+    color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
+  },
+  // After `fallback` on a lone Avatar: in forced colors its initials and
+  // default icon take the color around them, which the browser forces to
+  // CanvasText, so a control that paints itself disabled (GrayText) or
+  // selected (HighlightText) carries them with it; an
+  // authored color would be forced to CanvasText whatever the control shows.
+  // A grouped face keeps it: its ring's opaque fill is forced to Canvas, so
+  // only CanvasText is sure to read on it.
+  loneFallback: {
+    color: {
+      default: colorVars['--color-text-primary'],
+      '@media (forced-colors: active)': 'currentColor',
+    },
   },
   status: {
     position: 'absolute',
@@ -223,6 +245,19 @@ const styles = stylex.create({
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
+  // Generated content draws the initials. They are part of the picture, not
+  // text of the control. On a link or button, visible text that the name does
+  // not contain fails Label in Name. Newer engines get empty alternative text.
+  // Older engines draw the plain string; the aria-label still names the
+  // control.
+  initials: (quoted: string) => ({
+    '::before': {
+      content: {
+        default: quoted,
+        '@supports (content: "a" / "")': `${quoted} / ""`,
+      },
+    },
+  }),
   size: (size: number) => ({
     width: size,
     height: size,
@@ -407,6 +442,11 @@ const INITIAL_CHARACTER = new RegExp(
 function initialCharacter(word: string): string {
   const index = word.search(INITIAL_CHARACTER);
   return index === -1 ? '' : firstCharacter(word.slice(index));
+}
+
+/** The text as a CSS string literal, with quotes and backslashes escaped. */
+function cssString(text: string): string {
+  return `"${text.replace(/[\\"]/g, char => `\\${char}`).replace(/\n/g, '\\a ')}"`;
 }
 
 /**
@@ -599,7 +639,7 @@ export function Avatar({
   // neither a name nor a labelled status, the avatar is decorative — expose
   // it as `presentation`/`aria-hidden` rather than announcing a meaningless
   // generic "Avatar" (obs-9).
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const nameLabel = meaningfulAlt || meaningfulName;
   // This render can only see a label introspected off a directly-passed
   // element. A status inside a consumer's own wrapper reports through the ref
@@ -784,23 +824,29 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
+                dynamicStyles.initials(cssString(initials)),
               ),
-            )}>
-            {initials}
-          </div>
+            )}
+          />
         )}
         {showIcon && (
           <div
             {...mergeProps(
               themeProps('avatar-fallback', {size: resolvedSize}),
-              stylex.props(styles.fallback),
+              stylex.props(
+                styles.fallback,
+                avatarGroup == null && styles.loneFallback,
+              ),
             )}>
             <DefaultIcon size={numericSize} />
           </div>
         )}
       </div>
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,

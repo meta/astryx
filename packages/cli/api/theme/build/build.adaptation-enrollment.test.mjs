@@ -86,6 +86,10 @@ describe('values the root accepts without enrollment are accepted rule-only', ()
     // case. It must NOT be an adaptation-specific exception; it is simply
     // whatever root does.
     ['an unresolved domain', 'avatar-group', 'size:not-a-real-avatar-size'],
+    // `IconVariantMap` is public and augmentable, but `Icon.variant` selects
+    // artwork and has no component styling map (component-theming-surface
+    // INV14), so a styling key on it never enrolls a value.
+    ['an artwork-request axis', 'icon', 'variant:filled'],
   ])('accepts %s on both surfaces', async (_label, component, key) => {
     const rootReceipt = await buildWithRootValue('root-ok', component, key);
     expect(rootReceipt?.type).toBe('theme.build');

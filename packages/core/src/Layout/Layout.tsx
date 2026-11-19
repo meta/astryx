@@ -4,7 +4,7 @@
 
 /**
  * @file Layout.tsx
- * @input Uses React, stack/stackItem utilities, LayoutAreaContext, LayoutSlotsContext
+ * @input Uses React, stack/stackItem utilities, isRenderable, LayoutAreaContext, LayoutSlotsContext
  * @output Exports Layout component and LayoutProps, LayoutHeight types
  * @position General five-slot layout primitive for arranging header, start, content, end, and footer regions.
  *   Building a page area with a side panel? Use Layout with start/end slots.
@@ -24,7 +24,8 @@ import {LayoutSlotsContext, type LayoutSlots} from './LayoutSlotsContext';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {stack} from '../Stack/stack.stylex';
 import {stackItem} from '../Stack/stackItem.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {isRenderable} from '../utils/isRenderable';
 import {layoutFooterMarker, layoutHeaderMarker} from './layoutEdges.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
@@ -78,9 +79,11 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
-    // Reset inherited width so nested Layouts without contentWidth keep their
-    // released padding. An explicit contentWidth overrides this on the same node.
-    '--layout-content-width': '100cqi',
+    // A Layout without contentWidth caps no region: `initial` makes every
+    // var(--layout-content-width, none) fall back to none. The alignment width
+    // is read only inside the middle row's query container, where 100cqi is
+    // its own width. An explicit contentWidth overrides both on this node.
+    '--layout-content-width': 'initial',
     '--layout-alignment-width': '100cqi',
     // A Layout's `padding` belongs to its own regions. Clear an ancestor
     // Layout's value so a nested Layout without `padding` takes the nearest
@@ -89,6 +92,8 @@ const styles = stylex.create({
     // explicit `padding` on this Layout overrides this on the same node.
     '--layout-padding-own-outer-x': 'initial',
     '--layout-padding-own-outer-y': 'initial',
+    '--_layout-flush-block-start': 'initial',
+    '--_layout-flush-block-end': 'initial',
   },
   fill: {
     // Add 2x container block padding to compensate for negative block margins
@@ -106,9 +111,9 @@ const styles = stylex.create({
     // LayoutFooter without one right after it, removes the matching inner
     // padding of LayoutContent (it reads these, falling back to its padding).
     // Sibling relations on this row only: a `:has()` on the layout followed
-    // by `*` restyles everything inside it on any change. Unset otherwise, so
-    // a nested Layout's content inherits an outer row's value, as the
-    // ancestor rule this replaces matched any enclosing layout.
+    // by `*` restyles everything inside it on any change. Unset otherwise:
+    // the inner stack clears both values, so a nested Layout does not take an
+    // outer row's collapse.
     '--_layout-flush-block-start': {
       default: null,
       [stylex.when.siblingBefore(':not([data-divider])', layoutHeaderMarker)]:
@@ -366,11 +371,12 @@ export function Layout({
     [defaultHasDividers],
   );
 
-  // Memoize slots info to avoid unnecessary re-renders
-  const hasHeader = header != null;
-  const hasFooter = footer != null;
-  const hasStart = start != null;
-  const hasEnd = end != null;
+  // A slot that renders nothing, such as `false` from `isOpen && <LayoutHeader />`,
+  // is absent, so its neighbours take the outer inset on that side.
+  const hasHeader = isRenderable(header);
+  const hasFooter = isRenderable(footer);
+  const hasStart = isRenderable(start);
+  const hasEnd = isRenderable(end);
   const hasBothPanels = hasStart && hasEnd;
   const hasSinglePanel = hasStart !== hasEnd;
   const usesInternalContentWidth =

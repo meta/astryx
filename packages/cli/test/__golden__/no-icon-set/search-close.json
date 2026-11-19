@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 44,
+    "matchCount": 51,
     "results": [
       {
         "domain": "component",
@@ -18,6 +18,28 @@
       },
       {
         "domain": "component",
+        "name": "DrawerHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component DrawerHeader",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheet",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheet",
+        "mentions": []
+      },
+      {
+        "domain": "component",
         "name": "BottomSheetSwitcher",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -25,6 +47,10 @@
         "description": "<text>",
         "import": "@astryxdesign/core/BottomSheet",
         "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
         "mentions": []
       },
       {
@@ -51,17 +77,6 @@
       },
       {
         "domain": "component",
-        "name": "DrawerHeader",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Drawer",
-        "command": "astryx component DrawerHeader",
-        "mentions": []
-      },
-      {
-        "domain": "component",
         "name": "DropdownMenuSubMenu",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -84,6 +99,17 @@
       },
       {
         "domain": "hook",
+        "name": "createSwipe",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Swipe",
+        "command": "astryx hook createSwipe",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
         "name": "useImperativeAlertDialog",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -102,6 +128,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/hooks",
         "command": "astryx hook useImperativeDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useKeyboardHint",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useKeyboardHint",
         "mentions": []
       },
       {
@@ -204,43 +241,6 @@
         "mentions": [
           "This lets you swap the icon set (e.g."
         ]
-      },
-      {
-        "domain": "doc",
-        "name": "migration/component-migration",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs migration/component-migration move-the-app-frame-first",
-        "parent": "astryx docs migration/component-migration --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "styling/styling-advanced",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs styling/styling-advanced compound-components",
-        "parent": "astryx docs styling/styling-advanced --index",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "ComplexSelector",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/ComplexSelector",
-        "command": "astryx component ComplexSelector",
-        "mentions": []
       }
     ]
   },

@@ -25,7 +25,8 @@ import {
   typeScaleVars,
   borderVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import type {DividerVariantMap} from './index';
 

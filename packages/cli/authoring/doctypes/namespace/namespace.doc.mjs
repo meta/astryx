@@ -65,6 +65,12 @@ export const doc = {
       description: 'Search terms not already present in the title or summary.',
     },
     {
+      name: 'describes',
+      type: "'cli'",
+      description:
+        "`cli` on a root namespace of the CLI's own docs whose pages describe the CLI itself, not the components of a base. A run on any base reads such a namespace and everything under it; every other root of the CLI's own docs describes Core, and only a run on Core reads it.",
+    },
+    {
       name: 'slots',
       type: 'Record<string, NamespaceSlot>',
       description:

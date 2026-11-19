@@ -2,7 +2,7 @@
 
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {
   afterAll,
@@ -29,7 +29,11 @@ vi.mock('../EmojiPicker/emojiData', () => ({
 
 import {Popover} from '@astryxdesign/core/Popover';
 import {CommentThread, type CommentThreadProps} from './CommentThread';
-import {unsavedDraftOf} from './useCommentThreadDismissal';
+import {
+  unsavedDraftOf,
+  useCommentThreadDismissal,
+  type UnsavedDraft,
+} from './useCommentThreadDismissal';
 import type {
   CommentComposerRenderProps,
   CommentThreadData,
@@ -351,6 +355,62 @@ describe('CommentThread dismissal', () => {
   }
 
   const UNSAVED = 'Unsaved draft. Dismiss again to discard it.';
+
+  it('guards the committed draft when React discards a render without it', async () => {
+    // A transition that suspends for good: React renders the new props, then
+    // keeps the committed tree and never commits that render.
+    const pending = new Promise<never>(() => {});
+    function Pending(): null {
+      use(pending);
+      return null;
+    }
+    const onDismiss = vi.fn();
+    const draft: UnsavedDraft = {
+      kind: 'reply',
+      parentId: 'c1',
+      signature: 'reply:c1:Half a thought',
+    };
+    function Thread({draft}: {draft: UnsavedDraft | null}) {
+      const rootRef = useRef<HTMLDivElement>(null);
+      const {onRootPointerDownCapture} = useCommentThreadDismissal({
+        onDismiss,
+        rootRef,
+        draft,
+        announce: () => {},
+      });
+      return (
+        <div ref={rootRef} onPointerDownCapture={onRootPointerDownCapture}>
+          <textarea aria-label="Reply" defaultValue="Half a thought" />
+        </div>
+      );
+    }
+    function Screen({
+      draft,
+      isPending,
+    }: {
+      draft: UnsavedDraft | null;
+      isPending: boolean;
+    }) {
+      return (
+        <>
+          <button type="button">Elsewhere</button>
+          <Suspense fallback={null}>
+            <Thread draft={draft} />
+            {isPending ? <Pending /> : null}
+          </Suspense>
+        </>
+      );
+    }
+    const {rerender} = render(<Screen draft={draft} isPending={false} />);
+    await settle();
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen draft={null} isPending />);
+      });
+    });
+    press(screen.getByRole('button', {name: 'Elsewhere'}));
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 
   it('dismisses on an outside press when nothing is unsaved', async () => {
     const {onDismiss} = renderThread();

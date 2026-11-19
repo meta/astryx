@@ -151,3 +151,36 @@ describe('scheduleThumbnailRender', () => {
     expect(idleCallbacks).toHaveLength(0);
   });
 });
+
+describe('scheduleThumbnailPrefetch', () => {
+  it('starts a download only after every waiting render job', async () => {
+    const {scheduleThumbnailPrefetch, scheduleThumbnailRender} =
+      await import('../components/thumbnailRenderScheduler');
+    const order: string[] = [];
+
+    scheduleThumbnailPrefetch(() => order.push('prefetch'));
+    scheduleThumbnailRender(() => order.push('first render'));
+    scheduleThumbnailRender(() => order.push('second render'));
+
+    for (let turn = 0; turn < 3; turn++) {
+      idleCallbacks.shift()?.(idleDeadline);
+      await flushMicrotasks();
+    }
+
+    expect(order).toEqual(['first render', 'second render', 'prefetch']);
+  });
+
+  it('does not start a cancelled download', async () => {
+    const {scheduleThumbnailPrefetch} =
+      await import('../components/thumbnailRenderScheduler');
+    const run = vi.fn();
+
+    const cancel = scheduleThumbnailPrefetch(run);
+    cancel();
+    idleCallbacks.shift()?.(idleDeadline);
+    await flushMicrotasks();
+
+    expect(run).not.toHaveBeenCalled();
+    expect(idleCallbacks).toHaveLength(0);
+  });
+});

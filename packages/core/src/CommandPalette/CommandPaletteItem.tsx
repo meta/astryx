@@ -42,6 +42,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-inner'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -155,6 +156,7 @@ export function CommandPaletteItem({
     (ctx ? ctx.highlightedIndex === itemIndex && itemIndex >= 0 : false);
   const isSelected = controlledSelected ?? (ctx ? ctx.value === value : false);
 
+  // Syncs the scroll position of a standalone item with `isHighlighted`.
   useEffect(() => {
     // Inside CommandPalette the shared useHighlightedOptionScroll (via
     // useCombobox) is the single scrollIntoView owner (#6077); a second owner

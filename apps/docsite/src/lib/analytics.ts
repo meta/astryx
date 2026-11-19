@@ -5,7 +5,7 @@
  * @position src/lib — typed analytics helpers wrapping @vercel/analytics.
  *
  * Convention: small fixed set of event names, context pushed into properties.
- * See https://github.com/facebook/astryx/issues/2607 for the full spec.
+ * See https://github.com/meta/astryx/issues/2607 for the full spec.
  */
 
 import {track} from '@vercel/analytics';

@@ -109,7 +109,8 @@ export interface InputGroupProps extends Omit<
   size?: InputGroupSize;
 
   /**
-   * Status indicator applied to the group border.
+   * Validation status. Its message shows below the group. The group border
+   * does not change; a theme can style the row from `data-status`.
    */
   status?: InputStatus;
 
@@ -125,8 +126,8 @@ export interface InputGroupProps extends Omit<
 }
 
 /**
- * Groups an input with prefix/suffix addons in a visually connected
- * container with shared border and focus ring.
+ * Groups an input with prefix and suffix addons in one connected row. A
+ * focused member stays above its neighbours, so its focus ring shows in full.
  *
  * @example
  * ```

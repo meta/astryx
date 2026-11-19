@@ -15,7 +15,7 @@
  * user is doing nothing at all. That is a different kind of decision from
  * "which curve", and the rubric did not have a criterion for it.
  *
- * The background is kt-fr88: the working marks' ambient colour fade repainted
+ * The background is the idle-repaint bug: the working marks' ambient colour fade repainted
  * the FULL DOCUMENT at 60fps on an idle page — 1,591 document paints in 28s
  * with the GPU 78% busy. The property was the whole bug. Fixing it took a 4s
  * idle window from ~1,414 paints to under 100.
@@ -35,7 +35,7 @@
  *   4. Every loop has a reduced-motion arm that stills the movement and leaves
  *      the state legible.
  *
- * Evidence: D117309888 — idle paints 1,414 -> 93, raster tasks 12,060 -> 480,
+ * Evidence: idle paints 1,414 -> 93, raster tasks 12,060 -> 480,
  * style time 543ms -> 155ms, in a 4s window.
  */
 
@@ -91,7 +91,7 @@ export const COST_TIERS: ReadonlyArray<{
   {
     cost: 'high',
     meaning:
-      'Loops on a paint-only, inherited, or layout property. This is the kt-fr88 shape: it repaints or re-lays-out every frame, forever, on an idle page.',
+      'Loops on a paint-only, inherited, or layout property. This is the idle-repaint shape: it repaints or re-lays-out every frame, forever, on an idle page.',
     gate: 'Blocker. Move it to transform/opacity, or step it with steps() at the lowest legible cadence.',
   },
 ];
@@ -100,7 +100,7 @@ export const COST_RULE =
   'A looping animation runs forever, so it is judged on idle cost, not duration. Compositor properties only; contain the paint and take a deliberate layer; gate the layer on prefers-reduced-motion: no-preference; and give every loop an arm that stills it.';
 
 export const COST_EVIDENCE =
-  'kt-fr88: an ambient colour fade repainted the full document at 60fps on an idle page \u2014 1,591 document paints in 28s, GPU 78% busy. D117309888 cut a 4s idle window from 1,414 paints to 93, raster tasks from 12,060 to 480, and style time from 543ms to 155ms.';
+  'The idle-repaint bug: an ambient colour fade repainted the full document at 60fps on an idle page \u2014 1,591 document paints in 28s, GPU 78% busy. The fix cut a 4s idle window from 1,414 paints to 93, raster tasks from 12,060 to 480, and style time from 543ms to 155ms.';
 
 /**
  * Every continuous animation in the two published packages and in this lab's
@@ -247,7 +247,7 @@ export const LOOP_INVENTORY: ReadonlyArray<LoopSite> = [
     hasLayer: false,
     hasReducedMotionArm: true,
     cost: 'high',
-    note: 'A spreading box-shadow on a colour-mix, per frame \u2014 structurally the kt-fr88 bug. Kept deliberately: it is the demo of what the rule forbids, and it is now paint-contained so the demonstration cannot repaint the page around it.',
+    note: 'A spreading box-shadow on a colour-mix, per frame \u2014 structurally the idle-repaint bug. Kept deliberately: it is the demo of what the rule forbids, and it is now paint-contained so the demonstration cannot repaint the page around it.',
   },
   {
     where: 'motion-lab',

@@ -4,7 +4,8 @@
 
 /**
  * @file TreeListItem.tsx
- * @input Uses React, StyleX, theme tokens, TreeListBranches
+ * @input Uses React, StyleX, theme tokens, TreeListBranches, the shared press
+ *   overlays and the compositor press layer
  * @output Exports TreeListItem component (internal, not publicly exported)
  * @position Internal implementation; consumed by TreeList.tsx
  *
@@ -15,6 +16,7 @@
  */
 
 import {useId, useMemo, useRef, type ReactNode} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -26,19 +28,29 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
+  cancelNestedPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
 import {Icon} from '../Icon';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useThemeIndicator} from '../Indicator/useThemeIndicator';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TreeList/TreeListItem.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -82,9 +94,9 @@ const styles = stylex.create({
     // collapse, so adjacent rows end up a full gap apart — and it rides the
     // `rowWrapper`, which carries no theme target, so the paintable
     // `tree-list-item` stays a pure paint seam (layout lives off it). The <li>s
-    // stay contiguous — the gap is padding INSIDE each <li>, not space between
-    // them — so the per-<li> connector guide can still span it and read as a
-    // continuous line (see TreeListBranches). The lever's default is a subtle
+    // stay contiguous, because the gap is padding inside each <li>, not space
+    // between them. So the per-row connector guide can still span it and read
+    // as one line (see TreeListBranches). The lever's default is a subtle
     // `--spacing-0-5` (2px, set on the tree-list root); a theme widens or closes
     // it via the `tree-list` target.
     paddingBlock: 'calc(var(--tree-list-row-gap, 0px) / 2)',
@@ -111,14 +123,23 @@ const styles = stylex.create({
   // when its own treeitem publishes focus (`--_tree-focus-z` on `wrapper`).
   // The ring is the row's outline, so it cannot be lifted on its own: a
   // focused row that is also filled (selected or hovered) covers the guides at
-  // that row. That is the accepted trade-off (DD3). Applied only with
-  // `focusWithinOrPublished`, the rows that draw the ring: a plain row shows
-  // no ring, so its fill stays under the guides.
+  // that row. That is the accepted trade-off (DD3). Its conditions match the
+  // ring's, so only the row whose ring shows rises above the guides.
   focusLift: {
     zIndex: {
       default: 'var(--_tree-focus-z, auto)',
       ':has(:focus-visible)': 2,
     },
+  },
+  // A plain row rings and lifts only on its own treeitem's focus, from the
+  // variables `publishFocusVisibleVars` sets on `wrapper`. A control in its
+  // start or end content rings itself.
+  plainRowFocusRing: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
+  publishedFocusLift: {
+    zIndex: 'var(--_tree-focus-z, auto)',
   },
   // Per-level indent, drawn INSIDE the row box: the row (`contentWrapper`)
   // stays full width, so a nested row's hover and selected fill spans the
@@ -227,8 +248,6 @@ const styles = stylex.create({
     padding: 0,
     color: colorVars['--color-icon-secondary'],
     borderRadius: radiusVars['--radius-inner'],
-    marginInlineStart: spacingVars['--spacing-1'],
-    marginInlineEnd: `calc(${spacingVars['--spacing-1']} * -1)`,
   },
   chevronButton: {
     display: 'flex',
@@ -243,8 +262,6 @@ const styles = stylex.create({
     },
     color: colorVars['--color-icon-secondary'],
     borderRadius: radiusVars['--radius-inner'],
-    marginInlineStart: spacingVars['--spacing-1'],
-    marginInlineEnd: `calc(${spacingVars['--spacing-1']} * -1)`,
   },
   chevronSvg: {
     display: 'flex',
@@ -351,6 +368,12 @@ export interface TreeListItemInternalProps {
   isLast: boolean;
   ancestorsIsLast: ReadonlyArray<boolean>;
   isExpanded: boolean;
+  /**
+   * The row collapsed and its child group is playing its exit: the group
+   * stays rendered (the exit makes it inert) until it ends, and its rows
+   * leave the tree's keyboard order at once.
+   */
+  isExiting?: boolean;
   onToggle?: (id: string) => void;
   density: TreeListDensity;
   /**
@@ -377,6 +400,9 @@ export interface TreeListItemInternalProps {
 // Component
 // =============================================================================
 
+/** A plain anchor, for a disabled item whose link has no destination. */
+const DisabledAnchor = 'a';
+
 export function TreeListItem({
   id,
   label,
@@ -397,6 +423,7 @@ export function TreeListItem({
   isLast,
   ancestorsIsLast,
   isExpanded,
+  isExiting = false,
   onToggle,
   density,
   variant,
@@ -406,11 +433,15 @@ export function TreeListItem({
   isTabbable,
 }: TreeListItemInternalProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const labelId = useId();
   const descriptionId = useId();
   const LinkComponent = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
+  // Disabling the item swaps the router link for a plain anchor, so React
+  // replaces it; focus on the inner link (after a pointer click) follows the
+  // swap instead of falling to the page (spec:AST-085 FR4).
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(linkRef);
   const isInteractive = onClick != null || href != null;
 
   const handleToggle = useMemo(
@@ -467,6 +498,28 @@ export function TreeListItem({
     interactiveRef: linkRef,
     disabled: isDisabled || !forwardsToLink,
   });
+
+  // A finger press that starts on a control inside the row does not activate
+  // the row, so the row shows no press for it. The row's own action, its link
+  // or invisible button, activates it. The Chevron does too when the row's
+  // surface toggles, since it runs that same toggle.
+  const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const chevronRef = useRef<HTMLButtonElement>(null);
+  const surfaceToggles = onClick == null && handleClick != null;
+  const pressOnRow = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isDisabled) {
+      return;
+    }
+    const chevron = chevronRef.current;
+    const ownAction =
+      surfaceToggles &&
+      chevron != null &&
+      event.target instanceof Node &&
+      chevron.contains(event.target)
+        ? chevron
+        : (linkRef.current ?? actionButtonRef.current);
+    cancelNestedPress(event, event.currentTarget, ownAction);
+  };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
     href,
@@ -509,6 +562,7 @@ export function TreeListItem({
         )}>
         {label}
       </span>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `description` is a string field: an empty string still describes the item */}
       {description != null && (
         <span
           id={descriptionId}
@@ -523,7 +577,14 @@ export function TreeListItem({
   // astryx-icon target — so the rotation rides on that same element instead of
   // an extra wrapper: a theme can still restyle the mark and its open/closed
   // transform through one selector.
-  const chevronIcon = (
+  const ThemeDisclosure = useThemeIndicator('tree-disclosure');
+  // A theme's disclosure mark draws each state itself, so it is not rotated.
+  const chevronIcon = ThemeDisclosure ? (
+    <ThemeDisclosure
+      state={isExpanded ? 'expanded' : 'collapsed'}
+      xstyle={styles.chevronSvg}
+    />
+  ) : (
     <Icon
       icon="chevronRight"
       // Nearest size to the 16px chevron column; `chevronSvg` re-pins the exact
@@ -547,6 +608,7 @@ export function TreeListItem({
       // focusable element to receive Enter/Space). The row's handleClick ignores
       // clicks originating inside a <button>, so this never double-toggles.
       <button
+        ref={chevronRef}
         type="button"
         aria-expanded={isExpanded}
         aria-label={t('@astryx.treeList.toggleChildren')}
@@ -590,15 +652,29 @@ export function TreeListItem({
   const innerContent = (
     <>
       {chevron}
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span {...stylex.props(styles.startContent)}>{startContent}</span>
       )}
-      {href != null ? (
+      {href != null && isDisabled ? (
+        // A disabled item's anchor has no destination, so neither the row's
+        // forwarded activation nor a screen reader's click can navigate
+        // (spec:AST-085 FR2). Like a disabled Link, it keeps the link role and
+        // skips the router link component.
+        <DisabledAnchor
+          ref={anchorRef}
+          role="link"
+          aria-disabled={true}
+          aria-labelledby={labelId}
+          aria-describedby={description != null ? descriptionId : undefined}
+          tabIndex={-1}
+          {...stylex.props(styles.invisibleAnchor)}>
+          {labelAndDescription}
+        </DisabledAnchor>
+      ) : href != null ? (
         <LinkComponent
-          ref={linkRef}
+          ref={anchorRef}
           href={href}
           target={target}
-          aria-disabled={isDisabled || undefined}
           aria-labelledby={labelId}
           aria-describedby={description != null ? descriptionId : undefined}
           // Roving tabindex lives on the treeitem row; inner action is not a
@@ -609,6 +685,7 @@ export function TreeListItem({
         </LinkComponent>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           aria-disabled={isDisabled || undefined}
@@ -624,7 +701,7 @@ export function TreeListItem({
       ) : (
         <span {...stylex.props(styles.content)}>{labelAndDescription}</span>
       )}
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
     </>
@@ -652,16 +729,16 @@ export function TreeListItem({
       data-tree-level={nestedLevel + 1}
       data-tree-disabled={isDisabled || undefined}
       {...focusOutlineProps.publishFocusVisibleVars(styles.wrapper)}>
-      {variant !== 'noGuides' && (
-        <div {...stylex.props(styles.treeBranches)}>
-          <TreeListBranches
-            ancestorsIsLast={ancestorsIsLast}
-            isLast={isLast}
-            nestedLevel={nestedLevel}
-          />
-        </div>
-      )}
       <div {...stylex.props(styles.rowWrapper)}>
+        {variant !== 'noGuides' && (
+          <div {...stylex.props(styles.treeBranches)}>
+            <TreeListBranches
+              ancestorsIsLast={ancestorsIsLast}
+              isLast={isLast}
+              nestedLevel={nestedLevel}
+            />
+          </div>
+        )}
         <div
           {...(isInteractive || (hasChildren && onClick == null)
             ? pressable
@@ -679,12 +756,20 @@ export function TreeListItem({
                   densityStyles[density],
                   styles.interactive,
                   interactionOverlayStyles.backgroundImage,
+                  // The touch press on a compositor layer (after the
+                  // overlay, whose own touch paint it turns off).
+                  rowPressLayerStyles.cell,
+                  rowPressLayerStyles.cellOnImage,
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,
                   xstyle,
                 )
-              : stylex.props(
+              : // A plain row has no action, but it is a stop in the roving
+                // focus. It rings while its treeitem has focus.
+                stylex.props(
+                  styles.plainRowFocusRing,
                   styles.contentWrapper,
+                  styles.publishedFocusLift,
                   densityStyles[density],
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,
@@ -699,12 +784,18 @@ export function TreeListItem({
           )}
           ref={forwardsToLink ? linkRowRef : undefined}
           onClick={forwardsToLink ? delegateToLink : handleClick}
-          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}>
+          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}
+          onPointerDown={
+            forwardsToLink || handleClick != null ? pressOnRow : undefined
+          }>
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>
-      {isExpanded && renderedChildren != null && (
-        <ul role="group" {...stylex.props(styles.childGroup)}>
+      {(isExpanded || isExiting) && isRenderable(renderedChildren) && (
+        <ul
+          role="group"
+          data-tree-exiting={isExiting ? '' : undefined}
+          {...stylex.props(styles.childGroup)}>
           {renderedChildren}
         </ul>
       )}

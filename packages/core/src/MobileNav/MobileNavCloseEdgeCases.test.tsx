@@ -256,7 +256,7 @@ describe('MobileNav close path edge cases', () => {
     try {
       const {rerender} = render(<Drawer isOpen />);
       const dialog = screen.getByTestId('mobile-nav');
-      expect(document.documentElement.style.overflow).toBe('clip');
+      expect(document.documentElement.style.overflow).toBe('hidden');
 
       // Two acts on purpose: the close timer is armed by the effect that runs
       // when the first act flushes, so advancing inside that same act would
@@ -279,13 +279,92 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  it("hides <body>'s overflow instead of the root's on a page whose <body> sets its own overflow, and gives it back", () => {
+    // A common reset: `body { overflow-x: hidden }` with the root's overflow
+    // left visible. The viewport then takes <body>'s overflow. Hiding the
+    // root's overflow stops that propagation, and the page jumps to its top.
+    document.body.style.overflowX = 'hidden';
+    try {
+      const {unmount} = render(<Drawer isOpen />);
+
+      expect(document.body.style.overflow).toBe('hidden');
+      expect(document.documentElement.style.overflow).toBe('');
+
+      unmount();
+
+      expect(document.body.style.overflow).toBe('');
+      expect(document.body.style.overflowX).toBe('hidden');
+    } finally {
+      document.body.style.overflowX = '';
+    }
+  });
+
   it('restores documentElement overflow when unmounted while open', () => {
     const {unmount} = render(<Drawer isOpen />);
-    expect(document.documentElement.style.overflow).toBe('clip');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     unmount();
 
     expect(document.documentElement.style.overflow).toBe('');
+  });
+
+  it('releases the page when the dialog closed natively before isOpen turned false', () => {
+    vi.useFakeTimers();
+    // A classic scrollbar, so the lock holds the gutter: jsdom does no layout.
+    const innerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const css = Object.getOwnPropertyDescriptor(window, 'CSS');
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1024,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      value: 1009,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'CSS', {
+      value: {
+        supports: (property: string, value: string) =>
+          property === 'scrollbar-gutter' && value === 'stable',
+      },
+      configurable: true,
+      writable: true,
+    });
+    try {
+      const {rerender} = render(<Drawer isOpen />);
+      const dialog = screen.getByTestId<HTMLDialogElement>('mobile-nav');
+      // Whatever value the lock writes, the page is locked while open.
+      expect(document.documentElement.style.overflow).not.toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('stable');
+
+      // A `<form method="dialog">` submit or a close() through a ref closes
+      // the dialog before the app's state follows.
+      act(() => {
+        dialog.close();
+      });
+      act(() => {
+        rerender(<Drawer isOpen={false} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(document.documentElement.style.overflow).toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('');
+    } finally {
+      vi.useRealTimers();
+      if (innerWidth) {
+        Object.defineProperty(window, 'innerWidth', innerWidth);
+      }
+      // @ts-expect-error -- drop the stub so jsdom's own value comes back
+      delete document.documentElement.clientWidth;
+      if (css) {
+        Object.defineProperty(window, 'CSS', css);
+      } else {
+        // @ts-expect-error -- jsdom has no CSS object of its own
+        delete window.CSS;
+      }
+    }
   });
 
   it('leaves no pending close timer behind after unmount', () => {

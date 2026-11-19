@@ -11,6 +11,25 @@ import {
   readsPressStrength,
 } from '../__tests__/pressState';
 
+/** The outline-style values `element`'s classes set with no focus condition. */
+function outlineStylesAtRest(element: Element): string[] {
+  const classes = Array.from(element.classList, name => `.${name}`);
+  const values: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (
+        rule instanceof CSSStyleRule &&
+        classes.some(cls => rule.selectorText.startsWith(cls)) &&
+        !rule.selectorText.includes('focus') &&
+        rule.style.getPropertyValue('outline-style') !== ''
+      ) {
+        values.push(rule.style.getPropertyValue('outline-style'));
+      }
+    }
+  }
+  return values;
+}
+
 describe('Thumbnail', () => {
   it('renders an image when src is provided', () => {
     render(<Thumbnail src="/photo.jpg" alt="Test photo" />);
@@ -149,30 +168,149 @@ describe('Thumbnail', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
-  it('does not render remove button when disabled', () => {
+  it('keeps a disabled Remove mounted, focusable and announced as disabled, without calling onRemove', async () => {
+    const user = userEvent.setup();
     const onRemove = vi.fn();
     render(<Thumbnail label="file.png" onRemove={onRemove} isDisabled />);
-    expect(screen.queryByRole('button', {name: /Remove/})).toBeNull();
+    const remove = screen.getByRole('button', {name: /Remove/});
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).not.toBeDisabled();
+    remove.focus();
+    await user.keyboard('{Enter}');
+    expect(onRemove).not.toHaveBeenCalled();
+    // A click that reaches it (assistive technology dispatching one; the
+    // disabled thumbnail takes no pointer events) calls nothing either.
+    fireEvent.click(remove);
+    expect(onRemove).not.toHaveBeenCalled();
   });
 
-  it('does not render onClick button when disabled', () => {
+  it('keeps a disabled Open mounted, focusable and announced as disabled, without calling onClick', async () => {
+    const user = userEvent.setup();
     const onClick = vi.fn();
     render(
       <Thumbnail src="/img.jpg" alt="Test" onClick={onClick} isDisabled />,
     );
-    expect(screen.queryByRole('button')).toBeNull();
+    const open = screen.getByRole('button', {name: 'Open Test'});
+    expect(open).toHaveAttribute('aria-disabled', 'true');
+    open.focus();
+    await user.keyboard('{Enter}');
+    expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('is not interactive when isLoading', () => {
+  it('keeps Open mounted but inert while loading', async () => {
+    const user = userEvent.setup();
     const onClick = vi.fn();
     render(<Thumbnail src="/img.jpg" alt="Test" onClick={onClick} isLoading />);
-    expect(screen.queryByRole('button')).toBeNull();
+    const open = screen.getByRole('button', {name: 'Open Test'});
+    expect(open).toHaveAttribute('aria-disabled', 'true');
+    await user.click(open);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['disabled', {isDisabled: true}],
+    ['loading', {isLoading: true}],
+  ])(
+    'stops a press on a %s Open before it reaches an ancestor (spec:AST-085 FR2)',
+    async (_state, stateProps) => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      const onAncestorClick = vi.fn();
+      render(
+        <div onClick={onAncestorClick}>
+          <Thumbnail
+            src="/img.jpg"
+            alt="Test"
+            onClick={onClick}
+            {...stateProps}
+          />
+        </div>,
+      );
+      const open = screen.getByRole('button', {name: 'Open Test'});
+      open.focus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      // A disabled thumbnail takes no pointer events, so the click is
+      // dispatched directly, as assistive technology may.
+      fireEvent.click(open);
+      expect(onClick).not.toHaveBeenCalled();
+      expect(onAncestorClick).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['a disabled Open', {isDisabled: true}, 'Open Test'],
+    ['a loading Open', {isLoading: true}, 'Open Test'],
+    ['a disabled Remove', {isDisabled: true}, /Remove/],
+  ] as const)(
+    'Enter and Space on %s dispatch no click to any listener (spec:AST-085 FR2)',
+    async (_name, stateProps, buttonName) => {
+      const user = userEvent.setup();
+      const clicks = vi.fn();
+      document.addEventListener('click', clicks, {capture: true});
+      try {
+        render(
+          <Thumbnail
+            src="/img.jpg"
+            alt="Test"
+            onClick={vi.fn()}
+            onRemove={vi.fn()}
+            {...stateProps}
+          />,
+        );
+        screen.getByRole('button', {name: buttonName}).focus();
+        await user.keyboard('{Enter}');
+        await user.keyboard(' ');
+        expect(clicks).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener('click', clicks, {capture: true});
+      }
+    },
+  );
+
+  it('keeps focus on Open and Remove when the thumbnail becomes loading or disabled (spec:AST-085 FR4)', () => {
+    const props = {
+      src: '/img.jpg',
+      alt: 'Test',
+      onClick: vi.fn(),
+      onRemove: vi.fn(),
+    };
+    const {rerender} = render(<Thumbnail {...props} />);
+    const open = screen.getByRole('button', {name: 'Open Test'});
+    open.focus();
+    rerender(<Thumbnail {...props} isLoading />);
+    expect(document.activeElement).toBe(open);
+    rerender(<Thumbnail {...props} isDisabled />);
+    expect(document.activeElement).toBe(open);
+
+    rerender(<Thumbnail {...props} />);
+    const remove = screen.getByRole('button', {name: /Remove/});
+    remove.focus();
+    rerender(<Thumbnail {...props} isDisabled />);
+    expect(document.activeElement).toBe(remove);
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('forwards ref to root element', () => {
     const ref = vi.fn();
     render(<Thumbnail ref={ref} data-testid="thumb" />);
     expect(ref).toHaveBeenCalled();
+  });
+
+  it('draws no ring of its own on Open, inside the image container ring', () => {
+    render(
+      <Thumbnail
+        src="/photo.jpg"
+        alt="Photo"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />,
+    );
+    const open = screen.getByRole('button', {name: 'Open Photo'});
+    const atRest = outlineStylesAtRest(open);
+    expect(atRest.length).toBeGreaterThan(0);
+    expect(atRest.every(value => value === 'none')).toBe(true);
   });
 
   describe('showRemoveOn', () => {

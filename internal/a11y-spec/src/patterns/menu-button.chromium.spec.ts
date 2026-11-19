@@ -8,7 +8,7 @@
  * @position Contract self-test, Chromium lane
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {

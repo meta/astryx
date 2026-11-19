@@ -13,7 +13,7 @@
  *   defineTheme({icons: {'comment:reply': <MyReplyIcon />}})
  */
 
-import type {SVGProps} from 'react';
+import type {ReactNode, SVGProps} from 'react';
 import {getExtendedIcon, Icon, type IconColor} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
 
@@ -106,6 +106,13 @@ const FALLBACK_GLYPHS: Record<
 };
 
 /**
+ * The fallback `getExtendedIcon` returns only when no theme, registered, or
+ * built-in entry answers a key. A function entry that returns `null` still
+ * answers it: its result is final, so the glyph draws nothing.
+ */
+const NO_ENTRY: ReactNode = <></>;
+
+/**
  * A comment glyph at the icon slot's size: the active theme's icon for its
  * `comment:*` key when one is registered, else the bundled default.
  */
@@ -120,7 +127,7 @@ export function CommentIcon({
 }) {
   const themeName = useThemeName();
   const key = COMMENT_ICON_KEYS[name];
-  const hasOverride = getExtendedIcon(key, undefined, themeName) != null;
+  const hasOverride = getExtendedIcon(key, NO_ENTRY, themeName) !== NO_ENTRY;
   const fallback =
     name in REGISTRY_FALLBACKS
       ? REGISTRY_FALLBACKS[name as keyof typeof REGISTRY_FALLBACKS]

@@ -24,13 +24,13 @@ export const docs = {
     ],
   },
   description:
-    'Groups an input with prefix/suffix addons in a visually connected container with shared border and focus ring.',
+    'Groups an input with prefix and suffix addons in one connected row. A focused member stays above its neighbours, so its focus ring shows in full.',
   props: [
     {
       name: 'children',
       type: 'ReactNode',
       description:
-        'InputGroupText, Button addons, and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, or MultiSelector.',
+        'InputGroupText, Button addons, and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, or MultiSelector.',
       required: true,
     },
     {
@@ -59,7 +59,7 @@ export const docs = {
     {
       name: 'isOptional',
       type: 'boolean',
-      description: 'Show "(optional)" indicator.',
+      description: 'Show the "Optional" indicator after the label.',
       default: 'false',
     },
     {
@@ -77,7 +77,8 @@ export const docs = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: 'Status indicator applied to the group border.',
+      description:
+        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`.',
     },
     {
       name: 'labelTooltip',
@@ -118,12 +119,17 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, and MultiSelector.',
+          'Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, and MultiSelector.',
       },
       {
         guidance: true,
         description:
           "Keep each inner input's label specific; grouped inputs automatically combine the group label with their own label and inherit the group description/status context.",
+      },
+      {
+        guidance: true,
+        description:
+          'Keep multi-value controls (Tokenizer, MultiSelector) short inside a group — the group is a fixed-height single-line surface, so cap or summarize selections instead of letting them fill the row.',
       },
       {
         guidance: false,
@@ -152,7 +158,7 @@ export const docs = {
         name: 'Input',
         required: true,
         description:
-          'The main input element (TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, or MultiSelector).',
+          'The main input element (TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, or MultiSelector).',
       },
       {
         name: 'Suffix addon',
@@ -194,12 +200,17 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, and MultiSelector.',
+          'Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, and MultiSelector.',
       },
       {
         guidance: true,
         description:
           "Keep each inner input's label specific; grouped inputs combine the group label with their own label and inherit group description/status.",
+      },
+      {
+        guidance: true,
+        description:
+          'Keep multi-value controls (Tokenizer, MultiSelector) short inside a group; the group row is fixed-height and single-line.',
       },
       {
         guidance: false,

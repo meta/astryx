@@ -24,7 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 
 export const colorDefaults = {
   // Core semantic
-  '--color-accent': 'light-dark(#0064E0, #2694FE)',
+  '--color-accent': 'light-dark(#0064E0, #0171E3)',
   '--color-accent-muted': 'light-dark(#0082FB33, #0082FB3F)',
   '--color-on-accent': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-neutral':
@@ -38,7 +38,10 @@ export const colorDefaults = {
 
   // Text
   '--color-text-primary': 'light-dark(#0A1317, #DFE2E5)',
-  '--color-text-secondary': 'light-dark(#4E606F, #AAAFB5)',
+  // Dark secondary text also sits on the translucent `--color-neutral` fill
+  // (a SegmentedControl track, AvatarGroup's overflow), which lifts the
+  // surface and card under it. This stop keeps it at 4.5:1 there.
+  '--color-text-secondary': 'light-dark(#4E606F, #B0B5BB)',
   '--color-text-disabled': 'light-dark(#A4B0BC, #6F747C)',
   '--color-text-accent': 'light-dark(#0064E0, #3E9EFB)',
   '--color-on-dark': 'light-dark(#FFFFFF, #FFFFFF)',
@@ -255,10 +258,8 @@ export const radiusDefaults = {
   '--radius-element': '8px',
   '--radius-container': '12px',
   '--radius-page': '28px',
-  // Chat surfaces (bubbles, composer, drawer) are intentionally rounder than
-  // cards in the same view. Tracks --radius-page's value by default but is a
-  // distinct token so chat rounding can be themed independently. See #2072.
-  '--radius-chat': '28px',
+  // A distinct token, so a theme can make chat rounder or squarer than its cards.
+  '--radius-chat': 'var(--radius-container)',
   '--radius-full': '9999px',
 } as const;
 
@@ -307,6 +308,8 @@ export const durationDefaults = {
   '--duration-slow-min': '730ms',
   '--duration-slow': '975ms',
   '--duration-slow-max': '1300ms',
+  /** The standard dismissal duration. */
+  '--duration-exit': 'var(--duration-fast)',
 } as const;
 
 export const durationVars = stylex.defineVars(durationDefaults);
@@ -316,9 +319,24 @@ export type DurationVarName = keyof typeof durationDefaults;
 // =============================================================================
 // Motion Tokens — Easing
 // =============================================================================
+// --ease-standard decelerates: things arriving and state changes.
+// --ease-exit accelerates: things leaving. It moves off from rest (no rise at
+// the start) and is quickest as the surface leaves, so the travel lands inside
+// the duration instead of in its first few frames.
 
 export const easeDefaults = {
   '--ease-standard': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Entrances: a layer or element arriving. A theme's `character` sets it
+   * (spec:AST-108 FR2); at `'standard'` it equals --ease-standard.
+   */
+  '--ease-entrance': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Moves: an element changing place or size on screen. A theme's
+   * `character` sets it; at `'standard'` it equals --ease-standard.
+   */
+  '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-exit': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
 } as const;
 
 export const easeVars = stylex.defineVars(easeDefaults);

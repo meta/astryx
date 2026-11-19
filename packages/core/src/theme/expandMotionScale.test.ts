@@ -139,7 +139,7 @@ describe('touch motion stays internal', () => {
       fs.readFileSync(path.resolve(__dirname, file), 'utf8');
     expect(read('../index.ts')).not.toMatch(/from '\.\/motion/);
     expect(read('./index.ts')).not.toMatch(
-      /expandMotionRoles|motionScaleOf|MotionConfig|MotionRoleValues|MotionCurvePoints|registerMotionTable|motion\/role/,
+      /expandMotionRoles|motionScaleOf|\bMotionConfig\b|MotionRoleValues|MotionCurvePoints|registerMotionTable|motion\/role/,
     );
   });
 });

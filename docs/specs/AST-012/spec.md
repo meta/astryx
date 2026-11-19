@@ -118,7 +118,8 @@ A breakpoint map alone emits no CSS. Only rules with adaptation values do.
   `localTokens` or an enrolled exact base declares names. A rule may replace only
   an exact name already enrolled in the effective lineage and uses AST-006's
   `TokenValue` normalization and validation. Identity, inheritance, syntax, icons,
-  indicators, media-surface fields, and adaptations remain root-owned. Within one
+  indicators, media-surface fields, adaptations, and `motion.reducedMotion`
+  (`spec:AST-108` FR5) remain root-owned. Within one
   rule, values use the root expansion, deep-merge, and kind precedence. A
   generative axis expands against the root axis metadata, and every produced leaf
   counts as a write by that rule except invariant type-scale component defaults

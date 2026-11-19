@@ -16,6 +16,8 @@ import {LayoutHeader} from '@astryxdesign/core/Layout';
 import {LayoutContent} from '@astryxdesign/core/Layout';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Heading} from '@astryxdesign/core/Text';
+import {OverflowList} from '@astryxdesign/core/OverflowList';
+import ToolbarTableFilter from '../../../packages/cli/assets/templates/blocks/components/Toolbar/ToolbarTableFilter';
 import {
   Cog6ToothIcon,
   FunnelIcon,
@@ -72,7 +74,7 @@ export const Default: Story = {
   },
 };
 
-/** Three-slot layout: CSS grid 1fr auto 1fr. Center content stays centered regardless of start/end width. */
+/** Three-slot layout. The center sits at the middle while each side lane fits in half of the width it leaves; when the lanes do not fit, the row wraps. */
 export const ThreeSlot: Story = {
   render: () => (
     <Toolbar
@@ -271,6 +273,36 @@ export const PageHeader: Story = {
         <Text type="body">Settings form content...</Text>
       </Section>
     </Card>
+  ),
+};
+
+/**
+ * Two lanes that do not fit one row on a phone: the row wraps, the title and
+ * its count stay on one line, and the end lane moves below.
+ */
+export const TwoLaneNarrow: Story = {
+  name: 'Readiness: two lanes on a narrow screen',
+  parameters: {layout: 'fullscreen'},
+  render: () => (
+    <Toolbar
+      label="Board actions"
+      startContent={
+        <>
+          <Heading level={3}>Sprint Board</Heading>
+          <Badge label={7} variant="neutral" />
+        </>
+      }
+      endContent={
+        <>
+          <Button label="Sort" variant="ghost" />
+          <Button label="Filter" variant="ghost" />
+          <Button
+            label="Add task"
+            icon={<PlusIcon style={{width: 16, height: 16}} />}
+          />
+        </>
+      }
+    />
   ),
 };
 
@@ -485,4 +517,137 @@ export const WithCenterTabNavigation: Story = {
       </Card>
     );
   },
+};
+
+/** Center tab navigation with an end action and no start lane. */
+export const CenterTabNavigationEndOnly: Story = {
+  name: 'Composition: Center Tab Navigation, End Only',
+  render: () => {
+    const [tab, setTab] = useState('overview');
+    return (
+      <Card>
+        <Toolbar
+          label="Center tab navigation"
+          dividers={['bottom']}
+          centerContent={
+            <TabList
+              value={tab}
+              onChange={setTab}
+              aria-label="Center tab navigation">
+              <Tab value="overview" label="Overview" />
+              <Tab value="analytics" label="Analytics" />
+              <Tab value="settings" label="Settings" />
+            </TabList>
+          }
+          endContent={<Button label="New item" />}
+        />
+        <Section>
+          <Text type="body">Content for the center tab navigation</Text>
+        </Section>
+      </Card>
+    );
+  },
+};
+
+const OVERFLOW_ACTIONS = [
+  'Save',
+  'Edit',
+  'Duplicate',
+  'Share',
+  'Archive',
+  'Delete',
+];
+
+function overflowActions() {
+  return (
+    <OverflowList
+      gap={2}
+      overflowRenderer={items => (
+        <Button label={`+${items.length}`} variant="ghost" size="sm" />
+      )}>
+      {OVERFLOW_ACTIONS.map(action => (
+        <Button key={action} label={action} variant="ghost" size="sm" />
+      ))}
+    </OverflowList>
+  );
+}
+
+/** Bulk selection with an OverflowList of actions in the start lane: the actions fold into a "+N" trigger beside the end lane instead of pushing it out. Resize the frame to see it. */
+export const OverflowActions: Story = {
+  name: 'Composition: Bulk Selection with Overflow Actions',
+  render: () => (
+    <div
+      data-testid="overflow-actions-frame"
+      style={{
+        width: 480,
+        maxWidth: '100%',
+        resize: 'horizontal',
+        overflow: 'auto',
+      }}>
+      <Toolbar
+        label="Bulk actions"
+        size="sm"
+        variant="muted"
+        startContent={
+          <>
+            <Badge label="5 selected" />
+            {overflowActions()}
+          </>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
+};
+
+/** The same actions inside a wrapper in the start lane: the lane keeps its content width, as before, because the list is not the lane's own child. */
+export const NestedOverflowActions: Story = {
+  name: 'Composition: Nested Overflow Actions',
+  render: () => (
+    <div data-testid="nested-overflow-frame" style={{width: 1280}}>
+      <Toolbar
+        label="Bulk actions"
+        size="sm"
+        startContent={
+          <span style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <Badge label="5 selected" />
+            {overflowActions()}
+          </span>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
+};
+
+/** The CLI's table filter toolbar template, whose clause list sits inside its own row in the start lane. */
+export const TableFilterTemplate: Story = {
+  name: 'Template: Table Filter',
+  render: () => (
+    <div
+      data-testid="table-filter-frame"
+      style={{width: 1280, maxWidth: '100%'}}>
+      <ToolbarTableFilter />
+    </div>
+  ),
+};
+
+/** Two lists as the start lane's own children share the room beside the end lane; each folds into its own trigger without clipping. */
+export const TwoOverflowLists: Story = {
+  name: 'Composition: Two Overflow Lists',
+  render: () => (
+    <div data-testid="two-lists-frame" style={{width: 530, maxWidth: '100%'}}>
+      <Toolbar
+        label="Two action groups"
+        size="sm"
+        startContent={
+          <>
+            {overflowActions()}
+            {overflowActions()}
+          </>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
 };

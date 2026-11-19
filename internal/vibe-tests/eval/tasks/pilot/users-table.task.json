@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "users-table",
+  "source": "dd-1",
+  "title": "Searchable, sortable users table",
+  "prompt": "Show a table of these six users with the columns Name, Email, Role and Joined: Ada Lovelace, ada@example.com, Admin, 2024-03-01; Grace Hopper, grace@example.com, Editor, 2023-11-15; Alan Turing, alan@example.com, Viewer, 2024-06-20; Katherine Johnson, katherine@example.com, Editor, 2022-09-05; Linus Torvalds, linus@example.com, Viewer, 2023-01-30; Margaret Hamilton, margaret@example.com, Admin, 2024-01-12. Use a real table that assistive technology reads as a table, with column headers, rows and cells. Above the table, a text field labelled \"Search users\" filters the rows as you type, matching the name or the email and ignoring case. When nothing matches, show \"No users found\". The Name column header contains a button that sorts the rows by name: the first press sorts A to Z, the next press sorts Z to A. The Name column header reports the current order to assistive technology with aria-sort."
+}

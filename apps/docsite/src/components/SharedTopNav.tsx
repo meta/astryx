@@ -24,10 +24,32 @@ import {AstryxIcon} from './logos';
 import {useThemeMode} from '../app/providers';
 import {trackSearch, trackClickCta} from '../lib/analytics';
 import {useAppShellHeaderHeight} from '../lib/useAppShellHeaderHeight';
+import {warmSearch, whenIdle} from '../lib/searchWarmup';
+
+type SearchPaletteModule = typeof import('./SearchPalette');
+let searchPaletteModule: Promise<SearchPaletteModule> | undefined;
+
+/** The palette's code, requested once; a failed load is tried again. */
+function loadSearchPalette(): Promise<SearchPaletteModule> {
+  searchPaletteModule ??= import('./SearchPalette').catch(error => {
+    searchPaletteModule = undefined;
+    throw error;
+  });
+  return searchPaletteModule;
+}
 
 const LazySearchPalette = lazy(() =>
-  import('./SearchPalette').then(module => ({default: module.SearchPalette})),
+  loadSearchPalette().then(module => ({default: module.SearchPalette})),
 );
+
+/**
+ * Get search ready before the reader types: start the search server (throttled
+ * per tab) and load the palette's code, so the first query waits for neither.
+ */
+function prepareSearch() {
+  warmSearch();
+  loadSearchPalette().catch(() => {});
+}
 
 const GitHubIcon = ({
   width = 20,
@@ -138,6 +160,7 @@ export function SharedTopNav() {
       ) {
         event.preventDefault();
         trackSearch({target: 'open'});
+        prepareSearch();
         setHasLoadedSearch(true);
         setIsSearchOpen(true);
       }
@@ -146,6 +169,14 @@ export function SharedTopNav() {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  // Synchronizes with the browser's idle scheduler: most readers open Search
+  // seconds after a page loads, so once the page is idle, get search ready and
+  // their first query does not wait on a cold start. Cleanup cancels the idle
+  // callback. The warm-up request itself belongs to the tab, not this nav
+  // (lib/searchWarmup.ts throttles it per tab), so a StrictMode replay or a
+  // remount sends no second request.
+  useEffect(() => whenIdle(prepareSearch), []);
 
   // Determine active nav item
   const getActiveItem = () => {
@@ -219,8 +250,11 @@ export function SharedTopNav() {
                 variant="ghost"
                 isIconOnly
                 icon={<Search size={20} />}
+                onPointerEnter={prepareSearch}
+                onFocus={prepareSearch}
                 onClick={() => {
                   trackSearch({target: 'open'});
+                  prepareSearch();
                   setHasLoadedSearch(true);
                   setIsSearchOpen(true);
                 }}

@@ -253,6 +253,34 @@ export const FromTwoTexts: Story = {
   },
 };
 
+/**
+ * A rewrite too large to compare line by line: the changed lines fold behind a
+ * labeled control until the reader shows them.
+ */
+export const LargeChange: Story = {
+  args: {
+    file: createDiffFile({
+      path: 'src/generated/schema.ts',
+      oldValue: [
+        '// Generated file. Do not edit.',
+        ...Array.from(
+          {length: 6000},
+          (_, i) => `export const field${i} = 'v1-${i}';`,
+        ),
+        'export default {};',
+      ].join('\n'),
+      newValue: [
+        '// Generated file. Do not edit.',
+        ...Array.from(
+          {length: 6000},
+          (_, i) => `export const field${i} = 'v2-${i}';`,
+        ),
+        'export default {};',
+      ].join('\n'),
+    }),
+  },
+};
+
 /** File header actions: a "Viewed" checkbox that also folds the file away. */
 export const ViewedToggle: Story = {
   render: args => {

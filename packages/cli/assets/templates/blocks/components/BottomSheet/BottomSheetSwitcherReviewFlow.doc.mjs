@@ -4,16 +4,18 @@
 export const doc = {
   type: 'block',
   exampleFor: 'BottomSheetSwitcher',
-  name: 'Bottom Sheet Switcher — Review flow',
-  displayName: 'Bottom Sheet Switcher — Review flow',
+  alsoExampleFor: ['BottomSheet'],
+  // The published registry identity predates the rewrite; keep it.
+  registry: {slug: 'review-flow'},
+  name: 'Bottom Sheet — Review flow',
+  displayName: 'Bottom Sheet — Review flow',
   description:
-    'A two-step form flow that lets a person review settings, confirm them, or move back, each step in its own native dialog under one scrim.',
+    'A two-step form flow of two standalone sheets driven by one state value: Continue replaces the review step with the confirmation in place, and Back returns.',
   isReady: true,
   isShowcase: false,
   aspectRatio: 3 / 4,
   componentsUsed: [
     'BottomSheet',
-    'BottomSheetSwitcher',
     'Button',
     'Heading',
     'Section',

@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'arrowLeft',
+  group: 'arrows',
   description: 'Go back to the previous page.',
   words: ['back', 'previous'],
 };

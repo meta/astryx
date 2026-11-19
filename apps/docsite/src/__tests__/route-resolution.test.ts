@@ -9,6 +9,7 @@ import {
 import {packages} from '../generated/packageRegistry';
 import {linkifyCode} from '../components/codeLinkifiers';
 import {buildOutline} from '../components/docs/docOutline';
+import {docsSidebarGroups} from '../components/docsSidebarData';
 
 /**
  * Every topic page the site had before the CLI's docs were split into
@@ -89,24 +90,30 @@ describe('route resolution', () => {
 
   it('lists the guides the sidebar listed before the splits, plus new topics only', () => {
     // The Guide section as it was before the CLI integration guide and the
-    // other topics were split into short guides. `styling-overview` and
-    // `cli-host-entry` are topics added since; `global` is the Global mode
+    // other topics were split into short guides. `styling-overview`,
+    // `cli-host-entry` and `cli-skill-places` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
     // `use-integrations` is the guide for apps that install one;
-    // `cli-experimental-render-pages` is the experimental render guide.
-    const sidebarGuides = docTopics
-      .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
+    // `cli-experimental-export-pages` is the experimental export guide and
+    // `cli-experimental-share-a-page` the task guide that uses it;
+    // `calendars` is the calendar systems page.
+    // `styling` shows under `styling-overview`, and
+    // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
+    // under Icons in Foundations.
+    const sidebarGuides = docsSidebarGroups(docTopics)
+      .guide.flatMap(({page, children}) => [page, ...children])
       .map(d => d.topic)
       .sort();
     expect(sidebarGuides).toEqual(
       [
         'authoring',
         'browser-support',
+        'calendars',
         'cli-component-lookups',
-        'cli-experimental-icon-set-files',
-        'cli-experimental-icon-sets',
-        'cli-experimental-render-pages',
+        'cli-experimental-export-pages',
+        'cli-experimental-share-a-page',
         'cli-host-entry',
+        'cli-skill-places',
         'global',
         'internationalization',
         'is-my-code-good',
@@ -120,6 +127,24 @@ describe('route resolution', () => {
         'use-integrations',
         'working-with-ai',
       ].sort(),
+    );
+  });
+
+  it('shows Calendars as its own guide page, under Internationalization in the sidebar', () => {
+    const calendars = pageBySlug.get('calendars');
+    expect(calendars?.category).toBe('guide');
+    expect(calendars?.sections.map(section => section.id)).toContain(
+      'lunisolar-calendars',
+    );
+    expect(docRedirects['calendars-calendar-systems']).toBe(
+      '/docs/calendars#choose-a-calendar',
+    );
+    // The short guide stays on the Internationalization page.
+    expect(docRedirects['internationalization-i18n-calendars']).toMatch(
+      /^\/docs\/internationalization#/,
+    );
+    expect(docTopics.find(d => d.topic === 'calendars')?.parent).toBe(
+      'internationalization',
     );
   });
 

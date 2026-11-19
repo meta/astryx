@@ -25,8 +25,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const TEMPLATE_LEDGER_FILENAME = 'template-scores.json';
 export const TEMPLATE_LEDGER_URL =
-  'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json';
-export const WIKI_REMOTE = 'https://github.com/facebook/astryx.wiki.git';
+  'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json';
+export const WIKI_REMOTE = 'https://github.com/meta/astryx.wiki.git';
 export const WIKI_BRANCH = 'master';
 export const TEMPLATE_AUDITS_PAGE_URL =
   'https://astryx.atmeta.com/sandbox/templates/';
@@ -540,7 +540,7 @@ export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
 
 export function repoFromWikiRemote(remote = WIKI_REMOTE) {
   const match = /github\.com[/:]([^/]+)\/(.+?)\.wiki(\.git)?$/.exec(remote);
-  return match ? `${match[1]}/${match[2]}` : 'facebook/astryx';
+  return match ? `${match[1]}/${match[2]}` : 'meta/astryx';
 }
 
 export function wikiCommitUrl(sha, remote = WIKI_REMOTE) {

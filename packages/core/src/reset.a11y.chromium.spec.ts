@@ -14,7 +14,7 @@
 
 import * as fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 
@@ -27,7 +27,7 @@ const RESET_CSS = fs.readFileSync(
 // placeholder takes the reset's fallback: the token's own light-dark() default.
 const PLACEHOLDER_FALLBACK = {
   light: 'rgb(78, 96, 111)',
-  dark: 'rgb(170, 175, 181)',
+  dark: 'rgb(176, 181, 187)',
 };
 
 /** Every style rule's selector, in source order, comments stripped. */

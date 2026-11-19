@@ -10,8 +10,8 @@ import type {DocsTarget} from '../lib/docsVersions';
 /**
  * Footer link to the sibling content line: from the Latest (production) site
  * over to the Canary docs, or back again. This is the low-key, persistent way
- * to reach Canary from production; on Canary the prominent CanaryBanner carries
- * the primary link back to Latest.
+ * to reach Canary from production; on Canary the docs info banner carries
+ * the primary link back to production.
  *
  * Renders nothing when there is no distinct sibling to link to (e.g. a local
  * build where the destination resolves to the current origin).
