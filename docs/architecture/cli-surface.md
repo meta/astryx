@@ -414,13 +414,14 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   another JSX runtime. When the project has no TypeScript that it can use,
   has a `tsconfig` or `jsconfig`, read by a page that imports Core, whose
   `jsxImportSource` or `jsxFactory` names another runtime, has a build config
-  in the folder of such a page or a folder above it (Babel, SWC, Vite,
-  Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or tsup, or the `babel`
-  key of a `package.json`) that sets another JSX runtime or a Babel plugin that
-  compiles a `css` prop, or has more source files than `doctor` reads, the
-  check does not run and says why, whatever props the pages give. When
-  there is a candidate and the types or the files that augment Core cannot
-  all be read, it reports no prop and says why. The warning names up to
+  in the folder of such a page or a folder above it, up to the project folder
+  (Babel, SWC, Vite, Vitest, esbuild, webpack, Rspack, Rsbuild, Next.js or
+  tsup, or the `babel` key of a `package.json`), that sets another JSX
+  runtime or factory or a transform that compiles a `css` prop (from emotion,
+  styled-components or Compiled), or has more source files than `doctor`
+  reads, the check does not run and says why, whatever props the pages give.
+  When there is a candidate and the types or the files that augment Core
+  cannot all be read, it reports no prop and says why. The warning names up to
   eight props, each with its file, line and component and the documented
   prop that has the same words when there is one, and counts the rest. It
   never fails `doctor`.

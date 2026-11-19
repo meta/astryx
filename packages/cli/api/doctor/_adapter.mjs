@@ -372,17 +372,19 @@ const BUILD_CONFIG =
   /^(?:\.babelrc(?:\.[cm]?js|\.json)?|babel\.config\.(?:[cm]?[jt]s|json)|\.swcrc|(?:vite|vitest|webpack|rspack|rsbuild|next|esbuild|tsup)\.config\.[cm]?[jt]s)$/;
 
 /**
- * A build setting that compiles JSX with a runtime other than React's: a
- * `jsxImportSource` or `importSource` other than `react`, or a Babel plugin
- * that compiles a `css` prop away (emotion's css-prop preset, or the
- * styled-components or Compiled plugin).
+ * A build setting that compiles JSX other than as React does: a runtime
+ * (`jsxImportSource`, `importSource`) other than `react`; a classic factory
+ * (`jsxFactory`, `pragma`) other than `React.createElement`, or one injected
+ * (`jsxInject`); or a transform that compiles a `css` prop, from emotion,
+ * styled-components or Compiled, as a Babel or SWC plugin or a Next.js
+ * compiler option.
  */
 const BUILD_JSX_RUNTIME =
-  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|@emotion\/babel-preset-css-prop|babel-plugin-styled-components|@compiled\/babel-plugin/;
+  /\b(?:jsxImportSource|importSource)['"]?\s*[:=]\s*['"](?!react['"])[^'"\s]+['"]|\b(?:jsxFactory|pragma)['"]?\s*[:=]\s*['"](?!React\.createElement['"])[^'"\s]+['"]|\bjsxInject\b|@emotion\/babel|styled-components|\bstyledComponents\b|@compiled\//;
 
 /**
- * The first build config that compiles JSX with another runtime, in the
- * folder of a page or a folder above it up to the project folder: a config
+ * The first build config that compiles JSX other than as React does, in the
+ * folder of a page or a folder above it, up to the project folder: a config
  * file, or the `babel` key of a `package.json`. Null when there is none.
  * @param {string[]} pages
  * @param {string} projectDir
@@ -515,7 +517,9 @@ export async function findUnknownCoreProps(projectDir) {
   }
   const build = buildJsxRuntime(corePages, projectDir);
   if (build) {
-    return notChecked(`the build config \`${relative(build)}\` compiles JSX with another runtime, which can give every component props of its own`);
+    return notChecked(
+      `the build config \`${relative(build)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
+    );
   }
   // One batch read of the props Core's docs list, as `astryx component
   // <Name> --props` prints them; a component they do not describe is not

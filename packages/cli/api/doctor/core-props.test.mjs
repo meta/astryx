@@ -186,13 +186,23 @@ describe('doctor core-props', () => {
         'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
       });
       expect(vite?.status).toBe('info');
-      expect(vite?.message).toMatch(/^Not checked: the build config `vite\.config\.js` compiles JSX with another runtime/);
+      expect(vite?.message).toMatch(/^Not checked: the build config `vite\.config\.js` sets another JSX runtime or compiles a `css` prop/);
       const babel = await propsCheck({
         'package.json': JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}, babel: {presets: ['@emotion/babel-preset-css-prop']}}),
         'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
       });
       expect(babel?.status).toBe('info');
-      expect(babel?.message).toMatch(/^Not checked: the build config `package\.json` compiles JSX with another runtime/);
+      expect(babel?.message).toMatch(/^Not checked: the build config `package\.json` sets another JSX runtime or compiles a `css` prop/);
+      // A classic factory, and the SWC and Next.js forms of a css-prop transform.
+      for (const [config, text] of [
+        ['vite.config.js', "export default {esbuild: {jsxFactory: 'jsx', jsxInject: \"import {jsx} from '@emotion/react'\"}};\n"],
+        ['.babelrc', JSON.stringify({presets: [['@babel/preset-react', {runtime: 'classic', pragma: 'jsx'}]]})],
+        ['.swcrc', JSON.stringify({jsc: {experimental: {plugins: [['@swc/plugin-styled-components', {cssProp: true}]]}}})],
+        ['next.config.js', 'module.exports = {compiler: {styledComponents: true}};\n'],
+      ]) {
+        const other = await propsCheck({[config]: text, 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
+        expect(other?.status, config).toBe('info');
+      }
       // A build config that names React's runtime is React's.
       const react = await propsCheck({
         'vite.config.js': "import react from '@vitejs/plugin-react';\nexport default {plugins: [react({jsxImportSource: 'react'})]};\n",
