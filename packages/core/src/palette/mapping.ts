@@ -174,7 +174,7 @@ export interface PaletteMapping {
   /** Lifted secondary text per background token of LIFT_PARTS, per mode; null without one. */
   lift: Record<string, Partial<Record<PaletteMode, StopRef>>> | null;
   /** The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read. */
-  kept: Array<{token: string; mode: PaletteMode; pair: string; ratio: number}>;
+  kept: {token: string; mode: PaletteMode; pair: BasePair; ratio: number}[];
   /** The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why. */
   statuses: {
     roles: Record<string, 'derived' | 'unreadable' | 'alike'>;
@@ -1097,40 +1097,41 @@ const TEXT_PROPS = [
   '--color-text-accent',
 ];
 
-/** A pair's name as a person reads it: "the blue card's primary text". */
-const pairLabel = (part: string, key: string, prop: string): string => {
-  const which =
-    /^(?:variant|color):(.+)$/.exec(key)?.[1] ?? key.replace(':', ' ');
-  const role =
-    prop === 'color' ? 'text' : `${prop.replace(/^--color-text-/, '')} text`;
-  return `the ${which === 'base' ? '' : `${which} `}${part.replace(/-/g, ' ')}'s ${role}`;
-};
+/**
+ * A text/fill pair a base theme draws: a category's text on its fill, a
+ * status's text on its fill or its tint, or the text a part's rule block
+ * sets on its fill. The editor words it.
+ */
+export type BasePair =
+  | {kind: 'category'; hue: string}
+  | {kind: 'status'; role: string; tint: boolean}
+  | {kind: 'part'; part: string; block: string; prop: string};
 
 /**
  * The text/fill pairs a base theme draws: Core's own (each category's text
  * on its fill; each status's text on its fill and on its tint) and those of
  * the base theme's rules (a coloured card's text on its fill, a part's text
- * color on its background), as `[label, text, fill]` values a mode resolves.
+ * color on its background), as `[pair, text, fill]` values a mode resolves.
  */
 function basePairs(
   base: PaletteBase | undefined,
-): Array<[string, string, string]> {
-  const out: Array<[string, string, string]> = [];
+): [BasePair, string, string][] {
+  const out: [BasePair, string, string][] = [];
   for (const hue of CATEGORY_HUES) {
     out.push([
-      `${hue} category text`,
+      {kind: 'category', hue},
       `var(--color-text-${hue})`,
       `var(--color-background-${hue})`,
     ]);
   }
   for (const role of ['info', 'success', 'warning', 'error']) {
     out.push([
-      `text on ${role}`,
+      {kind: 'status', role, tint: false},
       `var(--color-on-${role})`,
       `var(--color-${role})`,
     ]);
     out.push([
-      `text on the ${role} tint`,
+      {kind: 'status', role, tint: true},
       `var(--color-on-${role}-muted)`,
       `var(--color-${role}-muted)`,
     ]);
@@ -1148,7 +1149,7 @@ function basePairs(
         block.backgroundColor ??
         (hue &&
         HUE_FILL_PARTS.includes(part) &&
-        (CATEGORY_HUES as readonly string[]).includes(hue)
+        (CATEGORY_HUES as ReadonlyArray<string>).includes(hue)
           ? `var(--color-background-${hue})`
           : null);
       if (typeof fill !== 'string') {
@@ -1157,7 +1158,7 @@ function basePairs(
       for (const prop of TEXT_PROPS) {
         const text = block[prop];
         if (typeof text === 'string') {
-          out.push([pairLabel(part, key, prop), text, fill]);
+          out.push([{kind: 'part', part, block: key, prop}, text, fill]);
         }
       }
     }
@@ -1194,7 +1195,7 @@ function keepWhereBaseReads(
     if (depth > 6) {
       return null;
     }
-    let x = String(v).trim();
+    let x = v.trim();
     const pair = /^light-dark\((.*)\)$/is.exec(x);
     if (pair) {
       const halves = splitTopComma(pair[1]);
@@ -1212,24 +1213,22 @@ function keepWhereBaseReads(
       return null;
     }
     const page = reader.rgb(
-      String(
-        (now ? tokens['--color-background-body']?.[m]?.color : null) ??
-          base?.[m]?.['--color-background-body'] ??
-          (m === 'light' ? '#ffffff' : '#000000'),
-      ),
+      (now ? tokens['--color-background-body']?.[m]?.color : null) ??
+        base?.[m]?.['--color-background-body'] ??
+        (m === 'light' ? '#ffffff' : '#000000'),
     );
     const a = reader.alpha(x);
     return a < 1 && page ? compositeOver(rgb, a, page) : rgb;
   };
   /** The look tokens a value reads. */
   const reads = (v: string): string[] =>
-    [...String(v).matchAll(/var\((--[\w-]+)\)/g)]
+    [...v.matchAll(/var\((--[\w-]+)\)/g)]
       .map(x => x[1])
       .filter(k => isLook(k) && k in tokens);
   for (let round = 0; round < 6; round++) {
     let changed = false;
     for (const m of modes) {
-      for (const [label, text, fill] of pairs) {
+      for (const [pair, text, fill] of pairs) {
         const involved = [...reads(text), ...reads(fill)].filter(
           k => tokens[k]?.[m]?.family !== 'literal',
         );
@@ -1253,9 +1252,9 @@ function keepWhereBaseReads(
           }
           tokens[k] = {
             ...tokens[k],
-            [m]: {stop: 0, color: String(value), family: 'literal'},
+            [m]: {stop: 0, color: value, family: 'literal'},
           };
-          kept.push({token: k, mode: m, pair: label, ratio: round2(now)});
+          kept.push({token: k, mode: m, pair, ratio: round2(now)});
           changed = true;
         }
       }
@@ -1375,12 +1374,13 @@ export function mapPalette(
     token: string,
     id: string,
   ): Partial<Record<PaletteMode, StopRef>> => {
-    const core = String(context.defaults?.[token] ?? '').trim();
+    const raw = context.defaults?.[token];
+    const core = (typeof raw === 'string' ? raw : '').trim();
     const halves = /^light-dark\((.*)\)$/i.exec(core);
     const parts = halves ? splitTopComma(halves[1]) : [core];
     return each(m => {
       const target = parseColor(
-        String(parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
+        (parts[m === 'light' ? 0 : parts.length - 1] ?? '').trim(),
       );
       const best = target
         ? stops.reduce((x, y) =>
@@ -1741,9 +1741,7 @@ export function mapPalette(
       each(m => {
         const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
         const from = fill[m] as StopRef;
-        const own = exactFill[m]
-          ? solid(exactFill[m] as string, m, f.id)
-          : null;
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
         if (
           own &&
           Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
@@ -1972,10 +1970,7 @@ export function mapPalette(
    */
   const lookColors = (ks: string[], m: PaletteMode): string[] =>
     ks
-      .map(
-        k =>
-          tokens[k]?.[m]?.color ?? t.colorIn(String(base?.[m]?.[k] ?? ''), m),
-      )
+      .map(k => tokens[k]?.[m]?.color ?? t.colorIn(base?.[m]?.[k] ?? '', m))
       .filter((v): v is string =>
         Boolean(v && parseColor(v) && alphaOf(v) >= 1),
       );
@@ -2008,7 +2003,7 @@ export function mapPalette(
         t.onChoices(id, m).map(r => ({
           stop: r.stop,
           color: r.color,
-          family: String(r.family ?? 'neutral'),
+          family: r.family ?? 'neutral',
         })),
       accent: m => tokens['--color-accent']?.[m]?.color ?? null,
       wanted: k => has(k) && !setExactly(k),
