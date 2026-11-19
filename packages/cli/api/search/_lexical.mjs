@@ -604,7 +604,9 @@ export function rankLexical(query, options, catalog) {
   // asks for TabList before its Tab, and `code sample` for CodeBlock before
   // its Code, whatever their scores; a query holding
   // "item" keeps ListItem before List, and `breadcrumbitm` keeps
-  // BreadcrumbItem first. The scores and this order stay as they are: the
+  // BreadcrumbItem first. A root whose hits are weaker than keyword strength
+  // leads only inside its part's run (weakRootsOf). The scores and this order
+  // stay as they are: the
   // order of matches moves the root directly before its part (rootLeadsOf).
   /** @type {Map<object, object>} */
   const rootLeads = new Map();
@@ -632,10 +634,12 @@ export function rankLexical(query, options, catalog) {
           !pluralOf(t, joined(family)) &&
           typoDistance(t, joined(r.candidate.name)) != null,
       );
-    // Whether a root's own hits on the words its part answers are name or
-    // keyword hits. A root with weaker evidence leads its part only inside the
-    // part's run (rootsFirst): `router` keeps a part whose keyword is `router`
-    // above a root whose description only mentions it.
+    // Whether a root's own hits on the words its part answers have keyword
+    // strength (STRONG_TOKEN_SCORE: the whole name, the name's head word, or a
+    // keyword), not a word inside its name, a near spelling, or a mention in
+    // its text. A root with weaker hits leads its part only inside the part's
+    // run (rootsFirst): `router` keeps a part whose keyword is `router` above
+    // a root whose description only mentions it.
     /**
      * @param {(typeof ranked)[number]} root
      * @param {Set<string> | null} terms the words the part answered, or null

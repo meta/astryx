@@ -169,8 +169,9 @@ export const rootLeadsOf = new WeakMap();
 export const movedRootsOf = new WeakMap();
 
 /**
- * The parts, by lexical response, whose root leads them on weaker evidence
- * than a name or keyword hit (see rankLexical): such a root leads its part
+ * The parts, by lexical response, whose root leads them on hits weaker than
+ * keyword strength (STRONG_TOKEN_SCORE; see rankLexical): such a root leads
+ * its part
  * only inside the part's run. Module-private, so they never enter search's
  * JSON.
  * @type {WeakMap<object, Set<object>>}

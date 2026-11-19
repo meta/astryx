@@ -6,7 +6,7 @@
  * reason. A match never moves past one of another score band (BANDS below)
  * or another kind, doc or not; between runs the lexical order holds. The one
  * exception is a family's root that the lexical ranker marks as leading its
- * part on its own name or keyword hits: it moves directly before the part. A
+ * part with hits of keyword strength: it moves directly before the part. A
  * band
  * can be wide: 55–99 holds keyword matches beside one-word description hits,
  * and a synonym name match can score under 55, so inside a band a weaker match
@@ -22,7 +22,7 @@
  * that the lexical ranker marks as leading a part of its own family
  * (rootLeadsOf) moves directly before the part when it sits below it
  * (rootsFirst), after the part's tie is ordered as one block; a root with
- * only text evidence (weakRootsOf) moves so only inside the part's run.
+ * weaker hits (weakRootsOf) moves so only inside the part's run.
  */
 
 import {entryOf} from './_entries.mjs';

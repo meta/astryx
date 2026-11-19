@@ -75,9 +75,9 @@ owns response fields and compatibility.
   root does not, no query word, in any plural or stem form, is a word of the
   part's name that does not start a word of the root's name, and the query
   does not write the part's name of two or more words as one word, as is or
-  misspelled (a typed word that is the root's own name is no misspelling). A
-  root leads its part from another run only when its own hits on the words
-  the part answers are name or keyword hits, not mentions in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its evidence is text alone; nothing else crosses a run. Among matches of the first
+  misspelled (a typed word that is the root's own name, or its plural, is no
+  misspelling). A root leads its part from another run only when its own hits
+  on the words the part answers have keyword strength (the whole name, the name's head word, or a keyword), not a word inside its name, a near spelling, or a mention in its text. Such a root, when the order places it below that part, moves directly before the part, whatever its band, or only inside the part's run when its hits are weaker; nothing else crosses a run. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or
