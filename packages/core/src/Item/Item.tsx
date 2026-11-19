@@ -285,13 +285,13 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * `tabIndex`). Every other prop keeps landing on the root. The row's own
    * attributes win where they conflict. `aria-disabled` is the row's own,
    * from `isDisabled`: a disabled row's button or anchor says so and does not
-   * activate, and keeps the focus order these props give it. Where the root
-   * is the control (`as` is a link component, with or without a `role`),
-   * these land on the root after the row's other props, so on an attribute
-   * named in both places the `controlProps` value is the one written, a
-   * disabled row says so there too, and an invisible button the row still
-   * nests inside such a root for `onClick` takes none of them. A row given no
-   * `controlProps` renders as if the prop did not exist.
+   * activate, and keeps the enabled row's focus order, or the `tabIndex`
+   * these props set. Where the root is the control (`as` is a link component,
+   * with or without a `role`), these land on the root after the row's other
+   * props, so on an attribute named in both places the `controlProps` value
+   * is the one written, a disabled row says so there too, and an invisible
+   * button the row still nests inside such a root for `onClick` takes none of
+   * them. A row given no `controlProps` renders as if the prop did not exist.
    * Ignored, with a development warning, where the row renders no control: a
    * row with a `role` on a plain root (its parent owns keyboard access) or an
    * `interactiveRef` (the nested control is the one to attribute), a link
@@ -1120,6 +1120,11 @@ export function Item({
       {...restProps}
       {...rootControlProps}
       {...(rootControlProps != null ? disabledBagKeys : null)}
+      // A disabled link root drops its `href`, which made it a tab stop. It
+      // stays one unless the bag or the root sets a `tabIndex`.
+      {...(isDisabled && rootControlProps != null
+        ? {tabIndex: rootControlProps.tabIndex ?? restProps.tabIndex ?? 0}
+        : null)}
       {...swipeHandlers}
       {...linkRootProps}
       {...(isDelegate

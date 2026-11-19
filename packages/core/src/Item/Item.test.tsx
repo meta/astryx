@@ -4242,6 +4242,42 @@ describe('controlProps', () => {
     expect(root).not.toHaveAttribute('href');
   });
 
+  it('a disabled link root given a bag with no tabIndex stays a tab stop, as the enabled row is', () => {
+    render(
+      <Item
+        as={LinkRoot}
+        role="menuitem"
+        label="Docs"
+        href="/docs"
+        isDisabled
+        controlProps={{'aria-haspopup': 'menu'}}
+      />,
+    );
+    const root = screen.getByRole('menuitem', {name: 'Docs'});
+    expect(root).not.toHaveAttribute('href');
+    expect(root).toHaveAttribute('aria-disabled', 'true');
+    expect(root).toHaveAttribute('aria-haspopup', 'menu');
+    expect(root).toHaveAttribute('tabindex', '0');
+  });
+
+  it('a disabled link root given a bag with no tabIndex keeps the root\x27s own tabIndex', () => {
+    render(
+      <Item
+        as={LinkRoot}
+        role="menuitem"
+        label="Docs"
+        href="/docs"
+        isDisabled
+        tabIndex={-1}
+        controlProps={{'aria-haspopup': 'menu'}}
+      />,
+    );
+    expect(screen.getByRole('menuitem', {name: 'Docs'})).toHaveAttribute(
+      'tabindex',
+      '-1',
+    );
+  });
+
   it('on a link root, controlProps are written after the root\x27s props on a shared attribute', () => {
     render(
       <Item
