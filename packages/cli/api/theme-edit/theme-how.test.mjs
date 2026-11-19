@@ -863,6 +863,15 @@ describe('stripe answers keep to the stripe', () => {
       /--when parity:even(?! --state)(?! --mode)(?:\s|$)/,
     );
   });
+  // A stripe name beside another ask of the rows is that ask's.
+  it.each([
+    'alternate table row text color red',
+    'table rows alternate text color',
+  ])('writes no stripe for %s', async question => {
+    expect(await commandsFor(question)).not.toMatch(
+      /parity:|--color-background-muted|background/,
+    );
+  });
   it("reads a stripe ask that names no part as a table row's", async () => {
     expect(await commandsFor('zebra stripes')).toMatch(
       /--on table-row --when parity:even/,

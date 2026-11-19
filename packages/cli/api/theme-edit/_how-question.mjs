@@ -8558,14 +8558,16 @@ export function draftAnswer(ctx, env, question) {
       c.lengths.length
     )
       c.aspects = ['size'];
-  // "alternate row shading": the stripes the doc names, a fill ask.
+  // "alternate row shading": the stripes the doc names, a fill ask when
+  // the clause asks nothing else ("alternate table row text color red" is
+  // the text's).
   for (const c of clauses)
     if (
-      !c.aspects.includes('background') &&
+      !c.aspects.length &&
       c.parts.some(p => p.on === 'table-row') &&
       stripeNamesOf(ctx.project)(c.text)
     )
-      c.aspects = [...c.aspects, 'background'];
+      c.aspects = ['background'];
   // "shadow opacity 0.2", "card shadows with 30% alpha", "dialog shadows
   // 50% transparent": the layer's alpha is the ask, not the layer.
   for (const c of clauses)
