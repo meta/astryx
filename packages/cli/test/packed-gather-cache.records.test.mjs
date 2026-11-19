@@ -97,6 +97,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     );
     expect(plain).toContain("the CLI's own docs tree");
     expect(plain).toContain(
+      "what template reads from a template's source to name the components it uses",
+    );
+    expect(plain).toContain(
       "Core's and integrations' components with the doc parts the component matcher scores, Core hooks' declared keywords",
     );
     expect(plain).toContain(

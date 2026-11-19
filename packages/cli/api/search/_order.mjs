@@ -154,8 +154,7 @@ const PARTS_FIRST = 2;
 function tiesByFit(ranked, table, blockOf) {
   if (ranked.length < 3) return ranked;
   const first = nameWords(String(ranked[0].res.name ?? '')).map(fold);
-  const idf = table.fields.desc.idf;
-  const rarest = Math.max(0, ...idf.values());
+  const {idf, rarest} = table.fields.desc;
   /** @param {Item} it */
   const related = it => {
     // A part's name words start with the first result's whole name words:

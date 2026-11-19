@@ -690,9 +690,12 @@ export default function CheckoutWizardPage() {
               </HStack>
             </HStack>
 
+            {/* Only the side-by-side row wraps. A wrapping column sizes its
+                line to its widest content, which runs into the page's side
+                padding on a phone. */}
             <Stack
               direction={isNarrow ? 'vertical' : 'horizontal'}
-              wrap="wrap"
+              wrap={isNarrow ? undefined : 'wrap'}
               gap={6}
               vAlign="start">
               {/* When stacked, summary comes first in DOM as well as visual and
@@ -839,11 +842,13 @@ export default function CheckoutWizardPage() {
                             }
                           />
                         </StackItem>
-                        <Button
-                          label="Apply"
-                          variant="secondary"
-                          onClick={applyPromo}
-                        />
+                        <StackItem size="static">
+                          <Button
+                            label="Apply"
+                            variant="secondary"
+                            onClick={applyPromo}
+                          />
+                        </StackItem>
                       </HStack>
                     </VStack>
                   )}
