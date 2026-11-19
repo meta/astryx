@@ -85,13 +85,17 @@ const styles = stylex.create({
     strokeLinejoin: 'round',
   },
   empty: {
-    color: colorVars['--color-border-emphasized'],
-    '@media (forced-colors: active)': {color: 'CanvasText'},
+    color: {
+      default: colorVars['--color-border-emphasized'],
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
   filled: {
-    color: colorVars['--color-icon-yellow'],
+    color: {
+      default: colorVars['--color-icon-yellow'],
+      '@media (forced-colors: active)': 'Highlight',
+    },
     fill: 'currentColor',
-    '@media (forced-colors: active)': {color: 'Highlight'},
   },
   interactiveStar: {
     '--rating-color': {
