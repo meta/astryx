@@ -93,7 +93,10 @@ export const matchaTheme = defineTheme({
       withAlpha(neutral.light[20], '1a'),
       withAlpha(neutral.dark[75], '1a'),
     ],
-    '--color-background-muted': [neutral.light[95], neutral.dark[20]],
+    // Matcha's dark ramp is a deep gray neutral up to stop 15 and olive from
+    // stop 20, so dark surfaces stay at or under 15: the muted fill sits with
+    // the page, as it does in light mode.
+    '--color-background-muted': [neutral.light[95], neutral.dark[5]],
 
     // Text
     '--color-text-primary': [neutral.light[20], neutral.dark[75]],
@@ -128,7 +131,7 @@ export const matchaTheme = defineTheme({
 
     // Surface variants
     '--color-background-card': [neutral.light[100], neutral.dark[15]],
-    '--color-background-popover': [neutral.light[100], neutral.dark[20]],
+    '--color-background-popover': [neutral.light[100], neutral.dark[15]],
     '--color-background-inverted': [neutral.light[20], neutral.dark[75]],
 
     // Status / Sentiment

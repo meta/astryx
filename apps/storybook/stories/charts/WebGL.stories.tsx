@@ -22,7 +22,7 @@ import {
 import {createStreamSamples, scatterData, heatmapData} from './_data';
 
 const meta: Meta<typeof Chart> = {
-  title: 'Charts/WebGL',
+  title: 'Charts/Marks/WebGL',
   component: Chart,
 };
 export default meta;

@@ -37,7 +37,10 @@ export {
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
-export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
+export {
+  astryxDefinitionCoverage,
+  astryxIconDefinitions,
+} from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   setConfigString,

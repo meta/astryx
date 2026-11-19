@@ -23,7 +23,7 @@
 
 import {entryOf} from './_entries.mjs';
 import {fold, nameWords, queryWords, words} from './_query-words.mjs';
-import {searchedComponentsOf} from './_result.mjs';
+import {namedLeadsOf, searchedComponentsOf} from './_result.mjs';
 import {sameWord} from './_words.mjs';
 
 /** @typedef {import('./_entries.mjs').EntryTable} EntryTable */
@@ -84,9 +84,13 @@ export function orderMatches(table, order, lexical, query, limit, families) {
       learned: k === undefined ? Infinity : (place.get(k) ?? Infinity),
     };
   });
+  // An entry the query names: by a name match, or by a name of two or more
+  // words the lexical ranker put first (namedLeadsOf).
+  const leads = namedLeadsOf.get(lexical);
   const named = (/** @type {Item} */ it) =>
-    (it.res.score ?? 0) >= 95 &&
-    /^(exact name|plural of the name|name )/.test(it.res.reason ?? '');
+    ((it.res.score ?? 0) >= 95 &&
+      /^(exact name|plural of the name|name )/.test(it.res.reason ?? '')) ||
+    (leads?.has(it.res) ?? false);
   // Matches the lexical ranker scored the same move as one block, in its
   // order; the learned position of the block's first match places the block
   // in its run (not its best member's, which would let one strong member lift

@@ -213,6 +213,58 @@ describe('the run as meant', () => {
   });
 });
 
+describe('an option that answers a question', () => {
+  it.each([
+    '--yes',
+    '-y',
+    '--assume-yes',
+    '--non-interactive',
+    '--no-interactive',
+    '--no-input',
+  ])('says %s is not needed and names the run without it', flag => {
+    const {component} = program();
+    const a = answer(component, flag, ['component', 'Button', flag]);
+    expect(a?.message).toBe(
+      `${flag} is not needed: Astryx commands never ask questions. Drop it and run the command again.`,
+    );
+    expect(runs(a)).toEqual(['component Button']);
+  });
+
+  it('keeps the other options of the run', () => {
+    const {component} = program();
+    expect(
+      runs(answer(component, '--yes', ['component', '--list', '--yes'])),
+    ).toEqual(['component --list']);
+  });
+
+  it('names --apply on upgrade, which writes only with it', () => {
+    const {upgrade} = program();
+    upgrade.option('--apply', 'apply');
+    const a = answer(upgrade, '--yes', ['upgrade', '--from', '0.6.0', '--yes']);
+    expect(a?.message).toBe(
+      '--yes is not needed: Astryx commands never ask questions. upgrade writes only with --apply.',
+    );
+    expect(
+      a?.suggestions.map(s => s.name.replace(/^.*?astryx\S*\s+/, '')),
+    ).toEqual(['upgrade --from 0.6.0 --apply', 'upgrade --from 0.6.0']);
+  });
+
+  it('gives the plain answer to a listing run, which takes no approval', () => {
+    const {upgrade} = program();
+    upgrade.option('--apply', 'apply').option('--list', 'list');
+    const a = answer(upgrade, '--yes', ['upgrade', '--list', '--yes']);
+    expect(a?.message).toMatch(/Drop it and run the command again\.$/);
+    expect(runs(a)).toEqual(['upgrade --list']);
+  });
+
+  it('gives the usual answer for an option that is no answer to a question', () => {
+    const {component} = program();
+    expect(
+      answer(component, '--force', ['component', 'Button', '--force'])?.message,
+    ).toMatch(/^unknown option '--force': component takes /);
+  });
+});
+
 describe('runParses', () => {
   it('accepts a run each word of which the command takes', () => {
     const {root} = program();
@@ -361,6 +413,15 @@ describe('the CLI', () => {
     const meant = await runCli(['component', 'Text', '--json']);
     expect(meant.status).toBe(0);
     expect(JSON.parse(meant.stdout).type).toMatch(/^component/);
+  });
+
+  it('answers init --yes with init, which never asks a question', async () => {
+    const {status, stderr} = await runCli(['init', '--yes']);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(
+      /^Error: --yes is not needed: Astryx commands never ask questions\./m,
+    );
+    expect(stderr).toMatch(/^Run: .*astryx\S* init$/m);
   });
 
   it('names the options a command takes when the option points at none', async () => {

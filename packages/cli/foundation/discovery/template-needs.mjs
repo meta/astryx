@@ -27,7 +27,7 @@ import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, findPackageRoot, findWorkspaceRoot} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
-import {servingRootPackages} from '../runtime/package-root.mjs';
+import {hostedPagePackages} from '../runtime/package-root.mjs';
 import {runChoice} from '../release/run-context.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
 import {
@@ -290,9 +290,11 @@ function cliPackageRanges() {
  * in, or null; where it is set, printers show it instead of the command.
  * @param {string[]} packages
  * @param {string} cwd
+ * @param {string} [shownFrom] the folder the reason names other folders from;
+ *   `cwd` unless the command runs from another folder
  * @returns {{installCommand: string | null, noCommandReason: string | null, installGuidance: string | null}}
  */
-export function installCommandFor(packages, cwd) {
+export function installCommandFor(packages, cwd, shownFrom = cwd) {
   if (packages.length === 0) {
     return {installCommand: null, noCommandReason: null, installGuidance: null};
   }
@@ -311,7 +313,7 @@ export function installCommandFor(packages, cwd) {
       installGuidance,
     };
   }
-  const where = path.relative(cwd, resolved.dir) || '.';
+  const where = path.relative(shownFrom, resolved.dir) || '.';
   return {
     installCommand: null,
     noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
@@ -381,8 +383,8 @@ export function analyzeTemplateNeeds(source, cwd) {
   }
 
   // Outside a project, a page takes what the host's package set provides,
-  // so a package that set declares needs no install.
-  const provided = runChoice(cwd).inProject ? [] : servingRootPackages();
+  // as render serves it, so a package that set provides needs no install.
+  const provided = runChoice(cwd).inProject ? [] : hostedPagePackages();
   const missing = external.filter(
     p => !(p in projectDeps) && !provided.includes(p),
   );

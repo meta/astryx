@@ -80,6 +80,15 @@ import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 const TRACK_SIZE = {sm: [32, 20], md: [40, 24]} as const;
 
 /**
+ * The thumb circle's diameter of each size in each state, px. The thumb size
+ * styles below and the touch presentation's first value change read it.
+ */
+const THUMB_SIZE = {
+  sm: {off: 14, on: 16},
+  md: {off: 16, on: 20},
+} as const;
+
+/**
  * A finger: utils/touchPresentation.ts's TOUCH_QUERY. The touch presentation
  * is one model on every touch device: the lift, tracking, flip rule and
  * springs sit under it alone.
@@ -149,9 +158,9 @@ const ON_TRAVEL = 'calc(100cqi - 50cqb - 50%)';
 // scale alone; useSwitchTouch measures the box it renders.
 const thumbOffSizeStyles = stylex.create({
   sm: {
-    width: thumbWidth(14),
-    height: thumbHeight(14),
-    insetInlineStart: {default: null, [TOUCH]: restInset(14)},
+    width: thumbWidth(THUMB_SIZE.sm.off),
+    height: thumbHeight(THUMB_SIZE.sm.off),
+    insetInlineStart: {default: null, [TOUCH]: restInset(THUMB_SIZE.sm.off)},
     transform: {
       default: `translateX(${OFF_PLACE})`,
       ':is([dir="rtl"] *)': {
@@ -162,9 +171,9 @@ const thumbOffSizeStyles = stylex.create({
     },
   },
   md: {
-    width: thumbWidth(16),
-    height: thumbHeight(16),
-    insetInlineStart: {default: null, [TOUCH]: restInset(16)},
+    width: thumbWidth(THUMB_SIZE.md.off),
+    height: thumbHeight(THUMB_SIZE.md.off),
+    insetInlineStart: {default: null, [TOUCH]: restInset(THUMB_SIZE.md.off)},
     transform: {
       default: `translateX(${OFF_PLACE})`,
       ':is([dir="rtl"] *)': {
@@ -178,10 +187,10 @@ const thumbOffSizeStyles = stylex.create({
 
 const thumbOnSizeStyles = stylex.create({
   sm: {
-    width: thumbWidth(16),
-    height: thumbHeight(16),
+    width: thumbWidth(THUMB_SIZE.sm.on),
+    height: thumbHeight(THUMB_SIZE.sm.on),
     insetInlineStart: {default: null, [TOUCH]: 'auto'},
-    insetInlineEnd: {default: null, [TOUCH]: restInset(16)},
+    insetInlineEnd: {default: null, [TOUCH]: restInset(THUMB_SIZE.sm.on)},
     // The thumb rests at the inline-start edge (flex-start, which flexbox
     // already mirrors under RTL). The on-state travel toward the inline-end
     // edge is a physical translateX, so it must flip sign under RTL — right
@@ -197,10 +206,10 @@ const thumbOnSizeStyles = stylex.create({
     },
   },
   md: {
-    width: thumbWidth(20),
-    height: thumbHeight(20),
+    width: thumbWidth(THUMB_SIZE.md.on),
+    height: thumbHeight(THUMB_SIZE.md.on),
     insetInlineStart: {default: null, [TOUCH]: 'auto'},
-    insetInlineEnd: {default: null, [TOUCH]: restInset(20)},
+    insetInlineEnd: {default: null, [TOUCH]: restInset(THUMB_SIZE.md.on)},
     transform: {
       default: `translateX(${ON_TRAVEL})`,
       ':is([dir="rtl"] *)': {
@@ -271,7 +280,11 @@ const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
+    // The room between the switch and its label. A theme sets it with gap on
+    // the `switch-field` target, which the compiler hands to this row as
+    // --_switch-field-gap (derivedVarRegistry): the target is the outer field,
+    // which also holds the status message below the row.
+    gap: `var(--_switch-field-gap, ${spacingVars['--spacing-2']})`,
   },
   // A hidden label is sr-only, so its wrapper is a zero-width flex item — the
   // row gap would still be painted beside the track, making the field box
@@ -1007,6 +1020,7 @@ export function Switch({
     isInteractive: !isDisabled && !isBusy,
     isDisabled,
     trackSize: TRACK_SIZE[size],
+    thumbSize: THUMB_SIZE[size],
     otherTrackProps: trackPropsFor(!isOn),
   });
 

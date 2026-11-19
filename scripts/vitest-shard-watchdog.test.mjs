@@ -18,14 +18,13 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'shard-watchdog-'));
 afterAll(() => fs.rmSync(scratch, {recursive: true, force: true}));
 
 /**
- * The watchdog's settings come only from each case: a Main leg exports them
- * for its own run, and a fixture run must not take them over.
+ * The watchdog's settings and its times file come only from each case: a Node
+ * leg exports them for its own run, and its times file records that leg's
+ * files, so a fixture run must not take any of them over.
  */
-function withoutWatchdogSettings() {
+function withoutShardSettings() {
   return Object.fromEntries(
-    Object.entries(process.env).filter(
-      ([k]) => !k.startsWith('VITEST_SHARD_WATCHDOG_'),
-    ),
+    Object.entries(process.env).filter(([k]) => !k.startsWith('VITEST_SHARD_')),
   );
 }
 
@@ -50,7 +49,7 @@ function runFixtures(files, env, {timeout = 60_000} = {}) {
       cwd: root,
       encoding: 'utf8',
       timeout,
-      env: {...withoutWatchdogSettings(), CI: 'true', ...env},
+      env: {...withoutShardSettings(), CI: 'true', ...env},
     },
   );
 }
@@ -174,5 +173,24 @@ describe('the Node shard watchdog', () => {
     ];
     // It spent 1.5 s loading and well under a second in its test.
     expect(seconds).toBeLessThan(1);
+  }, 60_000);
+
+  it('leaves the times file of the leg running these tests untouched', () => {
+    const legTimes = path.join(scratch, 'leg-times.json');
+    const recorded = '{"packages/core/src/Button/Button.test.ts": 1.25}\n';
+    fs.writeFileSync(legTimes, recorded);
+    const saved = process.env.VITEST_SHARD_TIMES_FILE;
+    // As a Node leg sets it for its own files.
+    process.env.VITEST_SHARD_TIMES_FILE = legTimes;
+    try {
+      const result = runFixtures(['quick.fixture.mjs'], {
+        VITEST_SHARD_WATCHDOG_SECONDS: '60',
+      });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(fs.readFileSync(legTimes, 'utf8')).toBe(recorded);
+    } finally {
+      if (saved == null) delete process.env.VITEST_SHARD_TIMES_FILE;
+      else process.env.VITEST_SHARD_TIMES_FILE = saved;
+    }
   }, 60_000);
 });
