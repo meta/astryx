@@ -7,6 +7,7 @@
  * path.
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,6 +17,7 @@ import {user} from './user.mjs';
 import {runWithCliDoor} from '../../../foundation/env/cli-command.mjs';
 import {renderComputerAgentText} from '../../../foundation/agent-docs/computer-agent-text.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {MARKER_END, MARKER_START} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {settingsFile} from '../../../foundation/env/user-settings.mjs';
 import {readGlobalState} from '../../../foundation/release/global-state.mjs';
 import {cliVersion} from '../../../foundation/release/run-context.mjs';
@@ -229,4 +231,138 @@ describe('astryx init --user', () => {
       expect(JSON.parse(r.stdout).code).toBe('ERR_INVALID_ARGUMENT');
     }
   });
+});
+
+describe('a computer-level folder the user cannot write', () => {
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'refuses with ERR_WRITE_FAILED, the path, and what to change',
+    async () => {
+      const skills = path.join(home, '.agents', 'skills');
+      fs.mkdirSync(skills, {recursive: true});
+      fs.chmodSync(skills, 0o555);
+      try {
+        await expect(init({user: true}, {cwd: tmp('cwd')})).rejects.toMatchObject({
+          code: 'ERR_WRITE_FAILED',
+          message: expect.stringContaining('~/.agents/skills/astryx: EACCES (no permission)'),
+        });
+        const r = await runCli(['--json', 'init', '--user'], tmp('cli'));
+        expect(r.status).toBe(1);
+        expect(JSON.parse(r.stdout)).toMatchObject({code: 'ERR_WRITE_FAILED'});
+        expect(r.stdout).toContain('astryx init --user');
+      } finally {
+        fs.chmodSync(skills, 0o755);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'names the nearest folder that exists when the refused folder does not yet',
+    async () => {
+      const agents = path.join(home, '.agents');
+      fs.mkdirSync(agents);
+      fs.chmodSync(agents, 0o555);
+      try {
+        await expect(init({user: true}, {cwd: tmp('cwd')})).rejects.toMatchObject({
+          code: 'ERR_WRITE_FAILED',
+          message: expect.stringContaining('Give yourself write access to ~/.agents,'),
+        });
+      } finally {
+        fs.chmodSync(agents, 0o755);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'an old copy it cannot clear is kept, and the skill file is still written',
+    async () => {
+      await init({user: true}, {cwd: tmp('cwd')});
+      const link = path.join(home, '.claude', 'skills', 'astryx');
+      const skill = path.join(home, '.agents', 'skills', 'astryx', 'SKILL.md');
+      // An old managed copy in a folder the user cannot write.
+      fs.rmSync(link);
+      fs.mkdirSync(link);
+      fs.copyFileSync(skill, path.join(link, 'SKILL.md'));
+      fs.rmSync(skill);
+      fs.chmodSync(link, 0o555);
+      try {
+        const res = await init({user: true}, {cwd: tmp('cwd')});
+        if (res.type !== 'init.user') throw new Error(res.type);
+        expect(fs.existsSync(skill)).toBe(true);
+        expect(res.data.files.find(file => file.path === link)).toMatchObject({action: 'kept'});
+      } finally {
+        fs.chmodSync(link, 0o755);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'names the skill file itself when an older one exists and cannot be written',
+    async () => {
+      const skill = path.join(home, '.agents', 'skills', 'astryx', 'SKILL.md');
+      fs.mkdirSync(path.dirname(skill), {recursive: true});
+      // An unedited file an older release wrote.
+      const START = MARKER_START;
+      const body = `---\nname: astryx\n---\n\n${START}\nold\n${MARKER_END}\n`;
+      const hash = createHash('sha256').update(body).digest('hex');
+      fs.writeFileSync(skill, body.replace(`${START}\n`, `${START}\n<!-- astryx-managed sha256:${hash} -->\n`));
+      fs.chmodSync(skill, 0o444);
+      try {
+        await expect(init({user: true}, {cwd: tmp('cwd')})).rejects.toMatchObject({
+          code: 'ERR_WRITE_FAILED',
+          message: expect.stringContaining('Give yourself write access to ~/.agents/skills/astryx/SKILL.md,'),
+        });
+      } finally {
+        fs.chmodSync(skill, 0o644);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'with another place first, the message is about the computer-level text only',
+    async () => {
+      const skills = path.join(home, '.agents', 'skills');
+      fs.mkdirSync(skills, {recursive: true});
+      fs.chmodSync(skills, 0o555);
+      const project = tmp('project');
+      fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}));
+      fs.mkdirSync(path.join(project, '.git'));
+      try {
+        const err = await init({to: 'agents-md,user'}, {cwd: project}).catch(e => e);
+        expect(err.code).toBe('ERR_WRITE_FAILED');
+        expect(err.message).toContain('The computer-level agent text was not written.');
+        expect(err.message).not.toContain('Nothing was written');
+      } finally {
+        fs.chmodSync(skills, 0o755);
+      }
+    },
+  );
+
+  it('names a file standing where a folder belongs, with the step that fixes it', async () => {
+    fs.writeFileSync(path.join(home, '.agents'), 'not a folder\n');
+    await expect(init({user: true}, {cwd: tmp('cwd')})).rejects.toMatchObject({
+      code: 'ERR_WRITE_FAILED',
+      message: expect.stringContaining('A file stands where a folder belongs'),
+    });
+  });
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'a removal the skill folder refuses removes nothing, links included, and says so',
+    async () => {
+      await init({user: true}, {cwd: tmp('cwd')});
+      const folder = path.join(home, '.agents', 'skills', 'astryx');
+      const link = path.join(home, '.claude', 'skills', 'astryx');
+      fs.chmodSync(folder, 0o555);
+      try {
+        await expect(
+          init({user: true, removeAgents: true}, {cwd: tmp('cwd')}),
+        ).rejects.toMatchObject({
+          code: 'ERR_WRITE_FAILED',
+          message: expect.stringContaining('The computer-level agent text was not removed.'),
+        });
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      } finally {
+        fs.chmodSync(folder, 0o755);
+      }
+    },
+  );
 });

@@ -85,6 +85,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
+import {LayoutContainerContext} from '../Layout/LayoutContainerContext';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -217,6 +218,10 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
@@ -689,6 +694,13 @@ export function Dialog({
           ),
         ];
         for (const target of autofocusTargets) {
+          // A request belongs to its nearest dialog. One inside a nested
+          // dialog is that dialog's, open or closed: a closed one can still be
+          // laid out (a display utility class beats its closed state), and
+          // focus would then land in a dialog nobody can see.
+          if (target.closest('dialog') !== dialog) {
+            continue;
+          }
           // Only hiding inside the dialog makes a request ineligible: the
           // modal dialog is not part of an inert region around it.
           const hiddenAncestor = target.closest(
@@ -854,7 +866,11 @@ export function Dialog({
         styles.innerCorners,
         containerCornerStyles.publish,
       )}>
-      <DialogContext value={dialogContextValue}>{children}</DialogContext>
+      <DialogContext value={dialogContextValue}>
+        <LayoutContainerContext value="dialog">
+          {children}
+        </LayoutContainerContext>
+      </DialogContext>
     </div>
   );
 

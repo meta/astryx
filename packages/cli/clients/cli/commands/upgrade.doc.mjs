@@ -18,7 +18,8 @@ export const doc = {
   description:
     'Migrates project source from a previous Astryx version to the installed one by ' +
     'running the registered codemods, and refreshes the fully rendered managed ' +
-    'agent-docs block when Core or configured integration guidance changes. ' +
+    'agent-docs block when Core or configured integration guidance changes, and the Astryx skill in every place astryx.config `skills.to` saves ' +
+    '(`init --to`; an edited skill file is kept). ' +
     'Dry-run by default. --apply writes codemod and receipt changes, runs hooks, then refreshes agent docs. ' +
     'Anything a post-codemod hook prints goes to stderr, so stdout carries only the result. ' +
     'Run from a folder inside a project, it upgrades that project and names files in the result relative to the folder you ran it in. ' +
@@ -32,7 +33,8 @@ export const doc = {
       param: 'options.from',
       description:
         'Previous version before the dependency upgrade; required unless --list or --registry is set. ' +
-        'The target is the installed @astryxdesign/core version, or legacy @xds/core when @astryxdesign/core is not installed',
+        'The target is the installed version of the run\'s active base: @astryxdesign/core, or legacy @xds/core when @astryxdesign/core is not installed, in a run on Core; ' +
+        'the base\'s package in a run on another base, which runs no Core codemod and checks no copied composition',
     },
     {
       flag: '--apply',
@@ -116,7 +118,7 @@ export const doc = {
       code: 1,
       when:
         'missing or invalid --from, --registry with --list or a migration flag, a --path escape, ' +
-        'no installed @astryxdesign/core (or legacy @xds/core), jscodeshift missing and not installed by --install-deps, ' +
+        'no installed @astryxdesign/core (or legacy @xds/core) in a run on Core, or no installed active base in a run on another base, jscodeshift missing and not installed by --install-deps, ' +
         'an astryx.config that fails validation and that no pending config codemod repairs, ' +
         'an unreadable or invalid protection declaration, a protected file that still requires a codemod change, a generated file that must be regenerated, ' +
         'an unknown codemod, a codemod or post-codemod hook failure, or unresolved registry items',

@@ -20,9 +20,10 @@ import {
   allOrNothing,
 } from '../../foundation/discovery/icon-set-writer.mjs';
 import {PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {isOutsideAnyPackage} from '../../foundation/env/project-scope.mjs';
 import {projectIconSetCliWarning} from '../../foundation/integrations/cli-requirement.mjs';
 import {findLocalIconSet} from '../../foundation/discovery/icon-set-writer.mjs';
+import {ICON_PACK_QUERY} from '../../foundation/text/icon-set-next.mjs';
 import {
   templateIconMeanings,
   unmappedTemplateMeanings,
@@ -37,7 +38,12 @@ export {
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
-export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
+export {
+  astryxDefinitionCoverage,
+  astryxIconDefinitions,
+  definitionRelatives,
+  ownReplacedDefinitions,
+} from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   setConfigString,
@@ -46,8 +52,10 @@ export {
 export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
 export {
   ICON_USE_ORDER_COMMAND,
+  iconLookExport,
   iconSetLook,
   iconUseCommand,
+  missingIconLook,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
@@ -85,6 +93,11 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+export {
+  ICON_SET_GUIDE_COMMAND,
+  ICON_USE_COMMAND,
+  noIconSetNext,
+} from '../../foundation/text/icon-set-next.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
 export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 
@@ -97,25 +110,13 @@ export {checkVariantLook, drawnLooks} from './_default-look.mjs';
  * @param {string} where what to run it in
  */
 export function refuseOutsideProject(cwd, command, where) {
-  // A folder with a package.json at or above it is a package being authored,
-  // even before it declares Astryx; that package's own checks answer there.
-  if (!isOutsideProject(cwd) || hasPackageJsonAbove(cwd)) return;
+  // A package being authored answers with its own checks.
+  if (!isOutsideAnyPackage(cwd)) return;
   throw new AstryxError(
     `astryx ${command} works only in a project. Run it in ${where}.`,
     [],
     ERROR_CODES.ERR_PROJECT_REQUIRED,
   );
-}
-
-/**
- * Is there a package.json in `dir` or a folder above it?
- * @param {string} dir
- */
-function hasPackageJsonAbove(dir) {
-  for (let at = path.resolve(dir); ; at = path.dirname(at)) {
-    if (fs.existsSync(path.join(at, 'package.json'))) return true;
-    if (path.dirname(at) === at) return false;
-  }
 }
 
 /**
@@ -160,6 +161,20 @@ export async function authoring(step) {
 export async function loadIconSets(cwd) {
   const project = await Project.load(cwd);
   return project.iconSets({experimental: true});
+}
+
+/**
+ * Whether `astryx discover "icon set"` lists an icon set the project in
+ * `cwd` could add, read from the saved copies of its discover catalogs. No
+ * discover source is called, so before a discover run has saved a copy this
+ * is false.
+ * @param {string} cwd
+ * @returns {Promise<boolean>}
+ */
+export async function discoverListsIconSet(cwd) {
+  const project = Project.lastLoaded(cwd) ?? (await Project.load(cwd));
+  const {listsToAdd} = await import('../discover/discover.mjs');
+  return listsToAdd(project, ICON_PACK_QUERY, 'icon-set');
 }
 
 /**

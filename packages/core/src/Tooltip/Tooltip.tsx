@@ -19,6 +19,7 @@ import React, {
   useRef,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
@@ -371,3 +372,36 @@ export function Tooltip({
 }
 
 Tooltip.displayName = 'Tooltip';
+
+/**
+ * A tooltip whose content is its anchor's own name (a cut Button label or
+ * table heading), so it adds no description. It is open while it is mounted;
+ * `onHide` closes it (Escape). Internal: the truncation tooltip module loads
+ * it with this module; the Tooltip entry does not export it.
+ */
+export function UndescribedTooltip({
+  anchorRef,
+  content,
+  onHide,
+}: {
+  anchorRef: RefObject<HTMLElement | null>;
+  content: ReactNode;
+  onHide: () => void;
+}): ReactNode {
+  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
+  const attach = tooltip.ref;
+  // Syncs the trigger listeners with the anchor's current element on every
+  // render: a Button that renders a new element (a link Button that becomes
+  // disabled) moves them to it. Attaching the same element again is a no-op.
+  useIsomorphicLayoutEffect(() => {
+    attach(anchorRef.current);
+  });
+  // Syncs the trigger listeners with this tooltip's lifetime.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      attach(null);
+    },
+    [attach],
+  );
+  return tooltip.renderTooltip(content);
+}

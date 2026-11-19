@@ -17,6 +17,7 @@ import {
   listUnmigratedThemeCopies,
   readThemeListState,
   themeInPackage,
+  themeOwnerInstalled,
   themeRecordOwner,
 } from '../_adapter.mjs';
 
@@ -76,7 +77,8 @@ export async function themeListAvailable(options = {}) {
   const data = themes
     .filter(theme => themeInPackage(theme, options.package))
     .map(theme => {
-      const added = state.themes[theme.slug] === themeRecordOwner(theme);
+      const owner = themeRecordOwner(theme);
+      const added = state.themes[theme.slug] === owner;
       return {
         slug: theme.slug,
         displayName: theme.displayName,
@@ -96,6 +98,10 @@ export async function themeListAvailable(options = {}) {
               },
             }
           : {}),
+        // What `theme add` records and the app imports: a bundled theme's
+        // descriptor ships in the CLI, its built output in its own package.
+        owner,
+        installed: themeOwnerInstalled(theme, state.projectDir),
       };
     });
   const upgradeCommand = `${getCliInvocation(state.projectDir)} upgrade --from 0.6.4 --path . --apply`;

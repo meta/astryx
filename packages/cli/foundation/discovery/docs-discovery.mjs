@@ -37,12 +37,15 @@ import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
+import {ReplacementAliases} from './replacement-aliases.mjs';
 import {
   sectionKey,
   sectionKeyErrors,
   sourceTitle,
   withSourceTitle,
 } from './docs-section-key.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
+import {topicLevel} from '../doc-compiler/generated-levels.mjs';
 
 export {withSourceTitle};
 
@@ -95,6 +98,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the doc declares
  * @property {string} [replaces] topic this doc takes the place of
  * @property {string} [extendsTopic] topic this doc merges onto (`extends`)
  */
@@ -109,6 +113,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string} [replaces] the topic this one took the place of
  * @property {string} [replacedPackage] the package whose topic or guide this
  *   one took the place of
@@ -127,6 +132,16 @@ export function isGuideRoute(target) {
  * @returns {Record<string, string>} topic name → absolute doc path
  */
 export function discoverBuiltinTopics() {
+  // These topics describe Core; they show only in a run whose base is Core.
+  if (currentNonCoreBase()) return Object.create(null);
+  return builtinTopicsForCore();
+}
+
+/**
+ * The CLI's own topics as a run on Core reads them, whatever the run's base.
+ * @returns {Record<string, string>} topic name → absolute doc path
+ */
+export function builtinTopicsForCore() {
   /** @type {Record<string, string>} */
   const topics = Object.create(null);
   if (!fs.existsSync(BUILTIN_DOCS_DIR)) return topics;
@@ -138,13 +153,15 @@ export function discoverBuiltinTopics() {
 }
 
 /**
- * The name an integration doc declares, and whether it is placed (has
- * `placement`, so it is no topic or root namespace), as docs discovery reads
- * the doc; null when the doc does not load or parse, or names nothing. A doc
- * of exported literals is read as data ({@link readDocAsData}).
+ * The name an integration doc declares, whether it is placed (has
+ * `placement`, so it is no topic or root namespace), and the generated level
+ * its category puts it in when it is a flat topic (null for a placed doc or
+ * a namespace, which sit in no level), as docs discovery reads the doc; null when
+ * the doc does not load or parse, or names nothing. A doc of exported
+ * literals is read as data ({@link readDocAsData}).
  *
  * @param {string} file an integration doc file
- * @returns {Promise<{name: string, placed: boolean} | null>}
+ * @returns {Promise<{name: string, placed: boolean, level: string | null} | null>}
  */
 export async function integrationDocDeclaration(file) {
   let doc;
@@ -156,7 +173,12 @@ export async function integrationDocDeclaration(file) {
     return null;
   }
   if (typeof doc?.name !== 'string') return null;
-  return {name: doc.name, placed: doc.placement != null};
+  const placed = doc.placement != null;
+  return {
+    name: doc.name,
+    placed,
+    level: placed || doc.type === 'namespace' ? null : topicLevel(doc.category),
+  };
 }
 
 /**
@@ -551,6 +573,34 @@ function isFolder(dir) {
 }
 
 /**
+ * Every doc file under an integration's docs root, sorted: the files
+ * {@link discoverIntegrationDocs} reads, and the skill places read for the
+ * docs that declare a skill.
+ * @param {string} docsDir
+ * @returns {string[]}
+ */
+export function docsRootFiles(docsDir) {
+  /** @type {string[]} */
+  const files = [];
+  /** @param {string} dirPath */
+  function scanDir(dirPath) {
+    for (const entry of listDirEntries(dirPath)) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+      const full = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        scanDir(full);
+      } else if (
+        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
+      ) {
+        files.push(full);
+      }
+    }
+  }
+  if (isFolder(docsDir)) scanDir(docsDir);
+  return files.sort();
+}
+
+/**
  * Discover the topics contributed by a single loaded integration. Mirrors
  * `discoverIntegrationComponents`: walk the resolved root, take every
  * conventional doc file, and record what it declares. Unlike component
@@ -587,24 +637,7 @@ export async function discoverIntegrationDocs(
   }
   const providerId = integration.providerId ?? integration.name;
 
-  /** @type {string[]} */
-  const files = [];
-  /** @param {string} dirPath */
-  function scanDir(dirPath) {
-    for (const entry of listDirEntries(dirPath)) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
-      const full = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        scanDir(full);
-      } else if (
-        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
-      ) {
-        files.push(full);
-      }
-    }
-  }
-  scanDir(docsDir);
-  files.sort();
+  const files = docsRootFiles(docsDir);
 
   /** @type {Map<string, string>} */
   const seen = new Map();
@@ -686,6 +719,7 @@ export async function discoverIntegrationDocs(
         title: parsed.title,
         // Rendered once, where the tree is built (api/docs/_adapter.mjs).
         summary: parsed.description,
+        ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
         group: null,
         placement: parsed.placement,
         ref: {topicFile: file},
@@ -707,6 +741,7 @@ export async function discoverIntegrationDocs(
       title: parsed.title,
       description: parsed.description,
       category: parsed.category ?? null,
+      ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
       replaces: parsed.replaces,
       extendsTopic: parsed.extends,
       ...(providerId === integration.name ? {} : {providerId}),
@@ -940,8 +975,8 @@ export class DocsCatalog {
   #contributions = null;
   /** @type {Promise<LinkableContributions> | null} */
   #contributionsLoaded = null;
-  /** @type {Map<string, string>} old topic name → the name that replaced it */
-  #aliases = new Map();
+  /** old topic names, each pointing at the topic that replaced it */
+  #aliases = new ReplacementAliases(name => name.toLowerCase());
   /** @type {Array<{namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>} */
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
@@ -1148,6 +1183,7 @@ export class DocsCatalog {
         title: record.title,
         description: record.description,
         category: record.category,
+        ...(record.keywords ? {keywords: record.keywords} : {}),
         replaces: replaced,
         // The package whose topic it took over: an earlier replacement's, when
         // the topic was already replaced.
@@ -1161,11 +1197,7 @@ export class DocsCatalog {
         extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
-        this.#aliases.set(replacedKey, replacementKey);
-        // A topic renamed twice keeps every name it has ever answered to.
-        for (const [from, to] of this.#aliases) {
-          if (to === replacedKey) this.#aliases.set(from, replacementKey);
-        }
+        this.#aliases.record(replacedKey, replacementKey);
       }
       return warning;
     }
@@ -1186,6 +1218,7 @@ export class DocsCatalog {
       title: record.title,
       description: record.description,
       category: record.category,
+      ...(record.keywords ? {keywords: record.keywords} : {}),
       ...(record.providerId ? {providerId: record.providerId} : {}),
       extensions: [],
     });
@@ -1200,10 +1233,7 @@ export class DocsCatalog {
    * @returns {string[]}
    */
   aliasesOf(entry) {
-    const key = entry.name.toLowerCase();
-    return [...this.#aliases]
-      .filter(([, to]) => to === key)
-      .map(([from]) => from);
+    return this.#aliases.aliasesOf(entry.name);
   }
 
   /**
@@ -1214,17 +1244,8 @@ export class DocsCatalog {
    */
   resolve(name) {
     if (typeof name !== 'string') return undefined;
-    let key = name.toLowerCase();
-    // An alias chain is at most as long as the number of replacements, and a
-    // cycle can only come from a bug here; bound the walk either way.
-    for (let hops = 0; hops <= this.#aliases.size; hops++) {
-      const entry = this.#topics.get(key);
-      if (entry) return entry;
-      const next = this.#aliases.get(key);
-      if (next == null) return undefined;
-      key = next;
-    }
-    return undefined;
+    const key = this.#aliases.resolve(name, each => this.#topics.has(each));
+    return key == null ? undefined : this.#topics.get(key);
   }
 
   /** @returns {string[]} every topic name, in read order */

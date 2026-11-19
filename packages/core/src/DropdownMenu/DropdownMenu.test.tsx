@@ -369,6 +369,91 @@ describe('DropdownMenu', () => {
     expect(group.parentElement).toHaveRole('listitem');
   });
 
+  it('names the sheet after a node-label submenu while its level shows', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            label: (
+              <>
+                <em>Move</em> to project
+              </>
+            ),
+            description: 'Pick a project',
+            items: [{label: 'Apollo launch'}],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Move to project/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Move to project'}),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Back'}));
+    expect(
+      screen.getByRole('dialog', {name: 'Project actions'}),
+    ).toBeInTheDocument();
+  });
+
+  it('names the sheet after the node-label submenu that opened, also across sections', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'File actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            type: 'section',
+            title: 'Move',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Move</em> file
+                  </>
+                ),
+                items: [{label: 'Folder A'}],
+              },
+            ],
+          },
+          {
+            type: 'section',
+            title: 'Copy',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Copy</em> folder
+                  </>
+                ),
+                items: [{label: 'Folder B'}],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /File actions/}));
+    await user.click(screen.getByRole('button', {name: /Copy folder/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Copy folder'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items in bottom-sheet presentation', async () => {
     const user = userEvent.setup();
 
@@ -609,6 +694,89 @@ describe('DropdownMenu', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', {name: 'Edit'})).toHaveFocus(),
     );
+  });
+
+  it('keeps focus on the row a keyboard user activated when the open sheet re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: `Bump (${count})`,
+              hasCloseOnSelect: false,
+              onClick: () => setCount(value => value + 1),
+            },
+            {label: 'Last'},
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Bump (0)'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: 'Bump (1)'})).toHaveFocus();
+  });
+
+  it('keeps focus in an open sub-menu of the sheet when the menu re-renders with new items', async () => {
+    const user = userEvent.setup();
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return (
+        <DropdownMenu
+          button={{label: 'Options'}}
+          presentation="bottom-sheet"
+          items={[
+            {label: 'First'},
+            {
+              label: 'More',
+              items: [
+                {label: 'Inner'},
+                {
+                  label: `Bump (${count})`,
+                  hasCloseOnSelect: false,
+                  onClick: () => setCount(value => value + 1),
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+    render(<Counter />);
+
+    screen.getByRole('button', {name: /Options/}).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'First'})).toHaveFocus(),
+    );
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'Bump (0)'}),
+      ).toBeInTheDocument(),
+    );
+    await act(async () => nextFrames(3));
+    const bump = screen.getByRole('button', {name: /^Bump/});
+    bump.focus();
+    await user.keyboard('{Enter}');
+    await act(async () => nextFrames(3));
+
+    expect(screen.getByRole('button', {name: /^Bump/})).toHaveFocus();
   });
 
   it('restores touch focus without painting a trigger focus ring', async () => {
@@ -5487,3 +5655,16 @@ describe('DropdownMenu trigger refs across renders', () => {
     expect(refs.at(-1)).toBe(refs[0]);
   });
 });
+
+async function nextFrames(count: number): Promise<void> {
+  return new Promise(resolve => {
+    const step = (left: number) => {
+      if (left === 0) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}

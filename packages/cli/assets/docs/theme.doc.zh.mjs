@@ -4,7 +4,7 @@
 
 export const docsZh = {
   description:
-    'Astryx 主题的工作方式：用主题包裹应用，并用 `astryx experimental theme editor new <name> --like neutral` 创建或修改主题（让应用更紧凑或更宽松、修改某一类部件，也用它；其余步骤见本主题最前面的几节）。',
+    'Astryx 主题的工作方式：用主题包裹应用，并用 `astryx experimental theme editor new <name> --like neutral` 创建或修改主题（让应用更紧凑或更宽松、修改某一类部件，也用它）。下面先给出步骤，然后说明如何发布主题供其他团队使用。',
   sections: [
     {
       section: 'Make or change a theme',
@@ -53,6 +53,16 @@ export const docsZh = {
         {
           type: 'prose',
           text: '`astryx experimental theme preview app <dir>` 会创建一个展示该主题的入门应用。如何使用和创建主题：请参阅"使用主题"了解如何应用主题，参阅"创作主题"了解如何创建和自定义主题。',
+        },
+      ],
+    },
+    {
+      section: 'Share a theme with other teams',
+      title: '与其他团队共享主题',
+      content: [
+        {
+          type: 'prose',
+          text: '要发布主题供其他团队使用，请把它放在一个包里：包的 themes 文件夹存放主题，用 `{@command theme build}` 构建，并像其他包一样发布。其他团队安装这个包后运行 `{@command theme add <name> --package <package>}`。参见 {@link generic:add-a-theme}。',
         },
       ],
     },

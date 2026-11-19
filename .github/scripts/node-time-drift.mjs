@@ -2,29 +2,31 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Fails a Node leg when a test file the pull request changes now runs
- * far past its recorded time, so the record is brought up to date by the pull
- * request that slows the file, before a later pull request's leg runs over
- * its job limit.
+ * @file Notes, on a Node leg, each test file the pull request changes that now
+ * runs far past its recorded time or has no recorded time, so the author can
+ * bring the record up to date. It never fails the leg: a contributor cannot
+ * produce a CI-comparable time, and after each full unit run of `main` a job
+ * regenerates the record from that run's Node legs when an entry is missing
+ * or has drifted by this same rule (node-record-refresh.mjs). Until then a
+ * missing or low entry costs leg balance and can make a leg run long.
  *
  * The legs balance by `scripts/vitest-node-durations.json`. A loaded runner
  * slows every file, so a file is compared with its own leg: the leg factor is
  * the median of measured ÷ recorded over the files the change does not touch,
  * never below 1, so a fast runner does not tighten the bar. With fewer than
  * MIN_PEERS such files there is no baseline in the leg: the factor is 1, and
- * the output says so. A changed file fails when it ran
+ * the output says so. A changed file is noted when it ran
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
  * seconds over that. A changed file with no recorded time under its own path
- * fails when it ran more than NEW_FILE_S × the leg factor: the legs' split
- * looks the record up by path, so it books that file at the ninetieth
- * percentile of the recorded times until the path is recorded. That includes a renamed file, whose old entry the failure
- * asks to move. Each failure names the one entry to add, move or update.
+ * is noted when it ran more than NEW_FILE_S × the leg factor. That includes a
+ * renamed file, whose old entry the note asks to move. Each note names the one
+ * entry to add, move or update.
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
  *   --changed <base> (the merge commit's first parent)
- * @output exit 1 and one error line per drifted or unrecorded file; exit 0
- *   otherwise. `drifted` also judges every file, with a margin, for a
- *   scheduled run.
+ * @output one notice line per drifted or unrecorded file; always exit 0 once
+ *   the arguments are valid. `drifted` also judges every file, with a margin,
+ *   for a scheduled run.
  * @position .github/scripts — run by ci.yml's Node legs after their tests;
  *   cli-minimum-node.mjs imports `drifted` for the minimum-Node legs
  */
@@ -167,35 +169,20 @@ export function parseNameStatus(text) {
   return {changed, renames};
 }
 
-/** @param {string[]} args */
-function main(args) {
-  const option = (/** @type {string} */ name) => args[args.indexOf(name) + 1];
-  const timesFile = option('--times');
-  const base = option('--changed');
-  if (!timesFile || !base) {
-    console.error('usage: node-time-drift.mjs --times <file> --changed <base>');
-    return 2;
-  }
-  if (!fs.existsSync(timesFile)) {
-    console.log(
-      `No per-file times at ${timesFile}: the leg ran no Node test file.`,
-    );
-    return 0;
-  }
-  const measured = JSON.parse(fs.readFileSync(timesFile, 'utf8'));
-  const {changed, renames} = parseNameStatus(
-    execFileSync(
-      'git',
-      ['-C', ROOT, 'diff', '--name-status', '-M', base, 'HEAD'],
-      {encoding: 'utf8'},
-    ),
-  );
-  const recorded = JSON.parse(
-    fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
-  ).seconds;
+/**
+ * The notice lines for one leg: the baseline note, then one line per changed
+ * file past its record or with no record. Notices never fail the leg.
+ * @param {Record<string, number>} measured seconds per test file, this leg
+ * @param {Record<string, number>} recorded seconds per test file, the record
+ * @param {string[]} changed
+ * @param {Array<[string, string]>} [renames]
+ * @returns {string[]}
+ */
+export function notices(measured, recorded, changed, renames = []) {
+  const lines = [];
   const leg = legFactor(measured, recorded, new Set(changed));
   if (!leg.baseline)
-    console.log(
+    lines.push(
       `No baseline in this leg: ${leg.peers} unchanged test file(s) with a recorded time, fewer than ${MIN_PEERS}, so the leg factor is 1 and changed files are judged against their recorded times as they are.`,
     );
   const late = drifted(measured, recorded, changed);
@@ -209,23 +196,63 @@ function main(args) {
       ? "its time with the leg's slowdown taken out"
       : 'its measured time';
   for (const {file, recorded: before, measured: now, suggested} of late) {
-    console.log(
-      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
+    lines.push(
+      `::notice file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so you may set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
     );
   }
   const unseen = unrecorded(measured, recorded, changed, renames);
   const legSentence = `${legSays[0].toUpperCase()}${legSays.slice(1)}`;
   for (const {file, measured: now, suggested, from, fromRecorded} of unseen) {
     const fix = from
-      ? `It was renamed from ${from} (recorded at ${fromRecorded} s), so move that entry: replace "${from}" with "${file}": ${suggested} (${value}).`
-      : `Add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`;
-    console.log(
-      `::error file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it books this file at the ninetieth percentile of the recorded times. ${fix}`,
+      ? `It was renamed from ${from} (recorded at ${fromRecorded} s), so you may move that entry: replace "${from}" with "${file}": ${suggested} (${value}).`
+      : `You may add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`;
+    lines.push(
+      `::notice file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it books this file at the ninetieth percentile of the recorded times. ${fix}`,
     );
   }
   if (late.length === 0 && unseen.length === 0)
-    console.log('The changed Node test files run within their recorded times.');
-  return late.length || unseen.length ? 1 : 0;
+    lines.push('The changed Node test files run within their recorded times.');
+  return lines;
+}
+
+/**
+ * @param {string[]} args
+ * @param {{diff?: (base: string) => string}} [io] `git diff --name-status -M <base> HEAD`
+ * @returns {number} 2 for bad arguments; else 0, whatever the notices say
+ */
+export function main(
+  args,
+  {
+    diff = base =>
+      execFileSync(
+        'git',
+        ['-C', ROOT, 'diff', '--name-status', '-M', base, 'HEAD'],
+        {encoding: 'utf8'},
+      ),
+  } = {},
+) {
+  const option = (/** @type {string} */ name) =>
+    args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
+  const timesFile = option('--times');
+  const base = option('--changed');
+  if (!timesFile || !base) {
+    console.error('usage: node-time-drift.mjs --times <file> --changed <base>');
+    return 2;
+  }
+  if (!fs.existsSync(timesFile)) {
+    console.log(
+      `No per-file times at ${timesFile}: the leg ran no Node test file.`,
+    );
+    return 0;
+  }
+  const measured = JSON.parse(fs.readFileSync(timesFile, 'utf8'));
+  const {changed, renames} = parseNameStatus(diff(base));
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
+  ).seconds;
+  for (const line of notices(measured, recorded, changed, renames))
+    console.log(line);
+  return 0;
 }
 
 if (

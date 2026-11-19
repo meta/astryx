@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {describe, expect, it, vi} from 'vitest';
 import {
   MARGIN_S,
   MIN_PEERS,
@@ -10,6 +13,8 @@ import {
   NEW_FILE_S,
   unrecorded,
   parseNameStatus,
+  notices,
+  main,
 } from './node-time-drift.mjs';
 
 const CHANGES = 'packages/cli/test/packed-gather-cache.changes.test.mjs';
@@ -27,7 +32,7 @@ function leg(count, seconds, scale) {
 }
 
 describe('the recorded-time check for the test files a change touches', () => {
-  it('fails a changed file that runs far past its record while its leg runs at its record', () => {
+  it('names a changed file that runs far past its record while its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[CHANGES] = 207.8;
     measured[CHANGES] = 337.9;
@@ -49,7 +54,7 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted(measured, recorded, [RECORDS])).toEqual([]);
   });
 
-  it('fails a changed file 2× slow when the rest of its leg runs at its record', () => {
+  it('names a changed file 2× slow when the rest of its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[RECORDS] = 107.3;
     measured[RECORDS] = 228.4;
@@ -251,5 +256,54 @@ describe('judging every file, for a scheduled run', () => {
     ).toEqual(['a.test.mjs']);
     // Without `all`, only the changed files are judged.
     expect(drifted(measured, recorded, [])).toEqual([]);
+  });
+});
+
+describe('notice mode: the check reports and never fails the leg', () => {
+  const {recorded, measured} = leg(8, 40, 1);
+  recorded[CHANGES] = 207.8;
+  measured[CHANGES] = 337.9;
+  measured[RECORDS] = 120;
+
+  it('reports a drifted and an unrecorded changed file as notices, never errors', () => {
+    const lines = notices(measured, recorded, [CHANGES, RECORDS]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(
+      /^::notice file=.*title=Recorded Node test time is stale::/,
+    );
+    expect(lines[0]).toContain(`"${CHANGES}": 337.9`);
+    expect(lines[1]).toMatch(
+      /^::notice file=.*title=Node test file has no recorded time::/,
+    );
+    expect(lines[1]).toContain(`"${RECORDS}": 120`);
+    expect(lines.join('\n')).not.toContain('::error');
+  });
+
+  it('exits 0 for a leg with a drifted and an unrecorded changed file', () => {
+    // A path the repository's record has no entry for.
+    const NEW = 'packages/cli/test/not-yet-recorded.test.mjs';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-time-drift-'));
+    const times = path.join(dir, 'times.json');
+    fs.writeFileSync(times, JSON.stringify({[NEW]: 600}));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(
+        main(['--times', times, '--changed', 'base'], {
+          diff: () => `A\t${NEW}\n`,
+        }),
+      ).toBe(0);
+      expect(log.mock.calls.flat().join('\n')).toContain(
+        `::notice file=${NEW},title=Node test file has no recorded time::`,
+      );
+    } finally {
+      log.mockRestore();
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('exits 2 only for missing arguments', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(main(['--times', 'x.json'])).toBe(2);
+    error.mockRestore();
   });
 });

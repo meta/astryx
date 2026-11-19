@@ -251,6 +251,30 @@ describe('TopNav', () => {
 });
 
 describe('TopNavHeading', () => {
+  it("carries mode=drawer as the phone menu's title, and no mode in the bar", () => {
+    const {container, unmount} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavHeading heading="Acme" />
+      </TopNavRenderContext>,
+    );
+    expect(
+      container
+        .querySelector('.astryx-top-nav-heading')
+        ?.getAttribute('data-mode'),
+    ).toBe('drawer');
+    unmount();
+    const bar = render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNavHeading heading="Acme" />
+      </TopNavRenderContext>,
+    );
+    expect(
+      bar.container
+        .querySelector('.astryx-top-nav-heading')
+        ?.hasAttribute('data-mode'),
+    ).toBe(false);
+  });
+
   it('renders heading text', () => {
     render(<TopNavHeading heading="My App" />);
     expect(screen.getByText('My App')).toBeInTheDocument();

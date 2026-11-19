@@ -56,7 +56,7 @@ export const doc = {
     {
       type: 'theme.eject',
       description:
-        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, files, missingPackages (packages the fork imports that the app does not declare), and installCommand (installs them; null when none are missing or the package manager is undetermined). The written local descriptor always uses maintained: false.',
+        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, files, missingPackages (packages the fork imports that the app does not declare), installCommand (installs them; null when none are missing, when the package manager is undetermined, or when no package.json holds the folder), and installGuidance (present only when a loaded integration gives `installGuidance`: how to add them in this project, followed instead of installCommand). The written local descriptor always uses maintained: false.',
     },
   ],
   throws: [

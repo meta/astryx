@@ -67,6 +67,26 @@ export const AHEAD_CONTROL_RGB: readonly [number, number, number] = [
 const AHEAD_TOP = CONTROL_SIDE + 4;
 /** How far the control ahead runs ahead of the first, ms: half a leg. */
 const AHEAD_MS = CONTROL_LEG_MS / 2;
+/**
+ * The colour of the vernier control (`startBusyControl`'s `vernier`), apart
+ * from both other controls' and the component's marker.
+ */
+export const VERNIER_CONTROL_RGB: readonly [number, number, number] = [
+  255, 255, 0,
+];
+/** How long the vernier takes to travel `CONTROL_TRAVEL` one way, ms. */
+const VERNIER_LEG_MS = CONTROL_LEG_MS / 4;
+/**
+ * The colour of the vernier ahead (`startBusyControl` with `vernier` and
+ * `ahead`), apart from the other controls' and the component's marker.
+ */
+export const VERNIER_AHEAD_CONTROL_RGB: readonly [number, number, number] = [
+  0, 255, 0,
+];
+/** How far the vernier ahead runs ahead of the vernier, ms: half its leg. */
+const VERNIER_AHEAD_MS = VERNIER_LEG_MS / 2;
+/** The height of a vernier's strip, CSS px. */
+const VERNIER_STRIP = CONTROL_SIDE + 4;
 
 /**
  * The control's colour and the strip its box crosses (`startBusyControl`),
@@ -89,20 +109,61 @@ export function controlColor({
 }
 
 /**
+ * The vernier's colour and its strip at the viewport's foot (`startBusyControl`
+ * with `vernier`), for `trackMarkers`. `top` is the strip's top, CSS px,
+ * which `trackControl` reads from the page. With `ahead`, the vernier ahead.
+ */
+export function vernierColor(
+  top: number,
+  {ahead = false}: {ahead?: boolean} = {},
+): MarkerColor {
+  return {
+    rgb: ahead ? VERNIER_AHEAD_CONTROL_RGB : VERNIER_CONTROL_RGB,
+    region: {
+      x: 0,
+      y: top,
+      width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
+      height: VERNIER_STRIP,
+    },
+  };
+}
+
+/**
  * The control in each frame (`startBusyControl`'s box), searched only in the
- * strip the box crosses (`controlColor`). With `ahead`, the control ahead. A
- * proof that also tracks its marker passes both colours to one
- * `trackMarkers` call instead, so each frame is decoded once.
+ * strip the box crosses (`controlColor`). With `ahead`, the control ahead, and
+ * with `vernier`, the vernier; with both, the vernier ahead. A proof that also
+ * tracks its marker passes all the colours to one `trackMarkers` call
+ * instead, so each frame is decoded once.
  */
 export async function trackControl(
   page: Page,
   frames: readonly CastFrame[],
-  {ahead = false}: {ahead?: boolean} = {},
+  {ahead = false, vernier = false}: {ahead?: boolean; vernier?: boolean} = {},
 ): Promise<TrackedFrame[]> {
-  const [tracked] = await trackMarkers(page, frames, {
-    colors: [controlColor({ahead})],
-  });
+  const color = vernier
+    ? vernierColor(await vernierStripTop(page, ahead), {ahead})
+    : controlColor({ahead});
+  const [tracked] = await trackMarkers(page, frames, {colors: [color]});
   return tracked;
+}
+
+/** The top of a vernier's strip on the page, CSS px. */
+async function vernierStripTop(page: Page, ahead: boolean): Promise<number> {
+  const top = await page.evaluate(
+    isAhead =>
+      (
+        window as unknown as {
+          __harnessVernierTops?: {first?: number; ahead?: number};
+        }
+      ).__harnessVernierTops?.[isAhead ? 'ahead' : 'first'],
+    ahead,
+  );
+  if (top == null) {
+    throw new Error(
+      `trackControl: start the vernier${ahead ? ' ahead' : ''} before tracking it`,
+    );
+  }
+  return top;
 }
 
 /**
@@ -142,6 +203,22 @@ export async function trackControl(
  * `trackMarkers` call, or with `trackControl(page, frames, {ahead: true})`.
  * Keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
+ * With `vernier`, it starts another control after the first: the same box in
+ * `VERNIER_CONTROL_RGB`, in a strip at the viewport's foot. It runs four
+ * times as fast, on the first control's timeline. The cast often reads a box
+ * in 2 px blocks, which is 3.3 ms of the first control's travel. The same
+ * error in the vernier's reading is a quarter of that time. Pass its frames
+ * to `busyWindowProof` as `vernier`, tracked with `trackControl(page,
+ * frames, {vernier: true})`. Keep the marker out of its strip too (the
+ * viewport's bottom `CONTROL_SIDE + 4` px).
+ *
+ * With `vernier` and `ahead`, it starts the vernier ahead: the same box in
+ * `VERNIER_AHEAD_CONTROL_RGB`, half the vernier's leg (50 ms) ahead. It runs
+ * in the strip above the vernier's. Near the vernier's turns, the one ahead is
+ * mid-leg, so between them they can date every frame the slow controls read.
+ * Pass its frames as `vernierAhead`. Keep the marker out of both strips (the
+ * viewport's bottom `2 * (CONTROL_SIDE + 4)` px).
+ *
  * A busy proof dates a cast's frames on the controls' clock, in either
  * engine, when the frames carry their engine (`trackMarker` keeps it).
  * Without the control ahead, a frame stamped late near the first control's
@@ -153,10 +230,18 @@ export async function startBusyControl(
   page: Page,
   {
     ahead = false,
-    rgb = ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
+    vernier = false,
+    rgb = vernier
+      ? ahead
+        ? VERNIER_AHEAD_CONTROL_RGB
+        : VERNIER_CONTROL_RGB
+      : ahead
+        ? AHEAD_CONTROL_RGB
+        : CONTROL_RGB,
     within,
   }: {
     ahead?: boolean;
+    vernier?: boolean;
     rgb?: readonly [number, number, number];
     within?: Locator;
   } = {},
@@ -172,13 +257,29 @@ export async function startBusyControl(
     );
   }
   const start = await page.evaluate(
-    ({color, side, travel, legMs, top, aheadMs}) =>
+    ({color, side, travel, legMs, top, aheadMs, kind, strip}) =>
       new Promise<number>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
         const box = document.createElement('div');
-        box.setAttribute('data-harness-control', aheadMs > 0 ? 'ahead' : '');
-        box.style.cssText = `position:fixed;inset:auto;left:0;top:${top}px;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
+        box.setAttribute('data-harness-control', kind);
+        // The vernier's strip is the viewport's foot, and the strip of the
+        // one ahead is right above it.
+        const boxTop =
+          top ??
+          window.innerHeight -
+            side -
+            2 -
+            (kind === 'vernier-ahead' ? strip : 0);
+        if (kind === 'vernier' || kind === 'vernier-ahead') {
+          const page = window as unknown as {
+            __harnessVernierTops?: {first?: number; ahead?: number};
+          };
+          (page.__harnessVernierTops ??= {})[
+            kind === 'vernier' ? 'first' : 'ahead'
+          ] = boxTop - 2;
+        }
+        box.style.cssText = `position:fixed;inset:auto;left:0;top:${boxTop}px;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
         if (host == null) {
           box.setAttribute('popover', 'manual');
           document.body.appendChild(box);
@@ -219,8 +320,9 @@ export async function startBusyControl(
           );
           return;
         }
-        if (aheadMs > 0) {
-          // Half a leg ahead of the first control, on the same timeline.
+        if (kind !== '') {
+          // On the first control's timeline: the one ahead half a leg ahead,
+          // the vernier with no offset, the vernier ahead half its leg ahead.
           const first = [
             ...document.querySelectorAll('[data-harness-control=""]'),
           ]
@@ -230,7 +332,7 @@ export async function startBusyControl(
             box.remove();
             reject(
               new Error(
-                'startBusyControl: start the first control before the one ahead',
+                `startBusyControl: start the first control before the ${kind === 'ahead' ? 'one ahead' : kind.replace('-', ' ')}`,
               ),
             );
             return;
@@ -240,23 +342,27 @@ export async function startBusyControl(
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
         const realNow = gate?.now ?? (() => performance.now());
         const deadline = realNow() + 5_000;
-        // The one ahead starts running at once: give it a frame on the
-        // compositor too.
+        // A control on the first's timeline starts running at once: give it
+        // a frame on the compositor too.
         let ticks = 0;
         const tick = () => {
           ticks += 1;
           if (
             !animation.pending &&
             Number(animation.currentTime ?? 0) >= 16 &&
-            (aheadMs === 0 || ticks >= 2)
+            (kind === '' || ticks >= 2)
           ) {
             const start = performance.timeOrigin + Number(animation.startTime);
             // Kept on the page for the block's window, which dates frames on
-            // the controls' clock (`BlockedWindow.controlStarts`).
+            // the controls' clock (`BlockedWindow.controlStarts`). The
+            // vernier starts with the first control.
             const page = window as unknown as {
               __harnessControlStarts?: number[];
             };
-            (page.__harnessControlStarts ??= [])[aheadMs > 0 ? 1 : 0] = start;
+            if (kind === '' || kind === 'ahead') {
+              (page.__harnessControlStarts ??= [])[kind === 'ahead' ? 1 : 0] =
+                start;
+            }
             resolve(start);
           } else if (realNow() > deadline) {
             reject(new Error('startBusyControl: the control did not start'));
@@ -270,9 +376,17 @@ export async function startBusyControl(
       color: [...rgb],
       side: CONTROL_SIDE,
       travel: CONTROL_TRAVEL,
-      legMs: CONTROL_LEG_MS,
-      top: ahead ? AHEAD_TOP : 0,
-      aheadMs: ahead ? AHEAD_MS : 0,
+      legMs: vernier ? VERNIER_LEG_MS : CONTROL_LEG_MS,
+      top: vernier ? null : ahead ? AHEAD_TOP : 0,
+      aheadMs: ahead ? (vernier ? VERNIER_AHEAD_MS : AHEAD_MS) : 0,
+      kind: vernier
+        ? ahead
+          ? 'vernier-ahead'
+          : 'vernier'
+        : ahead
+          ? 'ahead'
+          : '',
+      strip: VERNIER_STRIP,
     },
   );
   return {
@@ -311,6 +425,64 @@ const DATED_GAP_MS = 0.01;
 const DISPLAY_FRAME_MS = 1000 / 60;
 /** How close the controls' clock reads a time, ms: one px of travel. */
 const CONTROL_READ_MS = CONTROL_LEG_MS / CONTROL_TRAVEL;
+/**
+ * How far the slow controls' time may lie from a frame's true time, ms. In
+ * 36,829 WebKit frames that the vernier dated, it lay within 3.75 ms.
+ */
+const VERNIER_AGREE_MS = 4;
+
+/**
+ * A frame's time on the page clock from the vernier's reading, epoch ms. `x`
+ * is the vernier's position, and `coarse` is the time the slow controls give
+ * the frame. `start` is the vernier's start, which is the first control's.
+ * The vernier gives two times a cycle, one on each leg, and `coarse` picks the
+ * nearer. Null when no time lies within `VERNIER_AGREE_MS` of `coarse`. Null
+ * too near a turn, where another time lies within twice that: the frame then
+ * keeps `coarse`.
+ */
+export function vernierTime(
+  x: number,
+  coarse: number,
+  start: number,
+): number | null {
+  const cycle = 2 * VERNIER_LEG_MS;
+  const out = (x / CONTROL_TRAVEL) * VERNIER_LEG_MS;
+  if (out < 0 || out > VERNIER_LEG_MS) {
+    return null;
+  }
+  const [nearest, next] = [out, cycle - out]
+    .flatMap(phase => {
+      const k = Math.round((coarse - start - phase) / cycle);
+      return [k - 1, k, k + 1].map(n => start + phase + n * cycle);
+    })
+    .sort((a, b) => Math.abs(a - coarse) - Math.abs(b - coarse));
+  return Math.abs(nearest - coarse) <= VERNIER_AGREE_MS &&
+    Math.abs(next - coarse) >= 2 * VERNIER_AGREE_MS
+    ? nearest
+    : null;
+}
+
+/**
+ * The vernier's position in each frame, by its stamp: its box's centre, less
+ * half its side. The cast blurs both edges of a box alike, so the centre
+ * keeps no edge's bias. A frame that repeats the position before it gets
+ * none.
+ */
+function vernierPositions(
+  vernier: readonly TrackedFrame[],
+): Map<number, number> {
+  const positions = new Map<number, number>();
+  let before: number | null = null;
+  for (const frame of vernier) {
+    const box = frame.box;
+    const x = box == null ? null : box.x + box.width / 2 - CONTROL_SIDE / 2;
+    if (x != null && (before == null || Math.abs(x - before) > 0.25)) {
+      positions.set(frame.t, x);
+    }
+    before = x;
+  }
+  return positions;
+}
 
 /**
  * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
@@ -413,22 +585,47 @@ function readControlClock(control: readonly TrackedFrame[]): {
  * agree with (`controlClock`). A frame with no reading has no time here.
  * Frames tracked from the same screencast share its stamps, so a spec looks
  * their times up here. The busy proofs date their frames from these times.
+ *
+ * With a `vernier`, a time takes the vernier's time where it gives one
+ * (`vernierTime`). Near the vernier's turns, the vernier ahead
+ * (`vernierAhead`) gives it instead.
  */
 export function pageTimesOnControls(
   control: readonly TrackedFrame[],
-  {
-    ahead,
-    controlStarts,
-  }: {
-    /** The control started `ahead`, from the same screencast. */
-    readonly ahead?: readonly TrackedFrame[];
-    /** When the first control started, then the one ahead (`startBusyControl`). */
-    readonly controlStarts?: readonly [number, number?];
-  } = {},
+  options: ControlTimesOptions = {},
 ): Map<number, number> {
+  return controlTimes(control, options).times;
+}
+
+/** The controls that `pageTimesOnControls` dates frames from. */
+export interface ControlTimesOptions {
+  /** The control started `ahead`, from the same screencast. */
+  readonly ahead?: readonly TrackedFrame[];
+  /**
+   * When the first control started, then the one ahead (`startBusyControl`).
+   */
+  readonly controlStarts?: readonly [number, number?];
+  /**
+   * The vernier (`startBusyControl` with `vernier`), from the same
+   * screencast.
+   */
+  readonly vernier?: readonly TrackedFrame[];
+  /**
+   * The vernier ahead (with `vernier` and `ahead`), from the same
+   * screencast.
+   */
+  readonly vernierAhead?: readonly TrackedFrame[];
+}
+
+/** `pageTimesOnControls`, with `fine`: the stamps each vernier dated. */
+function controlTimes(
+  control: readonly TrackedFrame[],
+  {ahead, controlStarts, vernier, vernierAhead}: ControlTimesOptions,
+): {times: Map<number, number>; fine: Map<number, VernierDating>} {
   const cycle = 2 * CONTROL_LEG_MS;
+  const firstClock = readControlClock(control);
   const readers = [
-    {...readControlClock(control), start: controlStarts?.[0]},
+    {...firstClock, start: controlStarts?.[0]},
     ...(ahead == null
       ? []
       : [{...readControlClock(ahead), start: controlStarts?.[1]}]),
@@ -452,7 +649,43 @@ export function pageTimesOnControls(
       }
     }
   }
-  return times;
+  const fine = new Map<number, VernierDating>();
+  const vernierStart = controlStarts?.[0] ?? firstClock.origin;
+  if (vernierStart == null) {
+    return {times, fine};
+  }
+  const verniers = [
+    ...(vernier == null
+      ? []
+      : [
+          {
+            kind: 'vernier' as const,
+            positions: vernierPositions(vernier),
+            start: vernierStart,
+          },
+        ]),
+    ...(vernierAhead == null
+      ? []
+      : [
+          {
+            kind: 'vernier-ahead' as const,
+            positions: vernierPositions(vernierAhead),
+            start: vernierStart - VERNIER_AHEAD_MS,
+          },
+        ]),
+  ];
+  for (const [stamp, coarse] of times) {
+    for (const {kind, positions, start} of verniers) {
+      const x = positions.get(stamp);
+      const time = x == null ? null : vernierTime(x, coarse, start);
+      if (time != null) {
+        times.set(stamp, time);
+        fine.set(stamp, kind);
+        break;
+      }
+    }
+  }
+  return {times, fine};
 }
 
 /**
@@ -472,14 +705,29 @@ export function pageTimesOnControls(
  * comes at least `DATED_GAP_MS` after the time of the stamp before it, since
  * the proof matches frames by time. `read` holds the stamps whose time is
  * their own reading. Null when no stamp has a reading.
+ *
+ * With the verniers, each stamp with its own reading takes a vernier's time
+ * where one gives it (`pageTimesOnControls`). `fine` holds those stamps, each
+ * with the vernier that dated it; the others keep the slow controls' time.
  */
 function controlPageTimes(
   stamps: readonly number[],
   control: readonly TrackedFrame[],
   ahead: readonly TrackedFrame[] | undefined,
   controlStarts: readonly [number, number?] | undefined,
-): {times: Map<number, number>; read: ReadonlySet<number>} | null {
-  const own = pageTimesOnControls(control, {ahead, controlStarts});
+  vernier?: readonly TrackedFrame[],
+  vernierAhead?: readonly TrackedFrame[],
+): {
+  times: Map<number, number>;
+  read: ReadonlySet<number>;
+  fine: ReadonlyMap<number, VernierDating>;
+} | null {
+  const {times: own, fine} = controlTimes(control, {
+    ahead,
+    controlStarts,
+    vernier,
+    vernierAhead,
+  });
   const read = new Map<number, number>();
   for (const stamp of stamps) {
     const ms = own.get(stamp);
@@ -532,7 +780,7 @@ function controlPageTimes(
     floor = Math.max(times.get(stamp) ?? stamp, floor + DATED_GAP_MS);
     times.set(stamp, floor);
   }
-  return {times, read: new Set(read.keys())};
+  return {times, read: new Set(read.keys()), fine};
 }
 
 /**
@@ -540,38 +788,54 @@ function controlPageTimes(
  * (`controlPageTimes`), in the cast's order, which those times keep. Both
  * series come from one screencast, so each frame takes the same time in both.
  * `stampOf` gives each dated time's stamp, and `readTimes` holds the times
- * that are a frame's own reading. Null when the controls give no reading:
- * the proof then judges the cast's stamps.
+ * that are a frame's own reading. `vernierTimes` holds the times the
+ * verniers gave, each with the vernier that gave it. Null when the controls
+ * give no reading: the proof then judges the cast's stamps.
  */
 function datedOnControlClock(
   tracked: readonly TrackedFrame[],
   control: readonly TrackedFrame[],
   ahead: readonly TrackedFrame[] | undefined,
   controlStarts: readonly [number, number?] | undefined,
+  vernier?: readonly TrackedFrame[],
+  vernierAhead?: readonly TrackedFrame[],
 ): {
   tracked: TrackedFrame[];
   control: TrackedFrame[];
   stampOf: ReadonlyMap<number, number>;
   readTimes: ReadonlySet<number>;
+  vernierTimes: ReadonlyMap<number, VernierDating>;
 } | null {
   if (control.length === 0) {
     return null;
   }
   const stamps = [...new Set([...tracked, ...control].map(frame => frame.t))];
-  const dating = controlPageTimes(stamps, control, ahead, controlStarts);
+  const dating = controlPageTimes(
+    stamps,
+    control,
+    ahead,
+    controlStarts,
+    vernier,
+    vernierAhead,
+  );
   if (dating == null) {
     return null;
   }
-  const {times, read} = dating;
+  const {times, read, fine} = dating;
   const date = (frames: readonly TrackedFrame[]) =>
     [...frames]
       .sort((a, b) => a.t - b.t)
       .map(frame => ({...frame, t: times.get(frame.t) ?? frame.t}));
+  const timesOf = (set: ReadonlySet<number>) =>
+    new Set([...set].map(stamp => times.get(stamp) ?? Number.NaN));
   return {
     tracked: date(tracked),
     control: date(control),
     stampOf: new Map([...times].map(([stamp, time]) => [time, stamp])),
-    readTimes: new Set([...read].map(stamp => times.get(stamp) ?? Number.NaN)),
+    readTimes: timesOf(read),
+    vernierTimes: new Map(
+      [...fine].map(([stamp, kind]) => [times.get(stamp) ?? Number.NaN, kind]),
+    ),
   };
 }
 
@@ -724,10 +988,14 @@ export interface BlockedWindow extends BusyWindow {
    * or the marker chip's when the element holds one. For a fade or a
    * pseudo-element, `progress` holds one numeric channel scaled from 0 to 1.
    * `check` is the replayed box and the element's own at the loop's end, once
-   * the replay is aligned to it. `unpredictable` says why neither could be
-   * read, and fails the proof. `notPredicted` says why the cast-step rule
-   * judges each frame instead. Either the caught element carries no harness
-   * marker, or the run left the element before its replay.
+   * the replay is aligned to it. `rides` says the marker is on a descendant of
+   * the element, and no element between them runs a geometry animation of its
+   * own. The replay then gives the element's travel, which the marker shares.
+   * It keeps no `check`, so the proof places it from the cast. `unpredictable`
+   * says why neither could be read, and fails the proof. `notPredicted` says
+   * why the cast-step rule judges each frame instead. The caught element may
+   * carry or hold no harness marker, or more than one. The marker may move
+   * inside it, or the run may leave the element before its replay.
    */
   readonly animation?: {
     readonly from: number;
@@ -740,6 +1008,7 @@ export interface BlockedWindow extends BusyWindow {
       readonly predicted: readonly [number, number, number, number];
       readonly actual: readonly [number, number, number, number];
     };
+    readonly rides?: boolean;
     readonly progress?: ReadonlyArray<readonly [number, number]>;
     readonly unpredictable?: string;
     readonly notPredicted?: string;
@@ -822,7 +1091,11 @@ const CALL_SLACK_MS = 5;
  * by `busyWindowProof` when the tracked value had settled before the judged
  * part of the window began. Thrown too when a held curve that keeps no end
  * value ends so soon in the block that too few frames are left
- * (`curveEndMs`). Thrown by `blockMainThread` too when its wait finds no run,
+ * (`curveEndMs`). Thrown too when the tracked value comes within its settle
+ * bound so soon that the control moved on too few frames.
+ * `controlFramesWithoutSettle` says how many frames judging on would have
+ * held.
+ * Thrown by `blockMainThread` too when its wait finds no run,
  * but the action's run ended before the wait (`startedBeforeWaitMs`,
  * `endedBeforeWaitMs`). The page received the action first. Always a red,
  * with the numbers; never a pass. Start the
@@ -1145,11 +1418,43 @@ export async function blockMainThread(
             isGeometry(caught)
           ) {
             // Only the element that carries the harness marker predicts the
-            // tracked box.
-            if (!target.hasAttribute('data-harness-marker')) {
+            // tracked box, or one that holds it. The marker then rides the
+            // element when no element between them runs a geometry animation.
+            const markers = target.hasAttribute('data-harness-marker')
+              ? [target]
+              : [...target.querySelectorAll('[data-harness-marker]')];
+            if (markers.length === 0) {
               return {
                 notPredicted: 'the tracked marker is not on the caught element',
               };
+            }
+            if (markers.length > 1) {
+              return {
+                notPredicted:
+                  'the caught element holds more than one harness marker',
+              };
+            }
+            const rides = markers[0] !== target;
+            for (
+              let inside: Element | null = markers[0];
+              rides && inside != null && inside !== target;
+              inside = inside.parentElement
+            ) {
+              if (
+                inside
+                  .getAnimations()
+                  .some(
+                    a =>
+                      isGeometry(a) &&
+                      a.playState !== 'finished' &&
+                      a.playState !== 'idle',
+                  )
+              ) {
+                return {
+                  notPredicted:
+                    'the tracked marker moves inside the caught element',
+                };
+              }
             }
             for (
               let up = target.parentElement;
@@ -1291,7 +1596,12 @@ export async function blockMainThread(
               replay.cancel();
             }
             clone.remove();
-            return {geometry: samples, check};
+            // A rider's replay gives the element's travel. WebKit reads the
+            // element's box at the loop's end before its animation's current
+            // time, so the proof places the replay from the cast instead.
+            return rides
+              ? {geometry: samples, rides: true}
+              : {geometry: samples, check};
           }
           // One numeric channel: the one that changes the most, for its size.
           const keyframes = keyframesOf(caught);
@@ -1664,8 +1974,43 @@ export interface BusyProof extends FrameStats {
   readonly unjudged: readonly UnjudgedFrame[];
   /** The judgment against the limits (see `busyWindowProof`). */
   readonly verdict: BusyVerdict;
+  /**
+   * With a `vernier`: how the frames in the judged part were dated, and how
+   * each miss and its anchor were.
+   */
+  readonly vernier?: BusyVernierRead;
   /** One line with the raw numbers, for an annotation or a failure message. */
   readonly summary: string;
+}
+
+/** Which vernier dated a frame: the vernier, or the one ahead. */
+export type VernierDating = 'vernier' | 'vernier-ahead';
+
+/**
+ * How a busy proof dated a frame: from a vernier, or from the slow controls
+ * alone where neither vernier gave a time. Else from a neighbour's reading, or
+ * by its cast stamp.
+ */
+export type BusyFrameDating =
+  VernierDating | 'controls' | 'neighbour' | 'stamp';
+
+/** How a busy proof with a `vernier` dated its judged frames. */
+export interface BusyVernierRead {
+  /** The frames in the judged part that the vernier dated. */
+  readonly dated: number;
+  /** The frames in the judged part that the vernier ahead dated. */
+  readonly datedAhead: number;
+  /** The frames in the judged part that kept a rougher time. */
+  readonly fallback: number;
+  /**
+   * Each miss, by its time after the block began, with how it and the frame
+   * that anchored its move were dated.
+   */
+  readonly misses: readonly {
+    readonly atMs: number;
+    readonly frame: BusyFrameDating;
+    readonly anchor: BusyFrameDating | null;
+  }[];
 }
 
 /**
@@ -1793,9 +2138,29 @@ function predictionOf(
   );
   const geometry = animation.geometry;
   if (geometry != null && geometry.length > 1) {
-    const value = sampled(
+    const replayed = sampled(
       geometry.map(sample => [sample[0], sample[1 + column]]),
     );
+    // A rider's replay gives the travel only. It is placed from the cast,
+    // outside the judged part. That is where the marker settles when the
+    // replay reaches the curve's end, else the last frame before the judged
+    // part.
+    let offset = 0;
+    if (animation.rides === true) {
+      const end =
+        settledAt ?? shown.filter(f => f.t >= animation.to).at(-1)?.value;
+      const before = shown.filter(f => f.t < judged.from).at(-1);
+      if (geometry[geometry.length - 1][0] >= animation.to && end != null) {
+        offset = end - replayed(animation.to);
+      } else if (before != null) {
+        offset = before.value - replayed(before.t);
+      } else {
+        return {
+          fallback: `no frame outside the judged part places the replay of the element the marker rides`,
+        };
+      }
+    }
+    const value = (t: number) => replayed(t) + offset;
     const check = animation.check;
     if (
       check != null &&
@@ -1927,7 +2292,10 @@ function motionStepPx(values: readonly number[]): number {
  * block started late for the motion. Without a control, the part's span
  * counts. That throws `BusyWindowTooLateError`, as a motion that settled
  * before the block does. A stall before the curve's end is still judged, and
- * fails.
+ * fails. A settle bound can end judging so soon that the control moved on
+ * fewer than `minJudgedFrames` frames. That throws it too, when judging on
+ * would have held enough. True starvation, a control that moved on too few
+ * frames up to the block's end, still throws `FrameStarvationError`.
  *
  * A just-started animation can reach the screen after the block began (its
  * hand-off to the compositor lags under load: 50–100 ms in WebKit). The
@@ -2021,6 +2389,13 @@ function motionStepPx(values: readonly number[]): number {
  * are dated. Frames built without it, and a cast with no control, are judged
  * on their stamps.
  *
+ * With a `vernier` (`startBusyControl`), each frame the slow controls read
+ * takes the vernier's time where it gives one (`vernierTime`). That time has
+ * a quarter of their reading error. Near the vernier's turns, the vernier
+ * ahead (`vernierAhead`) dates the frame. A frame neither dates keeps the slow
+ * controls' time. The proof's `vernier` and its notes count the judged frames
+ * the verniers dated, and say how each miss and its anchor were dated.
+ *
  * A WebKit proof keeps one dated frame per display interval, the earlier
  * one. A frame with no reading always stays. The proof judges motion on every
  * kept frame the control moved. Its cast rarely shows two frames one interval
@@ -2046,15 +2421,20 @@ function motionStepPx(values: readonly number[]): number {
  * the caller's (`predicted`), or the animation `blockMainThread` caught,
  * replayed once the loop ended (`window.animation`). A replay predicts in
  * Chromium when the proof passes the `ahead` control. A geometry replay also
- * needs the harness marker on the caught element. A move of one cast step or
- * more always changes the cast's reading, whatever the pixel phase. So such a
- * frame must show a new position, with no run excused. A predicted move under
- * one step may show none: that frame is too little to judge. It is listed in
- * `unjudged` and in the summary, and counts neither as moved nor as missed.
+ * needs the harness marker on the caught element, or on a descendant when no
+ * element between runs a geometry animation (`rides`). A rider's replay keeps
+ * no end check and is placed from the cast, so it predicts in WebKit too. A
+ * move of one cast step or more always changes the cast's reading, whatever
+ * the pixel phase. So such a frame must show a new position, with no run
+ * excused. A frame counts as a miss only when the curve moves at least one
+ * capture step since the last frame that showed a new position. A predicted
+ * move under one step may show none: that frame is too little to judge. It is
+ * listed in `unjudged` and in the summary, and counts neither as moved nor as
+ * missed.
  * When too few judged frames remain, the proof throws `FrameStarvationError`
  * naming them. Where a replay predicts, one it cannot read throws
  * `BusyPredictionError`. Every other window falls back by name to the cast-step
- * rule above, exactly as without a replay.
+ * rule above, exactly as without a replay. The notes name the fallback.
  *
  * With `judgeEveryFrame`, a frame the cast could not show the component's
  * step on is too little to judge (the frames `belowStep` counts). When the
@@ -2105,6 +2485,8 @@ function readBusyWindow(
   {
     ahead,
     controlStarts,
+    vernier,
+    vernierAhead,
     ...options
   }: NonNullable<Parameters<typeof judgeBusyWindow>[2]> & {
     /**
@@ -2119,7 +2501,26 @@ function readBusyWindow(
      * the origin that most of its frames' stamps agree with.
      */
     controlStarts?: readonly [number, number?];
+    /**
+     * The vernier control (`startBusyControl` with `vernier`), tracked from
+     * the same screencast. It dates each frame the slow controls read, to a
+     * quarter of their reading error (`vernierTime`). The proof's `vernier`
+     * and its notes count the frames it dated and the ones that kept a rougher
+     * time.
+     */
+    vernier?: readonly TrackedFrame[];
+    /**
+     * The vernier ahead (`startBusyControl` with `vernier` and `ahead`),
+     * tracked from the same screencast. It dates a frame near the vernier's
+     * turn.
+     */
+    vernierAhead?: readonly TrackedFrame[];
   } = {},
+  /**
+   * A pooled run's window. A settle bound that ends judging soon throws
+   * nothing there: the run adds its frames to the pool.
+   */
+  pooled = false,
 ): ReturnType<typeof judgeBusyWindow> {
   const {control, predicted} = options;
   // A prediction reads each frame at its content's time. The cast's stamps
@@ -2147,14 +2548,21 @@ function readBusyWindow(
       ...(window as BlockedWindow),
       animation: {from: start, to: end, holds, notPredicted: why},
     };
-    return readBusyWindow(tracked, plain, {...options, ahead, controlStarts});
+    return readBusyWindow(
+      tracked,
+      plain,
+      {...options, ahead, controlStarts, vernier, vernierAhead},
+      pooled,
+    );
   };
   // WebKit reads the element's box at the loop's end before its animation's
-  // current time, so the replay cannot be aligned to it there.
+  // current time, so the replay cannot be aligned to it there. A rider's
+  // replay is placed from the cast instead, so it predicts in WebKit too.
   if (
     animation != null &&
     predicted == null &&
     predicts &&
+    animation.rides !== true &&
     tracked.some(frame => frame.engine === 'webkit')
   ) {
     return fallBack(
@@ -2181,11 +2589,40 @@ function readBusyWindow(
   const dated =
     control != null &&
     (predicts || control.every(frame => frame.engine != null))
-      ? datedOnControlClock(tracked, control, ahead, starts)
+      ? datedOnControlClock(
+          tracked,
+          control,
+          ahead,
+          starts,
+          vernier,
+          vernierAhead,
+        )
       : null;
   if (dated == null) {
-    const read = judgeBusyWindow(tracked, window, options);
-    return read.fallback == null ? read : fallBack(read.fallback);
+    const read = judgeBusyWindow(
+      tracked,
+      window,
+      options,
+      undefined,
+      undefined,
+      pooled,
+    );
+    if (read.fallback != null) {
+      return fallBack(read.fallback);
+    }
+    if (vernier == null && vernierAhead == null) {
+      return read;
+    }
+    const onStamps = vernierRead(tracked, read, window.from, null);
+    return {
+      ...read,
+      proof: {
+        ...read.proof,
+        vernier: onStamps.read,
+        notes: [...read.proof.notes, onStamps.note],
+        summary: `${read.proof.summary}; ${onStamps.note}`,
+      },
+    };
   }
   const webkit = control?.every(frame => frame.engine === 'webkit') === true;
   const shown = webkit ? atDisplayRate(dated) : dated;
@@ -2198,6 +2635,7 @@ function readBusyWindow(
     {...options, control: shown.control},
     dated.tracked,
     unread,
+    pooled,
   );
   if (read.fallback != null) {
     return fallBack(read.fallback);
@@ -2214,18 +2652,94 @@ function readBusyWindow(
         (cadence.unmatched > 0
           ? `, ${cadence.unmatched} without a control frame at their time`
           : '');
+  // With a vernier, how each judged frame and each miss got its time.
+  const fine =
+    vernier == null && vernierAhead == null
+      ? null
+      : vernierRead(shown.tracked, read, window.from, shown);
+  const notes = [
+    ...(note == null ? [] : [note]),
+    ...(fine == null ? [] : [fine.note]),
+  ];
   return {
     ...read,
     proof: {
       ...read.proof,
       judged: judgedOnStamps(read.proof.judged, shown),
-      ...(note == null
+      ...(fine == null ? {} : {vernier: fine.read}),
+      ...(notes.length === 0
         ? {}
         : {
-            notes: [...read.proof.notes, note],
-            summary: `${read.proof.summary}; note: ${note}`,
+            notes: [...read.proof.notes, ...notes],
+            summary: [
+              read.proof.summary,
+              ...(note == null ? [] : [`note: ${note}`]),
+              ...(fine == null ? [] : [fine.note]),
+            ].join('; '),
           }),
     },
+  };
+}
+
+/**
+ * With a vernier: how each frame in the judged part was dated, and how each
+ * miss and the frame that anchored its move were. A miss with a rough time
+ * shows whether the vernier covered it. `dating` is null when the proof
+ * judges the cast's stamps.
+ */
+function vernierRead(
+  tracked: readonly TrackedFrame[],
+  {
+    proof,
+    missed,
+  }: {
+    readonly proof: BusyProof;
+    readonly missed: readonly {
+      readonly at: number;
+      readonly anchor: number | null;
+    }[];
+  },
+  windowFrom: number,
+  dating: {
+    readonly readTimes: ReadonlySet<number>;
+    readonly vernierTimes: ReadonlyMap<number, VernierDating>;
+  } | null,
+): {read: BusyVernierRead; note: string} {
+  const dated = (t: number): BusyFrameDating =>
+    dating == null
+      ? 'stamp'
+      : (dating.vernierTimes.get(t) ??
+        (dating.readTimes.has(t) ? 'controls' : 'neighbour'));
+  const kinds = tracked
+    .filter(frame => frame.t >= proof.judged.from && frame.t <= proof.judged.to)
+    .map(frame => dated(frame.t));
+  const count = (kind: BusyFrameDating) =>
+    kinds.filter(each => each === kind).length;
+  const misses = missed.map(({at, anchor}) => ({
+    atMs: at - windowFrom,
+    frame: dated(at),
+    anchor: anchor == null ? null : dated(anchor),
+  }));
+  const rougher = (['controls', 'neighbour', 'stamp'] as const)
+    .filter(kind => count(kind) > 0)
+    .map(kind => `${count(kind)} by ${kind}`);
+  const note =
+    `vernier: of the ${kinds.length} frames in the judged part, ${count('vernier')} by the vernier, ${count('vernier-ahead')} by the one ahead` +
+    (rougher.length > 0 ? `, ${rougher.join(', ')}` : '') +
+    misses
+      .map(
+        miss =>
+          `; miss at +${miss.atMs.toFixed(0)} ms: frame by ${miss.frame}, anchor by ${miss.anchor ?? 'none'}`,
+      )
+      .join('');
+  return {
+    read: {
+      dated: count('vernier'),
+      datedAhead: count('vernier-ahead'),
+      fallback: kinds.length - count('vernier') - count('vernier-ahead'),
+      misses,
+    },
+    note,
   };
 }
 
@@ -2340,6 +2854,11 @@ function judgeBusyWindow(
   drawn: readonly TrackedFrame[] = tracked,
   /** The frames dated from another frame's reading (`datedOnControlClock`). */
   unread: ReadonlySet<TrackedFrame> = new Set(),
+  /**
+   * A pooled run's window. A settle bound that ends judging soon throws
+   * nothing there: the run adds its frames to the pool.
+   */
+  pooled = false,
 ): {
   proof: BusyProof;
   starvation: FrameShortfall | null;
@@ -2353,6 +2872,11 @@ function judgeBusyWindow(
   componentFailed: boolean;
   /** The frames the cast drew in the block, and its longest gap there, ms. */
   cast: {frames: number; longestGapMs: number};
+  /**
+   * The judged frames the control moved on where the component showed no new
+   * position and no excuse applied, each with its anchor's time.
+   */
+  missed: readonly {readonly at: number; readonly anchor: number | null}[];
   /** Why the replay could not predict the frames: the caller judges again. */
   fallback?: string;
 } {
@@ -2378,6 +2902,9 @@ function judgeBusyWindow(
     settledWithinSteps == null || castStepPx == null
       ? settledWithin
       : settledWithinSteps * castStepPx;
+  // Where judging would end without the settle bound, when the bound ends it
+  // sooner: the guard below reads it.
+  let endWithoutSettle: number | null = null;
   if (settledWithinPx != null) {
     const valued = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
@@ -2391,6 +2918,14 @@ function judgeBusyWindow(
         Math.abs(f.value - final) <= settledWithinPx,
     );
     if (arrived != null) {
+      // Without the bound, judging ends at the block's end, or at a held
+      // curve's end when the element keeps no end value.
+      const heldEnd = (window as Partial<BlockedWindow>).animation;
+      const unbounded =
+        heldEnd?.holds === false ? Math.min(end, heldEnd.to) : end;
+      if (arrived.t < unbounded) {
+        endWithoutSettle = unbounded;
+      }
       end = Math.min(end, arrived.t);
     }
     // A sparse screencast can deliver the block's first frame after the
@@ -2757,6 +3292,7 @@ function judgeBusyWindow(
     return changes;
   };
   let controlRead: BusyControlRead | null = null;
+  let missed: {at: number; anchor: number | null}[] = [];
   // The cast step a predicted move is judged against: the coarser of the
   // motion's own step and the frames' own (`castStep`).
   const judgeStepPx = Math.max(
@@ -2780,6 +3316,7 @@ function judgeBusyWindow(
       unjudged: [],
       componentFailed: false,
       cast: {frames: 0, longestGapMs: 0},
+      missed: [],
       fallback: prediction.fallback,
     };
   }
@@ -2932,6 +3469,8 @@ function judgeBusyWindow(
     // step. Without a prediction, a run the cast's step explains counts as
     // moved.
     const excluded = new Set<number>();
+    // Each judged frame's anchor, for the misses the proof reports.
+    const anchors = new Map<number, number>();
     if (predictedAt != null) {
       for (const t of controlChanges) {
         const i = seriesIndex.get(t);
@@ -2952,6 +3491,7 @@ function judgeBusyWindow(
         while (anchor < i - 1 && unread.has(series[anchor].frame)) {
           anchor += 1;
         }
+        anchors.set(t, series[anchor].t);
         const move = Math.abs(predictedAt(t) - predictedAt(series[anchor].t));
         const undated =
           unread.has(series[i].frame) || unread.has(series[i - 1].frame);
@@ -3004,6 +3544,9 @@ function judgeBusyWindow(
         ...componentEdges.slice(1).map((t, i) => t - componentEdges[i]),
       ),
     };
+    missed = judgedChanges
+      .filter(t => !changed.has(t) && !excused(t))
+      .map(t => ({at: t, anchor: anchors.get(t) ?? null}));
   }
   // The curve's end left too little to judge only when the part up to the
   // block's end would have held enough. Otherwise the run fails as before,
@@ -3019,6 +3562,42 @@ function judgeBusyWindow(
         : controlChangesUpTo(control, endWithoutCurve).length;
     if (framesLeft < minJudgedFrames && framesWithoutCurve >= minJudgedFrames) {
       throw curveTooLate(framesLeft);
+    }
+  }
+  // The same holds for a settle bound. A motion that comes within it so soon
+  // after the block began leaves too few frames. That is only because the
+  // block started late for it, when judging on would have held enough. A
+  // pooled run adds its few frames to the pool instead, so it throws nothing.
+  if (
+    !pooled &&
+    endWithoutSettle != null &&
+    control != null &&
+    controlRead != null
+  ) {
+    const framesLeft = controlRead.moved + named.length;
+    const framesWithoutSettle = controlChangesUpTo(
+      control,
+      endWithoutSettle,
+    ).length;
+    if (
+      framesLeft < minJudgedFrames &&
+      framesWithoutSettle >= minJudgedFrames
+    ) {
+      const presented = tracked.filter(
+        f => f.t >= window.from && f.t <= window.to,
+      ).length;
+      const settledAtMs = end - window.from;
+      const judgedFromMs = judged.from - window.from;
+      throw new BusyWindowTooLateError(
+        `busyWindowProof: the tracked ${axis} came within ${settledWithinPx} px of where it ends ${settledAtMs.toFixed(0)} ms after the block began, so the part judged from ${judgedFromMs.toFixed(0)} ms held ${framesLeft} of the control's frames, under the ${minJudgedFrames} it needs, where judging on to ${(endWithoutSettle - window.from).toFixed(0)} ms would have held ${framesWithoutSettle} (${presented} frames presented in the block): the block started late for the motion. Start the block earlier.`,
+        {
+          settledAtMs,
+          judgedFromMs,
+          controlFrames: framesLeft,
+          controlFramesWithoutSettle: framesWithoutSettle,
+          presented,
+        },
+      );
     }
   }
   const failures: string[] = [];
@@ -3155,7 +3734,7 @@ function judgeBusyWindow(
     controlRead != null &&
     (controlRead.movedWith < controlRead.moved ||
       controlRead.componentStallMs > controlRead.longestStallMs);
-  return {proof, starvation, unjudged, componentFailed, cast};
+  return {proof, starvation, unjudged, componentFailed, cast, missed};
 }
 
 /**
@@ -3253,10 +3832,13 @@ export function pooledBusyProof(
   runs: readonly BusyRun[],
   options: Omit<
     NonNullable<Parameters<typeof busyWindowProof>[2]>,
-    // A prediction belongs to one window, never to the pool.
+    // A prediction belongs to one window, never to the pool, and so does the
+    // vernier.
     | 'control'
     | 'ahead'
     | 'controlStarts'
+    | 'vernier'
+    | 'vernierAhead'
     | 'minMovedFraction'
     | 'judgeEveryFrame'
     | 'predicted'
@@ -3295,6 +3877,7 @@ export function pooledBusyProof(
           ahead: run.ahead,
           controlStarts: run.controlStarts,
         },
+        true,
       );
       late.push(null);
       failedRuns.push(componentFailed);

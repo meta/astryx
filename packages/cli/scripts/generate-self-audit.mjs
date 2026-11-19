@@ -20,7 +20,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {SELF_AUDIT_FILE} from '../foundation/discovery/stored-self-audit.mjs';
 import {assertSameBesideLockfiles} from './same-beside-lockfiles.mjs';
-import {withPublishedCopy} from './published-copy.mjs';
+import {resolutionUnrecorded, withPublishedCopy} from './published-copy.mjs';
 
 /**
  * What runs the audit in the copy and prints its inputs and value.
@@ -30,7 +30,8 @@ import {withPublishedCopy} from './published-copy.mjs';
 function auditRunner(pkg) {
   const at = (/** @type {string} */ rel) =>
     JSON.stringify(pathToFileURL(path.join(pkg, rel)).href);
-  return `const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
+  return `${resolutionUnrecorded(pkg)}
+const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
 const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
 const {AUTHORING_AUDIT, authoringAuditData} = await import(${at('api/doctor/_adapter.mjs')});
 const seen = new Map();

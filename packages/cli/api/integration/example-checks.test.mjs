@@ -10,6 +10,7 @@ import {outsideFiles} from '../../foundation/integrations/pack-state.mjs';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../../foundation/release/cache.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+import {recordReads, unchangedSince} from '../../foundation/fs/read-record.mjs';
 
 // The checks' one-time start in this file (TypeScript and its lib files) runs
 // here, while the file is collected, so no test carries it.
@@ -693,6 +694,35 @@ describe('what npm packs decides', () => {
       );
       expect(notes[0].message).not.toContain('.npmignore');
     }
+  });
+
+  it('records an ignore file npm reads by its stamp, so a kept check sees it edited', async () => {
+    write({
+      'package.json': JSON.stringify({name: '@acme/kit', version: '1.0.0'}),
+      'templates/img/.npmignore': '*.log\n',
+      'templates/img/hero.png': 'png',
+      'templates/card.doc.mjs': blockDoc(
+        'card',
+        ", exampleFor: 'AcmeCard', isShowcase: true",
+      ),
+      'templates/card.tsx': [
+        "const hero = new URL('./img/hero.png', import.meta.url);",
+        'export default () => null;',
+        '',
+      ].join('\n'),
+    });
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    // As a kept check records: each path by what its call returned.
+    await recordReads(seen, () => notesOf(['template_asset_not_packed']), {
+      exact: true,
+    });
+    expect(unchangedSince(seen)).toBe(true);
+    // npm reads the file's lines in a child process, and nothing else reads
+    // them while the asset is packed: an edit that keeps the file there must
+    // still show.
+    fs.writeFileSync(path.join(dir, 'templates/img/.npmignore'), 'hero.png\n');
+    expect(unchangedSince(seen)).toBe(false);
   });
 
   it('names a nested ignore file that drops an asset', async () => {
