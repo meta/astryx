@@ -8,7 +8,9 @@ export const docs = {
   displayName: 'Top Nav Menu',
   description:
     'Navigation item that displays a hover-triggered popover menu with rich items containing an icon, title, and optional description.',
+  // The trigger is a bar item: the preview draws it in a TopNav.
   playground: {
+    wrapper: {component: 'TopNav'},
     defaults: {
       label: 'Products',
       items: [
