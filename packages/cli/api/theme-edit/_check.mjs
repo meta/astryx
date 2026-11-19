@@ -1004,9 +1004,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
           when: s.when,
           state: s.state,
           mode: s.mode,
-          // (A saved only that set would save without, on a part styled on
-          // its own, is read as without it, as the reader reads it.)
-          only: s.only && onlyFits(s) ? s.only : undefined,
+          only: s.only,
         },
       );
     } catch (e) {

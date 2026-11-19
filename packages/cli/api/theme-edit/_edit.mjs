@@ -7822,7 +7822,8 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            onlyHint: onlyMeans(s.on) === 'member',
+            onlyHint:
+              !groupsOf(ctx)[s.on ?? ''] && onlyMeans(s.on) === 'member',
           }
         : null,
       changedTokens: lookCollapsed(
