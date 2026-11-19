@@ -11,6 +11,7 @@
 
 import {
   astryxIconDefinitions,
+  definitionRelatives,
   iconLookExport,
   iconSetKey,
   importLine,
@@ -123,9 +124,35 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
       matchCount: matches.length,
       matches: matches
         .slice(0, limit)
-        .map(match => inLook(match, searched, looks)),
+        .map(match => withRelatives(inLook(match, searched, looks), searched)),
     },
   };
+}
+
+/**
+ * A match with `relatives`: the other definitions in the groups of the
+ * definitions it draws, from Astryx's and its set's own, so a reader sees
+ * the related meanings and picks the one that fits. Absent when there are
+ * none. It never changes the ranking.
+ * @param {import('../icon.type.mjs').IconMatchEntry} match
+ * @param {Parameters<typeof rankIcons>[0]} sets
+ * @returns {import('../icon.type.mjs').IconMatchEntry}
+ */
+function withRelatives(match, sets) {
+  if (match.definitions.length === 0) return match;
+  const set = sets.find(
+    each => each.package === match.package && each.name === match.set,
+  );
+  const relatives = definitionRelatives(match.definitions, [
+    ...astryxIconDefinitions().definitions.map(each => each.doc),
+    ...(set?.definitions ?? []).map(
+      each =>
+        /** @type {{name: string, description: string, group?: string}} */ (
+          each.doc
+        ),
+    ),
+  ]);
+  return relatives.length > 0 ? {...match, relatives} : match;
 }
 
 /**
@@ -164,6 +191,7 @@ function inLook(match, sets, looks) {
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
 function noIconSet(query, limit) {
+  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
   const found = definitionMatches(query).map(match => match.doc);
   const ordered = [
     ...found.filter(doc => doc.builtIn),
@@ -176,11 +204,16 @@ function noIconSet(query, limit) {
       matchCount: 0,
       matches: [],
       reason: 'No icon set is installed.',
-      definitions: ordered.slice(0, limit).map(doc => ({
-        name: doc.name,
-        builtIn: doc.builtIn === true,
-        description: doc.description,
-      })),
+      definitions: ordered.slice(0, limit).map(doc => {
+        const relatives = definitionRelatives([doc.name], docs);
+        return {
+          name: doc.name,
+          builtIn: doc.builtIn === true,
+          description: doc.description,
+          ...(doc.group ? {group: doc.group} : {}),
+          ...(relatives.length > 0 ? {relatives} : {}),
+        };
+      }),
       next: noIconSetNext(),
     },
   };

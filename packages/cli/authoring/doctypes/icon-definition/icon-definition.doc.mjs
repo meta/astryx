@@ -52,6 +52,14 @@ export const doc = {
       required: false,
     },
     {
+      name: 'group',
+      type: 'string',
+      description:
+        "camelCase name of the family the definition belongs to, such as `notifications` for `notification`, `notificationActive`, and `notificationOff`. The icon finder and the definition's docs page name the other members of its group, so a reader picks the one that fits. A set's own definition may join an Astryx group or name its own. It never changes ranking.",
+      required: false,
+      example: "'notifications'",
+    },
+    {
       name: 'stability',
       type: "'experimental'",
       description:

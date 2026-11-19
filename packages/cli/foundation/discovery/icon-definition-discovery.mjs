@@ -132,3 +132,37 @@ export function astryxDefinitionsByName() {
     astryxIconDefinitions().definitions.map(m => [m.doc.name, m.doc]),
   );
 }
+
+/**
+ * A related definition: one that shares a group with another.
+ * @typedef {object} IconDefinitionRelative
+ * @property {string} definition the related definition's name
+ * @property {string} description what it means
+ */
+
+/**
+ * The definitions related to `names`: every definition in `docs` that shares a
+ * `group` with one of `names` and is not one of them, in `docs` order. The
+ * first doc of a name wins, so Astryx's definitions come first in `docs`
+ * (spec:AST-084 FR4). Groups are information only: nothing ranks by them.
+ * @param {Iterable<string>} names
+ * @param {Array<{name: string, description: string, group?: string}>} docs
+ * @returns {IconDefinitionRelative[]}
+ */
+export function definitionRelatives(names, docs) {
+  const own = new Set(names);
+  /** @type {Map<string, {name: string, description: string, group?: string}>} */
+  const byName = new Map();
+  for (const doc of docs) if (!byName.has(doc.name)) byName.set(doc.name, doc);
+  const groups = new Set();
+  for (const name of own) {
+    const group = byName.get(name)?.group;
+    if (group) groups.add(group);
+  }
+  if (groups.size === 0) return [];
+  return [...byName.values()]
+    .filter(
+      doc => doc.group != null && groups.has(doc.group) && !own.has(doc.name),
+    )
+    .map(doc => ({definition: doc.name, description: doc.description}));
+}
