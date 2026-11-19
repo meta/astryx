@@ -155,10 +155,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   icons. It reflects the row's states but not its size: the Icon reflects its
   own `size` on that element. A custom React node given as `icon` carries no
   target, because Core does not inject props into consumer elements; the row
-  target's inherited color still reaches it. SideNavItem draws the built-in
-  icon with `drawsAsIcon` (`packages/core/src/Icon/Icon.tsx`, Core-internal,
-  not exported from the package), the check `renderIconSlot` uses, so both
-  read an icon slot value the same way.
+  target's inherited color still reaches it.
 
 ### Representative states
 
