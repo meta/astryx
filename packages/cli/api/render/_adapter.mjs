@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -429,21 +428,21 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
+      // At installCommandFor's versions, in the guidance too: a package Astryx
+      // releases with Core at the project's Core release, any other at the
+      // CLI's range; no command when the project's lockfiles disagree.
+      const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
+      const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
-      } else if (pageRoot == null) {
+      } else if (step == null) {
         // In a folder no package.json holds, an install would make the folder
         // a project, so the message names the packages for the project that
         // uses the page instead, as template and build do.
         message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        // At installCommandFor's versions: a package Astryx releases with
-        // Core at the project's Core release, any other at the CLI's range;
-        // none when the project's lockfiles disagree.
-        const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
         if (line && samePackage) {
           suggestions.push({name: line, reason: what});

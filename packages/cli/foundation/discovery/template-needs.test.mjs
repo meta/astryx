@@ -465,6 +465,19 @@ describe('installCommandFor names a package Astryx releases with Core at the pro
     );
   });
 
+  it('takes the release of the CLI that answers when the declared Core is not a plain version range', () => {
+    expect(
+      installCommandFor([theme], app({'@astryxdesign/core': 'workspace:*'}))
+        .installCommand,
+    ).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    const crafted = installCommandFor(
+      [theme],
+      app({'@astryxdesign/core': '^0.7.0"; echo INJECTED; "'}),
+    ).installCommand;
+    expect(crafted).toBe(`npm install ${theme}@${CLI_VERSION}`);
+    expect(crafted).not.toContain('INJECTED');
+  });
+
   it('leaves any other package to the package manager, and saves nothing exactly beside it', () => {
     const pinned = app({'@astryxdesign/core': '0.7.10'});
     expect(installCommandFor(['left-pad'], pinned).installCommand).toBe(

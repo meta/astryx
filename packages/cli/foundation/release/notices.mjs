@@ -51,7 +51,7 @@ import {
 import {CLI_ROOT, findAstryxProject, findPackageRoot} from '../fs/paths.mjs';
 import {readDeclaredDependencies} from '../integrations/declared-dependencies.mjs';
 import {satisfiesRange, semverCompare} from '../env/semver.mjs';
-import {isInReleaseCache, isReleaseVersion} from './cache.mjs';
+import {isInReleaseCache, isReleaseVersion, isVersionRange} from './cache.mjs';
 import {pinnedVersion, runningCopy} from './choose.mjs';
 import {
   knownLatest,
@@ -542,15 +542,18 @@ function projectFacts(cwd) {
 /**
  * The release at which a project with the release facts `facts` adds a
  * package Astryx releases with Core: the Core it installed or locked, else
- * the one its package.json pins, else the Core range it declares, else, with
- * no Core at all, the release of the CLI that answers.
+ * the one its package.json pins, else the Core range it declares, else the
+ * release of the CLI that answers. A declared range counts only when it is a
+ * plain version range: a `workspace:` or `file:` spec would make the command
+ * fail, and nothing a project declares may reach a shell.
  * @param {import('./project.mjs').ReleaseFacts} facts
  * @returns {string}
  */
 function coreRelease(facts) {
+  const declared = facts.declaredCoreRange;
   return (
     coreVersionOf(facts) ??
-    facts.declaredCoreRange ??
+    (declared && isVersionRange(declared) ? declared : null) ??
     runningCopy(CLI_ROOT).version
   );
 }
