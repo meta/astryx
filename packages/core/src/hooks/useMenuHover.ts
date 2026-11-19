@@ -161,6 +161,8 @@ export interface UseMenuHoverReturn<T extends HTMLElement = HTMLElement> {
     /** Present only when `popoverId` is supplied. */
     popoverTarget?: string;
   };
+  /** Open from the trigger's ArrowDown key and focus the first item. */
+  onTriggerKeyDown: (event: React.KeyboardEvent) => void;
   contentProps: {
     onMouseEnter: () => void;
     onMouseLeave: (event?: React.MouseEvent) => void;
@@ -329,6 +331,31 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     focusMenu();
   }, [ownsFocus, show, focusMenu]);
 
+  const openFromKeyboard = useCallback(() => {
+    closedAtRef.current = 0;
+    hoverModeRef.current = false;
+    hoverOpenedAtRef.current = 0;
+    if (isOpen) {
+      if (ownsFocus) {
+        focusMenu();
+      }
+    } else {
+      openAndFocus();
+    }
+  }, [focusMenu, isOpen, openAndFocus, ownsFocus]);
+
+  const handleTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== 'ArrowDown') {
+        return;
+      }
+      event.preventDefault();
+      clearTimeouts();
+      openFromKeyboard();
+    },
+    [clearTimeouts, openFromKeyboard],
+  );
+
   const confirmHoverOpen = useCallback((): boolean => {
     const isConfirming =
       clickGuardMs > 0 &&
@@ -357,16 +384,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       // visible menu.
       const isKeyboardActivation = event != null && event.detail === 0;
       if (isKeyboardActivation) {
-        closedAtRef.current = 0;
-        hoverModeRef.current = false;
-        hoverOpenedAtRef.current = 0;
-        if (isOpen) {
-          if (ownsFocus) {
-            focusMenu();
-          }
-        } else {
-          openAndFocus();
-        }
+        openFromKeyboard();
         return;
       }
 
@@ -391,9 +409,10 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       popoverId,
       clearTimeouts,
       isOpen,
+      openAndFocus,
       ownsFocus,
       confirmHoverOpen,
-      openAndFocus,
+      openFromKeyboard,
       focusMenu,
       hideAndRestoreFocus,
     ],
@@ -512,6 +531,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
   if (!isEnabled) {
     return {
       triggerProps: {onClick: noop, onMouseEnter: noop, onMouseLeave: noop},
+      onTriggerKeyDown: noopKeyDown,
       contentProps: {
         onMouseEnter: noop,
         onMouseLeave: noop,
@@ -533,6 +553,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       onMouseLeave: handleMouseLeave,
       ...(popoverId ? {popoverTarget: popoverId} : null),
     },
+    onTriggerKeyDown: handleTriggerKeyDown,
     contentProps: {
       onMouseEnter: handleContentMouseEnter,
       onMouseLeave: handleMouseLeave,

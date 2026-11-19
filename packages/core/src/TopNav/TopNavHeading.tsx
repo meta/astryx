@@ -405,6 +405,7 @@ export function TopNavHeading({
     contentProps,
     menuRef,
     setTriggerEl,
+    onTriggerKeyDown,
     close: closeMenu,
   } = useMenuHover<HTMLDivElement>({
     show: popover.show,
@@ -627,6 +628,7 @@ export function TopNavHeading({
                 e.stopPropagation();
                 triggerProps.onClick();
               }}
+              onKeyDown={onTriggerKeyDown}
               {...popover.triggerProps}
               {...stylex.props(styles.chevron, styles.interactive)}>
               <Icon
@@ -712,6 +714,7 @@ export function TopNavHeading({
                   e.stopPropagation();
                   triggerProps.onClick();
                 }}
+                onKeyDown={onTriggerKeyDown}
                 {...popover.triggerProps}
                 {...stylex.props(styles.chevron, styles.interactive)}>
                 <Icon

@@ -554,6 +554,27 @@ describe('SideNavHeading', () => {
       );
     });
 
+    it('opens and focuses the first item on ArrowDown from the menu button', () => {
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="One" onClick={() => {}} />
+              <NavHeadingMenuItem label="Two" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: /Open menu/});
+      trigger.focus();
+      fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('menuitem', {name: 'One', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
       __resetMenuPressForTest();
       const user = userEvent.setup();
