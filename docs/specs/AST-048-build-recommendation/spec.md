@@ -79,9 +79,10 @@ own ranking and output, and template owners own what each template is.
   app shell (FR2) when it gives no page. A family's base template is that page
   only when the ranker leads with it, and never when the family word heads the
   request and also ends a component's name: the request then asks for that
-  piece, not for a part of the family's page (DEC-13). The components in the kit carry the
-  part itself, and its block examples show how such a part is built (DEC-14). A request that changes a page the builder already has
-  starts from the app shell (FR2): the page is the builder's to keep (FR9), and
+  piece, not for a part of the family's page (DEC-13). The components in the
+  kit carry the part itself, and its block examples show how such a part is
+  built (DEC-14). A request that changes a page the builder already has starts
+  from the app shell (FR2): the page is the builder's to keep (FR9), and
   no template scaffolds it. A request that adds something to a place that
   names no page, only the app or product as a whole, changes no page the
   builder has: build reads what it adds as if the request gave no place. One
@@ -128,9 +129,8 @@ own ranking and output, and template owners own what each template is.
   it does not change a field's shape or meaning.
 - **FR12 — Text leads with the start.** Build's text output MUST lead with the
   start, then the alternatives, then the block examples, then the components.
-  Every
-  response field keeps a text projection as `spec:AST-017` requires: short by
-  default, and whole under `--verbose`.
+  Every response field keeps a text projection as `spec:AST-017` requires:
+  short by default, and whole under `--verbose`.
 - **FR13 — Every agent-facing surface agrees.** The build playbook, the
   generated agent docs, and the consumer guides that describe building a page
   MUST describe the same workflow: scaffold the named template, build its
@@ -340,8 +340,9 @@ Rejected: a single pick with no alternatives.
 
 A part is built inside a page. When the request gives that page, its template
 is where the part goes; when it gives none, the app shell is the frame, and the
-components carry the part, with block examples to read (DEC-14). A change to an existing page is the same
-case: the page is the builder's own, so no template is its start.
+components carry the part, with block examples to read (DEC-14). A change to an
+existing page is the same case: the page is the builder's own, so no template
+is its start.
 
 Rejected: starting a part from whichever page template shares a word with it,
 which scaffolds an unrelated page for a single control; and giving a part no
