@@ -368,7 +368,7 @@ function linkStateOf(at, folder) {
  * @param {string} expected
  * @returns {ComputerAgentTextState}
  */
-function copyStateOf(at, expected) {
+export function copyStateOf(at, expected) {
   /** @type {fs.Stats} */
   let stat;
   try {
