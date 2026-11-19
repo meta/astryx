@@ -48,8 +48,8 @@ const SURFACE_TEXT = {
 };
 
 /**
- * The selector Core's TableRow gives a striped table's painted rows (its
- * even rows, not counting expansion panels); the striped-row rule repeats it
+ * The selector Core's TableRow gives a striped table's painted rows: its
+ * even rows, not counting expansion panels. The striped-row rule repeats it
  * under the row's `striped` state, so a plain table's rows keep the text
  * around them.
  */
