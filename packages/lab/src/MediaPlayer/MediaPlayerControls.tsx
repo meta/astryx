@@ -13,6 +13,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   use,
   useCallback,
   useMemo,
@@ -27,14 +29,8 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
-import {
-  DropdownMenu,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from '@astryxdesign/core/DropdownMenu';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
-import {Popover} from '@astryxdesign/core/Popover';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {Slider} from '@astryxdesign/core/Slider';
 import {Theme, ThemeContext} from '@astryxdesign/core/theme';
@@ -65,6 +61,12 @@ import {
   useMediaSelector,
 } from './MediaPlayerContext';
 import {useMediaIcon} from './mediaIcons';
+
+// The speed menu and a marker's popover are optional, so each loads on
+// demand: a page that uses neither loads no DropdownMenu or Popover code.
+// While a chunk loads, its button shows without its menu or popover.
+const LazyMediaRateMenu = lazy(async () => import('./MediaRateMenu'));
+const LazyMediaMarkerPopover = lazy(async () => import('./MediaMarkerPopover'));
 
 /** Control height on the shared element-size scale: 28, 32, or 36px. */
 export type MediaControlSize = 'sm' | 'md' | 'lg';
@@ -703,30 +705,32 @@ function MarkerButton({
   // The popover shows page content, such as a comment thread, so it takes
   // the page's theme instead of the media surface's.
   const pageTheme = use(ThemeContext);
+  const button = (
+    <button
+      type="button"
+      aria-label={marker.label}
+      data-media-marker=""
+      onClick={onPress}
+      {...focusOutlineProps.focusVisible(styles.markerButton)}>
+      <span aria-hidden {...stylex.props(styles.markerDot)} />
+    </button>
+  );
   const popover = (
-    <Popover
-      label={marker.label}
-      content={
-        <div
-          {...{[MARKER_CONTENT_ATTRIBUTE]: ''}}
-          {...stylex.props(styles.markerContent)}>
-          {marker.content}
-        </div>
-      }
-      placement="above"
-      alignment="center"
-      width={MARKER_POPOVER_WIDTH}
-      padding={0}
-      onOpenChange={onOpenChange}>
-      <button
-        type="button"
-        aria-label={marker.label}
-        data-media-marker=""
-        onClick={onPress}
-        {...focusOutlineProps.focusVisible(styles.markerButton)}>
-        <span aria-hidden {...stylex.props(styles.markerDot)} />
-      </button>
-    </Popover>
+    <Suspense fallback={button}>
+      <LazyMediaMarkerPopover
+        label={marker.label}
+        content={
+          <div
+            {...{[MARKER_CONTENT_ATTRIBUTE]: ''}}
+            {...stylex.props(styles.markerContent)}>
+            {marker.content}
+          </div>
+        }
+        width={MARKER_POPOVER_WIDTH}
+        onOpenChange={onOpenChange}>
+        {button}
+      </LazyMediaMarkerPopover>
+    </Suspense>
   );
   return (
     <div {...stylex.props(styles.markerAnchor(x))}>
@@ -1383,31 +1387,27 @@ function RateMenu({
     state => state.playbackRate,
   );
   const text = useRateLabel();
+  const button = {
+    label: text.label(rate),
+    'aria-label': text.name(rate),
+    tooltip: text.tooltip,
+    variant: 'ghost' as const,
+    size,
+    xstyle: styles.rateLabel,
+    ...themeProps('media-playback-rate-button'),
+  };
   return (
-    <DropdownMenu
-      button={{
-        label: text.label(rate),
-        'aria-label': text.name(rate),
-        tooltip: text.tooltip,
-        variant: 'ghost',
-        size,
-        xstyle: styles.rateLabel,
-        ...themeProps('media-playback-rate-button'),
-      }}
-      onOpenChange={isOpen => holdControls('menu', isOpen)}>
-      <DropdownMenuRadioGroup
-        label={text.tooltip}
-        value={String(rate)}
-        onChange={value => store.actions.setPlaybackRate(Number(value))}>
-        {rates.map(option => (
-          <DropdownMenuRadioItem
-            key={option}
-            value={String(option)}
-            label={text.label(option)}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenu>
+    <Suspense fallback={<Button {...button} />}>
+      <LazyMediaRateMenu
+        rates={rates}
+        rate={rate}
+        groupLabel={text.tooltip}
+        optionLabel={text.label}
+        button={button}
+        onChange={value => store.actions.setPlaybackRate(value)}
+        onOpenChange={isOpen => holdControls('menu', isOpen)}
+      />
+    </Suspense>
   );
 }
 
