@@ -506,6 +506,16 @@ one removal merged ahead of the decision to allow it.
   unknown top-level word that asks for it (`import`, `back`, `restore`,
   `unrender`, `reverse`) MAY suggest `experimental import`, labeled
   experimental, and never runs it; it ends when the export exception ends.
+  Another named exception covers sharing a page as one HTML file: the CLI's
+  two guides that teach it (`cli/experimental/share-a-page` and
+  `cli/experimental/export-pages`) set `searchable: true`, and no other doc
+  may. In an Astryx project (one that installs or declares `@astryxdesign/core`
+  or `@astryxdesign/cli`), or outside any package (no package.json at or
+  above the folder), `astryx search`, the `search()` API and an index
+  `exportSearchIndex()` makes there MAY return each of them as one entry,
+  whose own text says it is experimental; in a package without Astryx none of
+  them returns the guides, and every other experimental doc stays out of
+  search. This exception ends when that command graduates or is removed.
   A further named exception: `astryx discover` may list experimental icon-set
   packages in a project where icon features are off. Such an entry shows only the catalog's descriptor
   text, the install line, the opt-in command
