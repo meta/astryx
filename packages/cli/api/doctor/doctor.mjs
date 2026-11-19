@@ -1264,7 +1264,12 @@ export function checkSkillPlaces(ctx) {
   const report = ctx.skillPlaces;
   if (!report) return null;
   const blockOnly = report.places.length === 1 && report.places[0] === 'agents-md';
-  if (blockOnly && report.skillFiles.length === 0 && report.plainNamed.length === 0) {
+  if (
+    blockOnly &&
+    report.skillFiles.length === 0 &&
+    report.plainNamed.length === 0 &&
+    report.skillProblems.length === 0
+  ) {
     return null;
   }
   const base = {id: 'skill-places', label: 'Astryx skill places'};
@@ -1286,6 +1291,10 @@ export function checkSkillPlaces(ctx) {
       fix: `Delete ${report.plainNamed.length === 1 ? 'it' : 'them'}; ${init('--to skills')} writes the project skill as \`astryx-project\`.`,
     };
   }
+  const leftOutNote =
+    report.skillProblems.length > 0
+      ? ` Skills left out: ${report.skillProblems.map(problem => `${problem.package}: ${problem.message}`).join(' ')}`
+      : '';
   const savesBlock = report.places.includes('agents-md');
   const savesSkill = report.places.some(place => place !== 'agents-md');
   // Both saved is the person's choice: the note in the pass line says so.
@@ -1303,19 +1312,27 @@ export function checkSkillPlaces(ctx) {
   }
   // The two copies of a place are one skill: one a person's own and the other
   // Astryx's means agents read two different texts.
-  const split = [...new Set(report.files.map(file => file.place))].filter(place => {
-    const states = report.files.filter(file => file.place === place).map(file => file.state);
+  // Grouped by place and skill: the project skill and each integration skill
+  // have copies of their own.
+  /** @param {{place: string, skill?: string}} file */
+  const copiesOf = file => `${file.place}\0${file.skill ?? ''}`;
+  const splitKeys = [...new Set(report.files.map(copiesOf))].filter(key => {
+    const states = report.files.filter(file => copiesOf(file) === key).map(file => file.state);
     return (
       states.some(state => state === 'edited' || state === 'foreign') &&
       states.some(state => state === 'current' || state === 'differs' || state === 'absent')
     );
   });
-  if (split.length > 0) {
-    const files = report.files.filter(file => split.includes(file.place));
+  if (splitKeys.length > 0) {
+    const files = report.files.filter(file => splitKeys.includes(copiesOf(file)));
+    const names = splitKeys.map(key => {
+      const [place, skill] = key.split('\0');
+      return skill ? `${skill} in ${place}` : place;
+    });
     return {
       ...base,
       status: 'warn',
-      message: `The copies of ${split.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : 'Astryx\'s'})`).join(', ')}, so agents read different texts.`,
+      message: `The copies of ${names.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : 'Astryx\'s'})`).join(', ')}, so agents read different texts.`,
       fix: 'Make the copies the same: copy your file over the other, or delete both and run ' + init('') + '.',
     };
   }
@@ -1330,6 +1347,10 @@ export function checkSkillPlaces(ctx) {
   const missing = report.files.filter(file => file.state === 'absent');
   const stale = report.files.filter(file => file.state === 'differs');
   const kept = report.files.filter(file => file.state === 'edited' || file.state === 'foreign');
+  const leftoverNote =
+    report.leftovers.length > 0
+      ? ` Skills Astryx wrote for an integration this project no longer has: ${report.leftovers.join(', ')}; \`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` or ${init('')} removes them.`
+      : '';
   const keptNote =
     kept.length > 0
       ? ` Kept as they are (edited, or not written by Astryx): ${kept.map(file => file.path).join(', ')}.`
@@ -1341,25 +1362,33 @@ export function checkSkillPlaces(ctx) {
   const codexNote = report.computerSkill && report.skillsFolderFiles.length > 0
     ? ' This computer also has the computer-level `astryx` skill, so Codex lists both skills.'
     : '';
-  if (missing.length > 0 || stale.length > 0) {
+  if (missing.length > 0 || stale.length > 0 || report.leftovers.length > 0) {
     const missingNote =
-      missing.length > 0 ? ` The Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.` : '';
+      missing.length > 0 ? ` An Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.` : '';
     const staleNote =
       stale.length > 0 ? ` The Astryx skill is from another release in ${stale.map(file => file.path).join(', ')}.` : '';
     return {
       ...base,
       status: 'warn',
-      message: `${(missingNote + staleNote).trim()}${keptNote}${codexNote}`,
-      fix: `Run ${init('')} to write the saved places (\`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` also refreshes them after an Astryx update).`,
+      message: `${(missingNote + staleNote).trim()}${keptNote}${leftoverNote}${codexNote}${leftOutNote}`,
+      fix: `Run ${init('')}: it writes every saved place again, and is the refresh after an integration changes (\`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` also refreshes them after an Astryx update).${leftOutNote ? ' For a skill left out, its package fixes the `skill` its note names.' : ''}`,
     };
   }
   const current = report.files.filter(file => file.state === 'current');
+  if (leftOutNote) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `${leftOutNote.trim()}${keptNote}${codexNote}`,
+      fix: 'Its package fixes the `skill` each note names; until then agents get no line or skill for it.',
+    };
+  }
   return {
     ...base,
     status: kept.length > 0 && current.length === 0 ? 'info' : 'pass',
     message:
       current.length > 0
-        ? `The Astryx skill matches this release in ${current.map(file => file.path).join(', ')}.${keptNote}${bothNote}${codexNote}`
+        ? `The Astryx skill matches this release in ${current.map(file => file.path).join(', ')}.${keptNote}${leftoverNote}${bothNote}${codexNote}`
         : `Saved places: ${report.places.join(', ')}.${keptNote}${bothNote}${codexNote}`,
   };
 }
