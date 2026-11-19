@@ -546,10 +546,12 @@ works on is `spec:AST-040` FR9's.
     points every release keeps (`search`, `docs`, `component`, and the like),
     so an older copy never misleads.
     It also gives the build route the project agent docs give, through their
-    shared workflow wording: work in a project folder, new or existing, adding
-    `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
-    installs Core, the CLI at that Core's version; run `astryx init` there; then
-    start from a template, check, and deliver the built project.
+    shared workflow wording: work in a project folder; a new project adds
+    `@astryxdesign/core` and `@astryxdesign/cli`, an existing app that does not
+    use Astryx keeps its current UI stack unless the user asks for Astryx (then
+    it adds both), and a project that already installs Core adds the CLI at that
+    Core's version; a project that has or adds Astryx runs `astryx init`, starts
+    from a template, checks, and delivers the built project.
     When it names `astryx`, it ends with
     ``If `astryx` is not found, run `<install step>` first.``, where the
     step installs the CLI for the computer with the package manager and folder

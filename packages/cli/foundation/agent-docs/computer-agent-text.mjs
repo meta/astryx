@@ -278,10 +278,10 @@ function bodyLines(run, install) {
     // own workflow lines.
     // A project that already installs Core gets the CLI at that version, as
     // the CLI's own hint for that state says, never a newer CLI beside it.
-    `To build UI, work in a project folder (create one if there is none). Add \`@astryxdesign/core\` and \`@astryxdesign/cli\` to a new project or one without \`@astryxdesign/core\`; to a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). Run \`${run} init\` there and follow the agent docs it writes.`,
+    `To build UI, work in a project folder (create one if there is none). In a new project, add \`@astryxdesign/core\` and \`@astryxdesign/cli\`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has \`@astryxdesign/core\`, add \`@astryxdesign/cli\` at the same version, pinned exactly when Core is (no \`^\` or \`~\`). In a project that has or adds Astryx, run \`${run} init\` and follow the agent docs it writes; the WORKFLOW below is for that project.`,
     WORKFLOW_TITLE,
     ...WORKFLOW_STEPS.map(step => step.replaceAll('`astryx ', `\`${run} `)),
-    `Before you deliver, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
+    `Before you deliver an Astryx page, re-read each file; ${SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it.`,
     // A host's door is the host's to restore; only the global command has an
     // install step to name.
     ...(run === COMPUTER_COMMAND ? [computerRestoreLine(install)] : []),
