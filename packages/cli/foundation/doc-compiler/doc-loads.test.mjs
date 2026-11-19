@@ -569,10 +569,11 @@ const RUNNERS = {
     ],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
-    runs: 'Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    runs: "Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported, and the Babel parser's package.json, for its release",
     sites: [
       'require(@babel/core)',
       'require(@babel/parser)',
+      'require(@babel/parser/package.json)',
       'require(jscodeshift)',
       'require(postcss)',
       'require(postcss-selector-parser)',
