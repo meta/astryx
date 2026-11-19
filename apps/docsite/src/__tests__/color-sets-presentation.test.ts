@@ -31,7 +31,7 @@ describe('color-set presentation', () => {
     expect(source).not.toContain('useState');
     expect(source).toContain('sets.map(section =>');
     expect(source).toContain('groups.map((group, index) =>');
-    expect(source).toContain('stylingSections.map(section =>');
+    expect(source).toContain("section.id !== 'readable-chart-details'");
     expect(source).toContain('id="chart-styling"');
     expect(source).toContain('trigger="Implementation details"');
     expect(source).toContain('defaultIsOpen={false}');
@@ -44,7 +44,7 @@ describe('color-set presentation', () => {
     expect(source).toContain(
       "resolveThemeTokens(neutralTheme, {mode: 'dark'})",
     );
-    expect(source).toContain('they blend with its background');
+    expect(source).toContain('opacity: strength');
     expect(source).not.toContain("section.title === 'Sequential' &&");
     expect(source).not.toContain("section.title === 'Semantic' &&");
     expect(source).not.toContain("section.title === 'Heatmap' &&");

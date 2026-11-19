@@ -57,20 +57,15 @@ const styles = stylex.create({
 });
 
 const PURPOSE: Record<string, string> = {
-  Categorical:
-    'Use distinct colors to compare categories or named series, such as teams or product lines. Keep each category’s color consistent across charts.',
-  Sequential:
-    'Use shades of one color to show low-to-high values, such as request counts or resource use. Label the ranges in the legend. The tables run from the darkest shade (5) to the lightest (1); gray changes between modes, while colored ramps stay the same.',
-  Reference:
-    'Use neutral or gray for a comparison, such as a target or the previous period. Label it so readers know what it represents.',
+  Categorical: 'Use different colors to compare categories or named series.',
+  Sequential: 'Use shades of one color to show values from low to high.',
+  Reference: 'Use neutral or gray for a target or comparison value.',
   Semantic:
-    'Use color to show a defined status, such as positive, warning, or negative. Include a label so color is not the only cue. The warning yellow shown here is a choice to review for your chart, not an approved default.',
+    'Use color to show a status, such as positive, warning, or negative.',
   Diverging:
-    'Use two color directions to show values above and below a midpoint, such as zero or a target. Label the midpoint and both sides.',
-  Spectrum:
-    'Use a mixed-hue scale only when the hues have a clear meaning for your chart. For a simple low-to-high measure, use a sequential ramp instead. This set has 10 positions but 8 distinct colors.',
-  Heatmap:
-    'Use cell color to reveal patterns in a table or grid, such as differences in volume or intensity. Keep exact values available, and check transparent fills on the chart’s surface because they blend with its background.',
+    'Use two color directions to show values above and below a midpoint.',
+  Spectrum: 'Use a sequence of multiple hues to show a range of values.',
+  Heatmap: 'Use cell colors to show patterns in a table or grid.',
 };
 
 export function colorLabel(value: string, strength: number): string {
@@ -289,20 +284,22 @@ export function ColorSetsDocView({
             ))}
           <Collapsible trigger="Implementation details" defaultIsOpen={false}>
             <VStack gap={4}>
-              {stylingSections.map(section => (
-                <VStack key={section.id} gap={3}>
-                  <Heading level={3}>{section.title}</Heading>
-                  {section.content
-                    .filter(
-                      block =>
-                        block.type !== 'table' ||
-                        section.id !== 'map-chart-parts',
-                    )
-                    .map((block, i) => (
-                      <ContentBlockRenderer key={i} block={block} />
-                    ))}
-                </VStack>
-              ))}
+              {stylingSections
+                .filter(section => section.id !== 'readable-chart-details')
+                .map(section => (
+                  <VStack key={section.id} gap={3}>
+                    <Heading level={3}>{section.title}</Heading>
+                    {section.content
+                      .filter(
+                        block =>
+                          block.type !== 'table' ||
+                          section.id !== 'map-chart-parts',
+                      )
+                      .map((block, i) => (
+                        <ContentBlockRenderer key={i} block={block} />
+                      ))}
+                  </VStack>
+                ))}
             </VStack>
           </Collapsible>
         </VStack>
