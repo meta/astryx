@@ -5,10 +5,12 @@
  * @file Keeps the recorded interaction spec times
  *   (`.github/playwright-leg-durations.json`) close to main, as the Node
  *   record's refresh does for the Node times.
- * @input `coverage --key <times key> [--github-summary]`: the record and the
- *   interaction spec files git tracks. `pr --run-url <url>...`: the
- *   regenerated record and `gh`.
- * @output `coverage` prints how many spec files the record times and, below
+ * @input `median --key <times key> <run times>...`: one recorded-times file
+ *   per run (spec file → seconds). `coverage --key <times key>
+ *   [--github-summary]`: the record and the interaction spec files git
+ *   tracks. `pr --run-url <url>...`: the regenerated record and `gh`.
+ * @output `median` writes each spec's median over those runs under the key,
+ *   so one slow or fast run does not move a time alone. `coverage` prints how many spec files the record times and, below
  *   nine in ten, an early warning (a workflow warning and a step summary
  *   line); it always exits 0. `pr` opens the refresh pull request, or edits
  *   the open one, so at most one is ever open.
@@ -33,6 +35,31 @@ const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
 );
+
+/**
+ * Each spec file's median time over the runs that timed it, to a tenth of a
+ * second. A file that one run timed keeps that time.
+ * @param {Record<string, number>[]} runs
+ * @returns {Record<string, number>}
+ */
+export function medianTimes(runs) {
+  /** @type {Map<string, number[]>} */
+  const times = new Map();
+  for (const run of runs)
+    for (const [file, seconds] of Object.entries(run))
+      times.set(file, [...(times.get(file) ?? []), seconds]);
+  return Object.fromEntries(
+    [...times]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([file, values]) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median =
+          sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        return [file, Math.round(median * 10) / 10];
+      }),
+  );
+}
 
 /**
  * How many of the interaction spec files the record times under one key.
@@ -63,7 +90,7 @@ export function prBody({runs, lines}) {
   return [
     '## What changes',
     '',
-    'The recorded interaction spec times in `.github/playwright-leg-durations.json`, re-recorded with `node .github/scripts/playwright-legs.mjs record` from these full runs of `main`:',
+    "The recorded interaction spec times in `.github/playwright-leg-durations.json`: each spec's median over these full runs of `main`, each run recorded with `node .github/scripts/playwright-legs.mjs record`:",
     '',
     ...runs.map(url => `- ${url}`),
     '',
@@ -73,7 +100,7 @@ export function prBody({runs, lines}) {
     '',
     ...lines.map(line => `- ${line}`),
     '',
-    'Opened by the interaction record refresh. A later refresh updates this pull request instead of opening another.',
+    `Opened by the interaction record refresh from the fixed branch \`${BRANCH}\`. A later refresh force-updates that branch and this pull request instead of opening another, so each refresh needs a new review at its head.`,
   ].join('\n');
 }
 
@@ -138,6 +165,24 @@ function main(args) {
   const values = name =>
     args.flatMap((arg, i) => (arg === name ? [args[i + 1]] : []));
   const durations = JSON.parse(fs.readFileSync(DURATIONS, 'utf8'));
+  if (command === 'median' && values('--key').length === 1) {
+    const [key] = values('--key');
+    const files = args
+      .slice(1)
+      .filter(
+        (arg, i, rest) => !arg.startsWith('--') && rest[i - 1] !== '--key',
+      );
+    if (files.length === 0)
+      throw new Error('median needs one times file per run');
+    durations[key] = medianTimes(
+      files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))),
+    );
+    fs.writeFileSync(DURATIONS, `${JSON.stringify(durations, null, 2)}\n`);
+    console.log(
+      `${key}: the median of ${files.length} run(s) for ${Object.keys(durations[key]).length} spec files`,
+    );
+    return;
+  }
   const specs = trackedSpecs();
   if (command === 'coverage' && values('--key').length) {
     for (const key of values('--key')) {
@@ -168,7 +213,7 @@ function main(args) {
     return;
   }
   throw new Error(
-    'usage: interaction-record-refresh.mjs coverage --key <times key>... [--github-summary] | pr --run-url <url>...',
+    'usage: interaction-record-refresh.mjs median --key <times key> <run times>... | coverage --key <times key>... [--github-summary] | pr --run-url <url>...',
   );
 }
 

@@ -18,6 +18,7 @@ import {
   BRANCH,
   coverageOf,
   earlyWarning,
+  medianTimes,
   openOrRefresh,
   prBody,
 } from './interaction-record-refresh.mjs';
@@ -50,6 +51,22 @@ describe('coverageOf and earlyWarning', () => {
   it('stays quiet at nine in ten', () => {
     const recorded = Object.fromEntries(specs.slice(0, 9).map(s => [s, 1]));
     expect(earlyWarning('k', coverageOf(specs, recorded))).toBe('');
+  });
+});
+
+describe('medianTimes', () => {
+  it("takes each spec's median over the runs that timed it", () => {
+    expect(
+      medianTimes([
+        {a: 100, b: 10, c: 5},
+        {a: 400, b: 12},
+        {a: 180, b: 11.04},
+      ]),
+    ).toEqual({a: 180, b: 11, c: 5});
+  });
+
+  it('averages the middle two of an even count', () => {
+    expect(medianTimes([{a: 10}, {a: 20}])).toEqual({a: 15});
   });
 });
 
@@ -87,6 +104,8 @@ describe('prBody', () => {
     expect(body).toContain('- https://x/runs/1');
     expect(body).toContain('- https://x/runs/2');
     expect(body).toContain('127 of 127');
+    expect(body).toContain(`fixed branch \`${BRANCH}\``);
+    expect(body).toContain('median');
   });
 });
 
@@ -105,28 +124,26 @@ describe('the workflow', () => {
     });
   });
 
-  it("reads the runs by ci.yml's run names and each lane's leg jobs", () => {
+  it("records each lane's three latest full runs by ci.yml's run names, then their median", () => {
     const ci = fs.readFileSync(
       path.join(root, '.github/workflows/ci.yml'),
       'utf8',
     );
     expect(ci).toContain("format('Interaction proofs of {0}', github.sha)");
     expect(ci).toContain("format('WebKit weekly of {0}', github.sha)");
-    const read = step(
-      "Read the interaction leg logs of main's latest full runs",
-    ).run;
-    expect(read).toContain("read_lane chromium 'Interaction proofs of '");
-    expect(read).toContain("read_lane webkit 'WebKit weekly of '");
-    expect(read).toContain('^pr-interaction \\\\([0-9]+/[0-9]+\\\\)$');
-    expect(read).toContain('^pr-interaction-webkit \\\\([0-9]+/[0-9]+\\\\)$');
-  });
-
-  it("re-records each lane with the planner's own recorder", () => {
-    expect(step('Re-record the Chromium times').run).toContain(
-      'playwright-legs.mjs record --key interaction-chromium --project chromium',
+    const run = step('Re-record each lane from its latest full runs').run;
+    expect(run).toContain('[:3][].id');
+    expect(run).toContain(
+      "record_lane chromium interaction-chromium chromium 'Interaction proofs of ' '^pr-interaction \\\\([0-9]+/[0-9]+\\\\)$'",
     );
-    expect(step('Re-record the WebKit times').run).toContain(
-      'playwright-legs.mjs record --key interaction-webkit --project webkit',
+    expect(run).toContain(
+      "record_lane webkit interaction-webkit webkit 'WebKit weekly of ' '^pr-interaction-webkit \\\\([0-9]+/[0-9]+\\\\)$'",
+    );
+    expect(run).toContain(
+      'playwright-legs.mjs" record --key "$key" --project "$project"',
+    );
+    expect(run).toContain(
+      'interaction-record-refresh.mjs median --key "$key" "${times[@]}"',
     );
   });
 

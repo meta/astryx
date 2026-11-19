@@ -2,9 +2,10 @@
 
 # Keeps the recorded interaction spec times (.github/playwright-leg-durations.json)
 # close to main, as node-record-refresh.yml does for the Node times. Once a
-# week it re-records the Chromium times from main's latest successful full
-# interaction run ("Interaction proofs of …") and the WebKit times from main's
-# latest successful WebKit weekly run, each leg's job log read on its own. When
+# week it re-records the Chromium times from main's three latest successful
+# full interaction runs ("Interaction proofs of …") and the WebKit times from
+# main's three latest successful WebKit weekly runs, each run on its own, and
+# keeps each spec's median over them. When
 # the record changes, it opens one durations-only pull request on a fixed
 # branch, or force-updates that branch and refreshes the open one
 # (.github/scripts/interaction-record-refresh.mjs). Under nine in ten spec
@@ -41,47 +42,50 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # Each lane's latest successful full run of main, by the run name ci.yml
-      # gives it, and each of its legs' complete job log in a file of its own:
-      # the recorder costs each test by its gap from the line before it, so
-      # one leg's lines never run on from another's.
-      - name: Read the interaction leg logs of main's latest full runs
+      # Each lane's three latest successful full runs of main, by the run
+      # name ci.yml gives them. Each run is recorded on its own, from each
+      # leg's complete job log in a file of its own: the recorder costs each
+      # test by its gap from the line before it, so one leg's lines never run
+      # on from another's. The record then takes each spec's median over the
+      # runs, so one slow or fast run does not move a time alone.
+      - name: Re-record each lane from its latest full runs
         id: runs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          urls=()
-          read_lane() {
-            local lane=$1 title=$2 jobs=$3 run
-            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&branch=main&status=success&per_page=100" \
-              --jq "[.workflow_runs[] | select(.display_title | startswith(\"$title\"))][0].id // empty")
-            if [ -z "$run" ]; then
+          : > "$RUNNER_TEMP/run-urls.txt"
+          record_lane() {
+            local lane=$1 key=$2 project=$3 title=$4 jobs=$5 run times=()
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&branch=main&status=success&per_page=100" \
+              --jq "[.workflow_runs[] | select(.display_title | startswith(\"$title\"))][:3][].id" > "$RUNNER_TEMP/$lane-runs.txt"
+            if [ ! -s "$RUNNER_TEMP/$lane-runs.txt" ]; then
               echo "::warning title=No ${lane} run::main has no successful '${title}…' run in its latest 100 dispatches; the ${lane} times stay as recorded."
               return 0
             fi
-            mkdir -p "$RUNNER_TEMP/$lane"
-            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
-              --jq ".jobs[] | select(.name | test(\"$jobs\")) | .id" > "$RUNNER_TEMP/$lane-jobs.txt"
-            while read -r job; do
-              gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/$lane/$job.log"
-            done < "$RUNNER_TEMP/$lane-jobs.txt"
-            if [ -s "$RUNNER_TEMP/$lane-jobs.txt" ]; then
-              echo "$lane=true" >> "$GITHUB_OUTPUT"
-              urls+=("$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run")
+            while read -r run; do
+              local dir="$RUNNER_TEMP/$lane/$run"
+              mkdir -p "$dir/logs" "$dir/root/.github"
+              gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+                --jq ".jobs[] | select(.name | test(\"$jobs\")) | .id" > "$dir/jobs.txt"
+              [ -s "$dir/jobs.txt" ] || continue
+              while read -r job; do
+                gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$dir/logs/$job.log"
+              done < "$dir/jobs.txt"
+              # The recorder writes the record in its working folder.
+              cp .github/playwright-leg-durations.json "$dir/root/.github/"
+              (cd "$dir/root" && node "$GITHUB_WORKSPACE/.github/scripts/playwright-legs.mjs" record --key "$key" --project "$project" "$dir"/logs/*.log)
+              node -e 'const fs = require("node:fs"); const [file, key, out] = process.argv.slice(1); fs.writeFileSync(out, JSON.stringify(JSON.parse(fs.readFileSync(file, "utf8"))[key]));' \
+                "$dir/root/.github/playwright-leg-durations.json" "$key" "$dir/times.json"
+              times+=("$dir/times.json")
+              echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$RUNNER_TEMP/run-urls.txt"
+            done < "$RUNNER_TEMP/$lane-runs.txt"
+            if [ "${#times[@]}" -gt 0 ]; then
+              node .github/scripts/interaction-record-refresh.mjs median --key "$key" "${times[@]}"
             fi
           }
-          read_lane chromium 'Interaction proofs of ' '^pr-interaction \\([0-9]+/[0-9]+\\)$'
-          read_lane webkit 'WebKit weekly of ' '^pr-interaction-webkit \\([0-9]+/[0-9]+\\)$'
-          printf '%s\n' "${urls[@]}" > "$RUNNER_TEMP/run-urls.txt"
-
-      - name: Re-record the Chromium times
-        if: steps.runs.outputs.chromium == 'true'
-        run: node .github/scripts/playwright-legs.mjs record --key interaction-chromium --project chromium "$RUNNER_TEMP"/chromium/*.log
-
-      - name: Re-record the WebKit times
-        if: steps.runs.outputs.webkit == 'true'
-        run: node .github/scripts/playwright-legs.mjs record --key interaction-webkit --project webkit "$RUNNER_TEMP"/webkit/*.log
+          record_lane chromium interaction-chromium chromium 'Interaction proofs of ' '^pr-interaction \\([0-9]+/[0-9]+\\)$'
+          record_lane webkit interaction-webkit webkit 'WebKit weekly of ' '^pr-interaction-webkit \\([0-9]+/[0-9]+\\)$'
 
       - name: Report the record's coverage
         run: node .github/scripts/interaction-record-refresh.mjs coverage --key interaction-chromium --key interaction-webkit --github-summary
