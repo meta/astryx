@@ -56,4 +56,7 @@ export {
 } from './RichTextEditorAutoLinkPlugin';
 export type {RichTextEditorAutoLinkPluginProps} from './RichTextEditorAutoLinkPlugin';
 
+export {RichTextEditorLinkPopoverPlugin} from './RichTextEditorLinkPopoverPlugin';
+export type {RichTextEditorLinkPopoverPluginProps} from './RichTextEditorLinkPopoverPlugin';
+
 export {sanitizeUrl, validateUrl} from './linkUtils';

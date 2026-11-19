@@ -54,6 +54,11 @@ export interface LinkFormProps {
   onApply: () => boolean;
   onRemove: () => void;
   onCancel: () => void;
+  /**
+   * Whether the field takes focus as the form mounts. A form inside a Popover
+   * leaves this off: the Popover's focus entry focuses the field.
+   */
+  hasAutoFocus?: boolean;
 }
 
 /**
@@ -71,6 +76,7 @@ export function LinkForm({
   onApply,
   onRemove,
   onCancel,
+  hasAutoFocus = false,
 }: LinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -102,6 +108,7 @@ export function LinkForm({
           ref={inputRef}
           label={t('@astryx.richTextEditor.link.url')}
           isLabelHidden
+          hasAutoFocus={hasAutoFocus}
           value={url}
           size={size}
           width="100%"

@@ -10,6 +10,7 @@ import {
   editorStateJSONToMarkdown,
   RichTextEditorToolbar,
   RichTextEditorAutoLinkPlugin,
+  RichTextEditorLinkPopoverPlugin,
   type RichTextEditorRef,
 } from '@astryxdesign/richtext';
 import type {EditorState} from 'lexical';
@@ -193,6 +194,19 @@ export const WithLinksNoRoomAbove: Story = {
     toolbar: <RichTextEditorToolbar />,
   },
   parameters: {layout: 'fullscreen'},
+};
+
+export const WithLinkPopoverPlugin: Story = {
+  args: {
+    label: 'Notes',
+    defaultValue: markdownToEditorStateJSON(
+      'Read [the release notes](https://example.com/docs/release-notes) before you upgrade, and keep [the guide](https://example.com/guide) open.',
+    ),
+    toolbar: <RichTextEditorToolbar />,
+    // Click in a link, or arrow into it, to show its popover. Cmd-click
+    // (Ctrl-click off Apple platforms) opens a link in a new tab.
+    plugins: <RichTextEditorLinkPopoverPlugin />,
+  },
 };
 
 export const WithAutoLink: Story = {
