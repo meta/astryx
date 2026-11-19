@@ -47,6 +47,16 @@ export const docsZh = {
       ],
     },
     {
+      section: 'The values a part shows',
+      title: '部件显示的值',
+      content: [
+        {
+          type: 'prose',
+          text: '要了解某个部件在主题中的实际绘制效果（卡片的内边距、按钮的圆角和颜色），请询问 CLI，而不是阅读包源码：`astryx experimental theme editor show <theme> --on <part>` 给出每个值（两种模式不同时分别给出）、其背后的 token，以及由 Core、基础主题还是主题本身设置。它不写入任何文件，适用于应用中的任何主题：neutral、本地主题或已安装包中的主题。',
+        },
+      ],
+    },
+    {
       section: 'No app yet',
       title: '还没有应用',
       content: [
