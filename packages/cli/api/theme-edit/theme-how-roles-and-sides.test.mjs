@@ -271,6 +271,32 @@ describe('part words read in place', () => {
     expect(writes(await how('q0', 'the action buttons rounder'))[0]).toMatch(
       / --on button$/,
     );
+    // ("Action" names the button only before "button" or at the end of a
+    // phrase: action items and an actions column are other things.)
+    for (const ask of [
+      'action items 8px corners',
+      'action items blue',
+      'the actions column bold',
+    ]) {
+      const w = writes(await how('q0', ask));
+      expect(
+        w.some(c => / --on button\b/.test(c)),
+        ask,
+      ).toBe(false);
+    }
+    // ("very tight" before a type word is that type's, never the theme's
+    // spacing dial at its far rung.)
+    for (const [ask, own] of [
+      ['very tight letter spacing', /^set q0 headings tight$/],
+      ['very tight line height', /^set q0 --text-body-leading /],
+    ]) {
+      const w = writes(await how('q0', ask));
+      expect(w[0], ask).toMatch(own);
+      expect(w, ask).not.toContain('set q0 spacing tight');
+    }
+    expect(writes(await how('q0', 'very tight'))[0]).toBe(
+      'set q0 spacing tight',
+    );
     for (const [ask, when] of [
       ['white text in error banners', 'status:error'],
       ['white text in error toasts', 'type:error'],

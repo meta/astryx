@@ -4774,7 +4774,12 @@ export function draftAnswer(ctx, env, question) {
         `${{xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24}[String(k)]}px text`,
     )
     // ("very compact", "very roomy": the far rung.)
-    .replace(/\bvery\s+(?:compact|dense|tight)\b/gi, 'spacing tight')
+    // ("very tight letter spacing", "very tight line height": the type's
+    // own tracking or leading, never the theme's spacing.)
+    .replace(
+      /\bvery\s+(?:compact|dense|tight)\b(?!\s+(?:letter[- ]?spacing|tracking|kerning|line[- ]?(?:height|spacing)|leading|letters?|lines?|type|text|headings?|titles?|fonts?)\b)/gi,
+      'spacing tight',
+    )
     .replace(/\bvery\s+(?:roomy|airy|spacious)\b/gi, 'spacing spacious')
     // ("tables without vertical borders": no line at a cell's sides.)
     .replace(

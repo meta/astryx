@@ -17,12 +17,12 @@
  */
 export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
-  // (An action, "a toast's action", is the button it holds. Read first,
-  // before the parts it can name, so "actions menu" and "action sheet" are
-  // that menu and that sheet. A call to action is the primary button,
-  // below.)
+  // (An action, "a toast's action", is the button it holds: before
+  // "button" or at the end of a phrase only. "Action items", "the actions
+  // column" and "an actions menu" are other parts. A call to action is the
+  // primary button, below.)
   [
-    /(?<!\bcalls? to )\bactions?(?: buttons?)?\b(?!\s+(?:bars?|sheets?|menus?|lists?))/,
+    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*(?:$|[,.;:!?)])))/,
     {on: 'button'},
   ],
   // (The page's main panel, the area its content sits in.)
