@@ -21,6 +21,7 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+import {pageDom, pageDrawn} from '../../test-utils/page-dom.mjs';
 
 /** A fetch answer. @param {any} body @param {ResponseInit} [init] */
 const respond = (body, init) => new globalThis.Response(body, init);
@@ -487,13 +488,10 @@ describe('imageSinks', () => {
  * @param {string} html
  */
 async function opened(html) {
-  const dom = new JSDOM(html, {
-    runScripts: 'dangerously',
-    pretendToBeVisual: true,
-  });
+  const dom = await pageDom(html);
   const settle = () =>
     new Promise(resolve => dom.window.setTimeout(resolve, 100));
-  await settle();
+  await pageDrawn(dom);
   const doc = dom.window.document;
   return {
     doc,
@@ -560,7 +558,7 @@ describe('a render with images from the web', () => {
       expect(asked.map(a => a.url)).toEqual(['https://example.com/shoe.png']);
       // The script keeps the page's address; the image sinks give the data
       // where the browser takes an image's address.
-      const script = page.html.slice(page.html.indexOf('<script>'));
+      const script = page.html.slice(page.html.indexOf('<script type="module">'));
       expect(script).toContain('"https://example.com/shoe.png"');
       // The first paint shows it, so the image sinks read its data there:
       // the file holds it once.
@@ -653,11 +651,8 @@ describe('a render with images from the web', () => {
       const data = `data:image/png;base64,${PNG.toString('base64')}`;
       expect(renderedMarkupOf(page.html)).toContain(data);
       // Drawn again by the script, the style still shows the carried data.
-      const dom = new JSDOM(page.html, {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
-      });
-      await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const dom = await pageDom(page.html);
+      await pageDrawn(dom);
       const box = dom.window.document.querySelector(`#${ROOT_ID} div`);
       /** @type {any} */ (box).style.backgroundImage =
         'url(https://example.com/bg.png)';
@@ -695,7 +690,7 @@ describe('a render with images from the web', () => {
       expect(page.remoteImages?.failed).toEqual([
         {url: 'https://api.example.com/v1/upload', reason: 'not an image'},
       ]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://api.example.com/v1/upload"',
       );
     } finally {
@@ -733,7 +728,7 @@ describe('a render with images from the web', () => {
       expect(renderedMarkupOf(page.html)).toContain(
         'href="https://example.com/first.png"',
       );
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://example.com/brochure.png"',
       );
     } finally {
@@ -832,7 +827,7 @@ describe('a render with images from the web', () => {
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       expect(asked).toEqual([]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         '"https://cdn.example.com/shoe-large.png"',
       );
     } finally {
@@ -861,7 +856,7 @@ describe('a render with images from the web', () => {
       const {fetch, asked} = fetchFrom({});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       expect(asked).toEqual([]);
-      expect(page.html.slice(page.html.lastIndexOf('<script>'))).toContain(
+      expect(page.html.slice(page.html.lastIndexOf('<script type="module">'))).toContain(
         'https://cdn.example.com/hero.png?size=',
       );
       expect(
@@ -1047,9 +1042,9 @@ describe('a render with images from the web', () => {
       const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([PNG, Buffer.from([n])]).toString('base64')}`;
       // Each image's data is in the file once: in the first paint's srcset.
       for (const n of [1, 2, 3]) expect(page.html.split(dataOf(n)).length - 1, String(n)).toBe(1);
-      const dom = new JSDOM(page.html, {runScripts: 'dangerously', pretendToBeVisual: true});
+      const dom = await pageDom(page.html);
       const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-      await settle();
+      await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="B"]`)?.getAttribute('srcset')).toBe(`${dataOf(1)} 2x`);
       expect(doc.querySelector(`#${ROOT_ID} img[alt="A"]`)?.getAttribute('srcset')).toBe(`${dataOf(2)} 1x, ${dataOf(3)} 2x`);
@@ -1092,9 +1087,9 @@ describe('a render with images from the web', () => {
       });
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([PNG, Buffer.from([n])]).toString('base64')}`;
-      const dom = new JSDOM(page.html, {runScripts: 'dangerously', pretendToBeVisual: true});
+      const dom = await pageDom(page.html);
       const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-      await settle();
+      await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="M"]`)?.getAttribute('srcset')).toBe(`${dataOf(4)} 1x, ${dataOf(5)} 2x`);
       /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
@@ -1129,13 +1124,13 @@ describe('a render with images from the web', () => {
       const {fetch} = fetchFrom({'https://cdn.example.com/hero.png': png()});
       const page = await renderPage(file, {cwd: dir, remoteImages: {fetch}});
       const data = `data:image/png;base64,${PNG.toString('base64')}`;
-      const script = page.html.slice(page.html.indexOf('<script>', page.html.indexOf('application/x-astryx-source')));
+      const script = page.html.slice(page.html.indexOf('<script type="module">', page.html.indexOf('application/x-astryx-source')));
       // The script holds no copy: the image sinks read the first paint's.
       expect(script).not.toContain(data);
       expect(script).toContain('__astryxCarried[i]');
-      const dom = new JSDOM(page.html, {runScripts: 'dangerously', pretendToBeVisual: true});
+      const dom = await pageDom(page.html);
       const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-      await settle();
+      await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelector(`#${ROOT_ID} img[alt="Now"]`)?.getAttribute('src')).toBe(data);
       /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
@@ -1796,13 +1791,10 @@ describe('a render with images from the web', () => {
       });
       // Opened after the click, offline: the avatars draw from the carried data.
       fs.writeFileSync(path.join(dir, 'page.html'), page.html);
-      const dom = new JSDOM(page.html, {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
-      });
+      const dom = await pageDom(page.html);
       const settle = () =>
         new Promise(resolve => dom.window.setTimeout(resolve, 100));
-      await settle();
+      await pageDrawn(dom);
       const doc = dom.window.document;
       expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
       /** @type {HTMLButtonElement} */ (

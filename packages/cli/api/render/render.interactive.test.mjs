@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {JSDOM, VirtualConsole} from 'jsdom';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {render} from './render.mjs';
 import {doctor} from '../doctor/doctor.mjs';
 import {
@@ -28,6 +28,7 @@ import {
 import {CARRY_ATTR, RenderError, renderPage} from '../../foundation/render/render-page.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {pageDom, pageDrawn} from '../../test-utils/page-dom.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -80,7 +81,7 @@ const LABEL = `export const label = (n: number): string => \`Clicked \${n} times
 /** The page's script: the last script element, after the embedded source. @param {string} file */
 const scriptOf = file =>
   file.slice(
-    file.lastIndexOf('-->\n<script>') + '-->\n<script>'.length,
+    file.lastIndexOf('-->\n<script type="module">') + '-->\n<script type="module">'.length,
     file.lastIndexOf('</script>'),
   );
 
@@ -119,7 +120,7 @@ describe("a render, which carries the page's script", () => {
     expect(html).toContain(`<body><div id="${ROOT_ID}">`);
     expect(html).toContain(`#${ROOT_ID}{display:contents}`);
     const block = html.indexOf(`<script type="${SOURCE_TYPE}">`);
-    const script = html.lastIndexOf('-->\n<script>');
+    const script = html.lastIndexOf('-->\n<script type="module">');
     expect(block).toBeGreaterThan(0);
     expect(script).toBeGreaterThan(block);
     expect(html.endsWith('</script>\n</body></html>\n')).toBe(true);
@@ -190,18 +191,90 @@ describe("a render, which carries the page's script", () => {
     expect(stdout).toMatch(/^Export it again: .* --out counter\.html$/m);
   }, 120_000);
 
+  it('keeps a classic script for a page that bundles a CommonJS module that does not ask for strict mode, and the page still works', async () => {
+    put(
+      'src/sloppy/count.js',
+      `// Written for sloppy mode: it assigns a name it never declares.
+module.exports = function next(n) {
+  counted = n + 1;
+  return counted;
+};
+`,
+    );
+    put(
+      'src/sloppy/page.tsx',
+      `import {useState} from 'react';
+import next from './count.js';
+export default function Page() {
+  const [n, setN] = useState(0);
+  return <button type="button" onClick={() => setN(next(n))}>Count {n}</button>;
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/sloppy/page.tsx', {cwd: dir, out: 'sloppy.html'});
+    const file = read('sloppy.html');
+    // A module script would run the module in strict mode, where the write throws.
+    expect(file).not.toContain('<script type="module">');
+    expect(file.slice(file.lastIndexOf('-->\n<script>'))).toMatch(/^-->\n<script>[^<]/);
+    const dom = new JSDOM(file, {runScripts: 'dangerously', pretendToBeVisual: true});
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const button = /** @type {HTMLButtonElement} */ (dom.window.document.querySelector(`#${ROOT_ID} button`));
+    button.click();
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    expect(button.textContent).toBe('Count 1');
+    dom.window.close();
+  }, 120_000);
+
+  it('keeps a classic script for a page that bundles a package written for sloppy mode, or one that reads document.currentScript', async () => {
+    put('node_modules/sloppy-count/package.json', JSON.stringify({name: 'sloppy-count', main: 'index.js'}));
+    put('node_modules/sloppy-count/index.js', 'module.exports = function next(n) { counted = n + 1; return counted; };\n');
+    put('node_modules/script-base/package.json', JSON.stringify({name: 'script-base', type: 'module', exports: './index.js'}));
+    put(
+      'node_modules/script-base/index.js',
+      "'use strict';\nexport const base = () => globalThis.document?.currentScript?.getAttribute('data-base') ?? 'none';\n",
+    );
+    for (const [name, page] of /** @type {const} */ ([
+      ['pkg-sloppy', `import next from 'sloppy-count';
+export default function Page() { return <button type="button" onClick={() => next(1)}>Go</button>; }
+import '@astryxdesign/core/astryx.css';
+`],
+      ['pkg-current', `import {base} from 'script-base';
+const at = base();
+export default function Page() { return <p>{at}</p>; }
+import '@astryxdesign/core/astryx.css';
+`],
+    ])) {
+      put(`src/${name}/page.tsx`, page);
+      await render(`src/${name}/page.tsx`, {cwd: dir, out: `${name}.html`});
+      const file = read(`${name}.html`);
+      expect(file, name).not.toContain('<script type="module">');
+      expect(file.slice(file.lastIndexOf('-->\n<script>')), name).toMatch(/^-->\n<script>[^<]/);
+    }
+  }, 120_000);
+
+  it('writes a module script for a page whose modules all run in strict mode', async () => {
+    put(
+      'src/strict/page.tsx',
+      `export default function Page() {
+  return <main>strict</main>;
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/strict/page.tsx', {cwd: dir, out: 'strict.html'});
+    expect(read('strict.html')).toContain('-->\n<script type="module">');
+  }, 120_000);
+
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
     const errors = /** @type {string[]} */ ([]);
-    const dom = new JSDOM(html, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
+    const dom = await pageDom(html);
     dom.window.addEventListener('error', e =>
       errors.push(String(/** @type {any} */ (e).message)),
     );
     const settle = () =>
       new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const root = /** @type {HTMLElement} */ (doc.getElementById(ROOT_ID));
     expect(root.textContent).toContain('Clicked 0 times');
@@ -217,6 +290,37 @@ describe("a render, which carries the page's script", () => {
     expect(errors).toEqual([]);
     dom.window.close();
   });
+
+  it('moves to a place when a viewer that listens once the document has loaded cancels the click', async () => {
+    put(
+      'src/viewer-cancel.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [n, setN] = useState(0);
+  return (
+    <main>
+      <span id="members" />
+      <button onClick={() => setN(n + 1)}>Count {n}</button>
+      <a href="#members">Members</a>
+    </main>
+  );
+}
+import '@astryxdesign/core/astryx.css';
+`,
+    );
+    await render('src/viewer-cancel.tsx', {cwd: dir, out: 'viewer-cancel.html'});
+    // The viewer adds its document listener from DOMContentLoaded and scrolls
+    // to the place itself, cancelling the browser's own move.
+    const viewer = `<script>document.addEventListener('DOMContentLoaded', () => document.addEventListener('click', e => { if (e.target.closest('a[href^="#"]')) e.preventDefault(); }, true));</script>`;
+    const file = read('viewer-cancel.html').replace('<head>', `<head><base href="https://viewer.test/board">${viewer}`);
+    const dom = await pageDom(file, {url: 'about:srcdoc'});
+    await pageDrawn(dom);
+    const link = [...dom.window.document.querySelectorAll('a')].find(a => a.textContent === 'Members');
+    link?.dispatchEvent(new dom.window.MouseEvent('click', {bubbles: true, cancelable: true, button: 0}));
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#members');
+    dom.window.close();
+  }, 120_000);
 
   it('keeps a link to a place in the page inside the file, in a frame whose address is the viewer\u2019s', async () => {
     put(
@@ -259,12 +363,8 @@ import '@astryxdesign/core/astryx.css';
       '<head>',
       '<head><base href="https://viewer.test/board">',
     );
-    const dom = new JSDOM(file, {
-      url: 'about:srcdoc',
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const dom = await pageDom(file, {url: 'about:srcdoc'});
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const click = (/** @type {string} */ text) => {
       const link = [...doc.querySelectorAll('a')].find(
@@ -405,11 +505,8 @@ import '@astryxdesign/core/astryx.css';
     );
     const painted = new JSDOM(markup).window.document.querySelector('input');
     expect(painted?.hasAttribute('autofocus')).toBe(false);
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
     const input = dom.window.document.querySelector(
       'input[aria-label="Search"]',
     );
@@ -454,13 +551,10 @@ import '@astryxdesign/core/astryx.css';
     expect(markup).toContain(
       '<a href="https://example.com/self" target="_self">Self</a>',
     );
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
+    const dom = await pageDom(file);
     const settle = () =>
       new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const sent = () => doc.getElementById('sent')?.textContent;
     const docs = /** @type {HTMLAnchorElement} */ (
@@ -523,23 +617,21 @@ import '@astryxdesign/core/astryx.css';
     );
     await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
     const file = read('shots.html');
-    const script = file.slice(file.lastIndexOf('<script>'));
+    const script = file.slice(file.lastIndexOf('<script type="module">'));
     const data = png.toString('base64');
     // The carried image is in the markup per image shown and once in the
     // embedded source; the one the source leaves out keeps its own copy.
     expect(script).not.toContain(data);
     expect(script.split(other.toString('base64')).length - 1).toBe(1);
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    // The script drew the page: only it sets the marker.
-    expect(
-      dom.window.document
-        .querySelector(`#${ROOT_ID} main`)
-        ?.getAttribute('data-drawn'),
-    ).toBe('yes');
+    const dom = await pageDom(file);
+    // The script drew the page: only its effect sets the marker.
+    await vi.waitFor(() =>
+      expect(
+        dom.window.document
+          .querySelector(`#${ROOT_ID} main`)
+          ?.getAttribute('data-drawn'),
+      ).toBe('yes'),
+    );
     const shown = [
       ...dom.window.document.querySelectorAll(`#${ROOT_ID} img`),
     ].map(img => img.getAttribute('src'));
@@ -578,14 +670,11 @@ import '@astryxdesign/core/astryx.css';
     // data: URI only where the markup shows it; the embedded source keeps
     // its own copy for --reverse.
     const html = read('pictured.html');
-    const pageScript = html.slice(html.lastIndexOf('<script>'));
+    const pageScript = html.slice(html.lastIndexOf('<script type="module">'));
     expect(pageScript).not.toContain('data:image/png');
     expect(html.split('data:image/png;base64,').length - 1).toBe(3);
-    const dom = new JSDOM(html, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(html);
+    await pageDrawn(dom);
     const doc = dom.window.document;
     const photo = doc.querySelector(`#${ROOT_ID} img[alt="Photo"]`);
     const sharp = doc.querySelector(`#${ROOT_ID} img[alt="Sharp"]`);
@@ -628,8 +717,8 @@ import '@astryxdesign/core/astryx.css';
     // Each image's data: URI is in the file once, in the first paint's
     // srcset; the embedded source keeps its own copy for --reverse.
     for (const n of [1, 2]) expect(file.split(dataOf(n)).length - 1, String(n)).toBe(1);
-    const dom = new JSDOM(file, {runScripts: 'dangerously', pretendToBeVisual: true});
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(file);
+    await pageDrawn(dom);
     const drawn = dom.window.document.querySelector(`#${ROOT_ID} img[alt="Pair"]`)?.getAttribute('srcset');
     expect(drawn).toBe(`${dataOf(1)} 1x, ${dataOf(2)} 2x`);
     dom.window.close();
@@ -661,9 +750,9 @@ import '@astryxdesign/core/astryx.css';
     const file = read('comma.html');
     expect(file).not.toContain('__astryxCandidate');
     const dataOf = (/** @type {number} */ n) => `data:image/png;base64,${Buffer.concat([png, Buffer.from([n])]).toString('base64')}`;
-    const dom = new JSDOM(file, {runScripts: 'dangerously', pretendToBeVisual: true});
+    const dom = await pageDom(file);
     const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelector(`#${ROOT_ID} img[alt="Logo"]`)?.getAttribute('src')).toBe(dataOf(1));
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
@@ -698,9 +787,9 @@ import '@astryxdesign/core/astryx.css';
     );
     await render('src/order/page.tsx', {cwd: dir, out: 'order.html'});
     const data = `data:image/png;base64,${png.toString('base64')}`;
-    const dom = new JSDOM(read('order.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const dom = await pageDom(read('order.html'));
     const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelector(`#${ROOT_ID} img[alt="Logo"]`)?.getAttribute('src')).toBe(data);
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
@@ -908,8 +997,8 @@ import '@astryxdesign/core/astryx.css';
     }
     /** @param {string} file */
     const drawn = async file => {
-      const dom = new JSDOM(read(file), {runScripts: 'dangerously', pretendToBeVisual: true});
-      await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+      const dom = await pageDom(read(file));
+      await pageDrawn(dom);
       const root = /** @type {Element} */ (dom.window.document.getElementById(ROOT_ID));
       const out = {
         plain: root.querySelector('img[alt="Plain"]')?.getAttribute('src'),
@@ -927,7 +1016,7 @@ import '@astryxdesign/core/astryx.css';
     expect(shapes.css).toMatch(/url\("?data:image\/png;base64,/);
     expect(shapes.bare).toMatch(/url\("?data:image\/png;base64,/);
     // Only the whole string "./photo.png" is read from the first paint.
-    const script = read('shapes.html').slice(read('shapes.html').lastIndexOf('-->\n<script>'));
+    const script = read('shapes.html').slice(read('shapes.html').lastIndexOf('-->\n<script type="module">'));
     expect(script).not.toMatch(/["'(]__astryxCarried\[/);
     expect(script).toContain('__astryxCarried[0]');
     const onlyNoscript = await drawn('only-noscript.html');
@@ -990,13 +1079,10 @@ export default function Notice() {
     expect(renderedMarkupOf(file)).not.toContain('astryx-banner-icon');
     expect(file).toContain('.astryx-banner-icon{outline-style:dotted}');
     expect(file).not.toContain('.astryx-never-a-part');
-    const dom = new JSDOM(file, {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
+    const dom = await pageDom(file);
     const settle = () =>
       new Promise(resolve => dom.window.setTimeout(resolve, 50));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
     await settle();
@@ -1026,11 +1112,8 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('site/src/shoe.tsx', {cwd: dir, out: 'shoe.html'});
-    const dom = new JSDOM(read('shoe.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(read('shoe.html'));
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelector(`#${ROOT_ID} img[alt="Shoe"]`)?.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
     expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('/pics/shoe.png');
@@ -1066,12 +1149,9 @@ import '@astryxdesign/core/astryx.css';
     expect(rendered.data.files).toEqual(
       expect.arrayContaining(['public/pics/later.png', 'src/near.png']),
     );
-    const dom = new JSDOM(read('drawn-later.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
+    const dom = await pageDom(read('drawn-later.html'));
     const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     expect(doc.querySelectorAll(`#${ROOT_ID} img`)).toHaveLength(0);
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
@@ -1105,9 +1185,9 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
-    const dom = new JSDOM(read('escaped-later.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const dom = await pageDom(read('escaped-later.html'));
     const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
     await settle();
@@ -1145,9 +1225,9 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('two-folders/page.tsx', {cwd: dir, out: 'two-folders.html'});
-    const dom = new JSDOM(read('two-folders.html'), {runScripts: 'dangerously', pretendToBeVisual: true});
+    const dom = await pageDom(read('two-folders.html'));
     const settle = () => new Promise(resolve => dom.window.setTimeout(resolve, 100));
-    await settle();
+    await pageDrawn(dom);
     const doc = dom.window.document;
     /** @type {HTMLButtonElement} */ (doc.querySelector(`#${ROOT_ID} button`)).click();
     await settle();
@@ -1215,8 +1295,8 @@ export default function Page() {
     const alias = /** @type {string} */ (lists[0].split(' ').at(-1));
     expect(html).toContain(`.${alias}`);
     // The script draws its own buttons with StyleX's classes.
-    const dom = new JSDOM(html, {runScripts: 'dangerously', pretendToBeVisual: true});
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const dom = await pageDom(html);
+    await pageDrawn(dom);
     const drawn = dom.window.document.querySelector(`#${ROOT_ID} button`)?.getAttribute('class') ?? '';
     expect(drawn).not.toContain(alias);
     expect(drawn).toMatch(/\sx[0-9a-z]{5,}/);
@@ -1251,12 +1331,10 @@ import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('src/throws.tsx', {cwd: dir, out: 'throws.html'});
-    const dom = new JSDOM(read('throws.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
+    const dom = await pageDom(read('throws.html'), {
       virtualConsole: new VirtualConsole(),
     });
-    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    await pageDrawn(dom);
     const root = dom.window.document.getElementById(ROOT_ID);
     expect(root?.textContent).toContain('Saved notes');
     expect(root?.textContent).toContain('Kept on screen');
@@ -1288,12 +1366,10 @@ import '@astryxdesign/core/astryx.css';
      * @param {boolean} works
      * @param {(window: any) => void} [frame] what the frame gives the page
      */
-    const open = (works, frame) => {
+    const open = async (works, frame) => {
       /** @type {string[]} */
       const copied = [];
-      const dom = new JSDOM(read('copy.html'), {
-        runScripts: 'dangerously',
-        pretendToBeVisual: true,
+      const dom = await pageDom(read('copy.html'), {
         beforeParse(window) {
           frame?.(window);
           // JSDOM has no copy command: this one fires the copy event, as a browser does.
@@ -1314,8 +1390,8 @@ import '@astryxdesign/core/astryx.css';
       });
       return {dom, copied};
     };
-    const working = open(true);
-    await settle(working.dom);
+    const working = await open(true);
+    await pageDrawn(working.dom);
     const [copyButton, pasteButton] =
       working.dom.window.document.querySelectorAll('button');
     copyButton.click();
@@ -1329,8 +1405,8 @@ import '@astryxdesign/core/astryx.css';
       working.dom.window.document.getElementById('read')?.textContent,
     ).toBe('NotAllowedError');
     working.dom.window.close();
-    const refused = open(false);
-    await settle(refused.dom);
+    const refused = await open(false);
+    await pageDrawn(refused.dom);
     refused.dom.window.document.querySelector('button')?.click();
     await settle(refused.dom);
     expect(
@@ -1368,8 +1444,8 @@ import '@astryxdesign/core/astryx.css';
         };
       },
     ]) {
-      const page = open(true, frame);
-      await settle(page.dom);
+      const page = await open(true, frame);
+      await pageDrawn(page.dom);
       page.dom.window.document.querySelector('button')?.click();
       await settle(page.dom);
       expect(page.copied).toEqual(['a,b\n1,2']);
@@ -1406,11 +1482,8 @@ import '@astryxdesign/core/astryx.css';
     const settle = (/** @type {any} */ dom) =>
       new Promise(resolve => dom.window.setTimeout(resolve, 100));
     // An opaque origin, as in a frame without allow-same-origin: storage throws.
-    const blocked = new JSDOM(read('filter.html'), {
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-    });
-    await settle(blocked);
+    const blocked = await pageDom(read('filter.html'));
+    await pageDrawn(blocked);
     const doc = blocked.window.document;
     expect(doc.getElementById('filter')?.textContent).toBe('all');
     /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
@@ -1430,13 +1503,11 @@ import '@astryxdesign/core/astryx.css';
     expect(stored.length).toBe(1);
     blocked.window.close();
     // A real origin keeps the browser's own storage.
-    const open = new JSDOM(read('filter.html'), {
+    const open = await pageDom(read('filter.html'), {
       url: 'https://example.test/',
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
     });
     const real = open.window.localStorage;
-    await settle(open);
+    await pageDrawn(open);
     expect(open.window.localStorage).toBe(real);
     expect(real.getItem('filter')).toBe('all');
     open.window.close();

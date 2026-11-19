@@ -178,6 +178,7 @@ const ROUTES_LAZY = `document.addEventListener('click', e => {
   e.preventDefault();
   window.dispatchEvent(new Event('lazy'));
 }, true);
+export {};
 `;
 
 // A page that registers its own click and key handlers the ways pages do: one
