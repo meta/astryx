@@ -2757,11 +2757,12 @@ export function partLexicon(ctx) {
     .map(key => [
       // (A catalog name's "nav" is Core's short form of "navigation":
       // "top navigation", "side navigation" are those parts.)
-      new RegExp(
+      needing(
         `\\b${key
           .split('-')
           .map(w => (w === 'nav' ? 'nav(?:igation)?' : w))
           .join('[\\s-]?')}(?:e?s)?\\b`,
+        key.split('-')[0],
       ),
       {on: key},
     ]);
@@ -2779,7 +2780,7 @@ export function partLexicon(ctx) {
   // read from its groups table: set --on <group> takes the same words.
   /** @type {Array<[RegExp, PartRef]>} */
   const groups = Object.keys(FAMILIES).map(name => [
-    new RegExp(`\\b${name.replace(/s$/, '')}s?\\b`),
+    needing(`\\b${name.replace(/s$/, '')}s?\\b`, name.replace(/s$/, '')),
     {on: name},
   ]);
   // A part's own sub-part named in words ("dialog header", "date range
@@ -2798,7 +2799,7 @@ export function partLexicon(ctx) {
     ])
       if (keys.has(part))
         subParts.push([
-          new RegExp(`\\b${key}s?(?:'s)?\\s+${phrase}s?\\b`),
+          needing(`\\b${key}s?(?:'s)?\\s+${phrase}s?\\b`, key),
           {on: part},
         ]);
     for (const sub of ['header', 'footer', 'title']) {
@@ -2812,7 +2813,7 @@ export function partLexicon(ctx) {
       const phrase = `${key} ${sub}`;
       if (OVERRIDES.some(([re]) => re.exec(phrase)?.[0] === phrase)) continue;
       subParts.push([
-        new RegExp(`\\b${key}s?[\\s-]${sub}s?\\b`),
+        needing(`\\b${key}s?[\\s-]${sub}s?\\b`, key),
         real ? {on: real} : {on: key, missing: `${key} ${sub}`},
       ]);
     }
@@ -2901,8 +2902,9 @@ export function partLexicon(ctx) {
       // named by its own name, so none is missing.
       if (!real && held.length > 1) continue;
       out.push([
-        new RegExp(
+        needing(
           `(?:${source})(?:'s)?[\\s-]${piece.replace(/-/g, '[\\s-]?')}s?\\b`,
+          piece.split('-')[0],
         ),
         real ? {on: real} : {on: key, missing: `${said} ${piece}`},
       ]);
@@ -2911,8 +2913,9 @@ export function partLexicon(ctx) {
       // in cards" is the icons a card holds, which the place reader reads.)
       if (real)
         out.push([
-          new RegExp(
+          needing(
             `\\b${piece.replace(/-/g, '[\\s-]?')}s?\\s+(?:on|in|of|inside)\\s+(?:the\\s+|all\\s+|every\\s+|each\\s+)?(?:${source})`,
+            piece.split('-')[0],
           ),
           {on: real},
         ]);
@@ -2965,7 +2968,7 @@ export function partLexicon(ctx) {
       );
       if (nouns.length)
         qualified.push([
-          new RegExp(`\\b${w}[\\s-]+(?:${nouns.join('|')})(?:e?s)?\\b`),
+          needing(`\\b${w}[\\s-]+(?:${nouns.join('|')})(?:e?s)?\\b`, w),
           {on: root},
         ]);
     }
@@ -3620,6 +3623,75 @@ function namedLists(q, partWords, isVariant) {
 const JOINED = '\u2060';
 
 /**
+ * The word every match of a made lexicon pattern holds: the first word of
+ * the part, group or piece it names. A text without that word holds no
+ * match, so the pattern is not run on it. A written pattern has none and is
+ * always run.
+ * @type {WeakMap<RegExp, string>}
+ */
+const NEEDS = new WeakMap();
+
+/**
+ * A lexicon pattern whose every match holds `need`.
+ * @param {string} source
+ * @param {string} need
+ * @returns {RegExp}
+ */
+function needing(source, need) {
+  const re = new RegExp(source);
+  NEEDS.set(re, need);
+  return re;
+}
+
+/**
+ * Whether `re` can match somewhere in `text`: false only when the pattern
+ * needs a word the text does not hold.
+ * @param {RegExp} re
+ * @param {string} text
+ */
+function mayMatch(re, text) {
+  const need = NEEDS.get(re);
+  return need === undefined || text.includes(need);
+}
+
+/** @type {WeakMap<RegExp, RegExp>} */
+const GLOBAL_COPIES = new WeakMap();
+/** @type {WeakMap<RegExp, RegExp>} */
+const PLAIN_COPIES = new WeakMap();
+
+/**
+ * A lexicon pattern with the `g` flag, for matchAll, made once.
+ * @param {RegExp} re
+ */
+function globalOf(re) {
+  let copy = GLOBAL_COPIES.get(re);
+  if (!copy) {
+    copy = new RegExp(
+      re.source,
+      re.flags.includes('g') ? re.flags : `${re.flags}g`,
+    );
+    GLOBAL_COPIES.set(re, copy);
+  }
+  return copy;
+}
+
+/**
+ * A lexicon pattern without the `g` flag, for exec from the start, made
+ * once.
+ * @param {RegExp} re
+ */
+function plainOf(re) {
+  // A sticky pattern reads its own lastIndex: it is made anew each time.
+  if (re.sticky) return new RegExp(re.source, re.flags.replace('g', ''));
+  let copy = PLAIN_COPIES.get(re);
+  if (!copy) {
+    copy = new RegExp(re.source, re.flags.replace('g', ''));
+    PLAIN_COPIES.set(re, copy);
+  }
+  return copy;
+}
+
+/**
  * A question whose fill word is followed by its color before a "with": that
  * "with" starts an ask of its own ("cards tinted blue with a navy header":
  * the header's navy). The clause split keeps a "with" after a fill word in the
@@ -3782,14 +3854,12 @@ function clausesOf(q, partWords, words = null) {
       );
     const cornerWords = /\b(round|corner|radius|shape|circular)/.test(text);
     for (const [re, part] of partWords) {
+      if (!mayMatch(re, rest)) continue;
       // (A part word is a word of its own, never one half of a hyphenated
       // compound, "field-service", "card-like": a match with a letter
       // joined to it by a hyphen names no part. A part's own name written
       // with a hyphen, "date-picker", is one match and counts whole.)
-      const all = new RegExp(
-        re.source,
-        re.flags.includes('g') ? re.flags : `${re.flags}g`,
-      );
+      const all = globalOf(re);
       /** @type {RegExpExecArray | null} */
       let m = null;
       for (const x of rest.matchAll(all)) {
@@ -3804,12 +3874,8 @@ function clausesOf(q, partWords, words = null) {
         const end = at + x[0].length;
         if (
           partWords.some(([other]) => {
-            if (other === re) return false;
-            const o = new RegExp(
-              other.source,
-              other.flags.includes('g') ? other.flags : `${other.flags}g`,
-            );
-            for (const y of rest.matchAll(o)) {
+            if (other === re || !mayMatch(other, rest)) return false;
+            for (const y of rest.matchAll(globalOf(other))) {
               const s = /** @type {number} */ (y.index);
               if (s > at) break;
               if (s + y[0].length >= end && y[0].trim().length > x[0].trim().length)
@@ -3827,11 +3893,11 @@ function clausesOf(q, partWords, words = null) {
       // name is that longer part's, read when its own words come.)
       const at = /** @type {number} */ (m.index);
       const len = m[0].length;
+      const fromMatch = rest.slice(at);
       if (
         partWords.some(([re2]) => {
-          const x = new RegExp(re2.source, re2.flags.replace('g', '')).exec(
-            rest.slice(at),
-          );
+          if (!mayMatch(re2, fromMatch)) return false;
+          const x = plainOf(re2).exec(fromMatch);
           return x != null && x.index === 0 && x[0].length > len;
         })
       )
