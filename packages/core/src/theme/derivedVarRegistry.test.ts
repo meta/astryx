@@ -347,6 +347,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // pair to a neutral Badge in its content, which paints the pair inverted.
   '--_button-fill',
   '--_button-on-fill',
+  // spec:AST-025 FR22: an adopter of the shared scroll-edge fade sets the
+  // clear band at the edge and the fade length on its viewport.
+  '--_scroll-fade-inset',
+  '--_scroll-fade-length',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

@@ -46,7 +46,7 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed, servedImportTarget} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {sha256} from './source-block.mjs';
@@ -125,7 +125,7 @@ const assetsInlined = new Set();
 /** @type {Set<string>} */
 const packages = new Set();
 /** Static JSX text per element, for the dropped-children warning. */
-/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number}[]} */
+/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number, chain: {component: string, line: number, from: string | null, name: string}[]}[]} */
 const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
@@ -205,6 +205,23 @@ const jsxName = node => {
       : '';
 };
 
+/**
+ * The module a JSX component name is imported from, and the name that module
+ * exports it under; `from` is null for a component the page defines itself.
+ * @param {any} p a JSX element path
+ * @param {string} name the element's name as the page writes it
+ * @returns {{from: string | null, name: string}}
+ */
+const importOf = (p, name) => {
+  const binding = p.scope.getBinding(name);
+  if (binding?.kind !== 'module') return {from: null, name};
+  const spec = binding.path.node;
+  return {
+    from: binding.path.parent.source.value,
+    name: spec.type === 'ImportSpecifier' ? (spec.imported.name ?? spec.imported.value) : name,
+  };
+};
+
 /** @type {Record<string, string>} */
 const ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
@@ -236,6 +253,82 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
  * @param {string} file */
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
+
+/**
+ * The real folders of the packages that a `node_modules` folder links to
+ * inside the folder whose modules the page carries (`npm link`, a `file:`
+ * dependency, a workspace package). Node loads such a package's modules by
+ * their real path, so they read as the page's own. They compile as the
+ * page's own do, but the file carries only what the page reaches by a path
+ * (see dropLinkedPackageFiles), because the page imports the package by its
+ * name. The search covers each `node_modules` folder that Node reads for the
+ * page's imports, from the page's folder up, and the `node_modules` folders
+ * of each linked package and of the folders above it, as a workspace links
+ * one package into another. A link to a folder that holds the page is not a
+ * package of the page's. Empty when no link leads into the carried folder.
+ * @returns {string[]} each folder, with a trailing separator
+ */
+function linkedPackageRoots() {
+  /** @type {Set<string>} */
+  const roots = new Set();
+  /** @type {Set<string>} */
+  const scanned = new Set();
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} link */
+  const addIfLinkedIn = link => {
+    let real;
+    try {
+      if (!fs.lstatSync(link).isSymbolicLink()) return;
+      real = fs.realpathSync(link);
+    } catch {
+      return;
+    }
+    const folder = real + path.sep;
+    if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
+      roots.add(folder);
+      found.push(real);
+    }
+  };
+  /** Read the links in `dir`'s `node_modules` folder and in those above it, up to `top`. @param {string} dir @param {string | null} top */
+  const scanUp = (dir, top) => {
+    for (let at = dir; ; at = path.dirname(at)) {
+      if (!scanned.has(at)) {
+        scanned.add(at);
+        const modules = path.join(at, 'node_modules');
+        /** @type {string[]} */
+        let names = [];
+        try {
+          names = fs.readdirSync(modules);
+        } catch {
+          // No node_modules folder here.
+        }
+        for (const name of names) {
+          const link = path.join(modules, name);
+          if (!name.startsWith('@')) {
+            addIfLinkedIn(link);
+            continue;
+          }
+          try {
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+          } catch {
+            // A scope that cannot be read holds no package that Node can load.
+          }
+        }
+      }
+      if (at === top || path.dirname(at) === at) break;
+    }
+  };
+  scanUp(path.dirname(entry), null);
+  // A linked package resolves its own imports from its folder up.
+  for (let next = found.shift(); next !== undefined; next = found.shift()) scanUp(next, scope);
+  return [...roots];
+}
+
+const LINKED_ROOTS = linkedPackageRoots();
+
+/** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
+const inLinkedPackage = file => LINKED_ROOTS.some(root => file.startsWith(root));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -663,35 +756,64 @@ async function drawOpenLayers(elements, React) {
 
 /**
  * Babel plugin: a bare import that a path alias places loads from that file,
- * as in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads. It runs on the page's
+ * as in TypeScript, before any installed copy. A relative `.js`-family import
+ * that names no file loads the TypeScript source it stands for (`./fmt.js`
+ * for fmt.ts). Any other import is left alone, so an installed package
+ * loads. It runs on the page's
  * own files, before {@link pagePlugin}, and on every module the page loads
  * from outside them and outside `node_modules` (a sibling package's source,
  * say).
  */
 function aliasPlugin() {
   return () => {
-    /** @param {any} node a string literal to point at the file an alias places */
-    const point = node => {
+    /**
+     * Point a string literal at the file an alias places, or at the
+     * TypeScript source a relative `.js`-family name stands for when no file
+     * has that name (`./fmt.js` for fmt.ts), as TypeScript and bundlers read
+     * it.
+     * @param {any} node
+     * @param {string} from the importing file
+     */
+    const point = (node, from) => {
       if (node?.type !== 'StringLiteral') return;
       const file = resolvePath(PATHS, node.value);
-      if (file) node.value = file;
+      if (file) {
+        node.value = file;
+        return;
+      }
+      const source = from ? typeScriptSourceOf(node.value, from) : null;
+      if (source) node.value = source;
     };
     return {
       visitor: {
-        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-          point(p.node.source);
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
-        CallExpression(/** @type {any} */ p) {
+        CallExpression(/** @type {any} */ p, /** @type {any} */ state) {
           const callee = p.node.callee;
-          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require'))
+            point(p.node.arguments?.[0], state.filename);
         },
-        ImportExpression(/** @type {any} */ p) {
-          point(p.node.source);
+        ImportExpression(/** @type {any} */ p, /** @type {any} */ state) {
+          point(p.node.source, state.filename);
         },
       },
     };
   };
+}
+
+/**
+ * The TypeScript source a relative `.js`-family import names when no file has
+ * the name as written, as the import walk and the browser bundle resolve it,
+ * or null.
+ * @param {string} spec
+ * @param {string} from the importing file
+ */
+function typeScriptSourceOf(spec, from) {
+  if (!spec.startsWith('.') || spec.includes('?')) return null;
+  const written = path.resolve(path.dirname(from), spec);
+  const file = existingFile(written, []);
+  return file && file !== written ? file : null;
 }
 
 /**
@@ -948,6 +1070,17 @@ function pagePlugin(filename, browser = false) {
             }
           }
         }
+        // The element and the components around it in the same JSX tree,
+        // innermost first: any of them can be the one that drops the text.
+        /** @type {{component: string, line: number, from: string | null, name: string}[]} */
+        const chain = [];
+        for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
+          if (!up.isJSXElement()) continue;
+          const name = jsxName(up.node);
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
+          chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
+        }
         texts.push({
           file: filename,
           component,
@@ -955,6 +1088,7 @@ function pagePlugin(filename, browser = false) {
           hidden: hidden || conditional,
           fn: fnKey(p),
           line: p.node.loc?.start.line ?? 0,
+          chain,
         });
       },
     },
@@ -1060,11 +1194,30 @@ function serveFromSet() {
         ? packageOf(request)
         : null;
       if (!name || !isServedPackage(name, served.integrations)) throw e;
-      const file = resolveFilename.call(this, request, servedParent, false);
+      const file = servedFile(request, () => resolveFilename.call(this, request, servedParent, false));
       if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
       return file;
     }
   };
+}
+
+/**
+ * The file the set serves for `request`: what the CommonJS resolve gives,
+ * or, when that finds the subpath not exported, the file the package exports
+ * to an ES module import (a subpath exported under `import` only).
+ * @param {string} request
+ * @param {() => string} resolveAsRequire
+ * @returns {string}
+ */
+function servedFile(request, resolveAsRequire) {
+  try {
+    return resolveAsRequire();
+  } catch (e) {
+    const file =
+      /** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && served ? servedImportTarget(request, served.dir) : null;
+    if (!file) throw e;
+    return file;
+  }
 }
 
 /**
@@ -1369,7 +1522,10 @@ function notExportedSubpath(spec, file) {
   const pkg = packageOf(spec);
   const attempts = [() => createRequire(file).resolve(spec)];
   if (served && isServedPackage(pkg, served.integrations)) {
-    attempts.push(() => createRequire(path.join(served.dir, 'package.json')).resolve(spec, {paths: [served.dir]}));
+    const servedDir = served.dir;
+    attempts.push(() =>
+      servedFile(spec, () => createRequire(path.join(servedDir, 'package.json')).resolve(spec, {paths: [servedDir]})),
+    );
   }
   for (const attempt of attempts) {
     try {
@@ -1604,6 +1760,56 @@ function describeFile(file) {
   if (at < 0) return path.relative(path.dirname(entry), file).split(path.sep).join('/');
   const parts = file.slice(at + NODE_MODULES.length).split(path.sep);
   return parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+/**
+ * Keep only the files of a linked package (see linkedPackageRoots) that the
+ * page reaches by a path, as --reverse walks it: from the page, through each
+ * relative or path-alias import of a carried module. The rest belong to the
+ * package, and so do the files that only its modules import: none is
+ * carried or named as not carried. A file that no module imports by a path
+ * (one Node loaded by itself) and is not a linked package's stays, as do the
+ * images, which the page's script reads from the file.
+ * @returns {string[]} the modules left out, whose image names the script may still draw
+ */
+function dropLinkedPackageFiles() {
+  /** @type {Map<string, Set<string>>} */
+  const importers = new Map();
+  for (const file of [...localFiles, ...outsideFiles]) {
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      if (!target || !path.isAbsolute(target)) continue;
+      const set = importers.get(target) ?? new Set();
+      set.add(file);
+      importers.set(target, set);
+    }
+  }
+  const reached = new Set([entry]);
+  const queue = [entry];
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    for (const [target, from] of importers) {
+      if (!reached.has(target) && from.has(file)) {
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  /** @param {string} file */
+  const kept = file =>
+    reached.has(file) || assetsInlined.has(file) || (!importers.has(file) && !inLinkedPackage(file));
+  const dropped = localFiles.filter(file => !kept(file) && /\.[cm]?[jt]sx?$/.test(file));
+  const keptLocal = localFiles.filter(kept);
+  localFiles.splice(0, localFiles.length, ...keptLocal);
+  const keptOutside = outsideFiles.filter(kept);
+  outsideFiles.splice(0, outsideFiles.length, ...keptOutside);
+  return dropped;
 }
 
 /**
@@ -1905,6 +2111,7 @@ try {
       }
     }
   }
+  const linkedModules = LINKED_ROOTS.length > 0 ? dropLinkedPackageFiles() : [];
   parentPort?.postMessage({
     ok: true,
     markup,
@@ -1919,6 +2126,8 @@ try {
     assets: [...assetsInlined],
     files: localFiles,
     uncarried: outsideFiles,
+    linkedRoots: LINKED_ROOTS,
+    linkedModules,
     aliasImports,
     texts,
     fnTexts,

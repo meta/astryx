@@ -161,12 +161,14 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-3'],
     textAlign: 'center' as const,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   loadingState: {
     padding: spacingVars['--spacing-3'],
     textAlign: 'center' as const,
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   groupHeading: {

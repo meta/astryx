@@ -89,6 +89,7 @@ import {useThemeDefinition} from '../theme/useTheme';
 import {
   DEFAULT_WIDTH_BREAKPOINTS,
   type WidthBreakpointName,
+  widthBelowFeature,
 } from '../theme/themeAdaptations';
 import type {AppShellVariantMap} from './index';
 
@@ -395,6 +396,7 @@ const styles = stylex.create({
     textDecoration: 'none',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
   },
   // Programmatic focus target for the skip link. While main fits, it is only
   // focusable via tabIndex={-1} (never tabbable), so a focus ring around the
@@ -704,10 +706,7 @@ export function AppShell({
       ? null
       : (activeWidthBreakpoints?.[sideNavBreakpoint] ??
         DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]);
-  const breakpointQuery =
-    breakpointWidth == null
-      ? '(width < 0px)'
-      : `(width < ${breakpointWidth}px)`;
+  const breakpointQuery = widthBelowFeature(breakpointWidth ?? 0);
   const isMobileOnServer =
     breakpointWidth != null && mobileNavConfig?.defaultIsMobile === true;
   const isBelowBreakpointNow = useMediaQuery(breakpointQuery, isMobileOnServer);

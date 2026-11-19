@@ -727,6 +727,9 @@ const styles = stylex.create({
   // second one would flow below the photo and clip. Taking the text layers
   // out of flow is what stacks them over it, the way they sit on an artboard.
   textLayers: {position: 'absolute', inset: 0},
+  // The save note and Export keep their width; the tab strip beside them is
+  // the part that gives up room when the bar is narrow.
+  headerTrail: {flexShrink: 0},
   // A Card given a height prop turns into a scroll container, which is the
   // right default for a card holding more copy than fits. This one is a
   // viewport onto an artboard that is deliberately larger than its frame —
@@ -839,7 +842,7 @@ const styles = stylex.create({
   tabRuleHidden: {visibility: 'hidden'},
   // Everything a tab needs beyond an Item: a width ceiling and a tighter
   // measure. Item brings the 28px box, the radius, the fill when selected,
-  // the inline padding, and the ellipsis on a string label.
+  // and the inline padding; the label's one-line Text brings the ellipsis.
   tab: {
     // Item spaces a list row, where 8px either side of the label is right
     // because the rows are stacked and the eye reads down a column. A tab is
@@ -1237,10 +1240,11 @@ function ItemAction({
  *
  * An open document is the same kind of thing as a layer: a name with a mark
  * in front of it and an action behind, which is why this is the same Item
- * the rail is built from rather than a tab. Item ellipsizes a string label
- * on its own, so the width ceiling below is the only thing left to say, and
- * it ignores a click that lands on a nested button — that is what stops the
- * close from also switching to the document it is closing.
+ * the rail is built from rather than a tab. Its one-line Text label
+ * ellipsizes the name on its own, so the width ceiling below is the only
+ * thing left to say, and it ignores a click that lands on a nested button —
+ * that is what stops the close from also switching to the document it is
+ * closing.
  *
  * Not TabList: a Tab marks the open one with an underline rather than a
  * fill, sizes itself to its label with no way to cap it from out here, and
@@ -1266,7 +1270,13 @@ function DocumentTab({
 
   return (
     <Item
-      label={tab.name}
+      // A one-line Text truncates the name like Item's own string label, and
+      // shows the full name in a tooltip only when it is cut.
+      label={
+        <Text type="body" color="inherit" maxLines={1}>
+          {tab.name}
+        </Text>
+      }
       density="compact"
       isSelected={isActive}
       onClick={onSelect}
@@ -2037,7 +2047,7 @@ export default function CanvasEditor() {
                     icon={<Icon icon={Plus} size={ICON} color="secondary" />}
                   />
                 </HStack>
-                <HStack gap={3} vAlign="center">
+                <HStack gap={3} vAlign="center" xstyle={styles.headerTrail}>
                   <Text type="supporting" color="secondary">
                     Saved · 2 min ago
                   </Text>

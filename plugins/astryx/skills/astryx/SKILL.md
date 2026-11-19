@@ -4,7 +4,7 @@ description: "Astryx, a design system and UI library, is available on this compu
 ---
 
 <!-- ASTRYX:START -->
-<!-- astryx-managed sha256:f95992f8f99979160a95d441cdbbeb9874ac54c23e5cd17c6ff574b7462fe6b6 -->
+<!-- astryx-managed sha256:d3361ea124902447e5df8afb23db51b82898911c3c6ab7a959dd3edbf26a1e92 -->
 Astryx, a design system and UI library, is available on this computer.
 Use it when you build or change UI, pick components, or style or theme an app.
 Its docs, components, templates, and themes are all reachable through `astryx`. To make a page, run `astryx build "<what the page is for>"` first, as the WORKFLOW below says. Start with `astryx search '<what you need>'` for anything else.
@@ -14,7 +14,7 @@ To build UI, work in a project folder (create one if there is none). Add `@astry
 WORKFLOW — start every page from a template, never from scratch:
 1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.
 2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.
-3. `astryx template <Block>` for parts it lacks; `astryx component <Name>` to read props before using one. Astryx names differ from other libraries: buttons, badges, tokens and tabs take their text in `label` (Text, Heading and Link take children), booleans start with `is` or `has` (`isOpen`, `isDisabled`), and every input takes `value` and `onChange`.
+3. `astryx component <Name>` to read props before using one; `astryx template <Block>` prints a block example to read for a part it lacks. Astryx names differ from other libraries: buttons, badges, tokens and tabs take their text in `label` (Text, Heading and Link take children), booleans start with `is` or `has` (`isOpen`, `isDisabled`), and every input takes `value` and `onChange`.
 Before you deliver, re-read each file; replace any raw <div>/<span>, imported .css/@apply, or hardcoded #hex/px with the component or a token. Then build the project and deliver that build, not a description of it.
 If `astryx` is not found, run `npm i -g @astryxdesign/cli` first.
 <!-- ASTRYX:END -->
