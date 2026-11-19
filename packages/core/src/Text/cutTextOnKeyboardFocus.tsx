@@ -15,6 +15,7 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -96,10 +97,11 @@ export function useCutTextOnKeyboardFocus({
       isCurrent = false;
     };
   }, [isEnabled, anchorRef, measureRef, yieldsToCallerTooltip]);
-  const hide = () => {
+  // The open tooltip takes this as `onHide`, so it keeps one identity.
+  const hide = useCallback(() => {
     heldFocusRef.current = null;
     setCutText(null);
-  };
+  }, []);
   const onFocus = (event: FocusEvent<HTMLElement>) => {
     const target = event.target;
     // `:focus-visible` also matches a text field a pointer focused, so the
