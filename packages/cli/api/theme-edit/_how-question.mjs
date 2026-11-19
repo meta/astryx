@@ -2715,8 +2715,17 @@ const PROHIBITION = new RegExp(
 const removalSaid = t => {
   const verb = String.raw`(?:hid(?:e|es|den|ing)|remov(?:e|es|ed|ing))\b`;
   if (!new RegExp(String.raw`\b${verb}`).test(t)) return null;
-  if (new RegExp(String.raw`\bun-?hid(?:e|den|ing)\b|\b(?:stop|quit|no longer)\s+${verb}`).test(t)) return 'show';
-  return new RegExp(String.raw`(?:\b(?:not|never|avoid(?:ing)?|don'?t want|do not want)|n't)(?:\s+\S+){0,6}?\s+${verb}`).test(t) ? 'keep' : 'remove';
+  if (
+    new RegExp(
+      String.raw`\bun-?hid(?:e|den|ing)\b|\b(?:stop|quit|no longer)\s+${verb}`,
+    ).test(t)
+  )
+    return 'show';
+  return new RegExp(
+    String.raw`(?:\b(?:not|never|avoid(?:ing)?|don'?t want|do not want)|n't)(?:\s+\S+){0,6}?\s+${verb}`,
+  ).test(t)
+    ? 'keep'
+    : 'remove';
 };
 /** Words that ask for a setting's earlier value: a reset, never a look. */
 const GOING_BACK =
@@ -3878,7 +3887,10 @@ function clausesOf(q, partWords, words = null) {
             for (const y of rest.matchAll(globalOf(other))) {
               const s = /** @type {number} */ (y.index);
               if (s > at) break;
-              if (s + y[0].length >= end && y[0].trim().length > x[0].trim().length)
+              if (
+                s + y[0].length >= end &&
+                y[0].trim().length > x[0].trim().length
+              )
                 return true;
             }
             return false;
@@ -18885,7 +18897,9 @@ export function draftAnswer(ctx, env, question) {
     if (
       c.parts.length &&
       (removedSaid || removal === 'keep' || removal === 'show') &&
-      ((removal && removal !== 'remove') || /\b(?:hide|hidden)\b/.test(c.text) || (c.neg && !c.aspects.length))
+      ((removal && removal !== 'remove') ||
+        /\b(?:hide|hidden)\b/.test(c.text) ||
+        (c.neg && !c.aspects.length))
     ) {
       const names = c.parts.map(p => one(p.on));
       // (An owner and its piece said apart, "alerts without icons": the
@@ -18898,7 +18912,13 @@ export function draftAnswer(ctx, env, question) {
       );
       // (An owner and a piece it does not have, "top nav items without
       // icons": nothing of the owner is taken away.)
-      const pieces = (paired.length || names.length < 2 ? paired.length ? paired : names : []).filter(
+      const pieces = (
+        paired.length || names.length < 2
+          ? paired.length
+            ? paired
+            : names
+          : []
+      ).filter(
         k =>
           k.includes('-') &&
           [...TARGET.keys()].some(o => k.startsWith(`${o}-`)) &&
@@ -18916,12 +18936,24 @@ export function draftAnswer(ctx, env, question) {
       if (pieces.length === 1 && C.MAP[pieces[0]] && shown) {
         const own = pieces[0];
         seenPart(own);
-        const hidden = env.data.settings.some(st => st.thing === 'display' && st.on === own);
+        const hidden = env.data.settings.some(
+          st => st.thing === 'display' && st.on === own,
+        );
         push({
           text: hidden
             ? `${own} shown again: the theme's display none on it is taken back`
             : `${own} is shown already (the theme does not hide it), so nothing changes`,
-          options: hidden ? [[/** @type {Step} */ ({verb: 'undo', thing: 'display', on: own})]] : [],
+          options: hidden
+            ? [
+                [
+                  /** @type {Step} */ ({
+                    verb: 'undo',
+                    thing: 'display',
+                    on: own,
+                  }),
+                ],
+              ]
+            : [],
         });
         continue;
       }
@@ -19350,9 +19382,10 @@ export function draftAnswer(ctx, env, question) {
    * @returns {Draft | null}
    */
   function variantLookAnswer(c) {
-    const said = /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
-      c.text.trim(),
-    );
+    const said =
+      /^(.*?)\b(?:to\s+)?looks?\s+(?:just\s+|exactly\s+)?like\s+(.+)$/.exec(
+        c.text.trim(),
+      );
     if (!said) return null;
     const on = [...new Set(c.parts.map(x => x.on))];
     if (on.length !== 1 || FAMILIES[on[0]]) return null;
@@ -19381,13 +19414,19 @@ export function draftAnswer(ctx, env, question) {
     const to =
       toSaid.length === 1
         ? toSaid[0]
-        : !toSaid.length && /\bdefault\b/.test(said[2]) && def && values.has(def)
+        : !toSaid.length &&
+            /\bdefault\b/.test(said[2]) &&
+            def &&
+            values.has(def)
           ? def
           : null;
     if (from.length !== 1 || !to || from[0] === to) return null;
     // (The look is copied whole, at rest and in both modes: a state or a
     // mode said with it is named, never written as the resting look.)
-    const scope = [c.state && `when ${c.state}`, c.mode && `in ${c.mode} mode`].filter(Boolean);
+    const scope = [
+      c.state && `when ${c.state}`,
+      c.mode && `in ${c.mode} mode`,
+    ].filter(Boolean);
     if (scope.length)
       return {
         text: `${from[0]} ${on[0]} takes the ${to} ${on[0]}'s look only whole, at rest and in both modes, so nothing is written for "${scope.join(' ')}": ask for the ${to} look alone, then for what changes ${scope.join(' ')}`,
@@ -27433,19 +27472,28 @@ export function draftAnswer(ctx, env, question) {
     // (A going-back word said alone: "use the default theme" names a
     // theme; "make it look like before" asks undo. Beside other asks, or
     // "by default", it is theirs.)
-    const back = clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
+    const back =
+      clauses.length === 1 && !/\bby default\b/.test(t) && !c.colors.length;
     // (Only words that name the earlier look go back, "like before", "clear
     // everything", "the default theme"; a describing word, "make it clear",
     // "more original", never does.)
     const earlier =
       /\b(?:(?:like|as) (?:it was )?before|back to (?:how|the way|what)|(?:go|put it|change it) back\b(?! to\b)|reset|revert|restore|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all)|the (?:previous|earlier|old) (?:look|version|theme))/;
-    if (back && /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(t))
+    if (
+      back &&
+      /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(
+        t,
+      )
+    )
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
         options: [],
         lookup: `astryx theme use ${env.data.like ?? '<base>'}`,
       };
-    if ((/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) || (back && earlier.test(t)))
+    if (
+      (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length) ||
+      (back && earlier.test(t))
+    )
       return env.undoSteps
         ? {
             text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
@@ -32229,7 +32277,11 @@ export function draftAnswer(ctx, env, question) {
     // never guessed.)
     const lookWrites = result.some(r => r.options.some(o => o.length));
     // ("look like before" is the earlier look, a reset, never a name.)
-    notTaken.splice(0, notTaken.length, ...notTaken.filter(w => !GOING_BACK.test(`like ${w}`)));
+    notTaken.splice(
+      0,
+      notTaken.length,
+      ...notTaken.filter(w => !GOING_BACK.test(`like ${w}`)),
+    );
     // (By position, never a list of brands: a word said as a look's name,
     // "<word> theme", "<word>-like", "like <word>", that the editor's own
     // words do not hold (a dial's help, a feel, a describing word) names
@@ -32249,7 +32301,9 @@ export function draftAnswer(ctx, env, question) {
         // name.)
         dialWords.has(word) ||
         DESCRIBING.test(word) ||
-        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(word)
+        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(
+          word,
+        )
       )
         return false;
       if (
@@ -32262,7 +32316,8 @@ export function draftAnswer(ctx, env, question) {
       // a name, capitalized: "make it Acme"; "make it pretty" describes.)
       return (
         new RegExp(`${NAMED_LOOK}${word}\\b`).test(q.toLowerCase()) &&
-        new RegExp(String.raw`\b${word}\b`, 'i').exec(question)?.[0]?.[0] !== word[0]
+        new RegExp(String.raw`\b${word}\b`, 'i').exec(question)?.[0]?.[0] !==
+          word[0]
       );
     });
     if (namedFor.length)
