@@ -41,6 +41,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {placeSkillFiles, renderProjectSkill} from '../../foundation/agent-docs/skill-places.mjs';
 import {managedFileState} from '../../foundation/agent-docs/managed-skill-file.mjs';
@@ -400,18 +401,36 @@ const CSS_PROP_TRANSFORMS = new Set([
 ]);
 
 /**
+ * The folder at or above the project folder that holds its workspace: the
+ * first with version control (`.git`), a `pnpm-workspace.yaml`, a
+ * `lerna.json`, or a package.json with `workspaces`. The project folder when
+ * none does, up to the home folder.
+ * @param {string} projectDir
+ */
+function workspaceRootOf(projectDir) {
+  const home = os.homedir();
+  for (let dir = projectDir; ; dir = path.dirname(dir)) {
+    if (['.git', 'pnpm-workspace.yaml', 'lerna.json'].some(name => fs.existsSync(path.join(dir, name)))) return dir;
+    if (readPackageJson(path.join(dir, 'package.json'))?.workspaces != null) return dir;
+    if (dir === home || dir === path.dirname(dir)) return projectDir;
+  }
+}
+
+/**
  * What compiles the JSX of a page other than as React does, in the folder of
- * the page or a folder above it, up to the project folder: a build config
+ * the page or a folder above it, up to the workspace root: a build config
  * that sets another runtime or factory (a config file, or the `babel` key of
- * a `package.json`), or a `package.json` that depends on a transform that
- * compiles a `css` prop. Null when nothing does.
+ * a `package.json`), a `package.json` that depends on a transform that
+ * compiles a `css` prop, or such a transform installed where the project
+ * finds packages. Null when nothing does.
  * @param {string[]} pages
  * @param {string} projectDir
- * @returns {{file: string, transform: string | null} | null} the config, and
- *   the transform it depends on
+ * @returns {{file: string, transform: string | null, installed?: boolean} | null}
+ *   the config, and the transform it depends on or has installed
  */
 function buildJsxRuntime(pages, projectDir) {
-  /** @type {Map<string, {file: string, transform: string | null} | null>} */
+  const top = workspaceRootOf(projectDir);
+  /** @type {Map<string, {file: string, transform: string | null, installed?: boolean} | null>} */
   const configIn = new Map();
   const read = (/** @type {string} */ dir) => {
     /** @type {string[]} */
@@ -447,12 +466,12 @@ function buildJsxRuntime(pages, projectDir) {
       if (!configIn.has(dir)) configIn.set(dir, read(dir));
       const found = configIn.get(dir);
       if (found) return found;
-      if (dir === projectDir || path.relative(projectDir, dir).startsWith('..') || dir === path.dirname(dir)) break;
+      if (dir === top || path.relative(top, dir).startsWith('..') || dir === path.dirname(dir)) break;
     }
   }
   for (const transform of [...CSS_PROP_TRANSFORMS].sort()) {
     const installed = findInstalledPackage(projectDir, transform, Infinity);
-    if (installed) return {file: installed, transform};
+    if (installed) return {file: installed, transform, installed: true};
   }
   return null;
 }
@@ -546,7 +565,7 @@ export async function findUnknownCoreProps(projectDir) {
   const build = buildJsxRuntime(corePages, projectDir);
   if (build?.transform) {
     return notChecked(
-      `the project depends on \`${build.transform}\`, which compiles a \`css\` prop that every component can take`,
+      `${build.installed ? `\`${build.transform}\` is installed` : `the project depends on \`${build.transform}\``}, which compiles a \`css\` prop that every component can take`,
     );
   }
   if (build) {
@@ -554,46 +573,80 @@ export async function findUnknownCoreProps(projectDir) {
       `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
     );
   }
-  // Batched reads of the props Core's docs list, as `astryx component
-  // <Name> --props` prints them; a component they do not describe is not
-  // judged.
-  /** @type {Map<string, string[]>} */
-  const documented = new Map();
-  const names = [...new Set(uses.map(use => use.component))];
-  for (let start = 0; start < names.length; start += COMPONENT_BATCH_SELECTOR_LIMIT) {
-    const batch = names.slice(start, start + COMPONENT_BATCH_SELECTOR_LIMIT);
-    const answer = /** @type {any} */ (await componentAnswer(batch, {cwd: projectDir, package: '@astryxdesign/core', props: true}));
-    for (const read of answer?.data?.results ?? []) {
-      const props = read?.status === 'found' ? read.result?.data : null;
-      if (Array.isArray(props)) documented.set(read.selector, props.map((/** @type {any} */ prop) => prop?.name).filter(Boolean));
+  // Each page is read as TypeScript reads it: with its config, and with Core
+  // and React found from the page's own folder. Pages that share a config and
+  // an installed Core share one read. A page whose config maps a Core module
+  // path elsewhere (`paths`) reads another module, and a page that finds no
+  // installed Core has no types to read; neither is judged.
+  /** @type {Map<string, string | null>} */
+  const coreFrom = new Map();
+  const coreDirFrom = (/** @type {string} */ dir) => {
+    if (!coreFrom.has(dir)) {
+      const found = findInstalledPackage(dir, '@astryxdesign/core', Infinity);
+      let real = found;
+      try {
+        real = found ? fs.realpathSync(found) : null;
+      } catch {
+        // A Core folder that does not resolve is read where it is found.
+      }
+      coreFrom.set(dir, real);
     }
+    return coreFrom.get(dir) ?? null;
+  };
+  /** @type {Map<string, {configFile: string, from: string, uses: typeof uses}>} */
+  const groups = new Map();
+  for (const use of uses) {
+    if (projectMapsImport(use.source, use.path)) continue;
+    const from = path.dirname(use.path);
+    const coreDir = coreDirFrom(from);
+    if (!coreDir) continue;
+    const configFile = configOf.get(use.path) ?? '';
+    const key = `${configFile}\0${coreDir}`;
+    const group = groups.get(key) ?? /** @type {any} */ (groups.set(key, {configFile, from, uses: []}).get(key));
+    group.uses.push(use);
   }
-  const candidates = uses.filter(use => {
-    const props = documented.get(use.component);
-    return props != null && !props.includes(use.prop);
-  });
+  if (uses.length > 0 && groups.size === 0 && uses.every(use => !projectMapsImport(use.source, use.path))) {
+    return notChecked('Core is not installed where the pages that import it can find it');
+  }
   /** @type {UnknownCoreProp[]} */
   const found = [];
-  for (const [configFile, config] of configs) {
-    const here = candidates.filter(use => configOf.get(use.path) === configFile);
-    if (here.length === 0) continue;
-    const augmentations = projectAugmentations(projectDir, here[0].path);
+  for (const group of groups.values()) {
+    // Batched reads of the props the docs of the group's Core list, as
+    // `astryx component <Name> --props` prints them; a component they do not
+    // describe is not judged.
+    /** @type {Map<string, string[]>} */
+    const documented = new Map();
+    const names = [...new Set(group.uses.map(use => use.component))];
+    for (let start = 0; start < names.length; start += COMPONENT_BATCH_SELECTOR_LIMIT) {
+      const batch = names.slice(start, start + COMPONENT_BATCH_SELECTOR_LIMIT);
+      const answer = /** @type {any} */ (await componentAnswer(batch, {cwd: group.from, package: '@astryxdesign/core', props: true}));
+      for (const read of answer?.data?.results ?? []) {
+        const props = read?.status === 'found' ? read.result?.data : null;
+        if (Array.isArray(props)) documented.set(read.selector, props.map((/** @type {any} */ prop) => prop?.name).filter(Boolean));
+      }
+    }
+    const candidates = group.uses.filter(use => {
+      const props = documented.get(use.component);
+      return props != null && !props.includes(use.prop);
+    });
+    if (candidates.length === 0) continue;
+    const augmentations = projectAugmentations(projectDir, candidates[0].path);
     if (!augmentations.complete) return notChecked("the files that may add to Core's types could not all be read");
     /** @type {Map<string, Set<string>>} */
     const asked = new Map();
-    for (const use of here) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
+    for (const use of candidates) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
     const types = readCorePropTypes({
       ts: compiler.ts,
-      projectDir,
-      configDir: configFile ? path.dirname(configFile) : projectDir,
-      options: config.options,
+      projectDir: group.from,
+      configDir: group.configFile ? path.dirname(group.configFile) : group.from,
+      options: configs.get(group.configFile)?.options ?? {},
       augmentations: [...augmentations.files, ...jsxDeclarations],
       props: asked,
     });
     if (types.unread) return notChecked(types.unread);
-    for (const use of here) {
+    for (const use of candidates) {
       if (types.attributes.has(use.prop) || types.takes.get(use.component)?.get(use.prop) !== false) continue;
-      const {path: _file, ...report} = use;
+      const {path: _file, source: _source, ...report} = use;
       found.push({...report, suggestion: closestProp(use.prop, documented.get(use.component) ?? [])});
     }
   }

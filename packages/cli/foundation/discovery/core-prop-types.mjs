@@ -85,7 +85,8 @@ function isGeneric(ts, checker, type) {
  * out of `takes`.
  * @param {object} input
  * @param {any} input.ts the project's TypeScript compiler
- * @param {string} input.projectDir
+ * @param {string} input.projectDir the folder of the pages, from which
+ *   TypeScript finds Core and React for them
  * @param {string} input.configDir the folder of the pages' config, which the
  *   default type roots are found from
  * @param {Record<string, unknown>} input.options the pages' compiler options,

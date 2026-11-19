@@ -9,7 +9,7 @@
  *   each prop against the component's docs and Core's own types.
  */
 
-import {coreComponentOf} from './core-elements.mjs';
+import {coreImportOf} from './core-elements.mjs';
 import {parseTemplateSource, traverseTemplateSource} from './template-source-tree.mjs';
 
 /**
@@ -21,6 +21,7 @@ const NOT_COMPONENT_PROPS = new Set(['key', 'ref', 'children', 'xstyle', 'classN
 /**
  * @typedef {object} CorePropUse
  * @property {string} component the name Core exports the component by
+ * @property {string} source the module path the module imports it from
  * @property {string} prop
  * @property {number} line
  * @property {number} column
@@ -46,15 +47,16 @@ export function scanCoreProps(source) {
   const uses = [];
   traverseTemplateSource(file, {
     JSXOpeningElement(/** @type {any} */ path) {
-      const component = coreComponentOf(path.node.name, path.scope);
-      if (component == null || !/^[A-Z]/.test(component)) return;
+      const core = coreImportOf(path.node.name, path.scope);
+      if (core == null || !/^[A-Z]/.test(core.component)) return;
+      const {component, source} = core;
       for (const attribute of path.node.attributes) {
         if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
         const prop = attribute.name.name;
         // JSX never checks a name with a hyphen against a props type.
         if (NOT_COMPONENT_PROPS.has(prop) || prop.includes('-')) continue;
         const start = attribute.loc?.start;
-        uses.push({component, prop, line: start?.line ?? 0, column: (start?.column ?? 0) + 1});
+        uses.push({component, source, prop, line: start?.line ?? 0, column: (start?.column ?? 0) + 1});
       }
     },
   });

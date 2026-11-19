@@ -85,6 +85,52 @@ function app(names, ...lines) {
 
 describe('doctor core-props', () => {
   it(
+    "reads each page with the Core it finds and its config's paths, and a workspace root's build config",
+    async () => {
+      const root = fs.mkdtempSync(path.join(tmp, 'workspace-'));
+      const write = (/** @type {Record<string, string>} */ files) => {
+        for (const [rel, text] of Object.entries(files)) {
+          const file = path.join(root, rel);
+          fs.mkdirSync(path.dirname(file), {recursive: true});
+          fs.writeFileSync(file, text);
+        }
+      };
+      write({
+        // The root declares Core, as a workspace root that builds its members
+        // does, and installs none of its own.
+        'package.json': JSON.stringify({name: 'repo', private: true, workspaces: ['apps/*'], dependencies: {'@astryxdesign/core': '*'}}),
+        'apps/web/package.json': JSON.stringify({name: 'web', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}}),
+        'apps/web/src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      // Core is installed only in the member: the member's page reads it.
+      const member = path.join(root, 'apps/web');
+      link(member, '@astryxdesign/core', path.join(REPO, 'packages', 'core'));
+      link(member, '@types/react', path.join(REPO, 'node_modules', '@types', 'react'));
+      link(root, 'typescript', path.join(REPO, 'node_modules', 'typescript'));
+      const check = async (/** @type {string} */ cwd) => (await runChecks({cwd})).checks.find(each => each.id === 'core-props');
+      const fromRoot = await check(root);
+      expect(fromRoot?.status).toBe('warn');
+      expect(fromRoot?.message).toContain('apps/web/src/App.tsx:5 TabList has no `selectedID`');
+      // A config that maps Core's module path to the app's own copy.
+      write({
+        'apps/web/tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', baseUrl: '.', paths: {'@astryxdesign/core': ['./src/astryx/index.ts']}}}),
+        'apps/web/src/astryx/index.ts': "export {TabList} from './TabList';\n",
+        'apps/web/src/astryx/TabList.tsx': 'export function TabList(props: {selectedID?: string}) {\n  return null;\n}\n',
+      });
+      expect((await check(member))?.status).toBe('pass');
+      fs.rmSync(path.join(member, 'tsconfig.json'));
+      // A workspace root's Babel config that sets emotion's runtime.
+      write({
+        'babel.config.js': "module.exports = {presets: [['@babel/preset-react', {runtime: 'automatic', importSource: '@emotion/react'}]]};\n",
+      });
+      const rootBabel = await check(member);
+      expect(rootBabel?.status).toBe('info');
+      expect(rootBabel?.message).toMatch(/^Not checked: the build config `\.\.\/\.\.\/babel\.config\.js` sets another JSX runtime/);
+    },
+    SLOW,
+  );
+
+  it(
     'names each prop a Core component does not take, with a documented prop that has the same words',
     async () => {
       const check = await propsCheck({
@@ -206,7 +252,7 @@ describe('doctor core-props', () => {
         'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />'),
       });
       expect(transitive?.status).toBe('info');
-      expect(transitive?.message).toMatch(/^Not checked: the project depends on `@emotion\/babel-preset-css-prop`/);
+      expect(transitive?.message).toMatch(/^Not checked: `@emotion\/babel-preset-css-prop` is installed, which compiles a `css` prop/);
       for (const transform of ['@emotion/babel-preset-css-prop', '@swc/plugin-styled-components', '@compiled/babel-plugin']) {
         const other = await propsCheck({'package.json': manifest({[transform]: '*'}), 'src/App.jsx': app('Button', '<Button label="Go" css={{color: "red"}} />')});
         expect(other?.status, transform).toBe('info');
