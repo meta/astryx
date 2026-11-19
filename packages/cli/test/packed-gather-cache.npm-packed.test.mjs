@@ -169,7 +169,6 @@ describe("npm's list, kept for a package's check of itself", () => {
       expect(check(tmp, dir)).toEqual(answer);
       expect(keptList(tmp)?.ino).toBe(ino);
     };
-    changedAt = Date.now();
     const first = same();
     readBack(first);
     // An edit inside a file, in place, keeps the list.
@@ -363,7 +362,9 @@ describe("npm's list, kept for a package's check of itself", () => {
       });
       return {status: result.status, stdout: result.stdout};
     };
-    const madeAt = Date.now();
+    // Settled first, so doctor's runs would store what they ask if they made
+    // the folder.
+    settleSince(Date.now());
     // A home no run has used: doctor makes no folder, and answers as a fresh
     // run does.
     const home = freshTmp();
@@ -371,9 +372,7 @@ describe("npm's list, kept for a package's check of itself", () => {
     expect(answer.status).not.toBeNull();
     expect(fs.existsSync(path.join(home, CACHE_NAME))).toBe(false);
     expect(answer).toEqual(validate(freshTmp()));
-    // integration check makes the folder and keeps the list there, once the
-    // new files have settled.
-    settleSince(madeAt);
+    // integration check makes the folder and keeps the list there.
     check(home, dir);
     const kept = keptList(home);
     expect(kept?.paths.slice().sort()).toEqual(npmList(dir));
