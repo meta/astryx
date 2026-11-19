@@ -201,7 +201,7 @@ extension Theme {
         s9: 36
       ),
       radius: RadiusTokens(
-        chat: 28,
+        chat: 12,
         container: 12,
         element: 8,
         full: 9999,
@@ -434,7 +434,7 @@ extension Theme {
         s9: 36
       ),
       radius: RadiusTokens(
-        chat: 28,
+        chat: 12,
         container: 12,
         element: 8,
         full: 9999,
