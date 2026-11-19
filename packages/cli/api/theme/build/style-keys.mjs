@@ -514,10 +514,14 @@ export function variantMapKeys(key, value) {
     !entries.every(([, v]) => isBlock(v) && Object.keys(v).length > 0)
   )
     return null;
-  // A wrapper that holds only maps (`variants: {variant: {…}}`) stands for
-  // the style keys of the maps inside it.
-  const inner = entries.map(([val, v]) => variantMapKeys(val, v));
-  if (inner.every(keys => keys != null)) return inner.flat();
+  // The `variants` wrapper (`variants: {variant: {…}}`) stands for the
+  // style keys of the maps inside it. Any other key's blocks are the
+  // values' own, a hover or selectors block included (`variant: {ghost:
+  // {'&:hover': {…}}}` is `'variant:ghost'`).
+  if (key === 'variants') {
+    const inner = entries.map(([val, v]) => variantMapKeys(val, v));
+    if (inner.every(keys => keys != null)) return inner.flat();
+  }
   return entries.map(([val]) => `${key}:${val}`);
 }
 

@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
+import {variantMapKeys} from '../theme/build/style-keys.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -120,4 +121,29 @@ describe('variants written as a map of values to blocks', () => {
     },
     T,
   );
+});
+
+describe('the style keys a variant map stands for', () => {
+  it.each([
+    [
+      'a variants wrapper',
+      'variants',
+      {variant: {secondary: {color: 'red'}}},
+      ['variant:secondary'],
+    ],
+    [
+      'a hover-only variant',
+      'variant',
+      {ghost: {'&:hover': {backgroundColor: 'red'}}},
+      ['variant:ghost'],
+    ],
+    [
+      'a variant written with selectors',
+      'variant',
+      {ghost: {selectors: {'&:hover': {backgroundColor: 'red'}}}},
+      ['variant:ghost'],
+    ],
+  ])('names %s by its own values', (_, key, value, keys) => {
+    expect(variantMapKeys(key, value)).toEqual(keys);
+  });
 });
