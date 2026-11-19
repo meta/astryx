@@ -1120,16 +1120,19 @@ export function planPaletteRequest(dials, options, context) {
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
   }
-  // The category and chart hues grow with the look, after the theme's own
-  // colors.
-  const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
-  for (const [id, seed] of Object.entries(derived)) {
-    if (!config.families.some(f => f?.id === id)) {
-      config.families.push({
-        id,
-        name: id[0].toUpperCase() + id.slice(1),
-        seed,
-      });
+  // The editor grows more families (context.editor).
+  if (context.editor) {
+    // The category and chart hues grow with the look, after the theme's own
+    // colors.
+    const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
+    for (const [id, seed] of Object.entries(derived)) {
+      if (!config.families.some(f => f?.id === id)) {
+        config.families.push({
+          id,
+          name: id[0].toUpperCase() + id.slice(1),
+          seed,
+        });
+      }
     }
   }
   return {config, fills};
@@ -1888,7 +1891,12 @@ export function mapPalette(candidate, dials, fills, context) {
       lift = found;
     }
   }
-  const categories = mapCategories();
+  /**
+   * @type {PaletteMapping['categories']}
+   */
+  const categories = context.editor
+    ? mapCategories()
+    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
