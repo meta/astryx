@@ -562,8 +562,11 @@ function SyllabusSection() {
   const announce = useAnnounce({hasReplace: true});
   const fold = (value: string) => value.toLowerCase();
   const needle = fold(query.trim());
+  // One match helper: a lesson matches when its title carries the text.
+  const matches = (lesson: Lesson, text: string) =>
+    fold(lesson.title).includes(text);
   const modules = MODULES.filter(module =>
-    module.lessons.some(lesson => fold(lesson.title).includes(needle)),
+    module.lessons.some(lesson => matches(lesson, needle)),
   );
 
   // The search owns the result count. A hit opens the module that holds it,
@@ -577,14 +580,12 @@ function SyllabusSection() {
       return;
     }
     const hits = MODULES.filter(module =>
-      module.lessons.some(lesson => fold(lesson.title).includes(next)),
+      module.lessons.some(lesson => matches(lesson, next)),
     );
     setOpen(hits.map(module => module.id));
     const count = hits.reduce(
       (total, module) =>
-        total +
-        module.lessons.filter(lesson => fold(lesson.title).includes(next))
-          .length,
+        total + module.lessons.filter(lesson => matches(lesson, next)).length,
       0,
     );
     announce(
@@ -943,11 +944,16 @@ function ReviewsSection() {
   const announce = useAnnounce({hasReplace: true});
   const fold = (value: string) => value.toLowerCase();
   const needle = fold(query.trim());
-  const filtered = REVIEWS.filter(review => {
-    const matchesText = !needle || fold(review.body).includes(needle);
-    const matchesRating = rating === 'all' || review.rating === Number(rating);
-    return matchesText && matchesRating;
-  });
+  // One match helper for both filters: a review stays in the list when it
+  // matches the text query and the rating.
+  const matchReviews = (text: string, ratingValue: string) =>
+    REVIEWS.filter(review => {
+      const matchesText = !text || fold(review.body).includes(text);
+      const matchesRating =
+        ratingValue === 'all' || review.rating === Number(ratingValue);
+      return matchesText && matchesRating;
+    });
+  const filtered = matchReviews(needle, rating);
   // REVIEWS is authored newest-first, so "Newest" keeps the array order and
   // only "Helpful" reorders it.
   const shown =
@@ -963,12 +969,7 @@ function ReviewsSection() {
     if (!next) {
       return;
     }
-    const count = REVIEWS.filter(review => {
-      const matchesText = fold(review.body).includes(next);
-      const matchesRating =
-        rating === 'all' || review.rating === Number(rating);
-      return matchesText && matchesRating;
-    }).length;
+    const count = matchReviews(next, rating).length;
     announce(
       count === 0
         ? `No reviews match “${value.trim()}”`
@@ -977,21 +978,23 @@ function ReviewsSection() {
   };
 
   // The rating control filters the same search, so it announces the same
-  // count while a query is active.
+  // count. With no query the visible message is the rating one, so the
+  // announcement says the same thing.
   const handleRatingChange = (value: string) => {
     setRating(value);
-    if (!needle) {
+    const count = matchReviews(needle, value).length;
+    if (needle) {
+      announce(
+        count === 0
+          ? `No reviews match “${query.trim()}”`
+          : `${count} ${count === 1 ? 'review' : 'reviews'} match “${query.trim()}”`,
+      );
       return;
     }
-    const count = REVIEWS.filter(review => {
-      const matchesText = fold(review.body).includes(needle);
-      const matchesRating = value === 'all' || review.rating === Number(value);
-      return matchesText && matchesRating;
-    }).length;
     announce(
       count === 0
-        ? `No reviews match “${query.trim()}”`
-        : `${count} ${count === 1 ? 'review' : 'reviews'} match “${query.trim()}”`,
+        ? 'No reviews carry this rating'
+        : `${count} ${count === 1 ? 'review' : 'reviews'}`,
     );
   };
 
