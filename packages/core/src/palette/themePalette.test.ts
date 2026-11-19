@@ -105,7 +105,11 @@ describe('themePalette', () => {
     }
     // The accent keeps the exact color given, as the editor anchors it.
     expect(palette.tokens['--color-accent'][0]).toBe('#5b3cc4');
-    expect(palette.components.item?.selected).toBeDefined();
+    // Core measures secondary text on the accent tint, so the palette lifts
+    // it only where the official theme does: segmented-control labels and
+    // the coloured cards.
+    expect(palette.components.item?.selected).toBeUndefined();
+    expect(palette.components['segmented-control-item']?.base).toBeDefined();
   });
 
   it('runs astryx-oklch-v1 when no recipe is named, and v2 only when named', () => {
@@ -297,7 +301,7 @@ describe('defineTheme({palette})', () => {
     const css = generateThemeCSS(
       defineTheme({name: 'palette-compiled', palette}),
     ).component;
-    const lift = palette.components.item?.selected;
+    const lift = palette.components['segmented-control-item']?.base;
     const light = lift?.['@light']['--color-text-secondary'];
     const dark = lift?.['@dark']['--color-text-secondary'];
     expect(light).toMatch(/^#[0-9a-f]{6}$/);

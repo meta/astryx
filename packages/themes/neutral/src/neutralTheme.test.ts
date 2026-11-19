@@ -435,10 +435,11 @@ describe('neutral selected fill', () => {
 
   it('leaves the text on the tint to Core: no part rule sets it', () => {
     const css = generateThemeCSS(neutralTheme).component;
-    for (const target of ['item', 'tree-list-item', 'citation', 'file-input'])
+    for (const target of ['item', 'tree-list-item', 'citation', 'file-input']) {
       expect(css).not.toMatch(
         new RegExp(`\\.astryx-${target}\\[[^{]*\\{[^}]*--color-text-secondary`),
       );
+    }
   });
   it.each(Object.entries(foregrounds))(
     '%s reads at 4.5:1 on the fill in both modes',

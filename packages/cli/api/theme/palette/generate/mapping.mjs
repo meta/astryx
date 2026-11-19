@@ -293,10 +293,6 @@ export const OFFICIAL_NEUTRAL_STOPS = ownTable({
  */
 export const OFFICIAL_NEUTRAL_LIFTED = Object.freeze(
   /** @type {const} */ ([
-    ['item', 'selected'],
-    ['tree-list-item', 'selected'],
-    ['file-input', 'mode:dropzone'],
-    ['citation', 'variant:number'],
     ['segmented-control-item', 'base'],
     ['card', 'variant:blue'],
     ['card', 'variant:cyan'],
@@ -395,9 +391,10 @@ export const STATUS_MUTED = /** @type {[ number, [number, string], ]} */ (
 export const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official Neutral theme lifts, with
- * the block it lifts it in and what the text sits on: the accent tint,
- * except under segmented-control labels, which sit on the translucent
- * neutral track (`--color-neutral`).
+ * the block it lifts it in and what the text sits on: the translucent
+ * neutral track under segmented-control labels (`--color-neutral`), or a
+ * coloured card's own fill. Core measures the secondary text on the
+ * accent tint itself, so no part on the tint is lifted here.
  * @type {ReadonlyArray<[string, string, string]>}
  */
 export const LIFT_PARTS = OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
@@ -425,10 +422,6 @@ function liftGround(part, block) {
  * @type {Record<string, {what: string; parts: string}>}
  */
 export const LIFT_GROUNDS = {
-  '--color-accent-muted': {
-    what: 'the accent tint',
-    parts: 'selected items and rows, a dropzone, numbered citations',
-  },
   '--color-neutral': {
     what: 'the neutral track',
     parts: 'segmented-control labels',
@@ -1497,7 +1490,7 @@ export function mapPalette(candidate, dials, fills, context) {
       }
     }
     // The tint: the official stop, never the fill's own shade, see-through
-    // or not.
+    // or not. Core measures the secondary text on the parts that sit on it.
     const muted = each(m => {
       const i = side(m);
       const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];

@@ -13735,7 +13735,8 @@ function partTokenChanges(before, after, modes) {
       );
   }
   // Parts first. The root's derived values (one per Card variant) fold into
-  // one line, so a palette change does not list a dozen private names.
+  // one line that names each once with the modes that moved, not a line per
+  // value and mode.
   if (onRoot.length === 0) return out;
   const names = [...new Set(onRoot.map(line => line.split(' ')[0]))];
   const modesMoved = order.filter(m => onRoot.some(l => l.includes(`(${m})`)));
