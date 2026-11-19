@@ -326,7 +326,7 @@ export function tempFor(file) {
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
  * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
- * @property {Array<{token: string, mode: Mode, pair: string, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
+ * @property {Array<{token: string, mode: Mode, pair: import('../theme/palette/generate/mapping.mjs').BasePair, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
@@ -2046,6 +2046,25 @@ export function paletteFailedKeys(pal) {
 }
 
 /**
+ * A text/fill pair the base theme draws, as a person reads it: "the blue
+ * card's primary text", "text on the error tint".
+ * @param {import('../theme/palette/generate/mapping.mjs').BasePair} pair
+ */
+function pairWords(pair) {
+  if (pair.kind === 'category') return `${pair.hue} category text`;
+  if (pair.kind === 'status')
+    return pair.tint ? `text on the ${pair.role} tint` : `text on ${pair.role}`;
+  const which =
+    /^(?:variant|color):(.+)$/.exec(pair.block)?.[1] ??
+    pair.block.replace(':', ' ');
+  const role =
+    pair.prop === 'color'
+      ? 'text'
+      : `${pair.prop.replace(/^--color-text-/, '')} text`;
+  return `the ${which === 'base' ? '' : `${which} `}${pair.part.replace(/-/g, ' ')}'s ${role}`;
+}
+
+/**
  * What the look did to the category colors (Badge, Token, Card tints) and
  * the chart colors: one line with the accent's notes, and a refused mapping
  * with every dial's.
@@ -2096,7 +2115,9 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   const held = pal.kept ?? [];
   if (held.length) {
     const tokensHeld = [...new Set(held.map(h => h.token))];
-    const pairs = [...new Set(held.map(h => `${h.pair} (${h.mode})`))];
+    const pairs = [
+      ...new Set(held.map(h => `${pairWords(h.pair)} (${h.mode})`)),
+    ];
     out.push(
       `${tokensHeld.length} of the colors the look grows keep the base theme's where the base theme draws its own text with them, so it stays readable: ${pairs.slice(0, 3).join(', ')}${pairs.length > 3 ? `, and ${pairs.length - 3} more` : ''}`,
     );
