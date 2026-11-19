@@ -5,20 +5,26 @@
  * @input Uses vitest, @testing-library/react, ChartTooltip, ChartProvider,
  *        d3-scale
  * @output Functional tests for the grouped tooltip — portal lifecycle, pointer
- *         subscription, card content/visibility, hover dots, crosshair vs band
- *         highlight, and the custom render contract
+ *         subscription, card content/visibility, rows for series without a
+ *         value key, hover dots, crosshair vs band highlight, and the custom
+ *         render contract
  * @position Colocated test for ChartTooltip.tsx (issue #4295 viz coverage).
  *           Renders under a hand-built ChartProvider so the pointer stream can
  *           be driven directly (jsdom has no SVG geometry for the real one).
  */
 
-import {describe, it, expect, vi} from 'vitest';
-import {render, act} from '@testing-library/react';
+import {describe, it, expect, vi, type Mock} from 'vitest';
+import {render, act, within} from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {scaleLinear, scaleBand} from 'd3-scale';
 import {MediaTheme, Theme, defineTheme} from '@astryxdesign/core';
 import {ChartTooltip} from './ChartTooltip';
 import {ChartProvider} from './ChartContext';
+import {bar} from './marks/bar';
+import {heatmapGL} from './marks/heatmapGL';
+import {line} from './marks/line';
+import {referenceLine} from './marks/referenceLine';
+import {streamGL} from './marks/streamGL';
 import type {
   ChartContext,
   ChartPointerEvent,
@@ -429,6 +435,131 @@ describe('ChartTooltip card', () => {
       showSpy.mockRestore();
       hideSpy.mockRestore();
     }
+  });
+});
+
+describe('ChartTooltip series without a value key', () => {
+  const heatmap = () =>
+    heatmapGL({
+      xKey: 'month',
+      yKey: 'month',
+      valueKey: 'profit',
+      colorRange: ['#ffffff', '#000000'],
+    });
+  const stream = () => streamGL({color: '#00ff00'});
+  const salesBar = () => bar('sales', {label: 'Sales', color: '#ff0000'});
+  const salesLine = () => line('sales', {label: 'Sales', color: '#ff0000'});
+
+  function renderBeside(
+    makeValued: () => SeriesDef,
+    makeKeyless: () => SeriesDef,
+    renderFn?: Mock,
+  ) {
+    const valued = makeValued();
+    valued._uid = '0:sales';
+    const keyless = makeKeyless();
+    keyless._uid = `1:${keyless.key}`;
+    // Layout stores an entry for every series, keyless ones included.
+    const harness = makeHarness({
+      resolved: new Map([
+        ['0:sales', SALES_POINTS],
+        [keyless._uid, []],
+      ]),
+    });
+    renderTooltip(harness, {
+      series: [valued, keyless],
+      ...(renderFn ? {render: renderFn} : {}),
+    });
+    harness.dispatch(hoverAt(1));
+  }
+
+  it.each([
+    ['heatmapGL', heatmap],
+    ['streamGL', stream],
+  ])(
+    'passes only the bar row to a custom render beside %s',
+    (_name, makeKeyless) => {
+      const renderFn = vi.fn(() => <span>custom body</span>);
+      renderBeside(salesBar, makeKeyless, renderFn);
+      expect(renderFn).toHaveBeenCalled();
+      for (const call of renderFn.mock.calls) {
+        expect(call).toEqual([
+          'Feb',
+          [
+            {
+              key: 'sales',
+              label: 'Sales',
+              color: '#ff0000',
+              type: 'bar',
+              value: 7,
+            },
+          ],
+        ]);
+      }
+    },
+  );
+
+  it.each([
+    ['a line beside heatmapGL', salesLine, heatmap],
+    ['a bar beside streamGL', salesBar, stream],
+  ])(
+    'labels the one remaining row for %s',
+    (_name, makeValued, makeKeyless) => {
+      renderBeside(makeValued, makeKeyless);
+      expect(card().textContent).toBe('FebSales7');
+      const row = within(card()).getByText('Sales').parentElement;
+      expect(row?.textContent).toBe('Sales7');
+    },
+  );
+});
+
+describe('ChartTooltip default layout', () => {
+  it('shows the bare value for a chart with one series', () => {
+    const harness = makeHarness();
+    renderTooltip(harness);
+    harness.dispatch(hoverAt(1));
+    expect(card().textContent).toBe('Feb7');
+  });
+
+  it('shows the bare value for one series beside a utility mark', () => {
+    const salesBar = bar('sales', {label: 'Sales', color: '#ff0000'});
+    salesBar._uid = '0:sales';
+    const target = referenceLine({y: 5, label: 'Target'});
+    target._uid = `1:${target.key}`;
+    const harness = makeHarness({
+      resolved: new Map([
+        ['0:sales', SALES_POINTS],
+        [target._uid, []],
+      ]),
+    });
+    renderTooltip(harness, {series: [salesBar, target]});
+    harness.dispatch(hoverAt(1));
+    expect(card().textContent).toBe('Feb7');
+  });
+
+  it.each([
+    ['sales first', ['sales', 'profit'], 'FebSales7Profit2'],
+    ['profit first', ['profit', 'sales'], 'FebProfit2Sales7'],
+  ])('labels each row in series order (%s)', (_name, order, expectedText) => {
+    const profitPoints = SALES_POINTS.map(p => ({...p, py: p.py + 30}));
+    const defs: Record<string, SeriesDef> = {
+      sales: makeSeries(),
+      profit: makeSeries({
+        key: 'profit',
+        dataKeys: ['profit'],
+        label: 'Profit',
+        _uid: '1:profit',
+      }),
+    };
+    const harness = makeHarness({
+      resolved: new Map([
+        ['0:sales', SALES_POINTS],
+        ['1:profit', profitPoints],
+      ]),
+    });
+    renderTooltip(harness, {series: order.map(key => defs[key])});
+    harness.dispatch(hoverAt(1));
+    expect(card().textContent).toBe(expectedText);
   });
 });
 
