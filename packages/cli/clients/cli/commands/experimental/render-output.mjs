@@ -81,6 +81,15 @@ export function printRendered(d, run) {
       scriptBytes: kb(d.scriptBytes),
       scriptModules: d.scriptModules,
     }),
+    // Each image not fetched prints its own `url` and `reason`, as the
+    // JSON's `remoteImages.failed` lists them.
+    ...(d.remoteImages
+      ? [
+          section('Remote images'),
+          ...(d.remoteImages.fetched.length > 0 ? [record({fetched: d.remoteImages.fetched.join(', ')})] : []),
+          ...d.remoteImages.failed.map(f => record({url: f.url, reason: f.reason})),
+        ]
+      : []),
     ...(d.warnings.length > 0
       ? [section('Warnings'), list(d.warnings.map(w => w.message))]
       : []),

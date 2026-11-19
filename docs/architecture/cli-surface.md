@@ -1153,6 +1153,28 @@ Rejected: naming a folder that holds `page.tsx` (an import of the folder does
 not resolve without an index file); writing an index file beside each scaffold
 (a second file that the template does not own).
 
+### DEC-18 — A render fetches the remote images a page names
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+A rendered page is one file that shows the page in any viewer, and a viewer
+that blocks the network cannot load an image the page names by its web
+address. So `astryx experimental export` fetches each image the page names by
+an `https` address, once, while the page renders, and the file carries it.
+That is the only request a render makes for the page itself. A fetch sends no
+cookies or credentials and takes only an image, by its content type and its
+bytes, up to the size a render carries of one file. Each image has a time
+limit for its first answer and one for its last byte, and all the images of
+one render have one more; when the network answers none of the first images
+a render asks for, it asks for no more. Any failure leaves the
+address as the page wrote it, with the warning a remote image gets, and the
+result names every address fetched and every one that was not. The embedded
+source keeps the addresses, so `--reverse` gives back the page as written.
+
+Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
+broken), and carrying a fetched image in the embedded source (the way back
+would no longer be the page as written).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
