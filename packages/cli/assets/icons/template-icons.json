@@ -645,6 +645,7 @@
       "lucide": "Columns3"
     },
     "wallet": {
+      "heroicons": "WalletIcon",
       "lucide": "Wallet"
     },
     "warning": {
