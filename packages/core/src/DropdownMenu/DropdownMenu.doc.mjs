@@ -14,6 +14,12 @@ const anatomy = [
       'Optional trailing chevron shown by a labeled trigger when hasChevron is enabled.',
   },
   {
+    name: 'Pointer popup',
+    required: false,
+    description:
+      'Anchored floating box that holds a pointer menu: its background, corners, border and shadow.',
+  },
+  {
     name: 'Pointer menu surface',
     required: false,
     description:
@@ -141,6 +147,7 @@ export const docs = {
         className: 'astryx-dropdown-menu',
         visualProps: ['presentation'],
       },
+      {className: 'astryx-dropdown-menu-popup'},
       {
         className: 'astryx-dropdown-menu-item',
         visualProps: ['size', 'variant'],

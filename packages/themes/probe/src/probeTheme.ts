@@ -2274,6 +2274,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(227.2 80% 25%)',
       },
     },
+    'dropdown-menu-popup': {
+      base: {
+        backgroundColor: 'hsl(144.6 70% 56%)',
+        color: 'hsl(120.3 78% 12%)',
+        borderColor: 'hsl(247.9 91% 25%)',
+        outlineColor: 'hsl(28.1 70% 25%)',
+      },
+    },
     'dropdown-menu-radio': {
       base: {
         backgroundColor: 'hsl(217.6 80% 54%)',
