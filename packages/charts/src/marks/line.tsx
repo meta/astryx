@@ -30,6 +30,7 @@ export type CurveType = keyof typeof CURVES;
 
 export interface LineOptions {
   color?: string;
+  /** How points join. Default `'linear'`: straight segments. */
   curve?: CurveType;
   strokeWidth?: number;
   dots?: boolean;
@@ -43,7 +44,7 @@ function isFinitePoint(p: ResolvedPoint): boolean {
 
 export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
   const color = options.color;
-  const curve = options.curve ?? 'monotone';
+  const curve = options.curve ?? 'linear';
   const strokeWidth =
     typeof options.strokeWidth === 'number' &&
     Number.isFinite(options.strokeWidth)
@@ -80,7 +81,7 @@ export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
       if (resolved.length === 0) {
         return null;
       }
-      const curveFactory = CURVES[curve] ?? curveMonotoneX;
+      const curveFactory = CURVES[curve] ?? curveLinear;
       const pathGen = d3Line<ResolvedPoint>()
         .defined(isFinitePoint)
         .x(d => d.px)
