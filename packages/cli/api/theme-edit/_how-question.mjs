@@ -28766,11 +28766,20 @@ export function draftAnswer(ctx, env, question) {
       // ("too playful", "less minimal", "not playful", "I don't want it
       // busy", "without being loud", "keep it from looking busy", "tone
       // down the busy look", "steer clear of loud": the feel is what the
-      // ask moves away from, never a move toward it.)
+      // ask moves away from, never a move toward it. So is a feel the
+      // whole ask judges bad or tones down after it: "busy dashboards are
+      // bad", "it's loud, tone it down".)
+      const said = q.toLowerCase();
       if (
         new RegExp(
           String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing|from|stop|prevent|reduce|rid\s+of|clear\s+of|instead\s+of|rather\s+than|(?:tone|dial|turn|calm|tamp|scale|cut|play|water)(?:s|d|ed|ing)?\s+(?:it\s+|things\s+)?(?:down|back))[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
-        ).test(q.toLowerCase())
+        ).test(said) ||
+        new RegExp(
+          String.raw`\b${w}\b(?:[\s,]+[\w']+){0,3}?[\s,]+(?:(?:is|are|was|were|looks?|feels?|seems?)\s+)?(?:bad|awful|ugly|annoying|wrong|too\s+much)\b`,
+        ).test(asked0) ||
+        new RegExp(
+          String.raw`\b${w}\b[^.;!?]{0,40}?\b(?:tone|dial|turn|calm|tamp|scale|cut|play|water)(?:s|d|ed|ing)?\s+(?:it|that|this|things)?\s*(?:down|back)\s*(?:[.,;!?]|$)`,
+        ).test(asked0)
       )
         continue;
       const moves = (FEELS.get(w) ?? []).filter(

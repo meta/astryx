@@ -110,6 +110,8 @@ describe('a feel word said for the whole theme', () => {
       'keep it from looking busy',
       'tone down the busy look',
       'steer clear of loud',
+      'busy dashboards are bad, keep ours calm',
+      "it's loud, tone it down",
     ]) {
       const sets = (await answer(ask)).sets;
       expect(sets.join(' '), ask).not.toMatch(/spacing compact|type display/);
@@ -118,6 +120,10 @@ describe('a feel word said for the whole theme', () => {
       'headings bold',
     );
     // (A feel word said of a color, a status or the accent, describes it.)
+    // (A calm verb with its own object tones that down, not the feel.)
+    expect(
+      (await answer('playful theme, tone down the shadows')).sets,
+    ).toContain('corners round');
     for (const ask of ['bright red errors', 'a bright accent'])
       expect((await answer(ask)).sets.join(' '), ask).not.toMatch(/vibrancy/);
   }, 240_000);
