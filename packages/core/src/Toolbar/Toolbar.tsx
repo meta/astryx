@@ -138,15 +138,23 @@ const styles = stylex.create({
   // leaves, and its automatic minimum stops counting the list's unfolded
   // items. The list then folds to that width, down to its own floor.
   startFolds: {
-    // The end lane grows by 1 to keep its controls at the inline end. A
-    // factor this large gives this lane all the free space, so the end lane
-    // stays at its content width.
-    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1_000_000},
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1},
     flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
     minWidth: {default: null, [HOLDS_OVERFLOW_LIST]: 0},
-    // The list folds instead: a wrapping lane would move the list, at its
-    // unfolded width, to a line of its own.
-    flexWrap: {default: null, [HOLDS_OVERFLOW_LIST]: 'nowrap'},
+  },
+  // A two-lane start lane: `twoLane`, except that a lane holding an
+  // OverflowList folds it. Such a lane takes all the free space, because the
+  // end lane grows by 1 and this factor dwarfs it, so the end lane stays at
+  // its content width. It does not wrap, because a wrapping lane would move
+  // the list, at its unfolded width, to a line of its own.
+  twoLaneStart: {
+    flexWrap: {default: 'wrap', [HOLDS_OVERFLOW_LIST]: 'nowrap'},
+    minWidth: {
+      default: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+      [HOLDS_OVERFLOW_LIST]: 0,
+    },
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1_000_000},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
   },
   // When only endContent, push to end
   endOnly: {
@@ -488,11 +496,10 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.startSlot,
-                    hasEndContent &&
-                      orientation !== 'vertical' &&
-                      styles.twoLane,
                     !hasEndContent && styles.startOnly,
-                    orientation === 'horizontal' && styles.startFolds,
+                    hasEndContent && orientation !== 'vertical'
+                      ? styles.twoLaneStart
+                      : orientation === 'horizontal' && styles.startFolds,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>

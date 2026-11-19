@@ -136,6 +136,9 @@ async function rowAt(page: Page, frame: string, width: number): Promise<Row> {
 }
 
 const BROKEN = (row: Row) => row.overlaps || row.endOutside || row.clipsTrigger;
+/** Whether the row shows a "+N" trigger, which the label count includes. */
+const SHOWS_TRIGGER = (row: Row) =>
+  row.labels.some(label => /^\+\d+$/.test(label));
 
 test.describe("a start lane's own OverflowList", () => {
   test('folds beside the end lane at 380 px with its trigger whole (#8804)', async ({
@@ -233,6 +236,7 @@ test.describe("a start lane's own OverflowList", () => {
     );
     const row = await rowAt(page, 'overflow-actions-frame', 900);
     expect(row.labels).toHaveLength(row.itemCount);
+    expect(SHOWS_TRIGGER(row)).toBe(false);
     expect(BROKEN(row)).toBe(false);
   });
 
@@ -310,11 +314,43 @@ test.describe("a start lane's own OverflowList", () => {
         expect(row.labels, `${theme} ${width}: every action`).toHaveLength(
           row.itemCount,
         );
+        expect(SHOWS_TRIGGER(row), `${theme} ${width}: no trigger`).toBe(false);
       }
     }
     test
       .info()
       .annotations.push({type: 'lanes', description: reads.join(' | ')});
+  });
+
+  test('a two-lane start lane without a list keeps its content width and its wrap', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-toolbar--two-lane-narrow&viewMode=story`,
+    );
+    const toolbar = page.locator('#storybook-root [role="toolbar"]').first();
+    await toolbar.waitFor();
+    const start = await toolbar.evaluate(element => {
+      const lane = [...element.children].find(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement &&
+          child.getBoundingClientRect().width > 0,
+      );
+      if (lane == null) {
+        return null;
+      }
+      const style = getComputedStyle(lane);
+      return {
+        minWidth: style.minWidth,
+        flexWrap: style.flexWrap,
+        flexGrow: style.flexGrow,
+      };
+    });
+    expect(start).toEqual({
+      minWidth: 'fit-content',
+      flexWrap: 'wrap',
+      flexGrow: '0',
+    });
   });
 
   test('unfolds again when the row widens after a fold', async ({page}) => {
@@ -330,6 +366,9 @@ test.describe("a start lane's own OverflowList", () => {
         async () => (await rowAt(page, 'overflow-actions-frame', 900)).labels,
       )
       .toHaveLength(narrow.itemCount);
+    expect(
+      SHOWS_TRIGGER(await rowAt(page, 'overflow-actions-frame', 900)),
+    ).toBe(false);
   });
 
   test('reports the width where the lanes first meet', async ({page}) => {
