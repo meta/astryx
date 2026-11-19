@@ -10,10 +10,4 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Button', 'ButtonGroup', 'Icon', 'IconButton', 'Layout'],
-  icons: {
-    ChevronDownIcon: 'chevronDown',
-    ClipboardDocumentIcon: 'copyText',
-    ClipboardIcon: 'paste',
-    ScissorsIcon: 'cut',
-  },
 };
