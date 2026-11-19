@@ -39,6 +39,12 @@ const port = Number(getArg('port') || 6010);
 // whole cost of promoting its play function into required CI.
 const TARGETS = [
   {
+    component: 'Table',
+    story: 'core-table--children-mode-narrow',
+    guards:
+      'a children-mode table wider than its container scrolls inside its own box, with every heading in full and every word whole',
+  },
+  {
     component: 'Item',
     story: 'core-item--align-first-line',
     guards:
