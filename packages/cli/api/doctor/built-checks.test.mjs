@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {checkBuilt, scanBuilt} from './built-checks.mjs';
+import {checkBuilt, linksCoreStylesheet, scanBuilt} from './built-checks.mjs';
 import {builtIntegrationPackages} from './_adapter.mjs';
 import {runChecks} from './doctor.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
@@ -167,6 +167,14 @@ describe('built-astryx-styles', () => {
       'page/app.js': CORE_JS,
     });
     expect(check('page').styles?.status).toBe('pass');
+  });
+
+  it("counts a templated link to Core's stylesheet by its file name", () => {
+    expect(
+      linksCoreStylesheet(
+        '<link rel="stylesheet" href="${cdn}/@astryxdesign/core/dist/astryx.css">',
+      ),
+    ).toBe(true);
   });
 
   it("passes a page that links Core's stylesheet, but not a link in a comment", () => {
