@@ -399,6 +399,17 @@ export const neutralTheme = defineTheme({
       },
     },
 
+    // Secondary text (stop 65) reads under 3:1 on the dark track, so a neutral
+    // or disabled fill takes stop 75 there.
+    'progress-bar-fill': {
+      'variant:neutral': {
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[75]})`,
+      },
+      'variant:disabled': {
+        backgroundColor: `light-dark(var(--color-text-secondary), ${neutral.dark[75]})`,
+      },
+    },
+
     // Secondary text on a coloured card steps to the nearest neutral stop
     // that reads at 4.5:1 on that fill, and under a hover, in dark mode.
     card: {

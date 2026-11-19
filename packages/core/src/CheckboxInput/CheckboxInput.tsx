@@ -107,6 +107,10 @@ const styles = stylex.create({
     // The row paints every press, so the indicator draws no `:active` fill.
     '--_indicator-active-press': 'transparent',
   },
+  // The slot is as big as the indicator it holds. So a box a theme sizes,
+  // or a replacement indicator, sets the row's spacing, and the pressed layer
+  // fits it. The hidden input keeps the full size for its hit area
+  // (wrapperSizeStyles), centered on the box.
   checkboxWrapper: {
     position: 'relative',
     display: 'flex',
@@ -540,7 +544,6 @@ export function CheckboxInput({
           {...(isDisabled ? undefined : pressBoxProps)}
           {...stylex.props(
             styles.checkboxWrapper,
-            wrapperSizeStyles[size],
             !isDisabled && styles.indicatorPressOverlay,
             // Under a row that owns the press, the row's own overlay paints
             // instead of the owner's press paint.

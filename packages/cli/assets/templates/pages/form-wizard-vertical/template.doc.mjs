@@ -13,7 +13,7 @@ export const doc = {
     BookOpenIcon: 'book',
     BuildingLibraryIcon: 'bank',
     CalendarIcon: 'calendar',
-    CheckBadgeIcon: 'checkDouble',
+    CheckBadgeIcon: 'info',
     CurrencyDollarIcon: 'money',
     ExclamationTriangleIcon: 'warning',
     GlobeAltIcon: 'globe',

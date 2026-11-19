@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The font families a font stylesheet loads.
- * @input a stylesheet: a file, or an `@import` specifier and where it is read from
- * @output lowercase family keys
+ * @file The font families, and the faces, a font stylesheet loads.
+ * @input a stylesheet: a file, its text, or an `@import` specifier and where it is read from
+ * @output lowercase family keys; each `@font-face` rule's family and weights
  * @position shared by the theme build's font note and the editor's app copy
  */
 
@@ -85,6 +85,61 @@ export function importedFontFamilies(spec, fromDir, seen = new Set()) {
 }
 
 /**
+ * The family and weights of one `@font-face` rule: the family as it is
+ * written (unquoted, unescaped) and as a family key, and the weights as a
+ * [from, to] span: one weight (`400`, `bold`) or a range (`100 900`, a
+ * variable face, every weight in it). A rule with no font-weight is weight
+ * 400; a weight that is not a number or keyword gives null weights.
+ * @param {import('postcss').AtRule} rule
+ * @returns {{family: string, key: string, weights: [number, number] | null} | null}
+ */
+function faceOf(rule) {
+  /** @type {string | null} */
+  let family = null;
+  let weight = '400';
+  rule.walkDecls(decl => {
+    const prop = decl.prop.toLowerCase();
+    if (prop === 'font-family') family = decl.value;
+    else if (prop === 'font-weight') weight = decl.value;
+  });
+  if (family == null) return null;
+  const nums = String(weight)
+    .trim()
+    .replace(/\bnormal\b/gi, '400')
+    .replace(/\bbold\b/gi, '700')
+    .split(/\s+/)
+    .map(Number);
+  const known = nums.length > 0 && nums.every(n => Number.isFinite(n));
+  return {
+    family: cssUnescape(String(family).replace(/["']/g, '')).trim(),
+    key: fontKey(family),
+    weights: known ? [nums[0], nums[1] ?? nums[0]] : null,
+  };
+}
+
+/**
+ * Each `@font-face` rule of a stylesheet's text, in source order: its
+ * family and weights, as {@link faceOf} reads them.
+ * @param {string} css
+ * @returns {Array<{family: string, key: string, weights: [number, number] | null}>}
+ */
+export function fontFaces(css) {
+  /** @type {Array<{family: string, key: string, weights: [number, number] | null}>} */
+  const out = [];
+  try {
+    postcss()
+      .parse(css)
+      .walkAtRules(/^font-face$/i, rule => {
+        const face = faceOf(rule);
+        if (face) out.push(face);
+      });
+  } catch {
+    // A stylesheet that does not parse loads no face known here.
+  }
+  return out;
+}
+
+/**
  * The families a stylesheet file loads: its `@font-face` rules, and what
  * each of its `@import`s loads.
  * @param {string} file
@@ -112,10 +167,10 @@ export function stylesheetFontFamilies(file, seen = new Set()) {
       if (spec)
         for (const f of importedFontFamilies(spec, path.dirname(file), seen))
           out.add(f);
-    } else if (name === 'font-face')
-      rule.walkDecls(/^font-family$/i, decl => {
-        out.add(fontKey(decl.value));
-      });
+    } else if (name === 'font-face') {
+      const face = faceOf(rule);
+      if (face) out.add(face.key);
+    }
   });
   return out;
 }

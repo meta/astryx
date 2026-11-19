@@ -635,6 +635,17 @@
             ]
           },
           {
+            "name": "exitFullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
             "name": "expand",
             "description": "<text>",
             "words": [
@@ -737,6 +748,17 @@
             "name": "frame",
             "description": "<text>",
             "words": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ]
+          },
+          {
+            "name": "fullScreen",
+            "description": "<text>",
+            "words": [
+              "<text>",
+              "<text>",
               "<text>",
               "<text>",
               "<text>"
@@ -1964,11 +1986,7 @@
             },
             {
               "definition": "<text>",
-              "templates": 1
-            },
-            {
-              "definition": "<text>",
-              "templates": 1
+              "templates": 2
             },
             {
               "definition": "<text>",

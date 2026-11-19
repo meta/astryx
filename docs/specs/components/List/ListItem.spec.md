@@ -17,6 +17,7 @@ verified_by:
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
+    packages/core/src/List/__tests__/TaskCheckboxCentered.interaction.browser.spec.ts,
   ]
 modules: []
 families: [family:navigation-destinations]
@@ -178,20 +179,20 @@ migration, so the map is deferred.
 
 ## Verification map
 
-| Contract     | Verification                                                                                  | Representative states                          | Mutation or failure expectation                                              | Audit section                  |
-| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
-| FR1, AR1     | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests              | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails.                       | `audit:ListItem/behavior`      |
-| FR2          | `List.test.tsx` density, divider, radius, and edge treatment tests                            | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.                                | `audit:ListItem/layout`        |
-| FR3          | `List.test.tsx` "keeps the inset of a ListItem outside a List"                                | Row outside a List                             | A row outside a List that loses its inset fails.                             | `audit:ListItem/layout`        |
-| FR4, AR3     | `List.test.tsx` marker and ListMarkerScope tests                                              | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.                                | `audit:ListItem/anatomy`       |
-| AR2          | `List.test.tsx` invisible button, anchor, disabled, and selection tests                       | Click, href, disabled, selected                | Lost row semantics fail.                                                     | `audit:ListItem/accessibility` |
-| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `List / Interactive` | Start icon and end chevron; LTR and RTL        | A start content that is not at the inline start of the end content fails D2. | `audit:ListItem/i18n-rtl`      |
+| Contract     | Verification                                                                                                                                                                           | Representative states                          | Mutation or failure expectation                                              | Audit section                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| FR1, AR1     | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests                                                                                                       | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails.                       | `audit:ListItem/behavior`      |
+| FR2          | `List.test.tsx` density, divider, radius, and edge treatment tests                                                                                                                     | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.                                | `audit:ListItem/layout`        |
+| FR3          | `List.test.tsx` "keeps the inset of a ListItem outside a List"                                                                                                                         | Row outside a List                             | A row outside a List that loses its inset fails.                             | `audit:ListItem/layout`        |
+| FR4, AR3     | `List.test.tsx` marker and ListMarkerScope tests; `__tests__/TaskCheckboxCentered.interaction.browser.spec.ts` (the task checkbox centered on the first line, shipped and theme-sized) | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.                                | `audit:ListItem/anatomy`       |
+| AR2          | `List.test.tsx` invisible button, anchor, disabled, and selection tests                                                                                                                | Click, href, disabled, selected                | Lost row semantics fail.                                                     | `audit:ListItem/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `List / Interactive`                                                                                          | Start icon and end chevron; LTR and RTL        | A start content that is not at the inline start of the end content fails D2. | `audit:ListItem/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 
 - FR1: `interactiveRef`, `rel`, and `ref` reaching the Item row.
 - FR2: the divider border and square corners. The `bleed` end-row corner exception is checked by `ContainerCorners.a11y.chromium.spec.ts` (`component:List` FR5).
-- FR4: each marker and the task checkbox sitting on the label's first line.
+- FR4: each marker sitting on the label's first line.
 - FR3: `balanced` density, no dividers, and no marker outside a List.
 - FR4: the shape of each bullet marker (the disc's fill, the circle's ring),
   and the number marker and its counter.

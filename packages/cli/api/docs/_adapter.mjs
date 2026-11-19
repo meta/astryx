@@ -19,6 +19,9 @@
 
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
+import {discoverIntegrationSkills} from '../../foundation/discovery/integration-skills.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {
   DocsCatalog,
   integrationDocsCatalog,
@@ -1901,10 +1904,16 @@ export async function nodeContent(catalog, tree, node) {
 function typedDocIndex(tree) {
   let index = typedDocIndexes.get(tree);
   if (!index) {
+    const nodes = [...tree.nodes.values()].filter(each => each.ref?.selfDoc);
+    /** @type {Map<string, string>} */
+    const routes = new Map();
+    for (const each of nodes) {
+      const key = `${each.ref.selfDoc.type}:${each.ref.selfDoc.name}`;
+      if (!routes.has(key)) routes.set(key, each.route);
+    }
     index = cliDocIndex(
-      [...tree.nodes.values()].flatMap(each =>
-        each.ref?.selfDoc ? [each.ref.selfDoc] : [],
-      ),
+      nodes.map(each => each.ref.selfDoc),
+      (kind, name) => routes.get(`${kind}:${name}`) ?? null,
     );
     typedDocIndexes.set(tree, index);
   }
@@ -2686,3 +2695,78 @@ export async function integrationDocTypes(integration, cwd) {
     ].sort((a, b) => compareText(a.doc, b.doc)),
   };
 }
+
+/**
+ * The skills the project's integrations declare, each with the route `astryx
+ * docs` reads its doc by, and why each skill left out was left out.
+ * `complete` is false when an integration's docs folder could not be read:
+ * its skills are unknown, so no copy is removed as a leftover.
+ * @param {string} cwd
+ * @returns {Promise<{skills: Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>, problems: Array<{package: string, message: string, unread?: true}>, complete: boolean, unread: string[]}>}
+ */
+export async function projectIntegrationSkills(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  const project = projectOfCatalog.get(catalog);
+  if (!project) return {skills: [], problems: [], complete: true, unread: []};
+  const {skills, problems, unread} = await discoverIntegrationSkills(project.loadedIntegrations);
+  const complete = unread.length === 0;
+  if (skills.length === 0) return {skills: [], problems, complete, unread};
+  const tree = await projectTree(catalog);
+  // Each skill reads its own doc: the node whose file it is, as a topic or as
+  // a guide's replacement. A doc the tree withdrew (a name another doc
+  // holds, or a CLI topic's name taken without `replaces`) has no node, and
+  // its skill is left out.
+  /** @type {Map<string, string>} */
+  const routes = new Map();
+  for (const node of tree.nodes.values()) {
+    const ref = /** @type {any} */ (node.ref);
+    const file =
+      node.guideOverlay?.replacement?.path ??
+      ref?.topicFile ??
+      (ref?.flatTopic != null ? catalog.resolve(ref.flatTopic)?.path : undefined);
+    if (typeof file === 'string') routes.set(path.resolve(file), node.route);
+  }
+  /** @type {Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>} */
+  const kept = [];
+  for (const each of skills) {
+    const route = routes.get(path.resolve(each.file));
+    if (route == null) {
+      problems.push({
+        package: each.package,
+        message: `${path.basename(each.file)}: skill "${each.name}" is left out because its doc "${each.doc}" is not in the docs tree (another doc holds that name; use \`replaces\` to take its place).`,
+      });
+      continue;
+    }
+    kept.push({...each, route});
+  }
+  return {skills: kept, problems, complete, unread};
+}
+
+/**
+ * The project root the project skill belongs to, or null outside a project.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function skillsProjectRoot(cwd) {
+  return resolveAgentDocsRoot(cwd);
+}
+
+/**
+ * The agent-docs block for the project at `root`, pointing to the
+ * integration skills the docs tree keeps, so the block, `docs skills` and
+ * the skill places name the same skills.
+ * @param {string} root
+ * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @returns {Promise<string>}
+ */
+export async function renderProjectAgentDocsBlock(root, options = {}) {
+  /** @type {Array<{package: string, name: string, description: string}>} */
+  let skills = [];
+  try {
+    skills = (await projectIntegrationSkills(root)).skills;
+  } catch {
+    // A project that cannot load is reported by the block's own render.
+  }
+  return renderAgentDocsBlock(root, {...options, skills});
+}
+

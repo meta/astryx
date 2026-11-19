@@ -226,7 +226,7 @@ describe('experimental icon --definitions marks template use and the set', () =>
     expect(text.stdout).toContain('checked against @acme/glyphs/glyphs');
     expect(text.stdout).toMatch(
       new RegExp(
-        `- document \\[optional, ${counts.get('document')} templates, not mapped\\]`,
+        `- document \\[optional, group files, ${counts.get('document')} templates, not mapped\\]`,
         'u',
       ),
     );

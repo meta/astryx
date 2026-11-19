@@ -27,6 +27,7 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {definitionRelatives} from './icon-definition-discovery.mjs';
 import {
   publishedOptionDescription,
   publishedSummary,
@@ -125,6 +126,8 @@ export async function loadCliSelfDocs(
  * @typedef {object} CliDocIndex
  * @property {Map<string, any>} functions
  * @property {Set<string>} commands
+ * @property {any[]} iconDefinitions the loaded icon definition docs, the
+ *   first of each name only
  * @property {(kind: string, name: string) => string | null} route
  */
 
@@ -139,6 +142,14 @@ export function cliDocIndex(docs, route = () => null) {
       docs.filter(d => d.type === 'function').map(d => [d.name, d]),
     ),
     commands: new Set(docs.filter(d => d.type === 'command').map(d => d.name)),
+    iconDefinitions: [
+      ...new Map(
+        docs
+          .filter(d => d.type === 'icon-definition')
+          .reverse()
+          .map(d => [d.name, d]),
+      ).values(),
+    ].reverse(),
     route,
   };
 }
@@ -187,7 +198,10 @@ function entryText(entry, fn) {
  * @returns {string}
  */
 function optionText(option, fn) {
-  return publishedOptionDescription(option, entryText({param: option.param}, fn));
+  return publishedOptionDescription(
+    option,
+    entryText({param: option.param}, fn),
+  );
 }
 
 /**
@@ -436,11 +450,13 @@ function enumSection(doc) {
 
 /**
  * What `astryx docs <route>` prints for one icon definition: its description,
- * its words, whether it is built in, and the command
- * that finds the icon each installed set draws for it.
+ * its words, whether it is built in, its group with the other members and
+ * the routes that open them, and the command that finds the icon each
+ * installed set draws for it.
  * @param {any} doc
+ * @param {CliDocIndex} index
  */
-function iconDefinitionSection(doc) {
+function iconDefinitionSection(doc, index) {
   /** @type {string[][]} */
   const rows = [
     [
@@ -448,15 +464,46 @@ function iconDefinitionSection(doc) {
       doc.words.map((/** @type {string} */ w) => `\`${w}\``).join(', '),
     ],
   ];
+  if (doc.replaces) {
+    rows.push([
+      'Replaces',
+      `\`${doc.replaces}\`: that name answers with this definition.`,
+    ]);
+  }
   if (doc.builtIn) {
     rows.push([
       'Built in',
       'Yes: every icon set maps it, and Core renders it.',
     ]);
   }
+  /** @type {string[]} */
+  const groupRoutes = [];
+  if (doc.group) {
+    const others = definitionRelatives([doc.name], index.iconDefinitions).map(
+      each => each.definition,
+    );
+    rows.push([
+      'Group',
+      others.length > 0
+        ? `\`${doc.group}\`: ${others.map(name => `\`${name}\``).join(', ')}`
+        : `\`${doc.group}\``,
+    ]);
+    for (const name of others) {
+      const route = index.route('icon-definition', name);
+      if (route) groupRoutes.push(`\`astryx docs ${route}\``);
+    }
+  }
   const content = [
     {type: 'prose', text: doc.description},
     {type: 'table', headers: ['Field', 'Value'], rows},
+    ...(groupRoutes.length > 0
+      ? [
+          {
+            type: 'prose',
+            text: `Read the other definitions in its group: ${groupRoutes.join(', ')}.`,
+          },
+        ]
+      : []),
     {
       type: 'prose',
       text: `An icon set registers the icon that draws this definition in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
@@ -478,7 +525,7 @@ function iconDefinitionSection(doc) {
  */
 export function cliDocSection(doc, index) {
   if (doc.type === 'command') return commandSection(doc, index);
-  if (doc.type === 'icon-definition') return iconDefinitionSection(doc);
+  if (doc.type === 'icon-definition') return iconDefinitionSection(doc, index);
   if (doc.type === 'function') return functionSection(doc, index);
   if (doc.type === 'enum') return enumSection(doc);
   if (doc.type === 'namespace')

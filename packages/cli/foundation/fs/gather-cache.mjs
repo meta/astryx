@@ -45,9 +45,11 @@
  *   its key holds the content of the code that compiles it in place of the
  *   build id, and it keeps the stamps of the CLI's own files too. Through `persistedValue`, the stored docs
  *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
- *   doc's parse by the doc's text and the zod release the parsers load,
- *   which with the build id are all the parse depends on, in a run that
- *   keeps catalogs. The commands whose runs keep the other
+ *   doc's parse by the doc's text and the zod release the parsers load, and
+ *   `template` (foundation/discovery/template-adapter.mjs keptTemplateSyntax)
+ *   keeps what it reads from a template's source to name its components by
+ *   the source's text and the parser's release: with the build id, all each
+ *   value depends on, in a run that keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
@@ -1183,7 +1185,8 @@ export function persistedDerived(key, compute, codec, inputs = []) {
 /**
  * A value that is a function of `key` and of this CLI build alone, kept in
  * the catalogs folder: the parse of a doc the CLI reads from the stored docs,
- * by the doc's text. The build and the folder it runs from stand for the
+ * by the doc's text, or what `template` reads from a template's source, by
+ * the source's text and the parser's release. The build and the folder it runs from stand for the
  * CLI's own code, as in every kept entry, so nothing else is stamped. Kept
  * only in a run that keeps catalogs (recordRunFor), by an installed CLI whose
  * cache folder exists, and only when `codec` stores the value as text that

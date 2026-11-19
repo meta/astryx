@@ -111,8 +111,21 @@ const COLORS = {
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {
   fontSize: 'var(--font-size-sm, 12px)',
-  fill: 'var(--color-text-secondary, #4E606F)',
+  fill: 'var(--color-text-secondary, #445564)',
 };
+
+// Short tick labels ("6M", "350K") fit the fixed gutter with a small font up to
+// 16 px, wide fonts included.
+// A series stored in thousands or millions is scaled first, so the axis agrees
+// with the heading and tooltip beside it.
+const Y_AXIS_WIDTH = 52;
+const UNIT_SCALE: Record<string, number> = {k: 1_000, M: 1_000_000};
+const compactTick = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+const formatYTick = (value: number, unit: string) =>
+  compactTick.format(value * (UNIT_SCALE[unit] ?? 1));
 
 // ============= SCORECARD DATA =============
 
@@ -582,7 +595,10 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={Y_AXIS_WIDTH}
+                tickFormatter={(value: number) =>
+                  formatYTick(value, trend.unit)
+                }
               />
               <Tooltip
                 content={<TrendTooltip />}
@@ -629,7 +645,10 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={Y_AXIS_WIDTH}
+                tickFormatter={(value: number) =>
+                  formatYTick(value, trend.unit)
+                }
               />
               <Tooltip
                 content={<TrendTooltip />}
