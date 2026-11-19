@@ -105,7 +105,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_UNKNOWN_STATE',
-      when: '--state is not a state of the part',
+      when: '--state is not a state of the part (a word for exactly one of its states is read as that state)',
     },
     {
       code: 'ERR_THEME_UNKNOWN_TOKEN',

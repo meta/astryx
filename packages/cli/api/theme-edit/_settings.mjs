@@ -41,6 +41,7 @@ import {
   drawnValue,
   familyRoles,
   partHeightPx,
+  censusStatesOf,
 } from './_parts.mjs';
 import {
   hexToOklch,
@@ -174,6 +175,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {boolean} [only]
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
+ * @property {string} [stateNote] - The state word a command wrote as another state, said in its result.
  */
 
 /**
@@ -5584,6 +5586,7 @@ export function compileTheme(ctx, data, base) {
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
+      censusStatesOf(ctx.project, target),
     );
     const b = (t[key] ??= {});
     return pseudo ? (b[pseudo] ??= {}) : b;
@@ -5603,6 +5606,7 @@ export function compileTheme(ctx, data, base) {
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
+      censusStatesOf(ctx.project, target),
     );
     const rule = (t[key] ??= {});
     const mb = (rule[`@${mode}`] ??= {});
@@ -6282,6 +6286,7 @@ export function compileTheme(ctx, data, base) {
       s.when,
       controlOf(ctx, target),
       tg?.stateValues,
+      censusStatesOf(ctx.project, target),
     );
     if (s.state && slot.key !== (s.when ?? 'base')) return null;
     const attrs = s.when
@@ -6305,6 +6310,30 @@ export function compileTheme(ctx, data, base) {
   const orderBlocks = () => {
     /** @param {Record<string, any>} b @returns {Record<string, any>} */
     const dirFirst = b => {
+      // (Core writes a mode's rules after the plain ones: a mode block with
+      // its own hover, press or focus rule gets the plain marked state's
+      // rule too, after them, so the marked state wins in that mode as
+      // well.)
+      const marked = Object.keys(b).filter(k => /^:is\(\[data-/.test(k));
+      if (marked.length)
+        for (const m of Object.keys(b).filter(k => /^@(light|dark)$/.test(k))) {
+          const block = b[m];
+          if (!block || typeof block !== 'object') continue;
+          const own = Object.keys(block);
+          if (!own.some(k => k.startsWith(':') && !/^:is\(\[data-/.test(k)))
+            continue;
+          // (A mode's own marked rule keeps its values; the plain one's
+          // others come with them.)
+          for (const k of marked)
+            block[k] =
+              own.includes(k) &&
+              block[k] &&
+              typeof block[k] === 'object' &&
+              b[k] &&
+              typeof b[k] === 'object'
+                ? {...b[k], ...block[k]}
+                : (block[k] ?? b[k]);
+        }
       const keys = Object.keys(b);
       const plain = keys.filter(k => !k.startsWith(':'));
       const dirs = keys.filter(k => /^:(where\()?dir\(/.test(k));
@@ -6312,16 +6341,23 @@ export function compileTheme(ctx, data, base) {
       // part's own direction rules at the same weight, so a side the part
       // sets for a direction holds inside a variant too.
       const resets = keys.filter(k => /^:where\((?!:?dir\().* \*\)$/.test(k));
+      // A state Core marks with an attribute (a list item's selected)
+      // comes after the hover, press and focus rules at the same weight,
+      // as Core's own state block does, whichever was set first.
+      const marks = keys.filter(k => /^:is\(\[data-/.test(k));
       const rest = keys.filter(
         k =>
           k.startsWith(':') &&
           !/^:(where\()?dir\(/.test(k) &&
-          !resets.includes(k),
+          !resets.includes(k) &&
+          !marks.includes(k),
       );
       return Object.fromEntries(
-        [...plain, ...resets, ...dirs, ...rest].map(k => [
+        [...plain, ...resets, ...dirs, ...rest, ...marks].map(k => [
           k,
-          k.startsWith(':') && b[k] && typeof b[k] === 'object'
+          (k.startsWith(':') || /^@(light|dark)$/.test(k)) &&
+          b[k] &&
+          typeof b[k] === 'object'
             ? dirFirst(b[k])
             : b[k],
         ]),
@@ -6381,6 +6417,7 @@ export function compileTheme(ctx, data, base) {
       s.when,
       controlOf(ctx, target),
       tg?.stateValues,
+      censusStatesOf(ctx.project, target),
     );
     if (!slot.pseudo) return [block(s, target), dir];
     const parent = ((theme.components[target] ??= {})[slot.key] ??= {});
@@ -13761,20 +13798,25 @@ export function settingsShapeOk(data) {
 }
 
 /**
- * The settings as the file keeps them: a setting's `note` is what the
+ * A setting as the file keeps it: its `note` and `stateNote` are what the
  * command that made it says in its result, not part of the setting.
+ * @template {Record<string, any> | null | undefined} S
+ * @param {S} s
+ * @returns {S}
+ */
+export function savedSetting(s) {
+  if (!s || typeof s !== 'object') return s;
+  const {note: _note, stateNote: _said, ...entry} = /** @type {any} */ (s);
+  return /** @type {S} */ (entry);
+}
+
+/**
+ * The settings as the file keeps them (see savedSetting).
  * @param {ThemeData} data
  * @returns {ThemeData}
  */
 function savedForm(data) {
-  return {
-    ...data,
-    settings: data.settings.map(s => {
-      const entry = {...s};
-      delete entry.note;
-      return entry;
-    }),
-  };
+  return {...data, settings: data.settings.map(s => savedSetting(s))};
 }
 
 /**
@@ -13814,6 +13856,7 @@ export function baseComponent(base, ctx, target, prop, s) {
       s.when,
       controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
+      censusStatesOf(ctx.project, target),
     );
     b = slot.pseudo
       ? (t[slot.key]?.[slot.pseudo] ??
@@ -14542,17 +14585,32 @@ function loadedForm(data) {
  *   or its control (`controlOf`)
  * @param {Record<string, string>} [values] the value Core writes for each
  *   own state: a state that names a boolean prop is written `state:true`
+ * @param {string[]} [census] the part's states from the census alone
  * @returns {{key: string, pseudo: string | null}}
  */
-export function stateSlot(own, state, when, wrapsControl = false, values = {}) {
+export function stateSlot(
+  own,
+  state,
+  when,
+  wrapsControl = false,
+  values = {},
+  census = [],
+) {
   const pieces = state ? String(state).split('+') : [];
+  // (A state the part shows from an element it rides, which Core's theme
+  // takes no style key for there (a list item's Item marks it selected):
+  // written as the attribute Core marks, inside the plain rule.)
+  const marked = pieces
+    .filter(p => census.includes(p))
+    .map(p => `:is([data-${p}="${values[p] ?? p}"])`);
   const keyed = pieces
-    .filter(p => own.includes(p))
+    .filter(p => own.includes(p) && !census.includes(p))
     .map(p => (values[p] && values[p] !== p ? `${p}:${values[p]}` : p));
-  const pseudo = pieces
-    .filter(p => !own.includes(p))
-    .map(p => stateKey(p, wrapsControl))
-    .join('');
+  // (After the pseudo-classes, so a hover's disabled guard still reads it.)
+  const pseudo = [
+    ...pieces.filter(p => !own.includes(p)).map(p => stateKey(p, wrapsControl)),
+    ...marked,
+  ].join('');
   return {
     key: [...(when == null ? [] : [when]), ...keyed].join('+') || 'base',
     pseudo: pseudo || null,
