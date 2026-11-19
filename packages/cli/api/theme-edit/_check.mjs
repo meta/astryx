@@ -3526,20 +3526,67 @@ export const BORDER_TO_COLOR = 'var(--border-width) solid transparent';
  * @param {string} part
  */
 function borderSetToNone(ctx, data, s, part) {
+  const asked = borderSides(String(/** @type {any} */ (s).thing ?? ''));
   return [...(data?.settings ?? [])].reverse().find(
     (/** @type {any} */ x) =>
       x.source === 'property' &&
       /^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?$/.test(
         String(x.thing),
       ) &&
-      // (A whole none or zero token: "0.5px" is a width.)
-      /^\s*(?:none|hidden|0(?:px|rem|em)?)(?=\s|$)/i.test(String(x.value)) &&
+      // (Only a none that hides every side the color is on: "border-width
+      // 0 0 1px" still draws the bottom.)
+      asked.every(side =>
+        hiddenSides(String(x.thing), String(x.value)).includes(side),
+      ) &&
       // (A none set for one look hides only that look: a color for every
       // button still shows on the others.)
       (!x.when || x.when === s.when) &&
       (!x.state || x.state === s.state) &&
       partsOf(ctx, x).includes(part),
   );
+}
+
+const BOX_SIDES = /** @type {const} */ (['top', 'right', 'bottom', 'left']);
+
+/**
+ * The sides a border property names: one side, a logical pair, or all four.
+ * @param {string} thing
+ * @returns {string[]}
+ */
+function borderSides(thing) {
+  const m =
+    /^border-(top|right|bottom|left|block|inline)(?:-(start|end))?/.exec(thing);
+  if (!m) return [...BOX_SIDES];
+  if (m[1] === 'block')
+    return m[2] ? [m[2] === 'start' ? 'top' : 'bottom'] : ['top', 'bottom'];
+  if (m[1] === 'inline')
+    return m[2] ? [m[2] === 'start' ? 'left' : 'right'] : ['left', 'right'];
+  return [m[1]];
+}
+
+/**
+ * The sides a border width, style or shorthand leaves with no line: a whole
+ * none, hidden or zero token. A width or style of one to four values names
+ * each side as CSS reads them ("0 0 1px" hides the top and the sides).
+ * @param {string} thing
+ * @param {string} value
+ * @returns {string[]}
+ */
+function hiddenSides(thing, value) {
+  const sides = borderSides(thing);
+  const tokens = value.trim().split(/\s+/).filter(Boolean);
+  const blank = (/** @type {string | undefined} */ t) =>
+    /^(?:none|hidden|0(?:px|rem|em)?)$/i.test(t ?? '');
+  if (/-(?:width|style)$/.test(thing) && sides.length === 4) {
+    const at = [
+      [0, 0, 0, 0],
+      [0, 1, 0, 1],
+      [0, 1, 2, 1],
+      [0, 1, 2, 3],
+    ][Math.min(tokens.length, 4) - 1] ?? [0, 0, 0, 0];
+    return BOX_SIDES.filter((_, i) => blank(tokens[at[i]]));
+  }
+  return tokens.some(t => blank(t)) ? sides : [];
 }
 
 /**
@@ -3550,8 +3597,8 @@ function borderSetToNone(ctx, data, s, part) {
  * border width, so the part keeps one size in every state and the color
  * has a line to show on. Null when the setting is no border color, its
  * parts draw a border there, or the theme itself sets their border to none
- * (set saves the color with a note that it does not show, and undoing
- * that none brings the border). Set and how both write it before the color.
+ * (set refuses that conflict, naming the none). Set and how both write it
+ * before the color.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data
@@ -3593,17 +3640,17 @@ export function borderFor(ctx, slug, data, s) {
 }
 
 /**
- * Notes a border color on a part whose border the theme itself sets to
- * none where the color is asked (`border none --on tab`): the color is
- * saved but does not show, and the note gives the command for each choice,
- * showing the line or dropping the color.
+ * Refuses a border color on a part whose border the theme itself sets to
+ * none on every side the color is on (`border none --on tab`): the two say
+ * opposite things, so neither is changed for the other. The refusal names
+ * the none and offers its undo.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data
  * @param {import('./_settings.mjs').Setting} s
  * @param {string} prop
  */
-function borderNoneNote(ctx, slug, data, s, prop) {
+function borderNoneRefusal(ctx, slug, data, s, prop) {
   if (ctx.unchecked || !s.on || !BORDER_COLOR_PROP.test(prop)) return;
   const parts = partsOf(ctx, s);
   // (Whether Core draws the border or not: the theme's own none hides it
@@ -3611,8 +3658,11 @@ function borderNoneNote(ctx, slug, data, s, prop) {
   if (!parts.length) return;
   const none = parts.map(t => borderSetToNone(ctx, data, s, t)).find(Boolean);
   if (!none) return;
-  const hidden = `${prop} on ${s.on} does not show: ${slug} sets ${none.thing} ${none.value} on ${none.on}${none.when ? ` when ${none.when}` : ''}${none.state ? ` :${none.state}` : ''}, which hides the line. To show it, run \`${setLine(slug, none.thing, '', none, true)}\` (the color then brings the border it needs); to drop the color, run \`${setLine(slug, prop, '', s, true)}\``;
-  s.note = s.note ? `${s.note}; ${hidden}` : hidden;
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${slug} sets ${none.thing} ${none.value} on ${none.on}${none.when ? ` when ${none.when}` : ''}${none.state ? ` :${none.state}` : ''}, so ${prop} on ${s.on} has no line to color. Undo that first, then set the color: it brings the border it needs.`,
+    {run: [setLine(slug, none.thing, '', none, true)]},
+  );
 }
 
 /**
@@ -7989,9 +8039,8 @@ function checkOne(
     if (!unset && /^outline-(color|width|offset)$/.test(prop))
       noOutlineRefusal(ctx, slug, data, s, prop, v);
     // A border color where the theme itself sets the part's border to none
-    // has no line to color: it is saved, and the answer says so, with the
-    // command for either choice (elsewhere set brings the border it needs).
-    if (!unset) borderNoneNote(ctx, slug, data, s, prop);
+    // has no line to color (elsewhere set brings the border it needs).
+    if (!unset) borderNoneRefusal(ctx, slug, data, s, prop);
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.

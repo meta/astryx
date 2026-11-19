@@ -7,8 +7,8 @@
  * side, brings the border it needs: a transparent one at rest, as wide as
  * the theme's border width, written in the same change and named in the
  * result, so one undo takes back both. Where the theme itself sets that
- * border to none, the color is saved with a note that it does not show;
- * undoing the none, or setting the color again, brings the border. Whether a part draws a border is read
+ * border to none on every side the color is on, the color is refused,
+ * naming the none and its undo; a none on fewer sides is no conflict. Whether a part draws a border is read
  * one way for set and how: drawsLine, by the variant asked, with a side
  * cleared only on the first or last child still drawn on the others.
  */
@@ -24,6 +24,7 @@ import {
 } from './theme-edit.mjs';
 import {context} from './_context.mjs';
 import {apply, checked, howTheme} from './_how-commands.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {drawsLine} from './_check.mjs';
 import {
   makeLinkedFixture,
@@ -152,39 +153,26 @@ describe('a border color on a part that draws no border', () => {
   );
 
   it(
-    'is saved with a note where the theme sets that border to none',
+    'is refused where the theme sets that border to none',
     async () => {
       await themeEditSet('u', 'border', 'none', {cwd, on: 'tab'});
-      const r = await themeEditSet('u', 'border-bottom-color', '#999999', {
-        cwd,
-        on: 'tab',
-      });
-      const note = r.data.notes.join('\n');
-      expect(note).toContain(
-        'border-bottom-color on tab does not show: u sets border none on tab',
+      const r = await refusal(() =>
+        themeEditSet('u', 'border-bottom-color', '#999999', {cwd, on: 'tab'}),
       );
-      expect(note).toContain('undo u border --on tab');
-      expect(note).toContain('undo u border-bottom-color --on tab');
-      expect(note).not.toContain('added a');
-      // (The note's "to show it" command: the border comes back, and the
-      // built stylesheet draws the color on it.)
-      await themeEditUndo('u', {cwd, thing: 'border', on: 'tab'});
-      const built = fs.readFileSync(path.join(cwd, 'themes/u/u.css'), 'utf8');
-      expect(built).toMatch(
-        /\.astryx-tab \{\s*border: var\(--border-width\) solid transparent;/,
-      );
-      expect(built).toContain('border-bottom-color: #999999;');
-      // (A part Core draws a border on, an input, the same: saved, and
-      // said not to show.)
+      expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+      expect(r.message).toContain('u sets border none on tab');
+      expect(r.run).toEqual([
+        expect.stringContaining('undo u border --on tab'),
+      ]);
+      // (A part Core draws a border on, an input, the same.)
       await themeEditSet('u', 'border', 'none', {cwd, on: 'inputs'});
-      const inputs = await themeEditSet('u', 'border-color', '#ff0000', {
-        cwd,
-        on: 'inputs',
-      });
-      expect(inputs.data.notes.join('\n')).toContain(
-        'border-color on inputs does not show: u sets border none on inputs',
+      const inputs = await refusal(() =>
+        themeEditSet('u', 'border-color', '#ff0000', {cwd, on: 'inputs'}),
       );
-      for (let k = 0; k < 3; k++) await themeEditUndo('u', {cwd});
+      expect(inputs.code).toBe('ERR_THEME_NO_EFFECT');
+      expect(inputs.message).toContain('u sets border none on inputs');
+      await themeEditUndo('u', {cwd});
+      await themeEditUndo('u', {cwd});
     },
     T,
   );
@@ -199,7 +187,7 @@ describe('a border none read exactly', () => {
         cwd,
         on: 'tab',
       });
-      expect(thin.data.notes.join('\n')).not.toContain('sets border-width');
+      expect(thin.data.setting.thing).toBe('border-color');
       await themeEditUndo('u', {cwd});
       await themeEditUndo('u', {cwd});
       await themeEditSet('u', 'border', 'none', {
@@ -211,8 +199,41 @@ describe('a border none read exactly', () => {
         cwd,
         on: 'button',
       });
-      expect(all.data.notes.join('\n')).not.toContain('sets border none');
+      expect(all.data.setting.thing).toBe('border-color');
       await themeEditUndo('u', {cwd});
+      await themeEditUndo('u', {cwd});
+    },
+    T,
+  );
+});
+
+describe('a none that hides only some sides', () => {
+  it(
+    'refuses a color only where a none hides every side it is on',
+    async () => {
+      for (const [thing, value] of [
+        ['border-width', '0 0 1px'],
+        ['border-style', 'none none solid'],
+        ['border-bottom', 'none'],
+      ]) {
+        await themeEditSet('u', thing, value, {cwd, on: 'inputs'});
+        // (Saved, never refused: a side still draws.)
+        await themeEditSet('u', 'border-color', '#999999', {
+          cwd,
+          on: 'inputs',
+        });
+        await themeEditUndo('u', {cwd});
+        await themeEditUndo('u', {cwd});
+      }
+      // (The side it hides, said alone, is refused.)
+      await themeEditSet('u', 'border-bottom', 'none', {cwd, on: 'inputs'});
+      const bottom = await refusal(() =>
+        themeEditSet('u', 'border-bottom-color', '#999999', {
+          cwd,
+          on: 'inputs',
+        }),
+      );
+      expect(bottom.message).toContain('u sets border-bottom none on inputs');
       await themeEditUndo('u', {cwd});
     },
     T,
