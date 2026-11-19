@@ -27509,24 +27509,42 @@ export function draftAnswer(ctx, env, question) {
   // also undo the corners" with no corners set) reads a theme other than
   // this one: the rest of it is said, never written, until the person
   // sees what the theme has.
+  /** The clauses an undo in the same ask answered. @type {Set<unknown>} */
+  const answeredByUndo = new Set();
   {
     const unmet = result.find(d => d.unmet);
     // ("… make them a bit smaller. Undo the heading change.": an undo of a
     // change said earlier in the same ask takes that change back here; the
-    // rest of the ask stands.)
-    const part = unmet
-      ? / on ([a-z0-9-]+)$/.exec(String(unmet.unmet))?.[1]
-      : null;
+    // rest of the ask stands. Only a change of what the undo names, "Reset
+    // the card shadows" takes back a card shadow, never "cards rounder",
+    // and never a change said after it.)
+    const [, what, part] =
+      /^(.+?) on ([a-z0-9-]+)$/.exec(String(unmet?.unmet ?? '')) ?? [];
+    const undoAt = clauses.indexOf(
+      /** @type {any} */ (unmet ? draftClause.get(unmet) : null),
+    );
     const undone = part
-      ? result.filter(
-          d =>
+      ? result.filter(d => {
+          const c = /** @type {any} */ (draftClause.get(d));
+          return (
             d !== unmet &&
             d.options.length &&
-            /** @type {any} */ (draftClause.get(d))?.parts?.some(
+            c &&
+            (undoAt < 0 || clauses.indexOf(c) < undoAt) &&
+            c.parts?.some(
               (/** @type {{on: string}} */ p) =>
                 p.on === part || (FAMILIES[part] ?? []).includes(p.on),
-            ),
-        )
+            ) &&
+            (what === 'everything' ||
+              c.aspects?.includes(what) ||
+              d.options
+                .flat()
+                .some(
+                  (/** @type {Step} */ st) =>
+                    st.thing === what || String(st.thing).includes(what),
+                ))
+          );
+        })
       : [];
     if (unmet && undone.length) {
       const gone = new Set(
@@ -27541,13 +27559,24 @@ export function draftAnswer(ctx, env, question) {
         result.length,
         ...result.filter(d => d !== unmet && !undone.includes(d)),
       );
+      for (const d of [unmet, ...undone]) {
+        const c = draftClause.get(/** @type {any} */ (d));
+        if (c) answeredByUndo.add(c);
+      }
       result.push({
         text: `the ${part} change said earlier in this ask is taken back by its undo, so it is not written`,
         options: [],
       });
     } else if (unmet && result.some(d => d !== unmet && d.options.length)) {
+      // (A change said after the undo, "Undo the heading change. Then make
+      // the headings bold.", is asked of the theme as the undo leaves it,
+      // so it stands.)
+      const before = (/** @type {any} */ d) => {
+        const at = clauses.indexOf(/** @type {any} */ (draftClause.get(d)));
+        return undoAt < 0 || at < 0 || at < undoAt;
+      };
       for (const d of result)
-        if (d !== unmet && d.options.length) {
+        if (d !== unmet && d.options.length && before(d)) {
           d.text = `${d.text} (held back: the same ask takes back ${unmet.unmet}, which ${env.slug} does not set, so the theme is not as the ask expects; ask for this alone to get it)`;
           d.options = [];
         }
@@ -30733,9 +30762,10 @@ export function draftAnswer(ctx, env, question) {
       ];
       if (typed.length && typed.some(v => !usedValue(v))) named.push(words);
     }
-    const taken = new Set(
-      result.map(d => draftClause.get(d)).filter(x => x != null),
-    );
+    const taken = new Set([
+      ...result.map(d => draftClause.get(d)).filter(x => x != null),
+      ...answeredByUndo,
+    ]);
     const silent = clauses.filter(c => {
       const t = c.text.trim();
       if (!t || c.except || taken.has(c)) return false;

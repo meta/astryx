@@ -248,6 +248,30 @@ const ROWS = [
     },
   ],
   [
+    'an undo takes back only the change of what it names',
+    {
+      q: 'Make the cards rounder. Reset the card shadows.',
+      says: /^(?![\s\S]*taken back by its undo)(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    'a change said after an undo stands',
+    {
+      q: 'Undo the heading change. Then make the headings bold.',
+      has: ['headings bold'],
+      says: /^(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    'an undo of a change said earlier names no clause as not used',
+    {
+      q: 'Headings a bit smaller. Undo the heading change. A blue accent.',
+      has: ["accent '#2563eb'"],
+      never: /--text-heading-\d-size/,
+      says: /^(?![\s\S]*not used)/,
+    },
+  ],
+  [
     'a font said as a style of the type is that font',
     {q: 'Helvetica-style type', has: ['font helvetica']},
   ],
