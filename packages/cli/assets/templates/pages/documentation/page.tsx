@@ -20,14 +20,14 @@ const styles = stylex.create({
     display: {default: null, '@media (max-width: 640px)': 'none'},
   },
   // A phone also gets a narrower card inset, so the display title's longest
-  // word fits its line.
+  // word fits its line. The default keeps the card's own inset.
   hero: {
     paddingInlineStart: {
-      default: null,
+      default: 'var(--container-padding-inline-start)',
       '@media (max-width: 640px)': 'var(--spacing-6)',
     },
     paddingInlineEnd: {
-      default: null,
+      default: 'var(--container-padding-inline-end)',
       '@media (max-width: 640px)': 'var(--spacing-6)',
     },
   },
