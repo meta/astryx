@@ -82,8 +82,8 @@ const ROWS = [
     {
       q: 'pagination: 6px radius, 1px #dee2e6 border, and the active page #0d6efd with white text',
       has: [
-        "background-color '#0d6efd' --on button --state current",
-        "color '#ffffff' --on button --state current",
+        "background-color '#0d6efd' --on pagination-item --state selected",
+        "color '#ffffff' --on pagination-item --state selected",
       ],
       never: /^--color-text-primary\b/,
     },
@@ -124,10 +124,10 @@ describe("a part's colon list owns its items", () => {
     for (const line of lines) expect(line, row.q).not.toMatch(row.never);
   });
 
-  it('reads "the active page in pagination" as its current page button', async () => {
+  it('reads "the active page in pagination" as its current page cell', async () => {
     if (unbuilt) return;
     expect(await first('the active page in pagination blue')).toContain(
-      "background-color '#2563eb' --on button --state current",
+      "background-color '#2563eb' --on pagination-item --state selected",
     );
   });
 });
