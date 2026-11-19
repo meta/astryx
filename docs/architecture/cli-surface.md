@@ -817,6 +817,16 @@ non-interactive guarantee.
   every restored file matches its recorded checksum.
   `astryx experimental import` follows the same rule: it reports the same
   `missing` and `exact`.
+- `api/render` and `foundation/discovery/core-augmentation-points.mjs` — the
+  `unknown-prop-value` warning of `astryx experimental export`: each string a
+  page writes for a Core component's prop whose type is a closed set of
+  strings, checked against Core's docs for that component in the page's own
+  Core. Where the prop's type in Core's source takes the keys of an interface
+  a theme can widen by declaration merging (the module theme build also
+  resolves its augmentations with), the keys the project's own TypeScript
+  files and its installed theme and integration packages' declaration files
+  add are values the prop has; a project that cannot be read in full leaves
+  such a prop unchecked.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
