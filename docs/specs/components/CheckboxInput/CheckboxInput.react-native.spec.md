@@ -59,10 +59,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-These lines say where `CheckboxInput` in the canary build of
-`@astryxdesign/react-native`, the React Native platform package
-(`spec:AST-112` FR15), differs from this record.
-
 - FR2, FR4 gap: a read-only row's hint carries no "Read only" word; the row
   only refuses presses.
 - FR5 gap: the busy start is not announced; the row reads as busy only.
