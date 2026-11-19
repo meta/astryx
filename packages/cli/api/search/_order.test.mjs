@@ -104,6 +104,21 @@ describe('search ordering invariants', () => {
     }, 60_000);
   }
 
+  for (const [q, root, part] of [
+    ['title', 'Dialog', 'DialogHeader'],
+    ['page title', 'Dialog', 'DialogHeader'],
+    ['indicator', 'Field', 'FieldLabel'],
+  ]) {
+    it(`keeps ${root} directly before ${part} for "${q}"`, async () => {
+      const names = (await search(q, {cwd, limit: 20})).data.results.map(
+        r => r.name,
+      );
+      const at = names.indexOf(root);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(names[at + 1]).toBe(part);
+    }, 60_000);
+  }
+
   it('moves a marked root directly before its part, across bands', async () => {
     const names = (await search('code sample', {cwd, limit: 20})).data.results
       .filter(r => r.domain === 'component')

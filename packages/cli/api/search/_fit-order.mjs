@@ -148,16 +148,26 @@ const runOf = r => `${bandOf(r.score ?? 0)}:${r.domain === 'doc'}`;
  *   runs only when a run can change. Without weights the order stays
  * @param {Set<any>} [held] results that never move down: a family root
  *   the order moved directly before its part, and that part
+ * @param {Map<any, any>} [pairs] each such part, mapped to its root: the part
+ *   counts in its root's run, so the pair stays together
  * @returns {any[]}
  */
-export function orderByFit(results, candidates, query, weights, held) {
+export function orderByFit(results, candidates, query, weights, held, pairs) {
+  /** @param {any} r */
+  const runAt = r => runOf(pairs?.get(r) ?? r);
+  /** @param {number} k */
+  const pairAt = k =>
+    k < results.length && pairs?.get(results[k]) === results[k - 1];
   if (!weights || results.length < 3) return results;
   const end = Math.min(FIT_PLACES, results.length);
   /** @type {[number, number][]} */
   const runs = [];
   for (let i = 1; i < end;) {
     let j = i;
-    while (j < end && runOf(results[j]) === runOf(results[i])) j++;
+    while (j < end && runAt(results[j]) === runAt(results[i])) j++;
+    // A held root in the last place read keeps its part in its run, so what
+    // moves after the root moves after the part too.
+    if (pairAt(j)) j++;
     runs.push([i, j]);
     i = j;
   }
@@ -235,17 +245,21 @@ export function withFitOrder(response, candidates, query, weights) {
   const results = r?.data?.results;
   if (!Array.isArray(results)) return response;
   // A family root the order moved directly before its part (movedRootsOf)
-  // stays there: neither that root nor its part moves down. A root that sat
+  // stays there: neither that root nor its part moves down, and the part
+  // counts in its root's run, so nothing comes between them. A root that sat
   // above its part on its own is not held.
   const moved = movedRootsOf.get(r);
   /** @type {Set<any>} */
   const held = new Set();
+  /** @type {Map<any, any>} */
+  const pairs = new Map();
   results.forEach((part, k) => {
     if (k > 0 && moved?.get(part) === results[k - 1]) {
       held.add(part).add(results[k - 1]);
+      pairs.set(part, results[k - 1]);
     }
   });
-  const ordered = orderByFit(results, candidates, query, weights, held);
+  const ordered = orderByFit(results, candidates, query, weights, held, pairs);
   if (ordered === results) return response;
   const out = {...r, data: {...r.data, results: ordered}};
   const searched = searchedComponentsOf.get(r);
