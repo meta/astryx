@@ -16,7 +16,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
-import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
+import {readSourceBlock, renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -2778,6 +2778,54 @@ describe('render(): a page outside a project', () => {
   afterAll(() => {
     fs.rmSync(away, {recursive: true, force: true});
   });
+
+  it('uses a .js file that exists under the name as written, not the TypeScript file beside it', () => {
+    const tree = path.join(away, 'own-js-exists');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'fmt.js'), "export const fmt = value => `js:${value}`;\n");
+    fs.writeFileSync(path.join(tree, 'fmt.ts'), "export const fmt = (value: string): string => `ts:${value}`;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'fmt.js']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('js:128');
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 1}});
+  }, 60_000);
+
+  it('loads the page\'s own modules imported TypeScript-style by .js names, and gives them back exactly', () => {
+    const tree = path.join(away, 'own-ts-js');
+    fs.mkdirSync(path.join(tree, 'parts'), {recursive: true});
+    const files = {
+      'parts/fmt.ts': "export const fmt = (value: string): string => `#${value}`;\n",
+      'parts/later.tsx': 'export const Later = () => <p>Later</p>;\n',
+      'parts/Kpi.tsx':
+        "import {fmt} from './fmt.js';\nexport const loadLater = () => import('./later.js');\nexport function Kpi({label, value}: {label: string; value: string}) {\n  return <p>{label}: {fmt(value)}</p>;\n}\n",
+      'page.tsx':
+        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\n",
+    };
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tree, name), text);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    expect([...run.json.data.files].sort()).toEqual(['page.tsx', 'parts/Kpi.tsx', 'parts/fmt.ts', 'parts/later.tsx']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Signups: #128');
+    // Earlier CLIs cannot follow a .js name to its TypeScript file, so the
+    // file says a render format they do not read, and they name this CLI.
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 3}});
+    expect(html).toContain('render format 3.');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, format: 3});
+    expect(back.json.data).not.toHaveProperty('missing');
+    for (const [name, text] of Object.entries(files)) {
+      expect(fs.readFileSync(path.join(tree, 'page-restored', name), 'utf8'), name).toBe(text);
+    }
+  }, 60_000);
 
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
