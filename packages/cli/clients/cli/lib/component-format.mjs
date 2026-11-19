@@ -106,6 +106,18 @@ function formatPropsList(props, {whole = false} = {}) {
 }
 
 /**
+ * Whether a family doc's sub-component entry is the read's own component. A
+ * read scoped to one member keeps that member's entry under `components`, and
+ * its props already print under `## Props`.
+ * @param {any} docs
+ * @param {any} comp
+ * @returns {boolean}
+ */
+function isOwnEntry(docs, comp) {
+  return 'props' in docs && comp.name === docs.name;
+}
+
+/**
  * How a read prints prop descriptions: each one's first sentence, under one
  * line that names the command printing them whole, or every one whole. A read
  * prints them whole when it has no such command, or when the cut would save
@@ -120,7 +132,9 @@ function propsPlan(docs, propsCommand) {
   /** @type {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} */
   const props = [
     ...(docs.props ?? []),
-    ...(docs.components ?? []).flatMap((/** @type {any} */ c) => c.props ?? []),
+    ...(docs.components ?? [])
+      .filter((/** @type {any} */ c) => !isOwnEntry(docs, c))
+      .flatMap((/** @type {any} */ c) => c.props ?? []),
   ];
   let saved = 0;
   for (const p of props) {
@@ -185,14 +199,17 @@ export function formatAccessibility(accessibility, heading = '##') {
  * reader at the sub-component's own docs instead of a blank/`undefined` block.
  * @param {any} comp
  * @param {boolean} [whole] - print prop descriptions whole
+ * @param {boolean} [ownProps] - the entry is the read's own component, whose
+ *   props print under `## Props`: print no props list
  * @returns {string[]}
  */
-function formatSubComponent(comp, whole = true) {
+function formatSubComponent(comp, whole = true, ownProps = false) {
   const out = [`### ${comp.name}\n`];
   if (comp.description) {
     out.push(comp.description + '\n');
   }
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
+  if (ownProps) return out;
   const list = formatPropsList(comp.props, {whole});
   if (list) {
     out.push(list + '\n');
@@ -226,9 +243,10 @@ function isBareReference(comp) {
  * @param {any[]} components
  * @param {string} [exampleHashes] - heading level for inline examples; none when omitted
  * @param {boolean} [whole] - print prop descriptions whole
+ * @param {any} [docs] - the doc being read, so its own entry prints no props again
  * @returns {string[]}
  */
-function formatSubComponents(components, exampleHashes, whole = true) {
+function formatSubComponents(components, exampleHashes, whole = true, docs) {
   /** @type {string[]} */
   const out = [];
   /** @type {string[]} */
@@ -251,7 +269,13 @@ function formatSubComponents(components, exampleHashes, whole = true) {
       continue;
     }
     flush();
-    out.push(...formatSubComponent(comp, whole));
+    out.push(
+      ...formatSubComponent(
+        comp,
+        whole,
+        docs != null && isOwnEntry(docs, comp),
+      ),
+    );
     if (exampleHashes && comp.examples?.length) {
       for (const ex of comp.examples) {
         out.push(...formatExample(ex, exampleHashes));
@@ -440,10 +464,16 @@ export function formatFull(docs, options = {}) {
   // Multi-component
   if ('components' in docs) {
     sections.push('## Components\n');
-    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
+    if (
+      docs.components.some(
+        (/** @type {any} */ c) => c.props?.length && !isOwnEntry(docs, c),
+      )
+    ) {
       sections.push(...pointer);
     }
-    sections.push(...formatSubComponents(docs.components, '####', plan.whole));
+    sections.push(
+      ...formatSubComponents(docs.components, '####', plan.whole, docs),
+    );
   }
 
   // A read that resolves to a hook prints what it returns, as `hook <name>` does.
@@ -678,7 +708,7 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
     const bare = [];
     for (const comp of docs.components) {
       // A family doc can list its own entry again; its props are above.
-      if (comp.name === name && 'props' in docs) continue;
+      if (isOwnEntry(docs, comp)) continue;
       if (comp.props?.length) {
         pieces.push(
           `### ${comp.name}\n`,

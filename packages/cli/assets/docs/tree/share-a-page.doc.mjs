@@ -12,6 +12,7 @@ export const docs = {
   name: 'share-a-page',
   placement: {parent: 'namespace:experimental', slot: 'guides', order: 18},
   stability: 'experimental',
+  searchable: true,
   title: 'Make a shareable page',
   category: 'guide',
   keywords: [
@@ -20,10 +21,6 @@ export const docs = {
     'one html file',
     'single file',
     'artifact',
-    'upload',
-    'report',
-    'status page',
-    'dashboard',
     'edit a shared page',
     'back to source',
     'render',

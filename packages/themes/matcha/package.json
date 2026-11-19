@@ -57,6 +57,7 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
+    "fonts",
     "theme.css.d.ts",
     "palette.config.json",
     "!**/*.test.*",
