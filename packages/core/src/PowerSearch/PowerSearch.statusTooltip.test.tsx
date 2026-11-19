@@ -129,4 +129,22 @@ describe('PowerSearch status icon', () => {
     expect(button).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('opens the flow when the plain attached icon on the sheet trigger field is tapped', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <Field presentation="bottom-sheet" statusVariant="attached" />,
+    );
+    const trigger = screen.getByRole('button', {name: /Search issues/});
+    const icon = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>(
+        '.astryx-input-status-icon',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(trigger.contains(icon)).toBe(false);
+    await user.click(icon);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
 });

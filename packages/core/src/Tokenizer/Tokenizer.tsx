@@ -1463,13 +1463,7 @@ export function Tokenizer<T extends SearchableItem>({
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
   // `laneRef` publishes the lane's width, so token rows and the placeholder
-  // stop short of it. `sheetLaneRef` tells a tap in the lane from a tap on the
-  // field.
-  const sheetLaneRef = useRef<HTMLDivElement | null>(null);
-  const sheetLaneMergedRef = useMergedRefs<HTMLDivElement>(
-    laneRef,
-    sheetLaneRef,
-  );
+  // stop short of it.
   // A composing component can lock tokens (PowerSearch's read-only filters
   // and read-only field). No remove path removes a locked token.
   const isItemRemovable = use(TokenizerItemRemovableContext);
@@ -2178,9 +2172,10 @@ export function Tokenizer<T extends SearchableItem>({
       triggerRef.current?.focus();
     }
   };
-  // A tap on a token, the placeholder or empty space opens the sheet, as a tap
-  // on the trigger does. The trigger, `endContent` and a custom token's
-  // controls handle their own clicks.
+  // A tap on a token, the placeholder, empty space or the plain status icon
+  // opens the sheet, as a tap on the trigger does. The trigger, `endContent`'s
+  // controls, the status info-tip and a custom token's controls handle their
+  // own clicks.
   const handleSheetFieldClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const trigger = triggerRef.current;
     const target = event.target;
@@ -2189,7 +2184,6 @@ export function Tokenizer<T extends SearchableItem>({
     }
     if (
       trigger.contains(target) ||
-      sheetLaneRef.current?.contains(target) ||
       hasInteractiveAncestor(target, event.currentTarget)
     ) {
       return;
@@ -2373,7 +2367,7 @@ export function Tokenizer<T extends SearchableItem>({
           )}
           {(isRenderable(endContent) || isRenderable(statusIcon)) && (
             <div
-              ref={sheetLaneMergedRef}
+              ref={laneRef}
               {...stylex.props(styles.endSection, endSectionSizeStyles[size])}>
               {endContent}
               {statusIcon}

@@ -115,6 +115,7 @@ import {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -381,8 +382,7 @@ export interface PowerSearchProps extends Omit<
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
-   * - 'tooltip': no message box and no status icon, so the message is not shown;
-   *   screen readers still announce it and the border still shows the status type
+   * - 'tooltip': the status icon is an info-tip button that reveals the message
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
@@ -1451,13 +1451,16 @@ export function PowerSearch({
   const endLaneRef = useRef<HTMLDivElement>(null);
   const handleTriggerWrapperClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      // Tokens are display-only; a tap on them or the empty space around them
-      // opens the flow. The trigger button handles its own click, and the end
-      // lane handles its own.
+      // Tokens are display-only; a tap on them, the empty space around them or
+      // the plain status icon opens the flow. The trigger button handles its
+      // own click, and an interactive control in the end lane (`endContent`'s
+      // controls, the status info-tip) handles its own.
+      const target = event.target;
       if (
-        event.target instanceof Node &&
-        (triggerRef.current?.contains(event.target) ||
-          endLaneRef.current?.contains(event.target))
+        target instanceof Element &&
+        (triggerRef.current?.contains(target) ||
+          (endLaneRef.current?.contains(target) &&
+            hasInteractiveAncestor(target, event.currentTarget)))
       ) {
         return;
       }

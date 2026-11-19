@@ -5,8 +5,8 @@
  * @input Uses vitest, @testing-library/react, Tokenizer
  * @output Unit tests for the on-field status icon: the `tooltip` variant's
  *   info-tip button reveals the message in the inline field and in the sheet
- *   field, and the `attached` and `detached` variants draw what TextInput
- *   draws
+ *   field, the `attached` and `detached` variants draw what TextInput draws,
+ *   and a tap on the plain icon in the sheet field opens the sheet
  * @position Testing; validates Tokenizer.tsx with useInputStatusIcon
  */
 
@@ -172,5 +172,23 @@ describe('Tokenizer status icon', () => {
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     await user.click(button);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens the sheet when the plain attached icon in the sheet field is tapped', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <Field statusVariant="attached" presentation="bottom-sheet" />,
+    );
+    const trigger = screen.getByRole('button', {name: /Members/});
+    const icon = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>(
+        '.astryx-input-status-icon',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(trigger.contains(icon)).toBe(false);
+    await user.click(icon);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 });
