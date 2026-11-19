@@ -44,7 +44,7 @@ export const travellingStyles = stylex.create({
   // its neighbors opaque and on top, and these rows have no background of
   // their own. The surface is an inset shadow across the padding box, under
   // the press and the row's content, so the divider and the press stay
-  // visible. A selected row keeps its own fill. Item marks a selected row
+  // visible. A selected row keeps its own fill. The row reads selection from
   // `data-selected`, because an interactive row's `aria-current` is on its
   // button or link. The surface takes no pseudo-element,
   // since under a finger the row's `::after` is its hit layer. Its z-index, 2,

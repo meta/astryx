@@ -261,11 +261,13 @@ On an interactive row, the current marker (`aria-current`) sits on the
 element that takes focus: the row's own button or link, or the control it
 delegates to. A screen reader then announces "current" when that element
 takes focus. A row whose root takes focus keeps the marker on the root, and a
-row that is not interactive keeps it on its list item. A selected row keeps
+row that is not interactive keeps it on its root. A selected row keeps
 `data-selected` on its root for styling. A caller's `aria-current` on an
 interactive row moves with the marker. In server-rendered HTML a delegated
 row's control carries the marker only after hydration, and a delegated row
-whose control is not mounted carries none.
+whose control is not mounted carries none. A control that its own component
+mounts or replaces without a render of the row carries the marker from the
+row's next render.
 
 Rejected: the marker on the list item of an interactive row, which a screen
 reader does not announce on focus.

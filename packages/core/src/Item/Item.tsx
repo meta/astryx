@@ -232,7 +232,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * control itself, and on any other nested interactive element, are left to
    * that element. Mutually exclusive with `onClick`/`href` — when
    * `interactiveRef` is set those are ignored (the nested control is the sole
-   * action).
+   * action). While the row is selected, it writes `aria-current` on the
+   * control unless the control has its own marker; a control should not set
+   * the row's value itself, because the row removes it when deselected.
    */
   interactiveRef?: React.RefObject<HTMLElement | null>;
 
@@ -788,10 +790,9 @@ export function Item({
     !hasParentRole &&
     !isLinkRoot &&
     (isDelegate || href != null || onClick != null);
-  // The caller owns the delegated control, so the row marks it only while the
-  // control has no marker. The sync runs on every commit of the row. Cleanup
-  // removes the marker only if it still has the row's value, so a caller
-  // marker with another value stays.
+  // The caller owns the delegated control, and the row cannot see it mount or
+  // change. On each commit the row marks it while it has no marker. Cleanup
+  // removes only the value the row wrote.
   const controlCurrent =
     ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
   useIsomorphicLayoutEffect(() => {
