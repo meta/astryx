@@ -351,7 +351,8 @@ describe('per-side border asks', () => {
     async () => {
       if (unbuilt) return;
       expect(await first('cards border 2px #eee #eee #ddd')).toEqual([
-        "border '2px solid' --on card",
+        'border-width 2px --on card',
+        'border-style solid --on card',
         "border-color '#eee #eee #ddd' --on card --mode light",
       ]);
     },
@@ -366,6 +367,7 @@ describe('per-side border asks', () => {
         'cards with a border on the top and the bottom',
         'cards with borders on the left and on the right',
         'cards with a border above and below',
+        'cards bordered on the left and right',
       ])
         expect(
           (await first(q)).map(l => l.split(' ')[0]),
@@ -382,6 +384,22 @@ describe('per-side border asks', () => {
       expect(
         (await first('4px corners on top and bottom of cards')).join('\n'),
       ).not.toMatch(/border-start-(?:start|end)-radius/);
+    },
+    T,
+  );
+
+  it(
+    "reads a side's line said transparent after it as see-through",
+    async () => {
+      if (unbuilt) return;
+      expect(
+        (await first('tabs: bottom border transparent')).join('\n'),
+      ).toMatch(/^border-bottom '1px solid transparent' --on tab/m);
+      const top = await first('cards with the top edge transparent');
+      expect(top.join('\n')).toMatch(
+        /^border-top '1px solid transparent' --on card/m,
+      );
+      expect(top.join('\n')).not.toMatch(/^border '/m);
     },
     T,
   );
