@@ -10,7 +10,8 @@ approved_by: nynexman4464
 approved_at: 2026-11-18
 phase: accepted
 owners: [nynexman4464]
-affects_architecture: [architecture:layer-runtime]
+affects_architecture:
+  [architecture:layer-runtime, architecture:component-import-boundaries]
 affects_families: [family:overlay-dismissal]
 affects_contributing: []
 affects_consumer_docs: [Popover, usePopover, Dialog, DropdownMenu]
@@ -292,6 +293,9 @@ Dialog and DropdownMenu.
   element its `anchorRef` holds (FR9). INV20's centered case and the touch
   growth use the anchor's center. Its Purpose and positioning-mode prose and
   its browser-close note say "anchor" the same way.
+- `architecture:component-import-boundaries`: INV10 names
+  `tabBehavior: 'pageOrder'` as an entry over the allowance for an unused
+  optional feature, and its DEC-5 gains an amendment line (DEC-12).
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a `usePopover` popover with
   `tabBehavior: 'pageOrder'` takes Escape only
@@ -473,6 +477,26 @@ Rejected: `isModal: false` as the switch for no containment, which changes
 every released caller of it; one three-value modality input in place of
 `isModal`, which deprecates a released prop; and a `hasFocusTrap` boolean,
 where `architecture:public-component-api` INV2 asks for a behavior prop.
+
+### DEC-12 — `tabBehavior: 'pageOrder'` may cost more than the unused-feature allowance
+
+**Reference:** `spec:AST-116/DEC-12`
+**Decider:** `nynexman4464`, `2026-11-19`
+
+`tabBehavior: 'pageOrder'` may cost a page whose popovers do not use it more
+than the allowance for an unused optional feature, up to the bound its named
+entry states (`architecture:component-import-boundaries` INV10). The
+engineering owner accepts the difference. The cost is the option's Escape
+scope, its outside-press watch with the touch-pan rule, and its place in the
+focus order (FR12, FR15).
+
+Rejected: the option through its own import, because `tabBehavior` then
+takes an imported value where DEC-11 sets a closed union; a deferred load of
+the watch, which does not bring the option under the allowance and puts
+Layer's outside-press watch on pages that carry none; a `'pageOrder'`
+popover that no press outside closes, which costs less and drops FR15's
+outside press; and FR15 without the touch-pan rule, which stays over the
+allowance.
 
 ## Open questions
 
