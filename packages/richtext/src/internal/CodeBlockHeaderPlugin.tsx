@@ -6,8 +6,8 @@
  * @file CodeBlockHeaderPlugin.tsx
  * @input Uses @lexical/react (composer context), @lexical/code (CodeNode),
  *   lexical, core IconButton, Icon, useClipboard, useTranslator and
- *   observeResize, and a ResizeObserver on the editor root; both only
- *   schedule the measure frame.
+ *   observeResize, which watches the editor root and each header and only
+ *   schedules the measure frame.
  * @output Exports CodeBlockHeaderPlugin, which draws core CodeBlock's header
  *   over every fenced code block: the language label and a copy button, or
  *   just the copy button in the corner when the block names no language.
@@ -381,15 +381,10 @@ export function CodeBlockHeaderPlugin({
       }
     };
     scheduleRef.current = schedule;
-    const observer =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(schedule);
+    let unobserveRoot: (() => void) | null = null;
     const unregisterRoot = editor.registerRootListener(root => {
-      observer?.disconnect();
-      if (root != null) {
-        observer?.observe(root);
-      }
+      unobserveRoot?.();
+      unobserveRoot = root == null ? null : observeResize(root, schedule);
       schedule();
     });
     const unregisterUpdate = editor.registerUpdateListener(schedule);
@@ -397,7 +392,7 @@ export function CodeBlockHeaderPlugin({
     schedule();
     return () => {
       cancelAnimationFrame(frame);
-      observer?.disconnect();
+      unobserveRoot?.();
       scheduleRef.current = null;
       unregisterRoot();
       unregisterUpdate();
