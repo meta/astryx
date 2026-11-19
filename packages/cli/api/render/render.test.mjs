@@ -3739,6 +3739,24 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data.missing).toBeUndefined();
   }, 120_000);
 
+  it('carries and gives back exactly an image the page loads with import() on a click, its name as written', () => {
+    const site = path.join(away, 'lazy-image');
+    fs.mkdirSync(path.join(site, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(site, 'src/big.png'), PNG);
+    fs.writeFileSync(path.join(site, 'src/Screen%20Shot.png'), PNG);
+    fs.writeFileSync(
+      path.join(site, 'src/page.tsx'),
+      "import {useState} from 'react';\nexport default function Page() {\n  const [src, setSrc] = useState('');\n  return <main><button onClick={() => { import('./big.png').then(m => setSrc(m.default)); import('./Screen%20Shot.png'); }}>Show</button>{src ? <img src={src} alt=\"Big\" /> : null}</main>;\n}\n",
+    );
+    const run = runBin(site, ['experimental', 'export', 'src/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(expect.arrayContaining(['big.png', 'Screen%20Shot.png']));
+    const back = runBin(site, ['experimental', 'export', '--reverse', 'src/page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data.exact).toBe(true);
+    expect(back.json.data.missing).toBeUndefined();
+  }, 120_000);
+
   it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {
     const tree = path.join(away, 'dots');
     fs.mkdirSync(path.join(tree, '..x'), {recursive: true});

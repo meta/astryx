@@ -132,6 +132,16 @@ describe('reachableFiles: a reference written as URL text', () => {
     expect(reached.has('src/c d.png')).toBe(true);
   });
 
+  it('follows import() and require() of an image as written, with no decode', () => {
+    const page = "export default () => <button onClick={() => { import('./a%20b.png'); require('./c.png'); }} />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/a%20b.png'), file('src/c.png')]).missing).toEqual([]);
+  });
+
+  it('follows an import of an image as written, with no decode', () => {
+    const page = "import shot from './Screen%20Shot.png';\nexport default () => <img src={shot} alt=\"\" />;\n";
+    expect(reachableFiles([file('src/page.tsx', page), file('src/Screen%20Shot.png')]).missing).toEqual([]);
+  });
+
   it('reads a % that starts no escape as itself', () => {
     const page = 'export default () => <img src="./50%.png" alt="" />;\n';
     expect(reachableFiles([file('src/page.tsx', page), file('src/50%.png')]).missing).toEqual([]);

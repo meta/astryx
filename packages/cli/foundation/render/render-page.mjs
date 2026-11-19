@@ -1766,7 +1766,7 @@ export async function renderPage(entry, options = {}) {
     } catch {
       continue;
     }
-    for (const ref of assetRefsOf(text, file)) {
+    for (const {written: ref, file: name} of assetRefsOf(text, file)) {
       const how = `named in ${path.relative(dir, file).split(path.sep).join('/')}`;
       /** @param {string} f */
       const local = f => isInside(f, named) && isFileAt(f);
@@ -1778,12 +1778,12 @@ export async function renderPage(entry, options = {}) {
       } else {
         // The file the module names beside it, which a restore lays out
         // where the module's own folder finds it.
-        const beside = path.resolve(path.dirname(file), fileNamed(ref));
+        const beside = path.resolve(path.dirname(file), name);
         if (local(beside)) carryAsset(beside, how);
         // A stylesheet's url() is its own folder's file, which its inlined
         // rules already carry; only a module's string reaches the script.
         if (/\.css$/i.test(file)) continue;
-        shown = path.resolve(dir, fileNamed(ref));
+        shown = path.resolve(dir, name);
         if (!local(shown)) shown = null;
       }
       if (!shown) continue;
