@@ -360,6 +360,17 @@ export function renderPmStep(step, pm) {
  * @typedef {object} RenderOptions
  * @property {string} stem how the reader runs the CLI, e.g. `pnpm exec astryx`
  * @property {DocPackageManager} pm the reader's package manager
+ * @property {DocPin} [pin] the version the reader's project installs a
+ *   package at, when it has one
+ */
+
+/**
+ * The version a reader's project installs the package `name` at, written as
+ * the install names it (`name@version`, a range quoted), and whether the
+ * project saves it exactly. Null to leave the package as the doc writes it.
+ * @callback DocPin
+ * @param {string} name
+ * @returns {{spec: string, exact: boolean} | null}
  */
 
 /**
@@ -369,7 +380,7 @@ export function renderPmStep(step, pm) {
  * @param {RenderOptions} options
  * @returns {{command: string, note: string | null}}
  */
-export function renderStep(step, {stem, pm}) {
+export function renderStep(step, {stem, pm, pin}) {
   if (step.kind === 'command') {
     return {command: [stem, ...step.args].join(' '), note: null};
   }
@@ -379,7 +390,36 @@ export function renderStep(step, {stem, pm}) {
       note: `only with ${managerName(step.manager)}: ${step.reason}`,
     };
   }
-  return {command: renderPmStep(step, pm), note: null};
+  return {command: renderPmStep(pinStep(step, pin), pm), note: null};
+}
+
+/** A package name with no version after it. */
+const BARE_PACKAGE = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/u;
+
+/**
+ * `step` with each package an install adds by bare name at the version
+ * `pin` gives it, saved exactly when every package it adds is pinned to
+ * one exact release. A package the doc names with a version keeps it, and a
+ * global install, which no project holds, is left as written.
+ * @param {PmStep} step
+ * @param {DocPin | undefined} pin
+ * @returns {PmStep}
+ */
+function pinStep(step, pin) {
+  if (!pin || step.verb !== 'install' || step.flags.has('--global')) {
+    return step;
+  }
+  const pinned = step.args.map(arg =>
+    BARE_PACKAGE.test(arg) ? pin(arg) : null,
+  );
+  if (pinned.every(p => p == null)) return step;
+  const flags = new Set(step.flags);
+  if (pinned.every(p => p?.exact === true)) flags.add('--exact');
+  return {
+    ...step,
+    args: step.args.map((arg, i) => pinned[i]?.spec ?? arg),
+    flags,
+  };
 }
 
 /**

@@ -53,7 +53,8 @@ import {
  * @returns {T}
  */
 function inProject(cwd, fn) {
-  return runWithDocPackageManager(docPackageManager(cwd ?? process.cwd()), fn);
+  const dir = cwd ?? process.cwd();
+  return runWithDocPackageManager(docPackageManager(dir), fn, dir);
 }
 
 /** @type {typeof listRead} */

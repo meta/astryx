@@ -86,30 +86,33 @@ export async function exportSearchIndex(options = {}) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  return runWithDocPackageManager(docPackageManager(cwd), () =>
-    withListingCache(async () => {
-      const gathered = await gatherCandidates({cwd});
-      const kept =
-        owner == null
-          ? gathered.all
-          : gathered.all.filter(candidate => candidate._package === owner);
-      const candidates = kept.map(candidate =>
-        portable(/** @type {Record<string, unknown>} */ (candidate)),
-      );
-      await addDisplayDescriptions(candidates, cwd);
-      return {
-        version: cliVersion(),
-        candidates,
-        ...(gathered.coreSkipped == null
-          ? {}
-          : {
-              coreSkipped: gathered.coreSkipped,
-              ...(gathered.coreSkippedCode == null
-                ? {}
-                : {coreSkippedCode: gathered.coreSkippedCode}),
-            }),
-      };
-    }),
+  return runWithDocPackageManager(
+    docPackageManager(cwd),
+    () =>
+      withListingCache(async () => {
+        const gathered = await gatherCandidates({cwd});
+        const kept =
+          owner == null
+            ? gathered.all
+            : gathered.all.filter(candidate => candidate._package === owner);
+        const candidates = kept.map(candidate =>
+          portable(/** @type {Record<string, unknown>} */ (candidate)),
+        );
+        await addDisplayDescriptions(candidates, cwd);
+        return {
+          version: cliVersion(),
+          candidates,
+          ...(gathered.coreSkipped == null
+            ? {}
+            : {
+                coreSkipped: gathered.coreSkipped,
+                ...(gathered.coreSkippedCode == null
+                  ? {}
+                  : {coreSkippedCode: gathered.coreSkippedCode}),
+              }),
+        };
+      }),
+    cwd,
   );
 }
 

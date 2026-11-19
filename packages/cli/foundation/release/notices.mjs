@@ -554,11 +554,22 @@ function projectFacts(cwd) {
  * @returns {string}
  */
 function coreRelease(facts) {
+  return projectCoreRelease(facts) ?? runningCopy(CLI_ROOT).version;
+}
+
+/**
+ * The Core release a project with the release facts `facts` names itself:
+ * the Core it installed or locked, else the one its package.json pins, else
+ * the Core range it declares when that is a plain version range. Null when it
+ * names none.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @returns {string | null}
+ */
+function projectCoreRelease(facts) {
   const declared = facts.declaredCoreRange;
   return (
     coreVersionOf(facts) ??
-    (declared && isVersionRange(declared) ? declared : null) ??
-    runningCopy(CLI_ROOT).version
+    (declared && isVersionRange(declared) ? declared : null)
   );
 }
 
@@ -570,16 +581,20 @@ function coreRelease(facts) {
  * added at one release, the project's Core release, as {@link addMatchingCore}
  * names a theme. Null for any other package, which the package manager adds
  * at the version it picks.
+ * With `projectOnly`, null also when the project names no Core release
+ * itself, where the release of the CLI that answers would stand in.
  * @param {string} cwd
  * @param {string} name
+ * @param {{projectOnly?: boolean}} [options]
  * @returns {{release: string, exact: boolean} | null}
  */
-export function coreMatchedAdd(cwd, name) {
+export function coreMatchedAdd(cwd, name, {projectOnly = false} = {}) {
   if (name !== CORE_PACKAGE_NAME && !releasedWithCorePackages().has(name)) {
     return null;
   }
   const {facts} = projectFacts(cwd);
-  const release = coreRelease(facts);
+  const release = projectOnly ? projectCoreRelease(facts) : coreRelease(facts);
+  if (release == null) return null;
   return {release, exact: savesExactly(facts, release)};
 }
 
