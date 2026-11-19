@@ -268,8 +268,10 @@ the app reaches every layer instead of the components that happen to read it.
   accessibility navigation. It stays open, reports no dismissal, and shows
   again in place when the anchor returns (DEC-11). While hidden, it is not
   present for Escape or a platform close request (`family:overlay-dismissal`
-  FR2, FR3): the request goes to the member beneath it, or to the page. An
-  outside press still closes a hidden layer that light-dismisses, as it
+  FR2, FR3): the request goes to the member beneath it, or to the page. This
+  holds for a pinned tooltip too: while hidden, it does not take Escape
+  first, and Escape reaches the surface beneath it. An outside press still
+  closes a hidden layer that light-dismisses, as it
   closes a shown one. The hidden layer does not consume that press, so a
   host surface under it handles the press as well (`family:overlay-dismissal`
   FR11). The layer does not hide while focus is inside it or on
