@@ -28,7 +28,7 @@ import {
   type TokenValue,
 } from './defineTheme';
 import {parseColor, formatColor} from '../utils/color';
-import {generatedScopedStatusRoleDefaults} from './generateThemeRules';
+import {generatedScopedStatusRoleDefaults} from './statusRoleDefaults';
 import {
   findMatchingParen,
   resolveTokenReferences,

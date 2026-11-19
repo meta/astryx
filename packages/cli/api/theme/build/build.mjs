@@ -112,7 +112,13 @@ import {
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
-import {keyPathLine, keyValueLine, nullThemeValues} from './null-values.mjs';
+import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
+import {
+  keyPathIndex,
+  keyPathLine,
+  keyValueLine,
+  nullThemeValues,
+} from './null-values.mjs';
 import {typographyInputProblems} from './typography-values.mjs';
 import {radiusInputProblems} from './radius-values.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
@@ -130,6 +136,13 @@ import {
   writtenPrimitives,
   writtenValueProblems,
 } from './written-values.mjs';
+import {
+  settingEffectIssues,
+  settingIssueEntries,
+  blockPaths,
+  declarationPaths,
+  settingIssueLocation,
+} from './setting-effects.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
@@ -1875,17 +1888,20 @@ function toPascalCase(name) {
     .join('');
 }
 
-/** @type {Promise<Record<string, Record<string, string[]>>> | null} */
-let _knownValuesIndexPromise = null;
+/**
+ * The known values index of each Core `src` folder.
+ * @type {Map<string | null, Promise<Record<string, Record<string, string[]>>>>}
+ */
+const _knownValuesIndexes = new Map();
 
 /**
  * Build one target-keyed index of built-in visual-prop values from every core
  * component doc. A rendered target often lives in a sibling doc (for example,
  * `astryx-heading` is documented by Text/Heading.doc.mjs), so directory-name
  * guessing is not a valid lookup strategy.
+ * @param {string | null} coreSrc
  */
-async function loadKnownValuesIndex() {
-  const coreSrc = coreSrcPath();
+async function loadKnownValuesIndex(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
   return (await coreThemeValues(coreSrc)).knownValues;
 }
@@ -1895,25 +1911,60 @@ async function loadKnownValuesIndex() {
  * @returns {Promise<Record<string, string[]>>}
  */
 async function getKnownValues(componentName) {
-  _knownValuesIndexPromise ??= loadKnownValuesIndex();
-  const index = await _knownValuesIndexPromise;
+  const coreSrc = coreSrcPath();
+  let pending = _knownValuesIndexes.get(coreSrc);
+  if (!pending) {
+    pending = loadKnownValuesIndex(coreSrc);
+    _knownValuesIndexes.set(coreSrc, pending);
+  }
+  const index = await pending;
   return index[componentName] ?? {};
 }
 
 /**
- * Resolve `@astryxdesign/core`'s package root relative to the CLI package. Core
- * and the CLI ship as siblings (`@astryxdesign/core`, `@astryxdesign/cli`), so
- * `../../../../core` from `api/theme/build/` reaches core whether installed from
- * npm or run inside the monorepo. Returns null if it can't be found.
+ * The package root of the Core whose component docs and types the build reads:
+ * the Core the build selected ({@link selectCore}), else the Core beside the
+ * CLI. A copy installed for the computer has no Core beside it, so it reads
+ * the project's Core once the build selects it, as the build itself does.
+ * Returns null if neither can be found.
+ * @returns {string | null}
  */
 function resolveCoreRoot() {
+  const selected = _coreThemeFile ? corePackageRoot(_coreThemeFile) : null;
+  if (selected) return selected;
+  // Core and the CLI ship as siblings, so `../../../../core` from
+  // `api/theme/build/` reaches Core whether installed from npm or run inside
+  // the monorepo.
   const cliDir = path.dirname(fileURLToPath(import.meta.url));
   const coreRoot = path.resolve(cliDir, '../../../../core');
   return fs.existsSync(coreRoot) ? coreRoot : null;
 }
 
 /**
- * The `src` folder of the Core beside the CLI ({@link resolveCoreRoot}), or
+ * The folder at or above `file` whose package.json names `@astryxdesign/core`,
+ * or null.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function corePackageRoot(file) {
+  let dir = path.dirname(file);
+  for (;;) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+      );
+      if (pkg?.name === '@astryxdesign/core') return dir;
+    } catch {
+      // No readable package.json here; keep walking up.
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * The `src` folder of the Core the build reads ({@link resolveCoreRoot}), or
  * null when there is none.
  * @returns {string | null}
  */
@@ -1940,12 +1991,12 @@ const _componentDeclCache = new Map();
  */
 function readComponentDeclarations(pascalName, options = {}) {
   const includeTypes = options.includeTypes === true;
-  const cacheKey = `${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
+  const coreRoot = resolveCoreRoot();
+  const cacheKey = `${coreRoot}\0${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
   if (_componentDeclCache.has(cacheKey)) {
     return _componentDeclCache.get(cacheKey) ?? '';
   }
   let contents = '';
-  const coreRoot = resolveCoreRoot();
   if (coreRoot) {
     const candidateSets = [
       [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
@@ -1990,9 +2041,11 @@ const _augmentationTargetCache = new Map();
  * @returns {Promise<Array<{moduleName: string, interfacePrefix: string}>>}
  */
 async function resolveAugmentationTargetCandidates(componentName) {
-  if (_augmentationTargetCache.has(componentName)) {
+  const coreSrc = coreSrcPath();
+  const cacheKey = `${coreSrc}\0${componentName}`;
+  if (_augmentationTargetCache.has(cacheKey)) {
     return /** @type {Array<{moduleName: string, interfacePrefix: string}>} */ (
-      _augmentationTargetCache.get(componentName)
+      _augmentationTargetCache.get(cacheKey)
     );
   }
 
@@ -2003,9 +2056,8 @@ async function resolveAugmentationTargetCandidates(componentName) {
     },
   ];
 
-  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) {
-    _augmentationTargetCache.set(componentName, fallback);
+    _augmentationTargetCache.set(cacheKey, fallback);
     return fallback;
   }
 
@@ -2045,7 +2097,7 @@ async function resolveAugmentationTargetCandidates(componentName) {
     addCandidate(candidate.moduleName, candidate.interfacePrefix);
   }
   const resolved = matches;
-  _augmentationTargetCache.set(componentName, resolved);
+  _augmentationTargetCache.set(cacheKey, resolved);
   return resolved;
 }
 
@@ -2800,13 +2852,14 @@ function resolveThemeModule(specifier, fromFile) {
  * The sources of the themes a theme source extends, nearest first: the
  * module each `extends: name` imports `name` from, when it is a relative
  * import, then the one that module extends, a few hops at most. Empty when
- * the source extends nothing it imports.
+ * the source extends nothing it imports. Each with the export of that
+ * module the theme is built from (the name it is imported by).
  * @param {string} filePath
  * @param {string} source
- * @returns {Array<{file: string, source: string}>}
+ * @returns {Array<{file: string, source: string, exportName: string}>}
  */
 function extendedThemeSources(filePath, source) {
-  /** @type {Array<{file: string, source: string}>} */
+  /** @type {Array<{file: string, source: string, exportName: string}>} */
   const chain = [];
   let file = filePath;
   let text = source;
@@ -2849,13 +2902,21 @@ function extendedThemeSources(filePath, source) {
         st.specifiers.some((/** @type {any} */ x) => x.local?.name === base),
     );
     if (!from) return chain;
+    // The name the file is imported by: the export it builds the base from.
+    const spec = from.specifiers.find(
+      (/** @type {any} */ x) => x.local?.name === base,
+    );
+    const exportName =
+      spec?.type === 'ImportSpecifier'
+        ? (spec.imported.name ?? spec.imported.value)
+        : 'default';
     try {
       file = resolveThemeModule(String(from.source.value), file);
       text = fs.readFileSync(file, 'utf8');
     } catch {
       return chain;
     }
-    chain.push({file, source: text});
+    chain.push({file, source: text, exportName});
   }
   return chain;
 }
@@ -4361,7 +4422,7 @@ function generateBuiltModule(
       : serializeField('componentIcons', componentIconValues, true));
 
   return `${iconImport}${componentIconPrelude}${iconDeclaration}${iconNodesDeclaration}/**
- * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
+ * ${themeDef.name} theme — built by \`astryx theme build\`
  * Import the CSS file alongside this module:
  *
  *   import { ${themeBinding} } from './${artifactBaseName}';
@@ -4464,17 +4525,21 @@ async function loadKnownComponents() {
   return Object.keys(propsByKey).length > 0 ? {propsByKey} : null;
 }
 
-/** @type {{propsByKey: Record<string, string[]>} | null | undefined} */
-let knownComponentsCache;
+/**
+ * The known components of each Core `src` folder.
+ * @type {Map<string | null, {propsByKey: Record<string, string[]>} | null>}
+ */
+const knownComponentsCache = new Map();
 
 /**
  * @returns {Promise<{propsByKey: Record<string, string[]>} | null>}
  */
 async function getKnownComponents() {
-  if (knownComponentsCache === undefined) {
-    knownComponentsCache = await loadKnownComponents();
+  const coreSrc = coreSrcPath();
+  if (!knownComponentsCache.has(coreSrc)) {
+    knownComponentsCache.set(coreSrc, await loadKnownComponents());
   }
-  return knownComponentsCache;
+  return knownComponentsCache.get(coreSrc) ?? null;
 }
 
 /**
@@ -4482,11 +4547,13 @@ async function getKnownComponents() {
  *
  * @param {{components?: Record<string, Record<string, unknown>>, onDark?: {components?: Record<string, Record<string, unknown>>}, onLight?: {components?: Record<string, Record<string, unknown>>}, __onDark?: {components?: Record<string, Record<string, unknown>>}, __onLight?: {components?: Record<string, Record<string, unknown>>}}} themeDef
  * @param {{propsByKey: Record<string, string[]>}} knownComponents
+ * @param {Set<string>} [deadKeys] takes each `<part>\u0000<style key>` the warnings say builds a selector nothing matches
  * @returns {string[]}
  */
 export function validateComponentOverridesAgainstRegistry(
   themeDef,
   knownComponents,
+  deadKeys = new Set(),
 ) {
   /** @type {string[]} */
   const warnings = [];
@@ -4542,6 +4609,7 @@ export function validateComponentOverridesAgainstRegistry(
         for (const pair of pairs) {
           const [prop] = pair.split(':');
           if (prop && !knownProps.includes(prop)) {
+            deadKeys.add(`${component}\u0000${key}`);
             const hint =
               knownProps.length > 0
                 ? ` Known props/states: ${knownProps.join(', ')}`
@@ -4563,14 +4631,16 @@ export function validateComponentOverridesAgainstRegistry(
  * Warns on unknown component and prop names.
  *
  * @param {{components?: Record<string, Record<string, unknown>>, onDark?: {components?: Record<string, Record<string, unknown>>}, onLight?: {components?: Record<string, Record<string, unknown>>}, __onDark?: {components?: Record<string, Record<string, unknown>>}, __onLight?: {components?: Record<string, Record<string, unknown>>}}} themeDef
+ * @param {Set<string>} [deadKeys] takes each `<part>\u0000<style key>` that builds a selector nothing matches
  * @returns {Promise<string[]>}
  */
-async function validateComponentOverrides(themeDef) {
+async function validateComponentOverrides(themeDef, deadKeys = new Set()) {
   const knownComponents = await getKnownComponents();
   if (knownComponents == null) return [];
   const warnings = validateComponentOverridesAgainstRegistry(
     themeDef,
     knownComponents,
+    deadKeys,
   );
   // Style keys no element can carry: a pseudo-class or pseudo-element
   // written as a style key (`':hover'` builds `[data-="hover"]`), and a
@@ -4589,6 +4659,7 @@ async function validateComponentOverrides(themeDef) {
       for (const key of Object.keys(rules))
         for (const {prop, value} of componentValuePairs(key)) {
           if (!prop) {
+            deadKeys.add(`${component}\u0000${key}`);
             warnings.push(
               `Style key "${key}" on component "${component}" is no prop or state: a pseudo-class or pseudo-element goes inside a style key, such as base: {'${key}': {…}}. As written it builds a selector nothing matches.`,
             );
@@ -4600,10 +4671,12 @@ async function validateComponentOverrides(themeDef) {
             values.length > 0 &&
             (await classifyComponentValue(component, prop, value)) ===
               'unresolved'
-          )
+          ) {
+            deadKeys.add(`${component}\u0000${key}`);
             warnings.push(
               `Style key "${key}" on component "${component}": ${prop} takes ${values.join(', ')}, and a theme cannot add a value to it, so "${value}" builds a selector nothing matches.`,
             );
+          }
         }
     }
   return [...new Set(warnings)];
@@ -4885,7 +4958,12 @@ async function themeBuildInternal(
 
   // Core's facts first, before the build reads the theme: kept facts then do
   // not depend on it, and a build after an edit to the theme reads them back.
-  await keepCoreThemeFacts(coreSrcPath());
+  {
+    const installed = findInstalledPackage(cwd, '@astryxdesign/core');
+    await keepCoreThemeFacts(
+      installed ? path.join(installed, 'src') : coreSrcPath(),
+    );
+  }
 
   {
     const problem = buildInputProblem(file, options, cwd);
@@ -5390,11 +5468,17 @@ async function themeBuildInternal(
   });
 
   // Validate component overrides
-  const warnings = await validateComponentOverrides(themeDef);
+  // The style keys that build a selector nothing matches (warned below):
+  // no setting of theirs, and none they hold, takes part in which shows.
+  /** @type {Set<string>} */
+  const deadKeys = new Set();
+  const warnings = await validateComponentOverrides(themeDef, deadKeys);
   /** @type {string[]} */
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
+  /** @type {Array<import('./setting-effects.mjs').SettingIssueEntry & {line: number | null}>} */
+  const settingIssues = [];
   const blankSpecifier = handOff.prepareFamily
     ? null
     : blankSpecifierWarning(options.iconsSpecifier);
@@ -5674,6 +5758,72 @@ async function themeBuildInternal(
       throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
     }
     const {component, prose} = themeRules;
+    // A setting the browser never shows as written: another rule of the
+    // theme layer reaching the same element sets the same property and
+    // wins there (a shorthand after the setting, a more specific rule of
+    // the theme it extends, two situations whose order decides). Read from
+    // the rules just generated; a declaration is the theme's when its
+    // source, or a local theme it extends, writes it. Warned at its line,
+    // with the change that makes it show; the output is the same.
+    // Where a setting is written, nearest first: the theme's own objects in
+    // its file (never a base theme it extends that the file also defines),
+    // then such a base, then each local theme it extends in its own file.
+    // Each key path is read from the root of the object.
+    // Each file read twice: at its theme's own objects, then at the themes
+    // that theme extends inside the file.
+    const writtenIn = [
+      {file: filePath, source: themeSource, exportName: themeExportName},
+      ...extendedSources,
+    ].flatMap(s => {
+      const index = keyPathIndex(s.source, s.file, {exportName: s.exportName});
+      return [false, true].map(bases => ({
+        file: s.file,
+        lineOf: (/** @type {string[]} */ k) =>
+          index(k, {fromRoot: true, bases}),
+      }));
+    });
+    const blocks = blockPaths(
+      resolvedTheme.components,
+      components =>
+        _generateThemeRulesSplit(
+          _defineTheme({name: resolvedTheme.name, components}),
+          [],
+        ).component,
+    );
+    for (const entry of settingIssueEntries(
+      settingEffectIssues(
+        component,
+        at => {
+          for (const [layer, {lineOf}] of writtenIn.entries())
+            for (const keys of declarationPaths(at, blocks))
+              if (lineOf(keys) != null)
+                return {path: keys, layer};
+          return null;
+        },
+        {
+          skip: at =>
+            declarationPaths(at, blocks).some(p =>
+              deadKeys.has(`${p[1]}\u0000${p[2]}`),
+            ),
+        },
+      ),
+    )) {
+      // At its line in the theme's file, or in the local theme it extends
+      // that writes it (a family member's included).
+      const writer = writtenIn.find(
+        w => w.lineOf(entry.path) != null,
+      );
+      const line = writer?.lineOf(entry.path) ?? null;
+      const file =
+        writer && writer.file !== filePath
+          ? path.relative(cwd, writer.file) || writer.file
+          : null;
+      const placedEntry = {...entry, line, ...(file ? {file} : {})};
+      const w = `${entry.message}${settingIssueLocation(placedEntry)}. Fix: ${entry.fix}.`;
+      settingIssues.push(placedEntry);
+      warningMessages.push(w);
+      logger.warn(`  [warn] ${source}${w}`);
+    }
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
     // (generateThemeCSS) always emits them, so the build must too, or the
@@ -5705,9 +5855,10 @@ async function themeBuildInternal(
         ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`
         : '';
 
-    // #3658: also emit attribute-specific rules so <Theme mode> can override
-    // color-scheme. Inspect root and rule-owned values, not generated CSS, which
-    // also carries theme-independent data-token defaults with light-dark().
+    // A theme with light-dark() values pins the scheme where html forces a
+    // mode (a Theme's mode, or the host's data-theme). Inspect root and
+    // rule-owned values, not generated CSS, which also carries
+    // theme-independent data-token defaults with light-dark().
     const themeOwnValues = JSON.stringify(
       [
         resolvedTheme.tokens ?? {},
@@ -5725,10 +5876,14 @@ async function themeBuildInternal(
       ],
       bigIntAsText,
     );
+    // A theme follows the page's scheme: it pins the scheme only where the
+    // page or the Theme provider forces a mode (`data-theme` on html).
+    // Following the reader's device is the page's own choice, made by
+    // reset.css or the app's own `color-scheme` on html, never by a theme.
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')
-        ? '  :root { color-scheme: light dark; }\n  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
+        ? '  html[data-theme="light"] { color-scheme: light; }\n  html[data-theme="dark"] { color-scheme: dark; }\n\n'
         : '';
     if (colorSchemeDecl || componentScope) {
       cssParts.push(
@@ -6102,6 +6257,7 @@ async function themeBuildInternal(
       tokenCount,
       componentCount,
       warnings: warningMessages,
+      settingIssues,
       unloadedFonts,
       unbuiltStylesheets,
     };
@@ -6203,6 +6359,9 @@ async function themeBuildInternal(
         checked: checkedBuildOutputs(writes, cwd),
         // The code a stale check exits 1 with, for --json callers.
         ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
+        // A check reads the settings a build would warn about, so a check
+        // (`astryx doctor`, an editor) can say them without writing.
+        ...(settingIssues.length ? {settingIssues} : {}),
       },
     });
   }
@@ -6299,6 +6458,7 @@ async function themeBuildInternal(
       },
       warnings: warningMessages,
       notices: noticeMessages,
+      settingIssues,
     },
   };
 }
@@ -7044,6 +7204,26 @@ async function buildFamily(
       onWarning: message => outputWarnings.push(message),
     });
   }
+  // Each member's settings that do not show as written, at the member's
+  // file when the member's own source writes them.
+  // (A member that extends another reports the other's setting too: once.)
+  const familySettingIssues = [
+    ...new Map(
+      members
+        .flatMap(member =>
+          (member.settingIssues ?? []).map(
+            (/** @type {any} */ issue) => ({
+              ...issue,
+              file: issue.file ?? path.relative(cwd, member.filePath),
+            }),
+          ),
+        )
+        .map(issue => [
+          JSON.stringify([issue.file, issue.path, issue.by.path, issue.by.key]),
+          issue,
+        ]),
+    ).values(),
+  ];
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
@@ -7081,6 +7261,9 @@ async function buildFamily(
         checked: checkedBuildOutputs(writes, cwd),
         // The code a stale check exits 1 with, for --json callers.
         ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
+        ...(familySettingIssues.length
+          ? {settingIssues: familySettingIssues}
+          : {}),
       },
     });
   }
@@ -7153,6 +7336,9 @@ Or load the same stylesheet natively:
       outputs,
       warnings,
       notices,
+      // Each member's settings that do not show as written, at the member's
+      // file when its own source writes them.
+      settingIssues: familySettingIssues,
       // The base the family's root extends that the family does not select:
       // a requirement of the outputs (an installed package the app keeps).
       ...(familyBase ? {base: familyBase} : {}),
@@ -7182,76 +7368,10 @@ function themeBaseBinding(filePath, exportName) {
   } catch {
     return null;
   }
-  /** @type {Map<string, {source: string, imported: string}>} */
-  const imports = new Map();
-  /** @type {Map<string, any>} */
-  const consts = new Map();
-  /** @type {Map<string, any>} the node each export gives */
-  const exported = new Map();
-  /** @param {any} declaration */
-  const addDeclaration = declaration => {
-    if (declaration?.type !== 'VariableDeclaration') return;
-    for (const d of declaration.declarations)
-      if (d.id?.type === 'Identifier' && d.init) consts.set(d.id.name, d.init);
-  };
-  for (const node of ast.program.body) {
-    if (node.type === 'ImportDeclaration' && node.importKind !== 'type')
-      for (const spec of node.specifiers)
-        if (spec.type === 'ImportSpecifier')
-          imports.set(spec.local.name, {
-            source: node.source.value,
-            imported: spec.imported.name ?? spec.imported.value,
-          });
-        else if (spec.type === 'ImportDefaultSpecifier')
-          imports.set(spec.local.name, {
-            source: node.source.value,
-            imported: 'default',
-          });
-    addDeclaration(node);
-    if (node.type === 'ExportNamedDeclaration') {
-      addDeclaration(node.declaration);
-      if (node.declaration?.type === 'VariableDeclaration')
-        for (const d of node.declaration.declarations)
-          if (d.id?.type === 'Identifier') exported.set(d.id.name, d.id);
-      if (!node.source)
-        for (const spec of node.specifiers ?? [])
-          if (spec.type === 'ExportSpecifier')
-            exported.set(spec.exported.name ?? spec.exported.value, spec.local);
-    }
-    if (node.type === 'ExportDefaultDeclaration')
-      exported.set('default', node.declaration);
-  }
-  /** @param {any} node @returns {any} */
-  const unwrap = node => {
-    while (
-      node &&
-      /^(?:TSAsExpression|TSSatisfiesExpression|TSNonNullExpression|TSTypeAssertion|ParenthesizedExpression)$/.test(
-        node.type,
-      )
-    )
-      node = node.expression;
-    return node;
-  };
-  /** @param {any} node @param {number} depth @returns {any} the theme object literal */
-  const themeObject = (node, depth = 0) => {
-    node = unwrap(node);
-    if (!node || depth > 8) return null;
-    if (node.type === 'Identifier')
-      return consts.has(node.name)
-        ? themeObject(consts.get(node.name), depth + 1)
-        : null;
-    if (node.type === 'CallExpression')
-      return themeObject(node.arguments?.[0], depth + 1);
-    return node.type === 'ObjectExpression' ? node : null;
-  };
-  const object = themeObject(exported.get(exportName ?? 'default'));
-  const field = object?.properties.find(
-    (/** @type {any} */ p) =>
-      p.type === 'ObjectProperty' &&
-      !p.computed &&
-      (p.key.name ?? p.key.value) === 'extends',
+  const {imports, consts, exported} = moduleBindings(ast);
+  const value = extendsOf(
+    themeObjectOf(exported.get(exportName ?? 'default'), consts),
   );
-  const value = unwrap(field?.value);
   if (value?.type !== 'Identifier') return null;
   const imported = imports.get(value.name);
   if (imported)
