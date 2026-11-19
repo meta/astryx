@@ -22395,37 +22395,46 @@ export function draftAnswer(ctx, env, question) {
               );
             // (A corner longhand set after the part's last radius wins over
             // it: then only the longhands of the corners that change are
-            // written; see longhandLast.)
+            // written; see longhandLast. When a corner to change has its
+            // longhand before the radius, the radius is written with every
+            // corner, and a changing corner whose longhand comes after the
+            // radius keeps its own longhand too.)
+            const afterRadius = (/** @type {string} */ k) =>
+              ordered.some(
+                (st, n) => n > lastRadius && LONGHAND[st.thing] === k,
+              );
             /** @param {Record<string, string | null>} at @param {string[]} keys */
-            const writeAll = (at, keys) =>
-              (ALL.every(k => at[k] != null) &&
-                sameEitherWay &&
-                !longhandLast) ||
-              (!longhandLast &&
-                nowAt != null &&
-                keys.some(k => at[k] != null && behindRadius(k)))
-                ? [
-                    set(
-                      'border-radius',
-                      radiusOf(
-                        ALL.map(k =>
-                          String(
-                            at[k] ??
-                              /** @type {Record<string, string>} */ (nowAt)[k],
-                          ),
-                        ),
+            const writeAll = (at, keys) => {
+              const writes = [
+                'start-start',
+                'start-end',
+                'end-start',
+                'end-end',
+              ].filter(k => at[k] != null && keys.includes(k));
+              /** @param {string} k */
+              const longhand = k =>
+                set(`border-${k}-radius`, String(at[k]), {...f, ...modeOf(c)});
+              const whole =
+                (ALL.every(k => at[k] != null) &&
+                  sameEitherWay &&
+                  !longhandLast) ||
+                (nowAt != null && writes.some(behindRadius));
+              if (!whole) return writes.map(longhand);
+              return [
+                set(
+                  'border-radius',
+                  radiusOf(
+                    ALL.map(k =>
+                      String(
+                        at[k] ?? /** @type {Record<string, string>} */ (nowAt)[k],
                       ),
-                      {...f, ...modeOf(c)},
                     ),
-                  ]
-                : ['start-start', 'start-end', 'end-start', 'end-end']
-                    .filter(k => at[k] != null && keys.includes(k))
-                    .map(k =>
-                      set(`border-${k}-radius`, String(at[k]), {
-                        ...f,
-                        ...modeOf(c),
-                      }),
-                    );
+                  ),
+                  {...f, ...modeOf(c)},
+                ),
+                ...writes.filter(afterRadius).map(longhand),
+              ];
+            };
             // (Then each corner longhand the theme sets on the part, in the
             // order it set them: a longhand after the radius changes its
             // corner, a radius after a longhand replaces it. A physical

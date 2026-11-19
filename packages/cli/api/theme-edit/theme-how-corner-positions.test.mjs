@@ -514,6 +514,47 @@ describe('the corners an ask names', () => {
     ).toMatch(/is already so in lb: nothing to change/);
   }, 240_000);
 
+  it('writes the radius and a later longhand when a corner longhand sits on each side of the radius', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('both', {cwd, like: 'neutral'});
+    for (const [thing, value] of [
+      ['border-end-start-radius', '2px'],
+      ['border-radius', '4px 4px 0 0'],
+      ['border-end-end-radius', '3px'],
+    ])
+      await themeEditSet('both', thing, value, {cwd, on: 'tab'});
+    const ask = async (/** @type {string} */ q) =>
+      /** @type {Array<{commands: string[]}>} */ (
+        (await themeEditHow(q, {cwd, theme: 'both'})).data.results ?? []
+      )
+        .flatMap(r => r.commands)
+        .filter(c => / editor set /.test(c))
+        .map(c => c.replace(/^.*? editor set both /, ''));
+    // (The bottom-left longhand sits before the radius, so the radius
+    // carries it; the bottom-right longhand comes after, so it is written
+    // too. Asked again, it is already so.)
+    const lines = await ask('tab corners 8px except the top');
+    expect(lines).toEqual([
+      "border-radius '0 0 8px 8px' --on tab",
+      'border-end-end-radius 8px --on tab',
+    ]);
+    for (const line of lines) {
+      const m = /^(\S+) '?([^']+?)'? --on (\S+)$/.exec(line);
+      await themeEditSet('both', String(m?.[1]), String(m?.[2]), {
+        cwd,
+        on: String(m?.[3]),
+      });
+    }
+    expect(
+      (
+        await themeEditHow('tab corners 8px except the top', {
+          cwd,
+          theme: 'both',
+        })
+      ).data.hint,
+    ).toMatch(/is already so in both: nothing to change/);
+  }, 240_000);
+
   it('set takes each answer, a menu included', async ctx => {
     if (needBases(ctx)) return;
     for (const q of [
