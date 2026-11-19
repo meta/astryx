@@ -620,8 +620,10 @@ shared icon names under FR17.
   - The core carries what drawing components need. The app-shell pieces, the
     native classes and launch steps of an app's shell, are not capabilities and
     are not in the capability list (FR3): `astryx rn shell` writes them into a
-    generated app's native projects, and an app with its own native projects
-    keeps its own (FR4). The build
+    generated app's native projects, Expo's prebuild writes them into an Expo
+    app's projects through `@astryxdesign/react-native-expo`'s configuration
+    plugin (FR11), and an app with its own native projects keeps its own
+    (FR4). The build
     generates a size table per capability, and a check fails when the table is
     missing a capability.
 - **FR21 — Who draws is `render`; glass and materials are a look.**
@@ -768,12 +770,13 @@ record depends on an ask whose owner has not agreed to it.
 - `spec:AST-082` FR5, FR6, FR9, FR10, FR15, FR16, and FR19, and
   `spec:AST-093`, which name `@astryxdesign/native` as the home of the platform
   contracts, their documentation, the Swift and Kotlin bindings, the `ios`,
-  `android`, and `shared` type conditions, and `defineNativeTheme`, move the
+  `android`, `macos`, and `windows` type conditions (`spec:AST-082` FR5), the
+  `shared` condition (FR6), and `defineNativeTheme`, move the
   platform contracts to the shared contracts (DEC-19). Which published package
   carries the public type conditions and the other non-contract parts after
   the deprecation is OQ8.
 - The package-boundary check gains the FR2 rules: no import from the library layer in
-  the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency in `@astryxdesign/react-native`, no peer dependency outside Astryx other than React, React Native and, for `@astryxdesign/react-native-expo`, `expo`, and no dependency on these packages from core or the CLI.
+  the platform layer, no import of Expo or of `@astryxdesign/react-native-expo` in `@astryxdesign/react-native`, no import of a capability from the platform's core outside its loader or from another capability, no third-party native or navigation dependency in `@astryxdesign/react-native`, no third-party dependency of `@astryxdesign/react-native-expo` other than `expo`, no peer dependency outside Astryx other than React, React Native and, for `@astryxdesign/react-native-expo`, `expo`, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
