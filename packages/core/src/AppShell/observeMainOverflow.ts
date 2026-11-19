@@ -94,7 +94,7 @@ export function observeMainOverflow(
   };
 
   // The first notification measures at once: the browser has just laid out,
-  // so the read forces no pass. Later ones schedule it like other signals.
+  // so the read forces no pass.
   const onResize = () => {
     if (isLaidOut) {
       scheduleMeasure();
