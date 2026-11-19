@@ -53,8 +53,9 @@ export const wrapStyles = stylex.create({
     overflow: 'hidden',
     // Break a word only when it cannot fit its column. A zero max-width or a
     // break at any letter lets automatic layout shrink a column below its
-    // longest word.
+    // longest word. The table sets the word-break for its layout.
     overflowWrap: 'break-word',
+    wordBreak: 'var(--_table-cell-word-break, normal)',
   },
 });
 

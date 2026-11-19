@@ -66,7 +66,7 @@ system_specs: [spec:AST-025]
 | Public contract         | The shared plugin protocol exposes optional immutable render context, declared row-model/whole-row ownership, and an observable `renderState` source with immutable loading/availability snapshots. `Table.virtualization` accepts the opaque rows or columns capability, or a list of both, with data and explicit `idKey`.                                     |
 | Behavior                | Table validates one canonical identity, admits compatible flat-row compositions, plans windows before cell construction, and coordinates one viewport, logical row sequence and paint resolution.                                                                                                                                                                |
 | End-user impact         | Row activation remains independent from selection; loaded rows keep state and focus, and large flat tables bound mounted work without changing native table semantics.                                                                                                                                                                                           |
-| Builder impact          | Existing use without the new capabilities is unchanged. Windowing requires explicit identity and fixed-height layout; arbitrary row/detail/tree output does not silently enter the supported mode.                                                                                                                                                               |
+| Builder impact          | Existing use without the new capabilities is unchanged, except that a wrapping children-mode table sizes its columns from content and scrolls when they do not fit (FR24). Windowing requires explicit identity and fixed-height layout; arbitrary row/detail/tree output does not silently enter the supported mode.                                            |
 | Compatibility/readiness | Opt-in protocol additions preserve legacy row keys and body-relative ARIA without opt-in. New capabilities require their implementation and browser/performance verification before release. The `table-sort-indicator` (FR5) and `table-row-expand` (FR7) icon slots are additive, current, and await implementation; with no theme entry, output is unchanged. |
 | Review checks           | Reject a second key extractor, order-selected whole-row owners, rendering all cells before slicing, parallel scroll ownership, independent overlay writers or window-relative accessibility metadata.                                                                                                                                                            |
 | Governing rules         | Table owns the parent protocol; module records own capability behavior. Shared viewport behavior follows `spec:AST-025`; API caller burden follows `architecture:public-component-api`.                                                                                                                                                                          |
@@ -84,7 +84,8 @@ public behavior and evidence, without privately replacing the Table renderer.
 
 - Released default preserved: yes for capability opt-in. Without activation or
   virtualization, legacy reconciliation keys, body-relative `rowIndexStart` and
-  `rowCount`, children composition, column floors and scroll behavior remain unchanged.
+  `rowCount`, children composition, column floors and scroll behavior remain
+  unchanged, except for the children-mode wrap layout below.
 - FR15 retains the approved row-expansion animatedLayout decision, including the no-glide boundary for grid/column dividers; these flat-data capabilities do not implement or amend that motion contract.
 - Compatibility class: additive parent protocol and fixed-height windowing opt-in.
   Optional context arguments preserve existing shorter transform callbacks.
@@ -102,6 +103,13 @@ public behavior and evidence, without privately replacing the Table renderer.
   inline Scroll region. This
   existing default correction is not described as preservation of its former
   floor merely because the new capabilities are opt-in.
+- Children-mode wrap layout (FR24, DEC-6): a children-mode table whose cells
+  wrap sizes each column from its content, keeps every word whole that fits its
+  column, and scrolls in the existing Scroll region when the columns do not
+  fit, instead of dividing its width equally. Columns of a table that already
+  fits follow their content. Data-driven tables and tables under
+  `textOverflow="truncate"` are unchanged. This default change is not
+  described as preservation.
 - Retained scroll/target compatibility (DEC-1): shared viewport behavior follows
   `spec:AST-025` FR12, FR14, FR19 and FR21. Effective keyboard access, fitting
   pass-through and inline containment remain on the existing wrapper/content box.

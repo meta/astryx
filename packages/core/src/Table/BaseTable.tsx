@@ -112,9 +112,10 @@ const styles = stylex.create({
     borderCollapse: 'collapse',
     borderSpacing: '0',
     tableLayout: 'fixed',
-    // Fixed layout sets the columns, so a long token may break at any letter
-    // to stay inside its cell, flex rows inside the cell included.
-    wordBreak: 'break-word',
+    // Fixed layout sets the columns, so a wrap cell's long token may break at
+    // any letter to stay inside its cell, flex rows inside the cell included.
+    // Only wrap cells read this (`wrapStyles`); panel and empty rows do not.
+    '--_table-cell-word-break': 'break-word',
   },
   tableAutoLayout: {
     tableLayout: 'auto',
@@ -122,6 +123,7 @@ const styles = stylex.create({
     // inherited from an ancestor, such as a chat bubble, would shrink that
     // word to one letter, so the table sets its own.
     wordBreak: 'normal',
+    '--_table-cell-word-break': 'normal',
   },
   /**
    * Inline flex row that keeps the header label and any "after" slot content

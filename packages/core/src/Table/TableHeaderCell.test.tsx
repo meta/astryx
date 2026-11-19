@@ -356,20 +356,26 @@ describe('TableHeaderCell', () => {
     ).not.toContain('max-width: 0');
   });
 
-  it('gives each table layout its own word-break', () => {
+  it('gives each table layout its own word-break for wrap cells', () => {
     // A children-mode table resets an inherited word-break so a column keeps
-    // its longest word; a data-mode table keeps breaking long tokens.
+    // its longest word. A data-mode table lets its wrap cells break long
+    // tokens, and sets no word-break that panel or empty rows would inherit.
     const children = renderChildrenMode().container;
-    expect(
-      cssDeclarationsOf(children.querySelector('table') as Element),
-    ).toContain('word-break: normal');
+    const childrenTable = cssDeclarationsOf(
+      children.querySelector('table') as Element,
+    );
+    expect(childrenTable).toContain('word-break: normal');
+    expect(childrenTable).toContain('--_table-cell-word-break: normal');
     cleanup();
 
     const data = render(<Table data={users} columns={columns} />).container;
-    const declarations = cssDeclarationsOf(
-      data.querySelector('table') as Element,
-    );
-    expect(declarations).toContain('word-break: break-word');
-    expect(declarations).not.toContain('word-break: normal');
+    const dataTable = cssDeclarationsOf(data.querySelector('table') as Element);
+    expect(dataTable).toContain('--_table-cell-word-break: break-word');
+    expect(dataTable.some(d => d.startsWith('word-break:'))).toBe(false);
+    expect(
+      cssDeclarationsOf(data.querySelector('tbody td') as Element).some(d =>
+        d.startsWith('word-break: var(--_table-cell-word-break'),
+      ),
+    ).toBe(true);
   });
 });
