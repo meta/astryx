@@ -819,6 +819,7 @@ non-interactive guarantee.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
+- `foundation/render/remote-images.mjs` and `foundation/render/image-attributes.mjs` — the https images a file `astryx experimental export` carries (DEC-18): how a render fetches them, and where an element shows an image.
 - `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental export` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
 - `foundation/render/render-page.mjs` — the CSS a file `astryx experimental export` writes: Core's and the page's stylesheets cut to the classes the first paint uses and the names in the page's script, each name also as the class Core's naming module (`@astryxdesign/core/naming`) builds from it, so a theme's rules for every Core part the script can draw stay in the file; a Core without the naming module keeps the cut to the first paint and the script's names.
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
@@ -1158,6 +1159,42 @@ URL another page serves.
 Rejected: naming a folder that holds `page.tsx` (an import of the folder does
 not resolve without an index file); writing an index file beside each scaffold
 (a second file that the template does not own).
+
+### DEC-18 — A render fetches the remote images a page names
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+A rendered page is one file that shows the page in any viewer, and a viewer
+that blocks the network cannot load an image the page names by its web
+address. So `astryx experimental export` fetches each image the page names by
+an `https` address, once, while the page renders, and the file carries it.
+The page names an image where its markup shows one, in an `<img>`'s or an
+`<input>`'s `src`, an `<img>`'s or a `<source>`'s `srcset` or a `<video>`'s
+`poster`, and in a CSS `url()`. An `https` address in the page's own code
+counts where the page puts it in one of those attributes, directly or
+through a variable that the same file reads there; by an image extension at
+the end of its path; or by a name alone: a component's or an object's `src`,
+`srcSet` or `poster`, or a name with an image word. A link's address, an
+address whose path names a type that is never an image, and an address
+written only where an element takes it for something else (an `<iframe>`'s
+or a `<video>`'s `src`) never count, and the file puts carried data only
+where an element shows an image or in a CSS `url()`.
+These are the only requests a render makes for the page itself. A fetch sends
+no cookies or credentials and takes only an image, by its content type and
+its bytes, up to the size a render carries of one file. Each image has a time
+limit for its first answer and one for its last byte, and all the images of
+one render have one more; when the network answers none of the first images
+a render asks for, it asks for no more. A failure leaves the address as the
+page wrote it, with the warning a remote image gets. An address that counts
+only by a name can be an API's or a player's: when its answer is another
+type, the result lists it, and the fetch adds no warning. The result names
+every address
+fetched and every one that was not, with why. The embedded source keeps the
+addresses, so `--reverse` gives back the page as written.
+
+Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
+broken), and carrying a fetched image in the embedded source (the way back
+would no longer be the page as written).
 
 ## Verification
 
