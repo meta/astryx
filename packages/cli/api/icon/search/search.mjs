@@ -14,6 +14,7 @@ import {
   astryxIconDefinitions,
   discoverListsIconSet,
   definitionRelatives,
+  iconExportName,
   iconLookExport,
   iconSetKey,
   importLine,
@@ -80,12 +81,12 @@ export async function iconSearch(query, {cwd, set, limit}) {
 
 /**
  * Matches that name their meaning import: the match's export imported under
- * the name of a definition that its set's `map` names it for, in PascalCase
- * with `Icon` (`import {TrashIcon as DeleteIcon} from '…'`). App code that
- * uses this name keeps it when another set draws the meaning. When the set
- * maps the icon for several definitions, the one that the query ranks first
- * gives the name, else a built-in one, else the first by name. A match that
- * no definition names keeps its fields.
+ * the name of a definition that its set's `map` names it for, named as an
+ * icon set names its exports (`import {TrashIcon as DeleteIcon} from '…'`).
+ * App code that uses this name keeps it when another set draws the meaning.
+ * When the set maps the icon for several definitions, the one that the query
+ * ranks first gives the name, else a built-in one, else the first by name. A
+ * match that no definition names keeps its fields.
  * @param {import('../icon.type.mjs').IconMatchEntry[]} matches
  * @param {string} query
  * @param {Parameters<typeof rankIcons>[0]} sets the searched sets, whose own
@@ -117,10 +118,13 @@ function withMeaningImports(matches, query, sets) {
     const [meaning] = [...match.definitions].sort(
       (a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0),
     );
-    const name = `${meaning[0].toUpperCase()}${meaning.slice(1)}Icon`;
     return {
       ...match,
-      meaningImport: importLine(match.export, match.module, name),
+      meaningImport: importLine(
+        match.export,
+        match.module,
+        iconExportName(meaning),
+      ),
     };
   });
 }

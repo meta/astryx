@@ -308,14 +308,15 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `module`, `export`, and `import`, or, when its icon lacks the look, keeps
   its own and names both looks as `look`. A match whose set's `map` names it
   for a definition also has `meaningImport`: its export, in the look it
-  draws, imported as the definition's name in PascalCase followed by `Icon`
-  (`import {TrashIcon as DeleteIcon} from '…'`; no alias when the export has
-  that name), so app code names the meaning and keeps that name when another
-  set draws it. Of several definitions, the one the query ranks first names
-  it, then a built-in one, then the first by name. With no set installed, the
-  answer says so (`reason`), names the Astryx definitions that match
-  (`definitions`), built-in ones first, each with its `group` and
-  `relatives` as a match has them, and says how to get a set (`next`).
+  draws, imported as the definition's name in PascalCase ending in `Icon`,
+  as a set names its exports (`import {TrashIcon as DeleteIcon} from '…'`;
+  no alias when the export has that name), so app code names the meaning
+  and keeps that name when another set draws it. Of several definitions,
+  the one the query ranks first names it, then a built-in one, then the
+  first by name. With no set installed, the answer says so (`reason`),
+  names the Astryx definitions that match (`definitions`), built-in ones
+  first, each with its `group` and `relatives` as a match has them, and
+  says how to get a set (`next`).
   `astryx search` with no `--type` answers an icon ask the same way: where
   icon features are on and one word of the query as typed is `icon`, `icons`, a
   set's name, or an icon export name (`SearchIcon`), and is not a component

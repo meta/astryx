@@ -883,11 +883,15 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     cwd = writeIconSetProject(path.join(tmp, 'own'), {
       packages: [
         {
-          data: {...data, map: {...data.map, farewell: 'x'}},
+          data: {
+            ...data,
+            map: {...data.map, farewell: 'x', homeIcon: 'home'},
+          },
           definitions: {
             farewell: definitionSource('farewell', {
               words: ['farewell', 'goodbye'],
             }),
+            homeIcon: definitionSource('homeIcon', {words: ['dwelling']}),
           },
         },
       ],
@@ -905,6 +909,12 @@ describe('a match names the import that calls it by its meaning (FR6)', () => {
     expect((await search('close')).matches[0]).toMatchObject({
       id: 'x',
       meaningImport: "import {XIcon as CloseIcon} from '@acme/glyphs';",
+    });
+    // A name that already ends in `Icon` takes no second one, as export
+    // names do, so it needs no alias here.
+    expect((await search('dwelling')).matches[0]).toMatchObject({
+      id: 'home',
+      meaningImport: "import {HomeIcon} from '@acme/glyphs';",
     });
   });
 
