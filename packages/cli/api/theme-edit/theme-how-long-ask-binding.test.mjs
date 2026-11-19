@@ -8,14 +8,16 @@
  * reach, with no theme word or dial, is named, never written theme-wide or
  * on a part said further back; a mode pair stays on one part. The table
  * holds the rows each rule is read from; the long asks that once wrote on
- * the wrong part are run in the files beside this one, four quarters of
- * one table (long-ask-binding-rows), so each file stays fast.
+ * the wrong part are run after it, four quarters of one table
+ * (long-ask-binding-rows), on the same theme: no answer writes theme-wide,
+ * or on a part, beyond the ones listed for it.
  *
  * @position api/theme-edit — tests
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {linesBeyond} from '../../test-utils/long-ask-binding-rows.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -172,4 +174,44 @@ describe('long asks bind each clause to its own part', () => {
     },
     300_000,
   );
+});
+
+describe('long asks bind each clause to its own part', () => {
+  it('quarter 1: no answer writes beyond its own parts and theme words', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    expect(await linesBeyond(answer, 0)).toEqual([]);
+  }, 300_000);
+});
+
+describe('long asks bind each clause to its own part', () => {
+  it('quarter 2: no answer writes beyond its own parts and theme words', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    expect(await linesBeyond(answer, 1)).toEqual([]);
+  }, 300_000);
+});
+
+describe('long asks bind each clause to its own part', () => {
+  it('quarter 3: no answer writes beyond its own parts and theme words', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    expect(await linesBeyond(answer, 2)).toEqual([]);
+  }, 300_000);
+});
+
+describe('long asks bind each clause to its own part', () => {
+  it('quarter 4: no answer writes beyond its own parts and theme words', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    expect(await linesBeyond(answer, 3)).toEqual([]);
+  }, 300_000);
 });
