@@ -27229,16 +27229,23 @@ export function draftAnswer(ctx, env, question) {
   // what was never asked, so it is said, with the parts that show an
   // image.
   {
-    const photo = /\b(photos?|images?|pictures?|thumbnails?|pics)\b/.exec(
-      q,
-    )?.[1];
+    // ("a photo gallery app: square corners": a photo word in the name of
+    // the product, or in the lead before a colon, says what the app is,
+    // never a photo to style.)
+    const photo =
+      /\b(photos?|images?|pictures?|thumbnails?|pics)\b(?![\s-]+(?:galler(?:y|ies)|apps?|sites?|sharing|editors?|librar(?:y|ies)|portfolios?|studios?|booths?|platforms?|services?|books?|stocks?|feeds?|managers?|uploads?|uploaders?)\b)/.exec(
+        q.replace(/^[^:\n]{0,80}:\s/, ' '),
+      )?.[1];
     if (photo && !partsSeen.length) {
       const holders = [...ctx.project.target.keys()].filter(k =>
         /avatar|image|thumbnail|media/.test(k),
       );
       // (Only the photo's own clause is taken back: "rounded photos and a
       // blue accent" keeps the accent.)
-      const said = new RegExp(`\\b${photo}\\b`, 'i');
+      const said = new RegExp(
+        `\\b${photo}\\b(?![\\s-]+(?:galler(?:y|ies)|apps?|sites?)\\b)`,
+        'i',
+      );
       const own = result.filter(d => {
         const c = /** @type {any} */ (draftClause.get(d));
         return !c || said.test(String(c.text ?? ''));

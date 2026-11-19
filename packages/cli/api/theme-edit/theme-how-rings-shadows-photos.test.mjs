@@ -105,6 +105,17 @@ describe('rings, shadows, photos', () => {
     expect(texts(rs)).toMatch(/no part is called "photos"/);
   }, 240_000);
 
+  it('a photo word naming the product never drops the ask', async () => {
+    for (const ask of [
+      'a photo gallery app: square corners',
+      'Theme for our photo sharing site: square corners',
+    ]) {
+      const rs = await how('q0', ask);
+      expect(writes(rs), ask).toContain('set q0 corners square');
+      expect(texts(rs), ask).not.toMatch(/no part is called/);
+    }
+  }, 240_000);
+
   it('a photo said beside other asks takes back only its own clause', async () => {
     const rs = await how('q0', 'rounded photos and a blue accent');
     expect(writes(rs)).toContain(`set q0 accent '#2563eb'`);
