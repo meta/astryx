@@ -37,7 +37,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import {ArrowUpIcon, ArrowDownIcon} from '@heroicons/react/24/outline';
+import {ArrowUpIcon, ArrowDownIcon} from '@astryxdesign/template-icons';
 
 // ============= DATA =============
 

@@ -219,6 +219,69 @@ export function rewriteKeptImport(source, comments, node, keep) {
  */
 export function fillTemplatePlaceholders(source) {
   if (!source.includes(PLACEHOLDER_MODULE)) return {source, meanings: {}};
+  return fillPlainImports(source) ?? fillParsed(source);
+}
+
+/** A whole named import of the placeholder package on its own lines. */
+const PLAIN_IMPORT =
+  /^import \{([\w\s,]*)\} from '(@astryxdesign\/template-icons(?:\/[\w/]+)?)';$/gmu;
+
+/**
+ * The fill without a parse, for the plain imports bundled templates are
+ * written with: every reference to the package is a named import of names
+ * the table draws, with no comment or type inside. Null when any is not, so
+ * the parsed fill handles it; a copy then needs no parser on a warm run.
+ * @param {string} source
+ * @returns {{source: string, meanings: Record<string, string>} | null}
+ */
+function fillPlainImports(source) {
+  const table = placeholderTable();
+  /** @type {Record<string, string>} */
+  const meanings = {};
+  let references = 0;
+  for (let at = source.indexOf(PLACEHOLDER_MODULE); at !== -1; ) {
+    references += 1;
+    at = source.indexOf(PLACEHOLDER_MODULE, at + 1);
+  }
+  let plain = 0;
+  let failed = false;
+  const out = source.replace(PLAIN_IMPORT, (whole, list, module) => {
+    plain += 1;
+    const look = placeholderLook(module, table);
+    if (look == null) {
+      failed = true;
+      return whole;
+    }
+    /** @type {string[]} */
+    const filled = [];
+    let drawnModule = null;
+    for (const part of list
+      .split(',')
+      .map((/** @type {string} */ each) => each.trim())
+      .filter(Boolean)) {
+      const [name, local = name] = part.split(/\s+as\s+/u);
+      const meaning = placeholderMeaning(name);
+      const drawn = meaning ? placeholderSource(meaning, look, table) : null;
+      if (!drawn || (drawnModule && drawn.module !== drawnModule)) {
+        failed = true;
+        return whole;
+      }
+      drawnModule = drawn.module;
+      filled.push(drawn.export === local ? local : `${drawn.export} as ${local}`);
+      meanings[local] = /** @type {string} */ (meaning);
+    }
+    return drawnModule ? printImport(drawnModule, filled) : whole;
+  });
+  return failed || plain !== references ? null : {source: out, meanings};
+}
+
+/**
+ * The fill read from a parse of the source; the plain-import fill must give
+ * the same result.
+ * @param {string} source
+ * @returns {{source: string, meanings: Record<string, string>}}
+ */
+export function fillParsed(source) {
   /** @type {any} */
   let ast;
   try {
@@ -280,4 +343,121 @@ export function fillTemplatePlaceholders(source) {
     out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
   }
   return {source: out, meanings};
+}
+
+/**
+ * The meanings a source's placeholder imports name, in import order.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function placeholderMeaningsIn(source) {
+  if (!source.includes(PLACEHOLDER_MODULE)) return [];
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseTemplateSource(source);
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const meanings = [];
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    if (placeholderLook(node.source.value) == null) continue;
+    for (const specifier of node.specifiers) {
+      if (specifier.type !== 'ImportSpecifier') continue;
+      const meaning = placeholderMeaning(
+        specifier.imported.name ?? specifier.imported.value,
+      );
+      if (meaning && !meanings.includes(meaning)) meanings.push(meaning);
+    }
+  }
+  return meanings;
+}
+
+/**
+ * The problems in templates' placeholder imports, each with its fix: an
+ * import from a path that is not a look, a name that is not `<Meaning>Icon`
+ * for an icon definition, a meaning the table does not draw in that look, and
+ * an `icons` declaration left in the descriptor of a template that imports
+ * placeholders.
+ * @param {Array<{id: string, source: string, declared?: Record<string, string>}>} templates
+ * @param {{has: (name: string) => boolean}} definitions
+ * @returns {string[]}
+ */
+export function templatePlaceholderProblems(templates, definitions) {
+  const table = placeholderTable();
+  /** @type {string[]} */
+  const problems = [];
+  for (const {id, source, declared} of templates) {
+    if (!source.includes(PLACEHOLDER_MODULE)) continue;
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parseTemplateSource(source);
+    } catch {
+      continue;
+    }
+    let uses = false;
+    for (const node of ast.program.body) {
+      if (node.type !== 'ImportDeclaration') continue;
+      const module = node.source.value;
+      if (
+        module !== PLACEHOLDER_MODULE &&
+        !module.startsWith(`${PLACEHOLDER_MODULE}/`)
+      ) {
+        continue;
+      }
+      uses = true;
+      if (node.importKind === 'type' || node.specifiers.length === 0) {
+        problems.push(
+          `${id}: a ${node.importKind === 'type' ? 'type-only' : 'side-effect'} import of ${module} is never filled, so its copy would import a private package. Fix: import each icon by name, \`import {<Meaning>Icon} from '${module}'\`.`,
+        );
+        continue;
+      }
+      const look = placeholderLook(module, table);
+      if (look == null) {
+        problems.push(
+          `${id}: ${module} is not a variant. Fix: import from ${PLACEHOLDER_MODULE} (24 outline) or its /24/solid, /20/solid, /16/solid or /lucide path.`,
+        );
+        continue;
+      }
+      for (const specifier of node.specifiers) {
+        const name =
+          specifier.type === 'ImportSpecifier'
+            ? (specifier.imported.name ?? specifier.imported.value)
+            : specifier.local.name;
+        if (
+          specifier.type === 'ImportSpecifier' &&
+          specifier.importKind === 'type'
+        ) {
+          problems.push(
+            `${id}: ${name} is imported as a type, which a copy never fills, so its copy would import a private package. Fix: import it as a value.`,
+          );
+          continue;
+        }
+        const meaning =
+          specifier.type === 'ImportSpecifier'
+            ? placeholderMeaning(name)
+            : null;
+        if (!meaning || !definitions.has(meaning)) {
+          problems.push(
+            `${id}: ${name} names no icon meaning. Fix: import <Meaning>Icon for an icon definition (astryx experimental icon <words> finds it), or add the definition in the same change.`,
+          );
+          continue;
+        }
+        if (!placeholderSource(meaning, look, table)) {
+          problems.push(
+            `${id}: ${name} has no ${look} icon in the template icon table. Fix: add one for "${meaning}" to packages/cli/assets/icons/template-icons.json and regenerate the package, or import it from another variant.`,
+          );
+        }
+      }
+    }
+    if (uses && declared && Object.keys(declared).length > 0) {
+      problems.push(
+        `${id}: its descriptor still declares icons. Fix: remove \`icons\`; each placeholder import names its meaning.`,
+      );
+    }
+  }
+  return problems;
 }

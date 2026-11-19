@@ -94,18 +94,18 @@ import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
-  BookOpenIcon,
-  BuildingLibraryIcon,
+  BookIcon,
+  BankIcon,
   CalendarIcon,
-  CheckBadgeIcon,
-  CurrencyDollarIcon,
-  ExclamationTriangleIcon,
-  GlobeAltIcon,
+  ReviewIcon,
+  CurrencyIcon,
+  WarningIcon,
+  GlobeIcon,
   LanguageIcon,
-  RectangleStackIcon,
+  CollectionIcon,
   TagIcon,
   UserIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -638,11 +638,7 @@ export default function FormWizardVerticalPage() {
           // tints, so keeping the number there would leave colour as the only
           // thing marking the problem.
           indicator={
-            hasError ? (
-              <Icon icon={ExclamationTriangleIcon} size="sm" />
-            ) : (
-              'number'
-            )
+            hasError ? <Icon icon={WarningIcon} size="sm" /> : 'number'
           }
         />
       );
@@ -1266,7 +1262,7 @@ export default function FormWizardVerticalPage() {
                   <Banner
                     status="info"
                     title="Review takes up to 5 business days"
-                    icon={<Icon icon={CheckBadgeIcon} size="sm" />}
+                    icon={<Icon icon={ReviewIcon} size="sm" />}
                     description="You can keep editing metadata while the book is in review. Replacing the audio restarts it."
                   />
 
@@ -1314,7 +1310,7 @@ export default function FormWizardVerticalPage() {
                   <MetadataList columns="multi">
                     <MetadataListItem
                       label="Title"
-                      icon={<Icon icon={BookOpenIcon} size="sm" />}>
+                      icon={<Icon icon={BookIcon} size="sm" />}>
                       {title.trim() || '—'}
                     </MetadataListItem>
                     <MetadataListItem
@@ -1324,7 +1320,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Series"
-                      icon={<Icon icon={RectangleStackIcon} size="sm" />}>
+                      icon={<Icon icon={CollectionIcon} size="sm" />}>
                       {series.trim()
                         ? `${series.trim()}, book ${seriesNumber}`
                         : 'Standalone'}
@@ -1346,7 +1342,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Availability"
-                      icon={<Icon icon={GlobeAltIcon} size="sm" />}>
+                      icon={<Icon icon={GlobeIcon} size="sm" />}>
                       {scope === 'worldwide'
                         ? 'Worldwide'
                         : scope === 'exclusive'
@@ -1360,7 +1356,7 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="List price"
-                      icon={<Icon icon={CurrencyDollarIcon} size="sm" />}>
+                      icon={<Icon icon={CurrencyIcon} size="sm" />}>
                       {usd(price)}{' '}
                       {CURRENCIES.find(c => c.value === currency)
                         ?.label.split(' — ')[0]
@@ -1368,12 +1364,12 @@ export default function FormWizardVerticalPage() {
                     </MetadataListItem>
                     <MetadataListItem
                       label="Advisory"
-                      icon={<Icon icon={ExclamationTriangleIcon} size="sm" />}>
+                      icon={<Icon icon={WarningIcon} size="sm" />}>
                       {isExplicit ? 'Explicit content' : 'None'}
                     </MetadataListItem>
                     <MetadataListItem
                       label="Library lending"
-                      icon={<Icon icon={BuildingLibraryIcon} size="sm" />}>
+                      icon={<Icon icon={BankIcon} size="sm" />}>
                       {allowsLending ? 'Allowed' : 'Not allowed'}
                     </MetadataListItem>
                   </MetadataList>
