@@ -1218,6 +1218,89 @@ test('a push whose commit blocks the main thread starts from its first frame', a
   expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
 });
 
+test('a push from rest after a heavy commit never skips into its curve', async ({
+  page,
+}) => {
+  // The first frame that moves shows no more of the spring than the time
+  // since the frame before it (or since the block ended) allows, plus one
+  // frame, so the push never skips into its curve. A mouse click is an input
+  // task in every engine, as a tap is, so the test needs no touch path.
+  await openStory(page, storybook(), 'lab-navigationstack--settings');
+  const stackBox = await page.getByTestId('navigation-stack').boundingBox();
+  if (stackBox == null) {
+    throw new Error('no stack');
+  }
+  const width = stackBox.width;
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector('[data-navigation-screen="screen-General"]') ==
+        null
+      ) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + 300;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  });
+  const row = await rowCenter(page, 'General');
+  await page.mouse.click(row.x, row.y);
+  // The pushed card's offset and the frame time, in the first six frames,
+  // and when the block ended.
+  const {frames, blockEnd} = await page.evaluate(
+    () =>
+      new Promise<{frames: {offset: number; t: number}[]; blockEnd: number}>(
+        resolve => {
+          const read: {offset: number; t: number}[] = [];
+          const step = (t: number) => {
+            const pushed = document.querySelector(
+              '[data-navigation-screen="screen-General"]',
+            );
+            const value =
+              pushed == null ? 'none' : getComputedStyle(pushed).translate;
+            read.push({
+              offset: value === 'none' ? 0 : Math.abs(parseFloat(value)),
+              t,
+            });
+            if (read.length < 6) {
+              requestAnimationFrame(step);
+            } else {
+              resolve({
+                frames: read,
+                blockEnd:
+                  (window as Window & {blockEnd?: number}).blockEnd ?? 0,
+              });
+            }
+          };
+          requestAnimationFrame(step);
+        },
+      ),
+  );
+  const travelled = frames.map(frame => 1 - frame.offset / width);
+  const firstMoving = travelled.findIndex(share => share > 0.005);
+  expect(firstMoving).toBeGreaterThanOrEqual(0);
+  // Moving by the second frame after the task.
+  expect(firstMoving).toBeLessThanOrEqual(1);
+  // The spring's share after `ms` from rest (OMEGA, starting at
+  // PUSH_VELOCITY), and the most the first moving frame may show: the time
+  // since the frame before it (or since the block ended), plus one frame.
+  const shareAt = (ms: number) => {
+    const s = ms / 1000;
+    return 1 - (1 + (OMEGA - PUSH_VELOCITY) * s) * Math.exp(-OMEGA * s);
+  };
+  const sincePrevious =
+    frames[firstMoving].t -
+    (firstMoving > 0 ? frames[firstMoving - 1].t : blockEnd);
+  expect(travelled[firstMoving]).toBeLessThanOrEqual(
+    shareAt(sincePrevious + 17) + 0.02,
+  );
+});
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
