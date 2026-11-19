@@ -296,7 +296,8 @@ one removal merged ahead of the decision to allow it.
   contract includes fields inside discriminated `data` entries as well as the
   outer envelope. Every field is present in the canonical response type, contract
   tests, text projection where the command provides one, and complete
-  consumer-facing schema documentation. Adding an optional field is nonbreaking
+  consumer-facing schema documentation. A field shown in one section of the
+  text projection is not repeated in another. Adding an optional field is nonbreaking
   when old consumers continue unchanged, but it remains a public schema update and
   does not bypass current-authority review or documentation.
 - **FR14 — No supported CLI behavior is hidden.** Any Astryx CLI behavior
