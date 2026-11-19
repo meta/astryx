@@ -48,27 +48,26 @@ afterAll(() => {
 });
 
 describe('a border width set for the whole theme', () => {
-  it('gives one runnable line per part it does not reach, the framed and fixed-line parts included', async () => {
+  it('frames the surfaces in the build, and gives one runnable line per part it leaves out', async () => {
     await themeEditNew('w1', {cwd});
     const r = await themeEditSet('w1', '--border-width', '4px', {cwd});
-    const [surfaces, dividers] = r.data.leftOut;
-    for (const part of ['popover', 'tooltip', 'banner', 'dialog'])
-      expect(surfaces.run, part).toContainEqual(
-        expect.stringMatching(
-          new RegExp(
-            ` set w1 border '4px solid var\\(--color-border\\)' --on ${part}$`,
-          ),
-        ),
+    // (The surfaces that draw no border of their own are framed, named.)
+    const framed = r.data.notes.join(' ');
+    for (const part of ['popover', 'banner', 'dialog'])
+      expect(framed, part).toMatch(
+        new RegExp(`also frames the surfaces[^\\n]*\\b${part}\\b`),
       );
-    // A part whose variants differ is framed in the variants that draw a
-    // box (the button's ghost keeps none), as show's missed list frames it.
-    expect(surfaces.run).toContainEqual(
+    const [buttons, dividers] = r.data.leftOut;
+    // (A small box that only draws its own text keeps its own, offered.)
+    expect(buttons.run).toContainEqual(expect.stringMatching(/ --on tooltip$/));
+    // A button's frame is the buttons dial's: framed in the variants that
+    // draw a box (the button's ghost keeps none), as show's missed list does.
+    expect(buttons.run).toContainEqual(
       expect.stringMatching(/ --on button --when variant:primary$/),
     );
-    expect(surfaces.run).not.toContainEqual(
+    expect(buttons.run).not.toContainEqual(
       expect.stringMatching(/ --on button$/),
     );
-    expect(surfaces.run.length).toBeGreaterThan(5);
     const named = dividers.run.map((/** @type {string} */ l) =>
       l.replace(/.* --on /, ''),
     );
@@ -95,9 +94,9 @@ describe('a border width set for the whole theme', () => {
     ).stdout;
     const lines = out.split('\n').filter(Boolean);
     expect(lines[0]).toMatch(/^\[ok\] w2: --border-width = 3px/);
-    expect(lines[1]).toMatch(/^- --border-width does not reach the surfaces/);
+    expect(lines[1]).toMatch(/^- --border-width does not frame the buttons/);
     expect(lines[2]).toMatch(
-      / set w2 border '3px solid var\(--color-border\)' --on /,
+      / set w2 border '3px solid var\(--color-border\)' --on button /,
     );
   }, 240_000);
 });
