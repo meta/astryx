@@ -61,7 +61,10 @@
  *   renderer, and an import the template does not use as an icon are listed
  *   in `templateIcons` as not checked instead);
  *   `cli_peer_version`, the running CLI outside the package's
- *   `@astryxdesign/cli` peer range; and
+ *   `@astryxdesign/cli` peer range;
+ *   `core_peer_version`, outside a project, only the `@astryxdesign/core`
+ *   peer range of a package installed for the computer excluding the running
+ *   CLI's release (the other commands skip that package); and
  *   the package layout findings added after the last minor release, each with
  *   its fix in the message: two docs for one component
  *   (`duplicate_component_doc`), a root reached through a symlink
