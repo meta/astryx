@@ -70,6 +70,21 @@ const answer = async q => {
  */
 const ROWS = [
   [
+    'a px leading is that many px at the size the ask types',
+    {
+      q: 'Helvetica 13px, 18px leading',
+      has: ['font helvetica', 'text-size 13', '--text-body-leading 1.385'],
+      says: /^(?![\s\S]*not used)/,
+    },
+  ],
+  [
+    'a typed body size and a ratio leading are each exact',
+    {
+      q: '14px body, 1.5 leading',
+      has: ['text-size 14', '--text-body-leading 1.5'],
+    },
+  ],
+  [
     'a label that starts its clause sets its dial at the value said',
     {
       q: 'Density: roomy. Surface: flat.',

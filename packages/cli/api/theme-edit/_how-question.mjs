@@ -21778,10 +21778,34 @@ export function draftAnswer(ctx, env, question) {
         const leadFactor =
           exactFactor(c.text) ??
           (pctLeading ? Number(pctLeading[1]) / 100 : null);
+        // ("Helvetica 13px, 18px leading": a leading typed in px is that
+        // many px at the text size the ask types, else the size now, as the
+        // ratio the token takes.)
+        const pxLeading =
+          /(\d+(?:\.\d+)?)\s*px\s+(?:leading|line[- ]?height)\b|\b(?:leading|line[- ]?height)\s*(?:of\s+|:\s*)?(\d+(?:\.\d+)?)\s*px\b/i.exec(
+            c.text,
+          );
+        const typedSize = [
+          ...String(question).matchAll(
+            /(\d+(?:\.\d+)?)\s*px\b(?!\s+(?:leading|line))/gi,
+          ),
+        ]
+          .filter(
+            m =>
+              !/(?:leading|line[- ]?height)\s*(?:of\s+|:\s*)?$/i.test(
+                String(question).slice(0, m.index),
+              ),
+          )
+          .map(m => Number(m[1]))[0];
+        const sizeNow = lengthPx(String(current('--font-size-base') ?? ''));
+        const leadPx = pxLeading ? Number(pxLeading[1] ?? pxLeading[2]) : null;
+        const leadOf = typedSize ?? sizeNow ?? null;
         const n =
-          leadFactor != null
-            ? null
-            : (/\b(normal)\b/.exec(c.text)?.[1] ??
+          leadPx != null && leadOf
+            ? String(Number((leadPx / leadOf).toFixed(3)))
+            : leadFactor != null
+              ? null
+              : (/\b(normal)\b/.exec(c.text)?.[1] ??
               /(?:^|\s)(\d(?:\.\d+)?)(?![\d.]|\s*(px|rem|em|%|x\b|times\b))/.exec(
                 c.text,
               )?.[1]);
@@ -31676,7 +31700,14 @@ export function draftAnswer(ctx, env, question) {
         ...(words.toLowerCase().match(/#[0-9a-f]{3,8}\b/g) ?? []),
         ...lengthsIn(words.toLowerCase()),
       ];
-      if (typed.length && typed.some(v => !usedValue(v))) named.push(words);
+      // ("18px leading": written as the line height's ratio.)
+      const leadingWritten =
+        /\b(?:leading|line[- ]?height)\b/i.test(words) &&
+        steps.some(st =>
+          /^(?:--text-[a-z0-9-]*leading|line-height)$/.test(st.thing),
+        );
+      if (typed.length && !leadingWritten && typed.some(v => !usedValue(v)))
+        named.push(words);
     }
     const taken = new Set([
       ...result.map(d => draftClause.get(d)).filter(x => x != null),
