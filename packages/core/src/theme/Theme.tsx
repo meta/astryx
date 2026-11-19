@@ -49,7 +49,13 @@ import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {SystemSchemeContext, ThemeContext, useRootScheme} from './useTheme';
+import {
+  SystemSchemeContext,
+  ThemeContext,
+  ThemeSourceContext,
+  createThemeSource,
+  useRootScheme,
+} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -414,23 +420,31 @@ export function Theme({
 
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
+  const [source] = useState(() => createThemeSource(ctxValue));
+  // Syncs this Theme's value to subscribers in other React roots (the
+  // fallback toast viewport).
+  useIsomorphicLayoutEffect(() => {
+    source.set(ctxValue);
+  }, [source, ctxValue]);
 
   return (
     <SystemSchemeContext value={systemScheme}>
       <ThemeContext value={ctxValue}>
-        <ThemeNestingContext value={true}>
-          <div
-            {...stylex.props(
-              wrapperStyles.base,
-              colorSchemeStyle,
-              reducesMotion && wrapperStyles.reducedMotion,
-            )}
-            data-astryx-theme={theme.name}
-            {...reducedMotionMarkProps(reducesMotion)}
-            data-theme={mode === 'system' ? undefined : mode}>
-            {children}
-          </div>
-        </ThemeNestingContext>
+        <ThemeSourceContext value={source}>
+          <ThemeNestingContext value={true}>
+            <div
+              {...stylex.props(
+                wrapperStyles.base,
+                colorSchemeStyle,
+                reducesMotion && wrapperStyles.reducedMotion,
+              )}
+              data-astryx-theme={theme.name}
+              {...reducedMotionMarkProps(reducesMotion)}
+              data-theme={mode === 'system' ? undefined : mode}>
+              {children}
+            </div>
+          </ThemeNestingContext>
+        </ThemeSourceContext>
       </ThemeContext>
     </SystemSchemeContext>
   );

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {ReactNode} from 'react';
-import type {ThemeContextValue} from '../theme/useTheme';
+import type {ThemeSource} from '../theme/useTheme';
 
 /** Toast status type. Controls color scheme. */
 export type ToastType = 'info' | 'error';
@@ -97,15 +97,6 @@ export type ToastContentRenderFn = (
 /** Function returned by useToast to show toasts. */
 export type ShowToastFn = (options: ToastOptions) => ToastDismissFn;
 
-/**
- * The current Theme of the component that showed a toast.
- * @internal
- */
-export interface CallerThemeSource {
-  get: () => ThemeContextValue;
-  subscribe: (onChange: () => void) => () => void;
-}
-
 /** Internal toast state with ID and metadata. */
 export interface ToastEntry {
   id: string;
@@ -118,10 +109,9 @@ export interface ToastEntry {
   rowKey?: string;
   /**
    * The Theme the toast was shown from, when the fallback viewport draws it.
-   * That viewport sits outside the app's tree, so the row draws the toast
-   * under this Theme, and follows a change to its theme or mode while the
-   * toast shows.
+   * The fallback viewport sits outside the app's tree. The row draws the
+   * toast under this Theme and follows its changes.
    * @internal
    */
-  callerTheme?: CallerThemeSource;
+  callerTheme?: ThemeSource;
 }

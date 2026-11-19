@@ -2,22 +2,20 @@
 
 'use client';
 
-import {useCallback, useState, use} from 'react';
+import {useCallback, use} from 'react';
 import {createRoot} from 'react-dom/client';
 import {dataAttr} from '../naming';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
 import {createToastQueue, ToastQueueConnector} from '../Layer/toastHost';
 import {ThemeNestingContext} from '../theme/Theme';
-import {ThemeContext, type ThemeContextValue} from '../theme/useTheme';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {ThemeSourceContext} from '../theme/useTheme';
 import {warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
   ToastDismissFn,
   ShowToastFn,
   ToastEntry,
-  CallerThemeSource,
 } from './types';
 import {sharedForReact} from '../utils/sharedForReact';
 import {sharedSequence} from '../utils/sharedRealm';
@@ -140,52 +138,11 @@ function generateToastId(): string {
  * }
  * ```
  */
-/**
- * A source that holds the caller's current Theme, for toasts it shows into
- * the fallback viewport. Null with no Theme around the caller.
- */
-function useCallerThemeSource(
-  theme: ThemeContextValue | null,
-): CallerThemeSource | null {
-  const [source] = useState(() =>
-    theme == null ? null : createCallerThemeSource(theme),
-  );
-  useIsomorphicLayoutEffect(() => {
-    if (theme != null) {
-      source?.set(theme);
-    }
-  }, [source, theme]);
-  return source;
-}
-
-function createCallerThemeSource(
-  initial: ThemeContextValue,
-): CallerThemeSource & {set: (next: ThemeContextValue) => void} {
-  let current = initial;
-  const listeners = new Set<() => void>();
-  return {
-    get: () => current,
-    subscribe: onChange => {
-      listeners.add(onChange);
-      return () => listeners.delete(onChange);
-    },
-    set: next => {
-      if (next === current) {
-        return;
-      }
-      current = next;
-      for (const onChange of listeners) {
-        onChange();
-      }
-    },
-  };
-}
-
 export function useToast(): ShowToastFn {
   const contextFromProvider = use(ToastContext);
   // The fallback viewport renders outside this tree. A host page can rewrite
   // `<html>`.
-  const callerTheme = useCallerThemeSource(use(ThemeContext));
+  const callerTheme = use(ThemeSourceContext);
 
   const showToast = useCallback(
     (options: ToastOptions): ToastDismissFn => {

@@ -68,6 +68,49 @@ export const ThemeContext = createSharedContext<ThemeContextValue | null>(
 ThemeContext.displayName = 'ThemeContext';
 
 /**
+ * The nearest Theme's current value as a store that outlives a render. A
+ * separate React root (the fallback toast viewport) subscribes to it, so it
+ * follows the Theme while the Theme is mounted.
+ * @internal
+ */
+export interface ThemeSource {
+  get: () => ThemeContextValue;
+  subscribe: (onChange: () => void) => () => void;
+}
+
+/** @internal */
+export const ThemeSourceContext = createSharedContext<ThemeSource | null>(
+  'ThemeSourceContext',
+  1,
+  null,
+);
+ThemeSourceContext.displayName = 'ThemeSourceContext';
+
+/** @internal */
+export function createThemeSource(
+  initial: ThemeContextValue,
+): ThemeSource & {set: (next: ThemeContextValue) => void} {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    subscribe: onChange => {
+      listeners.add(onChange);
+      return () => listeners.delete(onChange);
+    },
+    set: next => {
+      if (next === current) {
+        return;
+      }
+      current = next;
+      for (const onChange of listeners) {
+        onChange();
+      }
+    },
+  };
+}
+
+/**
  * What a `system` mode follows here: the page root's scheme, or the OS
  * preference below a Theme that forces light or dark. Theme provides it.
  * @internal Not exported from the theme barrel.

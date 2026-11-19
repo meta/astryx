@@ -302,6 +302,82 @@ describe('useToast fallback viewport theme mode', () => {
     expect(scopeOf('fallback-first')).toBeNull();
   });
 
+  it('follows its Theme after the component that showed it unmounts', async () => {
+    const kept = defineTheme({name: 'fallback-kept', tokens: {}});
+    const {rerender} = render(
+      <Theme theme={kept} mode="light">
+        <ShowToastButton label="Trigger Kept" />
+      </Theme>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger Kept'));
+    });
+    const scope = () =>
+      document.querySelector(
+        '[data-astryx-toast-fallback] [data-astryx-theme="fallback-kept"]',
+      );
+    await waitFor(() => {
+      expect(scope()).toHaveAttribute('data-theme', 'light');
+    });
+    rerender(
+      <Theme theme={kept} mode="light">
+        {null}
+      </Theme>,
+    );
+    rerender(
+      <Theme theme={kept} mode="dark">
+        {null}
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(scope()).toHaveAttribute('data-theme', 'dark');
+    });
+  });
+
+  it('draws an overwrite from a second Theme under that Theme', async () => {
+    const one = defineTheme({name: 'fallback-one', tokens: {}});
+    const two = defineTheme({name: 'fallback-two', tokens: {}});
+    function Show({label, body}: {label: string; body: string}) {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            toast({body, uniqueID: 'two-themes', isAutoHide: false})
+          }>
+          {label}
+        </button>
+      );
+    }
+    render(
+      <>
+        <Theme theme={one} mode="light">
+          <Show label="From one" body="two-themes first" />
+        </Theme>
+        <Theme theme={two} mode="dark">
+          <Show label="From two" body="two-themes second" />
+        </Theme>
+      </>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('From one'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('two-themes first')).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('From two'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('two-themes second')).toBeInTheDocument();
+    });
+    const scope = screen
+      .getByText('two-themes second')
+      .closest('[data-astryx-theme]');
+    expect(scope).toHaveAttribute('data-astryx-theme', 'fallback-two');
+    expect(scope).toHaveAttribute('data-theme', 'dark');
+  });
+
   it('keeps focus in place when a toast from outside any Theme overwrites one from inside', async () => {
     const themed = defineTheme({name: 'fallback-mixed', tokens: {}});
     function Show({label, body}: {label: string; body: string}) {

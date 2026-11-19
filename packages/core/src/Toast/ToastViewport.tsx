@@ -58,12 +58,7 @@ import {
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
-import type {
-  CallerThemeSource,
-  ToastEntry,
-  ToastPosition,
-  ToastDismissReason,
-} from './types';
+import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {findToastNamesake, registerToastHost} from '../Layer/toastHost';
 import type {LayerInset} from '../Layer/LayerContext';
@@ -73,6 +68,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Toast/ToastViewport.generated';
 import {Theme} from '../theme/Theme';
+import type {ThemeSource} from '../theme/useTheme';
 
 registerEnglishFallback(english);
 
@@ -287,9 +283,9 @@ function CallerTheme({
   source,
   children,
 }: {
-  source: CallerThemeSource | undefined;
+  source: ThemeSource | undefined;
   children: ReactNode;
-}) {
+}): ReactNode {
   const caller = useSyncExternalStore(
     source?.subscribe ?? noCallerTheme,
     () => source?.get() ?? null,
@@ -608,8 +604,13 @@ export function ToastViewport({
         ? {
             ...entry,
             rowKey: overwritten.rowKey ?? overwritten.id,
-            // The card stays mounted, under the Theme it drew in or none.
-            callerTheme: overwritten.callerTheme,
+            // The new toast's Theme when both have one. Between a toast with
+            // a Theme and one without, the card keeps the way it drew, so it
+            // stays mounted and focus stays.
+            callerTheme:
+              entry.callerTheme != null && overwritten.callerTheme != null
+                ? entry.callerTheme
+                : overwritten.callerTheme,
           }
         : entry;
       if (keepsRow) {
