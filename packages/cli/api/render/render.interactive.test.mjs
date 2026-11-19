@@ -732,6 +732,7 @@ export default function Page() {
   const [open, setOpen] = useState(false);
   return <main><button type="button" onClick={() => setOpen(true)}>Show</button>{open && <img src="./c%20d.png" alt="Later" />}</main>;
 }
+import '@astryxdesign/core/astryx.css';
 `,
     );
     await render('escaped-later/page.tsx', {cwd: dir, out: 'escaped-later.html'});
@@ -1212,7 +1213,7 @@ import '@astryxdesign/core/astryx.css';
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB/m);
+    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB( \(most is the script: the page as a live app, with React and the packages it imports\))?$/m);
     for (const key of ['scriptBytes', 'cssBytes', 'markupBytes', 'sourceBytes'])
       expect(page.stdout).toMatch(new RegExp(`^${key}:\\s+[\\d.]+ (?:KB|B)$`, 'm'));
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
@@ -1384,6 +1385,22 @@ import '@astryxdesign/core/astryx.css';
     );
     expect(warning?.message).toBe(
       "The page asks useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 120_000);
+
+  it('warns when text inside a drawing that scales shrinks on a phone', async () => {
+    put(
+      'src/svg-chart.tsx',
+      'export default function Page() {\n  return (\n    <svg viewBox="0 0 960 300" width="100%" role="img" aria-label="Sales">\n      <text x="0" y="20" fontSize="13">January</text>\n    </svg>\n  );\n}\nimport \'@astryxdesign/core/astryx.css\';\n',
+    );
+    const result = /** @type {any} */ (
+      await render('src/svg-chart.tsx', {cwd: dir, out: 'svg-chart.html'})
+    );
+    expect(
+      result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')
+        ?.message,
+    ).toBe(
+      'An SVG drawing scales to fit its box with text inside, so on a 375 px phone that text shows at about 5 px. Put the labels in HTML beside the drawing, or draw the chart with recharts in a ResponsiveContainer, which keeps its text size.',
     );
   }, 120_000);
 

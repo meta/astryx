@@ -540,6 +540,10 @@ function SubtasksSection({
 }) {
   const doneCount = subtasks.filter(task => task.isDone).length;
   const showToast = useToast();
+  // On a phone the due date and assignee move under the title, so the title
+  // gets the row's width. Mobile first, so a page that runs no script gets
+  // the phone layout.
+  const isPhone = useMediaQuery('(max-width: 640px)', true);
 
   return (
     <Section padding={SECTION_PADDING}>
@@ -573,25 +577,32 @@ function SubtasksSection({
           </StackItem>
         </HStack>
         <List>
-          {subtasks.map(task => (
-            <CheckboxListItem
-              key={task.id}
-              label={task.title}
-              isChecked={task.isDone}
-              onCheck={isDone => onSetDone(task.id, isDone)}
-              endContent={
-                <HStack gap={2} vAlign="center">
-                  <Timestamp
-                    value={task.due}
-                    format="date"
-                    type="supporting"
-                    color="secondary"
-                  />
-                  <Avatar name={task.assignee} size="sm" />
-                </HStack>
-              }
-            />
-          ))}
+          {subtasks.map(task => {
+            const dueAndAssignee = (
+              <HStack gap={2} vAlign="center">
+                <Timestamp
+                  value={task.due}
+                  format="date"
+                  type="supporting"
+                  color="secondary"
+                />
+                <Avatar name={task.assignee} size="sm" />
+              </HStack>
+            );
+            return (
+              <CheckboxListItem
+                key={task.id}
+                // A node label wraps; a string label is cut to one line, which
+                // leaves a phone showing a few words of each task.
+                label={<>{task.title}</>}
+                isChecked={task.isDone}
+                onCheck={isDone => onSetDone(task.id, isDone)}
+                align={isPhone ? 'first-line' : undefined}
+                description={isPhone ? dueAndAssignee : undefined}
+                endContent={isPhone ? undefined : dueAndAssignee}
+              />
+            );
+          })}
         </List>
       </VStack>
     </Section>

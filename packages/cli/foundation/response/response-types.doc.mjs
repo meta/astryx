@@ -101,6 +101,17 @@ export const doc = {
         "One node of the docs tree, read by its route: its id, kind, package, title, summary, and breadcrumb, plus a namespace's slots with their children (one level down, each naming its package, and a guide an integration replaced its replaces and replacedPackage) or a typed doc's content, and links ({up, previous, next, related}: the commands that open its parent, its neighbors, and the docs it names).",
     },
 
+    {
+      value: 'docs.skills',
+      description:
+        'Each skill here: {name, description, package}[].',
+    },
+    {
+      value: 'docs.skill',
+      description:
+        'One skill: {name, description, text}.',
+    },
+
     // blog (read from the published RSS feed)
     {
       value: 'blog.list',
