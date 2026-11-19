@@ -443,12 +443,19 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   that imports a component and exports it again under the same name passes it
   on, as a re-export does, and so does a barrel that a module may load by such
   a path; and a component that the module refers to other than by rendering
-  it, in any function or block, is not judged. A hash router named only in a
-  comment is not hash routing. When the app's own code listens for a press
-  through the DOM (`addEventListener` for a click, or a pointer, mouse or
-  touch press, or an `onclick`-style property), doctor judges no button and
-  reports `info`, since a script may act on any button that way. The warning
-  names each button's file, line and label, and never fails `doctor`.
+  it, in any function or block, is not judged. A React Router `Route` renders
+  its `element` where its `Routes` sit: a router (`BrowserRouter`,
+  `HashRouter`, `MemoryRouter`, `Router` or `StaticRouter`), `Routes`, and a
+  `Route` with only props that match a path (`path`, `index`, `caseSensitive`,
+  `id`, `key`) render what they hold in place, and a route nested in any other
+  `Route` (one with an `element`, a `Component` or a `lazy` load) renders in
+  that route's `Outlet`, which the check does not follow, so it is not judged.
+  A hash router named only in a comment is not hash routing. When the app's
+  own code listens for a press through the DOM (`addEventListener` for a
+  click, or a pointer, mouse or touch press, or for an event that a variable
+  names, or an `onclick`-style property), doctor judges no button and reports
+  `info`, since a script may act on any button that way. The warning names
+  each button's file, line and label, and never fails `doctor`.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
   `humanWarn` are the only chatter primitives, and both are no-ops under
   `--json`. The run-level lines `spec:AST-081` defines, which print before or

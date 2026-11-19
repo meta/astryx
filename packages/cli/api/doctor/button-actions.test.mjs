@@ -378,18 +378,66 @@ describe('the button-actions check', () => {
         'src/App.tsx': ["import Banner from '#hero';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
       });
       expect(viaFallback?.status).toBe('pass');
+      // A route's page renders where its Routes sit, inside what the app renders around them.
+      const HOME = ["import {Button} from '@astryxdesign/core';", 'export default function Home() {', '  return <Button label="Start" />;', '}', ''].join('\n');
+      const routes = (/** @type {string} */ around) =>
+        [
+          "import {createRoot} from 'react-dom/client';",
+          "import {BrowserRouter, Routes, Route} from 'react-router-dom';",
+          "import {Shell} from './Shell';",
+          "import {Layout} from './Layout';",
+          "import Home from './Home';",
+          `createRoot(document.getElementById('root')!).render(<BrowserRouter>${around}</BrowserRouter>);`,
+          '',
+        ].join('\n');
+      const extras = {
+        'src/Home.tsx': HOME,
+        'src/Shell.tsx': "export function Shell({children}: {children: unknown}) {\n  return <div onClick={() => close()}>{children}</div>;\n}\n",
+        'src/Layout.tsx': "import {Outlet} from 'react-router-dom';\nexport function Layout() {\n  return <main onClick={() => close()}><Outlet /></main>;\n}\n",
+      };
+      const inShell = await fresh({...extras, 'src/main.tsx': routes('<Shell><Routes><Route path="/" element={<Home />} /></Routes></Shell>')});
+      expect(inShell?.status).toBe('pass');
+      const inLayout = await fresh({...extras, 'src/main.tsx': routes('<Routes><Route element={<Layout />}><Route path="/" element={<Home />} /></Route></Routes>')});
+      expect(inLayout?.status).toBe('pass');
+      const inComponent = await fresh({...extras, 'src/main.tsx': routes('<Routes><Route Component={Layout}><Route path="/" element={<Home />} /></Route></Routes>')});
+      expect(inComponent?.status).toBe('pass');
+      const routed = await fresh({...extras, 'src/main.tsx': routes('<Routes><Route path="/"><Route index element={<Home />} /></Route></Routes>')});
+      expect(routed?.status).toBe('warn');
+      expect(routed?.message).toContain('src/Home.tsx:3 "Start"');
+      // `S.default` off the app's own namespace import is that module's component.
+      const viaNamespace = await fresh({
+        'src/Hero.tsx': HERO,
+        'src/App.tsx': ["import * as S from './Hero';", 'export default function App() {', '  return <a href="/start"><S.default /></a>;', '}', ''].join('\n'),
+      });
+      expect(viaNamespace?.status).toBe('pass');
       // A script that listens for a press through the DOM may act on the button.
       const delegated = await fresh({
         'src/App.tsx': app('<Button label="Start" />'),
         'src/delegate.ts': "document.getElementById('root')?.addEventListener('click', event => {\n  void event;\n});\n",
       });
       expect(delegated?.status).toBe('info');
-      expect(delegated?.message).toBe('Not checked: `src/delegate.ts` listens for a press through the DOM, so a script may act on a button in a way doctor cannot read.');
+      expect(delegated?.message).toBe('Not checked: `src/delegate.ts` may listen for a press through the DOM, so a script may act on a button in a way doctor cannot read.');
       const keys = await fresh({
         'src/App.tsx': app('<Button label="Start" />'),
         'src/keys.ts': "document.addEventListener('keydown', event => {\n  void event;\n});\n",
       });
       expect(keys?.status).toBe('warn');
+      // An event named by a variable, as a helper or a list of names gives it.
+      const helper = await fresh({
+        'src/App.tsx': app('<Button label="Start" />'),
+        'src/listen.ts': 'export function listen(type: string, handler: () => void) {\n  window.addEventListener(type, handler);\n}\n',
+      });
+      expect(helper?.status).toBe('info');
+      const list = await fresh({
+        'src/App.tsx': app('<Button label="Start" />'),
+        'src/listen.ts': "for (const type of ['click', 'keydown']) {\n  document.addEventListener(type, () => {});\n}\n",
+      });
+      expect(list?.status).toBe('info');
+      const template = await fresh({
+        'src/App.tsx': app('<Button label="Start" />'),
+        'src/listen.ts': "const kind = 'click';\ndocument.addEventListener(`${kind}`, () => {});\n",
+      });
+      expect(template?.status).toBe('info');
       // A wrapper whose content a page passes in, such as a link.
       const wrapper = await fresh({
         'src/CTA.tsx': ["import {Button} from '@astryxdesign/core';", 'export function CTA({children}: {children: unknown}) {', '  return <Button label="Start" variant="primary">{children}</Button>;', '}', ''].join('\n'),

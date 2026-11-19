@@ -1814,7 +1814,7 @@ export function checkButtonActions(ctx) {
       id,
       label,
       status: 'info',
-      message: `Not checked: \`${scan.domListener}\` listens for a press through the DOM, so a script may act on a button in a way doctor cannot read.`,
+      message: `Not checked: \`${scan.domListener}\` may listen for a press through the DOM, so a script may act on a button in a way doctor cannot read.`,
     };
   }
   if (count === 0) {

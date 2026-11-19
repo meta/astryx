@@ -402,6 +402,12 @@ function bindingReferent(path, local, member, context) {
   if (imported && !imported.typeOnly) {
     const own = ownModule(imported.source, context.isOwnCode);
     if (member != null) {
+      // `S.default` off the app's own namespace import is that module's
+      // default export, named as a default import names it.
+      if (own && member === 'default') {
+        const stem = context.stemOf(imported.source);
+        return {kind: 'own', names: stem ? [stem] : [member]};
+      }
       if (own) return {kind: 'own', names: [member]};
       // A member of a namespace or default import is the module's export of
       // that name; a member of a named import is a part of that export.
@@ -541,10 +547,13 @@ function isRootRender(call) {
 /** The packages whose `Route` renders its `element` prop as a page. */
 const ROUTERS = new Set(['react-router', 'react-router-dom']);
 
+/** A router's own components that render the routes they hold in place. */
+const ROUTER_WRAPPERS = new Set(['BrowserRouter', 'HashRouter', 'MemoryRouter', 'Router', 'StaticRouter', 'Routes']);
+
 /**
  * @typedef {'blocked' | 'root' | {component: string}} Placement
  *   Where an element is rendered: `root`, at the top of the app (a root
- *   render call, or a route's page); `{component}`, in what the module's
+ *   render call); `{component}`, in what the module's
  *   component of that name renders, with nothing around it that may act on a
  *   press; `blocked`, anywhere else, or somewhere the tree cannot show.
  */
@@ -586,7 +595,12 @@ function placementOf(elementPath, context) {
       case 'JSXExpressionContainer':
         if (parent.parentPath?.node.type === 'JSXAttribute') {
           const attribute = parent.parentPath;
-          if (routePage(attribute, context)) return 'root';
+          // A route's page renders where its `Routes` sit, so the walk goes on
+          // from the route, through the router's own wrappers.
+          if (routePage(attribute, context)) {
+            path = attribute.parentPath.parentPath;
+            continue;
+          }
           // A layout component renders each element its props hold in place,
           // as it renders its children.
           const element = attribute.parentPath?.parentPath;
@@ -665,6 +679,28 @@ function routePage(attributePath, context) {
   if (element?.node.type !== 'JSXElement') return false;
   const target = referent(element, context);
   return target.kind === 'package' && ROUTERS.has(target.source) && target.name === 'Route';
+}
+
+/** The props of a `Route` that only match a path, so it renders its child routes in place. */
+const ROUTE_MATCH_PROPS = new Set(['path', 'index', 'caseSensitive', 'id', 'key']);
+
+/**
+ * Whether a router's element renders the routes it holds in place: a router,
+ * `Routes`, or a `Route` with only props that match a path. A route nested in
+ * any other `Route` (with an `element`, a `Component` or a `lazy` load)
+ * renders in that route's `Outlet`, which the scan does not follow.
+ * @param {any} path a JSXElement path
+ * @param {{kind: 'package', source: string, name: string}} target
+ */
+function routesInPlace(path, target) {
+  if (!ROUTERS.has(target.source)) return false;
+  if (ROUTER_WRAPPERS.has(target.name)) return true;
+  return (
+    target.name === 'Route' &&
+    path.node.openingElement.attributes.every(
+      (/** @type {any} */ a) => a.type === 'JSXAttribute' && ROUTE_MATCH_PROPS.has(attributeName(a)),
+    )
+  );
 }
 
 /**
@@ -791,7 +827,8 @@ function rendersInPlace(path, context) {
     const layout =
       (isCore(target.source) && LAYOUT_COMPONENTS.has(target.name)) ||
       (target.source === 'react' && REACT_WRAPPERS.has(target.name)) ||
-      (/Provider$/.test(target.name) && context.knownPackage(target.source));
+      (/Provider$/.test(target.name) && context.knownPackage(target.source)) ||
+      routesInPlace(path, target);
     if (!layout) return false;
   } else {
     // A context's own Provider (`Theme.Provider`) renders what it holds as it

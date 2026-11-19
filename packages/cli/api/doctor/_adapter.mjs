@@ -416,9 +416,14 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|__fixtures__|__stories__)\/|\.(tes
  */
 const TEST_FOLDER = /(^|\/)(tests?|stories|fixtures|e2e)\//;
 
-/** A press listener a script adds through the DOM: `addEventListener('click', …)`, `el.onclick = …`. */
+/**
+ * A press listener a script may add through the DOM: `addEventListener` with
+ * a press event (`'click'`, a pointer, mouse or touch press) or with an event
+ * it names by a variable or an expression (`addEventListener(type, …)`), or
+ * an `onclick`-style property (`el.onclick = …`).
+ */
 const DOM_PRESS_LISTENER =
-  /\baddEventListener\(\s*['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)['"`]|\.on(?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\s*=(?!=)/;
+  /\baddEventListener\(\s*(?:['"`](?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)['"`]|`[^`]*\$\{|[^'"`\s])|\.on(?:click|auxclick|dblclick|pointerdown|pointerup|mousedown|mouseup|touchstart|touchend)\s*=(?!=)/;
 
 /**
  * A module path a module imports, re-exports, or loads that is not relative
