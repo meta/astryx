@@ -273,6 +273,32 @@ const ROWS = [
     },
   ],
   [
+    'a system font said as a style of the type is that font',
+    {q: 'Arial-style font', has: ['font Arial'], never: /arialstyle/i},
+  ],
+  [
+    'an undo of a whole-theme change said earlier takes it back',
+    {
+      q: 'Make the corners rounder. Undo the corner change.',
+      never: /^corners /,
+    },
+  ],
+  [
+    'two undos each take back their own change',
+    {
+      q: 'Cards rounder. Headings bigger. Undo the card change. Undo the heading change. A blue accent.',
+      has: ["accent '#2563eb'"],
+      never: /--on card|--text-heading-\d-size|^headings /,
+    },
+  ],
+  [
+    'a change said again after its undo is written',
+    {
+      q: 'Make the cards rounder. Undo the card change. Make the cards rounder.',
+      has: ['corners more --on card'],
+    },
+  ],
+  [
     'a font said as a style of the type is that font',
     {q: 'Helvetica-style type', has: ['font helvetica']},
   ],
