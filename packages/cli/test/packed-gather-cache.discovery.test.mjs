@@ -540,7 +540,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
-    "keeps doctor's Core-props scan, and TypeScript, a new, deleted, edited or atomically saved page, a declaration and a config each show on the very next run",
+    "keeps doctor's Core-props scan, and a change to TypeScript, a page, a config, the config it extends or a declaration's global type shows on the very next run",
     () => {
       const tmp = keptTmp('core-props');
       const other = makeProject();
@@ -632,22 +632,57 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(scansAgain().message).toContain(
           'src/App.tsx:3 TabList has no `selectedID`',
         );
-        // A declaration that adds the prop to the component.
-        fs.writeFileSync(
-          path.join(src, 'tab-ids.d.ts'),
-          "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps {\n    selectedID?: string;\n  }\n}\n",
+        const write = (/** @type {Record<string, string>} */ files) => {
+          for (const [rel, text] of Object.entries(files)) {
+            const file = path.join(other.dir, rel);
+            fs.mkdirSync(path.dirname(file), {recursive: true});
+            fs.writeFileSync(file, text);
+          }
+        };
+        const config = (/** @type {Record<string, unknown>} */ options) =>
+          JSON.stringify({
+            extends: './tsconfig.base.json',
+            compilerOptions: {jsx: 'react-jsx', ...options},
+            include: ['src'],
+          });
+        const base = (/** @type {Record<string, unknown>} */ options) =>
+          JSON.stringify({compilerOptions: {baseUrl: '.', ...options}});
+        // A config that extends another, a declaration that adds a global
+        // type to the component, and a copy of the component that no config
+        // maps yet.
+        write({
+          'tsconfig.json': config({}),
+          'tsconfig.base.json': base({}),
+          'src/global.d.ts': 'interface AppExtras {\n  appNote?: string;\n}\n',
+          'src/tab-ids.d.ts':
+            "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps extends AppExtras {}\n}\n",
+          'src/astryx/index.ts': "export {TabList} from './TabList';\n",
+          'src/astryx/TabList.tsx':
+            'export function TabList(props: {selectedID?: string}) {\n  return null;\n}\n',
+        });
+        expect(scansAgain().message).toContain(
+          'src/App.tsx:3 TabList has no `selectedID`',
         );
+        // The config it extends maps Core's module path to the app's copy,
+        // then stops mapping it.
+        write({
+          'tsconfig.base.json': base({
+            paths: {'@astryxdesign/core': ['./src/astryx/index.ts']},
+          }),
+        });
+        expect(scansAgain().status).toBe('pass');
+        write({'tsconfig.base.json': base({})});
+        expect(scansAgain().message).toContain(
+          'src/App.tsx:3 TabList has no `selectedID`',
+        );
+        // The global type that the declaration adds gains the prop.
+        write({
+          'src/global.d.ts':
+            'interface AppExtras {\n  selectedID?: string;\n}\n',
+        });
         expect(scansAgain().status).toBe('pass');
         // A config that compiles JSX with another runtime.
-        fs.writeFileSync(
-          path.join(other.dir, 'tsconfig.json'),
-          JSON.stringify({
-            compilerOptions: {
-              jsx: 'react-jsx',
-              jsxImportSource: '@emotion/react',
-            },
-          }),
-        );
+        write({'tsconfig.json': config({jsxImportSource: '@emotion/react'})});
         expect(scansAgain().message).toMatch(
           /^Not checked: the project compiles JSX with `@emotion\/react`/,
         );
