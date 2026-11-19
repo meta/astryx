@@ -1,4 +1,4 @@
-Results for "experimental" (13)
+Results for "experimental" (14)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
@@ -67,6 +67,12 @@ section:     one-kind-of-part
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme one-kind-of-part
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     values-a-part-shows
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme values-a-part-shows
 parent:      pnpm exec astryx docs theme --index
 name:        theme
 section:     no-app-yet

@@ -68,7 +68,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'an unknown section',
+      when: 'an unknown section; with options.on, a name that is no part or is a group, or options.png or options.section beside it',
+    },
+    {
+      code: 'ERR_AMBIGUOUS_THEME',
+      when: 'with options.on, a theme slug two packages provide that the app records none of (the suggestions add one to the app)',
     },
     {
       code: 'ERR_UNKNOWN_THEME',
