@@ -6135,6 +6135,8 @@ async function changeOnce(
     s = first;
     sidesBeside.push(...rest);
   }
+  // The settings as saved before this change, to tell which sides it changes.
+  const savedBefore = new Set(data.settings.map(x => JSON.stringify(x)));
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
@@ -6578,6 +6580,23 @@ async function changeOnce(
     data.settings.push(s);
   }
   for (const side of sidesBeside) {
+    // An unchanged side stays where it is, as the first side does, unless a
+    // later setting covers it.
+    const at = data.settings.map(x => keyOf(x)).lastIndexOf(keyOf(side));
+    if (
+      at >= 0 &&
+      JSON.stringify(data.settings[at]) === JSON.stringify(side) &&
+      !data.settings
+        .slice(at + 1)
+        .some(
+          x =>
+            x.thing === side.thing &&
+            partsOf(ctx, x).some(t => partsOf(ctx, side).includes(t)),
+        )
+    ) {
+      data.settings[at] = side;
+      continue;
+    }
     data.settings = data.settings.filter(x => keyOf(x) !== keyOf(side));
     data.settings.push(side);
   }
@@ -6627,6 +6646,15 @@ async function changeOnce(
   // A shorthand set after its longhands on the same part replaces them
   // (each side a box shorthand is written as replaces its own).
   const written = [s, ...sidesBeside];
+  // An earlier setting of the typed shorthand in the same place goes: the
+  // sides written replace it, as a plain set replaces its value.
+  const typedBefore = shorthand
+    ? data.settings.filter(
+        x => !written.includes(x) && keyOf(x) === keyOf(shorthand),
+      )
+    : [];
+  data.settings = data.settings.filter(x => !typedBefore.includes(x));
+  const sidesChanged = written.filter(w => !savedBefore.has(JSON.stringify(w)));
   /** @param {import('./_settings.mjs').Setting} w */
   const longhandsOf = w =>
     sub === 'set' && w.source === 'property'
@@ -7100,8 +7128,22 @@ async function changeOnce(
   const notes = [
     ...(shorthand && !r.unchanged
       ? [
-          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${[s, ...sidesBeside].map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} takes back all ${sidesBeside.length + 1}`,
+          `wrote ${shorthand.thing} ${quoteCommandArgument(String(shorthand.value))} as its sides, ${written.map(x => `${x.thing} ${x.value}`).join(', ')}: ${shorthand.on} reads ${shorthand.thing} inside calc(), where one length works; undo ${slug} ${[
+            sidesChanged.length === written.length
+              ? `takes back all ${written.length}`
+              : sidesChanged.length
+                ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes`
+                : null,
+            typedBefore.length
+              ? `brings back ${typedBefore.map(describe).join(', ')}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' and ')}`,
         ]
+      : []),
+    ...(typedBefore.length
+      ? [`replaces ${typedBefore.map(describe).join(', ')}`]
       : []),
     ...fieldNotes,
     ...(borderAdded

@@ -185,4 +185,61 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'replaces an earlier padding on the part, and its undo brings it back',
+    async () => {
+      await set('4px');
+      const notes = (await set('5px 0')).join('\n');
+      expect(saved()).toEqual(['padding-block 5px', 'padding-inline 0']);
+      expect(notes).toMatch(/replaces padding = 4px on dropdown-menu/);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual(['padding 4px']);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'adds no undo step for a repeat that changes nothing after another change',
+    async () => {
+      await set('5px 0');
+      await themeEditSet('t', 'padding', '6px', {
+        cwd,
+        on: 'segmented-control',
+      });
+      const r = await themeEditSet('t', 'padding', '5px 0', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      expect(r.data.notes.join('\n')).not.toMatch(/as its sides/);
+      expect(saved()).toEqual([
+        'padding-block 5px',
+        'padding-inline 0',
+        'padding 6px',
+      ]);
+      // The next undo takes back the segmented control's padding.
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual(['padding-block 5px', 'padding-inline 0']);
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'names in its undo only the sides a change changes',
+    async () => {
+      await set('5px 0');
+      const notes = (await set('5px 2px')).join('\n');
+      expect(notes).toContain(
+        'undo t takes back padding-inline, the side this changes',
+      );
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
 });
