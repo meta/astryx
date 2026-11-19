@@ -64,4 +64,25 @@ describe('flat surfaces', () => {
       /background-color:/,
     );
   }, 240_000);
+  it("never covers a fill the theme sets on the card itself, before or after it", async ctx => {
+    if (needBases(ctx)) return;
+    for (const [name, order] of [
+      ['g', ['fill', 'flat']],
+      ['h', ['flat', 'fill']],
+    ]) {
+      await themeEditNew(name, {cwd, like: 'neutral'});
+      for (const step of order)
+        if (step === 'fill')
+          await themeEditSet(name, 'background-color', '#ffeecc', {cwd, on: 'card'});
+        else await themeEditSet(name, 'surfaces', 'flat', {cwd});
+      const css = fs.readFileSync(path.join(cwd, 'themes', name, `${name}.css`), 'utf8');
+      const rule = (/** @type {string} */ sel) =>
+        new RegExp(`${sel.replace(/[.[\]"=]/g, '\\$&')} \\{[^}]*\\}`).exec(css)?.[0] ?? '';
+      expect(rule('.astryx-card'), order.join(' then ')).toMatch(/background-color: #ffeecc/);
+      for (const v of ['default', 'transparent', 'muted'])
+        expect(rule(`.astryx-card[data-variant="${v}"]`), `${order.join(' then ')}: ${v}`).not.toMatch(
+          /background-color:/,
+        );
+    }
+  }, 240_000);
 });

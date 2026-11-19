@@ -158,8 +158,8 @@ describe('plain looks', () => {
   });
   it("a status's text on a banner reaches its title and description, never its buttons or icon", async () => {
     for (const [ask, re] of [
-      ['success text bold', /--font-weight-(?:semibold|normal) 700 --on banner --when status:success/],
-      ['warning text 10px', /--text-(?:label|supporting)-size 0\.625rem --on banner --when status:warning/],
+      ['success text bold', /--font-weight-normal 700 --on banner --when status:success/],
+      ['warning text 10px', /--text-supporting-size 0\.625rem --on banner --when status:warning/],
     ]) {
       const w = writes(await how('q0', String(ask))).join('\n');
       expect(w, String(ask)).toMatch(re);
@@ -167,7 +167,13 @@ describe('plain looks', () => {
       // the label size of a button; its icon reads the large size.)
       expect(w, String(ask)).not.toMatch(/--font-weight-medium [^\n]*--on banner/);
       expect(w, String(ask)).not.toMatch(/--text-large-size [^\n]*--on banner/);
+      // (Nor a token its buttons read too: the title's label size is the
+      // buttons' label size, so it is left, and said.)
+      expect(w, String(ask)).not.toMatch(/--text-label-size [^\n]*--on banner/);
     }
+    expect(
+      JSON.stringify(await how('q0', 'warning text 10px')),
+    ).toMatch(/left as it is: banner's --text-label-size, which its buttons read too/);
   });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [

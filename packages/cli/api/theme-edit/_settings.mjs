@@ -7153,6 +7153,21 @@ export function compileTheme(ctx, data, base) {
             // variants their own fill (a blue card stays blue under flat):
             // the fill goes on the variants that draw the plain surface.
             const keep = surfaceVariantsOf(t);
+            // (A fill the theme sets on the part itself, before or after
+            // the surfaces look, is the part's own: the look's fill never
+            // covers it, from a variant block or the part's own.)
+            const ownFill = data.settings.some(
+              (/** @type {any} */ o) =>
+                o.on === t &&
+                !o.state &&
+                !o.when &&
+                /^(?:background-color|background)$/.test(kebab(o.thing)),
+            );
+            if (ownFill && look.backgroundColor != null) {
+              const {backgroundColor, ...others} = look;
+              Object.assign(block({...s, mode: undefined}, t), others);
+              continue;
+            }
             if (keep && look.backgroundColor != null) {
               const {backgroundColor, ...others} = look;
               Object.assign(block({...s, mode: undefined}, t), others);
