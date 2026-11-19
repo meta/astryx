@@ -29,6 +29,7 @@ import {
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {
+  findDeclaredWorkspaceRoot,
   findInstalledPackage,
   findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
@@ -87,11 +88,13 @@ const DOCS_VERSION = 10;
  * of the node_modules that holds the Core the command reads (the
  * project's own, or a workspace root's). The locks and the part-data cache
  * both live here, so one command never finds two answers. Null without
- * Core.
+ * Core, and null under Yarn Plug'n'Play: there Core resolves into a
+ * read-only package archive, which is no node_modules.
  * @param {string} dir
  * @returns {string | null}
  */
 export function themeCacheRoot(dir) {
+  if (plugAndPlayAbove(dir)) return null;
   const core = findProjectCoreDir(dir);
   if (!core) return null;
   // Core read from source (a fork of the design system, packages/core) is
@@ -105,6 +108,21 @@ export function themeCacheRoot(dir) {
     return path.join(modules, '.cache', 'astryx-theme');
   const own = nodeModulesRoot(dir);
   return own ? path.join(own, 'node_modules', '.cache', 'astryx-theme') : null;
+}
+
+/**
+ * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at `dir` or above it, up
+ * to its workspace root (or, outside a workspace, the repository root).
+ * @param {string} dir
+ */
+export function plugAndPlayAbove(dir) {
+  const root = findDeclaredWorkspaceRoot(dir);
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, '.pnp.cjs'))) return true;
+    if (d === root || (!root && fs.existsSync(path.join(d, '.git'))))
+      return false;
+    if (path.dirname(d) === d) return false;
+  }
 }
 
 /**
