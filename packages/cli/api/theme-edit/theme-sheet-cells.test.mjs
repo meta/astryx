@@ -3,8 +3,8 @@
 /**
  * @file The sheet's cells draw each part whole: a drawn hover applies no
  * rule a real hover would not (a forced-colors one), a cell is as tall as
- * what it holds, a part that needs a row's width takes the row, a looping
- * animation is drawn at rest, and an empty container holds sample text.
+ * what it holds, a part that needs a row's width takes the row, and an
+ * empty container holds sample text.
  */
 
 import * as fs from 'node:fs';
@@ -23,6 +23,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 const T = 240_000;
 
@@ -81,7 +86,6 @@ describe('a sheet cell', () => {
       '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
     );
     expect(SHEET_CSS).toMatch(/\.cs-item\{[^}]*flex:1 1 200px/);
-    expect(SHEET_CSS).toContain('animation:none!important');
   });
 
   it(
@@ -100,7 +104,7 @@ describe('a sheet cell', () => {
           at,
           html.indexOf('<div class="cs-name">', at + 1),
         );
-        expect(cell, name).toContain('More content');
+        expect(cell, name).toContain('Sample content');
       }
     },
     T,

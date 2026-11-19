@@ -503,10 +503,26 @@ function DescriptionSection() {
           <Heading level={4} accessibilityLevel={3}>
             Success criteria
           </Heading>
+          {/* A node label wraps on a narrow screen; a string label
+              truncates to one line. */}
           <List listStyle="disc" density="compact">
-            <ListItem label="Day-seven activation rises from 42 to 55 percent for new workspaces in the variant." />
-            <ListItem label="Median time to first completed action drops below eight minutes." />
-            <ListItem label="No regression in day-thirty retention." />
+            <ListItem
+              label={
+                <>
+                  Day-seven activation rises from 42 to 55 percent for new
+                  workspaces in the variant.
+                </>
+              }
+            />
+            <ListItem
+              label={
+                <>
+                  Median time to first completed action drops below eight
+                  minutes.
+                </>
+              }
+            />
+            <ListItem label={<>No regression in day-thirty retention.</>} />
           </List>
         </VStack>
       </VStack>

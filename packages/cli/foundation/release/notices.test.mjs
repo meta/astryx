@@ -11,10 +11,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
-import {
-  recordDeclaredCliCommands,
-  runWithCliDoor,
-} from '../env/cli-command.mjs';
+import {recordDeclaredSettings, runWithCliDoor} from '../env/cli-command.mjs';
 import {
   NOTICE_INTERVAL_MS,
   availableLine,
@@ -448,6 +445,39 @@ describe('addMatchingCore', () => {
   });
 });
 
+describe('the packages that move with Core', () => {
+  it('are every package the project lists that Astryx releases with Core, at the new release, and no canary-only one', () => {
+    const stateDir = checked('0.7.3');
+    const app = project(tempDir(), {
+      '@astryxdesign/core': '0.7.1',
+      '@astryxdesign/theme-neutral': '0.7.1',
+      '@astryxdesign/lab': '0.7.1-canary.abc1234',
+      react: '19.2.0',
+    });
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.1');
+    expect(projectLag({cwd: app, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3 @astryxdesign/theme-neutral@0.7.3',
+    );
+    // Aligning Core up to a newer CLI moves the themes with it.
+    expect(alignCliAndCore({cwd: app, cli: '0.7.3', core: '0.7.1'})).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/theme-neutral@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
+    );
+    // A theme named only as a peer is the consumer's to install.
+    const kit = tempDir();
+    writeJson(path.join(kit, 'package.json'), {
+      name: 'kit',
+      dependencies: {'@astryxdesign/core': '0.7.1'},
+      peerDependencies: {'@astryxdesign/theme-neutral': '0.7.1'},
+    });
+    writeJson(path.join(kit, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(kit, '0.7.1');
+    expect(projectLag({cwd: kit, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
+  });
+});
+
 describe('addVerbFor', () => {
   it('reads the CLI a project pins when it declares no Core', () => {
     const cliOnly = project(tempDir(), {'@astryxdesign/cli': '0.7.1'});
@@ -501,9 +531,7 @@ describe('the commands notices print go through the command-name picker (spec AS
   it("use an integration's declared cliCommand for the upgrade step", () => {
     const stateDir = checked('0.7.3');
     const dir = coreOnlyProject();
-    recordDeclaredCliCommands(dir, [
-      {name: '@acme/a', cliCommand: 'acme astryx'},
-    ]);
+    recordDeclaredSettings(dir, [{name: '@acme/a', cliCommand: 'acme astryx'}]);
     try {
       expect(projectLag({cwd: dir, current: '0.7.1', stateDir})?.upgrade).toBe(
         'acme astryx upgrade --from 0.7.1 --apply',
@@ -512,7 +540,7 @@ describe('the commands notices print go through the command-name picker (spec AS
         'npm install -E @astryxdesign/core@0.7.3, then acme astryx upgrade --from 0.7.1 --apply',
       );
     } finally {
-      recordDeclaredCliCommands(dir, []);
+      recordDeclaredSettings(dir, []);
     }
   });
 

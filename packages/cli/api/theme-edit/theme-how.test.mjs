@@ -192,7 +192,8 @@ const QUESTIONS = [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background-color '#e5e7eb' --on card --mode light$/,
+      // (A plain fill reaches the neutral cards; colored ones keep theirs.)
+      top: /^set q background-color '#e5e7eb' --on card --when variant:default --mode light$/,
       adds: /card\b.*@light.*#e5e7eb|card\b.*#e5e7eb.*light/,
     },
   ],
@@ -270,8 +271,8 @@ const QUESTIONS = [
   [
     'progress bar fill should be green',
     {
-      top: /--on progress-bar-fill$/,
-      adds: /progress-bar-fill\.base\.backgroundColor=#16a34a/,
+      top: /--on progress-bar-fill --when variant:accent/,
+      adds: /progress-bar-fill\.variant:accent\.backgroundColor=#16a34a/,
     },
   ],
   [
@@ -1196,7 +1197,7 @@ const QUESTIONS_2 = [
   [
     'in dark mode, cards should be #1c1c1e',
     {
-      top: /^set q background-color '#1c1c1e' --on card --mode dark$/,
+      top: /^set q background-color '#1c1c1e' --on card --when variant:default --mode dark$/,
       adds: /card\.variant:default\.@dark\.backgroundColor=/,
     },
   ],
@@ -1794,7 +1795,13 @@ const QUESTIONS_3 = [
       top: /^set q background-color '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
     },
   ],
-  ['button color #fff', {top: /^set q color '#fff' --on button$/}],
+  // (A ghost button, drawn on the page, keeps its own text.)
+  [
+    'button color #fff',
+    {
+      top: /^set q color '#fff' --on button --when variant:primary(?!.*variant:ghost)/,
+    },
+  ],
   [
     'accent #ff0000 */ body{display:none} /*',
     {top: /^set q accent '#ff0000'$/},
@@ -2980,7 +2987,8 @@ const QUESTIONS_I = [
   [
     'cards get a 1px border instead of a shadow',
     {
-      top: /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none && set q border-width 1px --on card$/,
+      // (The shadow taken away is the cards', never every shadow.)
+      top: /^set q border-width 1px --on card && set q box-shadow none --on card$/,
     },
   ],
   ['turn off all animations', {top: /^set q --duration-[a-z-]+ 0ms/}],
@@ -3318,7 +3326,9 @@ describe('how answers final-5 questions', () => {
 const QUESTIONS_K = [
   [
     'in dark mode only, cards #111111',
-    {top: /^set q background-color '#111111' --on card --mode dark$/},
+    {
+      top: /^set q background-color '#111111' --on card --when variant:default --mode dark$/,
+    },
   ],
   ['only dark mode please', {top: /^set q mode dark-only$/}],
   [
@@ -3448,9 +3458,16 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       'I look at it all day, please make the cards rounder',
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'q'});
-      expect(JSON.stringify(data.results), q).not.toMatch(
-        /--mode light|light mode only/,
-      );
+      // (The readable-text line beside a fill is measured per mode.)
+      expect(
+        JSON.stringify(
+          data.results.filter(
+            (/** @type {any} */ r) =>
+              !/^readable text on that fill/.test(r.text),
+          ),
+        ),
+        q,
+      ).not.toMatch(/--mode light|light mode only/);
     }
     const {data} = await themeEditHow(
       'in daytime mode use a cream background',
@@ -3839,11 +3856,11 @@ const QUESTIONS_R = [
   ['darkmode accent teal', /^set q --color-accent '#0d9488' --mode dark$/],
   [
     'html.dark .card { background: #111 }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   [
     '@media (prefers-color-scheme: dark) { .card { background: #111 } }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],

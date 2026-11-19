@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {Chart, ChartAxis, ChartGrid, bar} from '@astryxdesign/charts';
+import {Chart, ChartAxis, ChartGrid, bar, line} from '@astryxdesign/charts';
 
 const CATEGORICAL_DATA = [
   {month: 'January', value: 18},
@@ -10,10 +10,14 @@ const CATEGORICAL_DATA = [
   {month: 'April', value: 42},
 ];
 
-const CONTINUOUS_DATA = [
-  {x: 0, value: 18},
-  {x: 5, value: 31},
-  {x: 10, value: 24},
+const REQUESTS_BY_HOUR = [
+  {label: '0 h', hour: 0, requests: 120},
+  {label: '4 h', hour: 4, requests: 80},
+  {label: '8 h', hour: 8, requests: 260},
+  {label: '12 h', hour: 12, requests: 410},
+  {label: '16 h', hour: 16, requests: 380},
+  {label: '20 h', hour: 20, requests: 300},
+  {label: '24 h', hour: 24, requests: 150},
 ];
 
 const meta = {
@@ -52,7 +56,41 @@ type Story = StoryObj<typeof meta>;
 /** Drive horizontal, vertical, combined, empty, and density states. */
 export const Playground: Story = {};
 
-/** Continuous x values use d3 ticks rather than categorical band centers. */
+/**
+ * Requests per minute in the 24 hours after a launch, one bar every 4 hours.
+ * Category labels on x put one vertical grid line on each band center, so
+ * each bar has a grid line. Continuous X uses the same rows.
+ */
+export const CategoricalX: Story = {
+  args: {
+    horizontal: false,
+    vertical: true,
+    tickCount: 5,
+  },
+  render: args => (
+    <Chart
+      data={REQUESTS_BY_HOUR}
+      xKey="label"
+      series={[bar('requests', {label: 'Requests per minute'})]}
+      title="Categorical x: grid on band centers"
+      grid={<ChartGrid {...args} />}
+      axes={
+        <>
+          <ChartAxis position="bottom" />
+          <ChartAxis position="left" />
+        </>
+      }
+      height={300}
+    />
+  ),
+  parameters: {controls: {disable: true}},
+};
+
+/**
+ * Requests per minute in the 24 hours after a launch, with the hours since
+ * the launch on x. Numbers on x put vertical grid lines on d3 ticks, which
+ * need not match the data points. Categorical X uses the same rows.
+ */
 export const ContinuousX: Story = {
   args: {
     horizontal: false,
@@ -61,10 +99,10 @@ export const ContinuousX: Story = {
   },
   render: args => (
     <Chart
-      data={CONTINUOUS_DATA}
-      xKey="x"
-      series={[bar('value')]}
-      title="Continuous x values"
+      data={REQUESTS_BY_HOUR}
+      xKey="hour"
+      series={[line('requests', {dots: true, label: 'Requests per minute'})]}
+      title="Continuous x: grid on d3 ticks"
       grid={<ChartGrid {...args} />}
       axes={
         <>

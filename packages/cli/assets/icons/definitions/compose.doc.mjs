@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'compose',
+  group: 'messaging',
   description: 'Write something new, such as a message or post.',
   words: ['write', 'new message', 'draft', 'square pen', 'pencil square'],
 };

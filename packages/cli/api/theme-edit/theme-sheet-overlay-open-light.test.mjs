@@ -25,6 +25,11 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 import {docs as authorDocs} from '../../assets/docs/author-a-theme.doc.mjs';
 import {docs as themeDocs} from '../../assets/docs/theme.doc.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (These cases read the drawn pages, their pictures or what a drawing
+// reports: drawn for real.)
+realRenders(true);
 
 /** @type {string} */
 let cwd;

@@ -263,7 +263,8 @@ const sheetTriggerStyles = stylex.create({
     position: 'absolute',
     inset: 0,
     minWidth: 0,
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
   },
   endSection: {
     display: 'flex',
@@ -379,6 +380,8 @@ export interface PowerSearchProps extends Omit<
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
+   * - 'tooltip': no message box and no status icon, so the message is not shown;
+   *   screen readers still announce it and the border still shows the status type
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;

@@ -84,6 +84,24 @@ describe('palette recipes', () => {
       );
   });
 
+  it('v2 fades a gray family toward white as a gray scale does; v1 keeps it', () => {
+    /** @param {string} recipe */
+    const gray = recipe =>
+      generatePaletteSet({
+        recipe,
+        families: [{id: 'neutral', seed: '#64748b', kind: 'neutral'}],
+        neutralProfile: 'custom',
+      }).families[0].light.colors;
+    const v1 = gray(PALETTE_RECIPE);
+    const v2 = gray(PALETTE_RECIPE_V2);
+    // A slate's page shade keeps about a sixth of its color, not half.
+    expect(hexToOklch(v2[95]).C).toBeLessThan(0.01);
+    expect(hexToOklch(v1[95]).C).toBeGreaterThan(0.015);
+    // Its darker shades keep their color.
+    expect(v2[50]).toBe(v1[50]);
+    expect(v2[30]).toBe(v1[30]);
+  });
+
   it('v2 draws the stops it does not share exactly as v1, for a dusty and a vivid seed', () => {
     // A stop whose gamut holds the most vivid seed at the default vibrancy
     // is not shared: orange's stops from 50 up, green's from 40 up.

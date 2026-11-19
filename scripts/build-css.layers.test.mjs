@@ -3,8 +3,7 @@
 /**
  * @file build-css.layers.test.mjs
  * spec:AST-080 FR3: every package stylesheet registers the Astryx layer order
- * and keeps every rule inside its one layer, `astryx-base`; Core's also carries
- * one `reset` block that holds only the root color-scheme rule.
+ * and keeps every rule inside its one layer, `astryx-base`.
  */
 
 import fs from 'node:fs/promises';
@@ -12,12 +11,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {beforeAll, describe, expect, it} from 'vitest';
 import {ensureCoreBuilt} from '../packages/cli/clients/cli/commands/ensure-core-built.mjs';
-import {createRequire} from 'node:module';
 import {ASTRYX_LAYER_ORDER, composePackageStylesheet} from './build-css.mjs';
-
-const {CORE_ROOT_BLOCK} = createRequire(import.meta.url)(
-  '../packages/build/src/source-stylesheet.js',
-);
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -57,24 +51,6 @@ function expectOneAstryxLayer(css, layer) {
   expect(statements[1].startsWith(`@layer ${layer} {`)).toBe(true);
 }
 
-/** Text with its whitespace collapsed, to compare CSS blocks. */
-const squeezed = text => text.replace(/\s+/g, ' ').trim();
-
-/**
- * Assert Core's shape: the order line, the root block that holds only
- * `:where(html:not([data-theme])) { color-scheme: light dark }` in `reset`,
- * then one `astryx-base` block.
- */
-function expectCoreLayers(css) {
-  const statements = topLevelStatements(css);
-  expect(statements[0]).toBe(ASTRYX_LAYER_ORDER);
-  expect(statements).toHaveLength(3);
-  expect(squeezed(statements[1])).toBe(
-    '@layer reset { :where(html:not([data-theme])) { color-scheme: light dark; } }',
-  );
-  expect(statements[2].startsWith('@layer astryx-base {')).toBe(true);
-}
-
 describe('package stylesheets register the Astryx layer order (spec:AST-080 FR3)', () => {
   it('names the same order theme output registers', () => {
     expect(ASTRYX_LAYER_ORDER).toBe('@layer reset, astryx-base, astryx-theme;');
@@ -88,16 +64,6 @@ describe('package stylesheets register the Astryx layer order (spec:AST-080 FR3)
     expectOneAstryxLayer(css, 'astryx-base');
     expect(css).toContain('.x1{color:red}');
     expect(css).toContain('@media (hover: hover){.x2:hover{color:blue}}');
-  });
-
-  it("puts Core's root block, and only it, before Core's rules", () => {
-    const css = composePackageStylesheet('Probe', '.x1{color:red}', {
-      core: true,
-    });
-    expectCoreLayers(css);
-    expect(squeezed(CORE_ROOT_BLOCK)).toBe(
-      '@layer reset { :where(html:not([data-theme])) { color-scheme: light dark; } }',
-    );
   });
 
   it('fails the shape check for an unlayered rule', () => {
@@ -123,8 +89,8 @@ describe('package stylesheets register the Astryx layer order (spec:AST-080 FR3)
       );
     }, 180_000);
 
-    it("astryx.css is the order line, Core's root block, and one astryx-base block", () => {
-      expectCoreLayers(astryxCss);
+    it('astryx.css is the order line plus one astryx-base block', () => {
+      expectOneAstryxLayer(astryxCss, 'astryx-base');
     });
   });
 

@@ -79,11 +79,6 @@ export async function searchComponents(
   components,
   others = [],
 ) {
-  const {readDocView} = await import('../doc-compiler/read.mjs');
-  const {listDirEntries, oncePerListing, pathExists} =
-    await import('../fs/listing-cache.mjs');
-  const path = await import('node:path');
-
   const term = needle.toLowerCase();
   // The typed name without the separators between its words.
   const termJoined = term.replace(/[\s_./-]+/g, '');
@@ -152,49 +147,27 @@ export async function searchComponents(
       addMatch(comp, 20, 'similar name (distance ' + dist + ')');
   }
 
-  // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  const srcDir = coreDir == null ? null : path.join(coreDir, 'src');
+  // --- Pass 2: Keyword + description matching (each doc's kept view) ---
+  const {coreComponentViews} =
+    await import('../discovery/core-component-views.mjs');
+  // A doc that does not read is not matched, as when no view reads.
+  const coreViews = await coreComponentViews(coreDir, coreNames).catch(
+    () => new Map(),
+  );
   /**
-   * The doc that Pass 2 reads for `comp`, or null.
+   * The parts of the doc Pass 2 scores for `comp`: Core's, or the view
+   * `others` gives.
    * @param {string} comp
-   * @returns {string | null}
+   * @returns {ComponentMatchView | null | undefined}
    */
-  function docPathOf(comp) {
-    if (srcDir == null) return null;
-    const direct = path.join(srcDir, comp, comp + '.doc.mjs');
-    if (pathExists(direct)) return direct;
-    const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
-    if (pathExists(xdsDirect)) return xdsDirect;
-    if (!pathExists(srcDir)) return null;
-    for (const entry of listDirEntries(srcDir)) {
-      if (!entry.isDirectory()) continue;
-      const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
-      if (pathExists(nested)) return nested;
-    }
-    return null;
-  }
-  // Each search probes the same paths, so one operation finds each doc once.
-  /**
-   * The doc Pass 2 reads for `comp`: Core's, or the view `others` gives.
-   * @param {string} comp
-   * @returns {Promise<any>}
-   */
-  async function docOf(comp) {
+  function docOf(comp) {
     if (otherViews.has(comp)) return otherViews.get(comp);
-    const docPath = oncePerListing(`search-doc\0${srcDir}\0${comp}`, () =>
-      docPathOf(comp),
-    );
-    if (!docPath) return null;
-    // Only the legacy `docs` export has ever been indexed here.
-    return readDocView(docPath, {
-      root: 'components',
-      loader: 'native',
-      exports: ['docs'],
-    });
+    return coreViews.get(comp);
   }
   for (const comp of allNames) {
     try {
-      const docs = await docOf(comp);
+      /** @type {any} */
+      const docs = docOf(comp);
       if (!docs) continue;
 
       // Keyword matching
