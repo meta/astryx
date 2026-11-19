@@ -1273,6 +1273,26 @@ describe('derived var expansion', () => {
     expect(css).toMatch(/:hover[^{]*\{[^}]*--_button-radius: 9px/);
   });
 
+  it('reports a rejected pseudo-class declaration once, under the name the theme wrote', () => {
+    const warnings: string[] = [];
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'pseudo-class-boundary',
+        components: {
+          icon: {base: {':hover': {width: '20px} .x { color: red'}}},
+          button: {base: {':hover': {borderRadius: '9px} .x { color: red'}}},
+        },
+      }),
+      warnings,
+    ).join('\n');
+    expect(css).not.toContain('.x {');
+    expect(warnings.filter(w => w.includes('"width"'))).toHaveLength(1);
+    expect(warnings.filter(w => w.includes('"border-radius"'))).toHaveLength(1);
+    // No private name reaches the author.
+    expect(warnings.join('\n')).not.toMatch(/--_/);
+    expect(warnings).toHaveLength(2);
+  });
+
   it('writes a pseudo-element block as authored', () => {
     const css = generateThemeCSS(
       defineTheme({

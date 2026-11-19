@@ -1138,22 +1138,36 @@ function generateComponentRules(
             pseudo.startsWith(':') &&
             !pseudo.includes('::') &&
             !/:(before|after|first-line|first-letter)(?![-\w])/i.test(pseudo);
+          // Like the resting rule, the boundary check reads the authored
+          // declarations first, so a rejected one is reported once, under
+          // the name the theme wrote, before any is lowered to a private
+          // variable.
+          const pseudoLocation = `${location}[${JSON.stringify(pseudo)}]`;
+          const accepted: [string, string][] = [];
+          if (pseudoClass) {
+            for (const [prop, value] of Object.entries(pseudoStyles)) {
+              if (value === undefined) {
+                continue;
+              }
+              const text = stringifyTokenValue(value);
+              if (
+                acceptDeclaration(toKebabCase(prop), text, pseudoLocation, sink)
+              ) {
+                accepted.push([prop, text]);
+              }
+            }
+          }
           const pseudoEntries = pseudoClass
             ? expandComponentDeclarations(
                 component,
-                Object.entries(pseudoStyles).map(([k, v]) => [
-                  k,
-                  typeof v === 'object' && v !== null
-                    ? JSON.stringify(v)
-                    : `${v}`,
-                ]),
+                accepted,
                 resetInheritedPaddingSpecificity,
               )
             : Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,
-              `${location}[${JSON.stringify(pseudo)}]`,
+              pseudoLocation,
               sink,
               toKebabCase,
             );
