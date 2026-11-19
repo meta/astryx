@@ -61,7 +61,7 @@ describe('Tooltip server render', () => {
     expect(id).not.toBe('');
     const description = container.querySelector(`[id="${id}"]`);
     expect(description).toHaveTextContent(
-      'Renews on the 1st.Cancel any time before then.',
+      'Renews on the 1st. Cancel any time before then.',
     );
     expect(trigger?.contains(description)).toBe(false);
     expect(container.querySelector('[role="tooltip"]')).toBeNull();
@@ -91,7 +91,7 @@ describe('Tooltip server render', () => {
     const trigger = container.querySelector('[tabindex="0"]') as HTMLElement;
     expect(trigger.getAttribute('aria-describedby')).toBe(serverId);
     expect(trigger).toHaveAccessibleDescription(
-      'Renews on the 1st.Cancel any time before then.',
+      'Renews on the 1st. Cancel any time before then.',
     );
     act(() => {
       root.unmount();

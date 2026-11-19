@@ -26,6 +26,7 @@ import {
 } from 'react';
 import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {getNodeText} from '../utils/getNodeText';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   TooltipDescribesContext,
@@ -335,7 +336,7 @@ function TooltipDescription({
   if (!hasComponent(children)) {
     return (
       <span id={id} hidden>
-        {textOf(children)}
+        {getNodeText(children)}
       </span>
     );
   }
@@ -365,24 +366,6 @@ function hasComponent(node: ReactNode): boolean {
     return true;
   }
   return hasComponent((node.props as {children?: ReactNode}).children);
-}
-
-/**
- * The plain text of host markup: strings and numbers, through arrays,
- * fragments and elements' children.
- */
-function textOf(node: ReactNode): string {
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node);
-  }
-  if (Array.isArray(node)) {
-    return node.map(textOf).join('');
-  }
-  if (node != null && typeof node === 'object' && 'props' in node) {
-    const props = node.props as {children?: ReactNode} | null;
-    return textOf(props?.children);
-  }
-  return '';
 }
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
