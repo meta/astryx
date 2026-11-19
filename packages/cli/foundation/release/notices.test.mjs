@@ -633,16 +633,18 @@ describe('cliUpdateStep', () => {
       version: '0.7.2',
     });
     const dlx = getDlxPrefix(outside);
-    // The run's own command after the newest release (the runner the run
-    // came through, its user agent, else npx).
+    const stateDir = checked('0.7.3');
+    // The run's own command after the newest known release, pinned (the
+    // runner the run came through, its user agent, else npx).
     expect(
       cliUpdateStep({
         cwd: outside,
         self: {version: '0.7.2', root: runner},
+        stateDir,
         argv: ['theme', 'palette', 'generate', 'my palette.json'],
       }),
     ).toEqual({
-      install: `${dlx} @astryxdesign/cli@latest theme palette generate 'my palette.json'`,
+      install: `${dlx} @astryxdesign/cli@0.7.3 theme palette generate 'my palette.json'`,
       upgrade: null,
       folder: null,
       runs: true,
@@ -652,9 +654,38 @@ describe('cliUpdateStep', () => {
       cliUpdateStep({
         cwd: outside,
         self: {version: '0.7.2', root: runner},
+        stateDir,
         argv: [],
       }).install,
-    ).toBe(`${dlx} @astryxdesign/cli@latest <command>`);
+    ).toBe(`${dlx} @astryxdesign/cli@0.7.3 <command>`);
+  });
+
+  it("outside a project, a package runner's copy with no newer release known installs the newest CLI for the computer", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.3',
+    });
+    const self = {version: '0.7.3', root: runner};
+    for (const stateDir of [tempDir('state'), checked('0.7.3')]) {
+      expect(
+        cliUpdateStep({cwd: outside, self, stateDir, argv: ['theme']}),
+      ).toEqual({
+        install: 'npm i -g @astryxdesign/cli@latest',
+        upgrade: null,
+        folder: null,
+        runs: false,
+      });
+    }
   });
 
   it("outside a project, repeats the run's command only when the bin started the run", () => {
@@ -674,18 +705,19 @@ describe('cliUpdateStep', () => {
     });
     const dlx = getDlxPrefix(outside);
     const self = {version: '0.7.2', root: runner};
+    const stateDir = checked('0.7.3');
     const argv = process.argv;
     process.argv = [argv[0], 'host.mjs', '--port', '4000', '--watch'];
     try {
       // Driven in-process, the arguments are the host program's own.
       _resetRunChoice();
-      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
-        `${dlx} @astryxdesign/cli@latest <command>`,
+      expect(cliUpdateStep({cwd: outside, self, stateDir}).install).toBe(
+        `${dlx} @astryxdesign/cli@0.7.3 <command>`,
       );
       process.argv = [argv[0], 'astryx', 'theme', 'palette', 'generate'];
       recordRunChoice(/** @type {any} */ ({copy: 'carried', answer: 'self'}));
-      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
-        `${dlx} @astryxdesign/cli@latest theme palette generate`,
+      expect(cliUpdateStep({cwd: outside, self, stateDir}).install).toBe(
+        `${dlx} @astryxdesign/cli@0.7.3 theme palette generate`,
       );
     } finally {
       process.argv = argv;
@@ -729,6 +761,30 @@ describe('the commands notices print go through the command-name picker (spec AS
       expect(alignCliAndCore({cwd: dir, cli: '0.7.3', core: '0.7.1'})).toBe(
         'npm install -E @astryxdesign/core@0.7.3, then host astryx upgrade --from 0.7.1 --apply',
       );
+    });
+  });
+
+  it("use a host's door for a package runner's run step outside a project", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    const self = {version: '0.7.2', root: runner};
+    runWithCliDoor('host astryx', () => {
+      expect(
+        cliUpdateStep({
+          cwd: outside,
+          self,
+          stateDir: checked('0.7.3'),
+          argv: ['theme', 'palette', 'generate'],
+        }).install,
+      ).toBe('host astryx theme palette generate');
     });
   });
 

@@ -47,7 +47,6 @@ import {
   commandInFolder,
   detectPackageManager,
   getCliInvocation,
-  getDlxPrefix,
   installDependenciesCommand,
   quoteCommandArgument,
 } from '../env/package-manager.mjs';
@@ -815,9 +814,11 @@ export function addCliCommand(root, version) {
  * project's, both run in the project's folder (`folder`). Outside a
  * project, the copy that ran updates: a global copy by the package manager
  * that holds it (see {@link globalUpgradeCommand}); a package runner's copy
- * by running the newest release (`runs`), with the run's own arguments
- * when the bin started the run (`<command>` otherwise, or when there are
- * none to repeat), as nothing installed it.
+ * by running the newest known release through the command-name picker
+ * (`runs`), with the run's own arguments when the bin started the run
+ * (`<command>` otherwise, or when there are none to repeat), as nothing
+ * installed it. With no release known to be newer than that copy, the step
+ * installs the newest CLI for the computer.
  * @param {{cwd: string, self?: {version: string, root: string}, stateDir?: string, argv?: string[]}} options
  * @returns {{install: string, upgrade: string | null, folder: string | null, runs: boolean}}
  */
@@ -837,11 +838,26 @@ export function cliUpdateStep({
         runs: false,
       };
     }
+    // A package runner may start the CLI package only at a version, through
+    // the command-name picker (spec AST-081 FR5). With no newer release
+    // known, the step installs the newest CLI for the computer instead.
+    const latest = knownLatest(stateDir);
+    if (!latest || !isBehind(self.version, latest.version)) {
+      return {
+        install: `npm i -g ${LATEST}`,
+        upgrade: null,
+        folder: null,
+        runs: false,
+      };
+    }
     const args = argv.length
       ? argv.map(arg => quoteCommandArgument(arg)).join(' ')
       : '<command>';
+    const stem = getCliInvocation(cwd, {
+      release: {version: latest.version, own: false},
+    });
     return {
-      install: `${getDlxPrefix(cwd)} ${LATEST} ${args}`,
+      install: `${stem} ${args}`,
       upgrade: null,
       folder: null,
       runs: true,
