@@ -349,15 +349,16 @@ describe('useToast fallback viewport theme mode', () => {
         </button>
       );
     }
+    // The second Theme is nested, so <html> keeps the first one's theme and
+    // mode: only the overwrite rule draws the second toast under the second
+    // Theme.
     render(
-      <>
-        <Theme theme={one} mode="light">
-          <Show label="From one" body="two-themes first" />
-        </Theme>
+      <Theme theme={one} mode="light">
+        <Show label="From one" body="two-themes first" />
         <Theme theme={two} mode="dark">
           <Show label="From two" body="two-themes second" />
         </Theme>
-      </>,
+      </Theme>,
     );
     await act(async () => {
       fireEvent.click(screen.getByText('From one'));
@@ -376,6 +377,10 @@ describe('useToast fallback viewport theme mode', () => {
       .closest('[data-astryx-theme]');
     expect(scope).toHaveAttribute('data-astryx-theme', 'fallback-two');
     expect(scope).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute(
+      'data-astryx-theme',
+      'fallback-one',
+    );
   });
 
   it('keeps focus in place when a toast from outside any Theme overwrites one from inside', async () => {
