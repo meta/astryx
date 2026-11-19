@@ -790,11 +790,12 @@ export function Item({
     !hasParentRole &&
     !isLinkRoot &&
     (isDelegate || href != null || onClick != null);
-  // The caller owns the delegated control, and the row cannot see it mount or
-  // change. On each commit the row marks it while it has no marker. Cleanup
-  // removes only the value the row wrote.
   const controlCurrent =
     ariaCurrent === false || ariaCurrent === 'false' ? undefined : ariaCurrent;
+  // Syncs `aria-current` on the caller's delegated control, a DOM node the row
+  // does not render and cannot see mount or change. On each commit the row
+  // marks it while it has no marker. Cleanup removes only the value the row
+  // wrote.
   useIsomorphicLayoutEffect(() => {
     const control = interactiveRef?.current;
     if (

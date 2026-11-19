@@ -93,7 +93,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `family:navigation-destinations`, of which ListItem is a member.
 - Item's label, description, slots, invisible button, delegated activation,
   and disabled and selected semantics — Item's shipped behavior, uncontracted
-  here.
+  here, except where the current marker sits on an interactive row
+  (`family:navigation-destinations` FR9).
 - What each edge treatment does to row geometry and the row inset, the touch
   target, press paint, row motion, and row menus — owned by `component:List`.
 - The `ListMarkerScope` that sets a marker or task state for Markdown's nested
@@ -147,7 +148,9 @@ No component-local concept beyond the consumer props; row props are
 - **AR1 — List semantics.** Inside a List, each row is an `<li>` in the List's
   `<ul>` or `<ol>` (FR1).
 - **AR2 — Row semantics.** Item's interaction, disabled, and selected semantics
-  apply unchanged; they are Item's shipped behavior, uncontracted here.
+  apply unchanged; they are Item's shipped behavior, uncontracted here, except
+  the current marker's place on an interactive row
+  (`family:navigation-destinations` FR9).
 - **AR3 — Task state.** A task row's checkbox is read-only and labelled (FR4).
 
 ## Design relationships

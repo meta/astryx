@@ -65,8 +65,7 @@ deciding_specs: [spec:AST-005/DEC-1, spec:AST-005/DEC-2, spec:AST-005/DEC-3]
 {
   "scope": "global",
   "triggers": {
-    "navigation": ["FR1", "FR3", "FR4", "FR5"],
-    "accessibility": ["FR9"]
+    "navigation": ["FR1", "FR3", "FR4", "FR5"]
   }
 }
 ```
@@ -267,7 +266,10 @@ interactive row moves with the marker. In server-rendered HTML a delegated
 row's control carries the marker only after hydration, and a delegated row
 whose control is not mounted carries none. A control that its own component
 mounts or replaces without a render of the row carries the marker from the
-row's next render.
+row's next render. When the row is deselected it removes a value it wrote,
+so a caller that sets the same value on its own control loses it then. A
+selected row keeps its own fill while it slides past other rows, whatever its
+`aria-current` value.
 
 Rejected: the marker on the list item of an interactive row, which a screen
 reader does not announce on focus.

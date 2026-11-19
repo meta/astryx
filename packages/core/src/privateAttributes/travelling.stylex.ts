@@ -46,7 +46,7 @@ export const travellingStyles = stylex.create({
   // the press and the row's content, so the divider and the press stay
   // visible. A selected row keeps its own fill. The row reads selection from
   // `data-selected`, because an interactive row's `aria-current` is on its
-  // button or link. The surface takes no pseudo-element,
+  // button, link or delegated control. The surface takes no pseudo-element,
   // since under a finger the row's `::after` is its hit layer. Its z-index, 2,
   // is above a swipeable row's raise under a finger (1), so it rides above
   // the swipeable rows it crosses.
