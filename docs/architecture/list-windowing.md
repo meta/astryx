@@ -161,7 +161,7 @@ module stays private while OQ1 is open.
 ### DEC-2 — Virtualizers work in container and page scroll
 
 **Reference:** `architecture:list-windowing/DEC-2`
-**Decider:** `cixzhang`, `2026-11-09`
+**Decider:** `cixzhang`, `2026-11-09 05:52 PT`
 
 Every virtualizer works inside a container scroll area and with page
 (document) scroll (INV4, FR4). No scroll-ref API is required.
@@ -171,36 +171,29 @@ Rejected: a caller-provided scroll ref.
 ### DEC-3 — Common engine requirements
 
 **Reference:** `architecture:list-windowing/DEC-3`
-**Decider:** `cixzhang`, `2026-11-09`
+**Decider:** `cixzhang`, `2026-11-09 05:51 PT`
 
-> In the common visualizer, anchoring will need to be configurable, scroll
-> positions keep properly with streaming data, then i want to pick the engine
-> with best perf and accuracy for row positions with variable height
-
-"Visualizer" means virtualizer. The shared windowing engine meets FR1–FR4. The
+The owner set three requirements for the shared virtualizer: anchoring is
+configurable, scroll positions hold while data streams in, and the engine is
+the candidate with the best performance and row-position accuracy for rows of
+variable height. The shared windowing engine meets FR1–FR4. The
 engine is chosen by a measured comparison of candidates on performance and
 row-position accuracy.
 
 ### DEC-4 — The windowing engine and its adapters have a size budget
 
 **Reference:** `architecture:list-windowing/DEC-4`
-**Decider:** `cixzhang`, `2026-11-09`
-
-> Size budget ok
+**Decider:** `cixzhang`, `2026-11-09 06:35 PT`
 
 The owner approved the budget in INV5. It is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
 
 ### DEC-6 — Table's public windowing API changes only one name
 
 **Reference:** `architecture:list-windowing/DEC-6`
-**Decider:** `cixzhang`, `2026-11-09`
+**Decider:** `cixzhang`, `2026-11-09 06:52 PT`
 
-> For humberto the public api probabyl just needs the initialViewportHeight
-> rename
-
-> Va a
-
-`useTableRowsVirtualization` keeps `rowHeight` and renames `viewportHeight` to
+The owner decided that Table's public windowing API needs only the
+`initialViewportHeight` rename. `useTableRowsVirtualization` keeps `rowHeight` and renames `viewportHeight` to
 `initialViewportHeight`, which Table reads for the first frame only. Other
 options the owner's card described for later (a callback scroll target, exact
 or estimated item sizes, an anchor) reach Table's public API only through a
@@ -208,11 +201,9 @@ later owner decision.
 
 Rejected: adding those options to Table's public API now.
 
-The owner added: "We can keep it required", "It just needs a rename and to
-remove it from affecting the actual height of the table", and "mainly because i
-dont want the virtualization hook to define the height. It does need to read
-the height". So `initialViewportHeight` stays required, and the hook reads the
-measured height of Table's scroll area and never defines it.
+The option stays required. The rename also stops it from setting Table's
+height: the hook reads the measured height of Table's scroll area and never
+defines it.
 
 ## Open questions
 
