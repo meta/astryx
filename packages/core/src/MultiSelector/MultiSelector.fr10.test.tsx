@@ -160,6 +160,26 @@ describe('MultiSelector FR10 targets', () => {
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
+
+  it('skips a consumer onKeyDown for a key the built-in model handles and cancels', () => {
+    const keys: string[] = [];
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={OPTIONS}
+        value={NO_VALUE}
+        onChange={() => {}}
+        onKeyDown={event => keys.push(event.key)}
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    const arrowDown = fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    // fireEvent returns false when a handler cancelled the event.
+    expect(arrowDown).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(trigger, {key: 'Tab'});
+    expect(keys).toEqual(['Tab']);
+  });
 });
 
 describe('MultiSelector FR10 renderTrigger', () => {
