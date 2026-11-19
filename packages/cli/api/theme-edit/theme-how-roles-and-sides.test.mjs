@@ -156,6 +156,19 @@ describe('plain looks', () => {
         ).toBe(true);
     }
   });
+  it("a status's text on a banner reaches its title and description, never its buttons or icon", async () => {
+    for (const [ask, re] of [
+      ['success text bold', /--font-weight-(?:semibold|normal) 700 --on banner --when status:success/],
+      ['warning text 10px', /--text-(?:label|supporting)-size 0\.625rem --on banner --when status:warning/],
+    ]) {
+      const w = writes(await how('q0', String(ask))).join('\n');
+      expect(w, String(ask)).toMatch(re);
+      // (A banner's close and action buttons read the medium weight and
+      // the label size of a button; its icon reads the large size.)
+      expect(w, String(ask)).not.toMatch(/--font-weight-medium [^\n]*--on banner/);
+      expect(w, String(ask)).not.toMatch(/--text-large-size [^\n]*--on banner/);
+    }
+  });
   it("a status's alerts keep their status for size and weight", async () => {
     for (const [ask, status] of [
       ['success alerts with smaller text', 'success'],
