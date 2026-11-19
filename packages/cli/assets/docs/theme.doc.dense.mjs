@@ -47,6 +47,16 @@ export const docsDense = {
       ],
     },
     {
+      section: 'The values a part shows',
+      title: 'The values a part shows',
+      content: [
+        {
+          type: 'prose',
+          text: 'what a part draws in a theme (card padding, button corners/colors): experimental theme editor show <theme> --on <part>, not package source; each value per mode + token + who sets it (core/base/theme); writes nothing; any theme the app has.',
+        },
+      ],
+    },
+    {
       section: 'No app yet',
       title: 'No app yet',
       content: [

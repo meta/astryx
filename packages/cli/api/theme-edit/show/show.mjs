@@ -12,11 +12,12 @@ import * as adapter from '../_adapter.mjs';
 
 /**
  * Every setting of a theme, key resolved values, problems it caused, the
- * sample page and the theme-building page with every component.
+ * sample page and the theme-building page with every component; with
+ * `options.on`, what one part of any theme shows, written nowhere.
  * @experimental
  * @param {string} theme
  * @param {import('../theme-edit.type.mjs').ThemeEditShowOptions} [options]
- * @returns {Promise<import('../theme-edit.type.mjs').ThemeEditShowResponse>}
+ * @returns {Promise<import('../theme-edit.type.mjs').ThemeEditShowResponse | import('../theme-edit.type.mjs').ThemeEditShowPartResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
   return adapter.themeEditShow(theme, options);
