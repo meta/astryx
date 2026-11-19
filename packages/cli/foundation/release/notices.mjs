@@ -407,23 +407,40 @@ const ADD = {
  * @returns {string}
  */
 export function addVerbFor(root, version = null) {
-  const pm = detectPackageManager(root);
-  const add = ADD[pm] ?? ADD.npm;
-  return savesExactly(root, version) ? `${add} ${exactAddFlag(pm)}` : add;
+  return addVerb(
+    root,
+    pinnedVersion(version) ? readReleaseFacts(root) : null,
+    version,
+  );
 }
 
 /**
- * Whether the project at `root` saves a package it adds at `version` exactly
- * ({@link addVerbFor}): `version` is one version, and the project pins its
- * Core (or, with no Core, its CLI) to one version.
+ * {@link addVerbFor} with the release facts of the project at `root` already
+ * read, or null when `version` is not one version.
  * @param {string} root
+ * @param {import('./project.mjs').ReleaseFacts | null} facts
+ * @param {string | null} version
+ * @returns {string}
+ */
+function addVerb(root, facts, version) {
+  const pm = detectPackageManager(root);
+  const add = ADD[pm] ?? ADD.npm;
+  return facts && savesExactly(facts, version)
+    ? `${add} ${exactAddFlag(pm)}`
+    : add;
+}
+
+/**
+ * Whether a project with the release facts `facts` saves a package it adds at
+ * `version` exactly ({@link addVerbFor}): `version` is one version, and the
+ * project pins its Core (or, with no Core, its CLI) to one version.
+ * @param {import('./project.mjs').ReleaseFacts} facts
  * @param {string | null} version
  * @returns {boolean}
  */
-function savesExactly(root, version) {
-  if (!pinnedVersion(version)) return false;
-  const facts = readReleaseFacts(root);
+function savesExactly(facts, version) {
   return Boolean(
+    pinnedVersion(version) &&
     pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange),
   );
 }
@@ -496,16 +513,46 @@ function releasedWithCoreIn(root) {
  * @returns {string}
  */
 export function addMatchingCore(cwd, name) {
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  const release = coreMatchedAdd(cwd, name)?.release ?? null;
+  const {root, facts} = projectFacts(cwd);
+  const release = releasedWithCorePackages().has(name)
+    ? coreRelease(facts)
+    : null;
   // The guidance names the same version the command would add.
   const guidance = installGuidanceFor(
     [release ? `${name}@${release}` : name],
     cwd,
   );
   if (guidance != null) return guidance;
-  const verb = addVerbFor(root, release);
+  const verb = addVerb(root, release ? facts : null, release);
   return `${verb} ${release ? releaseSpec(name, release) : name}`;
+}
+
+/**
+ * The root of the project a run in `cwd` belongs to, or `cwd` when it belongs
+ * to none, and that folder's release facts.
+ * @param {string} cwd
+ * @returns {{root: string, facts: import('./project.mjs').ReleaseFacts}}
+ */
+function projectFacts(cwd) {
+  const here = readReleaseFacts(cwd);
+  const root = projectRootOf(here) ?? cwd;
+  return {root, facts: samePath(root, cwd) ? here : readReleaseFacts(root)};
+}
+
+/**
+ * The release at which a project with the release facts `facts` adds a
+ * package Astryx releases with Core: the Core it installed or locked, else
+ * the one its package.json pins, else the Core range it declares, else, with
+ * no Core at all, the release of the CLI that answers.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @returns {string}
+ */
+function coreRelease(facts) {
+  return (
+    coreVersionOf(facts) ??
+    facts.declaredCoreRange ??
+    runningCopy(CLI_ROOT).version
+  );
 }
 
 /**
@@ -521,13 +568,9 @@ export function addMatchingCore(cwd, name) {
  */
 export function coreMatchedAdd(cwd, name) {
   if (!releasedWithCorePackages().has(name)) return null;
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  const facts = readReleaseFacts(root);
-  const release =
-    coreVersionOf(facts) ??
-    facts.declaredCoreRange ??
-    runningCopy(CLI_ROOT).version;
-  return {release, exact: savesExactly(root, release)};
+  const {facts} = projectFacts(cwd);
+  const release = coreRelease(facts);
+  return {release, exact: savesExactly(facts, release)};
 }
 
 /**

@@ -313,8 +313,18 @@ function installSpecs(packages, cwd) {
     guided: packages.map((p, i) =>
       matched[i] ? `${p}@${matched[i].release}` : p,
     ),
-    exact: matched.every(m => m?.exact === true),
+    exact: matched.length > 0 && matched.every(m => m?.exact === true),
   };
+}
+
+/**
+ * How the project at `cwd` installs `packages`: its package manager
+ * ({@link resolveInstallVerb}) and the versions {@link installSpecs} names.
+ * @param {string[]} packages
+ * @param {string} cwd
+ */
+function installPlan(packages, cwd) {
+  return {resolved: resolveInstallVerb(cwd), ...installSpecs(packages, cwd)};
 }
 
 /**
@@ -335,8 +345,20 @@ export function installCommandFor(packages, cwd, shownFrom = cwd) {
   if (packages.length === 0) {
     return {installCommand: null, noCommandReason: null, installGuidance: null};
   }
-  const resolved = resolveInstallVerb(cwd);
-  const {specs, guided, exact} = installSpecs(packages, cwd);
+  return planCommand(installPlan(packages, cwd), cwd, shownFrom);
+}
+
+/**
+ * {@link installCommandFor} for a plan already made.
+ * @param {ReturnType<typeof installPlan>} plan
+ * @param {string} cwd
+ * @param {string} shownFrom
+ * @returns {{installCommand: string | null, noCommandReason: string | null, installGuidance: string | null}}
+ */
+function planCommand({resolved, specs, guided, exact}, cwd, shownFrom) {
+  if (specs.length === 0) {
+    return {installCommand: null, noCommandReason: null, installGuidance: null};
+  }
   const installGuidance = installGuidanceFor(guided, cwd) ?? null;
   if (resolved.verb !== null) {
     const verb = exact
@@ -366,13 +388,13 @@ export function installCommandFor(packages, cwd, shownFrom = cwd) {
  * @returns {{line: string, note: string | null}}
  */
 export function installStepFor(packages, cwd) {
-  const {installCommand, installGuidance} = installCommandFor(packages, cwd);
+  const plan = installPlan(packages, cwd);
+  const {installCommand, installGuidance} = planCommand(plan, cwd, cwd);
   if (installGuidance) return {line: installGuidance, note: null};
   if (installCommand) return {line: installCommand, note: null};
-  const resolved = resolveInstallVerb(cwd);
+  const {resolved, specs, exact} = plan;
   const where =
     resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
-  const {specs, exact} = installSpecs(packages, cwd);
   return {
     line: `npm install ${exact ? `${exactAddFlag('npm')} ` : ''}${specs.join(' ')}`,
     note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,

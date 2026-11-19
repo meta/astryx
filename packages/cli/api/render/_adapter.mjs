@@ -440,9 +440,9 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
         // uses the page instead, as template and build do.
         message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        // At the versions template and build give it (a package released
-        // with Core at the project's Core release); none when the project's
-        // lockfiles disagree.
+        // At installCommandFor's versions: a package Astryx releases with
+        // Core at the project's Core release, any other at the CLI's range;
+        // none when the project's lockfiles disagree.
         const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
         if (line && samePackage) {
