@@ -17,6 +17,7 @@ verified_by:
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
+    packages/core/src/List/__tests__/TaskCheckboxCentered.interaction.browser.spec.ts,
   ]
 modules: []
 families: [family:navigation-destinations]
