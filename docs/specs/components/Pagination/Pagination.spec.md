@@ -367,12 +367,11 @@ public because a theme selects on it (`architecture:public-component-api`
 DEC-2).
 
 The first and last control in the row reflect `data-first="first"` and
-`data-last="last"`, so a strip can round
-its outer corners on the end cells and drop the separator after the last.
-Pagination reads them from the controls it renders, not from
-`:first-child`/`:last-child`: a control with a tooltip renders its layer after
-it in the row, so the last control is not the row's last child (the trap
-`component:ButtonGroup` met). Clipping the row with `overflow: hidden` instead
+`data-last="last"`, so a strip can round its outer corners on the end cells and
+drop the separator after the last. Pagination reads them from the controls it
+renders, not from `:first-child`/`:last-child`: a control with a tooltip
+renders its layer after it in the row, so the last control is not the row's
+last child (as `component:ButtonGroup` FR3 states). Clipping the row with `overflow: hidden` instead
 would cut the cells' focus rings. Calendar names a range's ends `start` and
 `end` (`component:Calendar` FR13); a strip's ends are a row's first and last
 controls, not a range's start and end days, so Pagination names them `first`
