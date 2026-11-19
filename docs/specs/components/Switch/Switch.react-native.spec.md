@@ -232,8 +232,9 @@ switch, `space.s2`, the theme's motion, and the theme's `toggle` haptic.
   behaviour of the thumb and the words; this record states only what React
   Native adds or does differently. Core's DOM-facing claims (FR1, FR2, FR8,
   FR9, FR11, FR12) belong to the web contract.
-- The Swift Switch also takes no `labelPosition`, `labelSpacing` or iOS
-  `size`; both follow the platform's switch row.
+- The draft Swift component API also keeps `labelPosition` and
+  `labelSpacing` out of the Apple contracts and makes `size` macOS-only; the
+  generated iOS `SwitchProps` still declares `size`.
 - `spec:AST-126` owns the platform control group; which native piece draws the
   platform's switch is its OQ6 (OQ1 here).
 - `spec:AST-124` owns drag frames and back-swipe arbitration; `spec:AST-130`
