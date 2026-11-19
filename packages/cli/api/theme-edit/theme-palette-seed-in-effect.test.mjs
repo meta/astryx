@@ -114,15 +114,6 @@ describe('a family whose fill the source sets', () => {
     expect(hue(String(shade))).toBeLessThan(300);
   }, 240_000);
 
-  it('names no replaced seed when the file is set again', async () => {
-    if (unbuilt) return;
-    const r = /** @type {any} */ (
-      await themeEditSet('t', 'accent', '#2563eb', {cwd})
-    );
-    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
-    expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
-  }, 240_000);
-
   it('names no replaced seed when only the source fill changed since', async () => {
     if (unbuilt) return;
     await editSource('t', text =>
@@ -152,5 +143,17 @@ describe('a family whose fill the source sets', () => {
     expect(text).toBeDefined();
     expect(hue(String(text))).toBeGreaterThan(250);
     expect(hue(String(text))).toBeLessThan(300);
+  }, 240_000);
+
+  it('drops a gray kind the editor wrote without blaming the author', async () => {
+    if (unbuilt) return;
+    await themeEditNew('g', {cwd, like: 'neutral'});
+    await themeEditSet('g', 'accent', '#808080', {cwd});
+    const r = /** @type {any} */ (
+      await themeEditSet('g', 'accent', '#2563eb', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    expect(notes.filter(n => /kind "neutral" is dropped/.test(n))).toEqual([]);
+    expect(notes.filter(n => /seed .* is replaced by/.test(n))).toEqual([]);
   }, 240_000);
 });

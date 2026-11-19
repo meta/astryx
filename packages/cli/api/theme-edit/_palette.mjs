@@ -297,10 +297,16 @@ export function tempFor(file) {
  */
 
 /**
+ * A color dial's family: its seed, and the source token that gives it when
+ * the theme's own source sets the family's fill (null when the setting does).
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null}} DialFamily
+ */
+
+/**
  * The palette mapping of a theme.
  * @typedef {object} PaletteMapping
  * @property {Candidate} candidate
- * @property {Array<{id: string, dial: string, seed: string, value: string}>} families
+ * @property {DialFamily[]} families
  * @property {Record<string, {family: string, light: StopRef, dark: StopRef}>} tokens
  * @property {ContrastCheck[]} contrast
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
@@ -685,7 +691,7 @@ function lightHalf(value) {
  * @param {Record<string, string>} [own] the tokens the theme's own source sets
  */
 function dialFamilies(data, own = {}) {
-  /** @type {Array<{id: string, dial: string, seed: string, value: string, source: string | null}>} */
+  /** @type {DialFamily[]} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
@@ -772,10 +778,9 @@ function savedSettings(cwd, slug) {
     return {
       settings: Array.isArray(data?.settings) ? data.settings : [],
       mode: typeof data?.mode === 'string' ? data.mode : null,
-      palette: typeof data?.palette === 'string' ? data.palette : null,
     };
   } catch {
-    return {settings: [], mode: null, palette: null};
+    return {settings: [], mode: null};
   }
 }
 
@@ -1196,7 +1201,7 @@ function darkExact(t, id, seed) {
  * the author's own stay. Null when the config would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{mode?: string, settings: Setting[], palette?: string}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base] the base theme's resolved colors, which the dark check reads
  * @returns {PalettePlan | null}
  */
@@ -1214,11 +1219,7 @@ function planPalette(cwd, slug, data, base) {
   // so its colors never move with a CLI upgrade. Moving it is a choice
   // made in its config.
   const config = own ? {...existing} : {recipe: PALETTE_RECIPE_V2};
-  const {
-    settings: saved,
-    mode: savedMode,
-    palette: savedPalette,
-  } = savedSettings(cwd, slug);
+  const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
   // Every theme's palette has both modes: a one-mode theme keeps both
   // halves of its colors (its mode is the one the app's <Theme> is given),
   // and a region Core draws in the other mode reads the other half.
@@ -1263,30 +1264,26 @@ function planPalette(cwd, slug, data, base) {
     );
   /** @type {any[]} */
   const before = Array.isArray(config.families) ? config.families : [];
+  const savedSeeds = dialFamilies(
+    {settings: saved},
+    ownSourceTokenValues(cwd, slug),
+  );
   // A config the editor wrote holds the seeds it gave, from the settings and
-  // the source as they were then: only a seed edited by hand is named.
-  const configHash = existing
-    ? sha256(fs.readFileSync(path.join(cwd, file)))
-    : null;
-  const configMine =
-    configHash != null &&
-    (data.palette === configHash ||
-      savedPalette === configHash ||
-      readWrittenRecord(cwd, slug)['palette.config.json'] === configHash);
-  const savedSeeds = configMine
-    ? []
-    : dialFamilies({settings: saved}, ownSourceTokenValues(cwd, slug));
+  // the source as they were then: its seed is never a hand edit.
+  const configMine = configWrittenByEditor(cwd, slug, data);
 
   /**
    * One dial family: the author's family with the dial's seed and the
    * exact anchors of that seed in place of the old ones.
    * @param {any} prev
-   * @param {{id: string, seed: string, source?: string | null}} f
+   * @param {DialFamily} f
    */
   const familyOf = (prev, f) => {
     const old = prev && typeof prev === 'object' ? prev : {};
     const neutral = f.id === 'neutral';
-    const wasSaved = savedSeeds.find(x => x.id === f.id)?.seed;
+    const wasSaved = configMine
+      ? old.seed
+      : savedSeeds.find(x => x.id === f.id)?.seed;
     if (old.seed != null && wasSaved && !sameColor(old.seed, wasSaved))
       notes.push(
         `${file}: the ${f.id} seed ${old.seed} there is replaced by ${f.source ? `the ${f.source} your theme source sets` : `your ${f.id} setting`}, ${f.seed}`,
@@ -1554,6 +1551,38 @@ export function syncPalette(cwd, slug, data, base) {
 }
 
 /**
+ * Whether the editor wrote the theme's palette config as it is now: its hash
+ * is the one the settings hold (`data.palette`, or the saved settings, which
+ * an undo may carry from before the palette existed), or the one the editor
+ * recorded writing (a color change stopped before its settings were saved).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{palette?: string}} data
+ */
+function configWrittenByEditor(cwd, slug, data) {
+  const file = path.join(cwd, paletteFiles(slug).config);
+  if (!fs.existsSync(file)) return false;
+  const hash = sha256(fs.readFileSync(file));
+  /** @type {string | undefined} */
+  let saved;
+  try {
+    saved = JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    ).palette;
+  } catch {
+    saved = undefined;
+  }
+  return (
+    data.palette === hash ||
+    saved === hash ||
+    readWrittenRecord(cwd, slug)['palette.config.json'] === hash
+  );
+}
+
+/**
  * @param {string} cwd
  * @param {string} slug
  * @param {any} data
@@ -1567,26 +1596,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   if (!plan) {
     // Only palette files the editor wrote go: a hand-made palette.config.json
     // (and what it generated) stays.
-    // The hash the saved settings recorded too: an undo may carry settings
-    // from before the palette existed.
-    /** @type {string | undefined} */
-    let saved;
-    try {
-      saved = JSON.parse(
-        fs.readFileSync(abs(`themes/${slug}/${slug}.settings.json`), 'utf8'),
-      ).palette;
-    } catch {
-      saved = undefined;
-    }
-    const hash = fs.existsSync(abs(f.config))
-      ? sha256(fs.readFileSync(abs(f.config)))
-      : null;
-    // Or the config the editor recorded writing (a color change stopped
-    // before its settings were saved).
-    const recorded = readWrittenRecord(cwd, slug)['palette.config.json'];
-    const mine =
-      hash != null &&
-      (data.palette === hash || saved === hash || recorded === hash);
+    const mine = configWrittenByEditor(cwd, slug, data);
     delete data.palette;
     if (!mine) return [];
     // A palette file edited by hand is never deleted: it stays, and the
