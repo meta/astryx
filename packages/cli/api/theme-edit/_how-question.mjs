@@ -2721,8 +2721,10 @@ const removalSaid = t => {
     ).test(t)
   )
     return 'show';
+  // (A negation rules out the removal only in its own clause: "it isn't
+  // useful so hide it" asks for the hide.)
   return new RegExp(
-    String.raw`(?:\b(?:not|never|avoid(?:ing)?|don'?t want|do not want)|n't)(?:\s+\S+){0,6}?\s+${verb}`,
+    String.raw`(?:\b(?:not|never|avoid(?:ing)?|don'?t want|do not want)|n't)(?:\s+(?!(?:so|but|then|and|therefore|thus)\b)[^\s,;.]+){0,6}?\s+${verb}`,
   ).test(t)
     ? 'keep'
     : 'remove';
@@ -11404,7 +11406,12 @@ export function draftAnswer(ctx, env, question) {
   const side = /\b(side ?nav|sidebar|side ?panel)\b/.test(q);
   for (const c of clauses)
     for (const p of c.parts) {
-      if (side && p.on === 'top-nav-item') p.on = 'side-nav-item';
+      if (
+        side &&
+        p.on === 'top-nav-item' &&
+        !/\b(?:top ?nav|navbar|top bar|header nav)/.test(c.text)
+      )
+        p.on = 'side-nav-item';
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
     }
   // ("sidebar: #111827 background, white links"): links said of a part that
@@ -18886,6 +18893,9 @@ export function draftAnswer(ctx, env, question) {
       const after = new RegExp(
         String.raw`\b(?:${REMOVAL_LEAD}|hid(?:e|es|den|ing)|un-?hide|remov(?:e|es|ed|ing))\s+(?:the\s+|any\s+|all\s+)?(.+)$`,
       ).exec(c.text.toLowerCase())?.[1];
+      // (A pronoun after it, "so hide it", takes the part said before.)
+      if (after != null && /^(?:it|them|this|that|those|these)\b/.test(after))
+        return true;
       return (
         after != null &&
         lex.parts.some(([re]) => {
@@ -18957,13 +18967,51 @@ export function draftAnswer(ctx, env, question) {
         });
         continue;
       }
-      // ("hide the dialog close button": a control said, whose only target is
-      // its icon. Hiding the icon leaves an empty control that still takes
-      // focus, so nothing is written.)
+      // ("hide the code block header background": only its background
+      // goes; the piece stays drawn.)
+      if (
+        pieces.length === 1 &&
+        C.MAP[pieces[0]] &&
+        removal !== 'keep' &&
+        !shown &&
+        /\b(?:background|backdrop|fill|bg)s?\b/.test(c.text)
+      ) {
+        const own = pieces[0];
+        seenPart(own);
+        const paints = Object.values(
+          C.MAP[own]?.at?.['background-color'] ?? {},
+        ).some(
+          v => !/^(?:transparent|none|initial|inherit)$/.test(String(v).trim()),
+        );
+        push(
+          paints
+            ? {
+                text: `no background on ${own}: its fill is transparent, and the piece itself stays drawn`,
+                options: [[set('background-color', 'transparent', {on: own})]],
+                intent: {...intentOf(c, []), families: []},
+              }
+            : {
+                text: `${own} paints no background of its own, so there is none to hide; the piece stays drawn`,
+                options: [],
+              },
+        );
+        continue;
+      }
+      // ("hide the dialog close button", "hide the dialog close icon": an
+      // icon drawn inside a button whose only target is the icon. Hiding
+      // the icon leaves an empty button that still takes focus, so nothing
+      // is written.)
+      const inButton = (/** @type {string} */ k) =>
+        Object.values(C.MAP).some(
+          v =>
+            /** @type {any} */ ((v).contains ?? []).includes(k) &&
+            /** @type {any} */ ((v).tags ?? []).includes('button'),
+        );
       if (
         pieces.length === 1 &&
         /-icon$/.test(pieces[0]) &&
-        /\b(?:button|control|link|toggle)s?\b/.test(c.text) &&
+        (inButton(pieces[0]) ||
+          /\b(?:button|control|link|toggle)s?\b/.test(c.text)) &&
         !TARGET.has(pieces[0].replace(/-icon$/, '-button'))
       ) {
         seenPart(pieces[0]);
@@ -27478,12 +27526,17 @@ export function draftAnswer(ctx, env, question) {
     // everything", "the default theme"; a describing word, "make it clear",
     // "more original", never does.)
     const earlier =
-      /\b(?:(?:like|as) (?:it was )?before|back to (?:how|the way|what)|(?:go|put it|change it) back\b(?! to\b)|reset|revert|restore|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all)|the (?:previous|earlier|old) (?:look|version|theme))/;
+      /\b(?:(?:like|as) (?:it was )?before|back to (?:how|the way|what)|(?:go|put it|change it) back(?! to\b)|reset|revert|restore|start over|what it was|the way (?:it|they) (?:was|were)|clear (?:everything|all|it all)|the (?:previous|earlier|old) (?:look|version))\b/;
+    // (The theme itself only when the ask goes back to it, "use the default
+    // theme", "back to the old theme"; "make the old theme warmer" asks for
+    // a change.)
     if (
       back &&
       /\bthe (?:default|base|original|standard|plain|previous|old) theme\b/.test(
         t,
-      )
+      ) &&
+      (earlier.test(t) ||
+        /\b(?:use|switch to|go back to|back to|return to)\s+the\b/.test(t))
     )
       return {
         text: `the app picks its theme: astryx theme use ${env.data.like ?? '<base>'} makes ${env.data.like ?? 'the base theme'} its default; to keep ${env.slug} and take back its settings instead: how "back to the base theme"`,
@@ -32301,9 +32354,12 @@ export function draftAnswer(ctx, env, question) {
         // name.)
         dialWords.has(word) ||
         DESCRIBING.test(word) ||
-        /(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(
+        // (A capitalized word is said as a name, "Airtable", "Fluent".)
+        (/(?:ful|ish|ive|al|ic|ous|less|est|ern|ed|ing|er|ly|ible|able|ent|ant)$/.test(
           word,
-        )
+        ) &&
+          new RegExp(String.raw`\b${word}\b`, 'i').exec(question)?.[0]?.[0] ===
+            word[0])
       )
         return false;
       if (

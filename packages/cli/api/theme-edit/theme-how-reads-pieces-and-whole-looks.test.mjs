@@ -55,8 +55,14 @@ const answer = async q => (await themeEditHow(q, {cwd, theme: 't'})).data;
 /** The first answer's lines, without the command prefix. @param {any} data */
 const first = data =>
   (data.results ?? [])
-    .find((/** @type {any} */ r) => r.commands.some((/** @type {string} */ c) => / editor (set|undo) /.test(c)))
-    ?.commands.map((/** @type {string} */ c) => c.replace(/^.*? editor /, '')) ?? [];
+    .find((/** @type {any} */ r) =>
+      r.commands.some((/** @type {string} */ c) =>
+        / editor (set|undo) /.test(c),
+      ),
+    )
+    ?.commands.map((/** @type {string} */ c) =>
+      c.replace(/^.*? editor /, ''),
+    ) ?? [];
 
 describe("a top nav's links and items", () => {
   it(
@@ -90,7 +96,12 @@ describe('a look named after a product', () => {
       }
       // (A quality or describing word names no product: a name is said as
       // one, capitalized.)
-      for (const q of ['make it accessible', 'make it consistent', 'make it pretty', 'make it cozy'])
+      for (const q of [
+        'make it accessible',
+        'make it consistent',
+        'make it pretty',
+        'make it cozy',
+      ])
         expect(JSON.stringify((await answer(q)).results), q).not.toMatch(
           /never guesses a brand/,
         );
@@ -113,9 +124,10 @@ describe('one variant made to look like another', () => {
           expect(l, q).toMatch(/^set t /);
           expect(l, q).toMatch(/--on button --when variant:ghost\b/);
         }
-        expect(lines.some(l => /^set t background-color /.test(l)), q).toBe(
-          true,
-        );
+        expect(
+          lines.some(l => /^set t background-color /.test(l)),
+          q,
+        ).toBe(true);
       }
       const primary = first(
         await answer('ghost buttons should look like the primary ones'),
@@ -130,7 +142,10 @@ describe('one variant made to look like another', () => {
   it(
     'leaves "look like before" a reset',
     async () => {
-      for (const q of ['make the cards look like before', 'make it look like before']) {
+      for (const q of [
+        'make the cards look like before',
+        'make it look like before',
+      ]) {
         const text = JSON.stringify((await answer(q)).results);
         expect(text, q).not.toMatch(/variant:/);
         // ("before" is the earlier look, never a product's name.)
@@ -138,14 +153,13 @@ describe('one variant made to look like another', () => {
       }
       // (Said of no part, it is the theme's earlier look: undo; a theme
       // named is the app's choice of theme.)
-      for (const q of [
-        'make it look like before',
-        'clear everything',
-      ])
+      for (const q of ['make it look like before', 'clear everything'])
         expect(JSON.stringify((await answer(q)).results), q).toMatch(
           /undo t steps back one change|has no change to undo/,
         );
-      const use = JSON.stringify((await answer('use the default theme')).results);
+      const use = JSON.stringify(
+        (await answer('use the default theme')).results,
+      );
       expect(use).toMatch(/astryx theme use /);
       expect(use).toMatch(/back to the base theme/);
       expect(use).not.toMatch(/steps back one change/);
@@ -163,7 +177,9 @@ describe('one variant made to look like another', () => {
         'a back-to-school theme',
       ]) {
         const text = JSON.stringify((await answer(q)).results);
-        expect(text, q).not.toMatch(/steps back one change|has no change to undo/);
+        expect(text, q).not.toMatch(
+          /steps back one change|has no change to undo/,
+        );
         expect(text, q).not.toMatch(/astryx theme use /);
       }
     },
@@ -201,7 +217,9 @@ describe('a likeness said with a state or a mode', () => {
       ]) {
         const data = await answer(q);
         expect(first(data), q).toEqual([]);
-        expect(JSON.stringify(data.results), q).toMatch(/nothing is written for/);
+        expect(JSON.stringify(data.results), q).toMatch(
+          /nothing is written for/,
+        );
       }
     },
     T,
@@ -219,7 +237,91 @@ describe('"not" or "never" before a look that is no likeness', () => {
       ]) {
         const data = await answer(q);
         expect(first(data).length, q).toBeGreaterThan(0);
-        expect(JSON.stringify(data.results), q).not.toMatch(/asks for no change|nothing to change/);
+        expect(JSON.stringify(data.results), q).not.toMatch(
+          /asks for no change|nothing to change/,
+        );
+      }
+    },
+    T,
+  );
+});
+
+describe('a background hidden on a piece', () => {
+  it(
+    'hides only the background; the piece stays drawn',
+    async () => {
+      for (const q of [
+        'hide the code block copy button background',
+        'hide the code block header background',
+        'hide the banner icon background',
+      ]) {
+        const data = await answer(q);
+        expect(JSON.stringify(data.results), q).not.toMatch(/display none/);
+      }
+      expect(
+        first(await answer('hide the code block header background')).join('\n'),
+      ).toMatch(/background-color transparent --on code-block-header/);
+    },
+    T,
+  );
+
+  it(
+    'leaves an icon drawn inside a button: hiding it keeps an empty, focusable button',
+    async () => {
+      const data = await answer('hide the dialog close icon');
+      expect(first(data)).toEqual([]);
+      expect(JSON.stringify(data.results)).toMatch(
+        /empty control that still takes focus/,
+      );
+    },
+    T,
+  );
+
+  it(
+    'a negation in a clause before the hide does not rule it out',
+    async () => {
+      const data = await answer(
+        "the code block copy button isn't useful so hide it",
+      );
+      expect(JSON.stringify(data.results)).not.toMatch(/asks for no change/);
+    },
+    T,
+  );
+});
+
+describe('the earlier theme or look, and parts said apart', () => {
+  it(
+    'needs going-back words, and keeps each nav where it was said',
+    async () => {
+      expect(
+        JSON.stringify((await answer('a restored vintage look')).results),
+      ).not.toMatch(/undo|no change to undo/);
+      expect(
+        JSON.stringify((await answer('make the old theme warmer')).results),
+      ).not.toMatch(/theme use/);
+      expect(
+        JSON.stringify((await answer('go back to the old theme')).results),
+      ).toMatch(/theme use/);
+      const navs = first(
+        await answer('top nav links bold and the side nav items red'),
+      ).join('\n');
+      expect(navs).toMatch(/font-weight 700 --on top-nav-item/);
+      expect(navs).toMatch(/--on side-nav-item/);
+    },
+    T,
+  );
+
+  it(
+    'reads a capitalized product name as a name, whatever its ending',
+    async () => {
+      for (const q of [
+        'an Airtable look',
+        'make it look like Segment',
+        'a Fluent theme',
+      ]) {
+        expect(JSON.stringify((await answer(q)).results), q).toMatch(
+          /never guesses a brand/,
+        );
       }
     },
     T,
@@ -250,7 +352,9 @@ describe('a negation that takes no piece away', () => {
     async () => {
       const data = await answer('hide the dialog close button');
       expect(first(data)).toEqual([]);
-      expect(JSON.stringify(data.results)).toMatch(/empty control that still takes focus/);
+      expect(JSON.stringify(data.results)).toMatch(
+        /empty control that still takes focus/,
+      );
     },
     T,
   );
@@ -268,7 +372,7 @@ describe('a piece said before a part that has no such piece', () => {
   );
 });
 
-describe("a piece the ask says not to take away", () => {
+describe('a piece the ask says not to take away', () => {
   it(
     'is kept: "don\'t hide", "never hide" and "do not remove" write nothing',
     async () => {
