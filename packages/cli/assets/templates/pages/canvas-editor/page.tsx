@@ -2484,7 +2484,7 @@ export default function CanvasEditor() {
                         <InspectorSection title="Styles">
                           <InspectorRow label="Radius">
                             <AxisInput
-                              icon={Scan}
+                              icon={SquareRoundCorner}
                               label="Corner radius"
                               value={selected.radius}
                               onChange={next => updateSelected({radius: next})}
@@ -2500,9 +2500,7 @@ export default function CanvasEditor() {
                               tooltip="Per corner"
                               size="sm"
                               variant="ghost"
-                              icon={
-                                <Icon icon={SquareRoundCorner} size={ICON} />
-                              }
+                              icon={<Icon icon={Scan} size={ICON} />}
                             />
                           </InspectorRow>
                           <StyleRow
