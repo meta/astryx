@@ -428,16 +428,17 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      // At installCommandFor's versions, in the guidance too: a package Astryx
-      // releases with Core at the project's Core release, any other at the
-      // CLI's range; no command when the project's lockfiles disagree.
+      // At installCommandFor's versions: a package Astryx releases with Core
+      // at the project's Core release, in the guidance too; any other at the
+      // CLI's range in the command, bare in the guidance; no command when the
+      // project's lockfiles disagree.
       const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
       const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
-      } else if (step == null) {
+      } else if (pageRoot == null || step == null) {
         // In a folder no package.json holds, an install would make the folder
         // a project, so the message names the packages for the project that
         // uses the page instead, as template and build do.
