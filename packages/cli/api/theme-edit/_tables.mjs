@@ -694,6 +694,12 @@ export const DIALS = wordTable({
     examples: ['set my base neutral', 'set my base none'],
     words: 'base start starting built-in extends foundation',
   },
+  focus: {
+    help: "How keyboard focus looks on every focusable part at once. ring: Core's focus ring, a solid accent outline set off from the part (the default). glow: a soft halo hugging the part, the accent at a quarter strength (the look of Bootstrap's focus). Fields take the same look on focus. The focus tokens (--focus-outline-color, --focus-outline-width, --focus-outline-offset) tune it further. Feel: ring feels precise; glow feels soft and friendly.",
+    values: 'ring|glow',
+    examples: ['set my focus glow', 'set my focus ring'],
+    words: 'focus focused keyboard glow halo focus-ring outline',
+  },
   mode: {
     help: "Which color modes the theme supports. light-only / dark-only: the colors the theme sets get one value, its mode's shade; settings saved for the other mode stay saved but do not apply (the result names them); the in-app preview starts in that mode with no switch. both (default): colors without --mode apply to both; --mode light|dark sets one side, and the other side keeps the base theme's value.",
     values: 'both|light-only|dark-only',

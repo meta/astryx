@@ -7788,6 +7788,14 @@ export function compileTheme(ctx, data, base) {
         }
     }
   };
+  /** The focus dial's look for the whole theme, if any. */
+  const focusLook =
+    [...data.settings]
+      .reverse()
+      .find(x => x.source === 'dial' && x.thing === 'focus' && !x.on)?.value ??
+    null;
+  const FOCUS_GLOW =
+    '0 0 0 var(--focus-outline-width) var(--focus-outline-color)';
   /**
    * A resting background shorthand on a part whose hover and press Core
    * draws as a background image (a layer over the fill): the shorthand
@@ -8158,6 +8166,15 @@ export function compileTheme(ctx, data, base) {
     /** What Core draws for a set in a state. @param {{pairs: string[], rest: string | null, states: Map<string, string>}} set @param {string} state @returns {string | null} */
     const coreOf = (set, state) => {
       const own = set.states.get(state);
+      // A whole-theme focus look (the focus dial's glow) is every field's
+      // focus ring too.
+      if (
+        own != null &&
+        focusLook === 'glow' &&
+        /^focus/.test(state) &&
+        !/^\s*none\s*$/i.test(own)
+      )
+        return FOCUS_GLOW;
       if (own != null) return own;
       // A set that refines another and has no rule of its own there keeps
       // its resting value (a status's none); a set alone draws nothing new.
@@ -8648,6 +8665,37 @@ export function compileTheme(ctx, data, base) {
           Object.assign(block({...s, mode: undefined}, fill), edge);
           if (Object.keys(rest).length)
             Object.assign(block({...s, mode: undefined}, t), rest);
+        }
+      } else if (s.thing === 'focus') {
+        // Parts that draw focus as an outline read the focus tokens; the
+        // fields, which ring themselves in their shadow, take the same look
+        // through withRingStates (coreOf reads the dial).
+        if (s.value === 'glow') {
+          putTok('--focus-outline-width', '0.25rem');
+          putTok('--focus-outline-offset', '0px');
+          putTok(
+            '--focus-outline-color',
+            'color-mix(in srgb, var(--color-accent) 25%, transparent)',
+          );
+          for (const target of ctx.project.target.keys()) {
+            // (A resting shadow for one scope, a status, composes the glow
+            // in that scope's own ring states; the rest of the part takes it
+            // here.)
+            const rested = data.settings.some(
+              y =>
+                y.source === 'property' &&
+                kebab(y.thing) === 'box-shadow' &&
+                !y.state &&
+                !y.when &&
+                partsOf(ctx, y).includes(target),
+            );
+            if (!rested)
+              withRingStates(
+                {...s, source: 'property', thing: 'box-shadow', on: target},
+                target,
+                null,
+              );
+          }
         }
       } else if (s.thing === 'buttons') {
         const primary = block(
@@ -9611,6 +9659,44 @@ export function compileTheme(ctx, data, base) {
           `light-dark(${edge.light ?? shown('--color-border-emphasized', 'light')}, ${edge.dark ?? shown('--color-border-emphasized', 'dark')})`;
     }
   }
+  // The focus dial's glow is the accent mixed with transparent: as soft
+  // as it can be while it reads at 3:1 on the page and on a surface, in
+  // each mode (a ring a theme sets itself stays as set).
+  if (
+    focusLook === 'glow' &&
+    !data.settings.some(
+      y => y.thing === '--focus-outline-color' && !y.on && !y.state,
+    )
+  )
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const accent = shown('--color-accent', m);
+      const grounds = [
+        shown('--color-background-body', m),
+        shown('--color-background-surface', m),
+      ].filter(g => g != null);
+      if (!accent || !grounds.length) continue;
+      let share = 25;
+      while (
+        share < 100 &&
+        grounds.some(
+          g =>
+            ratio(
+              compositeOver(
+                /** @type {[number, number, number]} */ (parseColor(accent)),
+                share / 100,
+                /** @type {[number, number, number]} */ (parseColor(String(g))),
+              ),
+              /** @type {[number, number, number]} */ (parseColor(String(g))),
+            ) < 3,
+        )
+      )
+        share += 5;
+      putTok(
+        '--focus-outline-color',
+        `color-mix(in srgb, var(--color-accent) ${share}%, transparent)`,
+        m,
+      );
+    }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
     const d = dark ?? shownHalf(k, 'dark');
@@ -9686,6 +9772,29 @@ export function compileTheme(ctx, data, base) {
   {
     /** @param {string} x */
     const rgbOf = x => /** @type {[number, number, number]} */ (parseColor(x));
+    /** The ring color as the theme writes it in a mode. @param {'light' | 'dark'} m */
+    const ringValue = m =>
+      String(
+        tok['--focus-outline-color']?.[m] ??
+          base[m]?.['--focus-outline-color'] ??
+          '',
+      ).trim();
+    /** A see-through ring (the glow, a color mixed with transparent): the color and its share. @param {string} v @param {'light' | 'dark'} m */
+    const mixed = (v, m) => {
+      const mm =
+        /^color-mix\(\s*in srgb\s*,\s*var\((--[\w-]+)\)\s+([\d.]+)%\s*,\s*transparent\s*\)$/i.exec(
+          v,
+        );
+      const c = mm ? shown(mm[1], m) : null;
+      return c ? {color: c, share: Number(mm?.[2]) / 100} : null;
+    };
+    /** The ring as drawn on a fill in a mode, as hex. @param {'light' | 'dark'} m @param {string} fill */
+    const ringOn = (m, fill) => {
+      const mix = mixed(ringValue(m), m);
+      return mix
+        ? hex(compositeOver(rgbOf(mix.color), mix.share, rgbOf(fill)))
+        : shown('--focus-outline-color', m);
+    };
     /** The last unscoped resting setting of a thing on a part in a mode. @param {string} target @param {RegExp} thing @param {'light' | 'dark'} m */
     const inEffect = (target, thing, m) =>
       [...data.settings]
@@ -9738,8 +9847,9 @@ export function compileTheme(ctx, data, base) {
       for (const m of /** @type {const} */ (['light', 'dark'])) {
         const set = inEffect(target, /^background(-color)?$/, m);
         const fill = set ? opaque(set.value, m) : null;
-        const ring = shown('--focus-outline-color', m);
-        if (!set || !fill || !ring) continue;
+        if (!set || !fill) continue;
+        const ring = ringOn(m, fill);
+        if (!ring) continue;
         if (ratio(rgbOf(ring), rgbOf(fill)) >= 3) continue;
         const text = inEffect(target, /^(color|--color-text-primary)$/, m);
         const ownText = text ? opaque(text.value, m) : null;
@@ -9757,10 +9867,14 @@ export function compileTheme(ctx, data, base) {
           if (!SURFACE_PARTS.includes(inner) || ringSet(inner)) continue;
           const own = fillOf(inner, m);
           if (!own || own === fill) continue;
+          // (The theme's own ring first, as it writes it.)
+          const theirs = ringOn(m, own);
           const back =
-            [ring, '#000000', '#ffffff'].find(
-              c => ratio(rgbOf(c), rgbOf(own)) >= 3,
-            ) ?? null;
+            theirs && ratio(rgbOf(theirs), rgbOf(own)) >= 3
+              ? ringValue(m) || theirs
+              : (['#000000', '#ffffff'].find(
+                  c => ratio(rgbOf(c), rgbOf(own)) >= 3,
+                ) ?? null);
           if (back) modeBlock(at, inner, m)['--focus-outline-color'] = back;
         }
       }
