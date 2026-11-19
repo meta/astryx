@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {userCacheDir} from '../foundation/env/user-dirs.mjs';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {
@@ -22,6 +23,7 @@ import {
   recyclePlacedCopies,
 } from '../test-utils/global-local-fixtures.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
+import {hasModuleHooks} from '../test-utils/packed-gather-cache-fixture.mjs';
 
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -299,23 +301,30 @@ describe('the stored search catalog', () => {
     }
   }, 300_000);
 
-  it('keeps a reference to the store, not a copy, and reads it back byte for byte', () => {
-    // Only a copy installed in a node_modules folder keeps gathers.
-    const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
-    const cache = fs.mkdtempSync(path.join(work, 'cache-'));
-    const env = {XDG_CACHE_HOME: cache};
-    const ask = ['search', 'button', '--json'];
-    const first = run(installed, ask, env);
-    expect(first.status, first.stderr).toBe(0);
-    const kept = path.join(cache, 'astryx', 'catalogs');
-    const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
-    expect(entries).toHaveLength(1);
-    const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
-    // No candidate is copied into the kept entry.
-    expect(entry).not.toContain('"domain":"component"');
-    expect(run(installed, ask, env)).toEqual(first);
-    expect(first).toEqual(run(CLI_ROOT, ask));
-  }, 120_000);
+  it.skipIf(!hasModuleHooks)(
+    'keeps a reference to the store, not a copy, and reads it back byte for byte',
+    () => {
+      // Only a copy installed in a node_modules folder keeps gathers.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      // macOS keeps the user cache under HOME and ignores XDG_CACHE_HOME, so
+      // the run gets a home of its own too.
+      const home = fs.mkdtempSync(path.join(work, 'home-'));
+      const env = {XDG_CACHE_HOME: cache, HOME: home};
+      const ask = ['search', 'button', '--json'];
+      const first = run(installed, ask, env);
+      expect(first.status, first.stderr).toBe(0);
+      const kept = path.join(userCacheDir({home, env}), 'catalogs');
+      const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
+      expect(entries).toHaveLength(1);
+      const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
+      // No candidate is copied into the kept entry.
+      expect(entry).not.toContain('"domain":"component"');
+      expect(run(installed, ask, env)).toEqual(first);
+      expect(first).toEqual(run(CLI_ROOT, ask));
+    },
+    120_000,
+  );
 
   it('is not used where the project adds to a catalog', () => {
     const config = path.join(project, 'astryx.config.mjs');

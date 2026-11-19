@@ -22,7 +22,10 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
-import {useTopNavRenderMode} from './TopNavRenderContext';
+import {
+  useTopNavRenderMode,
+  useTopNavUnreadRegionStyle,
+} from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
 import {Divider} from '../Divider/Divider';
 import {MobileNav} from '../MobileNav/MobileNav';
@@ -141,12 +144,16 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  // The end content keeps its full width while the heading can yield.
+  // It is never wider than the bar. A fluid end item then narrows,
+  // so the toggle stays on screen.
   mobileBarEnd: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     flexShrink: 0,
     marginInlineStart: 'auto',
+    maxWidth: '100%',
   },
   // Drawer mode — vertical list of nav items
   drawerItems: {
@@ -236,6 +243,7 @@ export function TopNav({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
+  const unreadRegionStyle = useTopNavUnreadRegionStyle() ?? undefined;
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
@@ -340,7 +348,7 @@ export function TopNav({
         )}
         {hasStartContent && (
           <TopNavSlotContext value="start">
-            <div {...stylex.props(styles.startContent)}>
+            <div {...stylex.props(styles.startContent, unreadRegionStyle)}>
               {resolvedStartContent}
             </div>
           </TopNavSlotContext>
@@ -348,7 +356,9 @@ export function TopNav({
       </div>
       {hasCenterContent && (
         <TopNavSlotContext value="center">
-          <div {...stylex.props(styles.centerContent)}>{centerContent}</div>
+          <div {...stylex.props(styles.centerContent, unreadRegionStyle)}>
+            {centerContent}
+          </div>
         </TopNavSlotContext>
       )}
       {hasCenterContent ? (

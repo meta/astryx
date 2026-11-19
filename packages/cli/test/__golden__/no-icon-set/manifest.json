@@ -233,7 +233,7 @@
           {
             "name": "query",
             "required": false,
-            "variadic": false,
+            "variadic": true,
             "description": "<text>"
           }
         ],
@@ -344,6 +344,8 @@
         "json": true,
         "available": true,
         "responseTypes": [
+          "<text>",
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
@@ -724,6 +726,24 @@
             "available": true
           },
           {
+            "flag": "--to <places>",
+            "description": "<text>",
+            "type": "string",
+            "available": true
+          },
+          {
+            "flag": "--once",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          },
+          {
+            "flag": "--remove",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          },
+          {
             "flag": "--remove-agents",
             "description": "<text>",
             "type": "boolean",
@@ -756,6 +776,9 @@
           "<text>"
         ],
         "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
@@ -1006,6 +1029,36 @@
         "responseTypes": [
           "<text>"
         ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "mcp",
+        "description": "<text>",
+        "arguments": [],
+        "options": [
+          {
+            "flag": "--docs-only",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          }
+        ],
+        "json": false,
+        "available": true,
         "examples": [
           "<text>",
           "<text>"
@@ -1295,6 +1348,7 @@
               "<text>"
             ],
             "examples": [
+              "<text>",
               "<text>",
               "<text>"
             ],
@@ -1882,6 +1936,8 @@
         "<text>"
       ],
       "docs": [
+        "<text>",
+        "<text>",
         "<text>",
         "<text>",
         "<text>",

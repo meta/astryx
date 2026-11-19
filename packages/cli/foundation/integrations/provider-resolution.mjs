@@ -187,6 +187,16 @@ function describeIntegration(integration) {
 }
 
 /**
+ * Whether the package's manifest writes its provider ID, rather than taking it
+ * from the package name.
+ * @param {LoadedIntegration} integration
+ * @returns {boolean}
+ */
+function declaresProviderId(integration) {
+  return integration.__declaredKeys?.includes('providerId') === true;
+}
+
+/**
  * An inert record for a package whose provider ID is already claimed. It keeps
  * the package's identity and location for reporting, and drops every
  * contribution root and handler.
@@ -204,6 +214,13 @@ function providerConflict(integration, claimant) {
   const reason = claimant.__local
     ? 'is the package being authored, so it is used'
     : 'loads first and is used';
+  const bothDeclare =
+    declaresProviderId(integration) && declaresProviderId(claimant);
+  const advice = bothDeclare
+    ? '. Both manifests declare this provider ID. If they are one integration ' +
+      'installed under two names, keep one of the two dependencies; ' +
+      'otherwise one package must change its providerId.'
+    : ' until one package changes its providerId.';
   return {
     name: integration.name,
     providerId,
@@ -220,8 +237,8 @@ function providerConflict(integration, claimant) {
       claimedBy: claimant.name,
       message:
         `${setAside} and ${winner} both claim provider ID "${providerId}". ` +
-        `${winner} ${reason}; ${setAside} contributes nothing ` +
-        'until one package changes its providerId.',
+        `${winner} ${reason}; ${setAside} contributes nothing${advice}`,
+      ...(bothDeclare ? {bothDeclare: true} : {}),
     },
   };
 }

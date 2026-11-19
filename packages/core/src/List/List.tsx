@@ -27,13 +27,14 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
+import {use, useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
 import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
 import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {
   ListContext,
+  ListStaticContext,
   type ListDensity,
   type ListEdge,
   type ListMarkerStyle,
@@ -226,6 +227,11 @@ const styles = stylex.create({
       ':has(:focus-visible)': FOCUS_RING_REACH,
     },
   },
+  // A static list has no swiped rows to cut, so it drops the inline clip.
+  // StyleX compiles `overflowInline` to `overflow-x`, so this sets `overflowX`.
+  noInlineClip: {
+    overflowX: 'visible',
+  },
   // A list under an `animatedLayout` handle isolates for every pointer. A row
   // that slides across others rides above them with a mouse too, and it must
   // stay below a page-level sticky header.
@@ -297,7 +303,7 @@ const styles = stylex.create({
     },
   },
   withDividers: {
-    gap: 0,
+    rowGap: 0,
   },
   withCounter: {
     counterReset: 'astryx-list',
@@ -397,6 +403,9 @@ export function List({
   const edge: ListEdge =
     edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
+  const staticMark = use(ListStaticContext);
+  const parentList = use(ListContext);
+  const isStatic = staticMark != null && parentList?.staticMark !== staticMark;
 
   const contextValue = useMemo(
     () => ({
@@ -410,6 +419,7 @@ export function List({
         session: reorderSession,
         options: reorderOptions as ListReorderOptions,
       },
+      staticMark,
     }),
     [
       density,
@@ -419,6 +429,7 @@ export function List({
       animatedLayout,
       reorderSession,
       reorderOptions,
+      staticMark,
     ],
   );
 
@@ -449,6 +460,7 @@ export function List({
         themeProps('list', {density, listStyle}),
         stylex.props(
           styles.list,
+          isStatic && styles.noInlineClip,
           animatedLayout != null && styles.animatedIsolation,
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,

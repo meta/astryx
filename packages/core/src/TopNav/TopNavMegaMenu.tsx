@@ -57,7 +57,7 @@ import {Icon} from '../Icon';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -65,6 +65,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -479,6 +480,7 @@ function DefaultMegaMenu({
     contentProps,
     menuRef,
     setTriggerEl,
+    close,
   } = useMenuHover<HTMLDivElement>({
     show: popover.show,
     hide: popover.hide,
@@ -491,6 +493,9 @@ function DefaultMegaMenu({
     // from light dismiss.
     popoverId: popover.id,
   });
+  // Items read the shared modality at a pick. This call turns that tracking on.
+  const modality = useInteractionModalityTracking();
+  const panelRef = useMergedRefs(menuRef, modality.ref);
 
   return (
     <>
@@ -532,24 +537,28 @@ function DefaultMegaMenu({
           // role="group" — a mega menu is a browsing grid of links, not an
           // ARIA menu of menuitems (per the WAI-ARIA APG, the menu role is
           // for action menus; link mega menus are the documented anti-case).
-          ref={menuRef}
+          ref={panelRef}
           role="group"
           aria-label={label}
           {...contentProps}
           {...stylex.props(styles.panelContainer)}>
-          <div {...stylex.props(styles.panelContent)}>
-            {/* Menu items section */}
-            {isRenderable(items) && (
-              <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
-                {items}
-              </Grid>
-            )}
+          {/* Items close the panel on a keyboard, finger or pen pick, as
+              TopNavMenu items do. */}
+          <TopNavMegaMenuCloseContext value={close}>
+            <div {...stylex.props(styles.panelContent)}>
+              {/* Menu items section */}
+              {isRenderable(items) && (
+                <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
+                  {items}
+                </Grid>
+              )}
 
-            {/* Featured section */}
-            {isRenderable(featured) && (
-              <div {...stylex.props(styles.featured)}>{featured}</div>
-            )}
-          </div>
+              {/* Featured section */}
+              {isRenderable(featured) && (
+                <div {...stylex.props(styles.featured)}>{featured}</div>
+              )}
+            </div>
+          </TopNavMegaMenuCloseContext>
         </div>,
         {
           placement: 'below',

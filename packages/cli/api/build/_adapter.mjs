@@ -7,20 +7,24 @@
  *
  * @input Template and component discovery for `cwd` — the CLI's own templates
  *   and Core's components, plus any that the project's configured integrations
- *   contribute.
+ *   contribute; the project's generated theme module and installed theme
+ *   packages.
  * @output Ready page templates as `{name, displayName, description, category,
  *   keywords, command}`, where `command` is the `astryx template` command that
  *   selects exactly that template; blocks as search names them; components as
  *   `{name, keywords}`; the kit's matcher weights, the root's classifier
  *   weights, and the block picker's weights; `keptBlockCatalog`, which keeps
- *   the picker's per-block vectors beside the kept search catalog.
+ *   the picker's per-block vectors beside the kept search catalog; and
+ *   `appThemeWiring`, how the project wires its theme.
  * @position Beside build.mjs (api/build/). The kit leaf reads templates and
  *   components only through here, because a subject's `_adapter.mjs` is its
  *   only environment access. This adds no discovery of its own: templates come
- *   from the template subject's, components from search's.
+ *   from the template subject's, components from search's, themes from the
+ *   theme subject's.
  */
 
 import fs from 'node:fs';
+import {linkOwnedTexts} from '../docs/_adapter.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -33,6 +37,21 @@ import {extractComponents} from '../../foundation/discovery/template-adapter.mjs
 import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
+import {
+  listAvailableThemeState,
+  themeOwnerInstalled,
+} from '../theme/_adapter.mjs';
+import {providerLine, providersOf} from '../theme/_app-provider.mjs';
+import {
+  ThemeImportError,
+  resolveThemeImports,
+} from '../../foundation/discovery/theme-imports.mjs';
+import {
+  ThemeStateError,
+  readThemeState,
+} from '../../foundation/config/theme-state.mjs';
+import {STARTER_THEME} from '../../foundation/discovery/theme-discovery.mjs';
+import {AstryxError} from '../error.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -109,6 +128,13 @@ export async function loadTemplates(cwd) {
   } catch {
     return {pages: [], blocks: [], notReadyPages: []};
   }
+  // Each description as `astryx docs` shows a doc's text: links and doc
+  // tokens rendered, so the kit and its JSON carry the bare command.
+  const described = await linkOwnedTexts(
+    templates.map(t => ({text: t.description || '', package: t.package})),
+    cwd,
+  );
+  const descriptions = new Map(templates.map((t, i) => [t, described[i]]));
   const notReadyPages = templates
     .filter(t => t.type === 'page' && t.isReady === false)
     .map(t => ({
@@ -116,7 +142,7 @@ export async function loadTemplates(cwd) {
       displayName: t.displayName || t.name,
       category: t.category || '',
       keywords: t.keywords ?? [],
-      description: t.description || '',
+      description: descriptions.get(t) ?? '',
     }));
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
@@ -125,7 +151,7 @@ export async function loadTemplates(cwd) {
         {
           name: t.dirName,
           displayName: t.displayName || t.name,
-          description: t.description || '',
+          description: descriptions.get(t) ?? '',
           package: t.package ?? '@astryxdesign/core',
           category: t.category || '',
           keywords: t.keywords ?? [],
@@ -145,7 +171,7 @@ export async function loadTemplates(cwd) {
       name: t.dirName,
       package: t.package ?? '@astryxdesign/core',
       displayName: t.name,
-      description: t.description || '',
+      description: descriptions.get(t) ?? '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
       isReady: t.isReady !== false,
     }));
@@ -413,4 +439,101 @@ function withComponents(entry, filePath) {
       },
     })
   );
+}
+
+/**
+ * The provider the app passes its theme to instead of `<Theme>`, as
+ * `theme add` names it: the one an installed package declares, when it takes
+ * a theme object. `line` is its opening tag, built as the `theme add`
+ * receipt builds it.
+ * @typedef {{export: string, from: string, line: string}} ThemeProvider
+ */
+
+/**
+ * @typedef {({state: 'wired', modulePath: string, hasModes: boolean}
+ *   | {state: 'installed', slug: string, hasModes: boolean}
+ *   | {state: 'none', slug: string, package: string})
+ *   & {provider: ThemeProvider | null}} AppThemeWiring
+ */
+
+/**
+ * How the project at `cwd` wires its theme, read the way `theme add` reads
+ * it: `wired` when `theme add` has written the generated module, `installed`
+ * when a theme it can add is installed but not added, and otherwise the
+ * starter theme. `hasModes` says the module records a theme's one color mode,
+ * or will once `theme add` adds the installed theme, read from its built
+ * module as `theme add` reads it. `provider` is set when an installed package
+ * names the provider that takes the theme.
+ * @param {string} cwd
+ * @returns {Promise<AppThemeWiring>}
+ */
+export async function appThemeWiring(cwd) {
+  /** @type {ThemeProvider | null} */
+  let starterProvider = null;
+  try {
+    const {themes} = await listAvailableThemeState(cwd);
+    const {taking} = providersOf(themes);
+    /** @param {boolean} oneMode @returns {ThemeProvider | null} */
+    const provide = oneMode =>
+      taking?.provider.themeProp
+        ? {
+            export: taking.provider.export,
+            from: taking.provider.from,
+            line: providerLine(taking.provider, oneMode),
+          }
+        : null;
+    starterProvider = provide(false);
+    const state = readThemeState(cwd);
+    const source = state.module.expectedOriginal;
+    if (state.configured && source) {
+      const hasModes = /\bexport const themeModes\b/u.test(
+        source.toString('utf-8'),
+      );
+      return {
+        state: 'wired',
+        modulePath: state.module.path,
+        hasModes,
+        provider: provide(hasModes),
+      };
+    }
+    const installed = themes.find(theme =>
+      themeOwnerInstalled(theme, state.projectDir),
+    );
+    if (installed) {
+      const hasModes = oneColorModeOf(installed, cwd);
+      return {
+        state: 'installed',
+        slug: installed.slug,
+        hasModes,
+        provider: provide(hasModes),
+      };
+    }
+  } catch (error) {
+    // Outside a project, or with theme state the theme commands refuse, the
+    // playbook names the starter theme; those commands report the problem.
+    if (!(error instanceof ThemeStateError || error instanceof AstryxError))
+      throw error;
+  }
+  return {
+    state: 'none',
+    slug: STARTER_THEME.slug,
+    package: STARTER_THEME.package,
+    provider: starterProvider,
+  };
+}
+
+/**
+ * Whether `theme add` records one color mode for a theme: its built module
+ * exports one. A theme whose built module cannot be resolved has none here;
+ * `theme add` reports that problem.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ */
+function oneColorModeOf(theme, cwd) {
+  try {
+    return resolveThemeImports(theme, {cwd}).mode != null;
+  } catch (error) {
+    if (error instanceof ThemeImportError) return false;
+    throw error;
+  }
 }

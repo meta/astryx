@@ -46,8 +46,11 @@
  *   `notes`: information beside the issues. A note fails nothing by default;
  *   one with `next: true` counts as a warning under `integration check
  *   --next`, fails `integration check --strict --next`, and fails `--strict`
- *   from the next minor release. Notes include `invalid_cli_command`, a
- *   `cliCommand` that was ignored as malformed;
+ *   from the next minor release. Notes include `unknown_manifest_key`, a
+ *   manifest key the running CLI does not know (marked `next` only when it
+ *   is one letter from a known key); `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed; `invalid_install_guidance`,
+ *   an `installGuidance` that was ignored as malformed;
  *   `component_without_example`, `template_category`,
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names

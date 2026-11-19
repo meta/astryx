@@ -290,6 +290,45 @@ function removeStylesheetHooks() {
 }
 
 /**
+ * The file Node could not load, from its refusal of an unknown extension
+ * (a native import), or from a syntax error in a file that is no JavaScript
+ * (jiti's synchronous require, which reads the file as a script and names it
+ * on the first line of the stack). Null for any other error.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+function unloadableFile(error) {
+  const e = /** @type {any} */ (error);
+  if (e?.code === 'ERR_UNKNOWN_FILE_EXTENSION')
+    return /\bfor (.+)$/.exec(String(e.message))?.[1] ?? null;
+  if (e instanceof SyntaxError)
+    return /^(.+):\d+$/.exec(String(e.stack).split('\n')[0])?.[1] ?? null;
+  return null;
+}
+
+/**
+ * On a Node without module hooks, the refusal for a stylesheet or an asset a
+ * theme module imports: it names the file and the Node that loads it. Null
+ * for any other error.
+ * @param {unknown} error
+ * @returns {Error | null}
+ */
+function needsModuleHooks(error) {
+  const file = unloadableFile(error);
+  if (!file || !(STYLESHEET_FILE.test(file) || ASSET_FILE.test(file)))
+    return null;
+  const relative = path.relative(process.cwd(), file);
+  const shown =
+    relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+      ? relative
+      : file;
+  return new Error(
+    `it imports ${shown}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later, or 23.5 or later (this is Node ${process.versions.node}). Nothing was written.`,
+    {cause: error},
+  );
+}
+
+/**
  * Run a theme module load with every stylesheet that the theme's modules
  * import, at any depth, loaded as an empty module, and every asset they
  * import (an .svg, a picture, a font) as its URL. A theme module can import
@@ -304,7 +343,9 @@ function removeStylesheetHooks() {
  * there, so the caller can say what its outputs do not carry. Module loads
  * outside this call's async context do not change. The module hook is
  * installed for the first overlapping load and removed after the last. A
- * Node without module hooks (before 22.15) runs the load unchanged.
+ * Node without module hooks (before 22.15, or 23.0 to 23.4) runs the load
+ * unchanged, and a stylesheet or asset it meets refuses the load, naming
+ * that Node.
  * @template T
  * @param {() => Promise<T>} load
  * @param {{unbuilt?: Set<string>, imported?: Set<string>}} [options]
@@ -316,7 +357,13 @@ export async function withEmptyStylesheets(load, options = {}) {
   // running never keeps the command from exiting, and an exit it calls
   // while loading is a refused load, never the command's own exit.
   const guarded = () => withStdoutOnStderr(() => withThemeModuleGuards(load));
-  if (typeof registerHooks !== 'function') return await guarded();
+  if (typeof registerHooks !== 'function') {
+    try {
+      return await guarded();
+    } catch (error) {
+      throw needsModuleHooks(error) ?? error;
+    }
+  }
   stylesheetHooks ??= registerHooks({
     resolve: resolveUnbuiltStylesheet,
     load: loadStylesheetAsEmptyModule,
@@ -344,6 +391,11 @@ let exitGuards = 0;
 /** @type {typeof process.exit | null} */
 let realExit = null;
 let guardsInstalled = false;
+/**
+ * The last exception a theme module's microtask threw, with its load.
+ * @type {{error: unknown, load: GuardedLoad} | null}
+ */
+let microtaskThrow = null;
 /** Callbacks of a module load running now, each holding the stdout gate. */
 const deferredGates = new Set();
 /**
@@ -563,12 +615,31 @@ function installThemeModuleGuards() {
   // One thrown while the module still loads (from a microtask it queued)
   // refuses that load with it, as a throw from its top level does.
   tellThemeModuleCallbacks(error => {
-    const load = guardedLoad.getStore();
+    const thrown = microtaskThrow?.error === error ? microtaskThrow : null;
+    microtaskThrow = null;
+    const load = guardedLoad.getStore() ?? thrown?.load;
     if (!load) return null;
     if (load.done) return 'after';
     load.fail(error);
     return 'during';
   });
+  // Before Node 24, an exception from a microtask reaches 'uncaughtException'
+  // outside the async context that queued it. A microtask a theme module
+  // queues keeps its load, so its exception is told as the module's.
+  const queue = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = function (callback) {
+    const load = guardedLoad.getStore();
+    if (!load || typeof callback !== 'function')
+      return queue.call(globalThis, callback);
+    return queue.call(globalThis, () => {
+      try {
+        callback();
+      } catch (error) {
+        microtaskThrow = {error, load};
+        throw error;
+      }
+    });
+  };
   // A global Node defines as replaceable (an accessor, such as `Buffer`)
   // that a theme module assigns while it loads is put back when the load
   // ends: its value as it was is read only when the module assigns it.
@@ -667,9 +738,14 @@ async function withThemeModuleGuards(load) {
   holdExit();
   /** @type {(error: unknown) => void} */
   let fail = () => {};
+  /** The first refusal, held where the race below cannot lose it. */
+  const failure = /** @type {{error?: {value: unknown}}} */ ({});
   /** @type {Promise<never>} */
   const failed = new Promise((_resolve, reject) => {
-    fail = reject;
+    fail = error => {
+      failure.error ??= {value: error};
+      reject(error);
+    };
   });
   // Read only through the race below; a failure after it settled is moot.
   failed.catch(() => {});
@@ -698,11 +774,15 @@ async function withThemeModuleGuards(load) {
   // Node empties its loop with the load still waiting: refused, not exit 13.
   process.once('beforeExit', drained);
   try {
-    return await Promise.race([
+    const loaded = await Promise.race([
       guardedLoad.run(store, load),
       unsettled,
       failed,
     ]);
+    // A load that settles in the same microtask checkpoint as a microtask it
+    // queued wins the race before that microtask's exception refuses it.
+    if (failure.error) throw failure.error.value;
+    return loaded;
   } finally {
     process.removeListener('beforeExit', drained);
     process.exitCode = exitCode;

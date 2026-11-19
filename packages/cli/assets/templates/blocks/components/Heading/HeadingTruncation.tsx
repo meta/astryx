@@ -2,11 +2,12 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
 
 export default function HeadingTruncation() {
   return (
-    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+    <VStack gap={6}>
       <div
         style={{
           width: 300,
@@ -28,6 +29,6 @@ export default function HeadingTruncation() {
           Layout Compact
         </Heading>
       </div>
-    </div>
+    </VStack>
   );
 }

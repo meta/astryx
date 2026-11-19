@@ -108,7 +108,7 @@ describe('validate-integration API', () => {
     ]);
   });
 
-  it('reports an unknown manifest key as a warning, and still loads the rest', async () => {
+  it('reports an unknown manifest key as a note, not an issue, and still loads the rest', async () => {
     // The manifest used to be parsed with a strict schema, so a single unknown
     // key failed the parse — and an integration whose manifest fails to parse
     // contributes NOTHING, taking its components, templates and codemods down
@@ -121,9 +121,10 @@ describe('validate-integration API', () => {
     const result = await validateLocalIntegration(pkgDir);
     expect(byCode(result.issues, 'invalid_manifest')).toHaveLength(0);
 
-    const unknown = byCode(result.issues, 'unknown_manifest_key');
+    expect(byCode(result.issues, 'unknown_manifest_key')).toHaveLength(0);
+    const unknown = byCode(result.notes ?? [], 'unknown_manifest_key');
     expect(unknown).toHaveLength(1);
-    expect(unknown[0].severity).toBe('warning');
+    expect(unknown[0].next).toBeUndefined();
     expect(unknown[0].message).toContain('"bogus"');
     // The declared root is still seen — it is missing on disk, which is the
     // proof the rest of the manifest was read rather than discarded.

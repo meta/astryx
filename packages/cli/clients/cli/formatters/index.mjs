@@ -410,6 +410,21 @@ export function formatDeprecation(deprecation) {
 }
 
 /**
+ * A doc text field the way a text reader sees it: each bare `astryx` command
+ * it names starts with the project's command, by the rule {@link emit} applies
+ * to doc Markdown. The API already rendered the doc's tokens; JSON keeps the
+ * bare command.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function docText(value) {
+  const text = String(value ?? '');
+  return text.includes('astryx')
+    ? prefixCliCommands(text, getCliInvocation())
+    : text;
+}
+
+/**
  * The one sanctioned way to write human output to stdout. Joins blocks with a
  * single blank line and hands the result to `humanLog`, which is a no-op in
  * `--json` mode (stdout carries only the envelope there). Accepts only Blocks
