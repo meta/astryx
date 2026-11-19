@@ -363,6 +363,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   '--_selected-text-secondary-red',
   '--_selected-text-secondary-teal',
   '--_selected-text-secondary-yellow',
+  // spec:AST-025 FR22: an adopter of the shared scroll-edge fade sets the
+  // clear band at the edge and the fade length on its viewport.
+  '--_scroll-fade-inset',
+  '--_scroll-fade-length',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

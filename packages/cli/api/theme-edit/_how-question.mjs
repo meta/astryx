@@ -10504,8 +10504,8 @@ export function draftAnswer(ctx, env, question) {
     const missing = clauseNow?.parts.find(x => x.missing);
     // A title Core draws as a heading inside the part, with no part of its
     // own: no setting reaches it alone, so nothing is written for it.
-    // (A part that draws its title as its own text, a banner's, is answered
-    // for the whole part, said so.)
+    // (A part that draws its title as its own text, a citation's, is
+    // answered for the whole part, said so.)
     if (
       missing &&
       /\btitle$/.test(String(missing.missing)) &&

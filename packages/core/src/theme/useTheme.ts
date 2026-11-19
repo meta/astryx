@@ -68,6 +68,69 @@ export const ThemeContext = createSharedContext<ThemeContextValue | null>(
 ThemeContext.displayName = 'ThemeContext';
 
 /**
+ * The nearest Theme's current value as a store. A separate React root (the
+ * fallback toast viewport) subscribes to it and follows the Theme while the
+ * Theme is mounted.
+ * @internal
+ */
+export interface ThemeSource {
+  get: () => ThemeContextValue | null;
+  subscribe: (onChange: () => void) => () => void;
+}
+
+/** @internal */
+export const ThemeSourceContext = createSharedContext<ThemeSource | null>(
+  'ThemeSourceContext',
+  1,
+  null,
+);
+ThemeSourceContext.displayName = 'ThemeSourceContext';
+
+/** @internal */
+export function createThemeSource(
+  initial: ThemeContextValue | null,
+): ThemeSource & {set: (next: ThemeContextValue | null) => void} {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    subscribe: onChange => {
+      listeners.add(onChange);
+      return () => listeners.delete(onChange);
+    },
+    set: next => {
+      if (next === current) {
+        return;
+      }
+      current = next;
+      for (const onChange of listeners) {
+        onChange();
+      }
+    },
+  };
+}
+
+/**
+ * The nearest Theme's mode. It is also set when no theme applies there and
+ * ThemeContext is null. `themeless` is true when no theme applies anywhere up
+ * to the page's root Theme, so `<html>` names no theme and nothing below
+ * needs to watch it.
+ * @internal Not exported from the theme barrel.
+ */
+export interface ThemeModeValue {
+  mode: ThemeMode;
+  themeless: boolean;
+}
+
+/** @internal Not exported from the theme barrel. */
+export const ThemeModeContext = createSharedContext<ThemeModeValue | null>(
+  'ThemeModeContext',
+  1,
+  null,
+);
+ThemeModeContext.displayName = 'ThemeModeContext';
+
+/**
  * What a `system` mode follows here: the page root's scheme, or the OS
  * preference below a Theme that forces light or dark. Theme provides it.
  * @internal Not exported from the theme barrel.
@@ -437,8 +500,9 @@ function useRootThemeNameAttr(hasCtx: boolean): string | null {
  */
 export function useThemeName(): string | null {
   const ctx = use(ThemeContext);
+  const themeless = use(ThemeModeContext)?.themeless === true;
   const hasCtx = ctx != null;
-  const rootThemeName = useRootThemeNameAttr(hasCtx);
+  const rootThemeName = useRootThemeNameAttr(hasCtx || themeless);
 
   return ctx?.theme.name ?? rootThemeName;
 }
@@ -453,8 +517,9 @@ export function useThemeName(): string | null {
 export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
   // `use` may be called conditionally, unlike the other hooks.
   const ctx = enabled ? use(ThemeContext) : null;
+  const themeless = enabled && use(ThemeModeContext)?.themeless === true;
   const hasCtx = ctx != null;
-  const rootThemeName = useRootThemeNameAttr(hasCtx || !enabled);
+  const rootThemeName = useRootThemeNameAttr(hasCtx || themeless || !enabled);
   if (!enabled) {
     return undefined;
   }
@@ -490,16 +555,20 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  */
 export function useTheme(): UseThemeReturn {
   const ctx = use(ThemeContext);
+  const nearest = use(ThemeModeContext);
+  const nearestMode = nearest?.mode;
   const systemScheme = use(SystemSchemeContext);
 
   // Falls back to the root Theme's mode via <html data-theme> when there's
-  // no ThemeContext ancestor (e.g. useToast's detached fallback viewport).
-  // Resolves to null when `ctx` is present, so it has no effect there.
+  // no Theme above (e.g. useToast's detached fallback viewport). Resolves to
+  // null when a Theme is above, so it has no effect there.
   const hasCtx = ctx != null;
-  const rootAttrMode = useRootModeAttr(hasCtx);
-  const rootThemeName = useRootThemeNameAttr(hasCtx);
+  const rootAttrMode = useRootModeAttr(hasCtx || nearestMode != null);
+  const rootThemeName = useRootThemeNameAttr(
+    hasCtx || nearest?.themeless === true,
+  );
 
-  const mode = ctx?.mode ?? rootAttrMode ?? 'system';
+  const mode = ctx?.mode ?? nearestMode ?? rootAttrMode ?? 'system';
   const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
 
   // Anything outside light|dark (a stale persisted preference cast to

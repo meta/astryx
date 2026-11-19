@@ -41,27 +41,24 @@ import {
 import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
 import {
-  placeSkillFiles,
   projectPlacesValue,
   renderProjectSkill,
 } from '../../foundation/agent-docs/skill-places.mjs';
-import {
-  keptReason,
-  managedFileState,
-  removeManagedFileIfOwned,
-  writeManagedFile,
-} from '../../foundation/agent-docs/managed-skill-file.mjs';
 import {
   computerSkillFolders,
   recordComputerSkillFolders,
 } from '../../foundation/env/user-settings.mjs';
 import {setConfigValues} from '../../foundation/config/config-writer.mjs';
-import {PathSafetyError, assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
-export {readProjectPlaces} from '../../foundation/agent-docs/skill-place-files.mjs';
+export {
+  readProjectPlaces,
+  removeSkillPlace,
+  writeSkillPlace,
+} from '../../foundation/agent-docs/skill-place-files.mjs';
+import {skillPlaceEscape} from '../../foundation/agent-docs/skill-place-files.mjs';
 
 // What the run leaf reads before it writes agent docs: the state of the files
 // it is about to write.
@@ -228,18 +225,8 @@ export function saveProjectPlaces(projectRoot, places, {check = false} = {}) {
  * @param {string} projectRoot
  */
 export function assertPlaceWithin(place, projectRoot) {
-  for (const file of placeSkillFiles(place, projectRoot)) {
-    try {
-      assertWithin(path.relative(projectRoot, file), projectRoot, {label: 'skill file'});
-    } catch (err) {
-      if (!(err instanceof PathSafetyError)) throw err;
-      throw new AstryxError(
-        `${err.message} Astryx writes the project skill only inside the project; make that folder a real folder in the project, or choose another place with \`--to\`.`,
-        undefined,
-        ERROR_CODES.ERR_PATH_TRAVERSAL,
-      );
-    }
-  }
+  const escape = skillPlaceEscape(place, projectRoot);
+  if (escape) throw new AstryxError(escape, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
 }
 
 /**
@@ -260,65 +247,8 @@ export function computerSkillText(command) {
   return renderComputerAgentText({command, install: computerInstallStep()});
 }
 
-/**
- * Write `text` to each skill file of `place`. The copies of one place are
- * written together or not at all: when any is a person's own (edited, or not
- * Astryx's), each is kept, so every agent reads one text.
- * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
- * @param {string | null} projectRoot
- * @param {string} text
- * @returns {Array<{file: string, action: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx' | 'pair-kept'}>}
- */
-export function writeSkillPlace(place, projectRoot, text) {
-  const files = placeSkillFiles(place, projectRoot);
-  const states = files.map(file => ({file, state: managedFileState(file, text)}));
-  const owned = (/** @type {string} */ state) => state === 'edited' || state === 'foreign';
-  if (files.length > 1 && states.some(each => owned(each.state))) {
-    return states.map(({file, state}) => ({
-      file,
-      action: /** @type {const} */ ('kept'),
-      reason: owned(state) ? keptReason(/** @type {'edited' | 'foreign'} */ (state)) : /** @type {const} */ ('pair-kept'),
-    }));
-  }
-  return files.map(file => ({file, ...writeManagedFile(file, text)}));
-}
 
-/**
- * Remove each skill file of `place` that is an unedited Astryx file.
- * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
- * @param {string | null} projectRoot
- * @returns {Array<{file: string, action: import('../../foundation/agent-docs/managed-skill-file.mjs').ManagedFileAction, reason?: 'edited' | 'not-astryx'}>}
- */
-export function removeSkillPlace(place, projectRoot) {
-  // Folders the removal empties go too, up to the folder the place names, or
-  // the project root for the skills folders.
-  const stop = place.kind === 'folder' ? place.dir : projectRoot;
-  return placeSkillFiles(place, projectRoot).map(file => {
-    const result = removeManagedFileIfOwned(file);
-    if (result.action === 'removed' && stop)
-      removeEmptyFolders(path.dirname(file), stop);
-    return {file, ...result};
-  });
-}
 
-/**
- * Remove `dir` and each folder above it while it is empty, stopping below
- * `stop`.
- * @param {string} dir
- * @param {string} stop
- */
-function removeEmptyFolders(dir, stop) {
-  let at = dir;
-  while (at !== stop && !path.relative(stop, at).startsWith('..')) {
-    try {
-      fs.rmdirSync(at);
-    } catch (error) {
-      // Already gone: the file's own folder goes with the file.
-      if (/** @type {{code?: string}} */ (error).code !== 'ENOENT') return;
-    }
-    at = path.dirname(at);
-  }
-}
 
 /**
  * Add folders outside any project to the ones the settings file records.

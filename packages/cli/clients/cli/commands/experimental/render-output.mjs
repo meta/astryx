@@ -25,6 +25,14 @@ const restoreHere = d =>
     ? ` --out ${shellArg(`${path.relative(process.cwd(), freeRestoreFolder(process.cwd(), path.basename(d.output)))}/${d.files[0]}`)}`
     : '';
 
+/**
+ * A written file's path and size, and where it is when that path is relative.
+ * @param {string} output
+ * @param {number} bytes
+ */
+const shownAt = (output, bytes) =>
+  path.isAbsolute(output) ? `${output} (${kb(bytes)})` : `${output} (${kb(bytes)}), at ${path.resolve(output)}`;
+
 /** The text answer names this many files at most. The JSON answer keeps every file. */
 const LISTED_FILES = 10;
 
@@ -71,19 +79,35 @@ export function printRendered(d, run) {
     record({
       input: d.input,
       output: d.output,
-      bytes: kb(d.bytes),
+      bytes: `${kb(d.bytes)}${d.scriptBytes > d.bytes / 2 ? ' (most is the script: the page as a live app, with React and the packages it imports)' : ''}`,
+      scriptBytes: kb(d.scriptBytes),
       cssBytes: kb(d.cssBytes),
+      markupBytes: kb(d.markupBytes),
+      sourceBytes: kb(d.sourceBytes),
       classes: d.classes,
       images: d.images,
       files: fileList(d.files),
       ...(d.notCarried?.length ? {notCarried: fileList(d.notCarried)} : {}),
       stylesheets: d.stylesheets.join(', ') || 'none',
-      scriptBytes: kb(d.scriptBytes),
       scriptModules: d.scriptModules,
     }),
     ...(d.warnings.length > 0
       ? [section('Warnings'), list(d.warnings.map(w => w.message))]
       : []),
+    section('Checks'),
+    ...(d.checks.outside.length === 0
+      ? [text("The file's markup and stylesheets load nothing from outside the file.")]
+      : [record({outside: fileList(d.checks.outside)})]),
+    record({
+      exact: d.checks.roundTrip.exact
+        ? `yes: experimental import gives back ${d.checks.roundTrip.files === 1 ? 'its 1 carried file' : `all ${d.checks.roundTrip.files} carried files`} byte for byte`
+        : `no: ${d.checks.roundTrip.differs.join(', ')} differ${d.checks.roundTrip.differs.length === 1 ? 's' : ''} from the files on disk`,
+    }),
+    text(
+      d.checks.outside.length === 0
+        ? `Share this one file: ${shownAt(d.output, d.bytes)}. Nothing else needs to go with it.`
+        : `${shownAt(d.output, d.bytes)} loads ${d.checks.outside.length} reference${d.checks.outside.length === 1 ? '' : 's'} from outside the file when it opens (outside, above), so it does not stand alone.`,
+    ),
     text(
       `Give it back: ${run} experimental import ${shellArg(d.output)}${restoreHere(d)}`,
     ),

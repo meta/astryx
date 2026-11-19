@@ -115,6 +115,7 @@ import {
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
+import {generatedSource} from '../../../foundation/fs/file-protection.mjs';
 import {
   keyPathIndex,
   keyPathLine,
@@ -144,6 +145,8 @@ import {
   blockPaths,
   declarationPaths,
   settingIssueLocation,
+  splitGeneratedIssues,
+  generatedNotesByFile,
 } from './setting-effects.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
@@ -5535,6 +5538,8 @@ async function themeBuildInternal(
   const noticeMessages = [];
   /** @type {Array<import('./setting-effects.mjs').SettingIssueEntry & {line: number | null}>} */
   const settingIssues = [];
+  /** The notes that stand in for a generated file's setting issues. @type {import('./setting-effects.mjs').GeneratedSettingNote[]} */
+  const settingNotices = [];
   const blankSpecifier = handOff.prepareFamily
     ? null
     : blankSpecifierWarning(options.iconsSpecifier);
@@ -5826,16 +5831,19 @@ async function themeBuildInternal(
     // then such a base, then each local theme it extends in its own file.
     // Each key path is read from the root of the object.
     // Each file read twice: at its theme's own objects, then at the themes
-    // that theme extends inside the file.
+    // that theme extends inside the file; each with whether a tool
+    // generates the file.
     const writtenIn = [
       {file: filePath, source: themeSource, exportName: themeExportName},
       ...extendedSources,
     ].flatMap(s => {
       const index = keyPathIndex(s.source, s.file, {exportName: s.exportName});
+      const generated = generatedSource(s.source, s.file);
       return [false, true].map(bases => ({
         file: s.file,
         lineOf: (/** @type {string[]} */ k) =>
           index(k, {fromRoot: true, bases}),
+        generated,
       }));
     });
     const blocks = blockPaths(
@@ -5874,11 +5882,30 @@ async function themeBuildInternal(
         writer && writer.file !== filePath
           ? path.relative(cwd, writer.file) || writer.file
           : null;
-      const placedEntry = {...entry, line, ...(file ? {file} : {})};
-      const w = `${entry.message}${settingIssueLocation(placedEntry)}. Fix: ${entry.fix}.`;
-      settingIssues.push(placedEntry);
+      settingIssues.push({...entry, line, ...(file ? {file} : {})});
+    }
+    // A generated file is not where the fix of its settings goes, its
+    // generator is: one notice per such file, and a warning for each other.
+    const {listed, notes: generatedNotes} = splitGeneratedIssues(
+      settingIssues,
+      file =>
+        writtenIn.find(
+          w =>
+            (file ? path.relative(cwd, w.file) || w.file : w.file) ===
+            (file ?? filePath),
+        )?.generated ?? null,
+      file => file ?? (path.relative(cwd, filePath) || filePath),
+    );
+    for (const entry of listed) {
+      const w = `${entry.message}${settingIssueLocation(entry)}. Fix: ${entry.fix}.`;
       warningMessages.push(w);
       logger.warn(`  [warn] ${source}${w}`);
+    }
+    for (const note of generatedNotes) {
+      noticeMessages.push(note.text);
+      settingNotices.push(note);
+      // A family prints the notes of all its members once, merged.
+      if (!handOff.prepareFamily) logger.log(`  [note] ${source}${note.text}`);
     }
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
@@ -6237,8 +6264,8 @@ async function themeBuildInternal(
           cssFileName: path.basename(outPath),
         },
       ) +
-      // The one color mode, beside the theme export (a two-mode theme
-      // exports none, so its module is unchanged).
+      // The one color mode, beside the theme export. A two-mode theme's
+      // ['light', 'dark'] is not written, so its module is unchanged.
       (colorModes
         ? `export const colorModes = [${JSON.stringify(colorModes[0])}];\n`
         : '');
@@ -6314,6 +6341,7 @@ async function themeBuildInternal(
       componentCount,
       warnings: warningMessages,
       settingIssues,
+      settingNotices,
       unloadedFonts,
       unbuiltStylesheets,
     };
@@ -6419,6 +6447,9 @@ async function themeBuildInternal(
         // A check reads the settings a build would warn about, so a check
         // (`astryx doctor`, an editor) can say them without writing.
         ...(settingIssues.length ? {settingIssues} : {}),
+        ...(settingNotices.length
+          ? {notices: settingNotices.map(note => note.text)}
+          : {}),
       },
     });
   }
@@ -7268,12 +7299,10 @@ async function buildFamily(
     ...new Map(
       members
         .flatMap(member =>
-          (member.settingIssues ?? []).map(
-            (/** @type {any} */ issue) => ({
-              ...issue,
-              file: issue.file ?? path.relative(cwd, member.filePath),
-            }),
-          ),
+          (member.settingIssues ?? []).map((/** @type {any} */ issue) => ({
+            ...issue,
+            file: issue.file ?? path.relative(cwd, member.filePath),
+          })),
         )
         .map(issue => [
           JSON.stringify([issue.file, issue.path, issue.by.path, issue.by.key]),
@@ -7281,6 +7310,12 @@ async function buildFamily(
         ]),
     ).values(),
   ];
+  // One note per generated file the members read: a member that extends a
+  // generated one reports that file's settings too.
+  const familySettingNotices = generatedNotesByFile(
+    members.map(member => ({notes: member.settingNotices ?? []})),
+  ).map(note => note.text);
+  for (const text of familySettingNotices) logger.log(`  [note] ${text}`);
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
@@ -7321,6 +7356,7 @@ async function buildFamily(
         ...(familySettingIssues.length
           ? {settingIssues: familySettingIssues}
           : {}),
+        ...(familySettingNotices.length ? {notices: familySettingNotices} : {}),
       },
     });
   }
@@ -7373,9 +7409,12 @@ Or load the same stylesheet natively:
     `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
   // The result names the command bare; the printed note as this project
   // runs the CLI.
-  const notices = unloadedFonts.map(family =>
-    familyNotice(family, 'astryx docs typography'),
-  );
+  const notices = [
+    ...familySettingNotices,
+    ...unloadedFonts.map(family =>
+      familyNotice(family, 'astryx docs typography'),
+    ),
+  ];
   for (const family of unloadedFonts)
     logger.log(
       `  note: ${familyNotice(family, formatCliCommand('docs typography', cwd))}`,

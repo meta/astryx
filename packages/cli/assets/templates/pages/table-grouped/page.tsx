@@ -1045,7 +1045,8 @@ export default function DataTableTemplate() {
         header={
           <LayoutHeader hasDivider padding={4}>
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center">
+              {/* On a narrow screen the action moves under the title instead of squeezing it. */}
+              <HStack gap={3} vAlign="center" wrap="wrap">
                 <StackItem size="fill">
                   <Heading level={1}>All Issues</Heading>
                 </StackItem>
