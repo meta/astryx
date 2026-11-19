@@ -112,7 +112,7 @@ import {
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
-import {interceptCore} from './core-interception.mjs';
+import {interceptCore, withVirtualModules} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {extendsOf, moduleBindings, themeObjectOf} from './theme-object.mjs';
 import {generatedSource} from '../../../foundation/fs/file-protection.mjs';
@@ -3416,15 +3416,12 @@ export async function loadThemeExport(file, {cwd = process.cwd(), base} = {}) {
       base.exportName,
     )
   ).theme;
-  const withBase = {
-    ...recorder,
-    modules: {
-      ...recorder.modules,
-      ...Object.fromEntries(
-        base.specifiers.map(s => [s, {[base.exportName]: shared}]),
-      ),
-    },
-  };
+  const withBase = withVirtualModules(
+    recorder,
+    Object.fromEntries(
+      base.specifiers.map(s => [s, {[base.exportName]: shared}]),
+    ),
+  );
   const again = await extractThemeDefinition(
     filePath,
     withBase,
