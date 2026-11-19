@@ -14,6 +14,7 @@
  * CLI keeps its exact output while a programmatic caller stays quiet.
  */
 
+import {renderProjectAgentDocsBlock} from '../docs/_adapter.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {execFile} from 'node:child_process';
@@ -36,7 +37,6 @@ import {
   assertAgentDocsTarget,
   installAgentDocs,
   inspectAgentDocs,
-  renderAgentDocsBlock,
 } from '../../foundation/agent-docs/agent-docs.mjs';
 import {
   CLI_PACKAGE,
@@ -67,11 +67,14 @@ import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 import {renderProjectSkill, savedName} from '../../foundation/agent-docs/skill-places.mjs';
 import {
   planSkillPlace,
+  leftoverIntegrationSkills,
   readProjectPlaces,
   keptText,
+  removeIntegrationSkillFiles,
   skillPlaceEscape,
   writeSkillPlace,
 } from '../../foundation/agent-docs/skill-place-files.mjs';
+import {integrationSkillFiles} from '../docs/skills/skills.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
@@ -493,8 +496,9 @@ export async function runPostCodemodHooks(hooks, context) {
  *   folder), so the result is `error` whatever the block refresh does
  * @property {boolean} [noBlock] the project saves no `agents-md` place and
  *   has no block, so its skill files give the status
- * @property {{text: string, writes: Array<{place: import('../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>}>} | null} [skills]
- *   the project skill and the files of the saved skill places it would write
+ * @property {{text: string, writes: SkillWrite[]} | null} [skills]
+ *   the project skill, and each skill whose copies in a saved skill place it
+ *   would write or remove
  */
 
 /**
@@ -578,6 +582,13 @@ function refuseSkillRefresh(plan, reason) {
 }
 
 /**
+ * The copies of one skill in one saved place that upgrade writes together:
+ * the project skill, an integration's skill (`skill`), or a skill Astryx
+ * wrote for an integration the project no longer has (`remove`).
+ * @typedef {{place: import('../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>, skill?: {name: string, text: string}, remove?: boolean}} SkillWrite
+ */
+
+/**
  * Plan the refresh of the saved skill places: each file this release's
  * project skill would create or update, and each it keeps (edited, or not
  * Astryx's). A file is written only by `--apply`.
@@ -589,7 +600,7 @@ async function prepareSkillRefresh(plan, skillPlaces, {installedVersion, apply, 
   const {cwd, origin, summary} = plan;
   let block = plan.renderedBlock;
   try {
-    block ??= await renderAgentDocsBlock(cwd, {installedVersion, fresh});
+    block ??= await renderProjectAgentDocsBlock(cwd, {installedVersion, fresh});
   } catch {
     summary.action = 'error';
     logger.warn(
@@ -615,30 +626,60 @@ async function prepareSkillRefresh(plan, skillPlaces, {installedVersion, apply, 
     }
   }
   const text = renderProjectSkill(block);
+  const declared = await integrationSkillFiles(cwd);
+  for (const problem of declared.problems) {
+    logger.warn(`Note: ${problem.package}: ${problem.message}`);
+  }
+  const keep = declared.keep;
   const shownFrom = origin ?? cwd;
-  /** @type {Array<{place: import('../../foundation/agent-docs/skill-places.mjs').SkillPlace, rows: Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>}>} */
+  /** @type {SkillWrite[]} */
   const writes = [];
   let created = 0;
   let total = 0;
-  for (const place of skillPlaces) {
-    // The plan init writes by: one person's file keeps every copy as it is.
+  /**
+   * Report the plan for one skill in one place, as init writes it: one
+   * person's file keeps every copy as it is.
+   * @param {import('../../foundation/agent-docs/skill-places.mjs').SkillPlace} place
+   * @param {string} skillText
+   * @param {{name: string, text: string}} [skill] an integration's skill; the project skill without it
+   */
+  const planCopies = (place, skillText, skill) => {
     /** @type {Map<string, import('./upgrade.type.mjs').UpgradeSkillFile>} */
     const rows = new Map();
-    for (const {file, state, plan, reason} of planSkillPlace(place, cwd, text)) {
+    for (const {file, state, plan: planned, reason} of planSkillPlace(place, cwd, skillText, skill?.name)) {
       /** @type {import('./upgrade.type.mjs').UpgradeSkillFile} */
       const row = {
         path: path.relative(shownFrom, file).split(path.sep).join('/'),
         place: savedName(place),
-        action: plan === 'create' ? 'would-create' : plan === 'update' ? 'would-update' : plan,
+        ...(skill ? {skill: skill.name} : {}),
+        action: planned === 'create' ? 'would-create' : planned === 'update' ? 'would-update' : planned,
       };
       if (reason) row.reason = reason;
-      total += 1;
-      if (state === 'absent') created += 1;
+      if (!skill) {
+        total += 1;
+        if (state === 'absent') created += 1;
+      }
       summary.skills?.push(row);
       rows.set(file, row);
     }
     if ([...rows.values()].some(row => row.action.startsWith('would-'))) {
-      writes.push({place, rows});
+      writes.push({place, rows, skill});
+    }
+  };
+  for (const place of skillPlaces) {
+    planCopies(place, text);
+    for (const each of declared.skills) planCopies(place, each.text, each);
+    // A skill Astryx wrote for an integration the project no longer has.
+    for (const file of declared.complete ? leftoverIntegrationSkills(place, cwd, keep) : []) {
+      /** @type {import('./upgrade.type.mjs').UpgradeSkillFile} */
+      const row = {
+        path: path.relative(shownFrom, file).split(path.sep).join('/'),
+        place: savedName(place),
+        skill: path.basename(path.dirname(file)),
+        action: 'would-remove',
+      };
+      summary.skills?.push(row);
+      writes.push({place, rows: new Map([[file, row]]), remove: true});
     }
   }
   // A kept file stays on its old text: say so, as init does.
@@ -715,7 +756,7 @@ async function prepareBlockRefresh({
 
   let renderedBlock;
   try {
-    renderedBlock = await renderAgentDocsBlock(cwd, {
+    renderedBlock = await renderProjectAgentDocsBlock(cwd, {
       installedVersion,
       fresh,
     });
@@ -777,14 +818,18 @@ export function applyAgentDocsRefresh(plan) {
 function applySkillRefresh(plan) {
   const {summary, skills} = plan;
   if (!skills || skills.writes.length === 0) return;
-  for (const {place, rows} of skills.writes) {
-    /** @type {ReturnType<typeof writeSkillPlace>} */
+  for (const {place, rows, skill, remove} of skills.writes) {
+    /** @type {Array<{file: string, action: string, reason?: 'edited' | 'not-astryx' | 'pair-kept' | 'computer-skill'}>} */
     let results;
     try {
-      results = writeSkillPlace(place, plan.cwd, skills.text);
+      results = remove
+        ? removeIntegrationSkillFiles([...rows.keys()])
+        : skill
+          ? writeSkillPlace(place, plan.cwd, skill.text, skill.name)
+          : writeSkillPlace(place, plan.cwd, skills.text);
     } catch (err) {
-      // Nothing of the place was written (writeSkillPlace checks every copy
-      // first), so its copies stay on one text.
+      // Nothing of the skill's copies was written (each write checks every
+      // copy first), so they stay on one text.
       plan.skillsRefused = true;
       summary.action = 'error';
       logger.warn(
@@ -809,10 +854,12 @@ function applySkillRefresh(plan) {
         continue;
       }
       row.action =
-        result.action === 'created' ? 'created' : result.action === 'updated' ? 'updated' : 'current';
+        result.action === 'created' || result.action === 'updated' || result.action === 'removed'
+          ? result.action
+          : 'current';
       if (row.action !== 'current') {
         summary.refreshed = true;
-        logger.log(`[ok] Astryx skill refreshed -> ${row.path}`);
+        logger.log(`[ok] Astryx skill ${row.action === 'removed' ? 'removed' : 'refreshed'} -> ${row.path}`);
       }
     }
   }
