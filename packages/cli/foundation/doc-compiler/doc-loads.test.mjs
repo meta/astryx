@@ -650,6 +650,7 @@ const LOADER_MODULES = {
     'mergeTopic',
     'mergeTopicReport',
     'problemsInTopic',
+    'sectionContributor',
     'withoutPosition',
     'withSourceTitle',
   ],

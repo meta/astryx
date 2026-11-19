@@ -1660,7 +1660,7 @@ export async function packageDocTargets(integration, discovered) {
     let owner = null;
     /** @type {string | null} */
     let basePath = null;
-    /** @type {ReadonlyArray<{path: string}>} every extension of the target, in configured order */
+    /** @type {ReadonlyArray<{package: string, path: string, providerId?: string}>} every extension of the target, in configured order */
     let extensions = [];
     /** @type {string[]} */
     let guidesBelow = [];
@@ -1710,7 +1710,9 @@ export async function packageDocTargets(integration, discovered) {
         if (doc == null) break;
         const file = (await loadTopicFile(extension.path, null)).doc;
         if (file == null) continue;
-        const merged = mergeTopicReport(doc, file);
+        const merged = mergeTopicReport(doc, file, {
+          contributor: extension.providerId ?? extension.package,
+        });
         if (extension.path === record.path) {
           unplaced = merged.unplaced;
           break;
