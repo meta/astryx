@@ -60,6 +60,14 @@ export const doc = {
       example: "'notifications'",
     },
     {
+      name: 'replaces',
+      type: 'string',
+      description:
+        "The name of an older definition this one takes the place of. The old name keeps answering: a set's `map` key, a template's `icons` value, and `astryx experimental icon <old name>` resolve to this definition, through every later replacement too, and `integration check` warns with each `map` key to rename (`icon_definition_replaced`). The replaced definition's file may stay, so the old names it carries keep answering; it is not a current definition any more. Replacements stay within one folder: a set's own definition never replaces an Astryx definition. Two definitions cannot replace one name, and a built-in definition is never replaced.",
+      required: false,
+      example: "'trash'",
+    },
+    {
       name: 'stability',
       type: "'experimental'",
       description:
