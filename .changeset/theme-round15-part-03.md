@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx doctor`'s font check no longer asks you to confirm a font service stylesheet (such as a Google Fonts `@import`) that names its families. A family the stylesheet does not name is a warning that names it, and the fix names the package that loads it when one does (`@fontsource/jetbrains-mono`).
+[experimental] Changes to `astryx experimental theme` and its editor:
 
 - `astryx experimental theme editor set … corners`: whole-theme corners name the parts the theme gives corners of their own (a border radius or corners set on a dialog, the menus) as kept, with the undo lines that hand them back to the dial.
 
@@ -67,8 +67,6 @@ Other readings fixed:
 
 - `astryx experimental theme`: a part's variants written as other styling libraries write them (`variants: {variant: {secondary: {…}}}`) are refused with the same words `astryx theme build` warns with, naming the style keys that write them (`'variant:secondary': {…}`).
 
-- `astryx theme build`: a `.js` theme source named after its theme (`brand.js` for theme `brand`) is offered a free folder for its outputs (`--out design/brand-2/brand.css`), not the same command again; a base imported as a package's default export, or as the whole package, is told the named import that works (`import {neutralTheme} from '@astryxdesign/theme-neutral'`). `astryx theme add` of a theme it does not find says where a theme you wrote must live to be added by name, and that a theme you built elsewhere needs only its imports.
-
-- `astryx experimental theme editor how`: rows said of a part that holds no table rows are that part's own rows, the items it draws, so "menus with 32px rows" sizes the menu items and never every table row; and a part word right before a noun the editor knows as nothing ("a radio station", "a button factory", "a card game") begins a compound subject, never the part: it is named and nothing is written for it ("make the radio station blue"), unless the word is a verb the reader knows ("links turn red"); a compound that describes the product before a colon ("radio station app: rounder corners") names nothing, and the look after it is the whole theme's.
+- `astryx experimental theme editor how`: a part word before a word the reader knows as a verb keeps the part ("links turn red"), and a compound that describes the product before a colon ("radio station app: rounder corners") names nothing, so the look after it is the whole theme's.
 
 @josephfarina
