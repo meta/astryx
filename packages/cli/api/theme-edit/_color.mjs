@@ -29,7 +29,7 @@ import {
   mixSide,
   readColor,
 } from '../../foundation/color/css-color.mjs';
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {contrastRatio} from '../theme/palette/generate/color.mjs';
 
 export {splitTop};
 export {
@@ -177,8 +177,7 @@ export function ratioWords(r) {
  * @param {number[]} b
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  return contrastRatio(hex(a), hex(b));
 }
 
 /**
