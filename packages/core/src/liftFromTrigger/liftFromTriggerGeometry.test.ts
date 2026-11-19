@@ -152,8 +152,43 @@ describe('surfacePlacement', () => {
     expect(surfacePlacement(low, 400, VIEWPORT, 16).side).toBe('above');
   });
 
-  it('reports that neither side fits when the surface is taller than the room above and below', () => {
-    expect(surfacePlacement(middle, 400, VIEWPORT, 16).side).toBe('none');
+  it('with room on neither side and none beside, takes the roomier side, capped a pixel under the room there', () => {
+    // 400 px fits neither above (270 px of room) nor below (300.33 px), and
+    // a 160 px surface fits beside on neither side (56 px of room each).
+    expect(surfacePlacement(middle, 400, VIEWPORT, 16, 160)).toEqual({
+      side: 'below',
+      alignment: 'center',
+      maxBlockSize: 820 - (368 + 135.67) - 16 - 1,
+    });
+    const high = {...middle, y: 450};
+    expect(surfacePlacement(high, 400, VIEWPORT, 16, 160)).toEqual({
+      side: 'above',
+      alignment: 'center',
+      maxBlockSize: 450 - 16 - 82 - 1,
+    });
+  });
+
+  it('goes beside the source, at the inline end first, where its width fits there', () => {
+    const narrow = {x: 16, y: 300, width: 100, height: 500};
+    expect(surfacePlacement(narrow, 400, VIEWPORT, 16, 160)).toEqual({
+      side: 'end',
+      alignment: 'start',
+    });
+    // The right side is the inline start in a right-to-left page.
+    const rtl: LiftFromTriggerViewport = {...VIEWPORT, direction: 'rtl'};
+    expect(surfacePlacement(narrow, 400, rtl, 16, 160)).toEqual({
+      side: 'start',
+      alignment: 'start',
+    });
+  });
+
+  it('caps a surface beside the source to the room between the block gutters', () => {
+    const narrow = {x: 16, y: 300, width: 100, height: 500};
+    expect(surfacePlacement(narrow, 900, VIEWPORT, 16, 160)).toEqual({
+      side: 'end',
+      alignment: 'start',
+      maxBlockSize: 874 - 82 - 54 - 1,
+    });
   });
 
   it('is flush with the edge the source is held against, and the sides swap in a right-to-left page', () => {

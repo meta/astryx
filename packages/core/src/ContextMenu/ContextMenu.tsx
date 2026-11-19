@@ -144,6 +144,9 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 registerEnglishFallback(english);
 
 const styles = stylex.create({
+  // A lifted menu that fits whole on no side: capped to the room on its side,
+  // so the layer's own fallbacks never need to size it, and scrolled.
+  liftedMenuCap: (maxBlockSize: number) => ({maxBlockSize}),
   // Trigger wrapper. `position: relative` makes the containing block for the
   // absolutely positioned cursor anchor below. So the anchor point follows
   // the trigger, and scrolls with it, instead of the page. The iOS callout and
@@ -539,9 +542,9 @@ export function ContextMenu({
     // Mounted at the first open and kept (see the file header).
     lazyMount: true,
     keepsMountAfterShow: true,
-    // A lifted menu never settles over the lifted trigger, which stays where
-    // it is: with room on neither side it goes beside it, or caps itself on
-    // the roomier side.
+    // A lifted menu's side and any cap are the lift's own (surfacePlacement),
+    // so it fits where it opens. Keeping the anchor clear scrolls a capped
+    // menu and keeps the runtime's fallbacks off the lifted trigger.
     keepsAnchorClear: liftPlacement != null,
     onHide: useCallback(() => {
       outsidePress.stop();
@@ -882,22 +885,29 @@ export function ContextMenu({
     [layer],
   );
   // Syncs the menu's side with the browser's layout of the shown menu: its
-  // height picks below or above the lift, before the frame paints.
+  // whole size picks its side and any cap, before the frame paints. The
+  // scroll height is the whole height when a cap already holds the menu, so
+  // a cap never feeds back into its own size.
   useIsomorphicLayoutEffect(() => {
     const lifted = liftRef.current;
     const menu = listRef.current?.closest<HTMLElement>('[popover]');
     if (lifted == null || liftPlacement == null || menu == null) {
       return;
     }
+    const height = menu.scrollHeight + (menu.offsetHeight - menu.clientHeight);
     const placement = surfacePlacement(
       lifted.lifted,
-      menu.offsetHeight,
+      height,
       lifted.viewport,
       contextMenu.lift.menuGap,
+      menu.offsetWidth,
     );
+    const cap = (value: number | undefined) =>
+      value == null ? null : Math.round(value);
     if (
       placement.side !== liftPlacement.side ||
-      placement.alignment !== liftPlacement.alignment
+      placement.alignment !== liftPlacement.alignment ||
+      cap(placement.maxBlockSize) !== cap(liftPlacement.maxBlockSize)
     ) {
       setLiftPlacement(placement);
     }
@@ -1210,13 +1220,15 @@ export function ContextMenu({
           <LayerDepthProvider>{renderedMenu}</LayerDepthProvider>,
           liftPlacement != null
             ? {
-                // With no room on either side, the layer runtime's own
-                // fallback places it.
-                placement: liftPlacement.side === 'above' ? 'above' : 'below',
+                placement: liftPlacement.side,
                 alignment: liftPlacement.alignment,
                 offset: contextMenu.lift.menuGap,
                 // The lift fades the menu in.
-                xstyle: [popoverXstyle],
+                xstyle: [
+                  popoverXstyle,
+                  liftPlacement.maxBlockSize != null &&
+                    styles.liftedMenuCap(liftPlacement.maxBlockSize),
+                ],
               }
             : {
                 placement: 'below',

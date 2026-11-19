@@ -467,42 +467,118 @@ test('in a right-to-left page a card at the left edge keeps its menu flush with 
   expect(menu.x, detail).toBeCloseTo(GUTTER, 0);
 });
 
-test('with room on neither side, the menu still never covers the lifted card, and the card stays where it is', async ({
-  page,
-}) => {
-  // A short viewport: the menu fits neither above nor below a card in its
-  // middle.
-  await page.setViewportSize({width: 402, height: 360});
-  const story = await openLiftStory(page, (box, viewport) => ({
-    dx: 0,
-    dy: viewport.height / 2 - (box.y + box.height / 2),
-  }));
-  const lift = await liftAndSettle(page, story);
-  const {preview, menu} = lift;
-  if (preview == null || menu == null) {
-    throw new Error(JSON.stringify(lift));
-  }
-  const natural = await page.evaluate(
-    () => document.querySelector('[role="menu"]')?.scrollHeight ?? 0,
-  );
-  const viewport = page.viewportSize();
-  const height = viewport?.height ?? NaN;
-  const detail = JSON.stringify({lift, natural, viewport});
-  // The case holds: the whole menu fits on neither side.
-  expect(natural, detail).toBeGreaterThan(preview.y - menuGap - GUTTER);
-  expect(natural, detail).toBeGreaterThan(
-    height - GUTTER - (preview.y + preview.height + menuGap),
-  );
-  const overlapX =
-    Math.min(preview.x + preview.width, menu.x + menu.width) -
-    Math.max(preview.x, menu.x);
-  const overlapY =
-    Math.min(preview.y + preview.height, menu.y + menu.height) -
-    Math.max(preview.y, menu.y);
-  expect(overlapX <= 0.5 || overlapY <= 0.5, detail).toBe(true);
-  expect(preview.x + preview.width / 2, detail).toBeCloseTo(story.center.x, 0);
-  expect(preview.y + preview.height / 2, detail).toBeCloseTo(story.center.y, 0);
-});
+// With room on neither side the menu takes the roomier side, capped to fit
+// inside the gutter, and scrolls; it never covers the lifted card, which stays
+// where it is. The phone geometry is a real one: 411 × 789 with a card 609 px
+// tall, as a 70vh card is where a phone's browser sizes vh to its larger
+// viewport. Phones' browsers placed that menu with none of the layer's
+// fallbacks, at its own place, so one case removes them: the lifted menu's
+// own place must fit.
+for (const geometry of [
+  {
+    name: 'a short viewport',
+    width: 402,
+    height: 360,
+    cardHeight: null,
+    fallbacks: true,
+  },
+  {
+    name: 'a phone with a tall card',
+    width: 411,
+    height: 789,
+    cardHeight: 609,
+    fallbacks: true,
+  },
+  {
+    name: 'a phone with a tall card and no layer fallbacks',
+    width: 411,
+    height: 789,
+    cardHeight: 609,
+    fallbacks: false,
+  },
+]) {
+  test(`with room on neither side (${geometry.name}), the menu is capped inside the gutter and scrolls, never covers the lifted card, and the card stays where it is`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({
+      width: geometry.width,
+      height: geometry.height,
+    });
+    const story = await openLiftStory(
+      page,
+      geometry.cardHeight == null
+        ? (box, viewport) => ({
+            dx: 0,
+            dy: viewport.height / 2 - (box.y + box.height / 2),
+          })
+        : undefined,
+    );
+    if (!geometry.fallbacks) {
+      await page.addStyleTag({
+        content: '[popover]{position-try-fallbacks:none !important}',
+      });
+    }
+    if (geometry.cardHeight != null) {
+      // The card grows to its height, then its parent's margin centers it, so
+      // the lifted card carries no offset of its own.
+      story.center = await page
+        .getByTestId('touch-context-menu')
+        .evaluate((el, height) => {
+          const host = el as HTMLElement;
+          host.style.height = `${height}px`;
+          const parent = host.parentElement as HTMLElement;
+          const box = host.getBoundingClientRect();
+          const margin = parseFloat(getComputedStyle(parent).marginTop) || 0;
+          parent.style.marginTop = `${margin + (innerHeight - box.height) / 2 - box.y}px`;
+          const moved = host.getBoundingClientRect();
+          return {x: moved.x + moved.width / 2, y: moved.y + moved.height / 2};
+        }, geometry.cardHeight);
+    }
+    const lift = await liftAndSettle(page, story);
+    const {preview, menu} = lift;
+    if (preview == null || menu == null) {
+      throw new Error(JSON.stringify(lift));
+    }
+    const fit = await page.evaluate(() => {
+      const list = document.querySelector('[role="menu"]');
+      const popover = list?.closest('[popover]');
+      return {
+        natural: list?.scrollHeight ?? 0,
+        scrolls: [popover, list].some(
+          el => el != null && el.scrollHeight > el.clientHeight + 1,
+        ),
+        innerHeight,
+      };
+    });
+    const detail = JSON.stringify({lift, fit, geometry});
+    // The case holds: the whole menu fits on neither side.
+    expect(fit.natural, detail).toBeGreaterThan(preview.y - menuGap - GUTTER);
+    expect(fit.natural, detail).toBeGreaterThan(
+      fit.innerHeight - GUTTER - (preview.y + preview.height + menuGap),
+    );
+    const overlapX =
+      Math.min(preview.x + preview.width, menu.x + menu.width) -
+      Math.max(preview.x, menu.x);
+    const overlapY =
+      Math.min(preview.y + preview.height, menu.y + menu.height) -
+      Math.max(preview.y, menu.y);
+    expect(overlapX <= 0.5 || overlapY <= 0.5, detail).toBe(true);
+    // Capped to fit inside the gutter, and scrolling what does not fit.
+    expect(menu.y, detail).toBeGreaterThanOrEqual(GUTTER - 0.5);
+    expect(menu.y + menu.height, detail).toBeLessThanOrEqual(
+      fit.innerHeight - GUTTER + 0.5,
+    );
+    expect(fit.scrolls, detail).toBe(true);
+    expect(preview.x + preview.width / 2, detail).toBeCloseTo(
+      story.center.x,
+      0,
+    );
+    expect(preview.y + preview.height / 2, detail).toBeCloseTo(
+      story.center.y,
+      0,
+    );
+  });
+}
 
 test('the menu shows above the lifted card and takes the finger: its rows are on top', async ({
   page,

@@ -49,12 +49,14 @@ export interface LiftFromTriggerScaleRule {
 
 /** Where a surface sits against the lifted source. */
 export interface SurfacePlacement {
-  /**
-   * `none` when the surface fits on neither side: the caller then leaves it to
-   * the layer runtime's own fallback.
-   */
-  readonly side: 'above' | 'below' | 'none';
+  /** The side of the lifted source the surface opens on; `start` and `end` are beside it, logical. */
+  readonly side: 'above' | 'below' | 'start' | 'end';
   readonly alignment: 'start' | 'center' | 'end';
+  /**
+   * The surface's largest block size, CSS px, when it does not fit whole on
+   * its side: it scrolls what does not fit. Absent when it fits whole.
+   */
+  readonly maxBlockSize?: number;
 }
 
 /**
@@ -140,30 +142,34 @@ export function surfaceAnchorRect(
 }
 
 /**
- * A surface's place: below the lifted source when `surfaceHeight` fits
- * between it, `gap` and the bottom gutter. Else it goes above, when it fits
- * under the top gutter. With room on neither side it answers `none`. It
- * centers on the source, or sits flush with the source's edge when the source
- * reaches the gutter at a side of the viewport.
+ * A surface's place against the lifted source, which never moves, so the
+ * surface never covers it. It goes below when `surfaceHeight` fits between
+ * the source, `gap` and the bottom gutter, else above when it fits under the
+ * top gutter. Else it goes beside the source, at the inline end first, where
+ * `surfaceWidth` fits there; it is capped to the room between the block
+ * gutters. Else it takes the side with more room, capped to that room, and
+ * scrolls the rest. Above or below, it centers on the source, or sits flush
+ * with the source's edge when the source reaches the gutter at a side of the
+ * viewport.
  */
 export function surfacePlacement(
   lifted: MorphRect,
   surfaceHeight: number,
   viewport: LiftFromTriggerViewport,
   gap: number,
+  surfaceWidth = Number.POSITIVE_INFINITY,
 ): SurfacePlacement {
   const {gutter} = viewport;
+  const isRtl = viewport.direction === 'rtl';
   const bottom = viewport.height - gutter.bottom;
-  const fitsBelow = lifted.y + lifted.height + gap + surfaceHeight <= bottom;
-  const fitsAbove = lifted.y - gap - surfaceHeight >= gutter.top;
-  const side = fitsBelow ? 'below' : fitsAbove ? 'above' : 'none';
+  const roomBelow = bottom - (lifted.y + lifted.height + gap);
+  const roomAbove = lifted.y - gap - gutter.top;
   const epsilon = 0.5;
   const atLeft = lifted.x <= gutter.inline + epsilon;
   const atRight =
     lifted.x + lifted.width >= viewport.width - gutter.inline - epsilon;
   // Flush with the edge the source is held against; the alignment is
   // logical, so a right-to-left page swaps the physical sides.
-  const isRtl = viewport.direction === 'rtl';
   const alignment = atLeft
     ? isRtl
       ? 'end'
@@ -173,5 +179,32 @@ export function surfacePlacement(
         ? 'start'
         : 'end'
       : 'center';
-  return {side, alignment};
+  if (surfaceHeight <= roomBelow) {
+    return {side: 'below', alignment};
+  }
+  if (surfaceHeight <= roomAbove) {
+    return {side: 'above', alignment};
+  }
+  const roomRight =
+    viewport.width - gutter.inline - (lifted.x + lifted.width + gap);
+  const roomLeft = lifted.x - gap - gutter.inline;
+  const roomEnd = isRtl ? roomLeft : roomRight;
+  const roomStart = isRtl ? roomRight : roomLeft;
+  const blockRoom = viewport.height - gutter.top - gutter.bottom;
+  // A cap is a pixel under its room, so rounding never puts the surface past
+  // the gutter.
+  const cap = (room: number) => Math.max(0, room - 1);
+  const beside = (side: 'start' | 'end'): SurfacePlacement =>
+    surfaceHeight > blockRoom
+      ? {side, alignment: 'start', maxBlockSize: cap(blockRoom)}
+      : {side, alignment: 'start'};
+  if (surfaceWidth <= roomEnd) {
+    return beside('end');
+  }
+  if (surfaceWidth <= roomStart) {
+    return beside('start');
+  }
+  return roomBelow >= roomAbove
+    ? {side: 'below', alignment, maxBlockSize: cap(roomBelow)}
+    : {side: 'above', alignment, maxBlockSize: cap(roomAbove)};
 }
