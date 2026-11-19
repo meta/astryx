@@ -10135,11 +10135,19 @@ export function draftAnswer(ctx, env, question) {
           x => x.on === holder || (FAMILIES[holder] ?? []).includes(x.on),
         ) &&
         !(FAMILIES[c.parts[0].on] ?? []).includes(holder) &&
-        // (Only a part the head holds: "cards tinted blue with a navy
-        // header" names the app's header, which no card holds.)
-        [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(x =>
-          (C.MAP[holder].contains ?? []).includes(x),
-        )
+        // (In a with-list, only a part the head holds: "cards tinted blue
+        // with a navy header" names the app's header, which no card holds.
+        // A part that sits in running text, a link, is held where that text
+        // is: "dark navigation bar with white links". A colon list is the
+        // head's own: "alerts like Bootstrap 1: …, bold title" is the
+        // alert's title.)
+        (joinOf.get(c)?.list !== 'with' ||
+          [c.parts[0].on, ...(FAMILIES[c.parts[0].on] ?? [])].some(
+            x =>
+              (C.MAP[holder].contains ?? []).includes(x) ||
+              ((C.MAP[holder].contains ?? []).includes('text') &&
+                (C.MAP.text?.contains ?? []).includes(x)),
+          ))
       ) {
         c.container = holder;
         c.placeStrict = {holder, part: c.parts[0].on};
