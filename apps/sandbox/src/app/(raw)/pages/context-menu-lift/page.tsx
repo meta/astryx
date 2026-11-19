@@ -13,6 +13,8 @@
 'use client';
 
 import * as stylex from '@stylexjs/stylex';
+import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {ContextMenu} from '@astryxdesign/core/ContextMenu';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -72,8 +74,10 @@ const styles = stylex.create({
     overflow: 'hidden',
     height: 120,
   },
-  // Taller than the room above or below it leaves for its menu.
-  tallCard: {minHeight: '70vh'},
+  // On a phone, fully on screen, it leaves too little room above or below
+  // for its whole menu, but room for part of it. `svh` is the visible
+  // screen, which `vh` is not where a browser's bars hide.
+  tallCard: {minHeight: '60svh'},
   // The trigger fills its table cell.
   cellTrigger: {display: 'block'},
   iconRow: {
@@ -107,6 +111,151 @@ const styles = stylex.create({
     },
   },
 });
+
+// The position-try probe: one box at a time against a tall anchor that
+// leaves 90 px above and below, as the tall card does. Each box needs one
+// `@position-try` fallback to fit, except the control's. The rules copy the
+// layer runtime's fit construct, step by step, with plain 16 px gutters.
+const PROBE_CSS = `
+.pt-overlay{position:fixed;inset:0;z-index:2147483000;pointer-events:none}
+.pt-anchor{position:absolute;inset-inline:16px;top:90px;bottom:90px;anchor-name:--pt-anchor;background:rgba(59,130,246,.25)}
+.pt-box{position:absolute;position-anchor:--pt-anchor;position-area:block-end;inline-size:160px;margin-block-start:16px;overflow:auto;background:rgba(16,185,129,.6)}
+.pt-content{block-size:160px}
+.pt-c0 .pt-content{block-size:40px}
+.pt-p1{position-try-fallbacks:--pt-p1}
+.pt-p2{position-try-fallbacks:--pt-p2}
+.pt-p3{position-try-fallbacks:--pt-p3}
+.pt-p4{position-try-fallbacks:--pt-p4}
+@position-try --pt-p1{position-area:block-end;margin-block-start:16px;block-size:40px}
+@position-try --pt-p2{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:calc(100% - 32px)}
+@position-try --pt-p3{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:max(calc(100% - 32px),calc((100dvb - anchor-size(block)) / 2 - 33px))}
+@position-try --pt-p4{position-area:self-block-end span-all;margin-block-start:16px;margin-block-end:16px;block-size:max(calc(100% - 32px),calc((100vh - anchor-size(block)) / 2 - 33px))}
+.pt-unit{position:fixed;top:0;left:0;inline-size:1px;visibility:hidden}
+`;
+
+const PROBES = [
+  {id: 'c0', label: 'Control: fits with no fallback', fits: 'below, 40 px'},
+  {id: 'p1', label: 'P1: a fallback with a fixed size', fits: 'below, 40 px'},
+  {
+    id: 'p2',
+    label: 'P2: a fallback sized by a percentage',
+    fits: 'below, capped',
+  },
+  {
+    id: 'p3',
+    label: 'P3: the layer’s fit rule (100dvb, anchor-size)',
+    fits: 'below, capped',
+  },
+  {id: 'p4', label: 'P4: the same with 100vh', fits: 'below, capped'},
+] as const;
+
+type ProbeResult = {id: string; verdict: string; box: string};
+
+const nextFrame = () =>
+  new Promise<void>(resolve =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
+function PositionTryProbe() {
+  const [current, setCurrent] = useState<string | null>(null);
+  const [results, setResults] = useState<ProbeResult[] | null>(null);
+  const [units, setUnits] = useState<string>('');
+  const run = async () => {
+    const out: ProbeResult[] = [];
+    for (const probe of PROBES) {
+      setCurrent(probe.id);
+      await nextFrame();
+      const anchor = document.querySelector('.pt-anchor');
+      const box = document.querySelector('.pt-box');
+      if (anchor == null || box == null) {
+        out.push({id: probe.id, verdict: 'not rendered', box: ''});
+        continue;
+      }
+      const a = anchor.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      const inView = b.bottom <= innerHeight + 0.5 && b.top >= -0.5;
+      const below = b.top >= a.bottom - 0.5;
+      const verdict = !inView
+        ? 'off screen: its own place, no fallback applied'
+        : !below
+          ? 'misplaced'
+          : probe.id === 'c0'
+            ? 'fits at its own place'
+            : b.height < 159.5
+              ? 'fallback applied'
+              : 'misplaced';
+      out.push({
+        id: probe.id,
+        verdict,
+        box: `top ${Math.round(b.top)}, height ${Math.round(b.height)}, bottom ${Math.round(b.bottom)}`,
+      });
+    }
+    setCurrent('units');
+    await nextFrame();
+    const read = (unit: string) => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-pt-unit="${unit}"]`,
+      );
+      return el == null
+        ? '?'
+        : `${Math.round(el.getBoundingClientRect().height)}`;
+    };
+    setUnits(
+      `innerHeight ${innerHeight}, visualViewport ${Math.round(window.visualViewport?.height ?? 0)}, ` +
+        `100vh ${read('vh')}, 100svh ${read('svh')}, 100lvh ${read('lvh')}, 100dvh ${read('dvh')}; ` +
+        `anchor-size supported: ${CSS.supports('block-size', 'anchor-size(block)')}; ` +
+        `${navigator.userAgent}`,
+    );
+    setCurrent(null);
+    setResults(out);
+  };
+  return (
+    <VStack gap={2}>
+      <Heading level={2}>Position-try probe</Heading>
+      <Text type="supporting">
+        Tap Run. Each box in turn is placed against a tall anchor that leaves 90
+        px above and below it. The control fits with no fallback. P1 to P4 fit
+        only if the browser applies their fallback. Results show below.
+      </Text>
+      <Button label="Run the position-try probe" onClick={() => void run()} />
+      <style>{PROBE_CSS}</style>
+      {current != null ? (
+        <div className="pt-overlay" aria-hidden>
+          {current === 'units' ? (
+            ['vh', 'svh', 'lvh', 'dvh'].map(unit => (
+              <div
+                key={unit}
+                className="pt-unit"
+                data-pt-unit={unit}
+                style={{blockSize: `100${unit}`}}
+              />
+            ))
+          ) : (
+            <>
+              <div className="pt-anchor" />
+              <div className={`pt-box pt-${current}`}>
+                <div className="pt-content" />
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+      {results != null ? (
+        <VStack gap={1}>
+          {results.map(result => {
+            const probe = PROBES.find(item => item.id === result.id);
+            return (
+              <Text key={result.id} type="supporting">
+                {`${probe?.label ?? result.id} — expected ${probe?.fits ?? ''}: ${result.verdict} (${result.box})`}
+              </Text>
+            );
+          })}
+          <Text type="supporting">{units}</Text>
+        </VStack>
+      ) : null}
+    </VStack>
+  );
+}
 
 export default function ContextMenuLiftPage() {
   const {mode, setMode} = useThemeControls();
@@ -269,8 +418,9 @@ export default function ContextMenuLiftPage() {
         <VStack gap={2}>
           <Heading level={2}>Taller than the room for its menu</Heading>
           <Text type="supporting">
-            Its menu fits neither above nor below it, so the menu opens beside
-            it, or scrolls on the roomier side. It never covers the card.
+            On a phone, with the card fully on screen, its menu fits neither
+            above nor below it. The menu opens on the roomier side, capped to
+            fit, and scrolls. It never covers the card.
           </Text>
           <ContextMenu items={MENU} label="Tall card">
             <Card xstyle={styles.tallCard}>
@@ -333,6 +483,9 @@ export default function ContextMenuLiftPage() {
             </VStack>
           </Card>
         </VStack>
+      </VStack>
+      <VStack gap={2} padding={4}>
+        <PositionTryProbe />
       </VStack>
       <ContextMenu items={MENU} label="Bottom row">
         <Item
