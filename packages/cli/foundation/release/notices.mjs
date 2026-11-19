@@ -72,6 +72,7 @@ import {
 import {installsPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
+import {binStartedRun} from './run-context.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
 
 /** A notice prints at most once in this long. */
@@ -815,7 +816,8 @@ export function addCliCommand(root, version) {
  * project, the copy that ran updates: a global copy by the package manager
  * that holds it (see {@link globalUpgradeCommand}); a package runner's copy
  * by running the newest release (`runs`), with the run's own arguments
- * (`<command>` when there are none to repeat), as nothing installed it.
+ * when the bin started the run (`<command>` otherwise, or when there are
+ * none to repeat), as nothing installed it.
  * @param {{cwd: string, self?: {version: string, root: string}, stateDir?: string, argv?: string[]}} options
  * @returns {{install: string, upgrade: string | null, folder: string | null, runs: boolean}}
  */
@@ -823,7 +825,7 @@ export function cliUpdateStep({
   cwd,
   self = runningCopy(CLI_ROOT),
   stateDir = userConfigDir(),
-  argv = process.argv.slice(2),
+  argv = binStartedRun() ? process.argv.slice(2) : [],
 }) {
   const target = installFolder(cwd);
   if (target == null) {

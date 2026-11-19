@@ -37,6 +37,7 @@ import {
   tryStateLock,
   updateGlobalState,
 } from './global-state.mjs';
+import {_resetRunChoice, recordRunChoice} from './run-context.mjs';
 import {
   CLI_VERSION,
   cleanupFixtures,
@@ -636,6 +637,42 @@ describe('cliUpdateStep', () => {
         argv: [],
       }).install,
     ).toBe(`${dlx} @astryxdesign/cli@latest <command>`);
+  });
+
+  it("outside a project, repeats the run's command only when the bin started the run", () => {
+    const outside = tempDir();
+    const runner = path.join(
+      tempDir('runner'),
+      '_npx',
+      'abc123',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.mkdirSync(runner, {recursive: true});
+    writeJson(path.join(runner, 'package.json'), {
+      name: '@astryxdesign/cli',
+      version: '0.7.2',
+    });
+    const dlx = getDlxPrefix(outside);
+    const self = {version: '0.7.2', root: runner};
+    const argv = process.argv;
+    process.argv = [argv[0], 'host.mjs', '--port', '4000', '--watch'];
+    try {
+      // Driven in-process, the arguments are the host program's own.
+      _resetRunChoice();
+      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
+        `${dlx} @astryxdesign/cli@latest <command>`,
+      );
+      process.argv = [argv[0], 'astryx', 'theme', 'palette', 'generate'];
+      recordRunChoice(/** @type {any} */ ({copy: 'carried', answer: 'self'}));
+      expect(cliUpdateStep({cwd: outside, self}).install).toBe(
+        `${dlx} @astryxdesign/cli@latest theme palette generate`,
+      );
+    } finally {
+      process.argv = argv;
+      _resetRunChoice();
+    }
   });
 });
 
