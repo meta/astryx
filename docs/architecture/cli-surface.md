@@ -163,11 +163,13 @@ and remains available through explicit Core package selection.
   prints the short answer, the `--detail compact` level: the description's
   first paragraph, the import, a usage line, each prop with its description's
   first sentence, the accessibility requirements, the component's pieces, a
-  hook's returns, and as its last line the `--detail full` command that prints
-  the whole doc.
+  hook's parameters and returns, and as its last line the `--detail full`
+  command that prints the whole doc.
   `component <Name> --props` prints each prop description whole. A list prints
   `brief` and a hook or docs read prints `full` when no `--detail` is given.
-  The detail level never changes a component read's JSON. The stdout of `astryx mcp` carries protocol messages only, and
+  The detail level never changes a component read's JSON. A field shown in
+  one section of the text projection is not repeated in another: a read of
+  one family member prints its props once, under Props. The stdout of `astryx mcp` carries protocol messages only, and
   each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
@@ -325,7 +327,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   a POSIX system; never a temp folder that is a disk's root or holds the home
   folder), under the checks a write in the project has: no link carries it out
   of that folder, and an existing file is replaced only with `--overwrite`
-  (DEC-15). The one HTML file `astryx experimental export` writes may also go
+  (DEC-15). For `astryx template <name> <path>` and `--cdn <path>`, a
+  destination that is `~`, or starts with `~/` or `~\`, names the home folder,
+  as a shell reads it, and then follows the rules of an absolute path; a
+  destination written that way never makes a folder named `~` in the project.
+  Reading it so is a compatible `[fix]`. The one HTML file
+  `astryx experimental export` writes may also go
   to an absolute path the caller names with `--out`, in any folder; it never
   replaces a file that a render did not write (DEC-16).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -1249,6 +1256,34 @@ addresses, so `--reverse` gives back the page as written.
 Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
 broken), and carrying a fetched image in the embedded source (the way back
 would no longer be the page as written).
+
+### DEC-19 — A render keeps a theme that draws in one mode in that mode
+
+**Decider:** `josephfarina`, `2026-11-18`
+
+A rendered page is one file that shows the page in any viewer. A page whose
+root theme draws in one mode is readable only in that mode: in a viewer of the
+other scheme, its text sits on the viewer's own canvas. So `astryx experimental
+export` writes one color scheme when the page's root theme is a built theme
+that draws in one mode, and paints the theme's page color on the document. A
+built theme is one whose compiled stylesheet the page imports, directly or
+through an `@import`. A theme passed to `Theme` unbuilt injects its CSS only
+at run time, which the render does not read: only what the page's own
+stylesheets set on that theme's root decides, by the same rule. The theme module's
+`colorModes` export decides, read without running the module. A theme with no
+`colorModes` export draws in one mode when every page and text color its root
+rule sets is a fixed color (an opaque one, for a page color) and all of them
+read as that mode by their lightness (a light page or dark text is light, a
+dark page or light text is dark), and no stylesheet that names the theme sets a
+page or text color under a light or dark condition. A media surface's own
+colors (`data-astryx-media`) do not count.
+Every other theme, and a page with no theme, keeps both schemes, and its file
+is written as before. The theme editor's previews keep both schemes, because
+the editor shows each mode itself.
+
+Rejected: following the viewer for every page (a one-mode theme is unreadable
+in the other scheme), and running the theme module to read its modes (a render
+runs no theme code).
 
 ## Verification
 

@@ -58,9 +58,12 @@
  * is in its list, `module`, `export`, and `import` draw that look; `look`
  * is present when the icon does not have it. `relatives` is present when the
  * groups of the definitions it draws have other members: those definitions,
- * Astryx's and its set's own.
+ * Astryx's and its set's own. In the `icon.search` answer, `meaningImport` is
+ * present when the set's `map` names the icon for a definition: the import
+ * line that names the icon by that meaning
+ * (`import {TrashIcon as DeleteIcon} from '…'`).
  * @experimental May change or be removed in a patch release.
- * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}, relatives?: IconDefinitionRelative[]}} IconMatchEntry
+ * @typedef {IconRecord & {reason: string, score: number, look?: {asked: string, used: string | null}, relatives?: IconDefinitionRelative[], meaningImport?: string}} IconMatchEntry
  */
 
 /**

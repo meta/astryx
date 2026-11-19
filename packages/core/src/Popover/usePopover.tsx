@@ -451,6 +451,8 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    * moves the popover (`useLayerInternal`'s `writesEntranceSide`).
    */
   writesEntranceSide?: boolean;
+  /** Called after a scroll stop places the popover afresh (`useLayerInternal`'s `onPlacedAfresh`). */
+  onPlacedAfresh?: () => void;
 }
 
 /**
@@ -502,6 +504,7 @@ function usePopoverImplementation(
     onHide,
     onCloseStart,
     writesEntranceSide,
+    onPlacedAfresh,
     xstyle,
     className,
     style,
@@ -579,6 +582,7 @@ function usePopoverImplementation(
     watchesOutsidePans:
       hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
     writesEntranceSide,
+    onPlacedAfresh,
     onOpenPendingChange,
     waitsForAnchor: anchorRef != null,
   });

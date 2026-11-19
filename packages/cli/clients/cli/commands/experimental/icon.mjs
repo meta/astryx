@@ -316,6 +316,7 @@ export function registerExperimentalIcon(group, program) {
               'id',
               'package',
               'import',
+              'meaningImport',
               'look',
               'words',
               'definitions',
