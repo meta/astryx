@@ -1759,7 +1759,13 @@ function ShortcutRow({
           {isCustom && (
             <IconButton
               label={`Reset ${def.label} to its default`}
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon
+                  icon={ArrowUturnLeftIcon}
+                  size="sm"
+                  xstyle={rtlStyles.mirror}
+                />
+              }
               variant="ghost"
               size="sm"
               onClick={onReset}
@@ -1879,7 +1885,13 @@ function ShortcutsPanel() {
               label="Reset all to defaults"
               variant="ghost"
               size="sm"
-              icon={<Icon icon={ArrowUturnLeftIcon} size="sm" />}
+              icon={
+                <Icon
+                  icon={ArrowUturnLeftIcon}
+                  size="sm"
+                  xstyle={rtlStyles.mirror}
+                />
+              }
               onClick={() => {
                 setOverrides({});
               }}

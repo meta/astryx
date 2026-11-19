@@ -656,6 +656,7 @@ const styles = stylex.create({
     flexShrink: 0,
     whiteSpace: 'nowrap',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     paddingInline: spacingVars['--spacing-1'],
   },

@@ -35,6 +35,11 @@ const {runCli} = require('../../../test-utils/run-cli.mjs');
 const {
   linkThisCliAsProjectCli,
 } = require('../../../test-utils/release-fixtures.mjs');
+/** @type {typeof import('../../../test-utils/icon-set-fixture.mjs')} */
+const {
+  glyphsData,
+  writeIconPackage,
+} = require('../../../test-utils/icon-set-fixture.mjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Run against the monorepo root so @astryxdesign/core is discoverable.
@@ -568,3 +573,64 @@ describe(
   },
   SCAN_TIMEOUT,
 );
+
+describe('search text — the icons block', () => {
+  /**
+   * A project with Core and the given icon-set packages installed.
+   * @param {string} dir
+   * @param {string[]} names the packages, each shipping a set named `glyphs`
+   */
+  function writeProject(dir, names) {
+    const scope = path.join(dir, 'node_modules', '@astryxdesign');
+    fs.mkdirSync(scope, {recursive: true});
+    fs.symlinkSync(
+      path.join(REPO_ROOT, 'packages', 'core'),
+      path.join(scope, 'core'),
+      'dir',
+    );
+    /** @type {Record<string, string>} */
+    const dependencies = {'@astryxdesign/core': '*'};
+    for (const name of names) {
+      dependencies[name] = '1.0.0';
+      writeIconPackage(path.join(dir, 'node_modules', ...name.split('/')), {
+        name,
+        set: 'glyphs',
+        data: {...glyphsData(), module: name},
+      });
+    }
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', private: true, dependencies}),
+    );
+  }
+
+  it(
+    'labels a set two packages ship with its package, and one set by its name alone',
+    async () => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'astryx-search-text-icons-'),
+      );
+      try {
+        const one = path.join(root, 'one');
+        writeProject(one, ['@acme/glyphs']);
+        const single = await runCli(['search', 'trash', 'icon'], one);
+        expect(single.stdout.trimEnd().split('\n').slice(-2)).toEqual([
+          'Icons (1)',
+          "trash (glyphs): import {TrashIcon} from '@acme/glyphs';",
+        ]);
+
+        const two = path.join(root, 'two');
+        writeProject(two, ['@acme/glyphs', '@other/glyphs']);
+        const twin = await runCli(['search', 'trash', 'icon'], two);
+        expect(twin.stdout.trimEnd().split('\n').slice(-3)).toEqual([
+          'Icons (2)',
+          "trash (@acme/glyphs/glyphs): import {TrashIcon} from '@acme/glyphs';",
+          "trash (@other/glyphs/glyphs): import {TrashIcon} from '@other/glyphs';",
+        ]);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    },
+    SCAN_TIMEOUT * 4,
+  );
+});

@@ -214,16 +214,22 @@ const styles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  // The label and its semibold sizer share one cell. A wrapped label can take
+  // fewer lines than the sizer, so both center in the cell: selection then
+  // does not move the label.
   labelContainer: {
     display: 'inline-grid',
+    textAlign: 'center',
   },
   labelText: {
     gridRowStart: 1,
     gridColumnStart: 1,
+    alignSelf: 'center',
   },
   labelSizer: {
     gridRowStart: 1,
     gridColumnStart: 1,
+    alignSelf: 'center',
     visibility: 'hidden',
     pointerEvents: 'none',
     fontWeight: fontWeightVars['--font-weight-semibold'],

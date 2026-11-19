@@ -507,7 +507,12 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
 
   const EXAMPLE_PREVIEWS: Record<string, React.ReactNode[]> = {
     button: [
-      <HStack key="semantics" gap={3} vAlign="center">
+      <HStack
+        key="semantics"
+        gap={3}
+        vAlign="center"
+        hAlign="center"
+        wrap="wrap">
         <Button label="Flat" variant="ghost" />
         <Button label="Default" variant="secondary" />
         <Button label="Primary" variant="primary" />
@@ -652,13 +657,15 @@ function ComponentDetailView({activeNav}: {activeNav: string}) {
                 return (
                   <Card key={i} padding={0}>
                     <Section padding={3} variant="transparent">
-                      <HStack gap={3} vAlign="center">
+                      {/* On a narrow screen the actions move under the title
+                          instead of running past the card. */}
+                      <HStack gap={3} vAlign="center" wrap="wrap">
                         <StackItem size="fill">
                           <Text type="body" weight="medium">
                             {example.title}
                           </Text>
                         </StackItem>
-                        <HStack gap={1} vAlign="center">
+                        <HStack gap={1} vAlign="center" wrap="wrap">
                           <Button
                             label="Open in Craft"
                             variant="ghost"

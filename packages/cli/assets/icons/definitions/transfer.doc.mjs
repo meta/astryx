@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'transfer',
+  group: 'money',
   description: 'Move money or items between two places.',
   words: ['exchange', 'swap', 'payment processor'],
 };

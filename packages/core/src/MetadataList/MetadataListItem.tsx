@@ -64,6 +64,14 @@ export interface MetadataListItemProps extends BaseProps<HTMLDivElement> {
 // Styles
 // =============================================================================
 
+// A value breaks a word only when the word is longer than its line, so a long
+// URL or ID wraps instead of overflowing. `overflow-wrap: break-word` keeps
+// each word's own width as the value's narrowest width, so a value in a row
+// (an amount beside its description) is never squeezed into breaking an
+// ordinary word or number. `word-break: break-word` would drop that narrowest
+// width to a single character.
+const VALUE_OVERFLOW_WRAP = 'break-word';
+
 const styles = stylex.create({
   // Label (dt) — inline (side-by-side with value)
   label: {
@@ -87,13 +95,17 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     minHeight: 24,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
-  // Stacked layout wrapper (label on top)
+  // Stacked layout wrapper (label on top). A grid or flex item's narrowest
+  // width is its longest word unless it sets `min-width: 0`; without it, a URL
+  // or ID wider than the list would widen the wrapper past the list instead
+  // of wrapping inside it.
   stackedWrapper: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
+    minWidth: 0,
   },
   // Stacked label
   stackedLabel: {
@@ -106,6 +118,9 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     margin: 0,
     padding: 0,
+    // Like the side-by-side label: a label word longer than its column
+    // breaks instead of running into the next column.
+    wordBreak: 'break-word',
   },
   stackedValue: {
     color: colorVars['--color-text-primary'],
@@ -113,7 +128,7 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-body-leading'],
     margin: 0,
     padding: 0,
-    wordBreak: 'break-word',
+    overflowWrap: VALUE_OVERFLOW_WRAP,
   },
   iconWrapper: {
     display: 'inline-flex',

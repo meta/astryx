@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A small, forgiving HTML reader for `astryx experimental render
+ * @file A small, forgiving HTML reader for `astryx experimental export
  * --reverse`: enough for rendered markup, plus the helpers that ask it which
  * Astryx component an element came from. Its scanner also finds the parts of
  * a rendered file that a reverse compares.
@@ -37,7 +37,7 @@ export const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title']);
  * content of a raw-text element.
  * @typedef {{kind: 'text' | 'raw' | 'comment' | 'doctype', start: number, end: number}
  *   | {kind: 'end', tag: string, start: number, end: number}
- *   | {kind: 'start', tag: string, attrs: Array<[string, string]>, selfClosing: boolean, start: number, end: number}} HtmlToken
+ *   | {kind: 'start', tag: string, attrs: Array<[string, string, number, number]>, selfClosing: boolean, start: number, end: number}} HtmlToken
  */
 
 const SPACE = /[\t\n\f\r ]/;
@@ -51,7 +51,8 @@ const DOCTYPE = /<!doctype/iy;
  * the tag self-closing.
  * @param {string} html
  * @param {number} i the first letter of the name
- * @returns {{tag: string, attrs: Array<[string, string]>, selfClosing: boolean, end: number} | 'text' | 'open'}
+ * @returns {{tag: string, attrs: Array<[string, string, number, number]>, selfClosing: boolean, end: number} | 'text' | 'open'}
+ *   each attribute: its name, its value, and where its text starts and ends
  *   'text' when the name is not a tag name, so the `<` is text; 'open' when
  *   no `>` ends the tag, so the rest of the document is text
  */
@@ -61,7 +62,7 @@ export function readTag(html, i) {
   while (i < n && NAME_CHAR.test(html[i])) i++;
   if (i >= n || !(SPACE.test(html[i]) || html[i] === '/' || html[i] === '>')) return 'text';
   const tag = html.slice(nameStart, i).toLowerCase();
-  /** @type {Array<[string, string]>} */
+  /** @type {Array<[string, string, number, number]>} */
   const attrs = [];
   let selfClosing = false;
   while (i < n && html[i] !== '>') {
@@ -96,7 +97,7 @@ export function readTag(html, i) {
         i = j;
       }
     }
-    attrs.push([name, value]);
+    attrs.push([name, value, nameAt, i]);
   }
   return i >= n ? 'open' : {tag, attrs, selfClosing, end: i + 1};
 }

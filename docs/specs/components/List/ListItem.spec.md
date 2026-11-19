@@ -17,6 +17,7 @@ verified_by:
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
+    packages/core/src/List/__tests__/TaskCheckboxCentered.interaction.browser.spec.ts,
   ]
 modules: []
 families: [family:navigation-destinations]
@@ -93,7 +94,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `family:navigation-destinations`, of which ListItem is a member.
 - Item's label, description, slots, invisible button, delegated activation,
   and disabled and selected semantics — Item's shipped behavior, uncontracted
-  here.
+  here, except where the current marker sits on an interactive row
+  (`family:navigation-destinations` FR9).
 - What each edge treatment does to row geometry and the row inset, the touch
   target, press paint, row motion, and row menus — owned by `component:List`.
 - The `ListMarkerScope` that sets a marker or task state for Markdown's nested
@@ -108,13 +110,13 @@ No component-local concept beyond the consumer props; row props are
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | ListItem renders `component:Item` as an `<li>` and passes `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, the deprecated `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), and `ref` to it unchanged, with other DOM and data props reaching the row.                                                                             | Current source and tests |
-| FR2 | Inside a List, the row takes the list's `density`, its `hasDividers` setting, which draws a divider between rows with no extra element and square corners (except that a `bleed` list's first or last row takes a rounded host's corner, `component:List` FR5), and its `edge` treatment.                                                                                                                                                               | Current source and tests |
-| FR3 | Outside a List, the row uses `balanced` density, no dividers, the `padded` treatment, and no marker, keeping Item's inline inset.                                                                                                                                                                                                                                                                                                                       | Current source and tests |
-| FR4 | In a List whose `listStyle` is `disc`, `circle`, or `decimal`, the row draws that marker before its content: a disc or circle shape, or a counter number. A task state set for the row draws a read-only, labelled checkbox in the marker's place. Each marker and the task checkbox sit on the label's first line. A List whose `listStyle` is `none` draws neither. Other markers, set internally for Markdown's nested lists, are uncontracted here. | Current source and tests |
-| FR5 | The row carries `component:List`'s `list-item` target, merged with the caller's `className` and `style`; `xstyle` applies after ListItem's own styles.                                                                                                                                                                                                                                                                                                  | Current source           |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | ListItem renders `component:Item` as an `<li>` and passes `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, the deprecated `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), and `ref` to it unchanged, with other DOM and data props reaching the row; on an interactive row a caller's `aria-current` reaches the row's focusable element (`family:navigation-destinations` FR9). | Current source and tests |
+| FR2 | Inside a List, the row takes the list's `density`, its `hasDividers` setting, which draws a divider between rows with no extra element and square corners (except that a `bleed` list's first or last row takes a rounded host's corner, `component:List` FR5), and its `edge` treatment.                                                                                                                                                                                                               | Current source and tests |
+| FR3 | Outside a List, the row uses `balanced` density, no dividers, the `padded` treatment, and no marker, keeping Item's inline inset.                                                                                                                                                                                                                                                                                                                                                                       | Current source and tests |
+| FR4 | In a List whose `listStyle` is `disc`, `circle`, or `decimal`, the row draws that marker before its content: a disc or circle shape, or a counter number. A task state set for the row draws a read-only, labelled checkbox in the marker's place. Each marker and the task checkbox sit on the label's first line. A List whose `listStyle` is `none` draws neither. Other markers, set internally for Markdown's nested lists, are uncontracted here.                                                 | Current source and tests |
+| FR5 | The row carries `component:List`'s `list-item` target, merged with the caller's `className` and `style`; `xstyle` applies after ListItem's own styles.                                                                                                                                                                                                                                                                                                                                                  | Current source           |
 
 ### Allowed variation
 
@@ -147,7 +149,9 @@ No component-local concept beyond the consumer props; row props are
 - **AR1 — List semantics.** Inside a List, each row is an `<li>` in the List's
   `<ul>` or `<ol>` (FR1).
 - **AR2 — Row semantics.** Item's interaction, disabled, and selected semantics
-  apply unchanged; they are Item's shipped behavior, uncontracted here.
+  apply unchanged; they are Item's shipped behavior, uncontracted here, except
+  the current marker's place on an interactive row
+  (`family:navigation-destinations` FR9).
 - **AR3 — Task state.** A task row's checkbox is read-only and labelled (FR4).
 
 ## Design relationships
@@ -175,20 +179,20 @@ migration, so the map is deferred.
 
 ## Verification map
 
-| Contract     | Verification                                                                                  | Representative states                          | Mutation or failure expectation                                              | Audit section                  |
-| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
-| FR1, AR1     | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests              | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails.                       | `audit:ListItem/behavior`      |
-| FR2          | `List.test.tsx` density, divider, radius, and edge treatment tests                            | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.                                | `audit:ListItem/layout`        |
-| FR3          | `List.test.tsx` "keeps the inset of a ListItem outside a List"                                | Row outside a List                             | A row outside a List that loses its inset fails.                             | `audit:ListItem/layout`        |
-| FR4, AR3     | `List.test.tsx` marker and ListMarkerScope tests                                              | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.                                | `audit:ListItem/anatomy`       |
-| AR2          | `List.test.tsx` invisible button, anchor, disabled, and selection tests                       | Click, href, disabled, selected                | Lost row semantics fail.                                                     | `audit:ListItem/accessibility` |
-| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `List / Interactive` | Start icon and end chevron; LTR and RTL        | A start content that is not at the inline start of the end content fails D2. | `audit:ListItem/i18n-rtl`      |
+| Contract     | Verification                                                                                                                                                                           | Representative states                          | Mutation or failure expectation                                              | Audit section                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| FR1, AR1     | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests                                                                                                       | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails.                       | `audit:ListItem/behavior`      |
+| FR2          | `List.test.tsx` density, divider, radius, and edge treatment tests                                                                                                                     | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.                                | `audit:ListItem/layout`        |
+| FR3          | `List.test.tsx` "keeps the inset of a ListItem outside a List"                                                                                                                         | Row outside a List                             | A row outside a List that loses its inset fails.                             | `audit:ListItem/layout`        |
+| FR4, AR3     | `List.test.tsx` marker and ListMarkerScope tests; `__tests__/TaskCheckboxCentered.interaction.browser.spec.ts` (the task checkbox centered on the first line, shipped and theme-sized) | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.                                | `audit:ListItem/anatomy`       |
+| AR2          | `List.test.tsx` invisible button, anchor, disabled, and selection tests                                                                                                                | Click, href, disabled, selected                | Lost row semantics fail.                                                     | `audit:ListItem/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `List / Interactive`                                                                                          | Start icon and end chevron; LTR and RTL        | A start content that is not at the inline start of the end content fails D2. | `audit:ListItem/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 
 - FR1: `interactiveRef`, `rel`, and `ref` reaching the Item row.
 - FR2: the divider border and square corners. The `bleed` end-row corner exception is checked by `ContainerCorners.a11y.chromium.spec.ts` (`component:List` FR5).
-- FR4: each marker and the task checkbox sitting on the label's first line.
+- FR4: each marker sitting on the label's first line.
 - FR3: `balanced` density, no dividers, and no marker outside a List.
 - FR4: the shape of each bullet marker (the disc's fill, the circle's ring),
   and the number marker and its counter.
