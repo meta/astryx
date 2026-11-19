@@ -106,6 +106,8 @@ describe('a button with no action', () => {
     ['an empty arrow handler', '<Button label="Save" onClick={() => {}} />', ['page.tsx:6 Save']],
     ['a handler that returns undefined', '<Button label="Save" clickAction={() => undefined} />', ['page.tsx:6 Save']],
     ['an empty function handler', '<Button label="Save" onClick={function () {}} />', ['page.tsx:6 Save']],
+    ['a block that only returns null', '<Button label="Save" onClick={() => { return null; }} />', ['page.tsx:6 Save']],
+    ['a function that only returns', '<Button label="Save" onClick={function () { return; }} />', ['page.tsx:6 Save']],
     ['type="button"', '<Button label="Next" type="button" />', ['page.tsx:6 Next']],
     ['isDisabled={false}', '<Button label="Go" isDisabled={false} />', ['page.tsx:6 Go']],
     ['a look that changes nothing a press does', '<Button label="Go" variant="primary" size="lg" icon={<span>+</span>} width="100%" />', ['page.tsx:6 Go']],

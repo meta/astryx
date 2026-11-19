@@ -83,7 +83,7 @@ import {
   specifierStem,
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
-import {projectMapsImport} from '../../foundation/render/ts-paths.mjs';
+import {existingFile, pathsFor, projectMapsImport, resolvePath} from '../../foundation/render/ts-paths.mjs';
 import {
   resolveIconModule,
   splitSpecifier,
@@ -281,6 +281,9 @@ export function readTextFileIfExists(file) {
     return null;
   }
 }
+
+/** A module path a module imports that is not relative, as the capture: a package, an alias or a `#` key. */
+const OWN_MODULE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
 
 /** A module path of only `.` and `..`, with an optional `index`: `'..'`, `'./index'`. */
 const FOLDER_PATH = /['"`](?:\.{1,2}\/)*\.{1,2}(?:\/(?:index(?:\.[cm]?[jt]sx?)?)?)?['"`]/;
@@ -528,7 +531,7 @@ export function findButtonsWithoutAction(projectDir) {
   // buttons are not judged.
   /** @type {Set<string>} */
   const importedMembers = new Set();
-  for (const file of files) {
+  for (const file of [...files, ...markup]) {
     for (const [, specifier] of (textOf(file) ?? '').matchAll(BARE_MODULE)) {
       const {name} = splitSpecifier(specifier);
       const {kind, dir} = installedAs(name, file);
@@ -563,17 +566,33 @@ export function findButtonsWithoutAction(projectDir) {
               hashRouting,
               knownPackage: specifier => knownPackage(specifier, file),
               jsx: !/\.[cm]?ts$/.test(file),
-              // `.` and `..` name the folder they read from.
-              stemOf: specifier =>
-                /^\.{1,2}(?:\/|$)/.test(specifier)
-                  ? specifierStem(path.resolve(path.dirname(file), specifier).split(path.sep).join('/'))
-                  : specifierStem(specifier),
+              // `.` and `..` name the folder they read from, and a path
+              // alias or package.json `imports` key names the module it
+              // maps to (`@components` for `./src/components`).
+              stemOf: specifier => {
+                const target = /^\.{1,2}(?:\/|$)/.test(specifier)
+                  ? path.resolve(path.dirname(file), specifier)
+                  : ownImportTarget(specifier, file);
+                return specifierStem((target ?? specifier).split(path.sep).join('/'));
+              },
             }),
       );
     }
     return scans.get(file) ?? null;
   };
   const withButtons = candidates.filter(file => !inImportedMember(file));
+  // A module that imports through a path alias or a package.json `imports`
+  // key may name a module by a path that does not hold its name (`#hero`).
+  /** @type {Set<string>} */
+  const aliasImporters = new Set();
+  for (const file of files) {
+    for (const [, specifier] of (textOf(file) ?? '').matchAll(OWN_MODULE)) {
+      if (specifier.startsWith('#') || projectMapsImport(specifier, file)) {
+        aliasImporters.add(file);
+        break;
+      }
+    }
+  }
   // A module that renders a component, or refers to it in any other way,
   // names it or the module that exports it; a path of only `.` and `..`
   // (`'..'`, `'./index'`) names a folder without its name.
@@ -582,7 +601,7 @@ export function findButtonsWithoutAction(projectDir) {
     const pattern = new RegExp(`\\b(?:${alternatives})\\b`);
     return [...files, ...markup].filter(file => {
       const text = textOf(file) ?? '';
-      return pattern.test(text) || FOLDER_PATH.test(text);
+      return pattern.test(text) || FOLDER_PATH.test(text) || aliasImporters.has(file);
     });
   };
   // A module that loads modules by a path the scan cannot read may load any
@@ -627,6 +646,52 @@ export function findButtonsWithoutAction(projectDir) {
   }));
   found.sort((a, b) => compareText(a.file, b.file) || a.line - b.line || a.column - b.column);
   return {found, files: files.length, incomplete: false};
+}
+
+/**
+ * The module of the app's own code that a path alias or a package.json
+ * `imports` key maps an import to: the file the importing module's tsconfig
+ * `paths` resolve it to, or the file the nearest package.json's `imports`
+ * names for it (an exact key, or a `*` key). Null for any other import.
+ * @param {string} specifier
+ * @param {string} file the importing module
+ * @returns {string | null}
+ */
+function ownImportTarget(specifier, file) {
+  if (specifier.startsWith('#')) {
+    const root = findPackageRoot(path.dirname(file));
+    const imports = root ? readPackageJson(path.join(root, 'package.json'))?.imports : null;
+    if (!root || imports == null || typeof imports !== 'object') return null;
+    /**
+     * @param {unknown} target
+     * @returns {string | null}
+     */
+    const named = target => {
+      if (typeof target === 'string') return target;
+      if (target && typeof target === 'object') {
+        for (const condition of ['types', 'import', 'module', 'browser', 'default', 'require', 'node']) {
+          /** @type {string | null} */
+          const value = named(/** @type {Record<string, unknown>} */ (target)[condition]);
+          if (value) return value;
+        }
+      }
+      return null;
+    };
+    /** @type {string | null} */
+    let target = named(imports[specifier]);
+    if (!target) {
+      for (const [key, value] of Object.entries(imports)) {
+        const star = key.indexOf('*');
+        if (star < 0 || !specifier.startsWith(key.slice(0, star)) || !specifier.endsWith(key.slice(star + 1))) continue;
+        const part = specifier.slice(star, specifier.length - (key.length - star - 1));
+        target = named(value)?.replace('*', part) ?? null;
+        if (target) break;
+      }
+    }
+    if (!target || !/^\.\//.test(target)) return null;
+    return existingFile(path.join(root, target)) ?? path.join(root, target);
+  }
+  return resolvePath(pathsFor(file), specifier);
 }
 
 /**

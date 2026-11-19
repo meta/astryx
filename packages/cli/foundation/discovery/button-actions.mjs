@@ -256,13 +256,15 @@ function isEmptyHandler(value, path) {
   ) {
     return false;
   }
+  const nothing = (/** @type {any} */ node) =>
+    node == null ||
+    node.type === 'NullLiteral' ||
+    (node.type === 'Identifier' && node.name === 'undefined') ||
+    (node.type === 'UnaryExpression' && node.operator === 'void' && node.argument.type === 'NumericLiteral');
   const body = fn.body;
-  if (body.type === 'BlockStatement') return body.body.length === 0;
-  return (
-    body.type === 'NullLiteral' ||
-    (body.type === 'Identifier' && body.name === 'undefined') ||
-    (body.type === 'UnaryExpression' && body.operator === 'void' && body.argument.type === 'NumericLiteral')
-  );
+  if (body.type !== 'BlockStatement') return nothing(body);
+  // A block that is empty, or that only returns nothing.
+  return body.body.length === 0 || (body.body.length === 1 && body.body[0].type === 'ReturnStatement' && nothing(body.body[0].argument));
 }
 
 /**
@@ -1032,7 +1034,7 @@ export function scanButtonActions(source, {isOwnCode, stem, hashRouting = false,
     }
     if (source?.type === 'TemplateLiteral') {
       const prefix = source.quasis[0]?.value.cooked ?? '';
-      if (prefix === '' || /^\.{1,2}\//.test(prefix)) loads.add(loadFolder(prefix));
+      if (prefix === '' || /^\.{0,2}\//.test(prefix)) loads.add(loadFolder(prefix));
       else if (mayBeOwn(prefix)) loads.add('*');
       return;
     }

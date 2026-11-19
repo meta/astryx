@@ -84,8 +84,9 @@ describe('the button-actions check', () => {
       /**
        * @param {string} app the web app's App module
        * @param {boolean} [linked] whether the install linked the member
+       * @param {Record<string, string>} [more] other files of the web app
        */
-      const workspace = async (app, linked = true) => {
+      const workspace = async (app, linked = true, more = {}) => {
         const root = fs.mkdtempSync(path.join(tmp, 'repo-'));
         const files = {
           'package.json': JSON.stringify({name: 'repo', private: true, workspaces: ['packages/*', 'apps/*'], dependencies: {'@astryxdesign/core': '*'}}),
@@ -94,6 +95,7 @@ describe('the button-actions check', () => {
           'apps/web/package.json': JSON.stringify({name: 'web', private: true, dependencies: {'@acme/ui': '*'}}),
           'apps/web/src/main.tsx': MAIN,
           'apps/web/src/App.tsx': app,
+          ...Object.fromEntries(Object.entries(more).map(([rel, text]) => [`apps/web/${rel}`, text])),
         };
         for (const [rel, text] of Object.entries(files)) {
           const file = path.join(root, rel);
@@ -118,6 +120,11 @@ describe('the button-actions check', () => {
         false,
       );
       expect(notInstalled?.status).toBe('pass');
+      // An MDX page imports the member by its package name.
+      const fromMdx = await workspace(['export default function App() {', '  return null;', '}', ''].join('\n'), true, {
+        'src/pages/home.mdx': "import Banner from '@acme/ui';\n\n<a href=\"/start\"><Banner /></a>\n",
+      });
+      expect(fromMdx?.status).toBe('pass');
       // Nothing imports the member, so its Hero is a page, and its button does nothing.
       const alone = await workspace(['export default function App() {', '  return null;', '}', ''].join('\n'));
       expect(alone?.status).toBe('warn');
@@ -196,6 +203,13 @@ describe('the button-actions check', () => {
         'src/App.tsx': ["import Banner = require('./sections/Hero');", page('return <a href="/start"><Banner.default /></a>;')].join('\n'),
       });
       expect(importEquals?.status).toBe('pass');
+      // A root path in a template literal starts in the project folder.
+      const rootTemplate = await loadedBy('', {
+        'src/lib/load.ts': 'export const load = (slug: string) => import(`/src/sections/${slug}`);\n',
+        'src/other/Promo.tsx': HERO.replace('function Hero', 'function Promo'),
+      });
+      expect(rootTemplate?.message).toContain('src/other/Promo.tsx');
+      expect(rootTemplate?.message).not.toContain('src/sections/Hero.tsx');
       // A path joined with `+` starts in the folder its first part names.
       expect((await loadedBy('', {'src/lib/load.ts': "export const load = (name: string) => import('../sections/' + name);\n"}))?.status).toBe('pass');
       // An app module named like a config file is the app's own code.
@@ -326,6 +340,37 @@ describe('the button-actions check', () => {
       // Without the link, Hero is a page, and its button does nothing.
       const unlinked = await fresh({'src/sections/Hero.tsx': HERO, 'src/App.tsx': ['export default function App() {', '  return null;', '}', ''].join('\n')});
       expect(unlinked?.status).toBe('warn');
+    },
+    SLOW,
+  );
+
+  it(
+    'follows a path alias or package.json imports key to the module it names',
+    async () => {
+      const fresh = (/** @type {Record<string, string>} */ files) => {
+        fs.rmSync(path.join(tmp, 'app'), {recursive: true, force: true});
+        return buttonCheck({'src/main.tsx': MAIN, ...files});
+      };
+      const named = HERO.replace('export default function Hero', 'export function Hero');
+      const viaAlias = await fresh({
+        'tsconfig.json': JSON.stringify({compilerOptions: {jsx: 'react-jsx', baseUrl: '.', paths: {'@components': ['./src/components']}}}),
+        'src/components/Hero.tsx': named,
+        'src/components/index.ts': "export {Hero} from './Hero';\n",
+        'src/App.tsx': [
+          "import * as C from '@components';",
+          'export default function App() {',
+          '  return <a href="/start">{Object.values(C).map(Each => <Each key="e" />)}</a>;',
+          '}',
+          '',
+        ].join('\n'),
+      });
+      expect(viaAlias?.status).toBe('pass');
+      const viaImports = await fresh({
+        'package.json': JSON.stringify({name: 'app', private: true, imports: {'#hero': './src/Hero.tsx'}, dependencies: {'@astryxdesign/core': '*'}}),
+        'src/Hero.tsx': HERO,
+        'src/App.tsx': ["import Banner from '#hero';", 'export default function App() {', '  return <a href="/start"><Banner /></a>;', '}', ''].join('\n'),
+      });
+      expect(viaImports?.status).toBe('pass');
     },
     SLOW,
   );
