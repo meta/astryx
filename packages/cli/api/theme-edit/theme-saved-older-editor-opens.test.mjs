@@ -85,7 +85,7 @@ const OLDER = [
     thing: 'line-height',
     value: '20px',
     source: 'property',
-    on: 'dropdown-menu-item',
+    on: 'kbd',
   },
 ];
 
