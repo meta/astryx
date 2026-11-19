@@ -32,7 +32,7 @@ export const doc = {
     ArrowPathIcon: 'refresh',
     ArrowUturnLeftIcon: 'undo',
     FaceSmileIcon: 'emoji',
-    FolderArrowDownIcon: 'folder',
+    FolderArrowDownIcon: 'moveToFolder',
     InboxIcon: 'inbox',
     LinkIcon: 'link',
     PaperAirplaneIcon: 'send',

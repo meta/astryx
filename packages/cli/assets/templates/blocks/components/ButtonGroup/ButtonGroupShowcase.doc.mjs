@@ -12,8 +12,8 @@ export const doc = {
   componentsUsed: ['Button', 'ButtonGroup', 'Icon', 'IconButton', 'Layout'],
   icons: {
     ChevronDownIcon: 'chevronDown',
-    ClipboardDocumentIcon: 'copy',
-    ClipboardIcon: 'clipboard',
+    ClipboardDocumentIcon: 'copyText',
+    ClipboardIcon: 'paste',
     ScissorsIcon: 'cut',
   },
 };

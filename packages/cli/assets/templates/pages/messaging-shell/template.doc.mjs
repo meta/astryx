@@ -24,11 +24,11 @@ export const doc = {
   category: 'Shell - Messaging',
   icons: {
     Cog6ToothIcon: 'settings',
-    HashtagIcon: 'tag',
+    HashtagIcon: 'channel',
     InboxIcon: 'inbox',
     MagnifyingGlassIcon: 'search',
     PencilSquareIcon: 'compose',
-    UserGroupIcon: 'users',
+    UserGroupIcon: 'team',
     XMarkIcon: 'close',
   },
 };

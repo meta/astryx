@@ -20,6 +20,10 @@
       "heroicons": "AdjustmentsHorizontalIcon",
       "lucide": "SlidersHorizontal"
     },
+    "alert": {
+      "heroicons": "ExclamationCircleIcon",
+      "fallback": "warning"
+    },
     "alignBottom": {
       "lucide": "ArrowDownToLine"
     },
@@ -79,6 +83,10 @@
     "bank": {
       "heroicons": "BuildingLibraryIcon"
     },
+    "block": {
+      "heroicons": "NoSymbolIcon",
+      "fallback": "error"
+    },
     "bold": {
       "heroicons": "BoldIcon"
     },
@@ -107,12 +115,20 @@
     "cart": {
       "heroicons": "ShoppingCartIcon"
     },
+    "channel": {
+      "heroicons": "HashtagIcon",
+      "fallback": "tag"
+    },
     "chart": {
       "heroicons": "ChartBarIcon",
       "lucide": "ChartColumn"
     },
     "check": {
       "heroicons": "CheckIcon"
+    },
+    "checklist": {
+      "heroicons": "ClipboardDocumentCheckIcon",
+      "fallback": "clipboard"
     },
     "chevronDown": {
       "heroicons": "ChevronDownIcon",
@@ -150,6 +166,10 @@
     "collection": {
       "heroicons": "RectangleStackIcon"
     },
+    "columnSettings": {
+      "lucide": "Columns3Cog",
+      "fallback": "viewColumns"
+    },
     "compose": {
       "heroicons": "PencilSquareIcon"
     },
@@ -162,6 +182,10 @@
     "copy": {
       "heroicons": "DocumentDuplicateIcon"
     },
+    "copyText": {
+      "heroicons": "ClipboardDocumentIcon",
+      "fallback": "copy"
+    },
     "cornerRadius": {
       "lucide": "SquareRoundCorner"
     },
@@ -169,9 +193,17 @@
       "heroicons": "CpuChipIcon",
       "lucide": "Cpu"
     },
+    "create": {
+      "heroicons": "PlusCircleIcon",
+      "fallback": "add"
+    },
     "creditCard": {
       "heroicons": "CreditCardIcon",
       "lucide": "CreditCard"
+    },
+    "currency": {
+      "heroicons": "CurrencyDollarIcon",
+      "fallback": "money"
     },
     "cut": {
       "heroicons": "ScissorsIcon"
@@ -279,11 +311,27 @@
     "group": {
       "lucide": "Group"
     },
+    "groupRows": {
+      "lucide": "Table2",
+      "fallback": "group"
+    },
+    "halftone": {
+      "lucide": "Grip",
+      "fallback": "drag"
+    },
     "heart": {
       "heroicons": "HeartIcon"
     },
+    "help": {
+      "heroicons": "QuestionMarkCircleIcon",
+      "fallback": "info"
+    },
     "home": {
       "heroicons": "HomeIcon"
+    },
+    "house": {
+      "heroicons": "HomeModernIcon",
+      "fallback": "home"
     },
     "image": {
       "heroicons": "PhotoIcon",
@@ -293,7 +341,7 @@
       "heroicons": "InboxIcon"
     },
     "info": {
-      "heroicons": "CheckBadgeIcon"
+      "heroicons": "InformationCircleIcon"
     },
     "integration": {
       "heroicons": "PuzzlePieceIcon"
@@ -321,6 +369,10 @@
       "heroicons": "ListBulletIcon",
       "lucide": "List"
     },
+    "listView": {
+      "heroicons": "Bars4Icon",
+      "fallback": "list"
+    },
     "location": {
       "heroicons": "MapPinIcon",
       "lucide": "MapPin"
@@ -334,6 +386,10 @@
     },
     "mail": {
       "heroicons": "EnvelopeIcon"
+    },
+    "media": {
+      "heroicons": "PlayCircleIcon",
+      "fallback": "play"
     },
     "mention": {
       "heroicons": "AtSymbolIcon"
@@ -362,6 +418,10 @@
     },
     "moreHorizontal": {
       "heroicons": "EllipsisHorizontalIcon"
+    },
+    "moveToFolder": {
+      "heroicons": "FolderArrowDownIcon",
+      "fallback": "folder"
     },
     "notification": {
       "heroicons": "BellIcon"
@@ -398,6 +458,10 @@
     "panelRight": {
       "lucide": "PanelRight"
     },
+    "paste": {
+      "heroicons": "ClipboardIcon",
+      "fallback": "clipboard"
+    },
     "photoEffect": {
       "lucide": "Aperture"
     },
@@ -423,6 +487,10 @@
       "heroicons": "MinusIcon",
       "lucide": "Minus"
     },
+    "review": {
+      "heroicons": "CheckBadgeIcon",
+      "fallback": "info"
+    },
     "rocket": {
       "heroicons": "RocketLaunchIcon"
     },
@@ -437,6 +505,10 @@
     },
     "scale": {
       "lucide": "Scale"
+    },
+    "schedule": {
+      "heroicons": "CalendarDaysIcon",
+      "fallback": "calendar"
     },
     "search": {
       "heroicons": "MagnifyingGlassIcon",
@@ -464,6 +536,10 @@
     "shoppingBag": {
       "heroicons": "ShoppingBagIcon",
       "lucide": "ShoppingBag"
+    },
+    "signal": {
+      "heroicons": "SignalIcon",
+      "fallback": "activity"
     },
     "sparkles": {
       "heroicons": "SparklesIcon",
@@ -500,6 +576,10 @@
     "tag": {
       "heroicons": "TagIcon",
       "lucide": "Tag"
+    },
+    "team": {
+      "heroicons": "UserGroupIcon",
+      "fallback": "users"
     },
     "text": {
       "lucide": "Type"
@@ -552,6 +632,10 @@
     },
     "users": {
       "heroicons": "UsersIcon"
+    },
+    "verified": {
+      "heroicons": "CheckBadgeIcon",
+      "fallback": "success"
     },
     "video": {
       "lucide": "Video"

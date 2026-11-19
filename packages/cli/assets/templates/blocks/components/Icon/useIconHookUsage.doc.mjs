@@ -12,8 +12,8 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['Theme', 'Layout', 'Text'],
   icons: {
-    CheckBadgeIcon: 'success',
-    ExclamationCircleIcon: 'warning',
-    NoSymbolIcon: 'error',
+    CheckBadgeIcon: 'verified',
+    ExclamationCircleIcon: 'alert',
+    NoSymbolIcon: 'block',
   },
 };
