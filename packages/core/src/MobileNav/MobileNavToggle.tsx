@@ -25,7 +25,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import type {BaseProps} from '../BaseProps';
-import {composeEventHandlers} from '../utils';
+import {composeEventHandlers, mergeProps} from '../utils';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -113,11 +113,8 @@ export function MobileNavToggle({
       data-testid={testId ?? 'mobile-nav-toggle'}
       xstyle={xstyle}
       // A theme reaches the toggle as its own part, so it can draw it for
-      // the bar it sits in; a caller's class is kept beside it.
-      className={[themeProps('mobile-nav-toggle').className, className]
-        .filter(Boolean)
-        .join(' ')}
-      style={style}
+      // the bar it sits in; a caller's class and style are kept beside it.
+      {...mergeProps(themeProps('mobile-nav-toggle'), {className}, style)}
       isIconOnly
     />
   );
