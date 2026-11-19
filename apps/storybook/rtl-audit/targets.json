@@ -1094,7 +1094,7 @@
   },
   {
     "component": "Tour",
-    "storyId": "lab-tour--showcase",
+    "storyId": "core-tour--default",
     "dims": ["D4"],
     "setup": {"click": "button:has-text(\"Start tour\")"},
     "selectors": {
@@ -1103,8 +1103,8 @@
     }
   },
   {
-    "component": "TourStep",
-    "storyId": "lab-tour--showcase",
+    "component": "Tour",
+    "storyId": "core-tour--default",
     "dims": ["D2"],
     "setup": {"click": "button:has-text(\"Start tour\")"},
     "selectors": {

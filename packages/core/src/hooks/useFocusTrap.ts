@@ -6,8 +6,8 @@
  * @file useFocusTrap.ts
  * @input Uses React useCallback, useEffect, useRef
  * @output Exports useFocusTrap, the internal focus-region Tab containment it
- *   composes, the deprecated Escape-state shim, and an
- *   internal compatibility-signal hook
+ *   composes (with focusRegionAround), the deprecated Escape-state shim, and
+ *   an internal compatibility-signal hook
  * @position Core hook; used by dialogs, modals, date pickers
  *
  * Based on WAI-ARIA dialog pattern:
@@ -215,6 +215,24 @@ const activeRegionContainers = sharedState(
   () => new Set<HTMLElement>(),
 );
 
+/**
+ * The innermost active focus region that contains `element`, or `null`. A
+ * layer that renders inside the region around its anchor stays in reach of
+ * that region's Tab containment. Internal: not re-exported from `hooks`.
+ */
+export function focusRegionAround(element: Element): HTMLElement | null {
+  let innermost: HTMLElement | null = null;
+  for (const container of activeRegionContainers) {
+    if (
+      container.contains(element) &&
+      (innermost == null || innermost.contains(container))
+    ) {
+      innermost = container;
+    }
+  }
+  return innermost;
+}
+
 function hasInnerRegionHolding(
   container: HTMLElement,
   active: Element,
@@ -254,16 +272,33 @@ export function useFocusRegionContainment(
   // Track if focus change was triggered by keyboard (Tab key)
   const isKeyboardNavigationRef = useRef(false);
 
+  // Syncs the shared registry of region containers. It runs after each
+  // render, so a container that mounts again while the region is active (a
+  // layer that moves to another host) replaces the element it had.
+  const registeredRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const container = containerRef.current;
-    if (!isActive || container == null) {
+    const container = isActive ? containerRef.current : null;
+    const registered = registeredRef.current;
+    if (container === registered) {
       return;
     }
-    activeRegionContainers.add(container);
-    return () => {
-      activeRegionContainers.delete(container);
-    };
-  }, [containerRef, isActive]);
+    if (registered != null) {
+      activeRegionContainers.delete(registered);
+    }
+    if (container != null) {
+      activeRegionContainers.add(container);
+    }
+    registeredRef.current = container;
+  });
+  useEffect(
+    () => () => {
+      if (registeredRef.current != null) {
+        activeRegionContainers.delete(registeredRef.current);
+        registeredRef.current = null;
+      }
+    },
+    [],
+  );
 
   /**
    * Handle focus events - redirect focus back into container if it escapes.
