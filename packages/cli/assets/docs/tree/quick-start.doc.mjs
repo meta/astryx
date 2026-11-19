@@ -5,13 +5,14 @@ export const docs = {
   type: 'generic',
   name: 'quick-start',
   placement: {
-    parent: 'namespace:integrations',
+    parent: 'namespace:authoring',
     slot: 'guides',
     order: 10,
   },
   title: 'Quick Start',
   category: 'guide',
   keywords: [
+    'authoring',
     'make a package',
     'make an integration',
     'first integration',
@@ -39,15 +40,15 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "mkdir acme-widgets && cd acme-widgets\nnpm init -y\nnpm pkg set name=@acme/astryx-widgets type=module\nnpm pkg set 'exports={}' --json\nnpm install -D @astryxdesign/cli @astryxdesign/core typescript@6",
+          code: 'mkdir acme-widgets && cd acme-widgets\n{@pm-only npm "writes package.json" init -y}\n{@pm-only npm "edits package.json" pkg set name=@acme/astryx-widgets type=module}\n{@pm-only npm "edits package.json" pkg set \'exports={}\' --json}\n{@pm install @astryxdesign/cli @astryxdesign/core typescript@6 --dev}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'Set `"type": "module"`: the `.js` files the CLI generates, such as a built theme, are ES modules, and Node fails to load them in a package marked `"type": "commonjs"`, which `npm init -y` writes on npm 11.',
+            'Set `"type": "module"`: the `.js` files the CLI generates, such as a built theme, are ES modules, and Node fails to load them in a package marked `"type": "commonjs"`, which `{@pm-only npm "writes package.json" init -y}` writes on npm 11.',
             'Start with `"exports": {}`: each component and template you add then writes the public import that `integration verify` resolves.',
-            'Run the CLI as `npx astryx`, which runs the `@astryxdesign/cli` you installed as a devDependency.',
+            'Run the CLI as `astryx`, which runs the `@astryxdesign/cli` you installed as a devDependency.',
             'Component commands read Core, so they need `@astryxdesign/core` installed.',
             "The checks compare your docs with your code through TypeScript's JavaScript compiler API, which `typescript` 5.0 through 6 has. TypeScript 7 does not ship that API: on TypeScript 7, also install `@typescript/typescript6`, its TypeScript 6 API package, and the checks use it.",
           ],
@@ -64,7 +65,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx integration add component AcmeCarousel',
+          code: '{@command integration add component AcmeCarousel}',
         },
         {
           type: 'code',
@@ -82,7 +83,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx component AcmeCarousel',
+          code: '{@command component AcmeCarousel}',
         },
         {
           type: 'prose',
@@ -95,12 +96,12 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Every integration runs `integration check --strict` in its own build, so a doc, prop, template, or link that stops matching the code fails your build instead of reaching the apps that install your package. Set it up now, as the `typecheck` script, and run it.',
+          text: "Run `integration check --strict` in every build ({@link generic:checks}): a doc, prop, template, or link that drifts from the code then fails your build, not your users' apps. Set it up now, as the `typecheck` script, and run it.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm pkg set scripts.typecheck="astryx integration check --strict"\nnpm run typecheck',
+          code: '{@pm-only npm "edits package.json" pkg set scripts.typecheck="astryx integration check --strict"}\n{@pm run typecheck}',
         },
         {
           type: 'code',
@@ -127,7 +128,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx integration verify\nnpm pack --pack-destination ..',
+          code: '{@command integration verify}\n{@pm-only npm "builds the publish tarball" pack --pack-destination ..}',
         },
         {
           type: 'code',
@@ -136,7 +137,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`integration verify` packs the package, unpacks it into a temporary app, and checks that the component resolves through its public import there. It publishes nothing and leaves no `.tgz` file, so `npm pack` writes `../acme-astryx-widgets-1.0.0.tgz` for the next step.',
+          text: '`integration verify` installs the packed package in a temporary app and confirms the component resolves through its public import there ({@link generic:checks}). It publishes nothing and leaves no `.tgz` file, so `{@pm-only npm "builds the publish tarball" pack}` writes `../acme-astryx-widgets-1.0.0.tgz` for the next step.',
         },
         {
           type: 'heading',
@@ -150,7 +151,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'cd ..\nmkdir my-app && cd my-app\nnpm init -y\nnpm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz\nnpx astryx component AcmeCarousel',
+          code: 'cd ..\nmkdir my-app && cd my-app\n{@pm-only npm "writes package.json" init -y}\n{@pm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz}\n{@command component AcmeCarousel}',
         },
         {
           type: 'code',
@@ -281,6 +282,16 @@ export const docs = {
           type: 'reference',
           target: 'command:doctor integration',
           presentation: 'summary',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: users can also install your package for their computer, beside the global CLI (`{@pm install @astryxdesign/cli your-package --global}`). It then applies in folders outside any project, and inside a project only if the project installs it. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

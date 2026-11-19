@@ -4,27 +4,62 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from './lib/git-fixture.mjs';
+import {
   composeKnowledgeSchemas,
+  collectConcernMatches,
   collectGlobalReviewMatches,
   discoverKnowledgeRecords,
   extractKnowledgeClaims,
+  matchesPathPattern,
   parseAnatomyThemingBlock,
   parseDesignDecisionsBlock,
   parseKnowledgeDocument,
+  parsePathApplicabilityBlock,
   parseReviewApplicabilityBlock,
   routeGlobalReviewBaselinesAtRevision,
   validateAnatomyThemingMap,
   validateDesignDecisionsBlock,
   validateDelegations,
   validateKnowledgeRoot,
+  validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
+  approvalLineRewritesSince,
+  findApprovalLineRewrites,
 } from './check-knowledge.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const roots = [];
+const {componentSpecPathForSource} = createRequire(import.meta.url)(
+  '../.github/scripts/knowledge-paths.cjs',
+);
+
+/**
+ * Fixtures describe a record by the source path it governs; the record itself
+ * lives under docs/specs/components/, mirroring that path.
+ */
+function recordPath(codeSidePath) {
+  const match =
+    /^(.*)[\\/]packages[\\/]([^\\/]+)[\\/]src[\\/](.+\.spec\.md)$/.exec(
+      codeSidePath,
+    );
+  if (!match) return codeSidePath;
+  const target = path.join(
+    match[1],
+    componentSpecPathForSource(match[2], match[3].split(path.sep).join('/')),
+  );
+  // The source directory the record mirrors exists, as it does beside real code.
+  fs.mkdirSync(path.dirname(codeSidePath), {recursive: true});
+  fs.mkdirSync(path.dirname(target), {recursive: true});
+  return target;
+}
 
 function fixtureRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-knowledge-'));
@@ -124,6 +159,24 @@ function componentRecord(overrides = {}) {
     .map(section => `## ${section}\n\nBody.`)
     .join('\n\n');
   return `---\n${frontmatter}\n---\n\n# Button component contract\n\n${sections}\n`;
+}
+
+function platformRecord(overrides = {}) {
+  return componentRecord({
+    id: 'component:swift/Button',
+    platform_of: 'component:Button',
+    verified_by: '[packages/native/apple/Tests/AstryxTests/ButtonTests.swift]',
+    ...overrides,
+  });
+}
+
+function writeSwiftTest(root) {
+  const swiftTest = path.join(
+    root,
+    'packages/native/apple/Tests/AstryxTests/ButtonTests.swift',
+  );
+  fs.mkdirSync(path.dirname(swiftTest), {recursive: true});
+  fs.writeFileSync(swiftTest, '');
 }
 
 function moduleRecord(overrides = {}) {
@@ -325,18 +378,21 @@ function withSystemClaims(record) {
   );
 }
 
-function commitFixture(root, message) {
-  execFileSync('git', ['init', '-q'], {cwd: root});
-  execFileSync('git', ['config', 'user.name', 'Fixture'], {cwd: root});
-  execFileSync('git', ['config', 'user.email', 'fixture@example.com'], {
-    cwd: root,
-  });
-  execFileSync('git', ['add', '.'], {cwd: root});
-  execFileSync('git', ['commit', '-q', '-m', message], {cwd: root});
-  return execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim();
+/**
+ * Commits the fixture's working tree as it stands on `main`, after the
+ * commit there, or as the first commit of a new repository.
+ */
+function commitFixture(root, message, {create = false} = {}) {
+  const commit = {
+    ref: 'refs/heads/main',
+    name: 'commit',
+    message,
+    snapshot: true,
+    files: workingTreeFiles(root),
+  };
+  return create
+    ? createRepository(root, [commit]).commit
+    : importCommits(root, [{...commit, parent: 'refs/heads/main'}]).commit;
 }
 
 afterEach(() => {
@@ -412,6 +468,149 @@ describe('global review applicability', () => {
     expect(parseReviewApplicabilityBlock(record).problems.join('\n')).toMatch(
       /repeats JSON field "public-api"/,
     );
+  });
+
+  it('keeps the same key in two different objects', () => {
+    const record = currentRecord.replace(
+      '# Fixture system spec',
+      '# Fixture system spec\n\n<!-- review-applicability:v1 -->\n```json\n{"scope":"global","concerns":{"a":{"names":["x"],"claims":["FR1"]},"b":{"names":["y"],"claims":["FR2"]}}}\n```',
+    );
+    const parsed = parseReviewApplicabilityBlock(record);
+    expect(parsed.problems).toEqual([]);
+    expect(validateReviewApplicability(parsed.config, record)).toEqual([]);
+  });
+
+  it('accepts a concerns map with or without triggers', () => {
+    const concerns = {
+      'slot-presence': {
+        names: ['isRenderable'],
+        patterns: ["typeof [\\w.]+ !== 'boolean'"],
+        claims: ['FR1'],
+      },
+    };
+    expect(
+      validateReviewApplicability({scope: 'global', concerns}, currentRecord),
+    ).toEqual([]);
+    expect(
+      validateReviewApplicability(
+        {scope: 'global', triggers: {'public-api': ['FR2']}, concerns},
+        currentRecord,
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'neither triggers nor concerns',
+      {scope: 'global'},
+      /triggers, concerns, or both/,
+    ],
+    [
+      'an unknown block key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1']}},
+        extra: 1,
+      },
+      /and nothing else/,
+    ],
+    [
+      'an empty concerns map',
+      {scope: 'global', concerns: {}},
+      /at least one concern/,
+    ],
+    [
+      'a concern without names or patterns',
+      {scope: 'global', concerns: {a: {claims: ['FR1']}}},
+      /at least one name or pattern/,
+    ],
+    [
+      'a concern name that is not an identifier',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['is renderable'], claims: ['FR1']}},
+      },
+      /not an identifier/,
+    ],
+    [
+      'an invalid pattern',
+      {scope: 'global', concerns: {a: {patterns: ['('], claims: ['FR1']}}},
+      /invalid pattern/,
+    ],
+    [
+      'a concern claim the record lacks',
+      {scope: 'global', concerns: {a: {names: ['x'], claims: ['FR99']}}},
+      /references missing claim "FR99"/,
+    ],
+    [
+      'an unknown concern key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1'], owner: 'y'}},
+      },
+      /claims with names, patterns, or both/,
+    ],
+  ])('rejects concerns with %s', (_name, config, expected) => {
+    expect(
+      validateReviewApplicability(config, currentRecord).join('\n'),
+    ).toMatch(expected);
+  });
+
+  it('routes each claim whose concern matches an added line, with the evidence', () => {
+    const record = {
+      path: 'docs/specs/AST-900/spec.md',
+      content: currentRecord.replace(
+        '# Fixture system spec',
+        `# Fixture system spec\n\n<!-- review-applicability:v1 -->\n\n\`\`\`json\n${JSON.stringify(
+          {
+            scope: 'global',
+            concerns: {
+              'slot-presence': {
+                names: ['isRenderable'],
+                patterns: ["typeof [\\w.]+ !== 'boolean'"],
+                claims: ['FR1'],
+              },
+              'unrelated-concern': {names: ['useScrollLock'], claims: ['FR2']},
+            },
+          },
+        )}\n\`\`\`\n`,
+      ),
+    };
+    const added = [
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 3,
+        text: 'const x = 1;',
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 4,
+        text: "  const hasLabel = label !== '' && label != null && typeof label !== 'boolean';",
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 5,
+        text: 'isRenderableish(x);',
+      },
+    ];
+    const matches = collectConcernMatches([record], added, null);
+    expect(matches).toEqual([
+      expect.objectContaining({
+        recordId: 'spec:AST-900',
+        concern: 'slot-presence',
+        claimId: 'FR1',
+        claim: 'Public API stays stable.',
+        utilities: ['isRenderable'],
+        evidence: [
+          expect.objectContaining({
+            line: 4,
+            matched: "typeof label !== 'boolean'",
+          }),
+        ],
+      }),
+    ]);
+    expect(matches[0].matchReason).toContain('(shared: isRenderable)');
+    expect(collectConcernMatches([record], [], null)).toEqual([]);
   });
 
   it('keeps the canonical claim title when a verification table repeats its id', () => {
@@ -503,6 +702,7 @@ describe('global review applicability', () => {
     const baseWithoutRouting = commitFixture(
       root,
       'base without global routing',
+      {create: true},
     );
     execFileSync(
       'git',
@@ -514,14 +714,7 @@ describe('global review applicability', () => {
       path.join(root, 'docs/specs/AST-900/spec.md'),
       withReviewApplicability(currentRecord, {'public-api': ['FR1']}),
     );
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'head adds global routing'], {
-      cwd: root,
-    });
-    const proposedHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const proposedHead = commitFixture(root, 'head adds global routing');
 
     expect(
       routeGlobalReviewBaselinesAtRevision(
@@ -551,14 +744,7 @@ describe('global review applicability', () => {
     ).toThrow(/review head must differ/);
 
     fs.writeFileSync(path.join(root, 'README.md'), '# Reviewed change\n');
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'later review head'], {
-      cwd: root,
-    });
-    const laterHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const laterHead = commitFixture(root, 'later review head');
     expect(
       routeGlobalReviewBaselinesAtRevision(root, proposedHead, laterHead, [
         'public-api',
@@ -663,6 +849,276 @@ describe('schema evolution', () => {
         new Map([['docs/schemas/knowledge/v1.json', 'changed']]),
       ).join('\n'),
     ).toMatch(/immutable.*append-only/s);
+  });
+});
+
+describe('approval line history', () => {
+  function record({approvedBy = 'owner-a', decisions = []} = {}) {
+    return {
+      path: 'docs/architecture/example.md',
+      content: [
+        '---',
+        'id: architecture:example',
+        'authority: current',
+        `approved_by: ${approvedBy}`,
+        '---',
+        '',
+        '## Deciding specs',
+        '',
+        ...decisions.flatMap(([id, decider]) => [
+          `### ${id} — A decision`,
+          '',
+          `**Decider:** ${decider}`,
+          '',
+          'The decision text.',
+          '',
+        ]),
+      ].join('\n'),
+    };
+  }
+  const base = record({
+    decisions: [['DEC-1', '`owner-a`, `2026-11-01`']],
+  });
+
+  it('reports a rewritten Decider and approved_by with the original decider', () => {
+    const head = record({
+      approvedBy: 'owner-b',
+      decisions: [['DEC-1', '`owner-b`, `2026-11-01`']],
+    });
+    expect(findApprovalLineRewrites([base], [head])).toEqual([
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'approved_by',
+        from: 'owner-a',
+        to: 'owner-b',
+        decider: 'owner-a',
+      },
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'DEC-1',
+        from: '`owner-a`, `2026-11-01`',
+        to: '`owner-b`, `2026-11-01`',
+        decider: 'owner-a',
+      },
+    ]);
+  });
+
+  it('reports a removed decision', () => {
+    expect(findApprovalLineRewrites([base], [record()])).toEqual([
+      expect.objectContaining({claim: 'DEC-1', to: null, decider: 'owner-a'}),
+    ]);
+  });
+
+  it('allows a new decision, an added approver, an amendment, and a filled placeholder', () => {
+    const pendingBase = record({
+      decisions: [
+        ['DEC-1', '`owner-a`, `2026-11-01`'],
+        ['DEC-2', '`owner-a`, `<pending>`'],
+      ],
+    });
+    const head = record({
+      approvedBy: '[owner-a, owner-b]',
+      decisions: [
+        ['DEC-2', '`owner-a`, `2026-11-08`'],
+        ['DEC-1', '`owner-a`, `2026-11-01`; amended `2026-11-08`'],
+        ['DEC-3', '`owner-b`, `2026-11-08`'],
+      ],
+    });
+    expect(findApprovalLineRewrites([pendingBase], [head])).toEqual([]);
+  });
+
+  it('reads a placeholder only in the decider and date fields', () => {
+    const decided =
+      '`owner-a`, `2026-11-01`; pending-search Enter, a quiet send';
+    const rewritten = findApprovalLineRewrites(
+      [record({decisions: [['DEC-1', decided]]})],
+      [
+        record({
+          decisions: [
+            [
+              'DEC-1',
+              '`owner-b`, `2026-11-01`; pending-search Enter, a quiet send',
+            ],
+          ],
+        }),
+      ],
+    );
+    expect(rewritten).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1',
+        from: decided,
+        decider: 'owner-a',
+      }),
+    ]);
+    // A placeholder date, with or without a note, is still a placeholder.
+    for (const placeholder of [
+      '`owner-a`, `<pending>`',
+      '`owner-a`, pending (awaiting the owner)',
+      'proposed by `owner-a`, `2026-09-27`; pending owner review',
+    ]) {
+      expect(
+        findApprovalLineRewrites(
+          [record({decisions: [['DEC-1', placeholder]]})],
+          [record({decisions: [['DEC-1', '`owner-a`, `2026-11-08`']]})],
+        ),
+        placeholder,
+      ).toEqual([]);
+    }
+  });
+
+  it('reads every decided-line shape the records use', () => {
+    const doc = lines => ({
+      path: 'docs/specs/AST-900/spec.md',
+      content: [
+        '---',
+        'id: spec:AST-900',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const shapes = [
+      // Reference and Decider on one line.
+      [
+        '### DEC-1 — One line',
+        '',
+        '**Reference:** `spec:AST-900/DEC-1` · **Decider:** `owner-a`, `2026-08-31`',
+      ],
+      // Several deciders.
+      [
+        '### DEC-2 — Two owners',
+        '',
+        '**Deciders:** `owner-a`, `owner-c`, `2026-09-03`',
+      ],
+      // A list-item decision with an indented Decider line.
+      [
+        '- **DEC-3 — A list item.**',
+        '',
+        '  **Decider:** `owner-a`, 2026-10-24',
+      ],
+      // An amendment heading.
+      [
+        '### Amendment — Narrow the name',
+        '',
+        '**Decider:** `owner-a`, `2026-09-12`',
+      ],
+      // A direction owner names who decided.
+      [
+        '### DEC-4 — Owner label',
+        '',
+        '**Direction owner:** `owner-a`, `2026-10-02`',
+      ],
+    ];
+    const expected = [
+      {claim: 'DEC-1', decider: 'owner-a'},
+      {claim: 'DEC-2', decider: 'owner-a, owner-c'},
+      {claim: 'DEC-3', decider: 'owner-a'},
+      {claim: 'Amendment — Narrow the name', decider: 'owner-a'},
+      {claim: 'DEC-4', decider: 'owner-a'},
+    ];
+    shapes.forEach((shape, i) => {
+      const rewritten = shape.map(line => line.replace('owner-a', 'owner-b'));
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(rewritten)]),
+        shape[0],
+      ).toEqual([expect.objectContaining(expected[i])]);
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(['## Notes'])]),
+        `${shape[0]} removed`,
+      ).toEqual([expect.objectContaining({...expected[i], to: null})]);
+      expect(findApprovalLineRewrites([doc(shape)], [doc(shape)])).toEqual([]);
+    });
+  });
+
+  it('reads each labelled decider of a decision, and no proposed one', () => {
+    const doc = lines => ({
+      path: 'packages/themes/example/example.spec.md',
+      content: [
+        '---',
+        'id: theme:example',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        '### DEC-1 — Two deciders',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const base = [
+      '**System-boundary decider:** `owner-a`, `2026-08-31`',
+      '**Final adoption decider:** `owner-c`, `2026-10-17`',
+      '**Proposed decider:** `owner-d`',
+    ];
+    const adoption = base.map(line => line.replace('owner-c', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(adoption)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (Final adoption decider)',
+        decider: 'owner-c',
+      }),
+    ]);
+    const boundary = base.map(line => line.replace('owner-a', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(boundary)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (System-boundary decider)',
+        decider: 'owner-a',
+      }),
+    ]);
+    const proposal = base.map(line => line.replace('owner-d', 'owner-e'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(proposal)])).toEqual([]);
+  });
+
+  it('warns for a platform component record too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
+    try {
+      const file = 'docs/specs/components/TextInput/TextInput.swift.spec.md';
+      const git = (...args) =>
+        execFileSync('git', ['-C', dir, ...args], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 't',
+            GIT_AUTHOR_EMAIL: 't@example.com',
+            GIT_COMMITTER_NAME: 't',
+            GIT_COMMITTER_EMAIL: 't@example.com',
+          },
+        });
+      const write = approvedBy => {
+        fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, file),
+          [
+            '---',
+            'id: component:TextInput/swift',
+            'authority: current',
+            `approved_by: ${approvedBy}`,
+            '---',
+            '',
+            '# TextInput (Swift)',
+            '',
+          ].join('\n'),
+        );
+      };
+      git('init', '-q');
+      write('owner-a');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      write('owner-b');
+      expect(approvalLineRewritesSince(dir, base, [file])).toEqual([
+        {
+          path: file,
+          claim: 'approved_by',
+          from: 'owner-a',
+          to: 'owner-b',
+          decider: 'owner-a',
+        },
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 
@@ -854,7 +1310,7 @@ describe('component theming anatomy metadata', () => {
     fs.mkdirSync(directory);
     const consumerDoc = writeButtonDoc(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       withAnatomyTheming(componentRecord(), {
         ...valid,
         Icon: {none: {reason: 'intentional: Fixture-owned icon.'}},
@@ -871,7 +1327,10 @@ describe('component theming anatomy metadata', () => {
     const root = fixtureRoot();
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
-    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Button.spec.md')),
+      componentRecord(),
+    );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
   });
 });
@@ -1068,7 +1527,7 @@ describe('component delegation ownership', () => {
       fs.mkdirSync(directory);
       writeButtonDoc(directory);
       fs.writeFileSync(
-        path.join(directory, 'Button.spec.md'),
+        recordPath(path.join(directory, 'Button.spec.md')),
         withAnatomyTheming(componentRecord(overrides), {
           Root: {target: 'button'},
           Label: {inherits: 'button'},
@@ -1099,7 +1558,7 @@ describe('component delegation ownership', () => {
     fs.mkdirSync(directory);
     writeButtonDoc(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       withAnatomyTheming(
         componentRecord({
           authority: 'archived',
@@ -1222,7 +1681,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord().replace(
         '## Intent',
         '## Contract at a glance\n\nProjection.\n\n## Intent',
@@ -1258,7 +1717,10 @@ describe('knowledge validation', () => {
     const root = fixtureRoot();
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
-    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Button.spec.md')),
+      componentRecord(),
+    );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
   });
 
@@ -1274,7 +1736,7 @@ describe('knowledge validation', () => {
       'export function VegaChart() {}\n',
     );
     fs.writeFileSync(
-      path.join(directory, 'VegaChart.spec.md'),
+      recordPath(path.join(directory, 'VegaChart.spec.md')),
       componentRecord({id: 'component:VegaChart'}),
     );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
@@ -1291,8 +1753,13 @@ describe('knowledge validation', () => {
       path.join(directory, 'Chart.tsx'),
       'export function Chart() {}\n',
     );
+    // Ghost.tsx exists but the package barrel does not export it.
     fs.writeFileSync(
-      path.join(directory, 'Ghost.spec.md'),
+      path.join(directory, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Ghost.spec.md')),
       componentRecord({id: 'component:Ghost'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -1303,7 +1770,9 @@ describe('knowledge validation', () => {
   it('accepts a flat-package module beneath its declared parent component', async () => {
     const root = fixtureRoot();
     const source = path.join(root, 'packages/charts/src');
-    const modulePath = path.join(source, 'Chart/plugins/useChartThing.spec.md');
+    const modulePath = recordPath(
+      path.join(source, 'Chart/plugins/useChartThing.spec.md'),
+    );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
       path.join(source, 'index.ts'),
@@ -1314,7 +1783,7 @@ describe('knowledge validation', () => {
       'export function Chart() {}\n',
     );
     fs.writeFileSync(
-      path.join(source, 'Chart.spec.md'),
+      recordPath(path.join(source, 'Chart.spec.md')),
       componentRecord({
         id: 'component:Chart',
         modules: '[module:Chart/useChartThing]',
@@ -1334,7 +1803,9 @@ describe('knowledge validation', () => {
   it('rejects a flat-package module beneath a different path root', async () => {
     const root = fixtureRoot();
     const source = path.join(root, 'packages/charts/src');
-    const modulePath = path.join(source, 'Ghost/plugins/useChartThing.spec.md');
+    const modulePath = recordPath(
+      path.join(source, 'Ghost/plugins/useChartThing.spec.md'),
+    );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
       path.join(source, 'index.ts'),
@@ -1345,7 +1816,7 @@ describe('knowledge validation', () => {
       'export function Chart() {}\n',
     );
     fs.writeFileSync(
-      path.join(source, 'Chart.spec.md'),
+      recordPath(path.join(source, 'Chart.spec.md')),
       componentRecord({
         id: 'component:Chart',
         modules: '[module:Chart/useChartThing]',
@@ -1360,7 +1831,7 @@ describe('knowledge validation', () => {
     );
 
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
-      /flat-package module module:Chart\/useChartThing must live under packages\/charts\/src\/Chart\//,
+      /flat-package module module:Chart\/useChartThing must live under docs\/specs\/components\/Chart\//,
     );
   });
 
@@ -1373,7 +1844,7 @@ describe('knowledge validation', () => {
       "export const docs = {name: 'NavHeadingMenu'};\n",
     );
     fs.writeFileSync(
-      path.join(directory, 'NavHeadingMenu.spec.md'),
+      recordPath(path.join(directory, 'NavHeadingMenu.spec.md')),
       componentRecord({id: 'component:NavHeadingMenu'}),
     );
 
@@ -1392,7 +1863,7 @@ describe('knowledge validation', () => {
 };\n`,
     );
     fs.writeFileSync(
-      path.join(directory, 'TableRow.spec.md'),
+      recordPath(path.join(directory, 'TableRow.spec.md')),
       componentRecord({id: 'component:TableRow'}),
     );
 
@@ -1409,7 +1880,7 @@ describe('knowledge validation', () => {
     );
     fs.writeFileSync(path.join(directory, 'Button.doc.mjs'), parentDoc);
     fs.writeFileSync(
-      path.join(directory, 'Wrong.spec.md'),
+      recordPath(path.join(directory, 'Wrong.spec.md')),
       componentRecord({id: 'component:Wrong'}),
     );
 
@@ -1421,13 +1892,12 @@ describe('knowledge validation', () => {
   it('discovers a nested module beside its flat parent and ignores non-record trees', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1444,13 +1914,13 @@ describe('knowledge validation', () => {
       'plugins/thing/snapshot.generated.spec.md',
     ];
     for (const relative of ignored) {
-      const ignoredPath = path.join(componentDirectory, relative);
+      const ignoredPath = recordPath(path.join(componentDirectory, relative));
       fs.mkdirSync(path.dirname(ignoredPath), {recursive: true});
       fs.writeFileSync(ignoredPath, moduleRecord());
     }
     const topLevelIgnored = path.join(
       root,
-      'packages/core/src/__tests__/TopLevel.spec.md',
+      'docs/specs/components/__tests__/TopLevel.spec.md',
     );
     fs.mkdirSync(path.dirname(topLevelIgnored), {recursive: true});
     fs.writeFileSync(topLevelIgnored, moduleRecord());
@@ -1458,26 +1928,262 @@ describe('knowledge validation', () => {
     const discovered = discoverKnowledgeRecords(root).map(filePath =>
       path.relative(root, filePath).split(path.sep).join('/'),
     );
-    expect(discovered).toContain('packages/core/src/Button/Button.spec.md');
+    expect(discovered).toContain('docs/specs/components/Button/Button.spec.md');
     expect(discovered).toContain(
-      'packages/core/src/Button/plugins/thing/useButtonThing.spec.md',
+      'docs/specs/components/Button/plugins/thing/useButtonThing.spec.md',
     );
     for (const relative of ignored) {
-      expect(discovered).not.toContain(`packages/core/src/Button/${relative}`);
+      expect(discovered).not.toContain(
+        `docs/specs/components/Button/${relative}`,
+      );
     }
     expect(discovered).not.toContain(
-      'packages/core/src/__tests__/TopLevel.spec.md',
+      'docs/specs/components/__tests__/TopLevel.spec.md',
     );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('rejects a component spec left beside its code and names where it belongs', async () => {
+    const root = fixtureRoot();
+    const directory = path.join(root, 'packages/core/src/Button');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      path.join(root, 'packages/charts/src/Chart.spec.md'),
+      componentRecord({id: 'component:Chart'}),
+    );
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).toContain(
+      'packages/core/src/Button/Button.spec.md: component records live under docs/specs/components/; move this record to docs/specs/components/Button/Button.spec.md.',
+    );
+    expect(problems).toContain(
+      'packages/charts/src/Chart.spec.md: component records live under docs/specs/components/; move this record to docs/specs/components/Chart/Chart.spec.md.',
+    );
+  });
+
+  it('rejects a Swift spec left beside its view and names its place beside the core record', async () => {
+    const root = fixtureRoot();
+    const view = path.join(
+      root,
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.spec.md',
+    );
+    fs.mkdirSync(path.dirname(view), {recursive: true});
+    fs.writeFileSync(view, '# Swift\n');
+    expect((await validateKnowledgeRoot(root)).join('\n')).toContain(
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.spec.md: Swift component records live beside the core record; move this record to docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md.',
+    );
+  });
+
+  it('accepts a platform record beside the core record and rejects other stray files', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    const folder = path.join(root, 'docs/specs/components/Button');
+    writeSwiftTest(root);
+    fs.writeFileSync(
+      path.join(folder, 'Button.swift.spec.md'),
+      platformRecord(),
+    );
+    fs.writeFileSync(path.join(folder, 'Button.klingon.spec.md'), '# ?\n');
+    fs.writeFileSync(
+      path.join(root, 'docs/specs/components/Loose.spec.md'),
+      '# ?\n',
+    );
+    const problems = await validateKnowledgeRoot(root);
+    expect(problems.join('\n')).not.toContain('Button.swift.spec.md');
+    expect(
+      problems.filter(problem => problem.includes('must be <ComponentRoot>')),
+    ).toHaveLength(2);
+  });
+
+  it('checks a platform record with the shared validator and against its core component', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    writeSwiftTest(root);
+    const swift = path.join(
+      root,
+      'docs/specs/components/Button/Button.swift.spec.md',
+    );
+    const swiftProblems = async overrides => {
+      fs.writeFileSync(swift, platformRecord(overrides));
+      return (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+      );
+    };
+
+    expect(await swiftProblems()).toEqual([]);
+    expect(
+      await swiftProblems({
+        id: 'component:Button',
+        platform_of: 'component:Card',
+        owners: '[]',
+        verified_by: '[packages/native/apple/Tests/Missing.swift]',
+      }),
+    ).toEqual([
+      'docs/specs/components/Button/Button.swift.spec.md: id must match "^component:swift/Button$".',
+      'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: duplicate id component:Button; first declared in docs/specs/components/Button/Button.spec.md.',
+      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
+      'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
+    ]);
+    // It is placed like the core record it implements.
+    for (const [misplaced, message] of [
+      [
+        'docs/specs/components/Buton/Button.swift.spec.md',
+        'platform records must live at docs/specs/components/<ComponentRoot>/',
+      ],
+      [
+        'docs/specs/components/Button/Banana.swift.spec.md',
+        'platform record for Banana must match component root "Button"',
+      ],
+    ]) {
+      const misplacedPath = path.join(root, misplaced);
+      fs.mkdirSync(path.dirname(misplacedPath), {recursive: true});
+      const name = path.basename(misplaced, '.swift.spec.md');
+      fs.writeFileSync(
+        misplacedPath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+      const misplacedProblems = (await validateKnowledgeRoot(root)).filter(
+        problem => problem.startsWith(misplaced),
+      );
+      expect(misplacedProblems.join('\n')).toContain(message);
+      fs.rmSync(misplacedPath);
+    }
+    // Its applicability blocks are validated, since specs:for reads them.
+    fs.writeFileSync(
+      swift,
+      withReviewApplicability(platformRecord(), {'not-a-trigger': ['INV1']}) +
+        '\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": []}\n```\n',
+    );
+    const blockProblems = (await validateKnowledgeRoot(root)).filter(problem =>
+      problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+    );
+    expect(
+      blockProblems.some(problem => problem.includes('review-applicability')),
+    ).toBe(true);
+    expect(blockProblems).toContain(
+      'docs/specs/components/Button/Button.swift.spec.md: path-applicability:v1 requires a non-empty paths list.',
+    );
+    // The shared validator's current-record rules apply, verified_by included.
+    expect(
+      await swiftProblems({authority: 'current', verified_by: '[]'}),
+    ).toEqual(
+      expect.arrayContaining([
+        'docs/specs/components/Button/Button.swift.spec.md: current records require non-empty verified_by.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
+      ]),
+    );
+    expect(
+      await swiftProblems({
+        authority: 'current',
+        approved_by: 'cixzhang',
+        approved_at: '2026-11-01',
+      }),
+    ).toEqual([]);
+  });
+
+  it('places a flat-package platform record by the same rules as its core record', async () => {
+    const root = fixtureRoot();
+    const source = path.join(root, 'packages/charts/src');
+    fs.writeFileSync(
+      path.join(source, 'index.ts'),
+      "export {Chart} from './Chart';\nexport {Ghost} from './Ghost';\n",
+    );
+    fs.writeFileSync(
+      path.join(source, 'Chart.tsx'),
+      'export function Chart() {}\n',
+    );
+    fs.writeFileSync(
+      path.join(source, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    writeSwiftTest(root);
+    const swiftRecord = (folder, name) => {
+      const filePath = path.join(
+        root,
+        `docs/specs/components/${folder}/${name}.swift.spec.md`,
+      );
+      fs.mkdirSync(path.dirname(filePath), {recursive: true});
+      fs.writeFileSync(
+        filePath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+    };
+    swiftRecord('Chart', 'Chart');
+    swiftRecord('Chart', 'Ghost');
+
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).not.toContain('Chart/Chart.swift.spec.md');
+    expect(problems).toContain(
+      'docs/specs/components/Chart/Ghost.swift.spec.md: platform record for Ghost must match component root "Chart"',
+    );
+  });
+
+  it('checks a package architecture record under packages/<package>/specs/', async () => {
+    const root = fixtureRoot();
+    const template = fs.readFileSync(
+      path.join(root, 'docs/templates/knowledge/architecture.md'),
+      'utf8',
+    );
+    const slots = path.join(root, 'packages/native/specs/swift/slots.spec.md');
+    const writeSlots = (id, kind = 'architecture') => {
+      fs.mkdirSync(path.dirname(slots), {recursive: true});
+      fs.writeFileSync(
+        slots,
+        template
+          .replace('id: architecture:<surface>', `id: ${id}`)
+          .replace('kind: architecture', `kind: ${kind}`),
+      );
+    };
+    const packageProblems = async () =>
+      (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('packages/native/specs/'),
+      );
+    // Guidance Markdown that is not a `<slug>.spec.md` is not a candidate.
+    fs.mkdirSync(path.join(root, 'packages/native/specs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'packages/native/specs/README.md'),
+      '# Native specs\n',
+    );
+
+    writeSlots('architecture:native-swift-slots');
+    expect(await packageProblems()).toEqual([]);
+
+    writeSlots('architecture:swift-slots');
+    expect(await packageProblems()).toEqual([
+      'packages/native/specs/swift/slots.spec.md: id must be architecture:native-swift-slots to match its path.',
+    ]);
+
+    writeSlots('architecture:native-swift-slots', 'bogus');
+    expect(await packageProblems()).toContain(
+      'packages/native/specs/swift/slots.spec.md: a record under packages/native/specs/ must be kind: architecture.',
+    );
   });
 
   it('rejects a nested component record instead of treating it as a module', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const nestedPath = path.join(componentDirectory, 'notes/Extra.spec.md');
+    const nestedPath = recordPath(
+      path.join(componentDirectory, 'notes/Extra.spec.md'),
+    );
     fs.mkdirSync(path.dirname(nestedPath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord(),
     );
     fs.writeFileSync(nestedPath, componentRecord({id: 'component:Extra'}));
@@ -1492,11 +2198,11 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
-      path.join(componentDirectory, 'useButtonThing.spec.md'),
+      recordPath(path.join(componentDirectory, 'useButtonThing.spec.md')),
       moduleRecord(),
     );
 
@@ -1508,13 +2214,12 @@ describe('knowledge validation', () => {
   it('rejects missing parent links and orphan module records', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/orphan/useOrphan.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/orphan/useOrphan.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useMissing]'}),
     );
     fs.writeFileSync(
@@ -1536,18 +2241,17 @@ describe('knowledge validation', () => {
     const root = fixtureRoot();
     const buttonDirectory = path.join(root, 'packages/core/src/Button');
     const otherDirectory = path.join(root, 'packages/core/src/Other');
-    const modulePath = path.join(
-      otherDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(otherDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(buttonDirectory, {recursive: true});
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(buttonDirectory, 'Button.spec.md'),
+      recordPath(path.join(buttonDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Other/useButtonThing]'}),
     );
     fs.writeFileSync(
-      path.join(otherDirectory, 'Other.spec.md'),
+      recordPath(path.join(otherDirectory, 'Other.spec.md')),
       componentRecord({
         id: 'component:Other',
         modules: '[module:Other/useButtonThing]',
@@ -1581,9 +2285,10 @@ describe('knowledge validation', () => {
         'id: component:Button',
       ),
     );
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
     const modulePath = path.join(
       root,
-      'packages/core/src/Button/plugins/thing/useButtonThing.spec.md',
+      'docs/specs/components/Button/plugins/thing/useButtonThing.spec.md',
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1606,7 +2311,7 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[family:actions]'}),
     );
 
@@ -1620,15 +2325,17 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({
         modules: '[module:Button/useButtonThing,module:Button/useButtonThing]',
       }),
     );
     for (const owner of ['first', 'second']) {
-      const modulePath = path.join(
-        componentDirectory,
-        `plugins/${owner}/useButtonThing.spec.md`,
+      const modulePath = recordPath(
+        path.join(
+          componentDirectory,
+          `plugins/${owner}/useButtonThing.spec.md`,
+        ),
       );
       fs.mkdirSync(path.dirname(modulePath), {recursive: true});
       fs.writeFileSync(modulePath, moduleRecord());
@@ -1644,13 +2351,12 @@ describe('knowledge validation', () => {
   it('requires module ids and filenames to encode the same public name', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/WrongName.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/WrongName.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1663,13 +2369,12 @@ describe('knowledge validation', () => {
   it('validates module anatomy only against the module consumer doc', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
@@ -1699,9 +2404,8 @@ describe('knowledge validation', () => {
   it('never validates a module map against parent aggregate anatomy', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     const parentDoc = writeButtonDoc(componentDirectory).replace(
@@ -1713,7 +2417,7 @@ describe('knowledge validation', () => {
       parentDoc,
     );
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
@@ -1980,7 +2684,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord().replace(
         'authority: draft',
         'authority: draft\nauthority: "current"',
@@ -1997,12 +2701,12 @@ describe('knowledge validation', () => {
       [
         'component',
         'component-spec.md',
-        'packages/core/src/Button/Button.spec.md',
+        'docs/specs/components/Button/Button.spec.md',
       ],
       [
         'module',
         'module-spec.md',
-        'packages/core/src/Button/hooks/useButtonThing.spec.md',
+        'docs/specs/components/Button/hooks/useButtonThing.spec.md',
       ],
       ['family', 'family-contract.md', 'docs/families/approval.md'],
       ['system-spec', 'system-spec.md', 'docs/specs/AST-900/spec.md'],
@@ -2075,7 +2779,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({authority: 'current'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2088,7 +2792,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         authority: 'current',
         approved_by: 'someone-else',
@@ -2105,7 +2809,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         authority: 'current',
         approved_by: 'cixzhang',
@@ -2120,7 +2824,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({authority: 'archived', archive_reason: 'superseded'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2133,7 +2837,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({template_version: '8'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2147,7 +2851,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({schema_version: '0'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2161,7 +2865,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         schema_version: '0',
         authority: 'archived',
@@ -2217,12 +2921,178 @@ describe('knowledge validation', () => {
       const directory = path.join(root, `packages/core/src/${name}`);
       fs.mkdirSync(directory);
       fs.writeFileSync(
-        path.join(directory, `${name}.spec.md`),
+        recordPath(path.join(directory, `${name}.spec.md`)),
         componentRecord(),
       );
     }
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
       /duplicate id component:Button/,
     );
+  });
+});
+
+describe('path-applicability:v1', () => {
+  it('matches ** across whole segments, * and ? within one segment', () => {
+    const cases = [
+      ['apps/docsite/**', 'apps/docsite/src/a.ts', true],
+      ['apps/docsite/**', 'apps/docsite', false],
+      ['apps/docsite/**', 'apps/docsite-old/a.ts', false],
+      [
+        'packages/**/*.doc.mjs',
+        'packages/core/src/Button/Button.doc.mjs',
+        true,
+      ],
+      ['packages/**/*.doc.mjs', 'packages/Button.doc.mjs', true],
+      [
+        'packages/**/*.doc.mjs',
+        'packages/core/src/Button/Button.doc.zh.mjs',
+        false,
+      ],
+      ['packages/*/src/index.ts', 'packages/core/src/index.ts', true],
+      ['packages/*/src/index.ts', 'packages/core/nested/src/index.ts', false],
+      ['scripts/check-?.mjs', 'scripts/check-a.mjs', true],
+      ['scripts/check-?.mjs', 'scripts/check-ab.mjs', false],
+      ['docs/a.b.md', 'docs/aXb.md', false],
+      ['README.md', 'README.md', true],
+      ['README.md', 'packages/core/README.md', false],
+    ];
+    for (const [pattern, filePath, expected] of cases) {
+      expect([
+        pattern,
+        filePath,
+        matchesPathPattern(pattern, filePath),
+      ]).toEqual([pattern, filePath, expected]);
+    }
+  });
+
+  it('accepts a valid block and rejects malformed, unsafe, repeated, or stale patterns', () => {
+    const files = ['apps/docsite/src/a.ts', 'README.md'];
+    const content = [
+      '# Record',
+      '',
+      '<!-- path-applicability:v1 -->',
+      '',
+      '```json',
+      '{"paths": ["apps/docsite/**", "README.md"]}',
+      '```',
+    ].join('\n');
+    const parsed = parsePathApplicabilityBlock(content, 'r.md');
+    expect(parsed.problems).toEqual([]);
+    expect(validatePathApplicability(parsed.config, 'r.md', files)).toEqual([]);
+
+    const problems = config => validatePathApplicability(config, 'r.md', files);
+    expect(problems({paths: []})).toEqual([
+      'r.md: path-applicability:v1 requires a non-empty paths list.',
+    ]);
+    expect(problems({paths: ['README.md'], scope: 'global'})).toEqual([
+      'r.md: path-applicability:v1 requires exactly paths.',
+    ]);
+    expect(
+      problems({
+        paths: [
+          'README.md',
+          'README.md',
+          '/abs/**',
+          'a/../b',
+          'a/b**',
+          '**',
+          'docs/{a,b}.md',
+          'apps/missing/**',
+          '**/*',
+          '**/**',
+          '**/?*',
+          '*/src/a.ts',
+        ],
+      }),
+    ).toEqual([
+      'r.md: path-applicability:v1 pattern "README.md" is repeated.',
+      'r.md: path-applicability:v1 pattern "/abs/**" must be repository-relative with no empty, "." or ".." segments.',
+      'r.md: path-applicability:v1 pattern "a/../b" must be repository-relative with no empty, "." or ".." segments.',
+      'r.md: path-applicability:v1 pattern "a/b**" may use ** only as a whole segment.',
+      'r.md: path-applicability:v1 pattern "**" covers the whole repository; name the paths.',
+      'r.md: path-applicability:v1 pattern "docs/{a,b}.md" may use only letters, digits, _ . @ - / and the wildcards * ** ?.',
+      'r.md: path-applicability:v1 pattern "apps/missing/**" matches no repository file.',
+      'r.md: path-applicability:v1 pattern "**/*" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "**/**" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "**/?*" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "*/src/a.ts" must start with a literal path segment; a leading wildcard covers the whole repository.',
+    ]);
+    expect(
+      validatePathApplicability({paths: ['apps/**']}, 'r.md', [
+        'apps/a.ts',
+        'apps/b/c.ts',
+      ]),
+    ).toEqual([
+      'r.md: path-applicability:v1 pattern "apps/**" matches every repository file; name the paths.',
+    ]);
+    expect(
+      validatePathApplicability({paths: ['apps/missing/**']}, 'r.md', null),
+    ).toEqual([]);
+  });
+
+  it('reports duplicate blocks through the shared overlay parser', () => {
+    const block =
+      '<!-- path-applicability:v1 -->\n```json\n{"paths": ["README.md"]}\n```\n';
+    expect(
+      parsePathApplicabilityBlock(`${block}\n${block}`, 'r.md').problems,
+    ).toEqual(['r.md: duplicate path-applicability:v1 blocks.']);
+  });
+});
+
+describe('INV25 record reachability', () => {
+  function gitFixture(root) {
+    execFileSync('git', ['init', '-q'], {cwd: root});
+    execFileSync('git', ['add', '-A'], {cwd: root});
+  }
+
+  it('fails a current record no tracked non-record path reaches, and passes once a pattern reaches it', async () => {
+    const root = fixtureRoot();
+    writeSystemSpec(root, 'AST-900', systemSpecRecord());
+    fs.mkdirSync(path.join(root, 'apps/site'), {recursive: true});
+    fs.writeFileSync(path.join(root, 'apps/site/index.md'), '# Site\n');
+    gitFixture(root);
+    expect(await validateKnowledgeRoot(root)).toEqual([
+      'docs/specs/AST-900/spec.md: current record spec:AST-900 is not reached from any repository path that is not itself a record (INV25). Link it through placement, applies_to, verified_by, a membership or consumer-doc id, a cited spec number, or a path-applicability:v1 block.',
+    ]);
+
+    fs.writeFileSync(
+      path.join(root, 'docs/specs/AST-900/spec.md'),
+      systemSpecRecord().replace(
+        '# Fixture system spec\n',
+        '# Fixture system spec\n\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": ["apps/site/**"]}\n```\n',
+      ),
+    );
+    gitFixture(root);
+    expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('skips reachability when the root has no tracked file list', async () => {
+    const root = fixtureRoot();
+    writeSystemSpec(root, 'AST-900', systemSpecRecord());
+    expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('runs from the command line without deadlocking on its own import', () => {
+    // The reachability check imports scripts/specs-for-file.mjs, which imports
+    // this module back. A small tracked fixture runs that check in well under
+    // a second; the whole repository takes seconds even on an idle machine.
+    const root = fixtureRoot();
+    writeSystemSpec(
+      root,
+      'AST-900',
+      systemSpecRecord().replace(
+        '# Fixture system spec\n',
+        '# Fixture system spec\n\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": ["apps/site/**"]}\n```\n',
+      ),
+    );
+    fs.mkdirSync(path.join(root, 'apps/site'), {recursive: true});
+    fs.writeFileSync(path.join(root, 'apps/site/index.md'), '# Site\n');
+    gitFixture(root);
+    const output = execFileSync(
+      process.execPath,
+      [path.join(repoRoot, 'scripts/check-knowledge.mjs'), '--root', root],
+      {cwd: repoRoot, encoding: 'utf8'},
+    );
+    expect(output).toContain('Knowledge templates and records are aligned.');
   });
 });

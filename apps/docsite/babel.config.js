@@ -3,6 +3,10 @@
 /* global module, require, process, __dirname */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('node:path');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {
+  stylexModuleResolution,
+} = require('../../scripts/stylex-module-resolution.cjs');
 
 const dev = process.env.NODE_ENV !== 'production';
 
@@ -20,9 +24,7 @@ module.exports = {
           '@/*': [path.join(__dirname, '*')],
         },
         classNamePrefix: 'p',
-        unstable_moduleResolution: {
-          type: 'commonJS',
-        },
+        unstable_moduleResolution: stylexModuleResolution,
       },
     ],
   ],

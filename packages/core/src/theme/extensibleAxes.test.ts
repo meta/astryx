@@ -32,6 +32,11 @@
  * `TreeListVariantMap`, with a module-augmentation example in its own JSDoc,
  * while `themeProps('tree-list', {density})` never passed `variant` — so an
  * augmented variant type-checked, rendered, and could not be themed.
+ *
+ * An artwork-request axis (`ARTWORK_REQUEST_MAPS`) keeps (1) but has no
+ * styling wiring: it selects theme-supplied artwork, so its target reflects
+ * nothing and documents no visual prop (architecture:component-theming-surface
+ * INV6, INV14).
  */
 
 import {describe, it, expect} from 'vitest';
@@ -318,6 +323,20 @@ const axes = collectExtensibleAxes(files, aliases, propMaps);
 const themePropsSites = collectThemePropsSites(files);
 const docTargets = collectDocTargets(SRC_DIR);
 
+/**
+ * Maps whose axis is an artwork request, not a styling selector. Each keeps the
+ * public-map check above and is exempt from the themeProps() reflection and
+ * visualProps checks only — and must stay unreflected and undocumented as a
+ * visual prop. `Icon.variant` selects a theme's artwork; an unlisted name
+ * renders the request without a variant. `astryx theme build` keeps the same
+ * list out of component-value enrollment
+ * (packages/cli/api/theme/build/build.mjs).
+ */
+const ARTWORK_REQUEST_MAPS: ReadonlySet<string> = new Set(['IconVariantMap']);
+
+const stylingAxes = axes.filter(a => !ARTWORK_REQUEST_MAPS.has(a.mapName));
+const artworkAxes = axes.filter(a => ARTWORK_REQUEST_MAPS.has(a.mapName));
+
 /** The target a component's own name maps to, e.g. TreeList -> astryx-tree-list. */
 function ownTargets(axis: ExtensibleAxis): DocTarget[] {
   return docTargets.get(axis.dir) ?? [];
@@ -349,39 +368,65 @@ describe('extensible prop axes are reachable by a theme', () => {
     ).toEqual([]);
   });
 
-  it.each(axes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const))(
-    '%s reaches the DOM through themeProps',
-    (_label, axis) => {
-      // The axis is extensible, so a consumer can add a value we have never
-      // seen. The only way their CSS can select it is if the component
-      // reflects the prop.
-      const targets = ownTargets(axis);
-      const reflected = targets.some(t =>
-        themePropsSites.get(t.className)?.has(axis.prop),
-      );
-      expect(
-        reflected,
-        `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
-          `themeProps() call passes \`${axis.prop}\` — a custom value renders no selector, ` +
-          `so it cannot be styled. Pass it: themeProps('<target>', {${axis.prop}}).`,
-      ).toBe(true);
-    },
-  );
+  it.each(
+    stylingAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )('%s reaches the DOM through themeProps', (_label, axis) => {
+    // The axis is extensible, so a consumer can add a value we have never
+    // seen. The only way their CSS can select it is if the component
+    // reflects the prop.
+    const targets = ownTargets(axis);
+    const reflected = targets.some(t =>
+      themePropsSites.get(t.className)?.has(axis.prop),
+    );
+    expect(
+      reflected,
+      `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
+        `themeProps() call passes \`${axis.prop}\` — a custom value renders no selector, ` +
+        `so it cannot be styled. Pass it: themeProps('<target>', {${axis.prop}}).`,
+    ).toBe(true);
+  });
 
-  it.each(axes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const))(
-    '%s is documented as a visual prop',
+  it.each(
+    stylingAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )('%s is documented as a visual prop', (_label, axis) => {
+    // Undocumented, it is undiscoverable — and `theme build` rejects
+    // `'<target>': {'<prop>:custom': …}` as an unknown prop, because its
+    // known-prop set is built from exactly this field.
+    const targets = ownTargets(axis);
+    const documented = targets.some(t => t.visualProps.includes(axis.prop));
+    expect(
+      documented,
+      `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
+        `theming target documents \`${axis.prop}\` in visualProps — a theme author cannot ` +
+        `discover the axis, and \`astryx theme build\` warns "Unknown prop" on it.`,
+    ).toBe(true);
+  });
+});
+
+describe('artwork-request axes are exempt from styling wiring only', () => {
+  it('lists only maps that are extensible axes', () => {
+    // A stale entry would silently exempt nothing; a renamed map would leave
+    // its axis held to styling wiring it must not have.
+    expect(artworkAxes.map(a => a.mapName).sort()).toEqual(
+      [...ARTWORK_REQUEST_MAPS].sort(),
+    );
+  });
+
+  it.each(
+    artworkAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )(
+    '%s is neither reflected nor documented as a visual prop',
     (_label, axis) => {
-      // Undocumented, it is undiscoverable — and `theme build` rejects
-      // `'<target>': {'<prop>:custom': …}` as an unknown prop, because its
-      // known-prop set is built from exactly this field.
+      // The axis selects artwork, so it has no styling selector.
       const targets = ownTargets(axis);
-      const documented = targets.some(t => t.visualProps.includes(axis.prop));
       expect(
-        documented,
-        `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
-          `theming target documents \`${axis.prop}\` in visualProps — a theme author cannot ` +
-          `discover the axis, and \`astryx theme build\` warns "Unknown prop" on it.`,
-      ).toBe(true);
+        targets.some(t => themePropsSites.get(t.className)?.has(axis.prop)),
+        `${axis.dir}.${axis.prop} selects artwork; no themeProps() call may reflect it.`,
+      ).toBe(false);
+      expect(
+        targets.some(t => t.visualProps.includes(axis.prop)),
+        `${axis.dir}.${axis.prop} selects artwork; no theming target may list it in visualProps.`,
+      ).toBe(false);
     },
   );
 });

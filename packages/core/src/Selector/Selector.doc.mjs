@@ -152,7 +152,7 @@ export const docs = {
       {
         className: 'astryx-selector-option-row',
         visualProps: ['size'],
-        states: ['selected', 'disabled'],
+        states: ['highlighted', 'selected', 'disabled'],
       },
       {className: 'astryx-selector-search'},
       {className: 'astryx-selector-section-heading'},
@@ -189,19 +189,27 @@ export const docs = {
     },
     {
       name: 'value',
-      type: 'string',
-      description: 'Currently selected value.',
+      type: 'string | null',
+      description:
+        'Currently selected value: a string, or undefined to show the placeholder; with hasClear, value is required and null means no selection. Without hasClear the type is string; with hasClear it is string | null.',
     },
     {
       name: 'onChange',
-      type: '(value: string) => void',
-      description: 'Callback fired when the selection changes.',
+      type: '(value: string | null) => void',
+      description:
+        'Called with the selected option value; it receives null only when hasClear is set and the user clears the selection. Without hasClear the type is (value: string) => void; with hasClear it is (value: string | null) => void, so a useState<string | null> setter fits.',
+    },
+    {
+      name: 'changeAction',
+      type: '(value: string | null) => void | Promise<void>',
+      description:
+        'Async action on change. Fires after onChange; the selector shows the new value and a busy state while it runs. Receives null on clear only with hasClear.',
     },
     {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows a clear (×) button when a value is selected. When true, onChange also accepts null to signal the user cleared the selection.',
+        'Shows a clear (×) button when a value is selected; with it, value becomes required and accepts null, and onChange receives null when the user clears the selection.',
       default: 'false',
     },
     {
@@ -273,7 +281,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the selector is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the trigger focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled Selector in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. Use this instead of wrapping a disabled Selector in Tooltip.',
     },
     {
       name: 'isLabelHidden',
@@ -285,6 +293,12 @@ export const docs = {
       name: 'description',
       type: 'string',
       description: 'Helper text displayed below the label.',
+    },
+    {
+      name: 'labelTooltip',
+      type: 'string',
+      description:
+        'Tooltip text displayed in an info icon at the end of the label.',
     },
     {
       name: 'isOptional',
@@ -338,6 +352,19 @@ export const docs = {
       default: "'popover'",
     },
     {
+      name: 'placement',
+      type: "'above' | 'below' | 'start' | 'end'",
+      description:
+        'Position of the popup relative to the trigger. Omit it to place the selected option over the trigger, kept inside the viewport; with hasSearch, the popup then opens below the trigger. Set it for explicit layer positioning, such as placement="above" for a toolbar fixed to the bottom.',
+    },
+    {
+      name: 'isDefaultOpen',
+      type: 'boolean',
+      description:
+        'Whether the dropdown starts open on mount. Useful for showcases and previews.',
+      default: 'false',
+    },
+    {
       name: 'width',
       type: 'SizeValue',
       description:
@@ -345,8 +372,8 @@ export const docs = {
     },
     {
       name: 'startIcon',
-      type: 'IconType | ReactNode',
-      description: 'Icon displayed at the start of the selector trigger.',
+      type: 'ReactNode | IconType',
+      description: 'Icon displayed at the start of the selector trigger; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isLoading',
@@ -475,7 +502,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,
@@ -536,7 +563,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,
@@ -607,7 +634,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled Selector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled Selector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
     anatomy,

@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -8,21 +9,26 @@ import {describe, expect, it} from 'vitest';
 import {
   getGeneratedLocales,
   getGeneratedLocaleSources,
+  localesWithoutData,
+  MAX_ABBREVIATED_LENGTH,
   renderGeneratedFile,
   resolveCldrSourceLocale,
 } from './generate-cldr-weekdays.mjs';
-import {standaloneShortWeekdayNamesByLocale} from '../packages/core/src/Calendar/standaloneShortWeekdayNames.generated';
+import {weekdayHeaderNamesByLocale} from '../packages/core/src/Calendar/weekdayHeaderNames.generated';
+import {MAX_ABBREVIATED_HEADER_LENGTH} from '../packages/core/src/Calendar/getWeekdayHeaderNames';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLDR_ROOT = path.dirname(require.resolve('cldr-dates-full/package.json'));
 const OUTPUT_FILE = path.join(
   ROOT,
-  'packages/core/src/Calendar/standaloneShortWeekdayNames.generated.ts',
+  'packages/core/src/Calendar/weekdayHeaderNames.generated.ts',
 );
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-function readRawCldr(locale) {
+const graphemes = new Intl.Segmenter('en', {granularity: 'grapheme'});
+
+function readRawCldr(locale, width) {
   const document = JSON.parse(
     fs.readFileSync(
       path.join(CLDR_ROOT, 'main', locale, 'ca-gregorian.json'),
@@ -30,8 +36,16 @@ function readRawCldr(locale) {
     ),
   );
   const days =
-    document.main[locale].dates.calendars.gregorian.days['stand-alone'].short;
+    document.main[locale].dates.calendars.gregorian.days['stand-alone'][width];
   return DAY_KEYS.map(day => days[day]);
+}
+
+function expectedHeaderNames(locale) {
+  const abbreviated = readRawCldr(locale, 'abbreviated');
+  const fits = abbreviated.every(
+    name => [...graphemes.segment(name)].length <= MAX_ABBREVIATED_LENGTH,
+  );
+  return fits ? abbreviated : readRawCldr(locale, 'short');
 }
 
 describe('generate-cldr-weekdays', () => {
@@ -54,16 +68,16 @@ describe('generate-cldr-weekdays', () => {
   it('matches every generated locale to its pinned raw CLDR source', () => {
     const generatedLocales = getGeneratedLocales();
     const sources = getGeneratedLocaleSources();
-    const checkedInLocales = Object.keys(standaloneShortWeekdayNamesByLocale);
+    const checkedInLocales = Object.keys(weekdayHeaderNamesByLocale);
 
     expect(checkedInLocales.toSorted()).toEqual(generatedLocales.toSorted());
 
     for (const locale of generatedLocales) {
       const source = sources[locale];
-      const weekdays = standaloneShortWeekdayNamesByLocale[locale];
+      const weekdays = weekdayHeaderNamesByLocale[locale];
 
       expect(source).toBeDefined();
-      expect(weekdays).toEqual(readRawCldr(source));
+      expect(weekdays).toEqual(expectedHeaderNames(source));
       expect(weekdays).toHaveLength(7);
       for (const weekday of weekdays) {
         expect(typeof weekday).toBe('string');
@@ -71,5 +85,59 @@ describe('generate-cldr-weekdays', () => {
       }
       expect(new Set(weekdays).size).toBe(7);
     }
+  });
+
+  it('picks abbreviated names only where all seven fit in four characters', () => {
+    expect(MAX_ABBREVIATED_LENGTH).toBe(4);
+    // The runtime fallback for unshipped languages applies the same limit.
+    expect(MAX_ABBREVIATED_HEADER_LENGTH).toBe(MAX_ABBREVIATED_LENGTH);
+    expect(weekdayHeaderNamesByLocale.en).toEqual([
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(weekdayHeaderNamesByLocale.en).toEqual(
+      readRawCldr('en', 'abbreviated'),
+    );
+    expect(weekdayHeaderNamesByLocale.fr).toEqual(
+      readRawCldr('fr', 'abbreviated'),
+    );
+    // Whole-word or longer abbreviations keep the whole locale on short names.
+    for (const locale of ['pt-PT', 'pl', 'he', 'da', 'vi', 'ar']) {
+      expect(weekdayHeaderNamesByLocale[locale]).toEqual(
+        readRawCldr(getGeneratedLocaleSources()[locale], 'short'),
+      );
+    }
+  });
+});
+
+describe('the locale data the generator needs', () => {
+  it('has locale data for every shipped locale on the Node CI runs', () => {
+    expect(localesWithoutData()).toEqual([]);
+  });
+
+  it('exits 1 with a clear message, never a crash, on a Node without locale data', () => {
+    // A small-ICU Node reports no data for any locale but English.
+    const stub =
+      'data:text/javascript,Intl.DateTimeFormat.supportedLocalesOf=l=>l.filter(x=>x==="en")';
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        stub,
+        path.join(ROOT, 'scripts/generate-cldr-weekdays.mjs'),
+        '--check',
+      ],
+      {encoding: 'utf8'},
+    );
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'generate-cldr-weekdays needs a Node build with full ICU data',
+    );
   });
 });

@@ -14,8 +14,10 @@ export const doc = {
     'returns',
     'allocation',
     'investments',
-    'performance reporting',
+    'performance',
+    'reporting',
   ],
   isReady: true,
   category: 'Dashboard - Portfolio',
+  icons: {ArrowDownIcon: 'arrowDown', ArrowUpIcon: 'arrowUp'},
 };

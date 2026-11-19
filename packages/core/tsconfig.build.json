@@ -9,15 +9,14 @@
     "emitDeclarationOnly": true,
     "sourceMap": false
   },
-  "include": [
-    "src"
-  ],
+  "include": ["src"],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.doc.mjs",
     "src/**/__tests__/**",
     "src/**/*.perf.test.ts",
-    "src/**/*.perf.test.tsx"
+    "src/**/*.perf.test.tsx",
+    "src/**/*.bench.*"
   ]
 }

@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 1,
   componentsUsed: ['EmptyState', 'Button', 'Icon'],
+  icons: {MagnifyingGlassIcon: 'search'},
 };

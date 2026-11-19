@@ -37,6 +37,7 @@ const CONTRIBUTION_KINDS = new Set([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
   'theme',
   'codemod',
   'agent-doc',
@@ -53,7 +54,17 @@ const DOC_KINDS = new Set([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
 ]);
+
+/**
+ * Whether a value is a bare npm package name, as written (lowercase).
+ * @param {unknown} name
+ * @returns {boolean}
+ */
+export function isPackageName(name) {
+  return typeof name === 'string' && PACKAGE_NAME_RE.test(name);
+}
 
 /** RFC 3986 path-segment encoding with uppercase escapes. */
 /** @param {string} value @returns {string} */
@@ -90,7 +101,7 @@ function normalizeName(value, label) {
  */
 export function normalizeProviderId(packageName) {
   const normalized = normalizeName(packageName, 'Provider ID').toLowerCase();
-  if (!PACKAGE_NAME_RE.test(normalized)) {
+  if (!isPackageName(normalized)) {
     throw new Error(
       `Provider ID "${packageName}" must be a bare npm package name.`,
     );

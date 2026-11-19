@@ -10,8 +10,9 @@ export const docs = {
   type: 'generic',
   name: 'component-lookups',
   placement: {parent: 'namespace:cli', slot: 'guides', order: 5},
-  title: 'Looking up components',
+  title: 'Component lookups',
   category: 'guide',
+  keywords: ['look up', 'looking up components', 'lookup', 'batch'],
   description:
     'Look up one or several exact component identities, choose a focused projection, and handle complete batch receipts.',
   sections: [
@@ -22,13 +23,13 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`astryx component` accepts exact selectors as a variadic positional argument. With no selector it browses the catalog. With one selector it keeps the normal single-component response. With two or more it prints one complete ordered batch receipt.',
+          text: '`{@command component}` accepts exact selectors as a variadic positional argument. With no selector it browses the catalog. With one selector it keeps the normal single-component response. With two or more it prints one complete ordered batch receipt.',
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Several component docs',
-          code: 'astryx component Button Badge Text\nastryx --json component Button Badge Text',
+          code: '{@command component Button Badge Text}\nastryx --json component Button Badge Text',
         },
         {
           type: 'prose',
@@ -46,7 +47,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Focused batch lookups',
-          code: 'astryx --json component Button Card --props\nastryx component Button Card --source\nastryx component Button Card --showcase\nastryx component Button Card --blocks\nastryx component Button Card --detail compact\nastryx component Button Card --lang dense\nastryx component Button Card --package @astryxdesign/core',
+          code: 'astryx --json component Button Card --props\n{@command component Button Card --source}\n{@command component Button Card --showcase}\n{@command component Button Card --blocks}\n{@command component Button Card --detail compact}\n{@command component Button Card --lang dense}\n{@command component Button Card --package @astryxdesign/core}',
         },
       ],
     },
@@ -75,7 +76,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`astryx discover` remains free-text package discovery. Its words form one query; they are not component batch selectors.',
+          text: '`{@command discover}` remains free-text package discovery. Its words form one query; they are not component batch selectors.',
         },
       ],
     },

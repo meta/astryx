@@ -12,9 +12,11 @@ export const doc = {
     'storefront',
     'shop',
     'listings',
-    'ecommerce grid',
+    'ecommerce',
+    'grid',
   ],
   type: 'page',
   isReady: true,
   category: 'Gallery - Product',
+  icons: {ArrowRightIcon: 'arrowRight'},
 };

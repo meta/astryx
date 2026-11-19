@@ -1,12 +1,22 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, beforeAll} from 'vitest';
-import {defineTheme, generateOnMediaCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateOnMediaCSS} from './generateThemeRules';
 import {
   defaultOnDarkTokens,
   defaultOnLightTokens,
   resolveOnMedia,
 } from './onMediaTokens';
+
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
 
 describe('onMediaTokens', () => {
   describe('defaultOnDarkTokens', () => {
@@ -146,6 +156,7 @@ describe('generateOnMediaCSS', () => {
     expect(css).toContain('[data-astryx-media="dark"]');
     expect(css).toContain('color-scheme: dark');
     expect(css).toContain('var(--color-on-dark)');
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
   });
 
   it('emits light media rules', () => {
@@ -155,9 +166,196 @@ describe('generateOnMediaCSS', () => {
     expect(css).toContain('color-scheme: light');
   });
 
+  it('keeps concrete root roles while rebinding default aliases on media surfaces', () => {
+    const concrete = defineTheme({
+      name: 'status-role-media',
+      tokens: {
+        '--color-text-blue': '#0074E2',
+        '--color-text-info': '#6D9CFE',
+      },
+      onDark: {tokens: {'--color-text-blue': '#FFFFFF'}},
+    });
+    const concreteCss = generateOnMediaCSS(concrete);
+
+    expect(concreteCss).toContain('--color-text-blue: #FFFFFF;');
+    expect(concreteCss).not.toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+
+    const canonical = defineTheme({
+      name: 'status-role-media-alias',
+      tokens: {
+        '--color-text-blue': '#0074E2',
+        '--color-text-info': 'var(--color-text-blue)',
+      },
+      onDark: {
+        tokens: {
+          '--color-text-blue': '#FFFFFF',
+        },
+      },
+    });
+    const canonicalCss = generateOnMediaCSS(canonical);
+
+    expect(canonicalCss).toContain('--color-text-blue: #FFFFFF;');
+    expect(canonicalCss).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it.each([
+    'VAR( /*x*/ --color-text-blue ) !important',
+    'v\\61r(--color-text-blue)',
+    'var( --color-text-blue )',
+    'var(--color-text-blue) !important',
+  ])('rebinds a semantically equivalent authored root alias: %s', info => {
+    const theme = defineTheme({
+      name: 'status-role-media-equivalent-alias',
+      tokens: {
+        '--color-text-blue': '#0074E2',
+        '--color-text-info': info,
+      },
+      onDark: {
+        tokens: {
+          '--color-text-blue': '#FFFFFF',
+        },
+      },
+    });
+
+    expect(generateOnMediaCSS(theme)).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('does not let a media alias override an adaptation-authored role', () => {
+    const theme = defineTheme({
+      name: 'status-role-media-adaptation',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-info': '#123456'}},
+          },
+        ],
+      },
+      onDark: {
+        tokens: {
+          '--color-text-blue': '#FFFFFF',
+        },
+      },
+    });
+    const css = generateOnMediaCSS(theme);
+
+    expect(css).toContain('--color-text-blue: #FFFFFF;');
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    expect(css).toContain('--color-text-info: inherit;');
+    expect(css.lastIndexOf('--color-text-info: inherit;')).toBeGreaterThan(
+      css.lastIndexOf('--color-text-info: var(--color-text-blue);'),
+    );
+  });
+
+  it('inherits non-default adaptation roles instead of re-resolving them locally', () => {
+    const theme = defineTheme({
+      name: 'status-role-media-inherit',
+      tokens: {'--color-text-purple': '#123456'},
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {'--color-text-info': 'var(--color-text-purple)'},
+            },
+          },
+        ],
+      },
+      onDark: {
+        tokens: {
+          '--color-text-purple': '#ffffff',
+          '--color-text-blue': '#ffffff',
+        },
+      },
+    });
+    const css = generateOnMediaCSS(theme);
+
+    expect(css).toContain('--color-text-info: inherit;');
+    expect(css).not.toContain('--color-text-info: var(--color-text-purple);');
+  });
+
+  it('avoids a descendant-local cycle while replaying an adaptation role', () => {
+    const theme = defineTheme({
+      name: 'status-role-media-replay-cycle',
+      tokens: KEEPS_SIDE,
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {'--color-text-info': 'var(--color-text-blue)'},
+            },
+          },
+        ],
+      },
+      onDark: {tokens: {'--color-text-blue': 'var(--color-text-info)'}},
+    });
+    const css = generateOnMediaCSS(theme);
+    const darkBlocks = Array.from(
+      css.matchAll(/\[data-astryx-media="dark"\] \{([\s\S]*?)\n\s*\}/g),
+      match => match[1],
+    );
+
+    expect(darkBlocks.length).toBeGreaterThan(0);
+    for (const block of darkBlocks) {
+      expect(block).not.toContain('--color-text-info: var(--color-text-blue);');
+      expect(block).not.toContain('--color-text-info: var(--color-text-blue);');
+    }
+  });
+
+  it('uses inheritance when multiple local role replays would form a cycle', () => {
+    const theme = defineTheme({
+      name: 'status-role-multi-replay-cycle',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {
+                '--color-text-info': 'var(--color-on-info-muted)',
+                '--color-on-info-muted': 'var(--color-text-green)',
+              },
+            },
+          },
+        ],
+      },
+      onDark: {
+        tokens: {
+          '--color-text-blue': '#ffffff',
+          '--color-text-green': 'var(--color-text-info)',
+        },
+      },
+    });
+    const css = generateOnMediaCSS(theme);
+    const alias = '--color-on-info-muted: var(--color-text-blue);';
+    const restoration = '--color-on-info-muted: inherit;';
+    expect(css).toContain(alias);
+    expect(css).toContain(restoration);
+    expect(css.lastIndexOf(restoration)).toBeGreaterThan(
+      css.lastIndexOf(alias),
+    );
+  });
+
+  it('stringifies a legacy non-string media status source without throwing', () => {
+    const theme = defineTheme({
+      name: 'legacy-media-status-source',
+      onDark: {tokens: {'--color-text-blue': null as never}},
+    });
+
+    expect(() => generateOnMediaCSS(theme)).not.toThrow();
+    expect(generateOnMediaCSS(theme)).toContain('--color-text-blue: null;');
+  });
+
   it('emits component override rules', () => {
     const theme = defineTheme({
       name: 'test',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           button: {
@@ -180,6 +378,7 @@ describe('generateOnMediaCSS', () => {
   it('emits pseudo-class rules for on-media components', () => {
     const theme = defineTheme({
       name: 'test',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           button: {

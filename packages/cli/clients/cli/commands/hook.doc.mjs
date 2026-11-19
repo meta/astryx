@@ -18,7 +18,7 @@ export const doc = {
     'Resolves a hook by name and prints its authored doc, or lists the catalog grouped ' +
     'by category. The --params flag narrows a single hook to just its parameters table.',
   fn: 'hook',
-  args: [{name: 'name', param: 'name', required: false}],
+  args: [{name: 'name', param: 'name', required: false, names: 'hook'}],
   options: [
     {
       flag: '--list',
@@ -40,6 +40,7 @@ export const doc = {
     {label: 'Browse the catalog', cli: 'astryx hook --list'},
     {label: 'One hook as JSON', cli: 'astryx hook useFocusTrap --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

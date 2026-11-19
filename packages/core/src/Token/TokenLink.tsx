@@ -25,13 +25,21 @@
  * - /packages/core/src/Token/Token.test.tsx (tests for delegated behavior)
  */
 
-import type {ReactNode, CSSProperties, Ref, HTMLAttributes} from 'react';
+import type {
+  ReactNode,
+  CSSProperties,
+  Ref,
+  HTMLAttributes,
+  MouseEventHandler,
+} from 'react';
 import {useRef} from 'react';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {LinkComponentType} from '../Link/types';
 import {composeEventHandlers} from '../utils';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
+import type {focusOwnerProps} from '../privateAttributes/focusOwner.stylex';
 export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Ref forwarded to the container element. */
   ref?: Ref<HTMLElement>;
@@ -39,10 +47,19 @@ export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   href: string;
   /** Whether the token is disabled. */
   isDisabled: boolean;
+  /**
+   * Caller `onClick`, attached to the inner link. A plain click on the
+   * container surface is delegated to the link, so this runs once per
+   * plain-click activation of the link or the surface. A Cmd/Ctrl-click or
+   * middle click on the surface opens the link in a new tab and skips it.
+   */
+  onLinkClick?: MouseEventHandler<HTMLElement>;
   /** Resolved link component (native `<a>` or a router link). */
   LinkComponent: LinkComponentType;
   /** `stylex.props()` output applied to the invisible inner link. */
-  linkStyleProps: {className?: string; style?: CSSProperties};
+  linkStyleProps: {className?: string; style?: CSSProperties} & Partial<
+    typeof focusOwnerProps
+  >;
   /** Visible (or visually hidden) label node rendered inside the link. */
   labelContent: ReactNode;
   /** Optional leading icon. */
@@ -67,6 +84,7 @@ export function TokenLink({
   ref,
   href,
   isDisabled,
+  onLinkClick,
   LinkComponent,
   linkStyleProps,
   labelContent,
@@ -75,12 +93,13 @@ export function TokenLink({
   removeButton,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   ...containerProps
 }: TokenLinkProps) {
   const containerRef = useRef<HTMLElement | null>(null);
   const linkRef = useRef<HTMLElement | null>(null);
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef: linkRef,
     href,
@@ -98,15 +117,34 @@ export function TokenLink({
         isDisabled
           ? onMouseUpProp
           : composeEventHandlers(onMouseUpProp, onMouseUp)
+      }
+      onPointerDown={
+        isDisabled
+          ? onPointerDownProp
+          : composeEventHandlers(onPointerDownProp, onPointerDown)
       }>
       {icon}
-      <LinkComponent
-        ref={linkRef as Ref<HTMLAnchorElement>}
-        href={href}
-        aria-disabled={isDisabled || undefined}
-        {...linkStyleProps}>
-        {labelContent}
-      </LinkComponent>
+      {isDisabled ? (
+        // A disabled link stays a focusable link with no destination, as a
+        // disabled Link does (spec:AST-085 FR1, FR5; component:Link FR5).
+        <a
+          ref={linkRef as Ref<HTMLAnchorElement>}
+          role="link"
+          aria-disabled={true}
+          tabIndex={0}
+          {...linkStyleProps}
+          {...disabledInteractionProps()}>
+          {labelContent}
+        </a>
+      ) : (
+        <LinkComponent
+          ref={linkRef as Ref<HTMLAnchorElement>}
+          href={href}
+          onClick={onLinkClick}
+          {...linkStyleProps}>
+          {labelContent}
+        </LinkComponent>
+      )}
       {endContent}
       {removeButton}
     </span>

@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file @astryxdesign/core postinstall — nudge to run `npx @astryxdesign/cli init`.
+ * @file @astryxdesign/core postinstall — nudge to run `astryx init`, prefixed
+ * the way the project's installed CLI prints commands.
  *
  * Enforcement layer 1 of making `astryx init` foolproof: when the design system
  * is installed and the project hasn't run init yet, print a one-line next-step
@@ -19,6 +20,8 @@
  * during npx's fetch, and once set up.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const HERE = fileURLToPath(import.meta.url);
@@ -37,6 +40,39 @@ async function loadContract() {
   }
 }
 
+/**
+ * The stem the project's installed CLI would print, from its picker
+ * (`getCliInvocation`). Core cannot depend on the CLI, so this looks for an
+ * installed copy from the project upward and imports the picker by path; with
+ * no CLI there, or one too old to have the picker, it returns undefined and
+ * the contract's scoped fallback is printed. At install time no integration is
+ * loaded, so this is the package-manager guess.
+ * @param {string} root
+ * @returns {Promise<string | undefined>}
+ */
+export async function cliInvocation(root) {
+  try {
+    let dir = path.resolve(root);
+    for (;;) {
+      const picker = path.join(
+        dir,
+        'node_modules/@astryxdesign/cli/foundation/env/package-manager.mjs',
+      );
+      if (fs.existsSync(picker)) {
+        const {getCliInvocation} = await import(pathToFileURL(picker).href);
+        return typeof getCliInvocation === 'function'
+          ? getCliInvocation(root)
+          : undefined;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) return undefined;
+      dir = parent;
+    }
+  } catch {
+    return undefined;
+  }
+}
+
 async function main() {
   const contract = await loadContract();
   if (!contract) return;
@@ -48,7 +84,12 @@ async function main() {
       isSetUp: contract.isAstryxPromptInReach(root),
     })
   ) {
-    process.stdout.write(contract.SETUP_NUDGE);
+    const invocation = await cliInvocation(root);
+    process.stdout.write(
+      typeof contract.setupNudge === 'function'
+        ? contract.setupNudge(invocation)
+        : contract.SETUP_NUDGE,
+    );
   }
 }
 

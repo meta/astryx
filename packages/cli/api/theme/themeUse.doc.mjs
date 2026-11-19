@@ -33,12 +33,18 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every added theme and its imports, the selected default, the generated module path, and the use change.',
+        'Every added theme and its imports, the selected default, the generated module path, and the use change. Added themes whose local folder or package is gone are left out of the record, and data.notes names each one. A theme that is only broken, or whose package is declared but not installed, still fails the command.',
     },
   ],
   throws: [
-    {code: 'ERR_UNKNOWN_THEME', when: 'the theme is not added'},
-    {code: 'ERR_THEME_INVALID', when: 'generated state is invalid'},
+    {
+      code: 'ERR_UNKNOWN_THEME',
+      when: 'the theme is not added; the suggestion is `theme add <slug>` when a theme with that slug is available, else `theme list`',
+    },
+    {
+      code: 'ERR_THEME_INVALID',
+      when: 'generated state is invalid, or the slug is not added and names a local theme folder that is broken',
+    },
     {code: 'ERR_WRITE_FAILED', when: 'the generated module cannot be written'},
   ],
   examples: [{label: 'Choose the default', code: "await themeUse('ocean');"}],

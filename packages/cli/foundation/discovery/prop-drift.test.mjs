@@ -366,6 +366,71 @@ export function Badge(props: BadgeProps) { return null; }`,
     ).toMatchObject({docRequired: false, codeRequired: true});
   });
 
+  it('compares a documented default with a literal default in the props destructuring, quotes and whitespace aside, and skips any other default', async () => {
+    withTypeScript();
+    const widget = component(
+      'Widget',
+      `const SIZE = 'md';
+export interface WidgetProps { size?: 'sm' | 'md'; tone?: string; count?: number; open?: boolean; label?: string; gap?: number; mode?: string }
+export function Widget({size = 'md', tone = "info", count = -2, open = false, label = SIZE, gap = 4, mode}: WidgetProps) { return null; }`,
+      {
+        props: [
+          prop('size', "'sm' | 'md'", {default: "'sm'"}),
+          prop('tone', 'string', {default: ' "info" '}),
+          prop('count', 'number', {default: '-2'}),
+          prop('open', 'boolean', {default: 'true'}),
+          prop('label', 'string', {default: "'x'"}),
+          prop('gap', 'number', {default: 'the theme gap'}),
+          prop('mode', 'string', {default: "'a'"}),
+        ],
+      },
+    );
+    const forwarded = component(
+      'Forwarded',
+      `declare function forwardRef<T>(render: T): T;
+export const Forwarded = forwardRef(function Forwarded({variant = 'solid'}: {variant?: string}) { return null; });`,
+      {props: [prop('variant', 'string', {default: "'ghost'"})]},
+    );
+
+    const report = await compare([widget, forwarded]);
+
+    expect(kinds(report)).toEqual([
+      'Forwarded.variant default_mismatch',
+      'Widget.open default_mismatch',
+      'Widget.size default_mismatch',
+    ]);
+    // A default that is not a literal on either side is listed, not skipped.
+    expect(report.typesNotCompared).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          component: 'Widget',
+          reason: expect.stringContaining(
+            'default in the code is not a literal',
+          ),
+          props: ['label'],
+        }),
+        expect.objectContaining({
+          component: 'Widget',
+          reason: expect.stringContaining(
+            'documented default is not a literal',
+          ),
+          props: ['gap'],
+        }),
+      ]),
+    );
+    expect(report.typesNotCompared.flatMap(entry => entry.props)).not.toContain(
+      'mode',
+    );
+    expect(report.findings.find(f => f.prop === 'size')).toMatchObject({
+      severity: 'warning',
+      message:
+        "\"size\" is documented with default 'sm', but the code defaults it to 'md'.",
+      fix: 'In components/Widget.doc.mjs, set the "size" prop\'s default to the code\'s: default: "\'md\'".',
+      docDefault: "'sm'",
+      codeDefault: "'md'",
+    });
+  });
+
   it("judges a field, a name an index signature takes, and a prop declared in another file by the type's name where the prop is declared, not by the name the type was declared with", async () => {
     withTypeScript();
     const dir = path.join(pkg, 'components');

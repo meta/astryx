@@ -24,10 +24,20 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {docs} from '../docs/docs.mjs';
-import {listAvailableThemes} from '../theme/_adapter.mjs';
-import {doc as themeAddCommandDoc} from '../../clients/cli/commands/theme-add.doc.mjs';
-import {
+import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../docs/docs.mjs')} */
+const {docs} = require('../docs/docs.mjs');
+/** @type {typeof import('../theme/_adapter.mjs')} */
+const {listAvailableThemes} = require('../theme/_adapter.mjs');
+/** @type {typeof import('../../clients/cli/commands/theme-add.doc.mjs')} */
+const {
+  doc: themeAddCommandDoc,
+} = require('../../clients/cli/commands/theme-add.doc.mjs');
+/** @type {typeof import('./search.mjs')} */
+const {
   headingWithPhrase,
   titleInQuery,
   search,
@@ -35,7 +45,11 @@ import {
   scoreQuery,
   tokenizeQuery,
   SEARCH_DOMAINS,
-} from './search.mjs';
+} = require('./search.mjs');
+/** @type {typeof import('../../test-utils/release-fixtures.mjs')} */
+const {
+  linkThisCliAsProjectCli,
+} = require('../../test-utils/release-fixtures.mjs');
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const cwd = REPO;
@@ -116,16 +130,16 @@ describe('search leaf — docs at the grain a reader reads them', () => {
         .find(result => result.section === 'which-codemods-run');
       expect(hit).toMatchObject({
         domain: 'doc',
-        name: expect.stringMatching(/^cli\/integrations\/(?:.+\/)?codemods$/),
+        name: expect.stringMatching(/^authoring\/(?:.+\/)?codemods$/),
         title: expect.stringMatching(/ › Codemods › Choose when a codemod runs$/),
       });
       expect(hit.parent).toBe(`astryx docs ${hit.name} --index`);
       expect(hit.command).toBe(`astryx docs ${hit.name} which-codemods-run`);
       const block = await search('token-ref', {cwd});
       expect(block.data.results[0]).toMatchObject({
-        name: 'authoring',
+        name: 'authoring/field-reference',
         section: 'reference-doc',
-        command: 'astryx docs authoring reference-doc',
+        command: 'astryx docs authoring/field-reference reference-doc',
       });
       const fn = await search('assertResponse', {cwd, type: 'doc'});
       expect(fn.data.results[0]).toMatchObject({
@@ -147,13 +161,13 @@ describe('search leaf — docs at the grain a reader reads them', () => {
       // keywords and the title the guides declare. A namespace's own
       // keywords count, and a plural name is the name.
       for (const [query, route] of [
-        ['make an integration', /^cli\/integrations$/],
-        ['build an integration', /^cli\/integrations$/],
-        ['create an integration', /^cli\/integrations$/],
-        ['integration', /^cli\/integrations$/],
-        ['publish an integration', /^cli\/integrations$/],
+        ['make an integration', /^authoring$/],
+        ['build an integration', /^authoring$/],
+        ['create an integration', /^authoring$/],
+        ['integration', /^authoring$/],
+        ['publish an integration', /^authoring$/],
         // The troubleshooting guide, wherever the tree places it.
-        ['troubleshoot integration', /^cli\/integrations\/(?:.+\/)?troubleshooting$/],
+        ['troubleshoot integration', /^authoring\/(?:.+\/)?troubleshooting$/],
       ]) {
         const r = await search(query, {cwd, type: 'doc'});
         const names = r.data.results.slice(0, 3).map(result => result.name);
@@ -166,7 +180,7 @@ describe('search leaf — docs at the grain a reader reads them', () => {
   it(
     'gives a top-level namespace hit the topic list as its parent',
     async () => {
-      for (const [query, route] of [['unorganized', 'unorganized'], ['Astryx CLI', 'cli']]) {
+      for (const [query, route] of [['foundations', 'foundations'], ['Astryx CLI', 'cli']]) {
         const r = await search(query, {cwd, type: 'doc'});
         expect(r.data.results).toContainEqual(
           expect.objectContaining({
@@ -184,7 +198,7 @@ describe('search leaf — docs at the grain a reader reads them', () => {
     'points a topic hit at its index, never a whole-topic read',
     async () => {
       // A guide the tree places, read from the tree rather than named.
-      const {data: integrations} = await docs('cli/integrations');
+      const {data: integrations} = await docs('authoring');
       const guide = integrations.slots
         .flatMap(slot => slot.children)
         .find(child => child.kind === 'generic').route;
@@ -439,9 +453,9 @@ describe('search leaf — a candidate that matches every word outranks a partial
     const tokens = await search('tokens', {cwd});
     expect(tokens.data.results[0]).toMatchObject({domain: 'doc', name: 'tokens'});
     for (const [query, route] of [
-      ['codemods', /^cli\/integrations\/(?:.+\/)?codemods$/],
-      ['quick start', /^cli\/integrations\/(?:.+\/)?quick-start$/],
-      ['test in an app', /^cli\/integrations\/(?:.+\/)?test-in-an-app$/],
+      ['codemods', /^authoring\/(?:.+\/)?codemods$/],
+      ['quick start', /^authoring\/(?:.+\/)?quick-start$/],
+      ['test in an app', /^authoring\/(?:.+\/)?test-in-an-app$/],
     ]) {
       const r = await search(query, {cwd, type: 'doc'});
       // The guide is among the hits that share the top score: two guides
@@ -470,8 +484,10 @@ describe('search leaf — error paths (pinned)', () => {
 
   it('searches the docs without @astryxdesign/core, and throws for a domain that needs it', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-search-no-core-'));
+    // A project whose own CLI answers, with no Core installed.
+    linkThisCliAsProjectCli(empty);
     try {
-      // An open search outside an app covers the docs, as `astryx docs` does.
+      // An open search without Core covers the docs, as `astryx docs` does.
       const open = await search('make an integration', {cwd: empty});
       expect(open.data.results.length).toBeGreaterThan(0);
       expect(new Set(open.data.results.map(r => r.domain))).toEqual(
@@ -659,7 +675,7 @@ describe('search leaf — integration components', () => {
    * `@acme/widgets` integration that contributes one component.
    */
   function makeConsumerWithIntegrationComponent() {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-search-it-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-search-it-'));
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({name: 'consumer'}));
     fs.writeFileSync(
       path.join(dir, 'astryx.config.mjs'),
@@ -922,6 +938,14 @@ describe('search leaf — compound names, other names, and word forms', () => {
       domain: 'component',
       name: 'LayoutHeader',
     });
+  }, SLOW);
+
+  it('keeps the entry that mentions an identifier read as its words', async () => {
+    // Only Markdown's docs mention BlockNodeWithMath; Section and Blockquote
+    // match its words, and the learned order inside a band may lead with
+    // them, but the entry that mentions it stays near the top.
+    const {data} = await search('BlockNodeWithMath', {cwd});
+    expect(data.results.slice(0, 3).map(r => r.name)).toContain('Markdown');
   }, SLOW);
 
   it('adds no near siblings beside an entry the query names outright', async () => {

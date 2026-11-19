@@ -14,8 +14,10 @@ export const doc = {
     'authentication',
     'credentials',
     'social',
-    'account access',
+    'account',
+    'access',
   ],
   isReady: true,
   category: 'Login - Card',
+  icons: {CubeIcon: 'package'},
 };

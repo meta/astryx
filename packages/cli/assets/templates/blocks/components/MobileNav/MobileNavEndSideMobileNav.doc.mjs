@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['MobileNav', 'SideNav', 'Button'],
+  icons: {Cog6ToothIcon: 'settings', UsersIcon: 'users'},
 };

@@ -26,6 +26,8 @@ Keep one primary intent; remove or split independently reviewable tagalongs.
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] This PR has one primary intent.
 - [ ] Independently removable API, visual, layout, behavior, cleanup, and policy changes were removed or split.
 - [ ] Public text and artifacts contain no internal Meta context.

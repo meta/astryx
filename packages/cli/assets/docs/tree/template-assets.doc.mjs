@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/build-the-template/template-assets`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/template-assets`:
  * make every style, font, icon, and media dependency survive a template copy.
  */
 

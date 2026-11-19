@@ -22,7 +22,9 @@ export const doc = {
     'warns about each field that does not match, naming the field and a fix. A doc ' +
     'it cannot fully check is listed with the reason, and test fixtures under ' +
     '`__tests__` in the components or docs root are counted, not checked. Without ' +
-    'TypeScript it prints one line saying the docs were not type-checked.',
+    'TypeScript it prints one line saying the docs were not type-checked. ' +
+    'Outside a package, with no package name it writes nothing and reports one no_package issue (exit 1); ' +
+    'a package name is looked up as it is in a project.',
   fn: 'validateIntegration',
   args: [
     {
@@ -43,6 +45,7 @@ export const doc = {
       cli: 'astryx doctor integration validate @acme/widgets --json',
     },
   ],
+  outsideProject: 'own',
   exitCodes: [
     {
       code: 0,
@@ -51,4 +54,10 @@ export const doc = {
     {code: 1, when: 'one or more error-severity issues'},
   ],
   related: ['doctor integration templates', 'template'],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a package, with no package named, it writes nothing, reports one `no_package` issue, and exits 1; a package name is looked up as it is in a project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+    },
+  ],
 };

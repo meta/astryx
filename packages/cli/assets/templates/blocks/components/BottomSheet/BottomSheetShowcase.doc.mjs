@@ -13,7 +13,7 @@ export const doc = {
   componentsUsed: [
     'BottomSheet',
     'Button',
-    'CheckboxInput',
+    'CheckboxList',
     'Divider',
     'Heading',
     'Section',

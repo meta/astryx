@@ -13,8 +13,10 @@ export const doc = {
     'signin',
     'authentication',
     'credentials',
-    'account access',
+    'account',
+    'access',
   ],
   isReady: true,
   category: 'Login - Split',
+  icons: {CheckCircleIcon: 'success', SquaresPlusIcon: 'apps'},
 };

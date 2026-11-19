@@ -49,7 +49,7 @@ export const doc = {
       name: 'namespace',
       type: 'string',
       description:
-        "The group that reads this doc: 'authoring' for a file an author writes (a section of {@link generic:authoring}), or 'cli/api' for a shape the CLI returns (the docs tree adopts it by kind, as the leaf `cli/api/schemas/<name>`). Every schema doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
+        "The group that reads this doc: 'authoring' for a file an author writes (a section of {@link generic:field-reference}), or 'cli/api' for a shape the CLI returns (the docs tree adopts it by kind, as the leaf `cli/api/schemas/<name>`). Every schema doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
     },
     {
       name: 'aliases',

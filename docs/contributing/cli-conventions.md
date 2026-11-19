@@ -143,6 +143,34 @@ a view of the envelope, not a separate design. Do not pad strings, align
 columns, or draw tables yourself; map rows onto `records()`. A new block kind
 needs the evidence that `spec:AST-042` FR3 asks for.
 
+## Output: keep answers short
+
+An agent that does not pass `--json` reads every byte a command prints, on
+every call. Before you add to an answer, think about what an agent does with
+each line. Keep the text short without losing anything it needs
+(`architecture:cli-surface` INV4 and INV5, `spec:AST-017` FR13):
+
+- **Shorten prose, never drop a field.** A long prose field may print its first
+  sentence (`firstSentence` in `foundation/text/string-utils.mjs`) when another
+  route prints it whole: `--verbose`, a focused view such as
+  `component <Name> --props`, or `--json`. Name that route in the answer, with
+  the read's own selector and scope, and print the field whole when the
+  pointer would cost more than the cut saves.
+- **One item per line.** A list prints each item on one line under a group
+  heading (a version, a package), not a block of `key: value` lines per item.
+  Use `records(items, {layout: 'inline'})`.
+- **Say a shared label once.** A label that applies to a run of items (Do and
+  Don't, a package) goes on one line above the run, with a blank line between
+  runs so each run stays its own Markdown list.
+- **Prefer records or a list to a table.** `spec:AST-042` FR3 admits no table
+  drawn from characters. Keep a yes/no value that readers count as its own
+  field, not a marker inside prose: `(optional)` inside prose can collide with
+  the same word in a description.
+- **Test the change with agents.** A shorter answer is a behavior change, and
+  so is a longer one. Give agents with no context the same tasks with the old
+  and the new output, and keep the change when every task comes out the same
+  or better.
+
 ## Errors: every failure carries a code
 
 Add a code to `foundation/response/error-codes.mjs` when no existing one fits.
@@ -157,11 +185,51 @@ name, the command that lists valid values.
 
 A command is not done without its `CommandDoc` in `<name>.doc.mjs`. Fill in
 `summary`, `description`, `args`, `options` (each with a description),
-`examples`, `exitCodes`, and `related`. Help text, the README tables, and the
+`examples`, `exitCodes`, `related`, and `outsideProject`: what the command does
+outside a project. Help text, the README tables, and the
 manifest are generated from it, so an undocumented flag is an invisible flag.
+
+When part of an option's text names a command or option that some bases do
+not serve, put that part in the option's `pointers` with the command paths it
+names, such as `{commands: ['template --skeleton'], text: ', --skeleton'}`.
+Help then leaves the part out on those bases. Plain text parts can follow it.
 
 Give at least one example that an agent would actually run, including a `--json`
 one.
+
+## Global mode: every command works outside a project
+
+People install the CLI once for their computer and run it in any folder
+(`spec:AST-081`). So every command also has to work, or explain itself, in a
+folder that is not a project, and its docs have to say which.
+
+1. **Declare `outsideProject`** in the command doc: `same` (it answers as it
+   would in a new project), `refuse` (it writes nothing and fails before doing
+   any work, naming what it needs), or `own` (it does something else). A
+   command that only groups subcommands declares nothing.
+   `clients/cli/commands/outside-project.test.mjs` runs every command in an
+   empty folder and checks what it does against this value, and fails on a
+   command without one; an `own` command needs a test of its own there.
+2. **Add the note, for readers.** Every `refuse` and every `own` command
+   carries one prose note that starts `In global mode:`, says exactly what it
+   does outside a project (the error code and message it stops with, or what
+   it does instead), and links `{@link namespace:global}`.
+   `test/global-mode-notes.test.mjs` fails on a missing note, and
+   `test/global-mode-docs.test.mjs` checks that the error code a note names is
+   the one the command stops with. An API function whose result depends on
+   `cwd` being in a project carries the same sentence in its description.
+3. **Add a who-answers row** when a change touches which copy of the CLI
+   answers (an install layout, a door, a hand-off rule): one row in the global
+   and project table of `spec:AST-081` and its test in the
+   `packages/cli/test/global-local*.test.mjs` file that holds its number range
+   (rows G1 to G15 in `global-local.test.mjs`, then `global-local.rows-16-39`
+   and `global-local.rows-40-59`), named with the row's number (`G12 …`); a
+   test there fails on a gap in the row numbers.
+4. **Quote, never paraphrase, what the CLI prints.** A terminal line shown on a
+   global-mode page must be one the CLI prints; `test/global-mode-docs.test.mjs`
+   builds those lines from the CLI's own strings.
+
+The user-facing explanation lives in `astryx docs global`.
 
 ## Every integration item ships a typed doc
 
@@ -213,12 +281,19 @@ change.
 - [ ] No `console.log`; all human output goes through the formatters, with no
       hand-padded columns.
 - [ ] Text field names match the JSON keys.
+- [ ] You read the default text as an agent would, and tested any change to
+      its length with agents.
 - [ ] Exit code is the same with and without `--json`.
 - [ ] The composition matrix is closed: every pair composes with a test, is
       refused with a message, or cannot co-occur.
 - [ ] Any path you write passes through `assertWithin`.
 - [ ] The doc lists the new flag, an example, and the exit codes.
+- [ ] The doc declares `outsideProject` (`same`, `refuse`, or `own`), and a test
+      run outside a project matches it.
 - [ ] Marked as work in progress if it is not ready to be depended on.
+- [ ] The command doc declares `outsideProject`; a value other than `same`
+      has its `In global mode:` note and a test of what it does outside a
+      project.
 
 ## Common review smells
 

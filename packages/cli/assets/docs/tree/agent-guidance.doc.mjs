@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/configuration/agent-guidance`: add short lines of
+ * @file `astryx docs authoring/building-blocks/configuration/agent-guidance`: add short lines of
  * guidance that apps put in front of their AI agents, within the limits.
  */
 
@@ -12,7 +12,7 @@ export const docs = {
   placement: {parent: 'namespace:configuration', slot: 'guides', order: 10},
   title: 'Agent guidance',
   category: 'guide',
-  keywords: ['agent docs', 'agents.md'],
+  keywords: ['agent docs', 'agents.md', 'skill', 'SKILL.md'],
   description:
     'Add a few lines of guidance that apps put in front of the AI agents working in their code.',
   sections: [
@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "npx astryx integration add agent-doc 'Use AcmeCarousel for rotating content.'",
+          code: "{@command integration add agent-doc 'Use AcmeCarousel for rotating content.'}",
         },
         {
           type: 'prose',
@@ -80,6 +80,10 @@ export default {
           type: 'prose',
           text: 'A line is one line of plain text. Line breaks, control characters, spaces at either end, and managed-block markers such as `<!-- ASTRYX:START -->` are rejected.',
         },
+        {
+          type: 'prose',
+          text: 'Start a command in a line with the word astryx alone, with no runner in front, as in: Run astryx doctor before finishing. The block names the command the app runs once, at its top, for every command below it, so your line works in every app. See {@link generic:cli-command}.',
+        },
       ],
     },
     {
@@ -88,18 +92,19 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "An app's `astryx init` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
+          text: "An app's `{@command init}` writes your lines near the end of its managed agent block, each labeled with your package name; only the CLI's line on how to remove the block comes after them. The CLI owns the heading, the labels, that last line, and the markers.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx init --features agents',
+          code: '{@command init --features agents}',
         },
         {
           type: 'code',
           lang: 'text',
           code: `INTEGRATIONS:
 - \`@acme/astryx-widgets\`: Use AcmeCarousel for rotating content.
+To remove this block, run \`astryx init --remove-agents\`, …
 <!-- ASTRYX:END -->`,
         },
         {
@@ -119,9 +124,9 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: `npx astryx init --features agents
+          code: `{@command init --features agents}
 # Or: --from takes the Core version the app had before
-npx astryx upgrade --from <version> --apply`,
+{@command upgrade --from <version> --apply}`,
         },
         {
           type: 'code',
@@ -130,7 +135,47 @@ npx astryx upgrade --from <version> --apply`,
         },
         {
           type: 'prose',
-          text: '`upgrade --apply` prints that line; `init` prints `[ok] AI agent docs installed -> AGENTS.md`. Without `--apply`, `upgrade` only reports `Agent docs differ from the installed Astryx and integration configuration.` It refreshes the block even when Core did not change. See {@link command:upgrade}.',
+          text: '`upgrade --apply` prints that line; `init` prints one line per file, such as `[ok] AI agent docs: AGENTS.md updated (Astryx 0.7.15 -> 0.7.16)` or `[ok] AI agent docs: AGENTS.md already current (Astryx 0.7.16), nothing changed`. Without `--apply`, `upgrade` only reports `Agent docs differ from the installed Astryx and integration configuration.` It refreshes the block even when Core did not change. See {@link command:upgrade}.',
+        },
+      ],
+    },
+    {
+      id: 'ship-a-skill',
+      title: 'Ship a skill',
+      content: [
+        {
+          type: 'prose',
+          text: "For guidance longer than a few lines, make one of your docs a skill: add `skill` with a name and a description. An app that keeps the Astryx skill in a skills folder (`{@command init --to skills}`) gets the doc as a skill of its own, `<name>/SKILL.md`; every app's agent block gets one line that names it and points to `{@command docs skills/<name>}`. Agents load a skill only when its description matches the task, so say when to use it, in the words a request would use.",
+        },
+        {
+          type: 'code',
+          lang: 'js',
+          code: `// docs/entities.doc.mjs
+export default {
+  type: 'generic',
+  name: 'acme-entities-guide',
+  title: 'Acme entities',
+  description: 'How to show Acme entities.',
+  skill: {
+    name: 'acme-entities',
+    description: 'Use when a page shows Acme customers, orders, or products.',
+  },
+  sections: [/* ... */],
+};`,
+        },
+        {
+          type: 'prose',
+          text: 'The rules for the name and the description, and what happens to a skill that breaks one, are on the `skill` field of ReferenceDoc in `{@command docs authoring/field-reference}`; `{@command integration check}` names a skill that breaks one. `agentDocs.append` lines keep working as before.',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: "In global mode: the agent guide the CLI keeps for the computer carries no integration's guidance, because it serves every folder; your guidance reaches agents through the agent docs `init` writes in an app that installs your package. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
         },
       ],
     },

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 export {Stepper} from './Stepper';
 export type {
   StepperCollapsedVariant,

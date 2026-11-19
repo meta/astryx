@@ -28,19 +28,20 @@ export default function TokenizerEndContent() {
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
 
   return (
-    <Stack direction="vertical" gap={2}>
-      <Text type="supporting" color="secondary">
-        Action button in the end slot
-      </Text>
-      <Tokenizer
-        label="Team Members"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={value}
-        onChange={items => setValue(items)}
-        endContent={<Button label="Apply" variant="primary" size="sm" />}
-        containerStyle={{width: 400}}
-      />
-    </Stack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <Stack direction="vertical" gap={2}>
+        <Text type="supporting" color="secondary">
+          Action button in the end slot
+        </Text>
+        <Tokenizer
+          label="Team Members"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={value}
+          onChange={items => setValue(items)}
+          endContent={<Button label="Apply" variant="primary" size="sm" />}
+        />
+      </Stack>
+    </div>
   );
 }

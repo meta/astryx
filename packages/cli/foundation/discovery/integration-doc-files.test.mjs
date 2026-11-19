@@ -186,6 +186,35 @@ describe('integrationDocFiles', () => {
     ]);
   });
 
+  it('takes each icon set descriptor, and the descriptor of a set that does not parse', async () => {
+    const data = JSON.stringify({
+      schemaVersion: 1,
+      module: '@acme/icons',
+      icons: [],
+    });
+    write(
+      'icon-sets/outline/outline.doc.mjs',
+      "export default {type: 'icon-set', name: 'outline', displayName: 'Outline', description: 'D', maintained: true, license: 'MIT'};\n",
+    );
+    write('icon-sets/outline/outline.icons.json', data);
+    // A descriptor with a wrongly typed field: discovery withdraws the set,
+    // but the file still ships and is still checked.
+    write(
+      'icon-sets/solid/solid.doc.mjs',
+      "export default {type: 'icon-set', name: 'solid', displayName: 'Solid', description: 'D', maintained: 'yes', license: 'MIT'};\n",
+    );
+    write('icon-sets/solid/solid.icons.json', data);
+    const {files, unread} = await integrationDocFiles({
+      name: '@acme/icons',
+      iconSets: path.join(pkg, 'icon-sets'),
+    });
+    expect(listed(files)).toEqual([
+      ['icon-sets/outline/outline.doc.mjs', 'icon-sets'],
+      ['icon-sets/solid/solid.doc.mjs', 'icon-sets'],
+    ]);
+    expect(unread).toEqual([]);
+  });
+
   it("takes a scoped package's namespace docs and placed guides where they are, with each guide's overlays", async () => {
     write(
       'docs/guides/guides.doc.mjs',

@@ -4,8 +4,9 @@
 export const doc = {
   type: 'block',
   exampleFor: 'InternationalizationProvider',
-  name: 'InternationalizationProvider — Overrides',
+  name: 'Override one Astryx string',
   displayName: 'Internationalization Provider — Overrides',
+  registry: {slug: 'overrides'},
   description:
     'Override a small number of Astryx strings without providing a full locale catalog.',
   isReady: true,

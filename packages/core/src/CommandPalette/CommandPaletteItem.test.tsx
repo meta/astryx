@@ -195,17 +195,6 @@ describe('CommandPaletteItem', () => {
     expect(item).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('paints context-derived highlight when the item is not selected', () => {
-    renderWithContext(
-      <CommandPaletteItem value="test">Item</CommandPaletteItem>,
-      {highlightedIndex: 0},
-    );
-
-    expect(getComputedStyle(screen.getByRole('option')).backgroundColor).toBe(
-      'var(--color-overlay-hover)',
-    );
-  });
-
   it('lets explicit visual state override context-derived state', () => {
     renderWithContext(
       <CommandPaletteItem value="test" isHighlighted={false} isSelected={false}>
@@ -216,7 +205,8 @@ describe('CommandPaletteItem', () => {
 
     const item = screen.getByRole('option');
     expect(item).toHaveAttribute('aria-selected', 'false');
-    expect(getComputedStyle(item).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(item).not.toHaveAttribute('data-selected');
+    expect(item).not.toHaveAttribute('data-highlighted');
   });
 
   it('protects owned option semantics from native passthrough props', () => {
@@ -352,6 +342,69 @@ describe('CommandPaletteItem', () => {
     expect(item).toHaveClass('astryx-command-palette-item');
     expect(item).toHaveClass('consumer-item');
     expect(item).toHaveStyle({marginBlockStart: '8px'});
+  });
+
+  it('reflects selected and disabled state on its theme target', () => {
+    render(
+      <>
+        <CommandPaletteItem value="rest">Rest</CommandPaletteItem>
+        <CommandPaletteItem value="selected" isSelected>
+          Selected
+        </CommandPaletteItem>
+        <CommandPaletteItem value="disabled" isDisabled>
+          Disabled
+        </CommandPaletteItem>
+      </>,
+    );
+
+    const rest = screen.getByRole('option', {name: 'Rest'});
+    expect(rest).not.toHaveAttribute('data-selected');
+    expect(rest).not.toHaveAttribute('data-disabled');
+    expect(screen.getByRole('option', {name: 'Selected'})).toHaveAttribute(
+      'data-selected',
+      'selected',
+    );
+    expect(screen.getByRole('option', {name: 'Disabled'})).toHaveAttribute(
+      'data-disabled',
+      'disabled',
+    );
+  });
+
+  it('reflects context-derived selection on its theme target', () => {
+    renderWithContext(
+      <CommandPaletteItem value="test">Item</CommandPaletteItem>,
+      {value: 'test'},
+    );
+
+    expect(screen.getByRole('option')).toHaveAttribute(
+      'data-selected',
+      'selected',
+    );
+  });
+
+  it('reflects explicit and context-derived highlight on its theme target', () => {
+    renderWithContext(
+      <>
+        <CommandPaletteItem value="test">
+          Context highlighted
+        </CommandPaletteItem>
+        <CommandPaletteItem value="other" isHighlighted>
+          Explicitly highlighted
+        </CommandPaletteItem>
+        <CommandPaletteItem value="rest">Rest</CommandPaletteItem>
+      </>,
+      {highlightedIndex: 0},
+    );
+
+    expect(
+      screen.getByRole('option', {name: 'Context highlighted'}),
+    ).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(
+      screen.getByRole('option', {name: 'Explicitly highlighted'}),
+    ).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(screen.getByRole('option', {name: 'Rest'})).not.toHaveAttribute(
+      'data-highlighted',
+    );
   });
 
   it('sets data-value attribute', () => {

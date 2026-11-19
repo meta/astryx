@@ -11,4 +11,10 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['MoreMenu'],
+  icons: {
+    DocumentDuplicateIcon: 'copy',
+    PencilIcon: 'edit',
+    ShareIcon: 'share',
+    TrashIcon: 'delete',
+  },
 };

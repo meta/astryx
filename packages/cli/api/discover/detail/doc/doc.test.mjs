@@ -86,6 +86,7 @@ describe('discover.detail.doc leaf', () => {
     );
     expect(res).toEqual({
       type: 'discover.detail.doc',
+      package: '@acme/widgets',
       data: {name: 'Beta', usage: {description: 'Beta component'}, props: []},
     });
   });

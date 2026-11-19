@@ -28,6 +28,8 @@ import {KIND_FIELDS} from './_adapter.mjs';
  * @property {string} [summary]
  * @property {string[]} [keywords]
  * @property {string} [description]
+ * @property {string} [packageDescription] an item's package's description:
+ *   search reads its words with the item's own
  */
 
 /**
@@ -59,20 +61,46 @@ export function hasKind(entry, kind) {
 }
 
 /**
- * Where a catalog package stands against the project.
+ * Where a catalog package stands against the project. An entry the official
+ * list supplied is checked against the project's own package.json
+ * (`officialDeclared`); any other entry against the folder discover runs in
+ * (`declared`).
  * @param {CatalogPackage} pkg
  * @param {Set<string>} installedNames
  * @param {Set<string>} declared
+ * @param {Set<string>} [officialDeclared]
  * @returns {{state: 'installed' | 'declared' | 'alias' | 'available', installedAs?: string}}
  */
-export function catalogState(pkg, installedNames, declared) {
+export function catalogState(pkg, installedNames, declared, officialDeclared) {
   if (installedNames.has(pkg.package)) return {state: 'installed'};
-  if (declared.has(pkg.package)) return {state: 'declared'};
+  if (
+    (pkg.official && officialDeclared ? officialDeclared : declared).has(
+      pkg.package,
+    )
+  )
+    return {state: 'declared'};
   const installedAs = pkg.aliases.find(
     name => installedNames.has(name) || declared.has(name),
   );
   if (installedAs != null) return {state: 'alias', installedAs};
   return {state: 'available'};
+}
+
+/**
+ * A catalog package as discover may show it: an installed package's icon
+ * sets, under its own name or an alias, are read only where icon features are
+ * on (spec:AST-084 FR17), whichever version is shown.
+ * @param {CatalogPackage} entry
+ * @param {{installed: boolean, iconSets?: boolean}} options `installed`: the
+ *   project has the package, under its name or an alias
+ * @returns {CatalogPackage}
+ */
+export function shownEntry(entry, {installed, iconSets}) {
+  if (!installed || iconSets) return entry;
+  return {
+    ...entry,
+    contributions: entry.contributions.filter(c => c.kind !== 'icon-set'),
+  };
 }
 
 /**
@@ -93,28 +121,42 @@ export function catalogEntry(pkg, version) {
   const {components, ...others} = kindLists(pkg.contributions);
   return {
     name: pkg.package,
+    package: pkg.package,
     category: pkg.package,
     components,
     ...(version ? {version} : {}),
     ...(pkg.description ? {description: pkg.description} : {}),
     ...others,
+    // Icon sets are experimental (spec:AST-017 FR27): the entry names the
+    // field that lists them, so a consumer can leave them out.
+    ...(others.iconSets ? {experimentalFields: ['iconSets']} : {}),
   };
 }
 
 /**
  * What the project could add: every catalog package it does not have, once per
- * integration (the first name a source lists), never an alias of one it has.
+ * integration (the first name a source lists), never an alias of one it has,
+ * each with the command that adds it when `install` is given.
  * @param {CatalogResult} catalog
  * @param {InstalledPackage[]} installed
  * @param {Set<string>} declared
+ * @param {{officialDeclared?: Set<string>, install?: (pkg: CatalogPackage) => string}} [options]
  */
-export function availableEntries(catalog, installed, declared) {
+export function availableEntries(
+  catalog,
+  installed,
+  declared,
+  {officialDeclared, install} = {},
+) {
   const installedNames = new Set(installed.map(p => p.name));
   /** @type {Set<string>} */
   const integrations = new Set();
   const entries = [];
   for (const pkg of catalog.packages) {
-    if (catalogState(pkg, installedNames, declared).state !== 'available')
+    if (
+      catalogState(pkg, installedNames, declared, officialDeclared).state !==
+      'available'
+    )
       continue;
     if (integrations.has(pkg.integration)) continue;
     integrations.add(pkg.integration);
@@ -124,6 +166,7 @@ export function availableEntries(catalog, installed, declared) {
       ...entry,
       ...(pkg.aliases.length > 0 ? {aliases: pkg.aliases} : {}),
       source: pkg.source,
+      ...(install ? {install: install(pkg)} : {}),
     });
   }
   return entries;
@@ -150,9 +193,10 @@ export function withLatest(installed, catalog) {
  * @param {InstalledPackage[]} installed
  * @param {CatalogResult} catalog
  * @param {Set<string>} declared
+ * @param {Set<string>} [officialDeclared]
  * @returns {SearchItem[]}
  */
-export function searchItems(installed, catalog, declared) {
+export function searchItems(installed, catalog, declared, officialDeclared) {
   /** @type {SearchItem[]} */
   const items = [];
   for (const pkg of installed) {
@@ -168,7 +212,13 @@ export function searchItems(installed, catalog, declared) {
       const names = /** @type {Record<string, unknown>} */ (pkg)[field];
       if (!Array.isArray(names)) continue;
       for (const name of names) {
-        items.push({package: pkg.name, kind, name, installed: true});
+        items.push({
+          package: pkg.name,
+          kind,
+          name,
+          installed: true,
+          ...(pkg.description ? {packageDescription: pkg.description} : {}),
+        });
       }
     }
   }
@@ -176,7 +226,10 @@ export function searchItems(installed, catalog, declared) {
   /** @type {Set<string>} */
   const integrations = new Set();
   for (const pkg of catalog.packages) {
-    if (catalogState(pkg, installedNames, declared).state !== 'available')
+    if (
+      catalogState(pkg, installedNames, declared, officialDeclared).state !==
+      'available'
+    )
       continue;
     if (integrations.has(pkg.integration)) continue;
     integrations.add(pkg.integration);
@@ -196,6 +249,7 @@ export function searchItems(installed, catalog, declared) {
         ...(c.title ? {title: c.title} : {}),
         ...(c.summary ? {summary: c.summary} : {}),
         ...(c.keywords ? {keywords: c.keywords} : {}),
+        ...(pkg.description ? {packageDescription: pkg.description} : {}),
       });
     }
   }

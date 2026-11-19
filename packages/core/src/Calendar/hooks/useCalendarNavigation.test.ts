@@ -104,6 +104,24 @@ describe('useCalendarNavigation — uncontrolled navigation', () => {
 // Controlled mode
 // =============================================================================
 
+describe('useCalendarNavigation — listener without focusDate', () => {
+  it('moves itself and reports the new month', () => {
+    // onFocusDateChange alone is NOT controlled (that needs focusDate too),
+    // so navigation must still update the internal month.
+    const onFocusDateChange = vi.fn();
+    const {result} = renderHook(() =>
+      useCalendarNavigation({initialValue: '2026-05-20', onFocusDateChange}),
+    );
+
+    act(() => {
+      result.current.navigateMonth(1);
+    });
+
+    expect(onFocusDateChange).toHaveBeenCalledWith('2026-06-01');
+    expect(result.current.baseMonth).toEqual({year: 2026, month: 6, day: 1});
+  });
+});
+
 describe('useCalendarNavigation — controlled mode', () => {
   it('reports the new month through the callback without moving itself', () => {
     const onFocusDateChange = vi.fn();

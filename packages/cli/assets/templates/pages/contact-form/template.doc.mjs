@@ -12,7 +12,8 @@ export const doc = {
     'lead capture',
     'enquiry',
     'survey',
-    'intake form',
+    'intake',
+    'form',
     'questionnaire',
     'feedback',
     'request',
@@ -23,4 +24,9 @@ export const doc = {
   ],
   isReady: true,
   category: 'Form - Basic',
+  icons: {
+    AdjustmentsHorizontalIcon: 'adjustments',
+    HandRaisedIcon: 'raiseHand',
+    RocketLaunchIcon: 'rocket',
+  },
 };

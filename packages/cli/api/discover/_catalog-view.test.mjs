@@ -74,6 +74,7 @@ describe('availableEntries', () => {
   it('describes an entry the way an installed one is described', () => {
     expect(availableEntries(CATALOG, [], new Set())[1]).toEqual({
       name: '@acme/charts',
+      package: '@acme/charts',
       components: [],
       version: '2.0.0',
       themes: ['ocean'],

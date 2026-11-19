@@ -143,7 +143,12 @@ describe('--json contract: supported commands emit valid envelopes', () => {
     const parsed = parseJson(stdout);
     expect(parsed.type).toBe('discover.list');
     expect(parsed.data).toEqual([]);
-    expect(parsed.meta).toEqual({configured: false});
+    expect(parsed.meta.configured).toBe(false);
+    // The official list the CLI carries is always a source.
+    expect(parsed.meta.sources).toEqual([
+      expect.objectContaining({name: 'Astryx', status: 'fresh'}),
+    ]);
+    expect(parsed.meta.answeredBy).toEqual(expect.any(Object));
   });
 
   it('astryx template --json emits a typed envelope', async () => {
@@ -162,7 +167,11 @@ describe('--json contract: supported commands emit valid envelopes', () => {
   });
 
   it('astryx doctor --json emits a doctor envelope with checks + summary', async () => {
-    // Run in a bare tmp dir → @astryxdesign/core won't resolve → a FAIL → exit 1.
+    // A project that declares @astryxdesign/core but installs none → a FAIL → exit 1.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}',
+    );
     const {status, stdout} = await runCli(['doctor', '--json'], {cwd: tmpDir});
     expect(status).toBe(1);
     const parsed = parseJson(stdout);

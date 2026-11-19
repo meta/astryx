@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createRef, Fragment} from 'react';
+import {createRef, Fragment, type ReactNode} from 'react';
 import {describe, expect, it} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
+import {ChatMessageList} from './ChatMessageList';
 import {ChatSystemMessage} from './ChatSystemMessage';
 
 const xstyleProbe = stylex.create({
@@ -100,7 +101,7 @@ describe('ChatSystemMessage', () => {
       expect(root).toHaveStyle({outlineOffset: '3px'});
       expectProbeClasses(root);
       expect(root).toHaveAttribute('aria-label', `${variant} system message`);
-      expect(root).toHaveAttribute('role', 'status');
+      expect(root).toHaveAttribute('role', 'note');
       expect(root).toHaveAttribute('data-variant', variant);
     },
   );
@@ -125,7 +126,7 @@ describe('ChatSystemMessage', () => {
       </ChatSystemMessage>,
     );
     const root = screen.getByTestId('empty-partition');
-    expect(root).toHaveAttribute('role', 'status');
+    expect(root).not.toHaveAttribute('role');
     expect(root).toHaveTextContent(text);
   });
 
@@ -148,7 +149,7 @@ describe('ChatSystemMessage', () => {
       </ChatSystemMessage>,
     );
     const root = screen.getByTestId('empty-partition');
-    expect(root).toHaveAttribute('role', 'status');
+    expect(root).not.toHaveAttribute('role');
     expect(root).toContainElement(screen.getByRole('separator'));
   });
 
@@ -163,5 +164,47 @@ describe('ChatSystemMessage', () => {
     expect(root).toHaveTextContent(/^0$/);
     expect(separator).toHaveAccessibleName('0');
     expect(separator).toHaveAttribute('aria-labelledby');
+  });
+
+  it.each(['default', 'divider'] as const)(
+    'leaves a %s row inside a chat log to the log (spec:AST-086 FR4)',
+    variant => {
+      render(
+        <ChatMessageList>
+          <ChatSystemMessage variant={variant} data-testid="notice">
+            Ana joined
+          </ChatSystemMessage>
+        </ChatMessageList>,
+      );
+      const notice = screen.getByTestId('notice');
+      expect(notice.closest('[role="log"]')).not.toBeNull();
+      for (const el of [notice, ...notice.querySelectorAll('*')]) {
+        expect(el).not.toHaveAttribute('aria-live');
+        expect(['status', 'alert', 'log']).not.toContain(
+          el.getAttribute('role'),
+        );
+      }
+    },
+  );
+
+  // A slot is empty for exactly the values React renders as nothing.
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <ChatSystemMessage icon={icon as ReactNode}>Notice</ChatSystemMessage>,
+    );
+    const {container: without} = render(
+      <ChatSystemMessage>Notice</ChatSystemMessage>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as an icon, as React does', () => {
+    render(<ChatSystemMessage icon={0}>Notice</ChatSystemMessage>);
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 });

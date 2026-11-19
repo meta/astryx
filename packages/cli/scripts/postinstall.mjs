@@ -24,7 +24,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 // is safe to load at install time.
 import {
   shouldNudge,
-  SETUP_NUDGE,
+  setupNudge,
 } from '../foundation/agent-docs/agent-doc-state.mjs';
 
 const HERE = fileURLToPath(import.meta.url);
@@ -50,6 +50,25 @@ async function projectIsSetUp(root) {
   }
 }
 
+/**
+ * The stem the CLI's picker prints for this project. At install time no
+ * integration is loaded, so this is the package-manager guess. Falls back to
+ * the contract's scoped form when the picker cannot load.
+ * @param {string} root
+ * @returns {Promise<string | undefined>}
+ */
+export async function cliInvocation(root) {
+  try {
+    // Node builtins only, like the contract.
+    const {getCliInvocation} = await import(
+      '../foundation/env/package-manager.mjs'
+    );
+    return getCliInvocation(root);
+  } catch {
+    return undefined;
+  }
+}
+
 async function main() {
   const root = process.env.INIT_CWD || process.cwd();
   const nudge = shouldNudge({
@@ -58,7 +77,7 @@ async function main() {
     isSetUp: await projectIsSetUp(root),
   });
   if (nudge) {
-    process.stdout.write(SETUP_NUDGE);
+    process.stdout.write(setupNudge(await cliInvocation(root)));
   }
 }
 

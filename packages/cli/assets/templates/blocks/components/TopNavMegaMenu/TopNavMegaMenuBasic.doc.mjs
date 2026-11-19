@@ -17,4 +17,5 @@ export const doc = {
     'TopNavMegaMenu',
     'TopNavMegaMenuItem',
   ],
+  icons: {BookOpenIcon: 'book', RocketLaunchIcon: 'rocket'},
 };

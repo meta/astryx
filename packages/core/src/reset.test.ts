@@ -172,6 +172,17 @@ describe('reset.css pseudo-element rules', () => {
     ).toBe(true);
   });
 
+  it('sets the dropdown marker of a field with a list on a single line', () => {
+    const marker = ruleBlocks.filter(({selector}) =>
+      topLevelSelectors(selector).some(entry =>
+        entry.endsWith('::-webkit-calendar-picker-indicator'),
+      ),
+    );
+    expect(marker.map(({body}) => body).join('\n')).toMatch(
+      /line-height:\s*1;/,
+    );
+  });
+
   it('falls back to the --color-text-secondary default for placeholders', () => {
     // A page that loads only the reset never defines the token. The fallback
     // repeats the token's own default, so that page shows the placeholder an
@@ -190,5 +201,32 @@ describe('reset.css pseudo-element rules', () => {
     expect(placeholder?.body).toContain(
       `color: var(--color-text-secondary, ${tokenDefault});`,
     );
+  });
+
+  it('gives html the --font-family-body token, and body inherits it', () => {
+    // Text that a library adds to the body outside a Theme wrapper must get
+    // the theme's body font. html carries it, so an app that sets its own
+    // html font still reaches body text. No fallback: where no stylesheet
+    // defines the token, html keeps the browser's default font, as before.
+    // reset.font.a11y.chromium.spec.ts measures the result in Chromium.
+    const fontFamilyOf = (selector: string) =>
+      ruleBlocks
+        .filter(block => block.selector === selector)
+        .map(({body}) => body.match(/font-family:\s*([^;]+);/)?.[1])
+        .find(Boolean);
+    expect(fontFamilyOf(':where(html)')).toBe('var(--font-family-body)');
+    expect(fontFamilyOf(':where(body)')).toBeUndefined();
+  });
+
+  it('sets no font size on html or body, so a host keeps its own text size', () => {
+    // Installing Astryx leaves the host's own styles alone. Each Theme root
+    // carries the theme's body size for the text inside it instead.
+    const fontSizeOf = (selector: string) =>
+      ruleBlocks
+        .filter(block => block.selector === selector)
+        .map(({body}) => body.match(/font-size:\s*([^;]+);/)?.[1])
+        .find(Boolean);
+    expect(fontSizeOf(':where(body)')).toBeUndefined();
+    expect(fontSizeOf(':where(html)')).toBeUndefined();
   });
 });

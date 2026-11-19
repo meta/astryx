@@ -11,6 +11,9 @@
  *   current directory by default.
  * @property {boolean} [strict] Also fail on any warning and on any check that
  *   did not run, not only on errors.
+ * @property {boolean} [next] Also count each finding the next minor release
+ *   turns into a warning (a note marked `next`) as a warning now, so `strict`
+ *   fails on it.
  */
 
 /**
@@ -78,7 +81,7 @@
  * @property {'integration.check'} type
  * `unchecked` counts the items the checks list as not compared, which never
  * fail it.
- * @property {{validated: boolean, name: string | null, version: string | null, strict: boolean, checks: IntegrationCheckResult[], errors: number, warnings: number, skipped: string[], unchecked: number, failures: IntegrationCheckFailure[], failed: boolean}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, strict: boolean, next: boolean, checks: IntegrationCheckResult[], errors: number, warnings: number, skipped: string[], unchecked: number, upcoming: number, failures: IntegrationCheckFailure[], failed: boolean}} data
  */
 
 export {};

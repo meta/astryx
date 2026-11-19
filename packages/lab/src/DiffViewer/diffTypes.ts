@@ -46,6 +46,13 @@ export interface DiffViewerHunk {
   newStart: number;
   newLines: number;
   lines: DiffViewerLine[];
+  /**
+   * True when the change was too large to compare line by line, so the hunk
+   * lists every old line as removed and every new line as added instead of a
+   * minimal diff. `createDiffFile` sets it; DiffViewer folds the changed lines
+   * behind a labeled control that shows them on request.
+   */
+  isReplacedBlock?: boolean;
 }
 
 /** One file's changes. */

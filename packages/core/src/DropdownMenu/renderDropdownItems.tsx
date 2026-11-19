@@ -69,6 +69,28 @@ function renderLeafItem(
 }
 
 /**
+ * A data item that declares nested `items` becomes a submenu (data-mode
+ * parity with the compound DropdownMenuSubMenu API), at the top level and
+ * inside a section alike; otherwise it's a leaf. renderDropdownItems owns the
+ * recursion and hands the rendered children to DropdownMenuSubMenu, so
+ * DropdownMenuSubMenu never imports this module back (no import cycle).
+ */
+function renderItem(item: DropdownMenuItemData, index: number): ReactElement {
+  if (item.items && item.items.length > 0) {
+    return (
+      <DropdownMenuSubMenu
+        key={getItemKey(item, index)}
+        icon={item.icon}
+        label={item.label}
+        isDisabled={item.isDisabled}>
+        {renderDropdownItems(item.items)}
+      </DropdownMenuSubMenu>
+    );
+  }
+  return renderLeafItem(item, index);
+}
+
+/**
  * Converts data-driven items into DropdownMenuItem components,
  * so both modes share the same rendering and keyboard navigation path.
  */
@@ -96,28 +118,11 @@ export function renderDropdownItems(items: DropdownMenuOption[]): ReactNode {
               {option.title}
             </div>
           )}
-          {option.items.map(renderLeafItem)}
+          {option.items.map(renderItem)}
         </div>,
       );
     } else if (!('type' in option)) {
-      // A plain item that declares nested `items` becomes a submenu (data-mode
-      // parity with the compound DropdownMenuSubMenu API); otherwise it's a
-      // leaf. renderDropdownItems owns the recursion and hands the rendered
-      // children to DropdownMenuSubMenu — so DropdownMenuSubMenu never imports
-      // this module back (no import cycle).
-      if (option.items && option.items.length > 0) {
-        elements.push(
-          <DropdownMenuSubMenu
-            key={getItemKey(option, i)}
-            icon={option.icon}
-            label={option.label}
-            isDisabled={option.isDisabled}>
-            {renderDropdownItems(option.items)}
-          </DropdownMenuSubMenu>,
-        );
-      } else {
-        elements.push(renderLeafItem(option, i));
-      }
+      elements.push(renderItem(option, i));
     }
   }
 

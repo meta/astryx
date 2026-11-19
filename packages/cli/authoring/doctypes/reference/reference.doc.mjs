@@ -60,6 +60,13 @@ export const doc = {
       example: "['dark mode', 'color scheme']",
     },
     {
+      name: 'skill',
+      type: '{name: string, description: string}',
+      description:
+        'Makes this doc an agent skill as well. `astryx init` and `astryx upgrade --apply` write it beside the project skill in each saved skills place, the agent-docs block names it, and `astryx docs skills` lists it. `name` is lowercase letters, digits, and single hyphens, at most 64 characters, not `astryx` or `astryx-project`, and unique across the project; `description` says when an agent uses it, on one line of at most 1024 characters. A skill that breaks a rule is left out with a note, and the doc still loads.',
+      example: "{name: 'acme-entities', description: 'Use when building screens that show Acme entities.'}",
+    },
+    {
       name: 'replaces',
       type: 'string',
       description:
@@ -152,7 +159,7 @@ export default {
     },
     {
       type: 'prose',
-      text: 'Each `sections[].content` is an ordered array of ReferenceContentBlock, the stable discriminated union of prose, heading, code, table, list, and token-ref, plus the reference block (ReferenceDocBlock). A read inlines a reference block the way it inlines a token-ref, so `astryx docs`, in text and in `--json`, returns only the stable block kinds. Docs-graph-only workflow and collection blocks are exported separately as GraphContentBlock and accepted by NamespaceDoc. choice, callout, and checklist remain invalid. ReferenceContentBlock is also reused by the `notes` field on SchemaDoc and CommandDoc. Inside text, `{@link <target>}` links another doc by identity (`[<provider>:]<kind>:<name>`): the CLI prints the command that opens it, and `astryx doctor` warns on one that names no doc.',
+      text: 'Each `sections[].content` is an ordered array of ReferenceContentBlock, the stable discriminated union of prose, heading, code, table, list, and token-ref, plus the reference block (ReferenceDocBlock). A read inlines a reference block the way it inlines a token-ref, so `astryx docs`, in text and in `--json`, returns only the stable block kinds. Docs-graph-only workflow and collection blocks are exported separately as GraphContentBlock and accepted by NamespaceDoc. choice, callout, and checklist remain invalid. ReferenceContentBlock is also reused by the `notes` field on SchemaDoc and CommandDoc. Inside text, `{@link <target>}` links another doc by identity (`[<provider>:]<kind>:<name>`): the CLI prints the command that opens it, and `astryx doctor` warns on one that names no doc. Write a CLI command in text, shell code, or a table cell as a bare `astryx` command: a text read adds the runner the reader uses in front of it, and `--json` returns it as written.',
     },
     {
       type: 'prose',

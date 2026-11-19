@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/build-the-template`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template`:
  * author portable template source and every asset that source needs.
  */
 

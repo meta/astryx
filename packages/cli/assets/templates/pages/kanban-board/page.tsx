@@ -29,9 +29,10 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Selector} from '@astryxdesign/core/Selector';
-import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
 
 import {
@@ -42,7 +43,6 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   InboxIcon,
-  InformationCircleIcon,
   ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 
@@ -293,6 +293,7 @@ function BoardCardBody({
   item: WorkItem;
   onMove: (id: string, to: ColumnId) => void;
 }) {
+  const showToast = useToast();
   const priority = PRIORITY_META[item.priority];
   const moveTargets = COLUMNS.filter(c => c.id !== item.column).map(c => ({
     label: `Move to ${c.title}`,
@@ -310,8 +311,24 @@ function BoardCardBody({
           label="Work item actions"
           size="sm"
           items={[
-            {label: 'Open', onClick: () => {}},
-            {label: 'Assign to me', onClick: () => {}},
+            {
+              label: 'Open',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: ${item.ref} would open here`,
+                  uniqueID: `open-${item.ref}`,
+                }),
+            },
+            {
+              label: 'Assign to me',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `Demo: ${item.ref} would be assigned to you here`,
+                  uniqueID: `assign-${item.id}`,
+                }),
+            },
             {type: 'divider'},
             ...moveTargets,
           ]}
@@ -319,7 +336,9 @@ function BoardCardBody({
       </HStack>
 
       <VStack gap={1}>
-        <Heading level={4}>{item.title}</Heading>
+        <Heading level={4} accessibilityLevel={3}>
+          {item.title}
+        </Heading>
         <Text type="supporting" color="secondary" maxLines={2}>
           {item.description}
         </Text>
@@ -381,14 +400,10 @@ function BoardColumn({
                   variant={meta.variant}
                   label={`${meta.title} status`}
                 />
-                <Heading level={4}>{meta.title}</Heading>
-                <Tooltip content={meta.tooltip}>
-                  <Icon
-                    icon={InformationCircleIcon}
-                    size="sm"
-                    color="secondary"
-                  />
-                </Tooltip>
+                <Heading level={4} accessibilityLevel={2}>
+                  {meta.title}
+                </Heading>
+                <InfoTip content={meta.tooltip} label={`About ${meta.title}`} />
               </HStack>
               <Text type="supporting" color="secondary" hasTabularNumbers>
                 {count}
@@ -419,6 +434,7 @@ function BoardColumn({
 // ============= MAIN =============
 
 export default function KanbanBoardTemplate() {
+  const showToast = useToast();
   const [items, setItems] = useState<WorkItem[]>(INITIAL_ITEMS);
   const [sprint, setSprint] = useState('003');
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -671,12 +687,14 @@ export default function KanbanBoardTemplate() {
               gap={2}
               startContent={
                 <>
-                  <Heading level={3}>Sprint Board</Heading>
+                  <Heading level={3} accessibilityLevel={1}>
+                    Sprint Board
+                  </Heading>
                   <Badge label={items.length} variant="neutral" />
                 </>
               }
               endContent={
-                <HStack gap={2}>
+                <HStack gap={2} wrap="wrap">
                   <Selector
                     label="Sprint"
                     width={200}
@@ -698,20 +716,48 @@ export default function KanbanBoardTemplate() {
                     <IconButton
                       icon={<Icon icon={ArrowsUpDownIcon} size="sm" />}
                       label="Sort"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: sort options would open here',
+                          uniqueID: 'sort',
+                        })
+                      }
                     />
                     <IconButton
                       icon={<Icon icon={FunnelIcon} size="sm" />}
                       label="Filter"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: filters would open here',
+                          uniqueID: 'filter',
+                        })
+                      }
                     />
                     <IconButton
                       icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
                       label="Search"
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: search across the board would open here',
+                          uniqueID: 'search',
+                        })
+                      }
                     />
                   </HStack>
                   <Button
                     label="Add task"
                     variant="primary"
                     icon={<Icon icon={PlusIcon} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: a new task form would open here',
+                        uniqueID: 'add-task',
+                      })
+                    }
                   />
                 </HStack>
               }
@@ -719,7 +765,7 @@ export default function KanbanBoardTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent padding={0}>
+          <LayoutContent role="main" padding={0}>
             <HStack gap={4} xstyle={styles.boardColumns}>
               {COLUMNS.map(meta => (
                 <BoardColumn

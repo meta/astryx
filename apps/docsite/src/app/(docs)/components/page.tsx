@@ -25,6 +25,10 @@ import {components as componentRegistry} from '../../../generated/componentRegis
 import {packages} from '../../../generated/packageRegistry';
 import {showcaseRegistry} from '../../../generated/showcaseRegistry';
 import {ShowcaseThumbnail} from '../../../components/ShowcaseThumbnail';
+import {
+  DEPRECATED_LABEL,
+  DeprecatedBadge,
+} from '../../../components/Deprecation';
 import {normalizeComponentCategory} from '../../../lib/componentCategories';
 import {layout} from '../../../layout.stylex';
 
@@ -88,6 +92,8 @@ interface CategoryItem {
   hasShowcase: boolean;
   packageName: string;
   isReady: boolean;
+  /** Whether the component's doc marks it deprecated. */
+  isDeprecated: boolean;
 }
 
 function ComponentGrid({items}: {items: CategoryItem[]}) {
@@ -96,7 +102,11 @@ function ComponentGrid({items}: {items: CategoryItem[]}) {
       {items.map(item => (
         <VStack key={`${item.packageName}:${item.name}`} gap={1}>
           <ClickableCard
-            label={item.displayName}
+            label={
+              item.isDeprecated
+                ? `${item.displayName} (${DEPRECATED_LABEL})`
+                : item.displayName
+            }
             href={item.href}
             padding={0}
             variant="transparent">
@@ -106,7 +116,10 @@ function ComponentGrid({items}: {items: CategoryItem[]}) {
               <div {...stylex.props(styles.cardImage)} />
             )}
           </ClickableCard>
-          <Text type="supporting">{item.displayName}</Text>
+          <HStack gap={2} vAlign="center">
+            <Text type="supporting">{item.displayName}</Text>
+            {item.isDeprecated && <DeprecatedBadge />}
+          </HStack>
         </VStack>
       ))}
     </Grid>
@@ -152,6 +165,7 @@ export default function ComponentsGalleryPage() {
           hasShowcase: SHOWCASE_NAMES.has(comp.name),
           packageName,
           isReady: comp.isReady,
+          isDeprecated: comp.deprecated != null,
         });
       }
     }

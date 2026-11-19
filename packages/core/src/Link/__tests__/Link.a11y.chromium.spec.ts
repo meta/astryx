@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/link\.|packages/core/src/Link/|apps/storybook/stories/LinkA11y)
 
 /**
  * Real-browser and accessibility-tree binding evidence for Link.
@@ -9,7 +10,12 @@
  * the story's router component records, and new tabs the page opens.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   LINK_PATTERN,
   blockingResults,
@@ -31,7 +37,6 @@ import {
 import {LINK_A11Y_STATES, type LinkA11yRow} from './Link.a11y.states';
 
 const SUBJECT_SELECTOR = '[data-a11y-link]';
-const NEW_TAB_SETTLE_MS = 500;
 let storybook: StaticServer;
 
 interface NavigationWindow extends Window {
@@ -52,11 +57,17 @@ function storyUrl(id: string): string {
 
 async function countNavigations(
   page: Page,
-  opensNewTab: boolean,
+  cdp: CDPSession,
 ): Promise<() => Promise<number>> {
+  // The page reports each new tab as it opens one (`Page.windowOpen`), on
+  // this DevTools session. The tab's own page reaches the test later, once it
+  // starts, which can be seconds on a loaded runner: it is only closed.
   let newTabs = 0;
-  page.context().on('page', opened => {
+  await cdp.send('Page.enable');
+  cdp.on('Page.windowOpen', () => {
     newTabs += 1;
+  });
+  page.context().on('page', opened => {
     void opened.close();
   });
   await page.evaluate(() => {
@@ -70,16 +81,14 @@ async function countNavigations(
     });
   });
   return async () => {
-    // A new tab reaches the test through the browser's target events, after
-    // the click or key that opened it has returned. Give it time to arrive so
-    // a later reading cannot miss a navigation an earlier one started.
-    if (opensNewTab) {
-      await page.waitForTimeout(NEW_TAB_SETTLE_MS);
-    }
-    const inPage = await page.evaluate(
-      () => (window as NavigationWindow).__a11yLinkNavigations ?? 0,
-    );
-    return inPage + newTabs;
+    // Read on the same session as the tab reports. The session delivers each
+    // report before this reading's answer, so the count holds every tab that
+    // an earlier click or key opened.
+    const {result} = (await cdp.send('Runtime.evaluate', {
+      expression: 'window.__a11yLinkNavigations ?? 0',
+      returnByValue: true,
+    })) as {result: {value?: number}};
+    return (result.value ?? 0) + newTabs;
   };
 }
 
@@ -102,27 +111,34 @@ async function runState(
       const subject = page.locator(SUBJECT_SELECTOR);
       await subject.waitFor({state: 'visible'});
       await expect(subject).toHaveCount(1);
-      navigations = await countNavigations(
-        page,
-        state.id === 'external-new-tab',
-      );
+      navigations = await countNavigations(page, cdp);
       return createChromiumHarness({page, cdp, subject});
     },
     activations: async () => navigations(),
   });
 }
 
-test('every Link expectation is exercised by at least one Link state', async ({
-  page,
-}) => {
-  // Mounts every state in one test, so it gets every state's time budget.
-  test.setTimeout(30_000 * LINK_A11Y_STATES.length);
-  const cdp = await page.context().newCDPSession(page);
+// Checking coverage runs every state again, which on a loaded runner nears
+// the per-test timeout as one test. It runs as one serial part per state,
+// sharing their results, then one check over all of them.
+test.describe('every Link expectation is exercised by at least one Link state', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of LINK_A11Y_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(neverExercised(results)).toEqual([]);
+
+  test('no expectation is left unexercised', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      LINK_A11Y_STATES.map(state => state.id).sort(),
+    );
+    expect(neverExercised(results)).toEqual([]);
+  });
 });
 
 for (const state of LINK_A11Y_STATES) {

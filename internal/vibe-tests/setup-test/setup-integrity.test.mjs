@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 import {
   analyzeSetupIntegrity,
   pairedModeArmSpans,
+  setupDiffSha256,
   substantiveLineDelta,
   WHOLESALE_REPLACEMENT_THRESHOLD,
 } from './setup-integrity.mjs';
@@ -37,11 +38,32 @@ function write(directory, relativePath, content) {
   fs.writeFileSync(file, content);
 }
 
+// The baseline repository is built once, before the tests, and copied for
+// each test. A copy costs no git launch, and each launch is slow on a loaded
+// machine.
+let baselineRepository = null;
+beforeAll(() => {
+  baselineRepository = baseline();
+});
+afterAll(() => {
+  if (baselineRepository !== null) {
+    fs.rmSync(baselineRepository, {recursive: true, force: true});
+  }
+});
+
 function repository() {
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), 'setup-integrity-test-'),
   );
   temporaryDirectories.push(directory);
+  fs.cpSync(baselineRepository, directory, {recursive: true});
+  return directory;
+}
+
+function baseline() {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-integrity-baseline-'),
+  );
   write(directory, '.gitignore', 'ignored.txt\n');
   write(
     directory,
@@ -93,7 +115,7 @@ function addValidAstryxChange(directory) {
 }
 
 function attest(directory) {
-  return analyzeSetupIntegrity(directory).diffSha256;
+  return setupDiffSha256(directory);
 }
 
 function kinds(result) {
@@ -698,6 +720,26 @@ describe('setup integrity', () => {
       {
         name: 'a theme-name attribute, which names no mode',
         css: '[data-astryx-theme="apptheme"] { color-scheme: light; }\n[data-astryx-theme="appdark"] { color-scheme: dark; }\n',
+        exempt: [],
+      },
+      {
+        name: "an Astryx media surface's own side, under page conditions",
+        css: [
+          '[data-astryx-media="light"] { color-scheme: light; }',
+          ':where(:scope[data-theme="dark"]) [data-astryx-media-dark-page="light"], :where(html[data-astryx-scheme="dark"] *) [data-astryx-media-dark-page="light"] { color-scheme: light; }',
+          '',
+        ].join('\n'),
+        exempt: [1, 2],
+      },
+      {
+        name: 'a surface side the value contradicts, or a page rule beside it',
+        css: [
+          '[data-astryx-media="dark"] { color-scheme: light; }',
+          '[data-astryx-media="light"], :root { color-scheme: light; }',
+          '[data-astryx-media="light"] .card { color-scheme: light; }',
+          'body:not([data-astryx-media="light"]) { color-scheme: light; }',
+          '',
+        ].join('\n'),
         exempt: [],
       },
       {

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file Switch.a11y.chromium.spec.ts
@@ -19,7 +20,12 @@
  *   ./Switch.a11y.known-failures.ts, both shared with the jsdom lane.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   SWITCH_PATTERN,
   blockingResults,

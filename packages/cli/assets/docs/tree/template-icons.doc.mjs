@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/build-the-template/template-assets/template-icons`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons`:
  * render template icons through Astryx and ship custom product icons from the
  * package.
  */

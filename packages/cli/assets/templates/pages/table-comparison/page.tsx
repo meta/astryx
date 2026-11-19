@@ -969,12 +969,21 @@ function uptimeStatus(value: number): {
   status: string;
 } {
   if (value >= 99.95) {
-    return {color: colorVars['--color-success'], status: 'Operational'};
+    return {
+      color: colorVars['--color-text-success'],
+      status: 'Operational',
+    };
   }
   if (value >= 99) {
-    return {color: colorVars['--color-warning'], status: 'Degraded'};
+    return {
+      color: colorVars['--color-text-warning'],
+      status: 'Degraded',
+    };
   }
-  return {color: colorVars['--color-error'], status: 'Outage'};
+  return {
+    color: colorVars['--color-text-error'],
+    status: 'Outage',
+  };
 }
 
 interface UptimeDay {
@@ -1422,7 +1431,7 @@ export default function ModelComparisonTemplate() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           {/* No padding of its own: the table's cells carry the inset, so a
               second one would inset them twice and pull the group headers
               off the card's edges. The card is here for the border, the

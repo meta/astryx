@@ -20,6 +20,12 @@ export const docs = {
   slots: {
     kinds: {title: 'Reference', accepts: {kinds: ['namespace']}},
   },
+  blocks: [
+    {
+      type: 'prose',
+      text: 'To run the whole CLI from your own command-line tool, with its arguments, folder, and command name, use the host entry: {@link generic:host-entry}.',
+    },
+  ],
   adopts: [
     {
       source: {group: 'cli/api', kinds: ['function', 'schema', 'enum']},

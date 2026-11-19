@@ -3,7 +3,7 @@
 /**
  * @file Codemod: Drop the `XDS` prefix from @xds/core imports and their usages
  *
- * Part of the XDS-prefix migration (P2380608025). Rewrites consumer code from
+ * Part of the XDS-prefix migration. Rewrites consumer code from
  * the prefixed names to their bare equivalents:
  *
  *   XDSButton      -> Button

@@ -2,7 +2,11 @@
 
 import {describe, expect, it} from 'vitest';
 import jscodeshift from 'jscodeshift';
-import {transformProp} from './transform-prop.mjs';
+import {
+  importedComponents,
+  resolveImportedComponent,
+  transformProp,
+} from './transform-prop.mjs';
 
 const j = jscodeshift.withParser('tsx');
 const components = new Map([
@@ -91,5 +95,36 @@ const b = <Group tone="old" size="old" />;`);
 
     expect(output).toContain('<Widget size="old" migratedtone="old"');
     expect(output).toContain('<Group tone="old" migratedsize="old"');
+  });
+
+  it('resolves non-JSX references through the same import and shadow rules', () => {
+    const root = j(`import {Widget as Card} from '@example/core';
+import * as Lib from '@example/core';
+const a = Card;
+const b = Lib.Group;
+function shadow(Card, Lib) {
+  return [Card, Lib.Group];
+}`);
+    const imports = importedComponents(root, j, {
+      matchesImport: value => /^@example\/core(?:\/|$)/.test(value),
+      components,
+    });
+    const resolved = root
+      .find(j.VariableDeclarator)
+      .paths()
+      .map(
+        path =>
+          resolveImportedComponent(path.node.init, path, imports)?.component,
+      );
+    expect(resolved).toEqual(['Widget', 'Group']);
+    const shadowed = root
+      .find(j.ArrayExpression)
+      .paths()
+      .flatMap(path =>
+        path.node.elements.map(element =>
+          resolveImportedComponent(element, path, imports),
+        ),
+      );
+    expect(shadowed).toEqual([null, null]);
   });
 });

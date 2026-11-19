@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/ship/upgrading`: update an integration
+ * @file `astryx docs authoring/ship/upgrading`: update an integration
  * package for each Astryx release, and the command apps run to upgrade with
  * it.
  */
@@ -28,14 +28,14 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "# 1. Build and test against the new release\nnpm install -D @astryxdesign/cli@latest @astryxdesign/core@latest\n# 2. Rerun the checks\nnpx astryx doctor integration validate\nnpx astryx doctor integration docs\nnpx astryx integration verify\n# 3. Admit the new Core once the checks pass\nnpm pkg set 'peerDependencies.@astryxdesign/core=^0.6.0 || ^0.7.0'\n# 4. Migrate apps across a change that breaks them\nnpx astryx integration add codemod rename-delay --to 0.7.0",
+          code: '# 1. Build and test against the new release\n{@pm install @astryxdesign/cli@latest @astryxdesign/core@latest --dev}\n# 2. Rerun the checks\n{@command doctor integration validate}\n{@command doctor integration docs}\n{@command integration verify}\n# 3. Admit the new Core once the checks pass\n{@pm-only npm "edits package.json" pkg set \'peerDependencies.@astryxdesign/core=^0.6.0 || ^0.7.0\'}\n# 4. Migrate apps across a change that breaks them\n{@command integration add codemod rename-delay --to 0.7.0}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             'Run every check in {@link generic:checks}, not only the ones shown.',
-            'Name each codemod folder after the Core version whose upgrade should run it; see {@link generic:codemods}.',
+            'Codemod folders are named for Core versions: {@link generic:codemods}.',
             'Release the result as a new version of your package; see {@link generic:publishing}.',
           ],
         },
@@ -47,12 +47,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'After an app installs a new Core, `astryx upgrade` runs the codemods for the versions it crossed. It is a dry run by default; `--apply` writes the changes.',
+          text: 'After an app installs a new Core, `{@command upgrade}` runs the codemods for the versions it crossed. It is a dry run by default; `--apply` writes the changes.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '# Preview what would change; nothing is written\nnpx astryx upgrade --from 0.6.3 --integration @acme/astryx-widgets\n# Write the changes\nnpx astryx upgrade --from 0.6.3 --integration @acme/astryx-widgets --apply',
+          code: '# Preview what would change; nothing is written\n{@command upgrade --from 0.6.3 --integration @acme/astryx-widgets}\n# Write the changes\n{@command upgrade --from 0.6.3 --integration @acme/astryx-widgets --apply}',
         },
         {
           type: 'code',

@@ -13,7 +13,7 @@ owners: [josephfarina, cixzhang]
 affects_architecture: [architecture:cli-surface]
 affects_families: []
 affects_contributing: [contributing:templates, contributing:api-conventions]
-affects_consumer_docs: [cli/integrations]
+affects_consumer_docs: [authoring]
 ---
 
 # Integration template and component replacement system spec

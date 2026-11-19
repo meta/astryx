@@ -14,7 +14,12 @@ export type AuthoredDocKind =
   | 'schema'
   | 'command'
   | 'enum'
-  | 'namespace';
+  | 'namespace'
+  /**
+   * An icon definition (spec:AST-084 FR4).
+   * @experimental May change or be removed in a patch release.
+   */
+  | 'icon-definition';
 
 /** Visibility of an authored doc in a compiled audience-specific bundle. */
 export type DocAudience = 'public' | 'internal';
@@ -45,6 +50,10 @@ export interface AuthoredDocGraphFields {
   /** Reserved: docs bundle audience; omit for public docs. Nothing reads it
    *  yet. */
   audience?: DocAudience;
+  /** Set on the doc of an experimental surface (spec:AST-017 FR21, FR27),
+   *  whose text then says it may change or be removed in a patch release. A
+   *  command's help shows it as `[experimental]`. Omit for stable surfaces. */
+  stability?: 'experimental';
 }
 
 /**
@@ -215,6 +224,14 @@ export interface ComponentAccessibilityThemeCoverage {
 }
 
 /**
+ * What an example is for. A `demo` example runs on its own, so a docs site may
+ * render it as a live preview. A `setup` example is code to read and copy, such
+ * as an app setup file, a server route, or a snippet that uses variables
+ * defined elsewhere; it is always shown as code only.
+ */
+export type ExampleKind = 'demo' | 'setup';
+
+/**
  * Code example for a component or sub-component.
  */
 export interface ComponentExampleDoc {
@@ -222,6 +239,8 @@ export interface ComponentExampleDoc {
   label?: string;
   /** TSX source for the example. */
   code: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**
@@ -300,6 +319,19 @@ export interface ComponentPlaygroundConfig {
    *  drawer open state interactive, and notes the simulation under the
    *  rendered component (#4983). */
   appShellMobile?: boolean;
+  /** Props merged over `defaults` for a second render at a phone viewport
+   *  for a component whose layout changes at phone width (AppShell's mobile
+   *  layout: its menu button in the top bar, its drawer). The theme editor's
+   *  part census renders it as one more item, so a theme reaches the parts
+   *  only that layout draws. Values are primitives, plain config objects or
+   *  ElementDescriptors, as in `defaults`.
+   *
+   *  @example
+   *  ```
+   *  playground: {mobile: {mobileNav: {defaultIsMobile: true, isOpen: true}}}
+   *  ```
+   */
+  mobile?: Record<string, unknown>;
   /** Required parent wrapper for sub-components that depend on a parent
    *  context provider (e.g. `Tab` calls `useTabListContext()` and throws
    *  standalone). The preview wraps the component in this parent before
@@ -538,6 +570,47 @@ export interface ComponentThemingVar {
    * `astryx theme build` errors if a theme sets a private var directly.
    */
   private?: boolean;
+}
+
+/**
+ * A component icon slot: a themeable icon role the component owns, which a
+ * theme maps to a shared icon name through `defineTheme({componentIcons})`.
+ * Each entry corresponds to a slot in `ComponentIconSlotMap`.
+ *
+ * @example
+ * ```
+ * {
+ *   slot: 'code-block-copy',
+ *   description: 'The copy button icon.',
+ *   fallback: '`copy`; `check` while copied',
+ *   state: [{name: 'copied', type: 'boolean', description: 'True while the copied feedback shows.'}],
+ *   whenNull: 'Hides the glyph. The button keeps its size, name, and tooltip.',
+ * }
+ * ```
+ */
+// SYNC: When adding a field here, add it to the docsite's generated-registry
+// copy too — apps/docsite/scripts/generate-data.mjs (interface ComponentIconSlot).
+export interface ComponentIconSlotDoc {
+  /** The slot name, `<component-kebab>-<semantic-role>`. */
+  slot: string;
+  /** The icon's role in the component. */
+  description: string;
+  /** The icon the component renders when the theme maps nothing, per state. */
+  fallback: string;
+  /** The state a slot function receives. Omit for a stateless slot. */
+  state?: ComponentIconSlotStateDoc[];
+  /** What a slot value of `null` does for this component. */
+  whenNull: string;
+}
+
+/** One field of the state a component passes to a slot function. */
+export interface ComponentIconSlotStateDoc {
+  /** The field name. */
+  name: string;
+  /** The field's TypeScript type. */
+  type: string;
+  /** When the field has each value. */
+  description: string;
 }
 
 /**

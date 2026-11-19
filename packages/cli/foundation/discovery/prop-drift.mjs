@@ -31,7 +31,11 @@
  *   each);
  * - `type_mismatch`: for a prop declared in the package, the documented type
  *   differs from the code's where both sides read exactly (type-match.mjs
- *   states the rules); every other type is listed as not compared.
+ *   states the rules); every other type is listed as not compared;
+ * - `default_mismatch`: the doc's `default` and the literal default the
+ *   component writes in its props parameter's destructuring (`size = 'md'`)
+ *   differ, quotes and whitespace aside; where both write a default and
+ *   either is not a literal, it is listed under `typesNotCompared`.
  *
  * @input Component records (name, docPath, sourcePath), or prop tables, the
  *   package root, and the directories to resolve `typescript` from.
@@ -50,15 +54,17 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 import {judgeType} from './type-match.mjs';
 import {typeTextTooOld} from './type-text.mjs';
 import {
   unresolvedGlobals,
   unresolvedReference,
 } from './unresolved-references.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
- * @typedef {'not_in_code' | 'not_in_doc' | 'required_mismatch' | 'type_mismatch'} PropDriftKind
+ * @typedef {'not_in_code' | 'not_in_doc' | 'required_mismatch' | 'type_mismatch' | 'default_mismatch'} PropDriftKind
  */
 
 /**
@@ -74,6 +80,9 @@ import {
  * @property {string} [codeType] the type as the source declares it
  * @property {boolean} [docRequired]
  * @property {boolean} [codeRequired]
+ * @property {string} [docDefault] the documented default, as written
+ * @property {string} [codeDefault] the literal default the code writes
+ * @property {string} [fix] what to change, ready to paste
  */
 
 /**
@@ -89,8 +98,10 @@ import {
  * @property {string} doc the doc file, relative to the package root
  * @property {string} reason why: not a form the check judges exactly, a
  *   field the prop's variants give different types, a standard prop
- *   (`className`, `style`, …), or a prop declared outside the package
- * @property {string[]} props documented props whose types were not compared
+ *   (`className`, `style`, …), a prop declared outside the package, or a
+ *   default that is not a literal on one side
+ * @property {string[]} props documented props whose types, or defaults, were
+ *   not compared
  */
 
 /**
@@ -149,6 +160,15 @@ const SKIP_TAGS = new Set(['internal']);
 const NOT_EXACT = 'not a form the check judges exactly';
 /** A field documented with one variant's type, where they differ. */
 const VARIANTS = "the prop's variants give this field different types";
+
+/** A default the code writes that is not a literal (a constant, a call). */
+const NOT_LITERAL = Symbol('not a literal');
+
+/** Why a documented default was not compared with the code's. */
+const CODE_DEFAULT_NOT_LITERAL =
+  'its default in the code is not a literal, so the documented default was not compared';
+const DOC_DEFAULT_NOT_LITERAL =
+  "its documented default is not a literal, so it was not compared with the code's";
 /** @type {(name: string, code?: CodeProp) => string} why a prop is not judged */
 const outside = (name, code) =>
   code?.untraced
@@ -252,7 +272,7 @@ function ownFileTest(root) {
  * @param {import('./unresolved-references.mjs').UnresolvedReference | null} ambient
  *   what the program's other roots cannot resolve, which any component may
  *   use
- * @returns {{ok: true, props: Map<string, CodeProp>, accepts: (name: string) => any} | {ok: false, reason: string}}
+ * @returns {{ok: true, props: Map<string, CodeProp>, accepts: (name: string) => any, defaults?: Map<string, string | number | boolean | null | symbol>} | {ok: false, reason: string}}
  */
 function readCodeProps(
   ts,
@@ -580,7 +600,118 @@ function readCodeProps(
   /** The index signatures of the props type that take this name. */
   const accepts = (/** @type {string} */ name) =>
     indexesFor(ts, checker, members, name);
-  return {ok: true, props, accepts};
+  return {ok: true, props, accepts, defaults: literalDefaults(ts, symbol)};
+}
+
+/**
+ * The defaults a component writes in its props parameter's destructuring
+ * (`{size = 'md'}`), by prop name, each as its value: a string, number,
+ * boolean, or null, or NOT_LITERAL for any other default (a constant, a call,
+ * an object), which is listed as not compared.
+ * @param {any} ts
+ * @param {any} symbol the component
+ * @returns {Map<string, string | number | boolean | null | symbol>}
+ */
+function literalDefaults(ts, symbol) {
+  /** @type {Map<string, string | number | boolean | null | symbol>} */
+  const out = new Map();
+  /** @param {any} node @param {number} depth @returns {any} */
+  const fnOf = (node, depth) => {
+    if (!node || depth > 4) return null;
+    if (
+      ts.isFunctionDeclaration(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isFunctionExpression(node)
+    ) {
+      return node;
+    }
+    if (ts.isVariableDeclaration(node))
+      return fnOf(node.initializer, depth + 1);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      (ts.isSatisfiesExpression && ts.isSatisfiesExpression(node))
+    ) {
+      return fnOf(node.expression, depth + 1);
+    }
+    // `forwardRef(function …)`, `memo(…)`: the function they wrap.
+    if (ts.isCallExpression(node)) {
+      for (const argument of node.arguments) {
+        const found = fnOf(argument, depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  const fn = fnOf(symbol?.valueDeclaration, 0);
+  const pattern = fn?.parameters?.[0]?.name;
+  if (!pattern || !ts.isObjectBindingPattern(pattern)) return out;
+  for (const element of pattern.elements) {
+    if (element.dotDotDotToken || !element.initializer) continue;
+    const key = element.propertyName ?? element.name;
+    if (!(
+      ts.isIdentifier(key) ||
+      ts.isStringLiteral(key) ||
+      ts.isNumericLiteral(key)
+    )) {
+      continue;
+    }
+    const value = literalValue(ts, element.initializer);
+    out.set(key.text, value === undefined ? NOT_LITERAL : value);
+  }
+  return out;
+}
+
+/**
+ * A literal expression's value, or undefined for anything else.
+ * @param {any} ts
+ * @param {any} node
+ * @returns {string | number | boolean | null | undefined}
+ */
+function literalValue(ts, node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  if (ts.isNumericLiteral(node)) return Number(node.text);
+  if (
+    ts.isPrefixUnaryExpression(node) &&
+    node.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(node.operand)
+  ) {
+    return -Number(node.operand.text);
+  }
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null;
+  return undefined;
+}
+
+/**
+ * A documented default as a literal value: a quoted string (quotes of any
+ * kind, whitespace around it ignored), a number, `true`, `false`, or
+ * `null`; undefined for prose or an expression, which is never compared.
+ * @param {unknown} written
+ * @returns {string | number | boolean | null | undefined}
+ */
+function documentedDefault(written) {
+  if (typeof written === 'number' || typeof written === 'boolean') {
+    return written;
+  }
+  if (written === null) return null;
+  if (typeof written !== 'string') return undefined;
+  const text = written.trim();
+  const quoted = /^(['"`])([^'"`]*)\1$/.exec(text);
+  if (quoted) return quoted[2];
+  if (/^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) return Number(text);
+  if (text === 'true') return true;
+  if (text === 'false') return false;
+  if (text === 'null') return null;
+  return undefined;
+}
+
+/** @param {string | number | boolean | null} value */
+function defaultText(value) {
+  return typeof value === 'string' ? `'${value}'` : String(value);
 }
 
 /**
@@ -632,7 +763,7 @@ function inDeclaredOrder(ts, checker, type, symbol) {
   /** @type {(t: any) => string} */
   const text = t => checker.typeToString(t);
   return [...type.types].sort(
-    (a, b) => place(a) - place(b) || text(a).localeCompare(text(b)),
+    (a, b) => place(a) - place(b) || compareText(text(a), text(b)),
   );
 }
 
@@ -1662,7 +1793,7 @@ export function comparePropTables(tables, options) {
         reason: `the package's TypeScript config has an error, so props were not read (${project.error})`,
       });
     }
-    unchecked.sort((a, b) => a.component.localeCompare(b.component));
+    unchecked.sort((a, b) => compareText(a.component, b.component));
     return {
       status: 'checked',
       typescript: version,
@@ -1673,6 +1804,10 @@ export function comparePropTables(tables, options) {
       typesNotCompared: [],
     };
   }
+  // Parsed once per process for these options: every check reads the same
+  // library and package declarations.
+  const host = ts.createCompilerHost(project.options);
+  host.getSourceFile = keepSourceFiles(ts, host, project.options);
   const program = ts.createProgram({
     rootNames: [
       ...new Set([
@@ -1681,6 +1816,7 @@ export function comparePropTables(tables, options) {
       ]),
     ],
     options: project.options,
+    host,
   });
   const checker = program.getTypeChecker();
   const isOwnFile = ownFileTest(root);
@@ -1952,6 +2088,42 @@ export function comparePropTables(tables, options) {
             codeRequired: code.required,
           });
         }
+        // A literal default the code writes in its props destructuring and a
+        // literal the doc writes must agree; where both write a default and
+        // either is not a literal, the default is listed as not compared.
+        const codeDefault = read.defaults?.get(propName);
+        const docWrites =
+          entries.length === 1 &&
+          raw.default !== undefined &&
+          raw.default !== '';
+        const docDefault = docWrites
+          ? documentedDefault(raw.default)
+          : undefined;
+        if (codeDefault !== undefined && docWrites) {
+          if (codeDefault === NOT_LITERAL) {
+            skip(CODE_DEFAULT_NOT_LITERAL, propName);
+          } else if (docDefault === undefined) {
+            skip(DOC_DEFAULT_NOT_LITERAL, propName);
+          }
+        }
+        if (
+          codeDefault !== undefined &&
+          codeDefault !== NOT_LITERAL &&
+          docDefault !== undefined &&
+          codeDefault !== docDefault
+        ) {
+          const shown = defaultText(
+            /** @type {string | number | boolean | null} */ (codeDefault),
+          );
+          findings.push({
+            ...base,
+            kind: 'default_mismatch',
+            message: `"${propName}" is documented with default ${String(raw.default).trim()}, but the code defaults it to ${shown}.`,
+            fix: `In ${table.doc}, set the "${propName}" prop's default to the code's: default: ${JSON.stringify(shown)}.`,
+            docDefault: String(raw.default),
+            codeDefault: shown,
+          });
+        }
         if (!code.own && typeof entry.type === 'string') {
           skip(outside(propName, code), propName);
         }
@@ -2042,15 +2214,14 @@ export function comparePropTables(tables, options) {
   // sort one component's findings among another's that shares its prefix.
   findings.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.prop.localeCompare(b.prop) ||
-      a.kind.localeCompare(b.kind),
+      compareText(a.component, b.component) ||
+      compareText(a.prop, b.prop) ||
+      compareText(a.kind, b.kind),
   );
-  unchecked.sort((a, b) => a.component.localeCompare(b.component));
+  unchecked.sort((a, b) => compareText(a.component, b.component));
   typesNotCompared.sort(
     (a, b) =>
-      a.component.localeCompare(b.component) ||
-      a.reason.localeCompare(b.reason),
+      compareText(a.component, b.component) || compareText(a.reason, b.reason),
   );
   return {
     status: 'checked',
@@ -2257,7 +2428,7 @@ export async function comparePropDocs(components, options) {
   return {
     ...report,
     unchecked: [...unchecked, ...report.unchecked].sort((a, b) =>
-      a.component.localeCompare(b.component),
+      compareText(a.component, b.component),
     ),
   };
 }

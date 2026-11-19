@@ -19,7 +19,15 @@
 
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
-import {DocsCatalog} from '../../foundation/discovery/docs-discovery.mjs';
+import {discoverIntegrationSkills} from '../../foundation/discovery/integration-skills.mjs';
+import {renderAgentDocsBlock} from '../../foundation/agent-docs/agent-docs.mjs';
+import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {
+  DocsCatalog,
+  integrationDocsCatalog,
+  isGuideRoute,
+  mergeTopicReport,
+} from '../../foundation/discovery/docs-discovery.mjs';
 import {checkDocTypes} from '../../foundation/discovery/doc-types.mjs';
 import {integrationDocFiles} from '../../foundation/discovery/integration-doc-files.mjs';
 import {
@@ -35,12 +43,16 @@ import {
 } from '../../foundation/doc-compiler/read.mjs';
 import {
   buildDocsTree,
+  isExperimentalTreeNode,
   loadTreeInputs,
 } from '../../foundation/doc-compiler/tree.mjs';
 import {sortDiagnostics} from '../../foundation/doc-compiler/diagnostics.mjs';
+import {indexView} from '../../foundation/doc-compiler/lenses.mjs';
 import {
   linkBlocks,
+  linkFields,
   parseLinkTarget,
+  renderTokens,
 } from '../../foundation/doc-compiler/links.mjs';
 import {
   createDocId,
@@ -51,6 +63,9 @@ import {
   cliDocSection,
 } from '../../foundation/discovery/cli-self-docs.mjs';
 import {
+  AUTHORING_REFERENCE_ROUTE,
+  EXPERIMENTAL_AUTHORING_ROUTE,
+  isExperimentalSelfDoc,
   loadAuthoringSelfDocs,
   schemaFieldTable,
   selfDocSection,
@@ -66,11 +81,30 @@ import {
   discoverCoreTemplates,
   discoverIntegrationTemplatesForOne,
 } from '../../foundation/discovery/template-adapter.mjs';
-import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../../foundation/fs/exact-codec.mjs';
+import {CLI_ROOT, findCoreDir} from '../../foundation/fs/paths.mjs';
+import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {
+  carriesTypedWord,
+  nameWords,
+  orderDocSuggestions,
+  orderRouteSuggestions,
+  typedWordTest,
+} from '../../foundation/text/suggest-order.mjs';
+import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
+
+/**
+ * The project each loaded catalog came from, so a later step of the same read
+ * does not load the project again.
+ * @type {WeakMap<DocsCatalog, Project>}
+ */
+const projectOfCatalog = new WeakMap();
 
 /**
  * The project's topics: the built-in ones plus whatever the configured
@@ -88,7 +122,9 @@ export {OVERLAY_LANGUAGES, overlayLanguages};
 export async function loadDocsCatalog(cwd = process.cwd()) {
   try {
     const project = await Project.load(cwd);
-    return await project.docs();
+    const catalog = await project.docs();
+    projectOfCatalog.set(catalog, project);
+    return catalog;
   } catch {
     return DocsCatalog.fromBuiltins();
   }
@@ -264,14 +300,161 @@ function linkTopic(catalog, entry, lang) {
         problems.push(...linked.problems);
         sections.push({...section, content: linked.content});
       }
+      // The topic's own text outside its sections, its description and
+      // summary, resolves against the topic's own provider.
+      const {resolve} = await linkerFor(providerOf(entry));
+      const fields = await linkFields(topicTextFields(raw.doc), resolve);
+      problems.push(...fields.problems);
       return {
-        node: deepFreeze({...raw, doc: {...raw.doc, sections}}),
+        node: deepFreeze({
+          ...raw,
+          doc: {...raw.doc, ...fields.doc, sections},
+        }),
         problems,
       };
     })();
     cache.set(key, linked);
   }
   return linked;
+}
+
+/**
+ * The text fields of a topic outside its sections: its description and
+ * summary, those it has.
+ * @param {any} doc
+ * @returns {{description?: string, summary?: string}}
+ */
+function topicTextFields(doc) {
+  /** @type {{description?: string, summary?: string}} */
+  const fields = {};
+  if (typeof doc?.description === 'string')
+    fields.description = doc.description;
+  if (typeof doc?.summary === 'string') fields.summary = doc.summary;
+  return fields;
+}
+
+/**
+ * One line of a doc's text, such as a topic's or a tree node's summary, with
+ * every inline link resolved against the provider that wrote it (spec:AST-047
+ * FR9). A link that names no doc prints as written; doctor names it.
+ * @param {DocsCatalog} catalog
+ * @param {string} providerId the provider id of the doc the text sits in
+ * @param {string} text
+ * @returns {Promise<string>}
+ */
+export async function linkDocText(catalog, providerId, text) {
+  if (typeof text !== 'string') return text;
+  if (!text.includes('{@link')) return renderTokens(text);
+  let provider;
+  try {
+    provider = normalizeProviderId(providerId);
+  } catch {
+    return text;
+  }
+  const linked = await linkFields(
+    {description: text},
+    await linkResolver(catalog, provider),
+  );
+  return linked.doc.description ?? text;
+}
+
+/**
+ * A component doc with every inline link in its text fields resolved
+ * (spec:AST-047 FR9): its description, usage, best practices, and each prop's
+ * and example's description. Code fields are shown as written. A Core
+ * component's links resolve against the CLI's own docs provider; an
+ * integration's against that integration's.
+ * @template T
+ * @param {DocsCatalog} catalog
+ * @param {string} providerId the provider id the component's links resolve
+ *   against
+ * @param {T} doc
+ * @returns {Promise<{doc: T, problems: LinkProblem[]}>}
+ */
+export async function linkComponentDoc(catalog, providerId, doc) {
+  // Doc tokens render in the same pass as links (resolveInline).
+  if (!JSON.stringify(doc ?? null).includes('{@')) {
+    return {doc, problems: []};
+  }
+  return linkFields(
+    doc,
+    await linkResolver(catalog, normalizeProviderId(providerId)),
+  );
+}
+
+/**
+ * The provider id a component's doc links resolve against: the CLI's own for
+ * a Core component, else its owner package's (or the provider id its manifest
+ * declares).
+ * @param {string} ownerPackage
+ * @param {string} [providerId]
+ * @returns {string}
+ */
+export function componentLinkProvider(ownerPackage, providerId) {
+  return ownerPackage === CORE_PACKAGE
+    ? CLI_PROVIDER_ID
+    : normalizeProviderId(providerId ?? ownerPackage);
+}
+
+/**
+ * A linker for doc objects that packages wrote: it resolves each inline link
+ * in a doc's text fields to the command that opens its doc, against the docs
+ * of the package that wrote it (a Core item's against the CLI's own), and
+ * renders its doc tokens in the same pass (spec:AST-047 FR9). An owner that is
+ * not a package, or names no provider, links nothing: its links print as
+ * written and its tokens still render. `astryx component`, `astryx template`,
+ * `build` and `search` read packages' doc text through it.
+ * @param {string} cwd
+ * @returns {Promise<<T>(doc: T, owner: string | undefined) => Promise<T>>}
+ */
+export async function ownedDocLinker(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of projectOfCatalog.get(catalog)?.loadedIntegrations ??
+    []) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /** @type {LinkResolver} */
+  const noDocs = async () => ({problem: 'its owner names no docs provider'});
+  return async (doc, owner) => {
+    if (!JSON.stringify(doc ?? null).includes('{@')) return doc;
+    let provider = null;
+    try {
+      if (typeof owner === 'string') {
+        provider = componentLinkProvider(owner, declared.get(owner));
+      }
+    } catch {
+      // Not a provider id: nothing to link against.
+    }
+    if (provider == null) return (await linkFields(doc, noDocs)).doc;
+    return (await linkComponentDoc(catalog, provider, doc)).doc;
+  };
+}
+
+/**
+ * Doc text that packages wrote, such as template descriptions, read through
+ * {@link ownedDocLinker}. The docs catalog loads only when a text links.
+ * @param {ReadonlyArray<{text: string, package?: string}>} items
+ * @param {string} cwd
+ * @returns {Promise<string[]>}
+ */
+export async function linkOwnedTexts(items, cwd) {
+  if (!items.some(item => item.text.includes('{@link'))) {
+    return items.map(item => renderTokens(item.text));
+  }
+  const link = await ownedDocLinker(cwd);
+  /** @type {string[]} */
+  const out = [];
+  for (const item of items) {
+    const linked = await link(
+      {description: item.text},
+      item.package ?? CORE_PACKAGE,
+    );
+    out.push(linked.description);
+  }
+  return out;
 }
 
 /** @type {WeakMap<DocsCatalog, Promise<DocsTree>>} */
@@ -295,25 +478,95 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** @type {ReturnType<typeof loadTreeInputs> | undefined} */
-let cliTreeInputs;
+/**
+ * The CLI's own tree files, kept between runs and loaded again after one of
+ * them changes. They are the same for every project this copy of the CLI
+ * runs in, so the copy's folder is the whole key.
+ */
+const keptTreeInputs = reusedWhileUnchanged(() =>
+  persistedGather(['docs-tree-inputs', CLI_ROOT], loadTreeInputs, TREE_INPUTS),
+);
 
 /**
- * Every flat topic in the catalog, as the tree's Unorganized level reads it.
+ * The CLI's own tree files, read from the files themselves, never from the
+ * kept copy: doctor checks what the files say, and the hint's routes
+ * ({@link routeTree}) are kept with stamps of their own.
+ */
+const readTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
+
+/** @typedef {Awaited<ReturnType<typeof loadTreeInputs>>} TreeInputs */
+
+/** The tree inputs, kept exactly, with the shape they need. */
+const TREE_INPUTS = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.namespaces) &&
+    Array.isArray(value.docs) &&
+    Array.isArray(value.diagnostics),
+};
+
+/**
+ * The docs tree of a project that loads these integrations, as far as its
+ * routes, from the doc files alone: the CLI's own and each integration's,
+ * read as data where a doc holds only exported literals
+ * (docs-discovery.mjs integrationDocsCatalog). A project's icon sets are not
+ * in it.
+ * @param {Array<{name?: string, docs?: unknown} | null | undefined>} integrations
+ * @returns {Promise<DocsTree>}
+ */
+export async function integrationRouteTree(integrations) {
+  return routeTree(await integrationDocsCatalog(integrations));
+}
+
+/**
+ * The catalog's docs tree as far as its routes: the tree {@link projectTree}
+ * builds, before what integrations do to a placed guide's title and summary
+ * and before its summaries' links resolve, neither of which moves a node. A
+ * flat topic's file is read only for its category, which places it.
  * @param {DocsCatalog} catalog
+ * @returns {Promise<DocsTree>}
+ */
+async function routeTree(catalog) {
+  const added = catalog.treeInputs;
+  // Not the kept copy: a kept gather holds the stamps of everything the run
+  // that stored it read, and a kept summary around this tree (the hint's
+  // name index) would take all of them. The CLI's build id covers its own
+  // files.
+  const cli = await readTreeInputs();
+  return buildDocsTree({
+    namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
+    docs: [...cli.docs, ...added.flatMap(each => each.guides)],
+    topics: await flatTopicInputs(catalog, {placement: true}),
+  });
+}
+
+/**
+ * Every flat topic in the catalog, as the tree's topic levels read it.
+ * @param {DocsCatalog} catalog
+ * @param {{placement?: boolean}} [options] `placement`: only what places a
+ *   topic is needed, so a topic's file is read only for a category its entry
+ *   does not carry
  * @returns {Promise<import('../../foundation/doc-compiler/tree.mjs').TreeTopicInput[]>}
  */
-async function flatTopicInputs(catalog) {
+async function flatTopicInputs(catalog, {placement = false} = {}) {
   /** @type {import('../../foundation/doc-compiler/tree.mjs').TreeTopicInput[]} */
   const topics = [];
   for (const entry of catalog.entries()) {
     const aliases = catalog.aliasesOf(entry);
-    let {title, description} = entry;
-    if (title == null || description == null) {
+    let {title, description, category, keywords} = entry;
+    if (
+      category === undefined ||
+      (!placement && (title == null || description == null))
+    ) {
       try {
         const file = await loadTopicFile(entry.path, null);
         title ??= file.doc?.title;
         description ??= file.doc?.description;
+        category ??= file.doc?.category;
+        if (keywords === undefined && Array.isArray(file.doc?.keywords)) {
+          keywords = file.doc.keywords;
+        }
       } catch {
         // A topic that does not load is reported where it is read.
       }
@@ -323,7 +576,10 @@ async function flatTopicInputs(catalog) {
       providerId: entry.providerId ?? entry.package,
       name: entry.name,
       title: title ?? entry.name,
+      // Rendered once, with the tree's other summaries (buildProjectTree).
       summary: description ?? '',
+      category: category ?? null,
+      ...(keywords ? {keywords} : {}),
       source: `${entry.package}:${entry.name}`,
       ...(aliases.length > 0 ? {aliases} : {}),
     });
@@ -333,24 +589,110 @@ async function flatTopicInputs(catalog) {
 
 /**
  * The CLI's tree, each configured integration's namespaces and guides, and
- * every flat topic in the generated Unorganized level.
+ * every flat topic in the generated level for its category.
  * @param {DocsCatalog} catalog
  * @param {boolean} fresh
  * @returns {Promise<DocsTree>}
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  if (fresh || !cliTreeInputs) cliTreeInputs = loadTreeInputs();
-  const cli = await cliTreeInputs;
+  const cli = fresh ? await readTreeInputs({fresh}) : await keptTreeInputs();
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],
     topics: await flatTopicInputs(catalog),
   });
+  // A guide the tree places that an integration replaces or extends by its
+  // route, or by the route it had before it moved: reads apply what it does,
+  // and a replacement lists under its own title and summary.
+  // Each doc applies in configured order to the guide its route names, so a
+  // doc naming a guide's old route and one naming its new route stack as if
+  // both named the same one.
+  for (const record of catalog.guideTargeters) {
+    const node = placedGuideAt(
+      result,
+      /** @type {string} */ (record.replaces ?? record.extendsTopic),
+    );
+    if (!node) continue;
+    /** @type {import('../../foundation/discovery/docs-discovery.mjs').GuideOverlay} */
+    const overlay = node.guideOverlay ?? {replacement: null, extensions: []};
+    if (record.replaces != null) {
+      node.guideOverlay = {
+        replacement: record,
+        // An extension adds to whatever answers its route, so it stays: the
+        // order integrations are configured in must not decide whether its
+        // sections show.
+        extensions: overlay.extensions,
+        ...(overlay.replacement
+          ? {replacedPackage: overlay.replacement.package}
+          : {}),
+      };
+    } else {
+      node.guideOverlay = {
+        ...overlay,
+        extensions: [
+          ...overlay.extensions,
+          {
+            package: record.package,
+            path: record.path,
+            ...(record.providerId ? {providerId: record.providerId} : {}),
+          },
+        ],
+      };
+    }
+  }
+  for (const node of result.nodes.values()) {
+    const replacement = node.guideOverlay?.replacement;
+    if (replacement) {
+      node.title = replacement.title ?? node.title;
+      node.summary = replacement.description ?? node.summary;
+    }
+  }
+  // A summary is a doc's text too: each link in it reads as the command that
+  // opens its doc, wherever the tree's summaries print (spec:AST-047 FR9).
+  for (const node of result.nodes.values()) {
+    if (typeof node.summary === 'string' && node.summary.includes('{@')) {
+      const replacement = node.guideOverlay?.replacement;
+      node.summary = await linkSummary(
+        catalog,
+        result,
+        replacement
+          ? (replacement.providerId ?? replacement.package)
+          : node.providerId,
+        node.summary,
+      );
+    }
+  }
   return {
     ...result,
     diagnostics: sortDiagnostics([...cli.diagnostics, ...result.diagnostics]),
   };
+}
+
+/**
+ * One summary with each inline link resolved to the command that opens its
+ * doc, against the provider that wrote it. A link that names no doc prints as
+ * written; doctor names it where it checks the doc's own fields.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} providerId
+ * @param {string} summary
+ * @returns {Promise<string>}
+ */
+async function linkSummary(catalog, tree, providerId, summary) {
+  if (!summary.includes('{@link')) return renderTokens(summary);
+  let provider;
+  try {
+    provider = normalizeProviderId(providerId);
+  } catch {
+    return summary;
+  }
+  const find = docFinderOver(catalog, tree, provider, false);
+  const linked = await linkFields({summary}, async target => {
+    const found = await find(target);
+    return 'problem' in found ? found : found.link;
+  });
+  return linked.doc.summary;
 }
 
 /** @type {WeakMap<DocsTree, Map<string, TreeNode>>} */
@@ -385,28 +727,27 @@ function identitiesOf(tree) {
 }
 
 /**
- * The CLI's authoring docs, by kind and name. `astryx docs authoring` reads
- * each as one section keyed by its name, so a link to one opens that section.
- * Loaded once per process, like the CLI's tree files.
- * @type {Promise<Map<string, any>> | undefined}
+ * The CLI's authoring docs, by kind and name. The field reference under
+ * `astryx docs authoring` reads each as one section keyed by its name, so a
+ * link to one opens that section. Loaded again after one of them changes,
+ * like the CLI's tree files.
  */
-let authoringDocs;
+const authoringDocs = reusedWhileUnchanged(() =>
+  loadAuthoringSelfDocs().then(
+    ({loaded}) =>
+      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
+  ),
+);
 
 /**
- * The CLI authoring doc a link names, while `astryx docs authoring` is the
- * CLI's own topic.
- * @param {DocsCatalog} catalog
+ * The CLI authoring doc a link names. The `authoring` namespace is the CLI's
+ * own, so no integration can take its route.
  * @param {string} kind
  * @param {string} name
  * @returns {Promise<any | null>}
  */
-async function authoringDoc(catalog, kind, name) {
-  if (catalog.resolve('authoring')?.package !== CLI_PROVIDER_ID) return null;
-  authoringDocs ??= loadAuthoringSelfDocs().then(
-    ({loaded}) =>
-      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
-  );
-  return (await authoringDocs).get(`${kind}\u0000${name}`) ?? null;
+async function authoringDoc(kind, name) {
+  return (await authoringDocs()).get(`${kind}\u0000${name}`) ?? null;
 }
 
 /**
@@ -430,10 +771,34 @@ async function authoringDoc(catalog, kind, name) {
  * @returns {Promise<(target: string) => Promise<FoundDoc | {problem: string}>>}
  */
 async function docFinder(catalog, fromProvider) {
-  const identities = identitiesOf(await projectTree(catalog));
+  return docFinderOver(catalog, await projectTree(catalog), fromProvider);
+}
+
+/**
+ * {@link docFinder} over a tree already built, so building the tree can
+ * resolve the links in its own summaries.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} fromProvider
+ * @param {boolean} [summaries] resolve the links in a found flat topic's
+ *   summary; off while a summary is itself being resolved, so two summaries
+ *   that link each other cannot loop
+ * @returns {(target: string) => Promise<FoundDoc | {problem: string}>}
+ */
+function docFinderOver(catalog, tree, fromProvider, summaries = true) {
+  const identities = identitiesOf(tree);
   return async target => {
     const parsed = parseLinkTarget(target);
-    if ('error' in parsed) return {problem: parsed.error};
+    if ('error' in parsed)
+      return {
+        problem: bareLinkHint(
+          parsed.error,
+          target,
+          catalog,
+          identities,
+          fromProvider,
+        ),
+      };
     let provider;
     try {
       provider = normalizeProviderId(parsed.provider ?? fromProvider);
@@ -442,7 +807,9 @@ async function docFinder(catalog, fromProvider) {
         problem: `"${target}" names "${parsed.provider}", which is not a provider id: an npm package name, or the \`providerId\` its manifest declares`,
       };
     }
-    const node = identities.get(identityKey(provider, parsed.kind, parsed.name));
+    const node = identities.get(
+      identityKey(provider, parsed.kind, parsed.name),
+    );
     if (node) {
       return {
         link: {
@@ -461,17 +828,23 @@ async function docFinder(catalog, fromProvider) {
     }
     const authored =
       provider === CLI_PROVIDER_ID
-        ? await authoringDoc(catalog, parsed.kind, parsed.name)
+        ? await authoringDoc(parsed.kind, parsed.name)
         : null;
     if (authored) {
+      // An experimental schema is a section of its experimental route, not
+      // of the field reference (spec:AST-084 FR0).
+      const experimental = isExperimentalSelfDoc(authored);
+      const route = experimental
+        ? EXPERIMENTAL_AUTHORING_ROUTE
+        : AUTHORING_REFERENCE_ROUTE;
       return {
         link: {
           target,
           id: createDocId(provider, authored.type, authored.name),
-          route: 'authoring',
+          route,
           title: authored.displayName ?? authored.name,
-          summary: authored.description ?? '',
-          command: `astryx docs authoring ${authored.name}`,
+          summary: renderTokens(authored.description ?? ''),
+          command: `astryx docs ${experimental ? route : 'authoring'} ${authored.name}`,
         },
         kind: parsed.kind,
         typed: {doc: authored, providerId: CLI_PROVIDER_ID, tree: false},
@@ -483,7 +856,8 @@ async function docFinder(catalog, fromProvider) {
         entry &&
         !entry.tree &&
         (providerOf(entry) === provider ||
-          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()))
+          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()) ||
+          entry.replaces?.toLowerCase() === parsed.name.toLowerCase())
       ) {
         let title = entry.title ?? entry.name;
         let summary = entry.description ?? '';
@@ -491,6 +865,14 @@ async function docFinder(catalog, fromProvider) {
           const raw = await lowerRawTopic(catalog, entry);
           title = raw.doc.title ?? title;
           summary = raw.doc.description ?? summary;
+          if (summaries) {
+            summary = await linkSummary(
+              catalog,
+              tree,
+              providerOf(entry),
+              summary,
+            );
+          }
         } catch {
           // The topic budget check reports a topic that does not load; the
           // link still opens it.
@@ -516,8 +898,23 @@ async function docFinder(catalog, fromProvider) {
         parsed.kind,
         parsed.name,
       );
-      if (link)
+      if (link) {
+        // The summary is the target doc's own text, so its links resolve
+        // against the target's provider, never the linking doc's: a Core
+        // component's against the CLI's docs, like its other fields.
+        // contributedDocLink returns the authored text; it renders once here.
+        if (summaries && link.summary.includes('{@')) {
+          link.summary = await linkSummary(
+            catalog,
+            tree,
+            provider === CORE_COMPONENT_PROVIDER ? CLI_PROVIDER_ID : provider,
+            link.summary,
+          );
+        } else {
+          link.summary = renderTokens(link.summary);
+        }
         return {link: {target, ...link}, kind: parsed.kind, typed: null};
+      }
     }
     const searchType =
       parsed.kind === 'component'
@@ -530,6 +927,54 @@ async function docFinder(catalog, fromProvider) {
     };
   };
 }
+
+/**
+ * What a link written as a bare name (`{@link deploying}`) should say
+ * instead: the exact target to write when a topic or tree doc has that
+ * name, or that none does.
+ * @param {string} error the parse error
+ * @param {string} target the target as written
+ * @param {DocsCatalog} catalog
+ * @param {Map<string, any>} identities
+ * @param {string} fromProvider
+ * @returns {string}
+ */
+function bareLinkHint(error, target, catalog, identities, fromProvider) {
+  const name = typeof target === 'string' ? target.trim() : '';
+  if (!name || name.includes(':') || /\s/.test(name)) return error;
+  /** @param {string} provider */
+  const normal = provider => {
+    try {
+      return normalizeProviderId(provider);
+    } catch {
+      return provider;
+    }
+  };
+  const from = normal(fromProvider);
+  /** @param {string} provider @param {string} kind @param {string} named */
+  const written = (provider, kind, named) =>
+    `{@link ${normal(provider) === from ? '' : `${provider}:`}${kind}:${named}}`;
+  const entry = catalog.resolve(name);
+  if (entry) {
+    return `${error}. "${name}" is a topic: write \`${written(entry.providerId ?? entry.package, 'generic', entry.name)}\`.`;
+  }
+  const node = [...identities.values()].find(
+    each => String(each.name).toLowerCase() === name.toLowerCase(),
+  );
+  if (node) {
+    return `${error}. "${name}" is a ${node.kind === 'generic' ? 'topic' : `${node.kind} doc`}: write \`${written(node.providerId, node.kind, node.name)}\`.`;
+  }
+  return `${error}, and no topic is named "${name}". Link a doc that exists, as \`{@link generic:<topic>}\` (\`astryx docs\` lists the topics), or remove the link.`;
+}
+
+/** The provider Core's components and templates belong to. */
+const CORE_COMPONENT_PROVIDER = (() => {
+  try {
+    return normalizeProviderId(CORE_PACKAGE);
+  } catch {
+    return CORE_PACKAGE;
+  }
+})();
 
 /** The doc kinds no docs tree holds: components and templates. */
 const CONTRIBUTED_KINDS = new Set(['component', 'page', 'block']);
@@ -839,58 +1284,262 @@ async function includedContent(catalog, tree, block, found) {
 }
 
 /**
+ * Whether a package owns a topic: it wrote the topic, or adds sections to it.
+ * @param {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry} entry
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsTopic(entry, owner) {
+  return (
+    entry.package === owner ||
+    entry.extensions.some(extension => extension.package === owner)
+  );
+}
+
+/**
+ * Whether a package owns a node of the docs tree: it placed the node, or
+ * replaces or extends the guide there by its route.
+ * @param {TreeNode} node
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsNode(node, owner) {
+  return (
+    node.provider === owner ||
+    node.guideOverlay?.replacement?.package === owner ||
+    (node.guideOverlay?.extensions.some(each => each.package === owner) ??
+      false)
+  );
+}
+
+/**
  * Every link in the project's docs that names no doc: in each topic, each
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
- * @param {{owner?: string, references?: boolean}} [options] `owner`: only the
- *   docs this package owns. `references`: instead of the links, each reference
- *   block that cannot include what it names; a reader loses that content,
- *   where a link that names no doc still prints as written
+ * @param {{owner?: string, references?: boolean, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only the docs this package owns. `references`: instead of the
+ *   links, each reference block that cannot include what it names; a reader
+ *   loses that content, where a link that names no doc still prints as
+ *   written. `absent`: true for a target the run leaves out on purpose, such
+ *   as a Core doc in a run whose base is not Core; a link to it is no problem.
+ *   A target that names no provider names one of its own doc's provider.
  * @returns {Promise<string[]>}
  */
 export async function docsLinkProblems(
   catalog,
   tree,
-  {owner, references = false} = {},
+  {owner, references = false, absent} = {},
 ) {
   /** @type {string[]} */
   const problems = [];
-  /** @param {string} where @param {LinkProblem[]} found */
-  const note = (where, found) => {
+  /**
+   * @param {LinkProblem} problem
+   * @param {string | undefined} provider the provider of the doc it sits in
+   */
+  const leftOut = (problem, provider) =>
+    leftOutOfRun(absent, problem, provider);
+  /**
+   * @param {string} where
+   * @param {string | undefined} provider
+   * @param {LinkProblem[]} found
+   */
+  const note = (where, provider, found) => {
     for (const problem of found) {
       if ((problem.include === true) !== references) continue;
+      if (leftOut(problem, provider)) continue;
       problems.push(
-        `${where}${problem.section ? ` \u00a7 ${problem.section}` : ''}: ${problem.message}`,
+        `${where}${problem.section ? ` \u00a7 ${problem.section}` : ''}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
     }
   };
   for (const entry of catalog.entries()) {
-    // A package owns a topic it wrote, and the sections it adds to another
-    // package's topic.
-    if (
-      owner != null &&
-      entry.package !== owner &&
-      !entry.extensions.some(extension => extension.package === owner)
-    ) {
-      continue;
-    }
+    if (owner != null && !ownsTopic(entry, owner)) continue;
     try {
-      note(entry.name, await topicLinkProblems(catalog, entry));
+      note(entry.name, entry.package, await topicLinkProblems(catalog, entry));
     } catch {
       // The topic budget check reports a topic that does not load.
     }
   }
   for (const node of tree.nodes.values()) {
-    if (owner != null && node.provider !== owner) continue;
+    if (owner != null && !ownsNode(node, owner)) continue;
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
-        note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
+        note(
+          node.route,
+          node.provider,
+          await topicLinkProblems(catalog, guideEntry(node)),
+        );
       } catch {
         // As above.
       }
     } else if (node.ref?.selfDoc) {
-      note(node.route, (await nodeContent(catalog, tree, node)).problems);
+      note(
+        node.route,
+        node.provider,
+        (await nodeContent(catalog, tree, node)).problems,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * Whether a link problem names a target the run leaves out on purpose.
+ * @param {((target: {provider: string, kind: string, name: string}) => boolean) | undefined} absent
+ * @param {LinkProblem} problem
+ * @param {string | undefined} provider the provider of the doc it sits in
+ * @returns {boolean}
+ */
+function leftOutOfRun(absent, problem, provider) {
+  if (absent == null) return false;
+  const target = parseLinkTarget(problem.target);
+  if ('error' in target) return false;
+  const owning = target.provider ?? provider;
+  return owning != null && absent({...target, provider: owning});
+}
+
+/**
+ * Every link in a template's description that names no doc. Each description
+ * is checked against the docs of the package that wrote it, with the provider
+ * a component doc's links use.
+ * @param {DocsCatalog} catalog
+ * @param {{owner?: string, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only this package's templates. `absent`: as in
+ *   {@link docsLinkProblems}.
+ * @returns {Promise<string[]>}
+ */
+export async function templateLinkProblems(catalog, {owner, absent} = {}) {
+  const contributions = await catalog.contributions();
+  /** @type {string[]} */
+  const problems = [];
+  for (const record of contributions?.templates ?? []) {
+    if (owner != null && record.package !== owner) continue;
+    if (!record.description?.includes('{@link')) continue;
+    let provider;
+    try {
+      provider = componentLinkProvider(record.package, record.providerId);
+    } catch {
+      // An owner that is not a provider id has no docs to check against.
+      continue;
+    }
+    const linked = await linkComponentDoc(catalog, provider, {
+      description: record.description,
+    });
+    for (const problem of linked.problems) {
+      if (leftOutOfRun(absent, problem, provider)) continue;
+      problems.push(
+        `template ${record.id}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * The catalog one integration package's docs and links read, as doctor checks
+ * it before any app configures it: the CLI's topics, Core's and the package's
+ * components and templates, and the package's own docs.
+ * @param {any} integration
+ * @param {{records: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicRecord[], namespaces: import('../../foundation/doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../../foundation/doc-compiler/tree.mjs').TreeDocInput[]} | null} discovered
+ * @returns {DocsCatalog}
+ */
+function packageCatalog(integration, discovered) {
+  const catalog = DocsCatalog.fromBuiltins();
+  catalog.setContributions(() => packageContributions(integration));
+  if (discovered) {
+    for (const record of discovered.records) catalog.add(record);
+    catalog.addTreeInputs({
+      namespaces: discovered.namespaces.map(input => ({...input, rank: 1})),
+      guides: discovered.guides.map(input => ({...input, rank: 1})),
+    });
+  }
+  return catalog;
+}
+
+/**
+ * What \`astryx doctor integration components\` checks of the links in one
+ * integration's own component docs (spec:AST-047 FR9): each link in a
+ * description, usage, best practice, or prop's or example's description that
+ * names no doc. It prints as written, so each is a warning.
+ * @param {any} integration a loaded integration
+ * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
+ *   docs, which its components' links may name; null when it ships none
+ * @returns {Promise<Array<{severity: 'warning', message: string}>>}
+ */
+export async function packageComponentLinkProblems(integration, discovered) {
+  // A package with no provider id (its manifest's, else its name) links
+  // nothing, as on the read path: its text reads as written, so there is
+  // nothing to report.
+  try {
+    normalizeProviderId(integration.providerId ?? integration.name);
+  } catch {
+    return [];
+  }
+  const catalog = packageCatalog(integration, discovered);
+  return (await componentLinkProblems(catalog, integration.name)).map(
+    message => ({severity: /** @type {const} */ ('warning'), message}),
+  );
+}
+
+/**
+ * Each link in one integration's own template descriptions that names no doc.
+ * `validate` lists each as a `next` note.
+ * @param {any} integration a loaded integration
+ * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
+ *   docs, which its templates' links may name; null when it ships none
+ * @returns {Promise<string[]>}
+ */
+export async function packageTemplateLinkProblems(integration, discovered) {
+  // A package with no provider id has no docs to check against.
+  try {
+    normalizeProviderId(integration.providerId ?? integration.name);
+  } catch {
+    return [];
+  }
+  return templateLinkProblems(packageCatalog(integration, discovered), {
+    owner: integration.name,
+  });
+}
+
+/**
+ * Each link in a package's own component docs that names no doc. A family doc
+ * that documents several components is read once.
+ * @param {DocsCatalog} catalog
+ * @param {string} owner the package whose component docs are read
+ * @returns {Promise<string[]>}
+ */
+async function componentLinkProblems(catalog, owner) {
+  const contributions = await catalog.contributions();
+  /** @type {string[]} */
+  const problems = [];
+  const seen = new Set();
+  for (const record of contributions?.components ?? []) {
+    if (record.package !== owner || !record.docPath) continue;
+    if (seen.has(record.docPath)) continue;
+    seen.add(record.docPath);
+    /** @type {any} */
+    let doc;
+    try {
+      doc = await loadComponentDoc(record.docPath);
+    } catch {
+      // The components check reports a doc that does not load.
+      continue;
+    }
+    let provider;
+    try {
+      provider = componentLinkProvider(record.package, record.providerId);
+    } catch {
+      // An owner that is not a provider id links nothing (as on the read
+      // path); its text reads as written.
+      continue;
+    }
+    const linked = await linkComponentDoc(catalog, provider, doc);
+    const name = typeof doc?.name === 'string' ? doc.name : record.name;
+    for (const problem of linked.problems) {
+      problems.push(
+        `component ${name}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
+      );
     }
   }
   return problems;
@@ -907,13 +1556,7 @@ export async function docsLinkProblems(
  * @returns {Promise<Array<{severity: 'error' | 'warning', message: string}>>}
  */
 export async function packageDocsProblems(integration, discovered) {
-  const catalog = DocsCatalog.fromBuiltins();
-  catalog.setContributions(() => packageContributions(integration));
-  for (const record of discovered.records) catalog.add(record);
-  catalog.addTreeInputs({
-    namespaces: discovered.namespaces.map(input => ({...input, rank: 1})),
-    guides: discovered.guides.map(input => ({...input, rank: 1})),
-  });
+  const catalog = packageCatalog(integration, discovered);
   const tree = await projectTree(catalog);
   /** @type {Array<{severity: 'error' | 'warning', message: string}>} */
   const problems = tree.diagnostics
@@ -928,6 +1571,168 @@ export async function packageDocsProblems(integration, discovered) {
     problems.push({severity: 'warning', message});
   }
   return problems;
+}
+
+/**
+ * The guide the docs tree places at a route, compared without case, or at the
+ * route it moved to; null when the route holds no placed guide.
+ * @param {DocsTree} tree
+ * @param {string} route
+ * @returns {TreeNode | null}
+ */
+function placedGuideAt(tree, route) {
+  const node =
+    tree.get(route) ?? tree.getFolded(route) ?? movedRoute(route, tree);
+  return node?.kind === 'generic' && node.ref?.topicFile ? node : null;
+}
+
+/**
+ * The routes of every guide the tree places below a namespace, nearest first,
+ * in reading order.
+ * @param {DocsTree} tree
+ * @param {TreeNode} namespace
+ * @returns {string[]}
+ */
+function placedGuidesBelow(tree, namespace) {
+  /** @type {string[]} */
+  const routes = [];
+  /** @type {TreeNode[]} */
+  let level = [namespace];
+  while (level.length > 0) {
+    /** @type {TreeNode[]} */
+    const next = [];
+    for (const parent of level) {
+      for (const slot of parent.slots) {
+        for (const route of slot.children) {
+          const child = tree.get(route);
+          if (!child || child.parent !== parent.route) continue;
+          if (child.kind === 'generic' && child.ref?.topicFile) {
+            routes.push(child.route);
+          }
+          if (child.slots.length > 0) next.push(child);
+        }
+      }
+    }
+    level = next;
+  }
+  return routes;
+}
+
+/**
+ * What one doc that replaces or extends another does, as a package's own
+ * check sees it.
+ * @typedef {object} DocTarget
+ * @property {string} topic the doc's own name
+ * @property {'replaces' | 'extends'} relationship
+ * @property {string} target the topic name or route it names
+ * @property {'topic' | 'guide' | 'namespace' | null} kind what the target
+ *   is: a flat topic, a guide the docs tree places, a namespace (which neither
+ *   takes), or null when it names nothing
+ * @property {string | null} guide for a guide, the route it is placed at now,
+ *   which an old route resolves to
+ * @property {string[]} guidesBelow for a namespace, the routes of the guides
+ *   placed below it, any of which the doc could name instead
+ * @property {string | null} owner the package whose topic or guide it is
+ * @property {Array<{section: string, field: 'before' | 'after', key: string}>} unplaced
+ *   each section whose `before` or `after` names no section of the target, so
+ *   it is added at the end instead
+ */
+
+/**
+ * Each doc in one integration's docs that replaces or extends a topic, or a
+ * guide the docs tree places by its route, read against the CLI's docs and the
+ * package's own: what it names and whether that exists, and each section an
+ * extension places with `before` or `after` that finds no section there.
+ * @param {any} integration
+ * @param {{records: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicRecord[], namespaces: import('../../foundation/doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../../foundation/doc-compiler/tree.mjs').TreeDocInput[]}} discovered
+ * @returns {Promise<DocTarget[]>}
+ */
+export async function packageDocTargets(integration, discovered) {
+  const catalog = packageCatalog(integration, discovered);
+  const tree = await projectTree(catalog);
+  /** @type {DocTarget[]} */
+  const targets = [];
+  for (const record of discovered.records) {
+    const relationship = record.replaces != null ? 'replaces' : 'extends';
+    const target =
+      relationship === 'replaces' ? record.replaces : record.extendsTopic;
+    if (target == null) continue;
+    /** @type {DocTarget['kind']} */
+    let kind = null;
+    /** @type {string | null} */
+    let owner = null;
+    /** @type {string | null} */
+    let basePath = null;
+    /** @type {ReadonlyArray<{path: string}>} every extension of the target, in configured order */
+    let extensions = [];
+    /** @type {string[]} */
+    let guidesBelow = [];
+    /** @type {string | null} */
+    let guide = null;
+    if (isGuideRoute(target)) {
+      const node = placedGuideAt(tree, target);
+      if (node) {
+        kind = 'guide';
+        guide = node.route;
+        owner = node.provider;
+        basePath = node.guideOverlay?.replacement?.path ?? node.ref.topicFile;
+        extensions = node.guideOverlay?.extensions ?? [];
+      }
+    } else {
+      // A replacement already holds the topic's place in the catalog, and
+      // names the package it took it from.
+      const entry = catalog.resolve(target);
+      if (entry?.path === record.path) {
+        kind = 'topic';
+        owner = entry.replacedPackage ?? null;
+      } else if (entry) {
+        kind = 'topic';
+        owner = entry.package;
+        basePath = entry.path;
+        extensions = entry.extensions;
+      }
+    }
+    if (kind == null) {
+      // A namespace holds no sections to take over or merge onto; the guides
+      // below it do.
+      const node =
+        tree.get(target) ?? tree.getFolded(target) ?? movedRoute(target, tree);
+      if (node?.kind === 'namespace') {
+        kind = 'namespace';
+        owner = node.provider;
+        guidesBelow = placedGuidesBelow(tree, node);
+      }
+    }
+    /** @type {DocTarget['unplaced']} */
+    let unplaced = [];
+    if (relationship === 'extends' && basePath != null) {
+      // Merge every extension in configured order, as a read does, so a key
+      // an earlier extension adds counts as a section of the target.
+      let doc = (await loadTopicFile(basePath, null)).doc;
+      for (const extension of extensions) {
+        if (doc == null) break;
+        const file = (await loadTopicFile(extension.path, null)).doc;
+        if (file == null) continue;
+        const merged = mergeTopicReport(doc, file);
+        if (extension.path === record.path) {
+          unplaced = merged.unplaced;
+          break;
+        }
+        doc = merged.doc;
+      }
+    }
+    targets.push({
+      topic: record.name,
+      relationship,
+      target,
+      kind,
+      owner,
+      guide,
+      guidesBelow,
+      unplaced,
+    });
+  }
+  return targets;
 }
 
 /**
@@ -1031,19 +1836,40 @@ export async function compileTopic(catalog, entry, lang = null) {
 /**
  * A guide the docs tree places, as a topic entry the topic readers open by its
  * route. It is never a flat topic: `astryx docs <route>` is its only name.
+ * What integrations do to it by its route applies: a replacement is read in
+ * its place and names its own package, and each extension's sections merge
+ * onto it, each naming the package that wrote it (INV28).
  * @param {import('../../foundation/doc-compiler/tree.mjs').TreeNode} node
  * @returns {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry}
  */
 export function guideEntry(node) {
-  return {
+  const base = {
     name: node.route,
     route: node.route,
     package: node.provider,
     providerId: node.providerId,
     path: node.ref.topicFile,
     extensions: [],
-    tree: true,
+    tree: /** @type {const} */ (true),
     parent: node.parent ?? undefined,
+  };
+  const overlay = node.guideOverlay;
+  if (!overlay) return base;
+  const replacement = overlay.replacement;
+  return {
+    ...base,
+    ...(replacement
+      ? {
+          package: replacement.package,
+          providerId: replacement.providerId ?? replacement.package,
+          path: replacement.path,
+          replaces: node.route,
+          // The package whose guide it took over: an earlier replacement's,
+          // when the guide was already replaced.
+          replacedPackage: overlay.replacedPackage ?? node.provider,
+        }
+      : {}),
+    extensions: [...overlay.extensions],
   };
 }
 
@@ -1078,10 +1904,16 @@ export async function nodeContent(catalog, tree, node) {
 function typedDocIndex(tree) {
   let index = typedDocIndexes.get(tree);
   if (!index) {
+    const nodes = [...tree.nodes.values()].filter(each => each.ref?.selfDoc);
+    /** @type {Map<string, string>} */
+    const routes = new Map();
+    for (const each of nodes) {
+      const key = `${each.ref.selfDoc.type}:${each.ref.selfDoc.name}`;
+      if (!routes.has(key)) routes.set(key, each.route);
+    }
     index = cliDocIndex(
-      [...tree.nodes.values()].flatMap(each =>
-        each.ref?.selfDoc ? [each.ref.selfDoc] : [],
-      ),
+      nodes.map(each => each.ref.selfDoc),
+      (kind, name) => routes.get(`${kind}:${name}`) ?? null,
     );
     typedDocIndexes.set(tree, index);
   }
@@ -1114,9 +1946,20 @@ export function placeLinks(tree, node) {
     up: node.parent == null ? 'astryx docs' : `astryx docs ${node.parent}`,
   };
   const parent = node.parent == null ? undefined : tree.get(node.parent);
-  const siblings =
+  // A stable node moves only to stable neighbors, so its links read as they
+  // do without experimental features (spec:AST-017 FR27, spec:AST-084 FR0),
+  // and an experimental node only to experimental ones, so each next read
+  // still names this one as its previous.
+  const experimental = isExperimentalTreeNode(tree, node);
+  const siblings = (
     parent?.slots.find(slot => slot.children.includes(node.route))?.children ??
-    [];
+    []
+  ).filter(route => {
+    const sibling = tree.get(route);
+    return (
+      sibling == null || isExperimentalTreeNode(tree, sibling) === experimental
+    );
+  });
   const at = siblings.indexOf(node.route);
   if (at > 0) links.previous = `astryx docs ${siblings[at - 1]}`;
   if (at !== -1 && at < siblings.length - 1) {
@@ -1127,7 +1970,7 @@ export function placeLinks(tree, node) {
 
 /**
  * The moves a topic read offers: from its place in the tree, where a guide
- * sits in its namespace and a flat topic in the Unorganized level.
+ * sits in its namespace and a flat topic in its topic level.
  * @param {DocsCatalog} catalog
  * @param {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry} entry
  * @returns {Promise<import('./docs.type.mjs').DocsLinks>}
@@ -1136,7 +1979,8 @@ export async function topicLinks(catalog, entry) {
   const tree = await projectTree(catalog);
   const node = tree.get(entry.tree ? (entry.route ?? entry.name) : entry.name);
   const placed =
-    node && (entry.tree ? node.kind === 'generic' : node.ref?.flatTopic === entry.name);
+    node &&
+    (entry.tree ? node.kind === 'generic' : node.ref?.flatTopic === entry.name);
   return placed ? placeLinks(tree, node) : {up: topicUp(entry)};
 }
 
@@ -1146,20 +1990,27 @@ export async function topicLinks(catalog, entry) {
  * decides.
  * @param {unknown} topic
  * @param {{cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal: a catalog the read already loaded,
+ *   so the read and every part of it share one snapshot of the project's docs
+ *   (and its memoized lowering) instead of loading the project again for each
+ *   part. It is a separate argument, never an option, so no caller of the
+ *   public `docs()` can set it
  * @returns {Promise<
  *   | {kind: 'topic', catalog: DocsCatalog, entry: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry}
  *   | {kind: 'node', catalog: DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree, node: import('../../foundation/doc-compiler/tree.mjs').TreeNode}
  *   | {kind: 'unknown', catalog: DocsCatalog}
  * >}
  */
-export async function resolveDocsArgument(topic, {cwd} = {}) {
-  const catalog = await loadDocsCatalog(cwd);
+export async function resolveDocsArgument(topic, {cwd} = {}, loaded) {
+  const catalog = loaded ?? (await loadDocsCatalog(cwd));
   if (typeof topic !== 'string' || topic === '')
     return {kind: 'unknown', catalog};
   const tree = await projectTree(catalog);
-  const owner = nameOwner(tree, catalog, topic);
+  const owner =
+    nameOwner(tree, catalog, topic) ?? spelledOwner(tree, catalog, topic);
   if (owner == null) return {kind: 'unknown', catalog};
-  if (owner.kind === 'topic') return {kind: 'topic', catalog, entry: owner.entry};
+  if (owner.kind === 'topic')
+    return {kind: 'topic', catalog, entry: owner.entry};
   return treeArgument(catalog, tree, owner.node);
 }
 
@@ -1183,9 +2034,195 @@ export function nameOwner(tree, catalog, name) {
     return entry == null ? null : {kind: 'topic', entry};
   }
   const entry = catalog.resolve(name);
-  if (entry == null) return null;
-  const owner = routeOwner(tree, entry);
-  return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  if (entry != null) {
+    const owner = routeOwner(tree, entry);
+    return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  }
+  return childOwner(tree, name);
+}
+
+/**
+ * The child a reader names without its namespace, or with a route that leaves
+ * out the prefix the child's own name repeats (spec:AST-046 FR5). A namespace
+ * whose children repeat its name makes its own routes stutter: `tokens` holds
+ * `tokens-color`, so the route is `tokens/tokens-color`, while the namespace
+ * listing shows the bare `tokens-color`. Both spellings name one child, so
+ * that child answers. Two or more children answering is ambiguous, and the
+ * read falls through to the suggestion list, unchanged. An experimental doc
+ * never answers to a bare name: its project reaches it only by a marked route
+ * (spec:AST-017 FR27).
+ * @param {DocsTree} tree
+ * @param {string} name
+ * @returns {{kind: 'node', node: TreeNode} | null}
+ */
+function childOwner(tree, name) {
+  const wanted = name.toLowerCase();
+  const slash = wanted.lastIndexOf('/');
+  const parent = slash > 0 ? wanted.slice(0, slash) : null;
+  const unstuttered =
+    parent == null
+      ? null
+      : `${parent}/${parent.slice(parent.lastIndexOf('/') + 1)}-${wanted.slice(slash + 1)}`;
+  const matches = [...tree.nodes.values()].filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      // An experimental doc is reachable only by a route its project marked
+      // as experimental (spec:AST-017 FR27): a bare name never opens one.
+      !isExperimentalTreeNode(tree, node) &&
+      (node.name?.toLowerCase() === wanted ||
+        (unstuttered != null && node.route.toLowerCase() === unstuttered)),
+  );
+  return matches.length === 1 ? {kind: 'node', node: matches[0]} : null;
+}
+
+/**
+ * A route's or name's words, for comparing spellings: lowercase, split at
+ * spaces, hyphens, slashes, dots and underscores, and sorted, so neither the
+ * separators nor the word order count.
+ * @param {string} text
+ * @returns {string}
+ */
+function spellingKey(text) {
+  return text
+    .toLowerCase()
+    .split(/[\s/._-]+/u)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
+/**
+ * The doc a reader names in another spelling of its own route, or of the name
+ * {@link childOwner} reads: `theme customize`, `customize/theme` and
+ * `theme.customize` all spell `theme/customize`. Only the separators and the
+ * word order differ, so the words are the doc's own and the read opens it. A
+ * route spelled this way answers before a name. When two docs share the
+ * spelling, the read falls through to the suggestion list. An experimental
+ * doc never answers: its project reaches it only by its marked route.
+ * @param {DocsTree} tree
+ * @param {DocsCatalog} catalog
+ * @param {string} topic
+ * @returns {ReturnType<typeof nameOwner>}
+ */
+function spelledOwner(tree, catalog, topic) {
+  const spells = spelledBy(topic);
+  if (spells == null) return null;
+  const nodes = [...tree.nodes.values()];
+  const routes = nodes.filter(
+    node => spells(node.route) && !isExperimentalTreeNode(tree, node),
+  );
+  if (routes.length > 0) {
+    return routes.length === 1
+      ? nameOwner(tree, catalog, routes[0].route)
+      : null;
+  }
+  const names = nodes.filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      spells(node.name) &&
+      !isExperimentalTreeNode(tree, node),
+  );
+  return names.length === 1 ? {kind: 'node', node: names[0]} : null;
+}
+
+/**
+ * A test for whether a text spells the typed one ({@link spellingKey}), or
+ * null when the typed text has no words. Two spellings hold the same
+ * characters besides separators, so a text of another length is no spelling
+ * and its words are never split.
+ * @param {string} topic
+ * @returns {((text: string) => boolean) | null}
+ */
+function spelledBy(topic) {
+  const wanted = spellingKey(topic);
+  if (wanted === '') return null;
+  const size = letterCount(topic);
+  return text => letterCount(text) === size && spellingKey(text) === wanted;
+}
+
+/**
+ * How many characters of a text are not separators, as {@link spellingKey}
+ * splits them.
+ * @param {string} text
+ * @returns {number}
+ */
+function letterCount(text) {
+  return text.replace(/[\s/._-]+/gu, '').length;
+}
+
+/**
+ * The search keywords a page declares.
+ * @param {TreeNode | undefined} node
+ * @returns {string[]}
+ */
+function declaredKeywords(node) {
+  if (node == null) return [];
+  const selfDoc = /** @type {any} */ (node.ref)?.selfDoc;
+  return [
+    ...(node.keywords ?? []),
+    ...(Array.isArray(selfDoc?.keywords) ? selfDoc.keywords : []),
+  ].filter(name => typeof name === 'string' && name !== '');
+}
+
+/**
+ * Docs suggestions ordered by each page's route, title and declared keywords
+ * (orderDocSuggestions).
+ * @template {{name: string}} T
+ * @param {DocsTree} tree
+ * @param {string} topic
+ * @param {T[]} suggestions
+ * @param {boolean} closest
+ * @returns {T[]}
+ */
+function orderDocPages(tree, topic, suggestions, closest) {
+  return orderDocSuggestions(topic, suggestions, {
+    closest,
+    titleOf: s => tree.get(s.name)?.title,
+    keywordsOf: s => declaredKeywords(tree.get(s.name)),
+  });
+}
+
+/**
+ * `stability: 'experimental'` for a node whose doc is marked experimental, or
+ * that sits under an experimental namespace (spec:AST-017 FR27), the way help
+ * marks an experimental command; nothing for a stable one, so stable entries
+ * read as they always have.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {{stability?: 'experimental'}}
+ */
+export function stabilityOf(tree, node) {
+  return isExperimentalTreeNode(tree, node) ? {stability: 'experimental'} : {};
+}
+
+/**
+ * The fields every child carries: what it is, and the route that opens it.
+ * Shared, so a child reads the same whether a namespace read or the topic
+ * list names it — including the package, which is the integration's for a
+ * guide an integration replaced, not the package whose route it took.
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @returns {import('./docs.type.mjs').DocsNodeChild}
+ */
+export function childIdentity(tree, child) {
+  return {
+    route: child.route,
+    name: child.route.slice(child.route.lastIndexOf('/') + 1),
+    package: child.guideOverlay?.replacement?.package ?? child.provider,
+    // A guide an integration's doc took the place of names whose it was.
+    ...(child.guideOverlay?.replacement
+      ? {
+          replaces: child.route,
+          replacedPackage: child.guideOverlay.replacedPackage ?? child.provider,
+        }
+      : {}),
+    kind: child.kind,
+    title: child.title,
+    summary: child.summary,
+    ...stabilityOf(tree, child),
+  };
 }
 
 /**
@@ -1206,6 +2243,85 @@ export function holdsOwnName(tree, catalog, entry) {
 }
 
 /**
+ * The names `astryx docs` opens a package's docs by, sorted: the one rule
+ * every surface that lists a package's docs names them by, so each name it
+ * prints opens (`astryx discover` lists an installed integration's docs this
+ * way). The docs are what the package's docs root ships, and each opens where
+ * it lands, not by the name on its file: a topic the package wrote or took
+ * over opens by its own name; a doc that adds sections to another topic opens
+ * with that topic, by its name; a namespace doc or guide the package places,
+ * and a guide it replaces or extends by its route, open by that route. A topic
+ * whose name opens another doc is left out, as the topic list leaves it out
+ * (spec:AST-046 FR11). Typed docs of the package's other contributions, such
+ * as an icon set's own icon definitions, are listed with those contributions,
+ * not here.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {string[]}
+ */
+export function packageDocNames(catalog, tree, owner) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const entry of catalog.entries()) {
+    if (ownsTopic(entry, owner) && holdsOwnName(tree, catalog, entry)) {
+      names.add(entry.name);
+    }
+  }
+  for (const node of tree.nodes.values()) {
+    // What a docs root ships to the tree: a namespace doc, or a guide (a topic
+    // file the tree places). A generated level has no doc of its own, and a
+    // topic the tree files in one opens by its name, named above.
+    if (node.generated) continue;
+    if (node.kind !== 'namespace' && node.ref?.topicFile == null) continue;
+    if (ownsNode(node, owner)) names.add(node.route);
+  }
+  return [...names].sort();
+}
+
+/**
+ * For each name a package's docs open by ({@link packageDocNames}) whose topic
+ * or guide another package owns, the keys of the sections this package adds
+ * to it, in reading order: `astryx docs <name> <key>` opens one. A theme
+ * package documents itself by adding a section to `theme`, a topic the CLI or
+ * the app's base library owns, and a long one; the key lets a reader open the
+ * package's own section without reading the whole topic. The keys are the
+ * ones the topic's own read lists, from the same merged topic, so each opens.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {Promise<Record<string, string[]>>}
+ */
+export async function packageDocSections(catalog, tree, owner) {
+  /** @type {Record<string, string[]>} */
+  const sections = {};
+  for (const name of packageDocNames(catalog, tree, owner)) {
+    const found = nameOwner(tree, catalog, name);
+    const entry =
+      found?.kind === 'topic'
+        ? found.entry
+        : found?.kind === 'node' && found.node.kind === 'generic'
+          ? guideEntry(found.node)
+          : null;
+    if (entry == null || entry.package === owner) continue;
+    let node;
+    try {
+      node = await lowerTopic(catalog, entry);
+    } catch {
+      // A topic that cannot be read opens no section, so it lists none; a
+      // read of it names the problem, and doctor reports it.
+      continue;
+    }
+    const sectionPackage = sectionPackageOf(entry, node);
+    const keys = indexView(node)
+      .sections.map(each => each.id)
+      .filter(id => id != null && sectionPackage(id) === owner);
+    if (keys.length > 0) sections[name] = keys;
+  }
+  return sections;
+}
+
+/**
  * What a tree node opens as: a guide the tree places reads like a topic; a
  * namespace or a typed doc is a node.
  * @param {DocsCatalog} catalog
@@ -1223,7 +2339,7 @@ function treeArgument(catalog, tree, node) {
 /**
  * The doc that took a flat topic's route in the docs tree, when it is not
  * that topic (spec:AST-046 FR11): the CLI keeps its routes, such as `cli`
- * and `unorganized`, and a namespace keeps its route over a topic of the same
+ * and `guides`, and a namespace keeps its route over a topic of the same
  * name. Null when the topic owns its route, or the tree has no node there.
  * @param {DocsTree} tree
  * @param {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry} entry
@@ -1238,17 +2354,134 @@ export function routeOwner(tree, entry) {
 }
 
 /**
+ * Routes that moved, old prefix first: the integration guides moved from
+ * `cli/integrations` (and, before that, the `cli-integrations` topic) into
+ * `authoring`, the one home for integration authors.
+ * Only the not-found error reads this, to name where a doc went; an old route
+ * opens nothing.
+ */
+const MOVED_ROUTES = [
+  ['cli/integrations', 'authoring'],
+  ['cli-integrations', 'authoring'],
+];
+
+/**
+ * The node an old route moved to, or null.
+ * @param {unknown} topic
+ * @param {DocsTree} tree
+ * @returns {TreeNode | null}
+ */
+function movedRoute(topic, tree) {
+  if (typeof topic !== 'string') return null;
+  const wanted = topic.toLowerCase();
+  for (const [from, to] of MOVED_ROUTES) {
+    if (wanted !== from && !wanted.startsWith(`${from}/`)) continue;
+    const node = tree.getFolded(`${to}${wanted.slice(from.length)}`);
+    if (node) return node;
+  }
+  return null;
+}
+
+/** The most docs a miss suggests for the words its argument shares with them. */
+const WORD_MATCH_SUGGESTIONS = 5;
+
+/**
+ * The docs whose route, title or declared keywords carry a typed word, closest
+ * first and cut where the matches get weaker (orderDocSuggestions): `theming`
+ * names the topic titled Theming. An experimental doc is never suggested for a
+ * word.
+ * @param {DocsTree} tree
+ * @param {string} topic
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function wordMatches(tree, topic) {
+  const carries = typedWordTest(topic);
+  const named = [...tree.nodes.values()]
+    .filter(
+      node =>
+        [node.route, node.title, ...declaredKeywords(node)].some(carries) &&
+        !isExperimentalTreeNode(tree, node),
+    )
+    .map(node => ({name: node.route, reason: node.summary}));
+  return orderDocPages(tree, topic, named, true);
+}
+
+/**
+ * Whether the typed text holds every word of a route: the route is named,
+ * by its leading path segments (`widgets/quick-start` names `widgets`) or its
+ * whole spelling inside the text (`set-up-widgets` names `widgets`).
+ * @param {string} topic
+ * @param {string} route
+ * @returns {boolean}
+ */
+function namesRoute(topic, route) {
+  const typed = new Set(nameWords(topic));
+  const words = nameWords(route);
+  return words.length > 0 && words.every(word => typed.has(word));
+}
+
+/**
+ * A list ordered by words, with the route the first list leads with kept
+ * first when the typed text names it: a word ordering never demotes a route
+ * the reader typed.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} first the list as route words order it
+ * @param {T[]} byWords the same docs or others, ordered by words
+ * @returns {T[]}
+ */
+function namedFirst(topic, first, byWords) {
+  const lead = first[0];
+  if (lead == null || !namesRoute(topic, lead.name)) return byWords;
+  return [lead, ...byWords.filter(entry => entry.name !== lead.name)];
+}
+
+/**
+ * The word matches that take the place of the every-doc list: the named route
+ * that list leads with stays first, and the list is never longer than the one
+ * it replaces, nor than {@link WORD_MATCH_SUGGESTIONS} with `taken` entries
+ * already before it.
+ * @param {string} topic
+ * @param {Array<{name: string, reason: string}>} everyDoc ordered and cut
+ * @param {Array<{name: string, reason: string}>} byWords
+ * @param {number} taken
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function fewerWordMatches(topic, everyDoc, byWords, taken) {
+  return namedFirst(topic, everyDoc, byWords).slice(
+    0,
+    Math.min(everyDoc.length, WORD_MATCH_SUGGESTIONS - taken),
+  );
+}
+
+/**
  * The error for a docs argument that names nothing. For a route, it suggests
- * the children of the deepest namespace the route reaches; otherwise, every
- * topic and every top-level namespace.
+ * every child of the deepest namespace the route reaches, closest first by
+ * each child's route, title and keywords, with a child the route names kept
+ * first. Otherwise it suggests the docs whose own name it is, or whose route
+ * it spells with hyphens; failing that, the topics and top-level namespaces,
+ * closest first and cut where the matches get weaker (every one of them when
+ * none shares a word with the argument, with the names a slip or two from it
+ * first). When the argument matches a component, hook or template
+ * (exact, folded or last segment), the command that reads that entry joins the list as
+ * foundation/suggest/other-command.mjs places it, and the list keeps its
+ * length; when no suggested doc
+ * shares a word with the argument, that command is the only suggestion.
+ * When no command joins, the docs whose route, title or declared keywords
+ * carry a typed word ({@link wordMatches}) take the place of the topics and
+ * namespaces, the named route that list leads with first, in a list no
+ * longer than the one they replace.
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
+ * @param {{cwd?: string}} [options]
  * @returns {Promise<AstryxError>}
  */
-export async function unknownTopicError(topic, catalog) {
+export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   const tree = await projectTree(catalog);
   /** @type {Array<{name: string, reason: string}>} */
   let suggestions = [];
+  // Route children stay whole (spec:AST-046); only the other lists are cut.
+  let routeChildren = false;
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -1258,6 +2491,7 @@ export async function unknownTopicError(topic, catalog) {
     ) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
+        routeChildren = true;
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -1269,8 +2503,7 @@ export async function unknownTopicError(topic, catalog) {
   }
   if (suggestions.length === 0 && typeof topic === 'string') {
     // The docs whose own name it is (`doctor` is cli/commands/doctor), or whose
-    // route it spells with hyphens (`cli-integrations`, the guide's name before
-    // it moved to cli/integrations).
+    // route it spells with hyphens (`cli-host-entry` is cli/host-entry).
     const wanted = topic.toLowerCase();
     suggestions = [...tree.nodes.values()]
       .filter(
@@ -1281,7 +2514,10 @@ export async function unknownTopicError(topic, catalog) {
       )
       .map(node => ({name: node.route, reason: node.summary}));
   }
+  // Every topic and namespace: the list a name no doc shares a word with gets.
+  let everyDoc = false;
   if (suggestions.length === 0) {
+    everyDoc = true;
     suggestions = [
       ...tree
         .roots()
@@ -1289,11 +2525,98 @@ export async function unknownTopicError(topic, catalog) {
       ...catalog.names().map(name => ({name, reason: 'available topic'})),
     ];
   }
+  if (typeof topic === 'string' && routeChildren) {
+    suggestions = namedFirst(
+      topic,
+      orderRouteSuggestions(topic, suggestions, {closest: false}),
+      orderDocPages(tree, topic, suggestions, false),
+    );
+  } else if (typeof topic === 'string') {
+    // Every topic and namespace is listed, so a near name (`tokns` for
+    // tokens, `colr` for color) only moves to the front, from four letters.
+    suggestions = orderRouteSuggestions(
+      topic,
+      suggestions,
+      everyDoc ? {closest: true, typos: true, slipFrom: 4} : {closest: true},
+    );
+  }
+  // In place of the every-doc list: the docs a typed word names by their
+  // route, title or keywords.
+  const byWords =
+    everyDoc && typeof topic === 'string' ? wordMatches(tree, topic) : [];
+  // A route that moved names where it went, ahead of the usual suggestions
+  // (spec:AST-046 FR9, FR6).
+  const moved = movedRoute(topic, tree);
+  if (moved) {
+    const after = (/** @type {Array<{name: string, reason: string}>} */ list) =>
+      list.filter(entry => entry.name !== moved.route);
+    const rest =
+      byWords.length > 0
+        ? fewerWordMatches(String(topic), after(suggestions), after(byWords), 1)
+        : after(suggestions);
+    return new AstryxError(
+      `Unknown topic "${String(topic)}". It moved to "${moved.route}"${notLoaded(catalog)}`,
+      [{name: moved.route, reason: moved.summary}, ...rest],
+      ERROR_CODES.ERR_UNKNOWN_TOPIC,
+    );
+  }
+  // A project that does not load gives no hint.
+  const project =
+    suggestions.length > 0 ? await catalogProject(catalog, cwd) : undefined;
+  // The hint's modules load only on this path.
+  const [hint, routes] = project
+    ? await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('./_entry-names-lazily.mjs'),
+      ])
+    : [];
+  const elsewhere =
+    hint && routes
+      ? await hint.findOtherCommand(topic, {
+          from: 'docs',
+          cwd,
+          coreDir: project?.coreDir(),
+          integrations: project?.loadedIntegrations,
+          // Kept with the project's one name index (the docs catalog itself
+          // is not asked from here).
+          docsRoutes: routes.docsRoutesLazily,
+        })
+      : null;
+  if (hint && elsewhere) {
+    // Another command's entry leads; word matches never join its list.
+    const sharesAWord =
+      !everyDoc ||
+      suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
+    suggestions =
+      hint.withOtherCommand(suggestions, elsewhere, String(topic), {
+        from: 'docs',
+        alone: !sharesAWord,
+      }) ?? [];
+  } else if (byWords.length > 0) {
+    suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
+  }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,
     suggestions,
     ERROR_CODES.ERR_UNKNOWN_TOPIC,
   );
+}
+
+/**
+ * The project a catalog came from, loaded again when the catalog is not one
+ * {@link loadDocsCatalog} made. Undefined when the project does not load.
+ * @param {DocsCatalog} catalog
+ * @param {string} [cwd]
+ * @returns {Promise<Project | undefined>}
+ */
+async function catalogProject(catalog, cwd = process.cwd()) {
+  const known = projectOfCatalog.get(catalog);
+  if (known) return known;
+  try {
+    return await Project.load(cwd);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1306,7 +2629,7 @@ export async function unknownTopicError(topic, catalog) {
 export function notLoaded(catalog) {
   const packages = [...new Set(catalog.issues.map(issue => issue.package))];
   if (packages.length === 0) return '';
-  return `. The docs of ${packages.join(', ')} did not load; run \`astryx doctor integration docs\` in that package to see why.`;
+  return `. The docs of ${packages.join(', ')} did not load; run \`${formatCliCommand('doctor integration docs')}\` in that package to see why.`;
 }
 
 /**
@@ -1314,21 +2637,22 @@ export function notLoaded(catalog) {
  * and lower it for the topic readers.
  * @param {unknown} topic
  * @param {{lang?: string | null, zh?: boolean, dense?: boolean, cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal, as {@link resolveDocsArgument}
  */
-export async function resolveTopicDocs(topic, options = {}) {
+export async function resolveTopicDocs(topic, options = {}, loaded) {
   const {lang = null, zh = false, dense = false, cwd} = options;
   const effectiveLang = lang || (dense ? 'dense' : zh ? 'zh' : null);
   // A public API caller could pass a non-string topic; it lands on the same
   // stable code as an unknown name rather than a raw TypeError.
-  const found = await resolveDocsArgument(topic, {cwd});
+  const found = await resolveDocsArgument(topic, {cwd}, loaded);
   if (found.kind !== 'topic') {
     throw found.kind === 'node'
       ? new AstryxError(
-          `"${found.node.route}" is a ${found.node.kind === 'namespace' ? 'namespace' : `${found.node.kind} doc`} in the docs tree, not a topic. Read it with \`astryx docs ${found.node.route}\`.`,
+          `"${found.node.route}" is a ${found.node.kind === 'namespace' ? 'namespace' : `${found.node.kind} doc`} in the docs tree, not a topic. Read it with \`${formatCliCommand(`docs ${found.node.route}`)}\`.`,
           undefined,
           ERROR_CODES.ERR_UNKNOWN_TOPIC,
         )
-      : await unknownTopicError(topic, found.catalog);
+      : await unknownTopicError(topic, found.catalog, {cwd});
   }
   const {catalog, entry} = found;
   const node = await lowerTopic(catalog, entry, effectiveLang);
@@ -1359,12 +2683,90 @@ export async function integrationDocTypes(integration, cwd) {
   if (report.status !== 'checked' || unread.length === 0) return report;
   // A root its reader cannot read serves no doc; say so rather than skip it.
   const rel = (/** @type {string} */ file) =>
-    path.relative(packageDir ?? cwd, file).split(path.sep).join('/') || '.';
+    path
+      .relative(packageDir ?? cwd, file)
+      .split(path.sep)
+      .join('/') || '.';
   return {
     ...report,
     unchecked: [
       ...report.unchecked,
       ...unread.map(entry => ({doc: rel(entry.path), reason: entry.reason})),
-    ].sort((a, b) => a.doc.localeCompare(b.doc)),
+    ].sort((a, b) => compareText(a.doc, b.doc)),
   };
 }
+
+/**
+ * The skills the project's integrations declare, each with the route `astryx
+ * docs` reads its doc by, and why each skill left out was left out.
+ * `complete` is false when an integration's docs folder could not be read:
+ * its skills are unknown, so no copy is removed as a leftover.
+ * @param {string} cwd
+ * @returns {Promise<{skills: Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>, problems: Array<{package: string, message: string, unread?: true}>, complete: boolean, unread: string[]}>}
+ */
+export async function projectIntegrationSkills(cwd) {
+  const catalog = await loadDocsCatalog(cwd);
+  const project = projectOfCatalog.get(catalog);
+  if (!project) return {skills: [], problems: [], complete: true, unread: []};
+  const {skills, problems, unread} = await discoverIntegrationSkills(project.loadedIntegrations);
+  const complete = unread.length === 0;
+  if (skills.length === 0) return {skills: [], problems, complete, unread};
+  const tree = await projectTree(catalog);
+  // Each skill reads its own doc: the node whose file it is, as a topic or as
+  // a guide's replacement. A doc the tree withdrew (a name another doc
+  // holds, or a CLI topic's name taken without `replaces`) has no node, and
+  // its skill is left out.
+  /** @type {Map<string, string>} */
+  const routes = new Map();
+  for (const node of tree.nodes.values()) {
+    const ref = /** @type {any} */ (node.ref);
+    const file =
+      node.guideOverlay?.replacement?.path ??
+      ref?.topicFile ??
+      (ref?.flatTopic != null ? catalog.resolve(ref.flatTopic)?.path : undefined);
+    if (typeof file === 'string') routes.set(path.resolve(file), node.route);
+  }
+  /** @type {Array<import('../../foundation/discovery/integration-skills.mjs').IntegrationSkill & {route: string}>} */
+  const kept = [];
+  for (const each of skills) {
+    const route = routes.get(path.resolve(each.file));
+    if (route == null) {
+      problems.push({
+        package: each.package,
+        message: `${path.basename(each.file)}: skill "${each.name}" is left out because its doc "${each.doc}" is not in the docs tree (another doc holds that name; use \`replaces\` to take its place).`,
+      });
+      continue;
+    }
+    kept.push({...each, route});
+  }
+  return {skills: kept, problems, complete, unread};
+}
+
+/**
+ * The project root the project skill belongs to, or null outside a project.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function skillsProjectRoot(cwd) {
+  return resolveAgentDocsRoot(cwd);
+}
+
+/**
+ * The agent-docs block for the project at `root`, pointing to the
+ * integration skills the docs tree keeps, so the block, `docs skills` and
+ * the skill places name the same skills.
+ * @param {string} root
+ * @param {{installedVersion?: string, fresh?: boolean}} [options]
+ * @returns {Promise<string>}
+ */
+export async function renderProjectAgentDocsBlock(root, options = {}) {
+  /** @type {Array<{package: string, name: string, description: string}>} */
+  let skills = [];
+  try {
+    skills = (await projectIntegrationSkills(root)).skills;
+  } catch {
+    // A project that cannot load is reported by the block's own render.
+  }
+  return renderAgentDocsBlock(root, {...options, skills});
+}
+

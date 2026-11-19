@@ -2,9 +2,9 @@
 
 name: 'Setup Node and pnpm'
 description: >-
-  Install pnpm, set up Node from .nvmrc with the pnpm store cached, and
-  optionally install workspace dependencies. Requires actions/checkout to have
-  run first — .nvmrc and the composite action itself are read from the
+  Install pnpm, set up Node from .nvmrc, and optionally install workspace
+  dependencies from the registry (no Actions cache). Requires actions/checkout
+  to have run first — .nvmrc and the composite action itself are read from the
   checked-out tree.
 
 inputs:
@@ -22,9 +22,8 @@ inputs:
 runs:
   using: composite
   steps:
-    # pnpm has to be on PATH before setup-node, otherwise `cache: pnpm` cannot
-    # resolve the store path. The version comes from package.json's
-    # `packageManager` field — never pin it here as well.
+    # The pnpm version comes from package.json's `packageManager` field —
+    # never pin it here as well.
     #
     # SHA-pinned like the repo's other third-party actions (crowdin,
     # peter-evans): this composite also runs inside the npm publish jobs, so a
@@ -35,10 +34,16 @@ runs:
     # .nvmrc is the single source of truth for the Node version, shared with
     # local nvm / fnm / mise. The 24.x line also bundles npm >= 11.5.1, which
     # release.yml requires for OIDC trusted publishing.
+    #
+    # No dependency cache. The pnpm store is ~245 MB and nearly every job
+    # restored it, so one pull request run pulled several GB from the Actions
+    # cache and hit its egress limit; a refused or throttled restore then
+    # stalled setup for up to ten minutes. A cold `pnpm install` from the
+    # registry takes about 13 s, so the cache saved little even when it worked.
     - uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
-        cache: pnpm
+        package-manager-cache: false
         registry-url: ${{ inputs.registry-url }}
 
     - if: inputs.install == 'true'

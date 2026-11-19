@@ -33,8 +33,19 @@ import {mergeProps} from '../utils';
 import {isSafeUrl} from '../utils/safeUrl';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {renderIconSlot} from '../Icon';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Citation/Citation.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 export interface CitationSource {
   title?: string;
@@ -71,7 +82,10 @@ const styles = stylex.create({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    verticalAlign: 'baseline',
+    // A flex chip takes its baseline from its first item. An icon has no text
+    // baseline, so its bottom edge sat on the line and the chip rode above
+    // it. Centred, it sits on the line with or without an icon.
+    verticalAlign: 'middle',
     height: spacingVars['--spacing-5'],
     fontSize: typeScaleVars['--text-supporting-size'],
     fontWeight: typeScaleVars['--text-supporting-weight'],
@@ -188,7 +202,14 @@ export function Citation({
   'data-testid': testId,
   ...rest
 }: CitationProps): React.ReactElement {
-  const t = useTranslator();
+  if (process.env.NODE_ENV !== 'production' && source == null) {
+    throw devPropError(
+      'Citation',
+      'source',
+      "is required, for example source={{title: 'Annual report', url: 'https://example.com/report'}}. Citation does not read children.",
+    );
+  }
+  const t = useComponentTranslator();
   const title = source.title ?? String(number);
   const href =
     source.url != null && isSafeUrl(source.url) ? source.url : undefined;

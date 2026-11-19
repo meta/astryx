@@ -4,12 +4,16 @@
 
 /**
  * @file Markdown.tsx
- * @input Markdown string, canonical AST, optional plugins and custom renderers
+ * @input Markdown string, canonical AST, optional plugins and custom renderers;
+ *   static document lists permit outside counter paint through ordered and
+ *   unordered ancestors. Flow-task
+ *   bodies use per-item first-line markers; paragraph-only task lists retain
+ *   their CheckboxList representation.
  * @output Exports Markdown component, MarkdownProps, and renderer contracts
  * @position Core implementation; renders markdown as Astryx components
  */
 
-import {Suspense, useMemo, useRef} from 'react';
+import {Suspense, useMemo, useRef, useState} from 'react';
 import type React from 'react';
 import {Fragment} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -28,12 +32,20 @@ import {
 import type {TextDisplay} from '../theme/types';
 import {CodeBlock, Code} from '../CodeBlock';
 import {parseFenceLanguage} from '../CodeBlock/tokenizer';
+import {listedLanguage, sameCodeLanguageList} from '../CodeBlock/grammar';
+import type {CodeLanguage} from '../CodeBlock/grammar';
 import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {Blockquote} from '../Blockquote/Blockquote';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {ListMarkerScope, type ListMarker} from '../List/ListContext';
+import {
+  ListEdgeScope,
+  ListStaticContext,
+  listStaticMark,
+  ListMarkerScope,
+  type ListMarker,
+} from '../List/ListContext';
 import {Table} from '../Table/Table';
 import {TableRow} from '../Table/TableRow';
 import {TableCell} from '../Table/TableCell';
@@ -41,6 +53,7 @@ import {TableHeaderCell} from '../Table/TableHeaderCell';
 import {TableHeader} from '../Table/TableHeader';
 import {TableBody} from '../Table/TableBody';
 import {mergeProps} from '../utils';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useStreamingText} from '../hooks/useStreamingText';
 import {computeBoundaries, computeSegments} from './streaming';
 import type {BaseProps} from '../BaseProps';
@@ -58,11 +71,17 @@ import {
 } from './parser';
 import type {IncrementalState, MathParseOptions, ParseOptions} from './parser';
 import {getMarkdownAstLegacyCodeLanguage, markdownAstText} from './ast';
+import {
+  blockDirection,
+  innerDirectionScope,
+  type BlockDirectionScope,
+} from './blockDirection';
 import type {
   MarkdownAstBlockContent,
   MarkdownAstPhrasingContent,
   MarkdownAstPosition,
   MarkdownAstTable,
+  MarkdownAstTableAlignment,
 } from './ast';
 import {
   applyMarkdownTransforms,
@@ -81,7 +100,6 @@ import type {
   MarkdownPluginEntry,
   PreparedMarkdownPlugins,
 } from './plugins/protocol';
-import {sanitizeMarkdownLinkUrl, sanitizeMarkdownUrl} from './url';
 import {
   projectMarkdownHeadings,
   type MarkdownHeadingProjection,
@@ -91,7 +109,15 @@ import {
   headingLinksHeadingStyle,
 } from './plugins/HeadingLinksRenderer';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {useDirection} from '../i18n/useDirection';
+import english from '../i18n/generated-english/Markdown/Markdown.generated';
+
+registerEnglishFallback(english);
 
 type SyncReactNode = Exclude<React.ReactNode, Promise<unknown>>;
 type RenderExtensionNode = MarkdownExtensionNode;
@@ -239,7 +265,9 @@ function sourceLineAttributes(lines: MarkdownSourceLines | undefined):
 export interface MarkdownProps<
   Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly [],
 > extends BaseProps<HTMLElement> {
+  /** Reaches the root element: a `div` in block display, a `span` in inline display. */
   ref?: React.Ref<HTMLDivElement> | React.Ref<HTMLSpanElement>;
+  /** The Markdown source to render. */
   children: string;
   /**
    * Display type. Markdown defaults to block.
@@ -247,6 +275,10 @@ export interface MarkdownProps<
    * @default 'block'
    */
   display?: TextDisplay;
+  /**
+   * Spacing between block-level elements. Each block target reflects it.
+   * @default 'default'
+   */
   density?: 'default' | 'compact';
   /**
    * The HTML heading level that markdown `#` maps to.
@@ -256,7 +288,19 @@ export interface MarkdownProps<
    * @default 1
    */
   headingLevelStart?: 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+   * Streaming mode: parses incrementally and fades in each newly arrived
+   * chunk. Under reduced motion the text shows at once.
+   * @default false
+   */
   isStreaming?: boolean;
+  /**
+   * Called when a default link is clicked. Return `false` to prevent the
+   * default navigation. A custom `link` renderer replaces the default link
+   * and does not receive this handler. A destination that the shared navigation rule
+   * rejects, and every `data:` URL, renders as plain text and never reaches
+   * this handler.
+   */
   onLinkClick?: (
     href: string,
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -277,6 +321,7 @@ export interface MarkdownProps<
    * Max width for prose content (paragraphs, headings, lists, blockquotes).
    * Tables and code blocks are unconstrained and can expand to the full
    * container width. Use for readable line lengths in wide layouts.
+   * @default 680
    *
    * @example
    * ```
@@ -287,22 +332,24 @@ export interface MarkdownProps<
   /**
    * Alignment of prose content within the container when `contentWidth`
    * is narrower than the available space.
-   * - 'start': left-aligned (default)
+   * - 'start': aligned to the inline start (the right edge in right-to-left)
    * - 'center': centered
    * @default 'start'
    */
   contentAlign?: 'start' | 'center';
-  components?: Partial<MarkdownComponents>;
   /**
-   * Plugins that transform text patterns into custom React elements.
-   * Applied to text nodes after parsing — code blocks, inline code, and math
-   * are unaffected. Patterns are matched in order; first match wins
-   * for overlapping ranges.
+   * Custom renderers for rendered Markdown parts. Supplying `math` opts into
+   * `$…$` and `$$…$$` parsing. Each renderer owns its own output and
+   * accessible semantics.
    */
+  components?: Partial<MarkdownComponents>;
   /** Ordered syntax, immutable transforms, and typed extension renderers. */
   plugins?: Plugins;
   /**
-   * Legacy text-match renderers. Unchanged and independent from `plugins`.
+   * Legacy text-match renderers, independent from `plugins`. Each turns
+   * matches in parsed prose text into custom React elements. Code blocks,
+   * inline code, and math are unaffected. Patterns are matched in order;
+   * the first match wins for overlapping ranges.
    */
   inlinePlugins?: MarkdownInlinePlugin[];
   /**
@@ -318,6 +365,15 @@ export interface MarkdownProps<
    * literal text.
    */
   autolink?: 'gfm';
+  /**
+   * CodeBlock language values a fence may name: each one imported on its
+   * own, such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. A fence whose language word is one of
+   * a listed value's identifiers renders with that value, ahead of a built-in
+   * with the same identifier; a later entry wins. Without it, fences render
+   * as they do today.
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +409,7 @@ const dynamicStyles = stylex.create({
 });
 
 const cellAlignStyles = stylex.create({
+  start: {textAlign: 'start'},
   center: {textAlign: 'center'},
   end: {textAlign: 'end'},
 });
@@ -361,42 +418,27 @@ const cellAlignStyles = stylex.create({
  * Cell sizing for Markdown's own default Table part, layered over Table's
  * wrap-mode defaults.
  *
- * Table sizes wrap-mode cells with `max-width: 0` + `word-break: break-word`,
- * and its header cell also applies nowrap + ellipsis. Those defaults zero every
- * column's min-content contribution, so automatic layout divides the container
- * equally: a six-column Markdown table squashes to a few characters per cell,
- * identifiers split mid-word, header labels ellipsize, and nothing ever
- * overflows into the Scroll region that exists to take the width.
- *
- * Here the cell reports an honest min-content, the header wraps instead of
- * truncating, and `box-sizing: content-box` makes the per-column `ch` floor a
- * floor on the text box rather than on the padded border box — so the floor
- * means the same number of characters at every density, with no padding
- * arithmetic to keep in sync with Table's own tokens.
- *
- * Data-driven `Table` keeps its released wrap mode; only Markdown's part is
- * restyled.
+ * Table's wrapping columns already follow their content and scroll when they
+ * do not fit. The header wraps instead of truncating. Overflow stays visible.
+ * `box-sizing: content-box` puts the per-column `ch` floor on the text box,
+ * not the padded box, so the floor holds the same number of characters at
+ * every density.
  */
 const markdownTableCellStyles = stylex.create({
   cell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
-    overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
-    wordBreak: 'normal',
   },
   headerCell: {
     boxSizing: 'content-box',
-    maxWidth: 'none',
     overflow: 'visible',
     overflowWrap: 'break-word',
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
     textOverflow: 'clip',
     whiteSpace: 'normal',
-    wordBreak: 'normal',
   },
   // Inline Code sets `word-break: break-word` so a long token cannot widen a
   // paragraph. Inside a table cell that same rule zeroes the token's
@@ -404,6 +446,17 @@ const markdownTableCellStyles = stylex.create({
   // and lets the column carry the width instead.
   code: {
     wordBreak: 'normal',
+  },
+  // A cell that reads against its table draws the column rule on the table's
+  // inline-end side, which is the cell's own inline-start.
+  ruleOnTableEnd: {
+    borderInlineEndWidth: 0,
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': '0',
+    },
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: colorVars['--color-border'],
   },
   // The grid's outer edge. `dividers="grid"` draws the lines *between* cells
   // and stops at the table's rim, so without this the top, bottom, and sides
@@ -574,9 +627,6 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
-  },
-  blockIndent: {
-    marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
   },
   // HR
   hr: {
@@ -861,6 +911,8 @@ function useStableMarkdownSyntaxEntries(
   plugins: PreparedMarkdownPlugins | undefined,
 ): ReadonlyArray<MarkdownPluginEntry> | undefined {
   const identity = plugins?.syntaxIdentity ?? '';
+  // A discarded render can leave an entry here. The hook uses an entry only
+  // while its identity matches, so it replaces that entry.
   const syntaxEntriesRef = useRef<
     | {
         identity: string;
@@ -1060,9 +1112,10 @@ function renderInline(
       return <MathComp key={index} value={node.value} display="inline" />;
     }
     case 'link': {
-      const safeHref = sanitizeMarkdownLinkUrl(node.url);
-      if (safeHref == null) {
-        // Unsafe URL — render as plain text
+      // The parser keeps only safe destinations, so the renderer checks no
+      // scheme. An empty destination still renders as text.
+      const safeHref = node.url;
+      if (safeHref === '') {
         return (
           <span key={index}>
             {node.children.map((c, i) =>
@@ -1141,8 +1194,8 @@ function renderInline(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return <span key={index}>[{node.alt}]</span>;
       }
       const ImageComp = components?.image;
@@ -1258,8 +1311,7 @@ function getElementSpacing(
 /**
  * Content-derived width floors for a Markdown table's columns, in `ch`.
  *
- * Once the cells stop clamping themselves (see `markdownTableCellStyles`),
- * automatic table layout already gives every column its min-content — the
+ * Table's automatic layout already gives every column its min-content — the
  * longest unbreakable token — so no identifier can split mid-word. That floor
  * is honest but not readable: a prose column's longest word is short, so six
  * prose columns in a narrow container still wrap one word per line. The
@@ -1309,6 +1361,24 @@ function computeTableColumnMinWidths(node: RenderTable): number[] {
   });
 }
 
+/**
+ * The alignment and column-rule styles for a Markdown table cell. For a cell
+ * that reads against its table, the table's start is the cell's end, so an
+ * explicit alignment and the rule swap logical sides.
+ */
+function tableCellSideStyles(
+  align: MarkdownAstTableAlignment | undefined,
+  isAgainstTable: boolean,
+): ReadonlyArray<StyleXStyles | false> {
+  return [
+    align === 'center' && cellAlignStyles.center,
+    align === 'right' &&
+      (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
+    align === 'left' && isAgainstTable && cellAlignStyles.end,
+    isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
+  ];
+}
+
 function renderBlock(
   node: RenderBlockNode,
   index: number,
@@ -1325,9 +1395,12 @@ function renderBlock(
   components: Partial<MarkdownComponents> | undefined,
   preparedPlugins: PreparedMarkdownPlugins | undefined,
   t: TranslatorFn,
+  // Language values fences may name (component:Markdown FR30).
+  codeLanguages: ReadonlyArray<CodeLanguage> | undefined,
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
+  directionScope?: BlockDirectionScope,
 ): SyncReactNode {
   const blockAlignMargin = BLOCK_ALIGN_MARGIN[contentAlign];
   const blockAlignStyle =
@@ -1378,6 +1451,7 @@ function renderBlock(
           <Tag
             key={index}
             id={headingId}
+            dir={blockDirection(node, directionScope)}
             {...mergeProps(
               themeProps('markdown-heading', {density, level}),
               stylex.props(
@@ -1402,6 +1476,7 @@ function renderBlock(
       return (
         <HeadingLinksRenderer
           key={index}
+          dir={blockDirection(node, directionScope)}
           headingId={headingId}
           headingLabel={headingLabel}
           permalinkUrl={permalinkUrl}
@@ -1464,6 +1539,7 @@ function renderBlock(
         <div
           key={index}
           role="paragraph"
+          dir={blockDirection(node, directionScope)}
           {...mergeProps(
             themeProps('markdown-paragraph', {density}),
             stylex.props(
@@ -1499,7 +1575,10 @@ function renderBlock(
       const diffLanguage = isDiff
         ? fence.language.match(/^\w*/)?.[0] || 'plaintext'
         : undefined;
-      const language = diffLanguage ?? legacyLanguage;
+      const fenceWord = diffLanguage ?? legacyLanguage;
+      // A listed language value claims its identifiers ahead of a built-in
+      // with the same identifier (component:Markdown FR30).
+      const language = listedLanguage(codeLanguages, fenceWord) ?? fenceWord;
       // A semantic-fence proposal claims its fence before the host's code
       // renderer (spec:AST-036 FR17). The host renderer, or the default Code
       // block without one, draws every unclaimed fence and is the fallback
@@ -1559,6 +1638,7 @@ function renderBlock(
       }
       try {
         const rendered = renderer.render({node: proposal.node});
+        // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- a plugin renderer's '' is its output; only null, undefined or a boolean asks for the readable fallback
         if (rendered == null || typeof rendered === 'boolean') {
           return fallback;
         }
@@ -1616,8 +1696,10 @@ function renderBlock(
             components,
             preparedPlugins,
             t,
+            codeLanguages,
             headingProjection,
             listDepth,
+            directionScope,
           ),
         );
         return (
@@ -1629,6 +1711,7 @@ function renderBlock(
       return (
         <Blockquote
           key={index}
+          dir={blockDirection(node, directionScope)}
           {...themeProps('markdown-blockquote', {density})}
           {...lineStamps}
           xstyle={[
@@ -1659,18 +1742,26 @@ function renderBlock(
               components,
               preparedPlugins,
               t,
+              codeLanguages,
               headingProjection,
               listDepth,
+              innerDirectionScope(node, directionScope),
             ),
           )}
         </Blockquote>
       );
     }
     case 'list': {
-      // Detect task lists: all items have a checked state
+      // Preserve the released CheckboxList representation for paragraph-only
+      // pure task lists. Flow/nested task bodies use the shared per-item marker
+      // path below, which owns first-line placement and static outside paint.
       const isTaskList =
         node.children.length > 0 &&
-        node.children.every(item => item.checked != null);
+        node.children.every(
+          item =>
+            item.checked != null &&
+            item.children.every(block => block.type === 'paragraph'),
+        );
 
       if (isTaskList) {
         // Extract labels from task items — render as rich inline content
@@ -1686,22 +1777,131 @@ function renderBlock(
               themeProps('markdown-list', {density}),
               stylex.props(
                 spacing,
+                contentWidthValue != null
+                  ? dynamicStyles.proseWidth(contentWidthValue)
+                  : null,
+                contentAlign !== 'start'
+                  ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                  : null,
                 isFirst && styles.noMarginBlockStart,
                 isLast && styles.noMarginBlockEnd,
               ),
             )}>
-            <CheckboxList
-              label={t('@astryx.markdown.taskList')}
-              isLabelHidden
-              value={checkedValues}
-              containerXstyle={styles.blockIndent}
-              isReadOnly
-              density="compact">
+            {/* Task rows never swipe, so each checkbox's focus ring draws
+                whole on the column edge. */}
+            <ListStaticContext value={listStaticMark()}>
+              <CheckboxList
+                label={t('@astryx.markdown.taskList')}
+                isLabelHidden
+                value={checkedValues}
+                isReadOnly
+                density="compact">
+                {/* Flush rows put each checkbox on the text line inside the
+                    column, as Markdown's other lists do. */}
+                <ListEdgeScope edge="flush">
+                  {node.children.map((item, i) => {
+                    const firstChild = item.children[0];
+                    const isInline =
+                      item.children.length === 1 &&
+                      firstChild?.type === 'paragraph';
+
+                    const label = isInline ? (
+                      <>
+                        {firstChild.children.map((c, j) =>
+                          renderInline(
+                            c,
+                            j,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                          ),
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {item.children.map((c, j) =>
+                          renderBlock(
+                            c,
+                            j,
+                            item.children.length,
+                            density,
+                            headingLevelStart,
+                            onLinkClick,
+                            cursor,
+                            citationCtx,
+                            contentWidthValue,
+                            contentAlign,
+                            linkComponent,
+                            inlinePlugins,
+                            components,
+                            preparedPlugins,
+                            t,
+                            codeLanguages,
+                            headingProjection,
+                            listDepth + 1,
+                            innerDirectionScope(item, directionScope),
+                          ),
+                        )}
+                      </>
+                    );
+
+                    return (
+                      <CheckboxListItem
+                        // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
+                        key={i}
+                        value={`task-${i}`}
+                        label={label}
+                        dir={blockDirection(item, directionScope)}
+                        {...(recordsSourceLines
+                          ? sourceLineAttributes(blockSourceLines(item))
+                          : undefined)}
+                      />
+                    );
+                  })}
+                </ListEdgeScope>
+              </CheckboxList>
+            </ListStaticContext>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          key={index}
+          {...mergeProps(
+            themeProps('markdown-list', {density}),
+            stylex.props(
+              spacing,
+              contentWidthValue != null
+                ? dynamicStyles.proseWidth(contentWidthValue)
+                : null,
+              contentAlign !== 'start'
+                ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                : null,
+              isFirst && styles.noMarginBlockStart,
+              isLast && styles.noMarginBlockEnd,
+            ),
+          )}>
+          {/* Static Markdown lists never host swipe actions, so outside
+              counter ink paints through the list's inline edge. */}
+          <ListStaticContext value={listStaticMark()}>
+            <List
+              listStyle={node.ordered ? 'decimal' : 'disc'}
+              density="compact"
+              edge="flush"
+              start={node.ordered ? node.start : undefined}>
               {node.children.map((item, i) => {
                 const firstChild = item.children[0];
                 const isInline =
                   item.children.length === 1 &&
                   firstChild?.type === 'paragraph';
+
+                // Check if this entire list item is "new" — if so, fade the
+                // whole item as a block instead of fading individual text spans.
 
                 const label = isInline ? (
                   <>
@@ -1738,151 +1938,91 @@ function renderBlock(
                         components,
                         preparedPlugins,
                         t,
+                        codeLanguages,
                         headingProjection,
                         listDepth + 1,
+                        innerDirectionScope(item, directionScope),
                       ),
                     )}
                   </>
                 );
 
+                // Each task item on this shared list path keeps its checked state
+                // (FR23): it shows a read-only checkbox where its marker
+                // would be, named by its text.
+                const firstParagraph = item.children.find(
+                  block => block.type === 'paragraph',
+                );
+                const task =
+                  item.checked == null
+                    ? undefined
+                    : {
+                        isChecked: item.checked,
+                        label:
+                          firstParagraph?.type === 'paragraph'
+                            ? markdownAstText(
+                                firstParagraph.children,
+                                extension =>
+                                  markdownExtensionText(
+                                    preparedPlugins,
+                                    extension,
+                                  ),
+                              )
+                            : t('@astryx.markdown.taskList'),
+                      };
+
+                const itemDirection = blockDirection(item, directionScope);
+                // A numbered item that reads against its list keeps its counter
+                // beside its own text, so its text never widens the counter
+                // column that the other rows share.
+                const readsAgainstList =
+                  node.ordered &&
+                  itemDirection != null &&
+                  directionScope != null &&
+                  itemDirection !== directionScope.around;
+
                 return (
-                  <CheckboxListItem
-                    // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown task items are rendered from positional AST nodes
+                  <ListMarkerScope
+                    // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
                     key={i}
-                    value={`task-${i}`}
-                    label={label}
-                    {...(recordsSourceLines
-                      ? sourceLineAttributes(blockSourceLines(item))
-                      : undefined)}
-                  />
+                    marker={
+                      (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
+                        listDepth % 3
+                      ]
+                    }
+                    task={task}
+                    hasMarkerGutter={node.ordered}
+                    isOutsideNumberColumns={readsAgainstList}>
+                    <ListItem
+                      label={label}
+                      dir={itemDirection}
+                      {...(recordsSourceLines
+                        ? sourceLineAttributes(blockSourceLines(item))
+                        : undefined)}
+                    />
+                  </ListMarkerScope>
                 );
               })}
-            </CheckboxList>
-          </div>
-        );
-      }
-
-      return (
-        <div
-          key={index}
-          {...mergeProps(
-            themeProps('markdown-list', {density}),
-            stylex.props(
-              spacing,
-              contentWidthValue != null
-                ? dynamicStyles.proseWidth(contentWidthValue)
-                : null,
-              contentAlign !== 'start'
-                ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
-                : null,
-              isFirst && styles.noMarginBlockStart,
-              isLast && styles.noMarginBlockEnd,
-            ),
-          )}>
-          <List
-            listStyle={node.ordered ? 'decimal' : 'disc'}
-            density="compact"
-            start={node.ordered ? node.start : undefined}
-            xstyle={styles.blockIndent}>
-            {node.children.map((item, i) => {
-              const firstChild = item.children[0];
-              const isInline =
-                item.children.length === 1 && firstChild?.type === 'paragraph';
-
-              // Check if this entire list item is "new" — if so, fade the
-              // whole item as a block instead of fading individual text spans.
-
-              const label = isInline ? (
-                <>
-                  {firstChild.children.map((c, j) =>
-                    renderInline(
-                      c,
-                      j,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                    ),
-                  )}
-                </>
-              ) : (
-                <>
-                  {item.children.map((c, j) =>
-                    renderBlock(
-                      c,
-                      j,
-                      item.children.length,
-                      density,
-                      headingLevelStart,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      contentWidthValue,
-                      contentAlign,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                      t,
-                      headingProjection,
-                      listDepth + 1,
-                    ),
-                  )}
-                </>
-              );
-
-              // A task item beside plain items keeps its own checked state
-              // (FR23): it shows a read-only checkbox where its marker
-              // would be, named by its text.
-              const firstParagraph = item.children.find(
-                block => block.type === 'paragraph',
-              );
-              const task =
-                item.checked == null
-                  ? undefined
-                  : {
-                      isChecked: item.checked,
-                      label:
-                        firstParagraph?.type === 'paragraph'
-                          ? markdownAstText(
-                              firstParagraph.children,
-                              extension =>
-                                markdownExtensionText(
-                                  preparedPlugins,
-                                  extension,
-                                ),
-                            )
-                          : t('@astryx.markdown.taskList'),
-                    };
-
-              return (
-                <ListMarkerScope
-                  // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
-                  key={i}
-                  marker={
-                    (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
-                      listDepth % 3
-                    ]
-                  }
-                  task={task}>
-                  <ListItem
-                    label={label}
-                    {...(recordsSourceLines
-                      ? sourceLineAttributes(blockSourceLines(item))
-                      : undefined)}
-                  />
-                </ListMarkerScope>
-              );
-            })}
-          </List>
+            </List>
+          </ListStaticContext>
         </div>
       );
     }
     case 'table': {
       const colMinWidths = computeTableColumnMinWidths(node);
+      // A cell whose text reads against its table keeps the table's sides: the
+      // column rule and an explicit alignment resolve in the table's
+      // direction, not the cell's.
+      const readsAgainstTable = (
+        cell: Parameters<typeof blockDirection>[0],
+      ): boolean => {
+        const cellDirection = blockDirection(cell, directionScope);
+        return (
+          cellDirection != null &&
+          directionScope != null &&
+          cellDirection !== directionScope.around
+        );
+      };
       const [header, ...rows] = node.children;
       // Inline code inside a cell keeps its token whole, through the same
       // `components` seam consumers use. A supplied renderer owns its own
@@ -1925,11 +2065,14 @@ function renderBlock(
                   <TableHeaderCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table columns are positional by definition
                     key={i}
+                    dir={blockDirection(h, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
-                      node.align[i] === 'center' && cellAlignStyles.center,
-                      node.align[i] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[i],
+                        readsAgainstTable(h),
+                      ),
                     ]}>
                     {h.children.map((c, j) =>
                       renderInline(
@@ -1954,10 +2097,13 @@ function renderBlock(
                   <TableCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table cells are positional by row and column
                     key={j}
+                    dir={blockDirection(cell, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.cell,
-                      node.align[j] === 'center' && cellAlignStyles.center,
-                      node.align[j] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[j],
+                        readsAgainstTable(cell),
+                      ),
                     ]}>
                     {cell.children.map((c, k) =>
                       renderInline(
@@ -2037,8 +2183,8 @@ function renderBlock(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return (
           <div
             key={index}
@@ -2113,6 +2259,7 @@ export function Markdown<
   plugins,
   inlinePlugins,
   autolink,
+  codeLanguages: codeLanguagesProp,
   xstyle,
   className,
   style,
@@ -2120,8 +2267,31 @@ export function Markdown<
   'data-testid': testId,
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const direction = useDirection();
+  // Keep one list while it names the same values, so an inline
+  // `codeLanguages={[…]}` does not re-render every block on each parent
+  // render (adjusting state during render, not in an Effect).
+  const [codeLanguages, setCodeLanguages] = useState(codeLanguagesProp);
+  if (!sameCodeLanguageList(codeLanguages, codeLanguagesProp)) {
+    setCodeLanguages(codeLanguagesProp);
+  }
   const LinkComponent = useLinkComponent();
+  // Links read the caller's handler when clicked, so a handler recreated on
+  // every caller render does not invalidate the memoized document below.
+  // Only whether a handler exists changes the rendered links.
+  const onLinkClickRef = useRef(onLinkClick);
+  useIsomorphicLayoutEffect(() => {
+    onLinkClickRef.current = onLinkClick;
+  });
+  const hasLinkClick = onLinkClick != null;
+  const stableOnLinkClick = useMemo<MarkdownProps['onLinkClick']>(
+    () =>
+      hasLinkClick
+        ? (href, event) => onLinkClickRef.current?.(href, event)
+        : undefined,
+    [hasLinkClick],
+  );
   // Derive the set of source IDs for the parser (stable across renders when sources don't change)
   const sourceIds = useMemo(
     () => (sources ? new Set(Object.keys(sources)) : undefined),
@@ -2158,6 +2328,10 @@ export function Markdown<
   // When not streaming, the hook returns children unchanged (no-op).
   const smoothedText = useStreamingText(children, isStreaming);
 
+  // A discarded render can change this cache, as it can change the option
+  // flags below. The parser reuses settled blocks only while the input starts
+  // with their text. So the output never shows text that only a discarded
+  // render had (Markdown.test.tsx: "a streamed render that React discards").
   const incrementalStateRef = useRef<IncrementalState<boolean>>(
     createIncrementalState<boolean>(),
   );
@@ -2312,6 +2486,10 @@ export function Markdown<
     return Math.min(Math.ceil(duration / tickMs), 12);
   }, [token]);
 
+  // Render writes these fade-in refs on purpose, an accepted exception to the
+  // runtime's ref rule. Text comes only from `smoothedText`. A render that
+  // React discards shifts the fade spans by the text it added. The "streamed
+  // text after a render React discards" tests pin why it is harmless.
   const prevBlocksRef = useRef<ReadonlyArray<RenderBlockNode>>([]);
   const prevInlineNodesRef = useRef<ReadonlyArray<RenderInlineNode>>([]);
   const boundariesRef = useRef<number[]>([]);
@@ -2323,23 +2501,90 @@ export function Markdown<
         ? countInlineTextLength(prevInlineNodesRef.current)
         : countBlockTextLength(prevBlocksRef.current);
     const next = computeBoundaries(boundariesRef.current, prevLen, maxSpans);
+    // Render writes this on purpose: see the fade-in refs' note above.
     boundariesRef.current = next;
     return next;
   }, [display, smoothedLen, maxSpans]);
 
-  const cursor: StreamingCursor = {
-    offset: 0,
-    boundaries,
-    active: isStreaming,
-  };
-
-  // Build citation context — numbers are assigned in encounter order during rendering.
-  // This is recreated each render so numbering stays consistent with the AST.
-  const citationCtx: CitationContext | null = sources
-    ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+  const contentWidthValue = contentWidth
+    ? typeof contentWidth === 'number'
+      ? `${contentWidth}px`
+      : contentWidth
     : null;
 
+  // The block document is the expensive part of a long Markdown render. It
+  // depends only on these inputs, so a caller re-render that changes none of
+  // them returns the same elements and React skips the whole subtree. The
+  // cursor and citation numbering are rebuilt inside, from the start of the
+  // document, exactly as a full render builds them.
+  const renderedBlocks = useMemo(() => {
+    if (display === 'inline') {
+      return null;
+    }
+    const blockCursor: StreamingCursor = {
+      offset: 0,
+      boundaries,
+      active: isStreaming,
+    };
+    // Numbers are assigned in encounter order during rendering.
+    const blockCitationCtx: CitationContext | null = sources
+      ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+      : null;
+    return blocks.map((block, i) =>
+      renderBlock(
+        block,
+        i,
+        blocks.length,
+        density,
+        headingLevelStart,
+        stableOnLinkClick,
+        blockCursor,
+        blockCitationCtx,
+        contentWidthValue,
+        contentAlign,
+        LinkComponent,
+        inlinePlugins,
+        components,
+        preparedPlugins,
+        t,
+        codeLanguages,
+        headingProjection,
+        undefined,
+        {provider: direction, around: direction},
+      ),
+    );
+  }, [
+    display,
+    blocks,
+    boundaries,
+    isStreaming,
+    sources,
+    citationStyle,
+    density,
+    headingLevelStart,
+    stableOnLinkClick,
+    contentWidthValue,
+    contentAlign,
+    LinkComponent,
+    inlinePlugins,
+    components,
+    preparedPlugins,
+    t,
+    headingProjection,
+    codeLanguages,
+    direction,
+  ]);
+
   if (display === 'inline') {
+    const cursor: StreamingCursor = {
+      offset: 0,
+      boundaries,
+      active: isStreaming,
+    };
+    // Numbers are assigned in encounter order during rendering.
+    const citationCtx: CitationContext | null = sources
+      ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+      : null;
     const renderedInline = (
       <span
         ref={ref}
@@ -2357,7 +2602,7 @@ export function Markdown<
           renderInline(
             node,
             i,
-            onLinkClick,
+            stableOnLinkClick,
             cursor,
             citationCtx,
             LinkComponent,
@@ -2370,6 +2615,7 @@ export function Markdown<
     );
 
     // Store current inline nodes for next render's boundary calculation.
+    // Render writes this on purpose: see the fade-in refs' note above.
     prevInlineNodesRef.current = inlineNodes;
     prevBlocksRef.current = [];
 
@@ -2391,36 +2637,14 @@ export function Markdown<
         className,
         style,
       )}>
-      {blocks.map((block, i) =>
-        renderBlock(
-          block,
-          i,
-          blocks.length,
-          density,
-          headingLevelStart,
-          onLinkClick,
-          cursor,
-          citationCtx,
-          contentWidth
-            ? typeof contentWidth === 'number'
-              ? `${contentWidth}px`
-              : contentWidth
-            : null,
-          contentAlign,
-          LinkComponent,
-          inlinePlugins,
-          components,
-          preparedPlugins,
-          t,
-          headingProjection,
-        ),
-      )}
+      {renderedBlocks}
     </div>
   );
 
   // Store current blocks for next render's boundary calculation.
   // This ref write is safe under StrictMode: both invocations produce the same
   // blocks (same smoothedText → same useMemo result), so both write the same value.
+  // Render writes this on purpose: see the fade-in refs' note above.
   prevBlocksRef.current = blocks;
   prevInlineNodesRef.current = [];
 

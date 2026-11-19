@@ -155,3 +155,177 @@ describe('visual gate capture identity', () => {
     ).toMatchObject({sha: 'invalid', runId: '', runAttempt: 'invalid'});
   });
 });
+
+// Each case spawns the gate on a 192-story index; a loaded CI runner can take
+// longer than the default 30 s for the first, cold spawn.
+describe(
+  'component scope with reverse dependents (spec:AST-030 FR13)',
+  {timeout: 120_000},
+  () => {
+    const repoRoot = path.resolve(path.dirname(SCRIPT), '../../..');
+    const baselineDir = path.join(repoRoot, '.github/visual-baseline');
+    let storybook;
+    let folders;
+
+    // A Storybook index of every baselined story, each tagged for every theme,
+    // so the touched-plus-dependent scope can pass the focused budget.
+    beforeEach(() => {
+      storybook = path.join(root, 'storybook');
+      fs.mkdirSync(storybook);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
+      );
+      const ids = [
+        ...new Set(Object.keys(manifest.shots).map(key => key.split('__')[0])),
+      ];
+      const entries = {};
+      for (const id of ids) {
+        const folder = id.split('--')[0].replace(/^core-/, '');
+        entries[id] = {
+          type: 'story',
+          id,
+          title: `Core/${folder}`,
+          name: id.split('--')[1],
+          componentPath: `../../packages/core/src/${folder}/index.ts`,
+          importPath: './stories/fixture.stories.tsx',
+          tags: ['visual-baseline'],
+        };
+      }
+      fs.writeFileSync(
+        path.join(storybook, 'index.json'),
+        JSON.stringify({v: 5, entries}),
+      );
+      folders = [
+        ...new Set(Object.values(entries).map(entry => entry.title.slice(5))),
+      ];
+    });
+
+    /** @param {string} command @param {...(string | Record<string, string>)} args */
+    const gate = (command, ...args) => {
+      const env =
+        typeof args.at(-1) === 'object'
+          ? {
+              ...process.env,
+              .../** @type {Record<string, string>} */ (args.pop()),
+            }
+          : process.env;
+      return spawnSync(
+        process.execPath,
+        [
+          SCRIPT,
+          command,
+          '--storybook-dir',
+          storybook,
+          '--baseline',
+          baselineDir,
+          '--out',
+          output,
+          '--tiers',
+          'component',
+          '--no-scout',
+          ...args,
+        ],
+        {encoding: 'utf8', env},
+      );
+    };
+    const verdict = () =>
+      JSON.parse(fs.readFileSync(path.join(output, 'verdict.json'), 'utf8'));
+
+    it('writes the skipped verdict for an over-budget plan with reverse dependents, which the workflow answers with the whole plan', () => {
+      const result = gate(
+        'check',
+        '--components',
+        folders[0],
+        '--dependents',
+        folders.join(','),
+      );
+      expect(result.stderr).not.toMatch(/ReferenceError/);
+      expect(result.status).toBe(0);
+      expect(verdict().status).toBe('skipped');
+    });
+
+    it('names the themes it cannot read, runs no pnpm build, and leaves every theme dist as it was', () => {
+      // The plan reads every theme's built source. A pnpm that records being
+      // called sits first on the gate's PATH.
+      const themesDir = path.join(repoRoot, 'packages/themes');
+      const coreThemeEntry = path.join(
+        repoRoot,
+        'packages/core/dist/theme/index.js',
+      );
+      const builtSources = () =>
+        fs
+          .readdirSync(themesDir, {withFileTypes: true})
+          .filter(entry => entry.isDirectory())
+          .map(entry => entry.name)
+          .sort()
+          .map(name => [
+            name,
+            fs.existsSync(path.join(themesDir, name, 'dist/source.mjs')),
+          ]);
+      const bin = path.join(root, 'bin');
+      const calls = path.join(root, 'pnpm-calls.log');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'pnpm'),
+        `#!/bin/sh\necho "$@" >> ${JSON.stringify(calls)}\nexit 1\n`,
+        {mode: 0o755},
+      );
+      const before = builtSources();
+      const coreBuilt = fs.existsSync(coreThemeEntry);
+
+      const result = gate('check', '--components', folders.join(','), {
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '').toBe(
+        '',
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(builtSources()).toEqual(before);
+      // The verdict names the themes it could not read: each one without its
+      // built source, or all of them when Core's theme entry is missing.
+      expect(verdict().context.themesNotBuilt).toEqual(
+        before
+          .filter(([, built]) => !built || !coreBuilt)
+          .map(([name]) => name),
+      );
+    });
+
+    it('writes the same skipped verdict for an over-budget plan of touched components alone', () => {
+      const result = gate('check', '--components', folders.join(','));
+      expect(result.status).toBe(0);
+      expect(verdict().status).toBe('skipped');
+    });
+
+    it('plans the touched component and each dependent folder with a stable story, and reports the rest', () => {
+      const touched = gate('plan', '--json', '--components', folders[0]);
+      const scoped = gate(
+        'plan',
+        '--json',
+        '--components',
+        folders[0],
+        '--dependents',
+        `${folders[1]},nosuchfolder`,
+      );
+      expect(scoped.status).toBe(0);
+      expect(scoped.stdout).toContain(
+        'Reverse dependents with no stable story: nosuchfolder',
+      );
+      const planned = text => JSON.parse(text.slice(text.indexOf('[')));
+      expect(planned(scoped.stdout).length).toBeGreaterThan(
+        planned(touched.stdout).length,
+      );
+    });
+
+    it('asks for the whole plan (exit 3) when nothing the scope reaches has a stable story', () => {
+      const result = gate(
+        'plan',
+        '--components',
+        '',
+        '--dependents',
+        'nosuchfolder',
+      );
+      expect(result.status).toBe(3);
+    });
+  },
+);

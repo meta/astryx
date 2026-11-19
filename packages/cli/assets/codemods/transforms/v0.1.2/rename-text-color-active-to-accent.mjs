@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Rename Text/Heading/Link/Timestamp color "active" to "accent"
- * @see https://github.com/facebook/astryx/issues/2863
+ * @see https://github.com/meta/astryx/issues/2863
  *
  * The `active` text-color value is renamed to `accent` and now maps to the
  * dedicated `--color-text-accent` token (legible accent ink) instead of

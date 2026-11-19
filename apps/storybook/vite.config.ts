@@ -13,6 +13,7 @@ import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import stylex from '@stylexjs/unplugin';
 import path from 'node:path';
+import stylexResolution from '../../scripts/stylex-module-resolution.cjs';
 
 const rootDir = path.resolve(__dirname, '../..');
 const coreRoot = path.resolve(__dirname, '../../packages/core/src');
@@ -23,15 +24,13 @@ export default defineConfig({
       // Use production mode with CSS extraction
       dev: false,
       useCSSLayers: true,
-      styleResolution: 'application-order',
+      // No styleResolution: Storybook resolves style merges the way the
+      // published CSS does, so a story shows what npm users get.
       aliases: {
         '@astryxdesign/core/*': [path.join(rootDir, 'packages/core/src/*')],
         '@astryxdesign/core': [path.join(rootDir, 'packages/core/src')],
       },
-      unstable_moduleResolution: {
-        type: 'commonJS',
-        rootDir: rootDir,
-      },
+      unstable_moduleResolution: stylexResolution.stylexModuleResolution,
     }),
     react(),
   ],

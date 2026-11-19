@@ -29,7 +29,7 @@ Arguably what an LLM does best is copy. We all know it is much worse at coming u
 
 Early on our templates were not good. There was too much plain StyleX. Too many divs and spans. Not enough actual components. We would ask an agent to build a page and watch it barely touch Astryx or hand back something that just looked broken. That confused us for a while. The agent had the docs. It had every prop and every example through the CLI. It had everything it could possibly need. Why was it ignoring all of it?
 
-The answer was almost too simple. It was copying our bad examples. Garbage in, garbage out. The old saying still holds. That is why we wrote a [grading rubric for templates](https://github.com/facebook/astryx/wiki/Contributing-Templates). It scores every template the same way every time. Nothing sloppy slips through and a room full of designers can hold one bar. We fixed what the agent was copying and the output followed.
+The answer was almost too simple. It was copying our bad examples. Garbage in, garbage out. The old saying still holds. That is why we wrote a [grading rubric for templates](https://github.com/meta/astryx/wiki/Contributing-Templates). It scores every template the same way every time. Nothing sloppy slips through and a room full of designers can hold one bar. We fixed what the agent was copying and the output followed.
 
 ## Good examples to copy
 
@@ -62,7 +62,7 @@ Templates get one extra trick. Each one is indexed by what it is built from and 
 - the components to fill the gaps
 - the frame and foundation every page needs anyway
 
-Then it picks a single starting move. A strong page match means scaffold this one and a weaker match means treat it as a layout reference and compose the rest. All of this is fast and deterministic so the same prompt returns the same result every time. There is no network call and no model behind it. You can read [the whole thing](https://github.com/facebook/astryx/blob/main/packages/cli/src/api/search.mjs) yourself.
+Then it picks a single starting move. A strong page match means scaffold this one and a weaker match means treat it as a layout reference and compose the rest. All of this is fast and deterministic so the same prompt returns the same result every time. There is no network call and no model behind it. You can read [the whole thing](https://github.com/meta/astryx/blob/main/packages/cli/src/api/search.mjs) yourself.
 
 Finally every `astryx build` run ends with a short set of rules. No divs for layout and no inline styles and tokens for everything else. It is the rubric again but this time pointed at your agent instead of our designers. The agent still gets to improvise and the fences just keep it on the system while it does.
 

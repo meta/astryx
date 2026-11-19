@@ -171,6 +171,37 @@ describe('Chart measurement gate', () => {
   });
 });
 
+describe('Chart container observation', () => {
+  it('observes its container while mounted and stops on unmount', () => {
+    const observed = new Set<Element>();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      },
+    );
+    const {container, unmount} = render(
+      <Chart data={data} xKey="month" yKeys={['revenue']}>
+        <g />
+      </Chart>,
+    );
+    const chartContainer = container.firstElementChild;
+    expect(chartContainer).not.toBeNull();
+    expect(observed.has(chartContainer!)).toBe(true);
+
+    unmount();
+    expect(observed.size).toBe(0);
+  });
+});
+
 describe('useChart', () => {
   it('throws a clear error when used outside <Chart>', () => {
     // React reports the uncaught render error via console.error; keep the

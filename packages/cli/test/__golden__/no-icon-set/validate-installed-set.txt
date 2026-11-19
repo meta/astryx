@@ -1,0 +1,131 @@
+exit 1
+Validating integration: @acme/glyphs@1.0.0
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+severity: [fail]
+code:     icon_builtin_definition_missing
+message:  <text>
+
+Summary: 27 errors, 0 warnings
+
+<text>
+
+<text>
+
+<text>
+
+set:      <text>
+<text>
+
+<text>
+
+<text>
+
+<text>
+
+<text>
+
+<text>

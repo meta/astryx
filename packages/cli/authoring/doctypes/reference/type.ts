@@ -132,17 +132,35 @@ export interface ReferenceDoc extends AuthoredDocGraphFields {
    *  thing. `astryx search` matches each as a keyword of the whole topic, so
    *  an exact one ranks the topic like its own title does. */
   keywords?: string[];
+  /** Makes this doc a skill as well as a topic: apps that keep the Astryx
+   *  skill in a skills folder (`astryx init --to skills`) get this doc as a
+   *  skill of its own, `<name>/SKILL.md`, and the AGENTS.md block gets one
+   *  line that points to it. `name` is lowercase words joined by hyphens, at
+   *  most 64 characters, unique among the app's integrations, and neither
+   *  `astryx` nor `astryx-project`; it is the skill's folder name.
+   *  `description` is one line of at most 1,024 characters that says when an
+   *  agent should load it: agents load a skill only when its description
+   *  matches the task. A skill that breaks a rule is left out with a
+   *  warning; the doc itself still loads. */
+  skill?: {
+    name: string;
+    description: string;
+  };
   /** Name of an existing topic this doc takes the place of. Authored by an
    *  integration whose guide should be served instead of the built-in one —
    *  `replaces: 'getting-started'` on a doc named `getting-started` swaps the
    *  content, and on a doc named something else swaps it and leaves the old
    *  name as an alias, so `astryx docs getting-started` still resolves.
+   *  A route (`'authoring/quick-start'`) names a guide the docs tree
+   *  places: readers who open that route get this doc.
    *  Ignored on a built-in topic (there is nothing above it to replace). */
   replaces?: string;
   /** Name of an existing topic this doc merges onto, section by section: a
    *  section whose title matches one in the base replaces it, and a section
-   *  the base does not have is appended. For correcting or adding to a topic
-   *  rather than owning it — `replaces` and `extends` are exclusive. */
+   *  the base does not have is added where its `before` or `after` says, else
+   *  at the end. A route (`'authoring/quick-start'`) names a guide the
+   *  docs tree places. For correcting or adding to a topic rather than owning
+   *  it — `replaces` and `extends` are exclusive. */
   extends?: string;
   /** Ordered sections that make up the doc. */
   sections: ReferenceSection[];
@@ -170,6 +188,14 @@ export interface ReferenceSection {
    *  `reference` block includes another doc from its canonical source, so a
    *  guide never copies a schema's fields or a command's options. */
   content: (ReferenceContentBlock | ReferenceDocBlock)[];
+  /** In a doc that `extends` a topic, the key of the base section (as
+   *  `astryx docs <topic> --index` shows it) to add this section before,
+   *  when it replaces none. Set `before` or `after`, not both; with neither,
+   *  the section is added at the end. Ignored on any other doc. */
+  before?: string;
+  /** In a doc that `extends` a topic, the key of the base section to add this
+   *  section after, when it replaces none. */
+  after?: string;
   /** Preview type for token tables in this section. When set, the docsite
    *  renders a visual preview column using the token's computed CSS value
    *  from the current theme. Omit for non-token sections. */

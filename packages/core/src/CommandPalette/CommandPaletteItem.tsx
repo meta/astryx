@@ -42,6 +42,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-inner'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -88,6 +89,7 @@ export interface CommandPaletteItemProps extends Omit<
   isHighlighted?: boolean;
   /**
    * Whether this item is currently selected (picker mode).
+   * When omitted inside CommandPalette, derived from the palette value.
    * @default false
    */
   isSelected?: boolean;
@@ -154,6 +156,7 @@ export function CommandPaletteItem({
     (ctx ? ctx.highlightedIndex === itemIndex && itemIndex >= 0 : false);
   const isSelected = controlledSelected ?? (ctx ? ctx.value === value : false);
 
+  // Syncs the scroll position of a standalone item with `isHighlighted`.
   useEffect(() => {
     // Inside CommandPalette the shared useHighlightedOptionScroll (via
     // useCombobox) is the single scrollIntoView owner (#6077); a second owner
@@ -202,7 +205,11 @@ export function CommandPaletteItem({
       }
       onMouseEnter={onMouseEnterProp}
       {...mergeProps(
-        themeProps('command-palette-item'),
+        themeProps('command-palette-item', {
+          highlighted: isHighlighted ? 'highlighted' : null,
+          selected: isSelected ? 'selected' : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.item,
           !isDisabled && interactionOverlayStyles.backgroundColor,

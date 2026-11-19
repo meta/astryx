@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file radio-group.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Contract self-test; proves the reusable contract, not Astryx components.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {describeExpectation, requiredLayers} from '../contract';
 import {

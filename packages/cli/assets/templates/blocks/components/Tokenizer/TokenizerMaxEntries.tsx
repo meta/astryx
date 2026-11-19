@@ -31,21 +31,22 @@ export default function TokenizerMaxEntries() {
   const [value, setValue] = useState<SearchableItem[]>([skills[0], skills[1]]);
 
   return (
-    <Stack direction="vertical" gap={2}>
-      <Text type="supporting" color="secondary">
-        Limited to {MAX_SKILLS} selections — {MAX_SKILLS - value.length}{' '}
-        remaining
-      </Text>
-      <Tokenizer
-        label="Top Skills"
-        placeholder="Search skills..."
-        description={`Choose up to ${MAX_SKILLS} skills`}
-        searchSource={skillSource}
-        value={value}
-        onChange={items => setValue(items)}
-        maxEntries={MAX_SKILLS}
-        containerStyle={{width: 400}}
-      />
-    </Stack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <Stack direction="vertical" gap={2}>
+        <Text type="supporting" color="secondary">
+          Limited to {MAX_SKILLS} selections — {MAX_SKILLS - value.length}{' '}
+          remaining
+        </Text>
+        <Tokenizer
+          label="Top Skills"
+          placeholder="Search skills..."
+          description={`Choose up to ${MAX_SKILLS} skills`}
+          searchSource={skillSource}
+          value={value}
+          onChange={items => setValue(items)}
+          maxEntries={MAX_SKILLS}
+        />
+      </Stack>
+    </div>
   );
 }

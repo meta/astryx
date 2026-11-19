@@ -558,6 +558,37 @@ describe('integration components a family doc lists in components', () => {
     expect(namesIn(loaded)).toEqual(['AcmeList']);
   });
 
+  it('lists no member the import only re-exports from another package', () => {
+    // Discovery follows relative re-exports alone; a package another package
+    // re-exports is not this integration's member.
+    const loaded = writePackage(
+      {main: './src/index.ts'},
+      {
+        'src/list/AcmeList.doc.mjs': family(
+          'AcmeList',
+          "{name: 'AcmeListRow', description: 'x'}, {name: 'AcmeListCell', description: 'x'}",
+        ).replace('usage:', "import: '@acme/widgets', usage:"),
+        'src/list/AcmeList.tsx':
+          'export function AcmeList() { return null; }\n',
+        'src/index.ts':
+          "export {AcmeList} from './list/AcmeList';\nexport {AcmeListRow} from '@acme/rows';\nexport * from '@acme/cells';\n",
+        'node_modules/@acme/rows/package.json': JSON.stringify({
+          name: '@acme/rows',
+          main: 'index.js',
+        }),
+        'node_modules/@acme/rows/index.js':
+          'export function AcmeListRow() { return null; }\n',
+        'node_modules/@acme/cells/package.json': JSON.stringify({
+          name: '@acme/cells',
+          exports: {'.': './index.js'},
+        }),
+        'node_modules/@acme/cells/index.js':
+          'export function AcmeListCell() { return null; }\n',
+      },
+    );
+    expect(namesIn(loaded)).toEqual(['AcmeList']);
+  });
+
   it("takes a member's source from the family's folder, never a bundle or the package root", () => {
     const loaded = writePackage(
       {exports: {'.': {import: './dist/index.mjs'}}},
@@ -671,6 +702,47 @@ describe('integration components a family doc lists in components', () => {
     );
     // Until the output exists, the import exports nothing.
     fs.rmSync(path.join(root, 'dist'), {recursive: true});
+    expect(namesIn(loaded)).toEqual(['AcmeList']);
+  });
+
+  it('reads members through the source condition, the same with or without built output', () => {
+    // The family's member is exported only from the root entry, as Lab's
+    // TourStep is.
+    const loaded = writePackage(
+      {
+        exports: {
+          '.': {
+            source: './src/index.ts',
+            types: './dist/index.d.ts',
+            default: './dist/index.js',
+          },
+        },
+      },
+      {
+        'src/index.ts':
+          "export {AcmeList} from './list/AcmeList';\nexport {AcmeListRow} from './list/row';\n",
+        'src/list/AcmeList.doc.mjs': family(
+          'AcmeList',
+          "{name: 'AcmeList', description: 'x'}, {name: 'AcmeListRow', description: 'x'}",
+        ),
+        'src/list/AcmeList.tsx':
+          'export function AcmeList() { return null; }\n',
+        'src/list/row.tsx': 'export function AcmeListRow() { return null; }\n',
+      },
+    );
+    expect(namesIn(loaded)).toEqual(['AcmeList', 'AcmeListRow']);
+    expect(findIntegrationComponentSource(loaded, 'AcmeListRow')).toBe(
+      path.join(root, 'src', 'list', 'row.tsx'),
+    );
+    // Built output, even a stale one without the member, changes nothing.
+    fs.mkdirSync(path.join(root, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'dist', 'index.js'),
+      'export function AcmeList() { return null; }\n',
+    );
+    expect(namesIn(loaded)).toEqual(['AcmeList', 'AcmeListRow']);
+    // A package that does not ship its source reads the built output.
+    fs.rmSync(path.join(root, 'src', 'index.ts'));
     expect(namesIn(loaded)).toEqual(['AcmeList']);
   });
 

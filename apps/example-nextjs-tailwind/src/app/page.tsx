@@ -139,19 +139,21 @@ export default function Home() {
             {/* Status colors */}
             <Text type="label">Status colors</Text>
             <div className="flex gap-3">
-              <div className="flex items-center gap-2 rounded-md bg-success/10 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-md bg-success-muted px-3 py-2">
                 <div className="h-2 w-2 rounded-full bg-success" />
-                <span className="text-sm font-medium text-success">
+                <span className="text-sm font-medium text-on-success-muted">
                   Success
                 </span>
               </div>
-              <div className="flex items-center gap-2 rounded-md bg-error/10 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-md bg-error-muted px-3 py-2">
                 <div className="h-2 w-2 rounded-full bg-error" />
-                <span className="text-sm font-medium text-error">Error</span>
+                <span className="text-sm font-medium text-on-error-muted">
+                  Error
+                </span>
               </div>
-              <div className="flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-md bg-warning-muted px-3 py-2">
                 <div className="h-2 w-2 rounded-full bg-warning" />
-                <span className="text-sm font-medium text-warning">
+                <span className="text-sm font-medium text-on-warning-muted">
                   Warning
                 </span>
               </div>

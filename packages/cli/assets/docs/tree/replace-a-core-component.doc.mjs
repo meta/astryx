@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/components/replace-a-core-component`:
+ * @file `astryx docs authoring/building-blocks/components/replace-a-core-component`:
  * intentionally make an integration component the default for a Core identity.
  */
 
@@ -103,7 +103,7 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx doctor integration components\nnpx astryx component SideNav\nnpx astryx component AcmeSideNav\nnpx astryx component SideNav --package @astryxdesign/core',
+          code: '{@command doctor integration components}\n{@command component SideNav}\n{@command component AcmeSideNav}\n{@command component SideNav --package @astryxdesign/core}',
         },
         {
           type: 'list',
@@ -112,6 +112,16 @@ export default {
             'Once the package declares the range, a missing target, invalid value, second replacement for one target in the same package, or a replacement named after a different Core component is an error. Without the range, `doctor integration components` reports each of these as a warning.',
             'When several integrations replace one target, explicit configuration beats the automatic pick. Among explicitly configured integrations, the later package wins and Doctor warns. Among autolinked integrations alone, the dependency listed later in `package.json` wins and Doctor warns.',
           ],
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: a replacement from a package installed for the computer applies in folders outside any project; inside a project, only replacements from packages the project installs apply. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

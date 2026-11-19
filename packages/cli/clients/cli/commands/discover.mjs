@@ -27,7 +27,16 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
-import {discover as discoverApi} from '../../../api/discover/discover.mjs';
+import {definitionCoverageText} from '../../../foundation/text/definition-coverage.mjs';
+import {defaultVariantText} from '../../../foundation/text/default-variant.mjs';
+import {
+  answersQueries,
+  discover as discoverApi,
+  iconSetCoverageOf,
+  OFFICIAL_SOURCE_NAME,
+} from '../../../api/discover/discover.mjs';
+import {isValidSemver} from '../../../foundation/env/semver.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
@@ -47,6 +56,7 @@ const KIND_PLURALS = {
   theme: 'themes',
   codemod: 'codemods',
   'agent-doc': 'agent docs',
+  'icon-set': 'icon sets',
 };
 
 // The list fields that hold item names, summarized in the package list.
@@ -57,6 +67,8 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'skills',
+  'iconSets',
 ];
 
 /**
@@ -76,6 +88,7 @@ const RESULT_KINDS = {
   theme: 'theme',
   codemod: 'migration',
   'agent-doc': 'doc',
+  'icon-set': 'mixed',
 };
 
 /**
@@ -123,6 +136,74 @@ function summarize(result) {
       });
   }
 }
+
+/**
+ * The commands that open the sections a package adds to a doc another package
+ * owns, one per section: the read itself, not only the section's key, so a
+ * reader runs it as printed.
+ * @param {string} name the doc the sections are in, as `astryx docs` opens it
+ * @param {string[]} keys the sections' keys
+ * @param {string} run the invocation commands print with
+ * @returns {string[]}
+ */
+function sectionReads(name, keys, run) {
+  return keys.map(key => `${run} docs ${name} ${key}`);
+}
+
+/**
+ * A package as the text views show it: a doc that adds sections to another
+ * package's topic prints, beside the doc, the read that opens each of them
+ * (`theme (read: … docs theme install-and-apply)`), so a reader can open its
+ * own section straight away. The JSON keeps `docs` and `docSections` apart.
+ * @template {{docs?: string[], docSections?: Record<string, string[]>}} T
+ * @param {T} entry
+ * @param {string} run the invocation commands print with
+ * @returns {Omit<T, 'docSections'>}
+ */
+function withDocSections(entry, run) {
+  const {docSections, ...rest} = entry;
+  if (!docSections || !rest.docs) return rest;
+  return {
+    ...rest,
+    docs: rest.docs.map(name =>
+      docSections[name]
+        ? `${name} (read: ${sectionReads(name, docSections[name], run).join('; ')})`
+        : name,
+    ),
+  };
+}
+
+/**
+ * An icon set's item page as the text view shows it: how many of the CLI's
+ * icon definitions it maps, of how many, as `definitions`, the label
+ * `experimental icon --list` prints it under. Where icon features are on, that line
+ * stands for the definitions themselves, which `--json` lists. The JSON
+ * carries no count.
+ * @template {object} T
+ * @param {T} data
+ * @param {{mapped: number, total: number} | null} coverage
+ * @returns {T | Record<string, unknown>}
+ */
+function withIconSetCoverage(data, coverage) {
+  if (!coverage) return data;
+  /** @type {Record<string, unknown>} */
+  const shown = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key === 'definitions') continue;
+    if (key === 'installed')
+      shown.definitions = definitionCoverageText(coverage);
+    shown[key] = value;
+  }
+  return shown;
+}
+
+/**
+ * Icon set names as text, marked experimental (spec:AST-017 FR27).
+ * @param {string[]} names
+ * @param {(names: string[]) => string} [shown] how the list is summarized
+ */
+const experimentalNames = (names, shown = n => n.join(', ')) =>
+  `${shown(names)} [experimental]`;
 
 /**
  * Record options that summarize each item list to its first names.
@@ -201,6 +282,85 @@ function versionLines(versions, marks) {
 }
 
 /**
+ * Whether a package entry adds anything besides themes.
+ * @param {Record<string, unknown>} entry
+ * @returns {boolean}
+ */
+function addsMoreThanThemes(entry) {
+  return ITEM_FIELDS.some(field => {
+    const names = entry[field];
+    return field !== 'themes' && Array.isArray(names) && names.length > 0;
+  });
+}
+
+/**
+ * What an official entry's add command installs, when that is not the version
+ * the page shows: the project's Core version, or the Core range it declares.
+ * @param {string} install the package-manager command
+ * @param {string | undefined} shown the version the page shows
+ * @param {string | undefined} source the entry's source
+ * @returns {string | undefined}
+ */
+function pinNote(install, shown, source) {
+  if (source !== OFFICIAL_SOURCE_NAME) return undefined;
+  const pin = /\S@([\d^~<>=*xXv][^"]*)"?$/u.exec(install)?.[1];
+  if (pin == null || pin === shown) return undefined;
+  return isValidSemver(pin)
+    ? `This installs ${pin}, the version that matches this project's Core.`
+    : `This installs the newest release in ${pin}, the Core range this project declares.`;
+}
+
+/**
+ * The "Add it" blocks for a package the project does not have: the command
+ * that adds it, then what makes its items usable. A theme still needs
+ * `theme add` once the package is installed; anything else loads on the next
+ * command.
+ * @param {string} install the package-manager command
+ * @param {string[]} themes theme slugs the package or item adds
+ * @param {boolean} addsOther whether it adds anything besides themes
+ * @param {string} run how to invoke the CLI
+ * @param {string} [note] what the command installs, when the page shows
+ *   another version
+ * @param {string[]} [iconSets] icon set names the item adds; once the package
+ *   is installed, `experimental icon use` picks one
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function addBlocks(install, themes, addsOther, run, note, iconSets = []) {
+  /** @type {import('../formatters/index.mjs').Block[]} */
+  const blocks = [section('Add it'), code(install)];
+  if (note) blocks.push(text(note));
+  if (iconSets.length > 0) {
+    blocks.push(
+      text('Then use its icon set:'),
+      code(
+        iconSets.map(set => `${run} experimental icon use ${set}`).join('\n'),
+      ),
+    );
+  }
+  if (themes.length > 0) {
+    blocks.push(
+      text(
+        themes.length === 1
+          ? 'Then use its theme:'
+          : 'Then use one of its themes:',
+      ),
+      code(themes.map(slug => `${run} theme add ${slug}`).join('\n')),
+    );
+  }
+  if (addsOther || themes.length === 0) {
+    blocks.push(
+      text(
+        'Astryx loads an integration on the next command once it is a dependency.',
+      ),
+    );
+  }
+  return blocks;
+}
+
+/** A whole scoped package name, `@scope/name`. */
+const SCOPED_NAME = /^@[^/\s]+\/[^/\s]+$/;
+
+/**
  * @param {import('commander').Command} program
  */
 export function registerDiscover(program) {
@@ -208,10 +368,21 @@ export function registerDiscover(program) {
     fn: discoverFn,
     action:
       /**
-       * @param {string | undefined} query
+       * @param {string[] | string | undefined} words
        * @param {{components?: boolean, type?: string, installed?: boolean, available?: boolean, limit?: string}} options
        */
-      async (query, options) => {
+      async (words, options) => {
+        // The query is variadic, as search's is: `astryx discover bar chart`
+        // is one query, "bar chart". A scoped package name and one word after
+        // it name an item: `astryx discover @acme/charts BarChart` opens
+        // `@acme/charts/BarChart`.
+        const query = Array.isArray(words)
+          ? words.length > 0
+            ? words.join(
+                words.length === 2 && SCOPED_NAME.test(words[0]) ? '/' : ' ',
+              )
+            : undefined
+          : words;
         rejectEmptyArgument('query', query, 'astryx discover');
         const detail = program.opts().detail || 'full';
         const json = program.opts().json || false;
@@ -222,8 +393,12 @@ export function registerDiscover(program) {
         // Non-blocking nudge: if any configured integration has validation
         // issues, print one compact line to stderr pointing at
         // doctor integration validate. Best-effort; suppressed in --json mode.
+        // Whether a query gets its own answer here or the list (FR1); the
+        // list's hints must not suggest queries that only return it again.
+        let queries = true;
         try {
           const project = await Project.load(process.cwd());
+          queries = answersQueries(project);
           await warnOnIntegrationIssues(project, {json});
         } catch {
           // Never let the nudge break the command.
@@ -263,70 +438,10 @@ export function registerDiscover(program) {
         switch (result.type) {
           case 'discover.list': {
             const listOpts = itemListOptions(Boolean(options.components));
-            const available = result.meta?.available;
+            // Discover always has a source, the official list, so the list
+            // always has an Available side.
+            const available = result.meta?.available ?? [];
             const sources = result.meta?.sources ?? [];
-
-            // No discover source: the list of what this project has, as always.
-            if (available === undefined) {
-              if (result.data.length === 0) {
-                if (options.available) {
-                  // The user specifically asked for available packages but
-                  // there is no source to answer from. Say so honestly.
-                  emit(
-                    text('No discover source is configured.'),
-                    text(
-                      [
-                        'Available integrations are listed by discover sources.',
-                        'A project can set one in astryx.config.mjs, and installed',
-                        'integrations can provide one.',
-                      ].join(' '),
-                    ),
-                    text(
-                      [
-                        `Find Astryx packages on npm: npm search @astryxdesign`,
-                        `Learn more: ${run} docs cli/integrations`,
-                      ].join('\n'),
-                    ),
-                  );
-                } else if (result.meta && result.meta.configured === false) {
-                  emit(
-                    text('No integrations configured.'),
-                    text('Add integration package names to astryx.config.mjs:'),
-                    code(
-                      "export default {\n  integrations: ['@scope/your-integration'],\n};",
-                    ),
-                    text(
-                      [
-                        `Find Astryx packages on npm: npm search @astryxdesign`,
-                        `Learn more: ${run} docs cli/integrations`,
-                      ].join('\n'),
-                    ),
-                  );
-                } else {
-                  emit(
-                    text(
-                      'No external components found in configured integrations.',
-                    ),
-                    text(
-                      `Find more packages: ${run} discover --available (needs a discover source)`,
-                    ),
-                  );
-                }
-                break;
-              }
-              emit(
-                records(result.data, listOpts),
-                text(
-                  [
-                    'Usage:',
-                    `  ${run} discover <package>            Browse a package`,
-                    `  ${run} discover <package>/Component  View component docs`,
-                    `  ${run} discover <search>             Search all packages`,
-                  ].join('\n'),
-                ),
-              );
-              break;
-            }
 
             const kind = options.type
               ? (KIND_PLURALS[options.type] ?? options.type)
@@ -337,11 +452,24 @@ export function registerDiscover(program) {
               blocks.push(section('Installed'));
               blocks.push(
                 result.data.length > 0
-                  ? records(result.data, listOpts)
+                  ? records(
+                      result.data.map(entry => withDocSections(entry, run)),
+                      {
+                        ...listOpts,
+                        // A package's description shows its first sentence;
+                        // `--json` carries it whole.
+                        format: {
+                          ...listOpts.format,
+                          description: firstSentence,
+                        },
+                      },
+                    )
                   : text(
                       kind
                         ? `None of this project's integrations add ${kind}.`
-                        : 'None yet.',
+                        : result.meta?.configured
+                          ? 'No external components found in configured integrations.'
+                          : 'None yet.',
                     ),
               );
             }
@@ -349,7 +477,16 @@ export function registerDiscover(program) {
               blocks.push(section('Available', sourceSubtitle(sources)));
               blocks.push(
                 available.length > 0
-                  ? records(available, listOpts)
+                  ? records(available, {
+                      ...listOpts,
+                      omit: ['experimentalFields'],
+                      format: {
+                        ...listOpts.format,
+                        description: firstSentence,
+                        iconSets: (/** @type {string[]} */ names) =>
+                          experimentalNames(names, listOpts.format?.iconSets),
+                      },
+                    })
                   : text(
                       !sources.some(s => s.status !== 'failed')
                         ? 'No source answered, so there is nothing to list.'
@@ -358,18 +495,60 @@ export function registerDiscover(program) {
                           : 'Nothing new to add: this project has every integration its sources list.',
                     ),
               );
+              // `<package>/<set>`, so the command picks the set even when two
+              // packages ship one of that name.
+              const iconSets = available.flatMap(entry =>
+                Array.isArray(entry.iconSets)
+                  ? entry.iconSets.map(set => `${entry.package}/${set}`)
+                  : [],
+              );
+              if (iconSets.length > 0) {
+                blocks.push(
+                  text(
+                    `Then use an icon set it adds: ${run} experimental icon use <set>, for example ${run} experimental icon use ${iconSets[0]}`,
+                  ),
+                );
+              }
             }
             blocks.push(...sourceNotes(sources));
-            blocks.push(
-              text(
-                [
-                  'Usage:',
-                  `  ${run} discover <package>            Browse a package and its versions`,
-                  `  ${run} discover <package>/<item>     View one item`,
-                  `  ${run} discover <search>             Search every item and package`,
-                ].join('\n'),
-              ),
-            );
+            if (!queries) {
+              // This project loads no integration and has no discover source
+              // of its own, so every query returns this list. Point at the
+              // add commands above instead of at queries.
+              if (query?.trim()) {
+                blocks.push(
+                  text(
+                    `This project loads no integration and has no discover source of its own, so discover lists everything instead of answering "${query}".`,
+                  ),
+                );
+              }
+              const themes = available.flatMap(entry =>
+                Array.isArray(entry.themes) ? entry.themes : [],
+              );
+              blocks.push(
+                text(
+                  [
+                    'To add a package, run its install command.',
+                    ...(themes.length > 0
+                      ? [
+                          `Then use a theme it adds: ${run} theme add <theme>, for example ${run} theme add ${themes[0]}`,
+                        ]
+                      : []),
+                  ].join('\n'),
+                ),
+              );
+            } else {
+              blocks.push(
+                text(
+                  [
+                    'Usage:',
+                    `  ${run} discover <package>            Browse a package and its versions`,
+                    `  ${run} discover <package>/<item>     View one item`,
+                    `  ${run} discover <search>             Search every item and package`,
+                  ].join('\n'),
+                ),
+              );
+            }
             emit(...blocks);
             break;
           }
@@ -377,8 +556,16 @@ export function registerDiscover(program) {
           case 'discover.detail': {
             const d = result.data;
             /** @type {import('../formatters/index.mjs').Block[]} */
-            const blocks = [record(d, {omit: ['versions', 'install']})];
-            if (d.versions) {
+            const blocks = [
+              record(withDocSections(d, run), {
+                omit: ['versions', 'install', 'experimentalFields'],
+                format: {
+                  description: firstSentence,
+                  iconSets: experimentalNames,
+                },
+              }),
+            ];
+            if (d.versions && d.versions.length > 0) {
               const shown = d.version;
               const lines = versionLines(d.versions, {
                 shown,
@@ -387,12 +574,12 @@ export function registerDiscover(program) {
                   : undefined,
                 latest: d.latest,
               });
-              const prereleases = d.versions.filter(v => v.prerelease).length;
+              // The shown version is listed even when it is a prerelease.
+              const prereleases = d.versions.filter(
+                v => v.prerelease && v.version !== shown,
+              ).length;
               blocks.push(
-                section(
-                  'Versions',
-                  `${d.versions.length} published, newest first`,
-                ),
+                section('Versions', `${d.versions.length} known, newest first`),
               );
               if (lines.length > 0) blocks.push(list(lines));
               if (prereleases > 0) {
@@ -405,10 +592,16 @@ export function registerDiscover(program) {
             }
             if (d.install) {
               blocks.push(
-                section('Add it'),
-                code(d.install),
-                text(
-                  'Astryx loads an integration on the next command once it is a dependency.',
+                ...addBlocks(
+                  d.install,
+                  d.themes ?? [],
+                  addsMoreThanThemes(
+                    /** @type {Record<string, unknown>} */ (
+                      /** @type {unknown} */ (d)
+                    ),
+                  ),
+                  run,
+                  pinNote(d.install, d.version, d.source),
                 ),
               );
             } else if (d.installedAs) {
@@ -420,7 +613,7 @@ export function registerDiscover(program) {
             }
             blocks.push(
               text(
-                d.installed
+                d.installed && d.components.length > 0
                   ? `Usage: ${run} discover ${d.name}/<ComponentName>`
                   : `See one item: ${run} discover ${d.name}/<item>`,
               ),
@@ -437,22 +630,53 @@ export function registerDiscover(program) {
                 : detail === 'compact'
                   ? formatCompact(docs, docs.name, '')
                   : formatFull(docs);
-            emit(code(md));
+            emit(
+              record({package: result.package}),
+              code(md, {lang: 'markdown'}),
+            );
             break;
           }
 
           case 'discover.item': {
             const d = result.data;
+            const shown =
+              d.kind === 'icon-set'
+                ? {...d, default: defaultVariantText(d.default)}
+                : d;
             emit(
-              record(d, {omit: ['install']}),
-              ...(d.install
+              record(withIconSetCoverage(shown, iconSetCoverageOf(result)), {
+                omit: ['install', 'experimental'],
+                // An icon set is experimental (spec:AST-017 FR27): its name
+                // carries the mark, as in the list.
+                ...(d.experimental
+                  ? {
+                      format: {
+                        name: (/** @type {string} */ name) =>
+                          `${name} [experimental]`,
+                      },
+                    }
+                  : {}),
+              }),
+              // A doc that adds sections to another package's topic says how
+              // to read each one.
+              ...(d.kind === 'doc' && d.sections
                 ? [
-                    section('Add it'),
-                    code(d.install),
                     text(
-                      'Astryx loads an integration on the next command once it is a dependency.',
+                      sectionReads(d.name, d.sections, run)
+                        .map(read => `Read: ${read}`)
+                        .join('\n'),
                     ),
                   ]
+                : []),
+              ...(d.install
+                ? addBlocks(
+                    d.install,
+                    d.kind === 'theme' ? [d.name] : [],
+                    d.kind !== 'theme',
+                    run,
+                    pinNote(d.install, d.version, d.source),
+                    d.kind === 'icon-set' ? [`${d.package}/${d.name}`] : [],
+                  )
                 : []),
               text(`Its package: ${run} discover ${d.package}`),
             );
@@ -479,7 +703,7 @@ export function registerDiscover(program) {
                     m.kind && m.kind !== 'component' ? m.kind : '',
                     m.installed === false ? 'not installed' : '',
                   ].filter(Boolean);
-                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}`;
+                  return `${run} discover ${target}${tags.length ? `  (${tags.join(', ')})` : ''}${m.experimental ? ' [experimental]' : ''}`;
                 }),
               ),
             );

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file reset.until-found.a11y.browser.spec.ts
@@ -12,7 +13,7 @@
 
 import * as fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 
 const RESET_CSS = fs.readFileSync(
   fileURLToPath(new URL('./reset.css', import.meta.url)),

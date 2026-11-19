@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/build-the-template/template-assets/template-styles`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-styles`:
  * style a template with Astryx first, keep editable styles in the file, and
  * ship shared CSS from the package.
  */
@@ -56,7 +56,7 @@ import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const styles = stylex.create({
   trend: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-text-success'],
     minWidth: 0,
   },
 });

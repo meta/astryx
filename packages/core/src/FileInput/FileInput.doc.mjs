@@ -123,8 +123,8 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon.',
-      default: "'attached'",
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon. Dropzone mode does not support attached, so a dropzone defaults to detached; an explicit attached keeps its released rendering until the next minor release, which resolves it to detached.',
+      default: "'attached' in input mode; 'detached' in dropzone mode",
     },
     {
       name: 'labelTooltip',
@@ -196,7 +196,7 @@ export const docs = {
       {name: 'Upload icon', required: false, description: 'An upload-to-tray icon in the drop zone hinting at the upload action.'},
       {name: 'Placeholder', required: false, description: 'Hint text shown when no files are selected.'},
       {name: 'File name display', required: false, description: 'Shows the name(s) of selected files.'},
-      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the input.'},
+      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the file-selection trigger.'},
       {name: 'Spinner', required: false, description: 'Loading indicator that appears during async upload actions.'},
       {name: 'Status message', required: false, description: 'Validation feedback showing error, warning, or success with a message.'},
     ],
@@ -296,8 +296,8 @@ export const docsZh = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。',
-      default: "'attached'",
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。dropzone 模式不支持 attached，因此 dropzone 默认使用 detached；显式传入的 attached 在下一个次版本之前保持原有渲染，届时会解析为 detached。',
+      default: "输入模式为 'attached'；dropzone 模式为 'detached'",
     },
     {
       name: 'containerXstyle',
@@ -408,7 +408,7 @@ export const docsDense = {
     placeholder: 'Placeholder when no files selected.',
     mode: "Visual mode: 'input' (compact) or 'dropzone' (drag-and-drop).",
     status: 'Validation status; colored border. Message floats below.',
-    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
+    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached (explicit attached kept until next minor).',
     labelTooltip: 'Tooltip in info icon at label end.',
   },
 };

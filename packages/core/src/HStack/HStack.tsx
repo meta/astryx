@@ -55,7 +55,8 @@ export interface HStackProps extends Omit<
 }
 
 /**
- * Horizontal stack component for arranging items left-to-right.
+ * Horizontal stack component that arranges items along the inline axis:
+ * left to right in LTR, right to left in RTL.
  * Convenience wrapper around `Stack` with `direction="horizontal"`.
  *
  * @example

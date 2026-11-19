@@ -24,7 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 
 export const colorDefaults = {
   // Core semantic
-  '--color-accent': 'light-dark(#0064E0, #2694FE)',
+  '--color-accent': 'light-dark(#0064E0, #0171E3)',
   '--color-accent-muted': 'light-dark(#0082FB33, #0082FB3F)',
   '--color-on-accent': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-neutral':
@@ -38,7 +38,11 @@ export const colorDefaults = {
 
   // Text
   '--color-text-primary': 'light-dark(#0A1317, #DFE2E5)',
-  '--color-text-secondary': 'light-dark(#4E606F, #AAAFB5)',
+  // Secondary text also sits on translucent fills: the stock palette tints
+  // (Card's `gray` variant, for one) and the `--color-neutral` fill (a
+  // SegmentedControl track, AvatarGroup's overflow). They lift the page under
+  // them, and these stops keep the text at 4.5:1 there.
+  '--color-text-secondary': 'light-dark(#445564, #B0B5BB)',
   '--color-text-disabled': 'light-dark(#A4B0BC, #6F747C)',
   '--color-text-accent': 'light-dark(#0064E0, #3E9EFB)',
   '--color-on-dark': 'light-dark(#FFFFFF, #FFFFFF)',
@@ -56,16 +60,45 @@ export const colorDefaults = {
   '--color-background-inverted': 'light-dark(#0A1317, #FFFFFF)',
   '--color-background-error-inverted': 'light-dark(#AA071E, #E3193B)',
 
-  // Status/Sentiment
+  // Status fills (architecture:theme-tokens INV11). Each `--color-<status>` is
+  // the strong status fill, and `--color-on-<status>` is content on it at
+  // 4.5:1 or more. `-muted` is the pale fill, with `--color-on-<status>-muted`.
+  // Info is independent of the accent.
+  '--color-info': 'light-dark(#0064E0, #0064E0)',
+  '--color-info-muted': 'light-dark(#0082FB33, #0082FB3F)',
+  '--color-on-info': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-success': 'light-dark(#0D8626, #0D8626)',
   '--color-success-muted': 'light-dark(#0B991F33, #0B991F3F)',
   '--color-on-success': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-error': 'light-dark(#E3193B, #F5394F)',
   '--color-error-muted': 'light-dark(#E3193B33, #F5394F3F)',
-  '--color-on-error': 'light-dark(#FFFFFF, #FFFFFF)',
+  // Dark error is light enough that white misses 4.5:1, so its content is dark.
+  '--color-on-error': 'light-dark(#FFFFFF, #0A1317)',
   '--color-warning': 'light-dark(#E9AF08, #F2C00B)',
   '--color-warning-muted': 'light-dark(#E2A40033, #E2A4003F)',
   '--color-on-warning': 'light-dark(#0A1317, #0A1317)',
+
+  // Status text on the default page and card surfaces, 4.5:1 or more.
+  '--color-text-info': 'var(--color-text-blue)',
+  '--color-text-success': 'var(--color-text-green)',
+  '--color-text-warning': 'var(--color-text-yellow)',
+  '--color-text-error': 'var(--color-text-red)',
+
+  // Status icons and borders on those surfaces follow the text role.
+  '--color-icon-info': 'var(--color-text-info)',
+  '--color-icon-success': 'var(--color-text-success)',
+  '--color-icon-warning': 'var(--color-text-warning)',
+  '--color-icon-error': 'var(--color-text-error)',
+  '--color-border-info': 'var(--color-text-info)',
+  '--color-border-success': 'var(--color-text-success)',
+  '--color-border-warning': 'var(--color-text-warning)',
+  '--color-border-error': 'var(--color-text-error)',
+
+  // Content on pale status fills.
+  '--color-on-info-muted': 'var(--color-text-blue)',
+  '--color-on-success-muted': 'var(--color-text-green)',
+  '--color-on-warning-muted': 'var(--color-text-yellow)',
+  '--color-on-error-muted': 'var(--color-text-red)',
 
   // Border
   '--color-border': 'light-dark(#05365919, #F2F4F619)',
@@ -226,10 +259,8 @@ export const radiusDefaults = {
   '--radius-element': '8px',
   '--radius-container': '12px',
   '--radius-page': '28px',
-  // Chat surfaces (bubbles, composer, drawer) are intentionally rounder than
-  // cards in the same view. Tracks --radius-page's value by default but is a
-  // distinct token so chat rounding can be themed independently. See #2072.
-  '--radius-chat': '28px',
+  // A distinct token, so a theme can make chat rounder or squarer than its cards.
+  '--radius-chat': 'var(--radius-container)',
   '--radius-full': '9999px',
 } as const;
 
@@ -278,6 +309,8 @@ export const durationDefaults = {
   '--duration-slow-min': '730ms',
   '--duration-slow': '975ms',
   '--duration-slow-max': '1300ms',
+  /** The standard dismissal duration. */
+  '--duration-exit': 'var(--duration-fast)',
 } as const;
 
 export const durationVars = stylex.defineVars(durationDefaults);
@@ -287,9 +320,24 @@ export type DurationVarName = keyof typeof durationDefaults;
 // =============================================================================
 // Motion Tokens — Easing
 // =============================================================================
+// --ease-standard decelerates: things arriving and state changes.
+// --ease-exit accelerates: things leaving. It moves off from rest (no rise at
+// the start) and is quickest as the surface leaves, so the travel lands inside
+// the duration instead of in its first few frames.
 
 export const easeDefaults = {
   '--ease-standard': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Entrances: a layer or element arriving. A theme's `character` sets it
+   * (spec:AST-108 FR2); at `'standard'` it equals --ease-standard.
+   */
+  '--ease-entrance': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Moves: an element changing place or size on screen. A theme's
+   * `character` sets it; at `'standard'` it equals --ease-standard.
+   */
+  '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-exit': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
 } as const;
 
 export const easeVars = stylex.defineVars(easeDefaults);

@@ -13,7 +13,10 @@
  *   read applies;
  * - themes: each theme's descriptor, as theme discovery resolves it. A themes
  *   root that discovery cannot read serves no theme, and is listed with the
- *   reason.
+ *   reason;
+ * - iconSets: each icon set's descriptor that icon-set discovery reads. A
+ *   set whose descriptor or data file does not parse still ships its
+ *   descriptor, which is checked as a doc no reader serves.
  * A doc no reader serves still ships: a `hidden` one, a second doc for one
  * name, an overlay without its topic. It goes to its root's kind. A test
  * fixture does not ship as a doc, and is only counted: a doc under
@@ -35,7 +38,9 @@ import {discoverIntegrationComponents} from './component-discovery.mjs';
 import {discoverIntegrationDocs} from './docs-discovery.mjs';
 import {discoverIntegrationTemplatesForOne} from './template-adapter.mjs';
 import {discoverThemeDirectory} from './theme-discovery.mjs';
+import {discoverIconSetDirectory} from './icon-set-discovery.mjs';
 import {rootProblem} from '../integrations/validate-contributions.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('./doc-types.mjs').DocFile} DocFile */
 /** @typedef {import('./doc-types.mjs').DocRoot} DocRoot */
@@ -48,7 +53,7 @@ import {rootProblem} from '../integrations/validate-contributions.mjs';
  * @returns {Promise<{files: DocFile[], unread: Array<{path: string, reason: string}>, fixtures: number}>}
  */
 export async function integrationDocFiles(integration) {
-  const {components, templates, docs, themes} = integration ?? {};
+  const {components, templates, docs, themes, iconSets} = integration ?? {};
   /** @type {Array<[DocRoot, string, string[]]>} */
   const read = [];
   /** @type {Array<{path: string, reason: string}>} */
@@ -121,6 +126,15 @@ export async function integrationDocFiles(integration) {
       ).map(theme => theme.docPath),
     ],
   ]);
+  await take(iconSets, 'iconSets', async () => [
+    [
+      'icon-sets',
+      discoverIconSetDirectory(
+        /** @type {string} */ (iconSets),
+        integration?.name ?? 'the package',
+      ).sets.map(set => set.docPath),
+    ],
+  ]);
   /** @type {Map<string, {root: DocRoot, dir: string}>} */
   const owners = new Map();
   /** @type {(table: Map<string, {root: DocRoot, dir: string}>, root: DocRoot, dir: string, file: string) => void} */
@@ -143,6 +157,7 @@ export async function integrationDocFiles(integration) {
     ['templates', templates],
     ['docs', docs],
     ['themes', themes],
+    ['icon-sets', iconSets],
   ])) {
     if (!dir || !readable.has(dir)) continue;
     for (const file of docFilesUnder(dir)) {
@@ -162,7 +177,7 @@ export async function integrationDocFiles(integration) {
   return {
     files: [...owners]
       .map(([file, {root}]) => ({path: file, root}))
-      .sort((a, b) => a.path.localeCompare(b.path)),
+      .sort((a, b) => compareText(a.path, b.path)),
     unread,
     fixtures,
   };
@@ -179,6 +194,7 @@ function isFixture(file, root) {
   return (
     root !== 'templates' &&
     root !== 'themes' &&
+    root !== 'icon-sets' &&
     file.split(path.sep).includes('__tests__')
   );
 }

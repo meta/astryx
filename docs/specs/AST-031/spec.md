@@ -13,7 +13,7 @@ owners: [josephfarina, cixzhang]
 affects_architecture: [architecture:cli-surface]
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: [cli/integrations]
+affects_consumer_docs: [authoring]
 ---
 
 # Runtime integration feature composition system spec
@@ -111,17 +111,15 @@ confirmation.
 
 A built-in fallback (e.g. opening a GitHub issue via `issuesUrl`) activates
 **only** when the effective handler set is empty after deduplication. The
-presence of any configured handler — project or integration — suppresses that
-fallback. A feature may still route to the target package's own destination
-beside its handlers; for gap reports, FR13 defines that route.
+presence of any configured handler — project or integration — suppresses the
+fallback entirely.
 
 #### issuesUrl is target metadata
 
 `issuesUrl` on an integration manifest or project config describes the
 destination for human-readable issue links. It is metadata about the target
 package, not a handler implementation. Handlers use it as context; the CLI
-uses it for fallback routing and, for gap reports, for the target route
-(FR13).
+uses it for fallback routing.
 
 #### Mutation-sensitive tests
 
@@ -182,8 +180,11 @@ fail-closed guard MUST break a test.
   (zero handlers after deduplication), and the target has a GitHub `issuesUrl`,
   the CLI offers to file via `gh issue create`. This fallback is consent-gated
   (`public` audience). Any other `issuesUrl` scheme produces a `routed_only`
-  receipt. This zero-handler fallback is suppressed when at least one handler
-  exists; FR13 defines the route that still reaches the target package.
+  receipt. The fallback is suppressed entirely when at least one handler exists.
+  `astryx swizzle`'s receipt offers its `gh issue create` line when `gh` is on
+  PATH, whatever its login state. A logged-out `gh` asks for its own login when
+  the line runs. The text receipt shows the command; the JSON receipt keeps the
+  command and the issues URL.
 
 - **FR9 — Project config field.** `astryx.config` gains a `gapReport` field
   accepting a `GapReportHandler`. This is the project-level handler and runs
@@ -200,24 +201,14 @@ fail-closed guard MUST break a test.
   handlers still run even when a gated sibling is blocked.
 
 - **FR12 — Aggregate response.** The command's response includes a `deliveries`
-  array with one entry per effective handler, fallback, or FR13 target route.
-  Each delivery records `handlerType`, `handler`, `audience`, `status`, `url`,
-  and `message`. The response shape is the same in `--json` and human output
-  modes.
+  array with one entry per effective handler or fallback. Each delivery records
+  `handlerType`, `handler`, `audience`, `status`, `url`, and `message`. The
+  response shape is the same in `--json` and human output modes.
 
-- **FR13 — The package a report is about also receives it.** When the
-  effective handler set is not empty and the target is an integration package
-  whose own manifest sets `issuesUrl`, the CLI also routes the report to that
-  `issuesUrl` after the handlers, the same way the FR8 fallback does: a GitHub
-  issues URL is filed with `gh issue create` only with caller consent
-  (`consent_required` otherwise), and any other URL produces a `routed_only`
-  delivery naming it. The route is one more delivery with
-  `handlerType: 'fallback'`. It does not run when the target is Core, whose
-  reports the handlers already receive; when the target package's own handler
-  is in the effective set; or when a handler delivery's `url` lies inside that
-  `issuesUrl` (same origin, and its path starts with the issues URL's path). So
-  one place never receives the same report twice. The route's outcome never
-  changes a handler's delivery.
+- **FR13 — A destination the caller names.** When the caller names a
+  destination with `--to`, that destination replaces the handlers and the FR8
+  fallback for that report. `architecture:cli-surface` INV36 governs the option
+  and who chooses the destination.
 
 #### Platform support
 
@@ -241,27 +232,23 @@ integration handler, and each handler returns its own receipt. Existing consumer
 without handlers keep the consent-gated `issuesUrl` fallback. No released config or
 integration API requires migration because the single-writer shape has not shipped.
 
-With handlers loaded, a report about an integration that sets its own
-`issuesUrl` also reaches that `issuesUrl` (FR13). The delivery uses the
-existing `fallback` delivery kinds, so the response shape gains no new values.
-
 ---
 
 ## Verification
 
-| Contract | Verification                                           | Representative states                                                                                                                                                   | Mutation or failure expectation                                                                                           |
-| -------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR3  | gap-report handler type and receipt contract tests     | valid handler; missing audience; wrong status value; non-object return                                                                                                  | an invalid handler shape or receipt is accepted silently                                                                  |
-| FR4      | handler isolation tests                                | handler writes stdout; handler calls process.exit; handler throws; handler exceeds 30 s                                                                                 | stdout corruption reaches the JSON envelope, or exit/throw stops later handlers                                           |
-| FR5      | no-opt-out assertion test                              | project sets `inheritDebug: false` in package.json; gap-report handlers still run                                                                                       | an opt-out mechanism suppresses a gap-report handler                                                                      |
-| FR6      | effective-set ordering and deduplication tests         | project + two integrations; duplicate handle ref; project only; integrations only                                                                                       | wrong order, duplicate execution, or missing handler                                                                      |
-| FR7      | target selection tests                                 | explicit package; unique owner; ambiguous owner requiring `--package`; no component match                                                                               | handler count influences target, ambiguity is guessed, or an unknown component fails to default to Core                   |
-| FR8      | fallback activation and suppression tests              | zero handlers + GitHub issuesUrl; zero handlers + non-GitHub issuesUrl; one handler present                                                                             | fallback fires with a handler present, or non-GitHub issuesUrl claims it filed                                            |
-| FR9–FR10 | config field and named-export loading tests            | project config with gapReport; integration with named export; both present; neither present                                                                             | config field ignored, named export ignored, or old CLI breaks on named export                                             |
-| FR11     | mixed-audience consent tests                           | all internal; all public with consent; all public without consent; mixed with partial consent                                                                           | a public handler runs without consent, or an internal handler is blocked by consent                                       |
-| FR12     | aggregate response shape tests                         | all succeed; one fails; one times out; consent_required entries; empty set (fallback)                                                                                   | missing delivery entry, wrong source attribution, or response shape differs between --json and human                      |
-| FR13     | target route tests                                     | handler + integration target with GitHub issuesUrl, with and without consent; non-GitHub issuesUrl; Core target; the target's own handler; receipt url inside issuesUrl | the route is skipped for an integration target, sent twice to one place, sent for Core, or filed publicly without consent |
-| General  | mutation-sensitive composition tests (structuredClone) | handler mutates event fields; handler adds properties to event                                                                                                          | mutation leaks to a subsequent handler                                                                                    |
+| Contract | Verification                                           | Representative states                                                                                                      | Mutation or failure expectation                                                                         |
+| -------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| FR1–FR3  | gap-report handler type and receipt contract tests     | valid handler; missing audience; wrong status value; non-object return                                                     | an invalid handler shape or receipt is accepted silently                                                |
+| FR4      | handler isolation tests                                | handler writes stdout; handler calls process.exit; handler throws; handler exceeds 30 s                                    | stdout corruption reaches the JSON envelope, or exit/throw stops later handlers                         |
+| FR5      | no-opt-out assertion test                              | project sets `inheritDebug: false` in package.json; gap-report handlers still run                                          | an opt-out mechanism suppresses a gap-report handler                                                    |
+| FR6      | effective-set ordering and deduplication tests         | project + two integrations; duplicate handle ref; project only; integrations only                                          | wrong order, duplicate execution, or missing handler                                                    |
+| FR7      | target selection tests                                 | explicit package; unique owner; ambiguous owner requiring `--package`; no component match                                  | handler count influences target, ambiguity is guessed, or an unknown component fails to default to Core |
+| FR8      | fallback activation and suppression tests              | zero handlers + GitHub issuesUrl; zero handlers + non-GitHub issuesUrl; one handler present                                | fallback fires with a handler present, or non-GitHub issuesUrl claims it filed                          |
+| FR9–FR10 | config field and named-export loading tests            | project config with gapReport; integration with named export; both present; neither present                                | config field ignored, named export ignored, or old CLI breaks on named export                           |
+| FR11     | mixed-audience consent tests                           | all internal; all public with consent; all public without consent; mixed with partial consent                              | a public handler runs without consent, or an internal handler is blocked by consent                     |
+| FR12     | aggregate response shape tests                         | all succeed; one fails; one times out; consent_required entries; empty set (fallback)                                      | missing delivery entry, wrong source attribution, or response shape differs between --json and human    |
+| FR13     | named destination tests                                | `--to` naming an integration with a GitHub issuesUrl, with and without consent; a non-GitHub issuesUrl; an unknown package | a handler runs with `--to`, or an unknown destination sends anything                                    |
+| General  | mutation-sensitive composition tests (structuredClone) | handler mutates event fields; handler adds properties to event                                                             | mutation leaks to a subsequent handler                                                                  |
 
 ---
 
@@ -309,21 +296,6 @@ Handler count and handler order never change target attribution.
 Rejected: selecting the target by handler count or integration order; silently
 choosing one ambiguous owner; distributing target ownership to every package that
 ships a handler.
-
-### DEC-4 — A report also reaches the package it is about
-
-**Reference:** `spec:AST-031/DEC-4`
-**Decider:** `josephfarina`, `2026-10-19`
-
-Handlers often belong to a shared place that collects every report, while each
-integration names its own tracker in `issuesUrl`. Sending only to the handlers
-would leave an integration's own tracker without reports about its components
-whenever any handler is loaded. The CLI therefore routes to the target integration's
-own `issuesUrl` as well, with the same consent rule, and skips it when that
-place already received the report.
-
-Rejected: sending to every loaded integration's `issuesUrl`, which spreads one
-report across unrelated trackers.
 
 ## Open questions
 

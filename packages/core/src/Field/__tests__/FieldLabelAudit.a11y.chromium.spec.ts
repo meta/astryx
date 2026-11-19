@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit FieldLabel
 
 /**
  * @file FieldLabelAudit.a11y.chromium.spec.ts
@@ -11,7 +12,8 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -19,7 +21,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('field-label-audit-evidence');
+const EVIDENCE = path.resolve('field-label-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const WIDE = {width: 1024, height: 900};
 const NARROW = {width: 320, height: 900};
 
@@ -77,8 +81,7 @@ async function settle(page: Page) {
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
@@ -141,7 +144,7 @@ for (const item of cases) {
     await expect(page.getByText(/Optional/)).toBeVisible();
     await expect(page.getByLabel('Search')).toBeVisible();
     const tooltipAnchor = page
-      .locator('label[for="field-label-optional"] [aria-describedby]')
+      .locator('label[for="field-label-optional"] + button')
       .first();
     await expect(tooltipAnchor).toHaveCount(1);
 
@@ -169,7 +172,7 @@ for (const item of cases) {
         '.astryx-field-label',
       );
       const currentTooltipAnchor = document.querySelector<HTMLElement>(
-        'label[for="field-label-optional"] [aria-describedby]',
+        'label[for="field-label-optional"] + button',
       );
       return {
         theme: document
@@ -188,11 +191,12 @@ for (const item of cases) {
           : null,
         tooltipAnchor: currentTooltipAnchor
           ? {
-              ariaHidden: currentTooltipAnchor.getAttribute('aria-hidden'),
+              tagName: currentTooltipAnchor.tagName,
               ariaLabel: currentTooltipAnchor.getAttribute('aria-label'),
               describedBy:
                 currentTooltipAnchor.getAttribute('aria-describedby'),
-              tabIndex: currentTooltipAnchor.getAttribute('tabindex'),
+              tabIndex: currentTooltipAnchor.tabIndex,
+              isInsideLabel: currentTooltipAnchor.closest('label') != null,
             }
           : null,
       };
@@ -204,10 +208,11 @@ for (const item of cases) {
       observed.labels.every(label => label.geometry.width > 0) &&
       observed.hiddenGeometry?.width === 1 &&
       observed.hiddenGeometry.height === 1;
-    const knownTooltipGapObserved =
-      observed.tooltipAnchor?.ariaHidden === 'true' &&
-      observed.tooltipAnchor.ariaLabel == null &&
-      observed.tooltipAnchor.tabIndex == null;
+    const infoButtonPass =
+      observed.tooltipAnchor?.tagName === 'BUTTON' &&
+      observed.tooltipAnchor.ariaLabel?.startsWith('About ') === true &&
+      observed.tooltipAnchor.tabIndex === 0 &&
+      !observed.tooltipAnchor.isInsideLabel;
 
     const png = await page.screenshot({animations: 'disabled', fullPage: true});
     const image = `${item.key}.png`;
@@ -223,8 +228,8 @@ for (const item of cases) {
         targetCount: 7,
         groupLabelTag: 'SPAN',
         hiddenGeometry: {width: 1, height: 1},
-        knownGap:
-          'the tooltip anchor is anonymous and nonfocusable on this audited head',
+        infoButton:
+          'one named, focusable info button after the label element and outside it',
       },
       observed: {
         build: storybookSha,
@@ -237,7 +242,7 @@ for (const item of cases) {
         width: png.readUInt32BE(16),
         height: png.readUInt32BE(20),
       },
-      checks: {semanticsPass, knownTooltipGapObserved},
+      checks: {semanticsPass, infoButtonPass},
       passed:
         storybookSha === checkoutSha &&
         pageErrors.length === 0 &&
@@ -249,7 +254,8 @@ for (const item of cases) {
         observed.reducedMotion &&
         !observed.horizontalOverflow &&
         observed.fonts === 'loaded' &&
-        semanticsPass,
+        semanticsPass &&
+        infoButtonPass,
     };
     fs.writeFileSync(path.join(OUTPUT, image), png);
     fs.writeFileSync(

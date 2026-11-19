@@ -91,12 +91,24 @@ function count(text, pattern) {
 
 /** @param {string} stdout */
 function lines(stdout) {
-  return stdout.split('\n').filter(Boolean);
+  return bareRecipe(stdout).split('\n').filter(Boolean);
+}
+
+/**
+ * The font recipe names `docs typography` with the project's CLI invocation,
+ * which depends on where the test runs; compare it as bare `astryx`.
+ * @param {string} stdout
+ */
+function bareRecipe(stdout) {
+  return stdout.replace(
+    /(recipe: |guidance: )\S.*? docs typography/g,
+    '$1astryx docs typography',
+  );
 }
 
 /** @param {string} stdout The sizes follow Core's CSS, so goldens keep the shape. */
 function normalized(stdout) {
-  return stdout.replace(/\d+(\.\d+)? KB/g, '<size> KB');
+  return bareRecipe(stdout).replace(/\d+(\.\d+)? KB/g, '<size> KB');
 }
 
 /** Bytes of the full report printed by one invocation per theme. */
@@ -163,7 +175,7 @@ describe('theme build report', () => {
       expect(out).toContain(`Building theme from themes/${name}.mjs...`);
       expect(out).toContain(`[ok] themes/${name}.css\n`);
       expect(out).toContain(
-        `  import { ${name}Theme } from './themes/${name}'; import './themes/${name}.css';`,
+        `  import { ${name}Theme } from '../themes/${name}'; import '../themes/${name}.css';`,
       );
     }
     expect(count(out, 'Install in your app')).toBe(1);
@@ -240,7 +252,7 @@ describe('theme build report', () => {
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('Building theme from themes/amber.mjs...');
-    expect(r.stdout).toContain("import { amberTheme } from './themes/amber';");
+    expect(r.stdout).toContain("import { amberTheme } from '../themes/amber';");
     expect(r.stdout).toContain('Or with a <link> tag:');
     expect(r.stdout).toContain('note: Font "Space Grotesk"');
     expect(r.stdout).toContain(
@@ -273,7 +285,7 @@ describe('theme build report', () => {
     expect(full.status).toBe(1);
     expect(count(full.stdout, 'Install in your app')).toBe(1);
     expect(full.stdout).toContain(
-      "  import { basilTheme } from './themes/basil'; import './themes/basil.css';",
+      "  import { basilTheme } from '../themes/basil'; import '../themes/basil.css';",
     );
     expect(full.stdout).toContain('  "Space Grotesk" (amber, basil)\n');
     expect(full.stdout).not.toContain('Built 3 themes');

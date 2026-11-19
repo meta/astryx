@@ -25,7 +25,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {program} from './index.mjs';
+import {program} from './program.mjs';
 import {reportsResult, reportsResultVia} from './lib/define-command.mjs';
 
 /**
@@ -44,12 +44,13 @@ const NO_ACTION_OF_THEIR_OWN = [];
 /**
  * Commands that record for themselves instead of returning a descriptor.
  *
- * They cannot come from a CommandDoc — `manifest` introspects the live program,
- * `postinstall` is a package-script hook — so they carry the mark by hand. The
- * mark is a hatch, and a hatch nobody watches is a hole: this list is the
- * watch. The root program is checked separately below.
+ * Empty: every command, `manifest` and the hidden `postinstall` hook included,
+ * registers through defineCommand. The mark is a hatch, and a hatch nobody
+ * watches is a hole: this list is the watch. The root program is checked
+ * separately below.
+ * @type {string[]}
  */
-const RECORD_FOR_THEMSELVES = ['manifest', 'postinstall'];
+const RECORD_FOR_THEMSELVES = [];
 
 /**
  * Every command in the program, depth first, with its fully qualified name.
@@ -85,11 +86,13 @@ describe('every command reports what it answered with', () => {
     const unreported = commands
       .filter(({command}) => runs(command) && !reportsResult(command))
       .map(({name}) => name);
-    expect(unreported, unreported.length
-      ? `these commands run without reporting a result — return a CommandResult ` +
-        `from the action (see foundation/debug/command-result.mjs), or register ` +
-        `through defineCommand: ${unreported.join(', ')}`
-      : '',
+    expect(
+      unreported,
+      unreported.length
+        ? `these commands run without reporting a result — return a CommandResult ` +
+            `from the action (see foundation/debug/command-result.mjs), or register ` +
+            `through defineCommand: ${unreported.join(', ')}`
+        : '',
     ).toEqual([]);
   });
 
@@ -115,13 +118,15 @@ describe('every command reports what it answered with', () => {
     // MODULES failed to import and left its fallback stub in its place (the
     // stub carries the mark, so it lands here). The second is a broken CLI,
     // not a broken test.
-    expect(manual, unexpected.length
-      ? `unexpected commands recording for themselves: ${unexpected.join(', ')} ` +
-        `— either a hand-registered command is using markReportsResult instead ` +
-        `of returning a CommandResult, or that command's module failed to load ` +
-        `and left its fallback stub behind (run \`astryx <name>\` to see the ` +
-        `import error)`
-      : '',
+    expect(
+      manual,
+      unexpected.length
+        ? `unexpected commands recording for themselves: ${unexpected.join(', ')} ` +
+            `— either a hand-registered command is using markReportsResult instead ` +
+            `of returning a CommandResult, or that command's module failed to load ` +
+            `and left its fallback stub behind (run \`astryx <name>\` to see the ` +
+            `import error)`
+        : '',
     ).toEqual([...RECORD_FOR_THEMSELVES].sort());
   });
 

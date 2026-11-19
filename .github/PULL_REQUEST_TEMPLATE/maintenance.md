@@ -17,8 +17,11 @@
 - Failure before the change:
 - Success after the change:
 - Product/runtime behavior verified unchanged:
+- CI impact (for a change to workflows, actions or CI scripts): <!-- runner class of each changed job, job-minutes per update and runner-pool usage before and after, time to green; the PR report's CI impact section measures them -->
 
 ## Scope
+
+Components: <!-- the components and modules this PR changes, comma-separated -->
 
 - [ ] No intended public API, product behavior, visual direction, or policy change.
 - [ ] Product changes discovered during the work were removed or split.
