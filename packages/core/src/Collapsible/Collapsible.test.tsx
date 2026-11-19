@@ -9,7 +9,8 @@
  * SYNC: When Collapsible.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
+import {useEffect, useId, type ReactNode} from 'react';
 import {render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
@@ -665,5 +666,118 @@ describe('Collapsible close focus (AR4)', () => {
     elsewhere.focus();
     rerender(<Example isOpen />);
     expect(elsewhere).toHaveFocus();
+  });
+});
+
+describe('Collapsible lazy mount', () => {
+  let mounts = 0;
+  let unmounts = 0;
+
+  function Body() {
+    useEffect(() => {
+      mounts += 1;
+      return () => {
+        unmounts += 1;
+      };
+    }, []);
+    return <button type="button">Inside</button>;
+  }
+
+  beforeEach(() => {
+    mounts = 0;
+    unmounts = 0;
+  });
+
+  it('mounts no children while closed and keeps the empty region aria-controls names', () => {
+    render(
+      <Collapsible trigger="Details" defaultIsOpen={false} hasLazyMount>
+        <Body />
+      </Collapsible>,
+    );
+    const content = contentFor(screen.getByRole('button', {name: 'Details'}));
+    expect(content.textContent).toBe('');
+    expect(content.querySelectorAll('*')).toHaveLength(1);
+    expect(mounts).toBe(0);
+  });
+
+  it('mounts the children when it opens and unmounts them when it closes', async () => {
+    const user = userEvent.setup();
+    render(
+      <Collapsible trigger="Details" defaultIsOpen={false} hasLazyMount>
+        <Body />
+      </Collapsible>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Details'});
+
+    await user.click(trigger);
+    expect(screen.getByRole('button', {name: 'Inside'})).toBeInTheDocument();
+    expect(mounts).toBe(1);
+
+    await user.click(trigger);
+    expect(screen.queryByRole('button', {name: 'Inside'})).toBeNull();
+    expect(contentFor(trigger)).toBeInTheDocument();
+    expect(unmounts).toBe(1);
+  });
+
+  it('keeps closed children mounted and hidden without hasLazyMount', () => {
+    render(
+      <Collapsible trigger="Details" defaultIsOpen={false}>
+        <Body />
+      </Collapsible>,
+    );
+    expect(mounts).toBe(1);
+    const content = contentFor(screen.getByRole('button', {name: 'Details'}));
+    expect(getComputedStyle(content).display).toBe('none');
+  });
+
+  it('moves focus inside the content to the trigger when it closes (AR4)', () => {
+    const example = (isOpen: boolean) => (
+      <Collapsible
+        trigger="Details"
+        isOpen={isOpen}
+        onOpenChange={() => {}}
+        hasLazyMount>
+        <Body />
+      </Collapsible>
+    );
+    const {rerender} = render(example(true));
+    screen.getByRole('button', {name: 'Inside'}).focus();
+    rerender(example(false));
+    expect(screen.queryByRole('button', {name: 'Inside'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Details'})).toHaveFocus();
+  });
+});
+
+describe('generated ids', () => {
+  function IdProbe() {
+    return <span data-testid="id-probe">{useId()}</span>;
+  }
+
+  /** How many ids `children` takes from the page, read from two probes. */
+  function idsTakenBy(children: ReactNode): number {
+    const {unmount} = render(
+      <>
+        <IdProbe />
+        {children}
+        <IdProbe />
+      </>,
+    );
+    const probes = screen
+      .getAllByTestId('id-probe')
+      .map(probe => /([0-9a-z]+)[^0-9a-z]*$/i.exec(probe.textContent ?? ''));
+    const before = probes.at(0);
+    const after = probes.at(-1);
+    unmount();
+    return (
+      Number.parseInt(after?.[1] ?? '', 32) -
+      Number.parseInt(before?.[1] ?? '', 32) -
+      1
+    );
+  }
+
+  it('takes one id per Collapsible, so the ids after it keep their values', () => {
+    expect(idsTakenBy(<Collapsible trigger="Details">Body</Collapsible>)).toBe(
+      idsTakenBy(<IdProbe />),
+    );
   });
 });

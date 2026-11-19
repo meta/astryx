@@ -2,8 +2,9 @@
 
 /**
  * @file index.ts
- * @input Imports Collapsible, CollapsibleGroup, and useCollapsible
- * @output Exports components, hook, and types
+ * @input Imports Collapsible, CollapsibleGroup, useCollapsible, and
+ *   useCollapsibleContentMotion
+ * @output Exports components, hooks, and types
  * @position Entry point for @astryxdesign/core/Collapsible module
  *
  * SYNC: When modified, update /packages/core/src/Collapsible/Collapsible.doc.mjs
@@ -25,3 +26,9 @@ export type {
   UseCollapsibleOptions,
   UseCollapsibleReturn,
 } from './useCollapsible';
+
+export {useCollapsibleContentMotion} from './useCollapsibleContentMotion';
+export type {
+  UseCollapsibleContentMotionOptions,
+  UseCollapsibleContentMotionReturn,
+} from './useCollapsibleContentMotion';

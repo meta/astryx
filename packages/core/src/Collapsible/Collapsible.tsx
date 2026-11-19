@@ -30,7 +30,6 @@
 import {
   use,
   useCallback,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -278,6 +277,15 @@ export interface CollapsibleProps extends BaseProps {
   animatedLayout?: AnimatedLayout;
 
   /**
+   * Mount the children only while the content is open. A closed Collapsible
+   * keeps its empty content region, so the trigger's `aria-controls` still
+   * names it. With `animatedLayout`, the children stay through the close
+   * motion. Without `hasLazyMount`, closed children stay mounted and hidden.
+   * @default false
+   */
+  hasLazyMount?: boolean;
+
+  /**
    * Logical position of the disclosure chevron.
    *
    * - `end` (default): a trailing indicator that points down when collapsed and
@@ -352,6 +360,7 @@ export function Collapsible({
   chevronPosition,
   value,
   animatedLayout,
+  hasLazyMount = false,
   ref,
   xstyle,
   className,
@@ -365,7 +374,7 @@ export function Collapsible({
       ? {isOpen: controlledIsOpen, onOpenChange}
       : {defaultIsOpen: defaultIsOpen ?? true, onOpenChange};
 
-  const {isOpen, toggle} = useCollapsible({
+  const {isOpen, toggle, contentProps} = useCollapsible({
     isCollapsible: collapsibleConfig,
     value,
   });
@@ -502,8 +511,18 @@ export function Collapsible({
   const isChevronAtStart = position === 'start';
 
   // Links the trigger to the region it shows/hides so assistive tech can move
-  // from the button to its controlled content (disclosure pattern).
-  const contentId = useId();
+  // from the button to its controlled content (disclosure pattern). The hook
+  // owns the id, so a Collapsible takes one generated id from the page.
+  const contentId = contentProps.id;
+  const hasChildren = !hasLazyMount || isOpen || isExiting;
+  const body =
+    presentation != null ? (
+      <CollapsibleGroupPresentationContext value={null}>
+        {children}
+      </CollapsibleGroupPresentationContext>
+    ) : (
+      children
+    );
 
   const chevron = (
     <Icon
@@ -597,15 +616,7 @@ export function Collapsible({
         )}>
         {/* One box holds the content, so an opening or closing slides it
             under the region's clip: a translation cannot move bare text. */}
-        <div>
-          {presentation != null ? (
-            <CollapsibleGroupPresentationContext value={null}>
-              {children}
-            </CollapsibleGroupPresentationContext>
-          ) : (
-            children
-          )}
-        </div>
+        <div>{hasChildren ? body : null}</div>
       </div>
     </div>
   );

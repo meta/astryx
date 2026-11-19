@@ -4,24 +4,19 @@
 
 /**
  * @file useCollapsible.ts
- * @input Uses React useState/use, CollapsibleGroupContext
- * @output Exports useCollapsible hook, CollapsibleConfig (formerly CollapsibleConfig), UseCollapsibleOptions, UseCollapsibleReturn types
- * @position Reusable hook for collapsible behavior — used by Card, Section, etc.
- *
- * Encapsulates the full collapsible state machine:
- * - Parsing boolean | config into normalized config
- * - Checking for CollapsibleGroup context (group-controlled mode)
- * - Managing internal state for uncontrolled mode
- * - Providing a unified toggle handler
+ * @input Uses React useState/use/useId, CollapsibleGroupContext
+ * @output Exports useCollapsible hook, CollapsibleConfig, UseCollapsibleOptions, UseCollapsibleReturn types
+ * @position Headless disclosure: the open-state machine (group, controlled,
+ *   uncontrolled) and the props a caller-rendered trigger and content need.
+ *   Collapsible and Banner use it. Content motion is a separate import,
+ *   useCollapsibleContentMotion.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Collapsible/index.ts (exports)
- * - /packages/core/src/Collapsible/Collapsible.doc.mjs
- *
- * NOTE: Public hooks use the `useXDS` prefix per Astryx naming conventions.
+ * - /packages/core/src/Collapsible/useCollapsible.doc.mjs
  */
 
-import {useState, use} from 'react';
+import {useState, use, useId} from 'react';
 import {CollapsibleGroupContext} from './CollapsibleGroupContext';
 
 /**
@@ -58,10 +53,35 @@ export interface UseCollapsibleReturn {
   isOpen: boolean;
   /** Toggle the open/closed state. */
   toggle: () => void;
+  /**
+   * Props to spread on the trigger: a `<button>`, or a component that renders
+   * one.
+   */
+  triggerProps: {
+    /** Activation toggles the content and never submits a form. */
+    type: 'button';
+    /** Whether the content is open. */
+    'aria-expanded': boolean;
+    /** The id of the content element, which stays rendered while closed. */
+    'aria-controls': string;
+    /** Toggles the open state. */
+    onClick: () => void;
+  };
+  /**
+   * Props to spread on the content element. Render that element in every
+   * state, and its children only while `isOpen`.
+   */
+  contentProps: {
+    /** The id the trigger's `aria-controls` names. */
+    id: string;
+    /** Hidden while the content is closed. */
+    hidden: boolean;
+  };
 }
 
 /**
- * Hook that encapsulates collapsible state management.
+ * Hook that encapsulates collapsible state management, and the props that
+ * wire a caller-rendered trigger to its content.
  *
  * Supports three modes:
  * 1. **Group-controlled**: When inside a CollapsibleGroup with a `value`, defers to group.
@@ -71,12 +91,16 @@ export interface UseCollapsibleReturn {
  *    `onOpenChange`, if supplied, is invoked in addition to the internal update —
  *    it is a notification callback, not a signal that the component is controlled.
  *
+ * `triggerProps` go on a `<button>`, and `contentProps` on the element that
+ * holds the content. That element stays rendered while closed, so
+ * `aria-controls` always names it; its children render only while `isOpen`.
+ * To animate the content, pass the result to `useCollapsibleContentMotion`.
+ *
  * @example
  * ```
- * const {isEnabled, isOpen, toggle} = useCollapsible({
- *   isCollapsible: true,
- *   value: 'section-1',
- * });
+ * const row = useCollapsible({isCollapsible: {defaultIsOpen: false}});
+ * <button {...row.triggerProps}>Details</button>
+ * <div {...row.contentProps}>{row.isOpen && <Details />}</div>
  * ```
  */
 export function useCollapsible(
@@ -136,5 +160,21 @@ export function useCollapsible(
     config?.onOpenChange?.(next);
   };
 
-  return {isEnabled, isOpen, toggle};
+  const contentId = useId();
+
+  return {
+    isEnabled,
+    isOpen,
+    toggle,
+    triggerProps: {
+      type: 'button',
+      'aria-expanded': isOpen,
+      'aria-controls': contentId,
+      onClick: toggle,
+    },
+    contentProps: {
+      id: contentId,
+      hidden: !isOpen,
+    },
+  };
 }

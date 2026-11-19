@@ -77,6 +77,15 @@ export const COLLAPSIBLE_DISCLOSURE_STATES = [
     controlled: true,
   },
   {
+    id: 'lazy-closed-end-ltr',
+    summary:
+      'a standalone Collapsible initially closed that mounts its content only while open',
+    storyId: 'a11y-collapsible-disclosure--lazy-closed-end-ltr',
+    label: 'Billing details',
+    facts: facts({expanded: false}),
+    props: {defaultIsOpen: false, hasLazyMount: true},
+  },
+  {
     id: 'disabled-open-end-ltr',
     summary:
       'an unavailable standalone Collapsible that preserves its visible content',
