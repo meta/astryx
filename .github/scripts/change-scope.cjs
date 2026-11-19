@@ -43,6 +43,10 @@ const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 const LAB_STORY =
   /^apps\/storybook\/stories\/([A-Z][A-Za-z0-9]*)\.stories\.tsx$/;
 const LAB_COMPONENT_DIR = /^packages\/lab\/src\/([A-Z][A-Za-z0-9]*)\//;
+// The swizzle proof's Lab samples, which `pnpm lab:sync` writes.
+const LAB_SAMPLES = 'packages/lab/swizzle-samples.mjs';
+// A Lab component's own spec records.
+const LAB_SPEC_DIR = /^docs\/specs\/components\/([A-Z][A-Za-z0-9]*)\//;
 
 // The registry's route slug for a component name. It mirrors
 // slugifyRegistryName in apps/docsite/src/lib/shadcnRegistry.mjs (a test pins
@@ -68,10 +72,12 @@ function changedLines(patch) {
 }
 
 function routesLockNamesLabOnly(patch, slugs) {
+  const lines = changedLines(patch);
   const ownSlug = value =>
     [...slugs].some(
       slug =>
         value === `components/lab/${slug}` ||
+        value === `hooks/lab/${slug}` ||
         value.startsWith(`examples/${slug}/`) ||
         value.startsWith(`showcases/${slug}/`),
     );
@@ -79,10 +85,10 @@ function routesLockNamesLabOnly(patch, slugs) {
     [...slugs].some(
       slug =>
         value === `component-lab-${slug}` ||
+        value === `hook-lab-${slug}` ||
         value.startsWith(`example-${slug}-`) ||
         value.startsWith(`showcase-${slug}-`),
     );
-  const lines = changedLines(patch);
   return (
     lines.length > 0 &&
     lines.every(({text}) => {
@@ -150,6 +156,32 @@ function storyImportsLab(patch) {
   return /from '@astryxdesign\/lab(?:\/[^']*)?';/.test(added);
 }
 
+const LAB_DOC = /^packages\/lab\/(?:src\/.+|blocks\/[^/]+)\.doc\.mjs$/;
+
+/**
+ * The component and hook names a change's Lab docs add (`name: 'AudioPlayer'`,
+ * `name: 'useMediaPlayer'` on an added line). A family doc names each of its
+ * components, so their routes belong to the change as the folder's do; a
+ * prop's lowercase name is not one.
+ * @param {{filename: string}[]} changes
+ * @param {Record<string, string> | null} patches
+ * @returns {string[]}
+ */
+function labDocNames(changes, patches) {
+  return changes.flatMap(change => {
+    const patch = LAB_DOC.test(change.filename)
+      ? patches?.[change.filename]
+      : null;
+    if (typeof patch !== 'string') return [];
+    return changedLines(patch)
+      .filter(({sign}) => sign === '+')
+      .flatMap(({text}) => {
+        const name = /^name:\s*'((?:use)?[A-Z][A-Za-z0-9]*)'$/.exec(text);
+        return name ? [name[1]] : [];
+      });
+  });
+}
+
 /**
  * Whether a Lab entry file's change belongs to the Lab components this change
  * carries (spec:AST-030 FR26). `names` are the Lab component folders the change
@@ -165,6 +197,9 @@ function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
   )
     return false;
   const slugs = new Set([...names].map(labRouteSlug));
+  if (change.filename === LAB_SAMPLES) return true;
+  const spec = LAB_SPEC_DIR.exec(change.filename);
+  if (spec) return names.has(spec[1]);
   if (change.filename === ROUTES_LOCK)
     return routesLockNamesLabOnly(patch, slugs);
   if (change.filename === OFFICIAL_PACKAGES)
@@ -428,6 +463,9 @@ function classifyChanges(
       return match ? [match[1]] : [];
     }),
   );
+  // A carried folder's docs name the components and hooks it adds.
+  if (labNames.size > 0)
+    for (const name of labDocNames(normalized, patches)) labNames.add(name);
   const labEntries = new Set(
     normalized
       .filter(change =>
@@ -576,6 +614,7 @@ if (require.main === module) {
 
 module.exports = {
   LAB_ROOT,
+  LAB_SAMPLES,
   OFFICIAL_PACKAGES,
   ROUTES_LOCK,
   NODE_TOOLING_PATHS,

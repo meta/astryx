@@ -960,6 +960,115 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
   });
 });
 
+describe('a new Lab component family, as #9832 added one (spec:AST-030 FR26)', () => {
+  const {ROUTES_LOCK, LAB_SAMPLES} = require('./change-scope.cjs');
+  const item = (name, path) => [
+    '+    {',
+    `+      "name": "${name}",`,
+    `+      "path": "${path}",`,
+    '+      "aliases": []',
+    '+    },',
+  ];
+  // The family folder is MediaPlayer; its doc names AudioPlayer, VideoPlayer
+  // and its parts, a hook, and blocks for each player.
+  const routePatch = [
+    '@@ -98,6 +98,26 @@',
+    ...item('component-lab-audio-player', 'components/lab/audio-player'),
+    ...item('component-lab-media-player', 'components/lab/media-player'),
+    ...item('component-lab-video-player', 'components/lab/video-player'),
+    ...item(
+      'example-audio-player-voice-memo',
+      'examples/audio-player/voice-memo',
+    ),
+    ...item('hook-lab-use-media-player', 'hooks/lab/use-media-player'),
+    ...item(
+      'showcase-media-player-custom-layout',
+      'showcases/media-player/custom-layout',
+    ),
+  ].join('\n');
+  const story = [
+    '@@ -0,0 +1,3 @@',
+    "+import {MediaPlayer} from '@astryxdesign/lab';",
+  ].join('\n');
+  const files = [
+    {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.tsx', status: 'A'},
+    {filename: 'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs', status: 'A'},
+    {filename: 'packages/lab/src/index.ts', status: 'M'},
+    {filename: 'packages/lab/blocks/AudioPlayerVoiceMemo.doc.mjs', status: 'A'},
+    {filename: 'packages/lab/blocks/AudioPlayerVoiceMemo.tsx', status: 'A'},
+    {filename: LAB_SAMPLES, status: 'M'},
+    {
+      filename: 'docs/specs/components/MediaPlayer/MediaPlayer.spec.md',
+      status: 'A',
+    },
+    {filename: 'apps/storybook/stories/MediaPlayer.stories.tsx', status: 'A'},
+    {filename: ROUTES_LOCK, status: 'M'},
+    {filename: '.changeset/lab-media-player.md', status: 'A'},
+  ];
+  const doc = [
+    '@@ -0,0 +1,9 @@',
+    '+export const docs = {',
+    "+  name: 'MediaPlayer',",
+    "+  components: [{name: 'AudioPlayer'}, {name: 'VideoPlayer'}],",
+    '+};',
+    '+export const audio = {',
+    "+  name: 'AudioPlayer',",
+    "+  props: [{name: 'label', type: 'string'}],",
+    '+};',
+    '+export const hook = {',
+    "+  name: 'useMediaPlayer',",
+    '+};',
+    '+export const video = {',
+    "+  name: 'VideoPlayer',",
+    '+};',
+  ].join('\n');
+  const patches = {
+    [ROUTES_LOCK]: routePatch,
+    'packages/lab/src/MediaPlayer/MediaPlayer.doc.mjs': doc,
+    'apps/storybook/stories/MediaPlayer.stories.tsx': story,
+    [LAB_SAMPLES]: '@@ -1,1 +1,2 @@\n+  lab__MediaPlayer: () => null,',
+    'docs/specs/components/MediaPlayer/MediaPlayer.spec.md':
+      '@@ -0,0 +1,1 @@\n+# MediaPlayer',
+  };
+
+  it('stays in the Lab lane with its samples, its spec folder and every route its docs give', () => {
+    const result = classifyChanges(files, {patches});
+    expect(result.labOnly).toBe(true);
+    expect(result.fullSuite).toBe(false);
+  });
+
+  it("refuses another component's spec folder, and a route for a component its docs do not name", () => {
+    const other = files.map(f =>
+      f.filename.startsWith('docs/specs/')
+        ? {...f, filename: 'docs/specs/components/Drawer/Drawer.spec.md'}
+        : f,
+    );
+    expect(
+      classifyChanges(other, {
+        patches: {
+          ...patches,
+          'docs/specs/components/Drawer/Drawer.spec.md': '@@ -1 +1 @@\n+x',
+        },
+      }).labOnly,
+    ).toBe(false);
+    const drawer = routePatch
+      .replace('component-lab-video-player', 'component-lab-drawer')
+      .replace('components/lab/video-player', 'components/lab/drawer');
+    expect(
+      classifyChanges(files, {patches: {...patches, [ROUTES_LOCK]: drawer}})
+        .labOnly,
+    ).toBe(false);
+    // A lowercase prop name is not a component name.
+    const prop = routePatch
+      .replace('component-lab-video-player', 'component-lab-label')
+      .replace('components/lab/video-player', 'components/lab/label');
+    expect(
+      classifyChanges(files, {patches: {...patches, [ROUTES_LOCK]: prop}})
+        .labOnly,
+    ).toBe(false);
+  });
+});
+
 describe('Lab component folders (spec:AST-030 FR26)', () => {
   it('reads a carried component only from a component folder, not a shared one', () => {
     const {ROUTES_LOCK} = require('./change-scope.cjs');
