@@ -29105,6 +29105,26 @@ export function draftAnswer(ctx, env, question) {
       );
       if (first >= 0) all.splice(first, 0, ...all.splice(i, 1));
     }
+    // Corners on a part that shows none yet, said with the edge the same
+    // ask gives it ("pagination: 6px radius, 1px border"): they show only
+    // once the edge is there, so they run after it, whichever came first.
+    const drawsEdge = (/** @type {Step} */ t) =>
+      /^(?:border(?!.*radius)|background|box-shadow|outline)/.test(
+        String(t.thing),
+      ) && !/^(?:none|0(?:px)?|transparent)$/.test(String(t.value).trim());
+    const cornerStep = (/** @type {Step} */ t) =>
+      t.thing === 'corners' || /^border.*radius$/.test(String(t.thing));
+    for (let i = 0; i < all.length; i++) {
+      const st = all[i];
+      if (!st.on || !cornerStep(st) || C.showsCorners(one(st.on))) continue;
+      let edge = -1;
+      for (let j = i + 1; j < all.length; j++)
+        if (all[j].on === st.on && !all[j].state && drawsEdge(all[j])) edge = j;
+      if (edge < 0) continue;
+      all.splice(i, 1);
+      all.splice(edge, 0, st);
+      i--;
+    }
     // At most MAX_STEPS in one sequence, cut only between clauses: a
     // clause's steps (its write and the keeps it needs, a status's border
     // written back) run together or not at all. The rest follow as the next

@@ -125,6 +125,7 @@ import {
   borderParts,
   cornerParts,
   boxFrameOf,
+  rowFrameOf,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -8763,11 +8764,17 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     .slice(0, 3);
   // (Set on a pager, the corners go on the row that frames its pages; with
   // no edge there yet they show nothing, and never on each page.)
-  const frame = boxFrameOf(ctx, s);
+  // (Asked of the row itself, the same: its cells' corners would round
+  // each page apart.)
+  const frame =
+    boxFrameOf(ctx, s) ??
+    ([...ctx.project.target.keys()].some(k => rowFrameOf(ctx, k) === parts[0])
+      ? parts[0]
+      : null);
   if (frame)
     refuse(
       E.ERR_THEME_NO_EFFECT,
-      `${s.on}'s corners go on ${frame}, the row that frames its controls as one strip, and ${frame} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners.`,
+      `${frame === s.on ? `${frame} frames its component's controls as one strip and` : `${s.on}'s corners go on ${frame}, the row that frames its controls as one strip, and ${frame}`} has no border, fill or shadow yet, so its corners show nothing. Give ${frame} an edge first, then set its corners; corners on each control would round each one apart.`,
       {run: [`${HOW} ${frame}`]},
     );
   refuse(

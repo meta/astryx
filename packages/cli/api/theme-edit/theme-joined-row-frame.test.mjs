@@ -14,7 +14,7 @@
 
 import fs from 'node:fs';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
@@ -89,5 +89,32 @@ describe('a border, corners, shadow, fill or outline on a row of joined controls
       /\.astryx-pagination\s*\{[^}]*(?:border|box-shadow|outline)/,
     );
     expect(css).not.toMatch(/\.astryx-pagination-item\s*\{[^}]*border:/);
+  }, 240_000);
+
+  it("puts an ask's corners on the row after the border it gives the row", async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      test.skip();
+    }
+    await themeEditNew('b', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow(
+      'pagination: 6px radius, 1px #dee2e6 border, and the active page #0d6efd with white text',
+      {cwd, theme: 'b'},
+    );
+    const whole = (data.results ?? []).find(r =>
+      /^all of it, in order/.test(r.text),
+    );
+    const sets = (whole?.commands ?? [])
+      .flatMap(c => c.split(' && '))
+      .map(c => c.replace(/^.* editor set \S+ /, ''));
+    const border = sets.findIndex(x =>
+      /^border '1px solid .*' --on pagination-list$/.test(x),
+    );
+    const radius = sets.indexOf('border-radius 6px --on pagination-list');
+    expect(border).toBeGreaterThan(-1);
+    expect(radius).toBeGreaterThan(border);
+    expect(sets.join('\n')).not.toMatch(
+      /(?:corners|radius) \S+ --on (?:pagination-item|button)\b/,
+    );
   }, 240_000);
 });
