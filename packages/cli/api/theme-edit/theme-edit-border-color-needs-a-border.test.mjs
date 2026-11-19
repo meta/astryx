@@ -22,7 +22,7 @@ import {
   themeEditUndo,
 } from './theme-edit.mjs';
 import {context} from './_context.mjs';
-import {checked, howTheme} from './_how-commands.mjs';
+import {apply, checked, howTheme} from './_how-commands.mjs';
 import {drawsLine} from './_check.mjs';
 import {
   makeLinkedFixture,
@@ -32,7 +32,6 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -79,7 +78,9 @@ describe('a border color on a part that draws no border', () => {
         /tab (?:grows by|keeps its size)|the size change the added border makes on tab was not measured/,
       );
       expect(css()).toMatch(
-        new RegExp(`\\.astryx-tab \\{\\s*border: ${EDGE.replace(/[()]/g, '\\$&')};`),
+        new RegExp(
+          `\\.astryx-tab \\{\\s*border: ${EDGE.replace(/[()]/g, '\\$&')};`,
+        ),
       );
       expect(css()).toContain('border-color: #eeeeee #eeeeee #dddddd;');
     },
@@ -87,7 +88,7 @@ describe('a border color on a part that draws no border', () => {
   );
 
   it(
-    'keeps a state\'s own colors after the border the build repeats there',
+    "keeps a state's own colors after the border the build repeats there",
     async () => {
       await themeEditSet('t', 'border-color', '#dddddd #dddddd transparent', {
         cwd,
@@ -134,36 +135,88 @@ describe('a border color on a part that draws no border', () => {
   it(
     'is taken back with its border by one undo',
     async () => {
+      const onPart = () =>
+        JSON.parse(
+          fs.readFileSync(path.join(cwd, 'themes/u/u.settings.json'), 'utf8'),
+        )
+          .settings.filter((/** @type {any} */ x) => x.on)
+          .map((/** @type {any} */ x) => x.thing);
       await themeEditSet('u', 'border-color', '#ff0000', {cwd, on: 'banner'});
+      // (Both the border it brought and the color are saved.)
+      expect(onPart()).toEqual(['border', 'border-color']);
       await themeEditUndo('u', {cwd});
-      const saved = JSON.parse(
-        fs.readFileSync(path.join(cwd, 'themes/u/u.settings.json'), 'utf8'),
-      );
-      expect(saved.settings.filter((/** @type {any} */ x) => x.on)).toEqual(
-        [],
-      );
+      expect(onPart()).toEqual([]);
     },
     T,
   );
 
   it(
-    'is refused where the theme sets that border to none',
+    'is saved with a note where the theme sets that border to none',
     async () => {
       await themeEditSet('u', 'border', 'none', {cwd, on: 'tab'});
-      const r = await refusal(() =>
-        themeEditSet('u', 'border-bottom-color', '#999999', {cwd, on: 'tab'}),
+      const r = await themeEditSet('u', 'border-bottom-color', '#999999', {
+        cwd,
+        on: 'tab',
+      });
+      const note = r.data.notes.join('\n');
+      expect(note).toContain(
+        'border-bottom-color on tab does not show: u sets border none on tab',
       );
-      expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-      expect(r.message).toContain('u sets border none on tab');
-      expect(r.run).toContainEqual(
-        expect.stringContaining('undo u border --on tab'),
+      expect(note).toContain('undo u border --on tab');
+      expect(note).toContain('undo u border-bottom-color --on tab');
+      expect(note).not.toContain('added a');
+      // (A part Core draws a border on, an input, the same: saved, and
+      // said not to show.)
+      await themeEditSet('u', 'border', 'none', {cwd, on: 'inputs'});
+      const inputs = await themeEditSet('u', 'border-color', '#ff0000', {
+        cwd,
+        on: 'inputs',
+      });
+      expect(inputs.data.notes.join('\n')).toContain(
+        'border-color on inputs does not show: u sets border none on inputs',
       );
+      for (let k = 0; k < 4; k++) await themeEditUndo('u', {cwd});
     },
     T,
   );
 });
 
 describe("how's check", () => {
+  it(
+    'writes a color the theme saves already after the border it brings',
+    async () => {
+      // (A color saved with no border, as the editor saved it before.)
+      await themeEditNew('hs', {cwd, like: 'neutral'});
+      const file = path.join(cwd, 'themes/hs/hs.settings.json');
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      saved.settings.push({
+        thing: 'border-color',
+        value: '#eeeeee',
+        source: 'property',
+        on: 'tab',
+      });
+      fs.writeFileSync(file, JSON.stringify(saved, null, 2));
+      const ctx = await context(cwd);
+      const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+      apply(/** @type {any} */ (ctx), 'hs', d, {
+        verb: 'set',
+        thing: 'border-color',
+        value: '#dddddd',
+        on: 'tab',
+      });
+      // (The border first, then the color: the shorthand never resets it.)
+      expect(
+        d.settings
+          .filter((/** @type {any} */ x) => x.on === 'tab')
+          .map((/** @type {any} */ x) => `${x.thing} ${x.value}`),
+      ).toEqual([
+        'border var(--border-width) solid transparent',
+        'border-color #dddddd',
+      ]);
+    },
+    T,
+  );
+
   it(
     'writes the border a border color brings, as set does',
     async () => {
@@ -198,7 +251,7 @@ describe("how's check", () => {
   );
 
   it(
-    'offers one side\'s color on a part that draws no border, as set takes it',
+    "offers one side's color on a part that draws no border, as set takes it",
     async () => {
       const {data} = await themeEditHow('banner with a lighter left border', {
         cwd,
@@ -225,9 +278,9 @@ describe('whether a part draws a border', () => {
       // A side cleared only on the first or last child is drawn on the
       // others: a list row's divider, a secondary button's join.
       expect(drawsLine(C, ['list-item'], 'border')).toBe(true);
-      expect(drawsLine(C, ['button'], 'border', null, 'variant:secondary')).toBe(
-        true,
-      );
+      expect(
+        drawsLine(C, ['button'], 'border', null, 'variant:secondary'),
+      ).toBe(true);
       expect(drawsLine(C, ['button'], 'border', null, 'variant:primary')).toBe(
         false,
       );

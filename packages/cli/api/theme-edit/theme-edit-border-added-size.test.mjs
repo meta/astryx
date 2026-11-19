@@ -57,6 +57,15 @@ describe('what the added border moves', () => {
       expect(sizeNote(r)).toBe(
         'badge grows by 2px in width (the added border; measured on the sheet)',
       );
+      // (A dialog's header shows only inside the open dialog, never alone
+      // on the overlays page: it is measured on the whole sheet.)
+      const header = await themeEditSet('t', 'border-color', '#999999', {
+        cwd,
+        on: 'dialog-header',
+      });
+      expect(sizeNote(header)).toMatch(
+        /^dialog-header (?:grows by \d+px|keeps its size)/,
+      );
     },
     T,
   );
@@ -66,8 +75,20 @@ describe('the size comparison', () => {
   it('names the growth of each part, in height and width', () => {
     const changes = boxChanges(
       ['badge', 'card'],
-      {badge: [[40, 20], [52, 20]], card: [[300, 120]]},
-      {badge: [[42, 22], [54, 22]], card: [[300, 122]]},
+      {
+        badge: [
+          [40, 20],
+          [52, 20],
+        ],
+        card: [[300, 120]],
+      },
+      {
+        badge: [
+          [42, 22],
+          [54, 22],
+        ],
+        card: [[300, 122]],
+      },
     );
     expect(changes).toEqual([
       {part: 'badge', width: 2, height: 2, drawn: 2},

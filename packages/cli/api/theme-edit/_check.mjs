@@ -3070,8 +3070,10 @@ export function drawsLine(C, parts, prop, state, when) {
         ? [`${prop}-width`, 'border-width']
         : [`${prop}-width`];
   const [wp, wv] = String(when ?? '').split(':');
-  const zero = (/** @type {unknown} */ v) => /^\s*0(?:px|rem|em)?\s*$/.test(String(v));
-  const none = (/** @type {unknown} */ v) => /^\s*(?:none|hidden)\b/i.test(String(v));
+  const zero = (/** @type {unknown} */ v) =>
+    /^\s*0(?:px|rem|em)?\s*$/.test(String(v));
+  const none = (/** @type {unknown} */ v) =>
+    /^\s*(?:none|hidden)\b/i.test(String(v));
   return parts.some(t => {
     const at = C.MAP[t]?.at ?? {};
     return keys.some(k => {
@@ -3557,7 +3559,13 @@ function borderSetToNone(ctx, data, s, part) {
 export function borderFor(ctx, slug, data, s) {
   if (ctx.unchecked || !s.on || s.source !== 'property') return null;
   if (!BORDER_COLOR_PROP.test(s.thing)) return null;
-  if (CSS_WIDE.includes(String(s.value ?? '').trim().toLowerCase()))
+  if (
+    CSS_WIDE.includes(
+      String(s.value ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  )
     return null;
   const parts = partsOf(ctx, s);
   if (
@@ -3583,37 +3591,26 @@ export function borderFor(ctx, slug, data, s) {
 }
 
 /**
- * Refuses a border color on a part whose border the theme itself sets to
- * none where the color is asked (`border none --on tab`): the two say
- * opposite things, so neither is changed for the other.
+ * Notes a border color on a part whose border the theme itself sets to
+ * none where the color is asked (`border none --on tab`): the color is
+ * saved but does not show, and the note gives the command for each choice,
+ * showing the line or dropping the color.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {any} data
  * @param {import('./_settings.mjs').Setting} s
  * @param {string} prop
  */
-function borderNoneRefusal(ctx, slug, data, s, prop) {
+function borderNoneNote(ctx, slug, data, s, prop) {
   if (ctx.unchecked || !s.on || !BORDER_COLOR_PROP.test(prop)) return;
   const parts = partsOf(ctx, s);
-  if (
-    !parts.length ||
-    parts.some(
-      t =>
-        drawsLine(ctx.C, [t], 'border', null, s.when) ||
-        (s.state && drawsLine(ctx.C, [t], 'border', s.state, s.when)) ||
-        bordersBeyondCore(ctx, data, s, t),
-    )
-  )
-    return;
-  const none = parts
-    .map(t => borderSetToNone(ctx, data, s, t))
-    .find(Boolean);
+  // (Whether Core draws the border or not: the theme's own none hides it
+  // either way, an input's included.)
+  if (!parts.length) return;
+  const none = parts.map(t => borderSetToNone(ctx, data, s, t)).find(Boolean);
   if (!none) return;
-  refuse(
-    E.ERR_THEME_NO_EFFECT,
-    `${slug} sets ${none.thing} ${none.value} on ${none.on}${none.when ? ` when ${none.when}` : ''}${none.state ? ` :${none.state}` : ''}, so ${prop} on ${s.on} has no line to color. Undo that first, then set the color: it brings the border it needs.`,
-    {run: [setLine(slug, none.thing, '', none, true)]},
-  );
+  const hidden = `${prop} on ${s.on} does not show: ${slug} sets ${none.thing} ${none.value} on ${none.on}${none.when ? ` when ${none.when}` : ''}${none.state ? ` :${none.state}` : ''}, which hides the line. To show it, run \`${setLine(slug, none.thing, '', none, true)}\` (the color then brings the border it needs); to drop the color, run \`${setLine(slug, prop, '', s, true)}\``;
+  s.note = s.note ? `${s.note}; ${hidden}` : hidden;
 }
 
 /**
@@ -7990,8 +7987,9 @@ function checkOne(
     if (!unset && /^outline-(color|width|offset)$/.test(prop))
       noOutlineRefusal(ctx, slug, data, s, prop, v);
     // A border color where the theme itself sets the part's border to none
-    // has no line to color (elsewhere set brings the border it needs).
-    if (!unset) borderNoneRefusal(ctx, slug, data, s, prop);
+    // has no line to color: it is saved, and the answer says so, with the
+    // command for either choice (elsewhere set brings the border it needs).
+    if (!unset) borderNoneNote(ctx, slug, data, s, prop);
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.

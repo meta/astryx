@@ -179,6 +179,24 @@ export function familyOf(project, name) {
 }
 
 /**
+ * Whether a section's own page draws a component in a cell of its own. On
+ * the overlays section's page, a part of an overlay (a dialog's header, a
+ * command palette's list) shows inside the overlay it belongs to, never
+ * alone beside it, and inside it only while the overlay is open: that page
+ * stays one or two screens. The whole sheet draws it alone.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {string | null | undefined} group the section drawn, none for the whole sheet
+ */
+export function shownOnSection(project, name, group) {
+  return !(
+    group === 'overlays' &&
+    familyOf(project, name) === 'overlays' &&
+    project.components[name]?.subComponentOf
+  );
+}
+
+/**
  * The sections of the theme-building page whose parts the theme's settings
  * set on their own (`--on badge`, or a group of parts such as `--on
  * inputs`): the components each part names a class of, each in its section. A setting for the whole theme (a color, the
@@ -375,11 +393,7 @@ function componentItems(project, group) {
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
     const info = project.components[name];
-    // On the overlays section's own page, a part of an overlay (a dialog's
-    // header, a command palette's list) shows inside the overlay it belongs
-    // to, never alone beside it: that page stays one or two screens.
-    if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
-      continue;
+    if (!shownOnSection(project, name, group)) continue;
     // A deprecated part is not drawn: a theme styles the part that replaces
     // it. An overlay whose playground opens it over the page draws nothing
     // closed (a phone's navigation drawer, slid out of the window): where
