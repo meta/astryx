@@ -121,6 +121,9 @@ export default function ChatComposerFullFeatured() {
             size="md"
             icon={<Icon icon={MicrophoneIcon} />}
             isIconOnly
+            onClick={() =>
+              showToast({body: 'Demo: voice input would start here'})
+            }
           />
         }
       />
