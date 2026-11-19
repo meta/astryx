@@ -30,7 +30,9 @@ A theme may instead opt into a palette input. `themePalette()` from
 `@astryxdesign/core/palette` takes a few seed colors and a pinned recipe,
 generates the palette, and maps it to the theme's color tokens. The theme passes
 the result to `defineTheme({palette})`. The theme source is then the accepted
-record of its colors: the same input always gives the same tokens.
+record of its colors: the same input always gives the same palette stops.
+Values the mapping measures against Core's default token values (secondary text
+lifted on a tinted part) follow the installed Core's defaults.
 
 The Palette Generator Lab compares candidate recipes, complete families, modes,
 anchors, and existing themes, then lets an author copy candidate JSON. The
@@ -251,8 +253,10 @@ TypeScript declaration metadata is not executable runtime behavior.
   tokens.** `themePalette(input)` from `@astryxdesign/core/palette` takes
   `accent`, `neutral`, `success`, `warning`, `danger`, and `info` seed colors
   (each optional, at least one), `vibrancy` (0–100, default 50), and `recipe`.
-  - A palette that names no recipe runs `astryx-oklch-v1`, so its colors never
-    move with a package upgrade. The CLI theme editor names
+  - A palette that names no recipe runs `astryx-oklch-v1`, so its generated
+    stops never move with a package upgrade. Values the mapping measures
+    against Core's default token values (secondary text lifted on a tinted
+    part) follow the installed Core's defaults. The CLI theme editor names
     `astryx-oklch-v2` explicitly for a new palette.
   - It builds the same generation request as the CLI theme editor builds for
     the same color settings: one family per seed, the seed pinned exactly at
@@ -495,8 +499,9 @@ Accepted palettes are committed snapshots. Theme mappings use literal CSS values
 or explicit references to committed palette data; generation never runs implicitly.
 A generated candidate changes no accepted source or rendered output until an author
 explicitly accepts it. The palette input (DEC-16) is an explicit source: its
-seeds and pinned recipe are the accepted record, and they give the same colors
-on every build.
+seeds and pinned recipe are the accepted record, and they give the same palette
+stops on every build; values measured against Core's default token values follow
+the installed Core.
 
 Rejected: an implicit generator run during ordinary theme normalization or build,
 because it would recolor a theme without an explicit accepted source change.
@@ -592,7 +597,7 @@ its own Core entry, so the generator ships only to apps that import it (FR13).
 `defineTheme` receives the resolved tokens, not palette metadata, and explicit
 `tokens` override them one by one. The mapping is the CLI theme editor's, so a
 theme made in the editor and one made in code with the same seeds and the same
-recipe get the same colors. A released recipe never changes. A recipe is fixed from the first
+recipe get the same colors against the same Core. A released recipe never changes. A recipe is fixed from the first
 package release that ships it, whether a CLI release or a Core release of this
 input, so `astryx-oklch-v2` is fixed and later tuning is a new recipe,
 `astryx-oklch-v3`.
