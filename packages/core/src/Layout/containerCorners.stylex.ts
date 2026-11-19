@@ -15,9 +15,10 @@ import * as stylex from '@stylexjs/stylex';
 
 /**
  * Corner publication for a rounded padding publisher (Card, Dialog). The host
- * sets `--_container-corner-start-start`, `-start-end`, `-end-start` and
- * `-end-end` to the radius of each of its corners, so a radius of different
- * corners reaches the child as it is drawn.
+ * copies its radius variables into the host variables `fromHostRadius` reads,
+ * which works out `--_container-corner-start-start`, `-start-end`,
+ * `-end-start` and `-end-end`, so a radius of different corners reaches the
+ * child as it is drawn.
  *
  * A corner goes only to the host's first or last child when that child reads
  * corners (it carries `data-container-corner`). A reader deeper inside could

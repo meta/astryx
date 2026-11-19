@@ -207,8 +207,8 @@ const flyoutStyles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
-    // The theme's corner variables inherit: an unthemed surface inside a
-    // themed one resets them, so what it hands each corner is its own radius.
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
     '--_dropdown-menu-radius-top-left': 'initial',
     '--_dropdown-menu-radius-top-right': 'initial',
     '--_dropdown-menu-radius-bottom-right': 'initial',
@@ -321,8 +321,8 @@ const regionStyles = stylex.create({
       MENU_MAX_BLOCK_SIZE_FALLBACK,
     ),
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
-    // The theme's corner variables inherit: an unthemed surface inside a
-    // themed one resets them, so what it hands each corner is its own radius.
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
     '--_dropdown-menu-radius-top-left': 'initial',
     '--_dropdown-menu-radius-top-right': 'initial',
     '--_dropdown-menu-radius-bottom-right': 'initial',

@@ -223,8 +223,8 @@ const styles = stylex.create({
     // that sets no color of its own (a selected nav row) needs this.
     color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
-    // The theme's corner variables inherit: an unthemed surface inside a
-    // themed one resets them, so what it hands each corner is its own radius.
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
     '--_dialog-radius-top-left': 'initial',
     '--_dialog-radius-top-right': 'initial',
     '--_dialog-radius-bottom-right': 'initial',
@@ -328,7 +328,8 @@ const styles = stylex.create({
     '--_container-host-radius': 'var(--_dialog-radius)',
     '--_container-host-radius-top-left': 'var(--_dialog-radius-top-left)',
     '--_container-host-radius-top-right': 'var(--_dialog-radius-top-right)',
-    '--_container-host-radius-bottom-right': 'var(--_dialog-radius-bottom-right)',
+    '--_container-host-radius-bottom-right':
+      'var(--_dialog-radius-bottom-right)',
     '--_container-host-radius-bottom-left': 'var(--_dialog-radius-bottom-left)',
     '--_container-host-radius-start-start': 'var(--_dialog-radius-start-start)',
     '--_container-host-radius-start-end': 'var(--_dialog-radius-start-end)',
@@ -340,8 +341,8 @@ const styles = stylex.create({
     padding: 0,
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
-    // The theme's corner variables inherit: an unthemed surface inside a
-    // themed one resets them, so what it hands each corner is its own radius.
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
     '--_dialog-radius-top-left': 'initial',
     '--_dialog-radius-top-right': 'initial',
     '--_dialog-radius-bottom-right': 'initial',

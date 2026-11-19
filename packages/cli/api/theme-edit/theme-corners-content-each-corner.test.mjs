@@ -47,4 +47,16 @@ describe('a card radius of different corners', () => {
       /Core gives it a single radius/,
     );
   }, 240_000);
+
+  it('still names it on a part whose content takes one radius', async () => {
+    const r = /** @type {any} */ (
+      await themeEditSet('c', 'border-radius', '12px 12px 0 0', {
+        cwd,
+        on: 'button',
+      })
+    );
+    expect((r.data?.notes ?? []).join(' ')).toMatch(
+      /Core gives it a single radius/,
+    );
+  }, 240_000);
 });

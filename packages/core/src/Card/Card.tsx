@@ -61,8 +61,8 @@ export type CardVariant = keyof CardVariantMap;
 const styles = stylex.create({
   card: {
     '--_card-radius': radiusVars['--radius-container'],
-    // The theme's corner variables inherit: an unthemed surface inside a
-    // themed one resets them, so what it hands each corner is its own radius.
+    // Theme corner variables inherit. Reset them, so a nested surface that the
+    // theme does not style hands out its own radius.
     '--_card-radius-top-left': 'initial',
     '--_card-radius-top-right': 'initial',
     '--_card-radius-bottom-right': 'initial',
