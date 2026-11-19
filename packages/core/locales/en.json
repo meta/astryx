@@ -499,6 +499,10 @@
     "defaultMessage": "{label} data",
     "description": "Screen-reader-only caption for the small-data table that mirrors a Chart. `{label}` is the Chart's resolved accessible name."
   },
+  "@astryx.chart.noData": {
+    "defaultMessage": "No data",
+    "description": "Text shown in a Chart's tooltip and read in its screen-reader data table in place of a value that is missing from the data. Short phrase meaning no value was recorded for this point; not a zero."
+  },
   "@astryx.chartLegend.label": {
     "defaultMessage": "Chart legend",
     "description": "Screen-reader-only accessible name for the list of series labels and swatches rendered by ChartLegend."

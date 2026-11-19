@@ -120,7 +120,7 @@ export const docs = {
         name: 'Data table',
         required: false,
         description:
-          'Visually hidden tabular alternative rendered for small datasets.',
+          'Visually hidden tabular alternative rendered for small datasets. Row headers show x values and cells show series values. A null or undefined value reads as the translated message "No data"; other values read as String(value).',
       },
     ],
   },
