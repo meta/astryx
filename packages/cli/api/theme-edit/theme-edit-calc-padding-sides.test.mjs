@@ -234,8 +234,23 @@ describe('a padding of several lengths where only one works', () => {
       await set('5px 0');
       const notes = (await set('5px 2px')).join('\n');
       expect(notes).toContain(
-        'undo t takes back padding-inline, the side this changes',
+        'undo t takes back padding-inline, the side this changes or moves',
       );
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+      expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'names in its undo every side a repeat moves back over a group setting',
+    async () => {
+      await set('5px 0');
+      await themeEditSet('t', 'padding', '3px 2px', {cwd, on: 'menus'});
+      const notes = (await set('5px 0')).join('\n');
+      expect(notes).toContain('undo t takes back all 2');
+      await themeEditUndo('t', {cwd});
       await themeEditUndo('t', {cwd});
       await themeEditUndo('t', {cwd});
       expect(saved()).toEqual([]);

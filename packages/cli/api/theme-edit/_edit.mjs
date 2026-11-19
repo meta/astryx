@@ -6135,8 +6135,9 @@ async function changeOnce(
     s = first;
     sidesBeside.push(...rest);
   }
-  // The settings as saved before this change, to tell which sides it changes.
-  const savedBefore = new Set(data.settings.map(x => JSON.stringify(x)));
+  // The sides this change writes or moves: the ones its undo takes back.
+  /** @type {Set<import('./_settings.mjs').Setting>} */
+  const sidesMoved = new Set();
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
@@ -6578,6 +6579,7 @@ async function changeOnce(
       if (borderAdded) data.settings.push(borderAdded);
     }
     data.settings.push(s);
+    sidesMoved.add(s);
   }
   for (const side of sidesBeside) {
     // An unchanged side stays where it is, as the first side does, unless a
@@ -6599,6 +6601,7 @@ async function changeOnce(
     }
     data.settings = data.settings.filter(x => keyOf(x) !== keyOf(side));
     data.settings.push(side);
+    sidesMoved.add(side);
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
@@ -6654,7 +6657,7 @@ async function changeOnce(
       )
     : [];
   data.settings = data.settings.filter(x => !typedBefore.includes(x));
-  const sidesChanged = written.filter(w => !savedBefore.has(JSON.stringify(w)));
+  const sidesChanged = written.filter(w => sidesMoved.has(w));
   /** @param {import('./_settings.mjs').Setting} w */
   const longhandsOf = w =>
     sub === 'set' && w.source === 'property'
@@ -7132,7 +7135,7 @@ async function changeOnce(
             sidesChanged.length === written.length
               ? `takes back all ${written.length}`
               : sidesChanged.length
-                ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes`
+                ? `takes back ${sidesChanged.map(x => x.thing).join(' and ')}, the ${sidesChanged.length === 1 ? 'side' : 'sides'} this changes or moves`
                 : null,
             typedBefore.length
               ? `brings back ${typedBefore.map(describe).join(', ')}`
