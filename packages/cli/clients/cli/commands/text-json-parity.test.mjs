@@ -555,7 +555,7 @@ const CASES = [
     // A rendered file that carries its page.
     setup: dir => {
       const source = Buffer.from(
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        'export default function Page() { return <h1>Hello</h1>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const json = JSON.stringify({
         version: 1,
@@ -588,7 +588,7 @@ const CASES = [
     cwd: '__TMP__',
     setup: dir => {
       const source = Buffer.from(
-        'export default function Page() { return <h1>Hello</h1>; }\n',
+        'export default function Page() { return <h1>Hello</h1>; }\nimport "@astryxdesign/core/astryx.css";\n',
       );
       const json = JSON.stringify({
         version: 1,

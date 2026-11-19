@@ -754,12 +754,12 @@ import '@astryxdesign/core/astryx.css';
     put('npm-link/package.json', '{"name":"npm-link","private":true}');
     putLinkedPackage('npm-link/vendor/badge', '@acme/linked');
     linkFolder('npm-link/node_modules/@acme/linked', 'npm-link/vendor/badge');
-    put('npm-link/page.tsx', "import {Badge} from '@acme/linked';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    put('npm-link/page.tsx', "import {Badge} from '@acme/linked';\nexport default function Page() { return <p><Badge /> after</p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     // A `file:` dependency, installed as a link to its folder.
     put('file-dep/package.json', JSON.stringify({name: 'file-dep', private: true, dependencies: {'@acme/local': 'file:./libs/local'}}));
     putLinkedPackage('file-dep/libs/local', '@acme/local');
     linkFolder('file-dep/node_modules/@acme/local', 'file-dep/libs/local');
-    put('file-dep/page.tsx', "import {Badge} from '@acme/local';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    put('file-dep/page.tsx', "import {Badge} from '@acme/local';\nexport default function Page() { return <p><Badge /> after</p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     for (const [page, name] of [['npm-link/page.tsx', '@acme/linked'], ['file-dep/page.tsx', '@acme/local']]) {
       const {first, back, markup, againMarkup} = await roundTrip(page);
       expect(first.data.files).toEqual(['page.tsx']);
@@ -779,7 +779,7 @@ import '@astryxdesign/core/astryx.css';
       "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'rel-badge', children: label}); }\n",
     );
     linkFolder('rel-link/node_modules/@acme/rel', 'rel-link/vendor/badge');
-    put('rel-link/page.tsx', "import {Badge} from './vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('rel-link/page.tsx', "import {Badge} from './vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back, markup, againMarkup} = await roundTrip('rel-link/page.tsx');
     expect([...first.data.files].sort()).toEqual(
       ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.css', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
@@ -794,7 +794,7 @@ import '@astryxdesign/core/astryx.css';
     put('alias-link/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}}}));
     putLinkedPackage('alias-link/vendor/badge', '@acme/aliased');
     linkFolder('alias-link/node_modules/@acme/aliased', 'alias-link/vendor/badge');
-    put('alias-link/page.tsx', "import {Badge} from '@/vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('alias-link/page.tsx', "import {Badge} from '@/vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back, markup, againMarkup} = await roundTrip('alias-link/page.tsx');
     expect([...first.data.files].sort()).toEqual(
       ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
@@ -825,7 +825,7 @@ import '@astryxdesign/core/astryx.css';
     put('late-link/own.js', "import './vendor/kit/src/parts/badge.css';\nimport {label} from './vendor/kit/src/parts/label.js';\nexport const own = `own ${label}`;\n");
     put(
       'late-link/page.tsx',
-      "import {Badge} from '@acme/late';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+      "import {Badge} from '@acme/late';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const {first, back, markup, againMarkup} = await roundTrip('late-link/page.tsx');
     expect([...first.data.files].sort()).toEqual(
@@ -854,7 +854,7 @@ import '@astryxdesign/core/astryx.css';
     put('share-link/own.js', "import './app.css';\nimport './vendor/kit/src/parts/theme.css';\nexport const own = 'own';\n");
     put(
       'share-link/page.tsx',
-      "import {Badge} from '@acme/share';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+      "import {Badge} from '@acme/share';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\nimport '@astryxdesign/core/astryx.css';\n",
     );
     const {first, back, markup, againMarkup} = await roundTrip('share-link/page.tsx');
     expect([...first.data.files].sort()).toEqual(
@@ -873,7 +873,7 @@ import '@astryxdesign/core/astryx.css';
       "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport {suffix} from '../../../../shared/util.js';\nexport function Badge() { return jsx('strong', {children: `${label} ${suffix}`}); }\n",
     );
     linkFolder('reach-out/node_modules/@acme/reach', 'reach-out/vendor/kit');
-    put('reach-out/page.tsx', "import {Badge} from '@acme/reach';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('reach-out/page.tsx', "import {Badge} from '@acme/reach';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back, markup, againMarkup} = await roundTrip('reach-out/page.tsx');
     expect(first.data.files).toEqual(['page.tsx']);
     expect(first.data.notCarried ?? []).toEqual([]);
@@ -897,7 +897,7 @@ import '@astryxdesign/core/astryx.css';
     // pnpm links a workspace dependency into the package's own node_modules.
     linkFolder('ws-nest/node_modules/@acme/nest-ui', 'ws-nest/packages/ui');
     linkFolder('ws-nest/packages/ui/node_modules/@acme/nest-utils', 'ws-nest/packages/utils');
-    put('ws-nest/src/page.tsx', "import {Badge} from '@acme/nest-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('ws-nest/src/page.tsx', "import {Badge} from '@acme/nest-ui';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back, markup, againMarkup} = await roundTrip('ws-nest/src/page.tsx');
     expect(first.data.files).toEqual(['page.tsx']);
     expect(markup).toContain('ui @acme/nest-utils badge text');
@@ -914,7 +914,7 @@ import '@astryxdesign/core/astryx.css';
       "import {jsx} from 'react/jsx-runtime';\nimport {useEffect, useState} from 'react';\nexport function Badge() {\n  const [on, setOn] = useState(false);\n  useEffect(() => setOn(true), []);\n  return on ? jsx('img', {src: '/pics/late.png', alt: 'later'}) : jsx('span', {children: 'before the script'});\n}\n",
     );
     linkFolder('late-img/node_modules/@acme/late-img', 'late-img/vendor/kit');
-    put('late-img/page.tsx', "import {Badge} from '@acme/late-img';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('late-img/page.tsx', "import {Badge} from '@acme/late-img';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back} = await roundTrip('late-img/page.tsx');
     expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
     const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
@@ -935,7 +935,7 @@ import '@astryxdesign/core/astryx.css';
       "import {jsx, jsxs} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport logo from './logo.png';\nimport data from './data.json';\nimport './badge.css';\nexport function Badge() { return jsxs('strong', {className: 'kit-badge', children: [jsx('img', {src: logo, alt: ''}), label, ' ', data.count]}); }\n",
     );
     linkFolder('link-assets/node_modules/@acme/kit', 'link-assets/vendor/kit');
-    put('link-assets/page.tsx', "import {Badge} from '@acme/kit';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('link-assets/page.tsx', "import {Badge} from '@acme/kit';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     const {first, back, markup, againMarkup} = await roundTrip('link-assets/page.tsx');
     expect(first.data.files).toEqual(['page.tsx', 'vendor/kit/src/parts/logo.png']);
     const html = fs.readFileSync(path.join(dir, 'link-assets/page.html'), 'utf8');
@@ -952,27 +952,27 @@ import '@astryxdesign/core/astryx.css';
     put('ws-root/package.json', JSON.stringify({name: 'ws-root', private: true, workspaces: ['packages/*']}));
     putLinkedPackage('ws-root/packages/ui', '@acme/ws-ui');
     linkFolder('ws-root/node_modules/@acme/ws-ui', 'ws-root/packages/ui');
-    put('ws-root/src/page.tsx', "import {Badge} from '@acme/ws-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('ws-root/src/page.tsx', "import {Badge} from '@acme/ws-ui';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     // A pnpm workspace app: the package is outside the app's project.
     put('ws-app/pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n  - 'packages/*'\n");
     putLinkedPackage('ws-app/packages/ui', '@acme/app-ui');
     put('ws-app/apps/web/package.json', JSON.stringify({name: 'web', private: true, dependencies: {'@acme/app-ui': 'workspace:*'}}));
     linkFolder('ws-app/apps/web/node_modules/@acme/app-ui', 'ws-app/packages/ui');
-    put('ws-app/apps/web/page.tsx', "import {Badge} from '@acme/app-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('ws-app/apps/web/page.tsx', "import {Badge} from '@acme/app-ui';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     // The pnpm store layout: node_modules links into node_modules/.pnpm.
     put('pnpm-store/package.json', '{"name":"pnpm-store","private":true}');
     putLinkedPackage('pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored', '@acme/stored');
     linkFolder('pnpm-store/node_modules/@acme/stored', 'pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored');
-    put('pnpm-store/page.tsx', "import {Badge} from '@acme/stored';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('pnpm-store/page.tsx', "import {Badge} from '@acme/stored';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     // A CommonJS package and an ES module package, installed as folders.
     put('cjs-pkg/package.json', '{"name":"cjs-pkg","private":true}');
     put('cjs-pkg/node_modules/acme-cjs/package.json', JSON.stringify({name: 'acme-cjs', version: '1.0.0', main: './lib/index.js'}));
     put('cjs-pkg/node_modules/acme-cjs/lib/index.js', "exports.Badge = require('./badge.js').Badge;\n");
     put('cjs-pkg/node_modules/acme-cjs/lib/badge.js', "const {jsx} = require('react/jsx-runtime');\nexports.Badge = function Badge() { return jsx('strong', {children: 'acme-cjs badge text'}); };\n");
-    put('cjs-pkg/page.tsx', "import {Badge} from 'acme-cjs';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('cjs-pkg/page.tsx', "import {Badge} from 'acme-cjs';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     put('esm-pkg/package.json', '{"name":"esm-pkg","private":true}');
     putLinkedPackage('esm-pkg/node_modules/@acme/esm', '@acme/esm');
-    put('esm-pkg/page.tsx', "import {Badge} from '@acme/esm';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('esm-pkg/page.tsx', "import {Badge} from '@acme/esm';\nexport default function Page() { return <p><Badge /></p>; }\nimport '@astryxdesign/core/astryx.css';\n");
     for (const [page, text] of [
       ['ws-root/src/page.tsx', '@acme/ws-ui badge text'],
       ['ws-app/apps/web/page.tsx', '@acme/app-ui badge text'],
@@ -1858,7 +1858,7 @@ describe('render(): every write stays inside the current folder', () => {
     // A file beside the page the render leaves for the browser is from outside
     // the file too, not from the network; a reference that loads nothing is
     // not counted.
-    put('relref/page.tsx', 'export default function Page() { return (<main><link rel="icon" href="./bg.png" /><iframe src="about:blank" title="x" /><h1>R</h1></main>); }\n');
+    put('relref/page.tsx', 'export default function Page() { return (<main><link rel="icon" href="./bg.png" /><iframe src="about:blank" title="x" /><h1>R</h1></main>); }\nimport "@astryxdesign/core/astryx.css";\n');
     const rel = await runCli(['experimental', 'export', 'relref/page.tsx'], {cwd: dir});
     expect(rel.status).toBe(0);
     expect(rel.stdout).toMatch(/^outside:\s+\.\/bg\.png$/m);
@@ -1869,7 +1869,7 @@ describe('render(): every write stays inside the current folder', () => {
   it('carries a srcset of local images as data: URIs, and the file still stands alone', async () => {
     put('srcset/dot.png', PNG);
     put('srcset/dot2.png', PNG);
-    put('srcset/page.tsx', 'export default function Page() { return (<main><h1>S</h1><img src="./dot.png" srcSet="./dot.png 1x, ./dot2.png 2x" alt="" /></main>); }\n');
+    put('srcset/page.tsx', 'export default function Page() { return (<main><h1>S</h1><img src="./dot.png" srcSet="./dot.png 1x, ./dot2.png 2x" alt="" /></main>); }\nimport "@astryxdesign/core/astryx.css";\n');
     const r = /** @type {any} */ (await render('srcset/page.tsx', {cwd: dir}));
     expect(fs.readFileSync(path.join(dir, 'srcset/page.html'), 'utf8')).toMatch(/srcset="data:image\/png;base64,[^"]+ 1x, data:image\/png;base64,[^"]+ 2x"/i);
     expect(r.data.checks.outside).toEqual([]);
@@ -1879,7 +1879,7 @@ describe('render(): every write stays inside the current folder', () => {
     const imgs = Array.from({length: 12}, (_, i) => `<img src="https://img.example/${i}.png" alt="" />`).join('');
     put(
       'many/page.tsx',
-      `export default function Page() { return (<main><div style={{backgroundImage: 'image-set("https://img.example/set.png" 1x)'}}>S</div>${imgs}</main>); }\n`,
+      `export default function Page() { return (<main><div style={{backgroundImage: 'image-set("https://img.example/set.png" 1x)'}}>S</div>${imgs}</main>); }\nimport '@astryxdesign/core/astryx.css';\n`,
     );
     const r = /** @type {any} */ (await render('many/page.tsx', {cwd: dir}));
     expect(r.data.warnings.map((/** @type {any} */ w) => w.message)).toContain(
