@@ -522,24 +522,28 @@ describe('projectLag from a tool folder inside a project', () => {
 });
 
 describe('cliUpdateStep', () => {
-  it("in a project, moves the project's CLI and Core together, then runs the codemods", () => {
+  it("in a project, moves the project's CLI and Core together, then names the bare codemod run", () => {
     const app = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
     writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
     installCore(app, '0.7.1');
     const self = {version: '0.7.2', root: path.join(app, 'cli')};
-    // The newest release known: the step the update notice names.
+    // The newest release known: the install the update notice names.
     const stateDir = checked('0.7.3');
     const lag = projectLag({cwd: app, current: '0.7.1', stateDir});
     expect(cliUpdateStep({cwd: app, self, stateDir})).toEqual({
-      command: `${lag?.install}, then ${lag?.upgrade}`,
+      install: lag?.install,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: null,
       runs: false,
     });
-    // Not known yet: the same step, at the latest release, and a project
+    // Not known yet: the same install, at the latest release, and a project
     // that pins Core to one version keeps its pins.
     expect(cliUpdateStep({cwd: app, self, stateDir: tempDir('state')})).toEqual(
       {
-        command:
-          'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest, then npx astryx upgrade --from 0.7.1 --apply',
+        install:
+          'npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest',
+        upgrade: 'astryx upgrade --from 0.7.1 --apply',
+        folder: null,
         runs: false,
       },
     );
@@ -548,10 +552,8 @@ describe('cliUpdateStep', () => {
     writeJson(path.join(ranged, 'package-lock.json'), {lockfileVersion: 3});
     installCore(ranged, '0.7.1');
     expect(
-      cliUpdateStep({cwd: ranged, self, stateDir: tempDir('state')}).command,
-    ).toBe(
-      'npm install @astryxdesign/core@latest @astryxdesign/cli@latest, then npx astryx upgrade --from 0.7.1 --apply',
-    );
+      cliUpdateStep({cwd: ranged, self, stateDir: tempDir('state')}).install,
+    ).toBe('npm install @astryxdesign/core@latest @astryxdesign/cli@latest');
   });
 
   it("from a tool folder inside a project, runs in the project's folder", () => {
@@ -560,14 +562,18 @@ describe('cliUpdateStep', () => {
     installCore(app, '0.7.1');
     const tool = path.join(app, 'tools', 'codegen');
     writeJson(path.join(tool, 'package.json'), {name: 'codegen'});
-    const {command} = cliUpdateStep({
-      cwd: tool,
-      self: {version: '0.7.2', root: path.join(app, 'cli')},
-      stateDir: tempDir('state'),
+    expect(
+      cliUpdateStep({
+        cwd: tool,
+        self: {version: '0.7.2', root: path.join(app, 'cli')},
+        stateDir: tempDir('state'),
+      }),
+    ).toEqual({
+      install: `cd ${app} && npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest`,
+      upgrade: 'astryx upgrade --from 0.7.1 --apply',
+      folder: app,
+      runs: false,
     });
-    expect(command).toBe(
-      `cd ${app} && npm install -E @astryxdesign/core@latest @astryxdesign/cli@latest, then cd ${app} && npx astryx upgrade --from 0.7.1 --apply`,
-    );
   });
 
   it('outside a project, updates the copy that ran', () => {
@@ -587,7 +593,12 @@ describe('cliUpdateStep', () => {
     });
     expect(
       cliUpdateStep({cwd: outside, self: {version: '0.7.2', root: global}}),
-    ).toEqual({command: globalUpgradeCommand(global), runs: false});
+    ).toEqual({
+      install: globalUpgradeCommand(global),
+      upgrade: null,
+      folder: null,
+      runs: false,
+    });
     // A package runner's copy: nothing installed it, so the newest runs.
     const runner = path.join(
       tempDir('runner'),
@@ -612,7 +623,9 @@ describe('cliUpdateStep', () => {
         argv: ['theme', 'palette', 'generate', 'my palette.json'],
       }),
     ).toEqual({
-      command: `${dlx} @astryxdesign/cli@latest theme palette generate 'my palette.json'`,
+      install: `${dlx} @astryxdesign/cli@latest theme palette generate 'my palette.json'`,
+      upgrade: null,
+      folder: null,
       runs: true,
     });
     // With no arguments to repeat, a place for the command.
@@ -621,11 +634,8 @@ describe('cliUpdateStep', () => {
         cwd: outside,
         self: {version: '0.7.2', root: runner},
         argv: [],
-      }),
-    ).toEqual({
-      command: `${dlx} @astryxdesign/cli@latest <command>`,
-      runs: true,
-    });
+      }).install,
+    ).toBe(`${dlx} @astryxdesign/cli@latest <command>`);
   });
 });
 

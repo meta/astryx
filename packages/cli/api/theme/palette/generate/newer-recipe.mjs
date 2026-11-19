@@ -39,18 +39,39 @@ export function newerRecipe(recipe) {
 /**
  * The refusal for a config a newer CLI made, keeping the code of every
  * palette generation refusal. The step it names fits where the CLI runs (see
- * `cliUpdateStep`): in a project, its CLI and Core together.
+ * `cliUpdateStep`): in a project, its CLI and Core together, then the codemod
+ * run. That command stays bare (`astryx …`), in the text and as its own
+ * suggestion, so the CLI names its own command for a person and a JSON reader
+ * gets the bare command.
  * @param {{recipe: string, file: string, cwd?: string}} options
  * @returns {AstryxError}
  */
 export function newerRecipeRefusal({recipe, file, cwd = process.cwd()}) {
   const step = cliUpdateStep({cwd});
+  const where = step.folder ? ` in ${step.folder}` : '';
   const then = step.runs
-    ? `Run the command again with the newest CLI: ${step.command}`
-    : `Update the CLI, then run the command again: ${step.command}`;
+    ? `Run the command again with the newest CLI: ${step.install}`
+    : step.upgrade
+      ? `Update the CLI: ${step.install}, then run ${step.upgrade}${where}; then run the command again`
+      : `Update the CLI, then run the command again: ${step.install}`;
   return new AstryxError(
     `${file} was made with a newer Astryx CLI: its colors use the ${recipe} recipe, and this CLI (${cliVersion()}) knows ${PALETTE_RECIPES.join(', ')}. ${then}. Nothing was changed.`,
-    [{name: step.command, reason: `a CLI that knows the ${recipe} recipe`}],
+    [
+      {
+        name: step.install,
+        reason: step.runs ? 'run the newest CLI' : 'install the newest CLI',
+      },
+      ...(step.upgrade
+        ? [
+            {
+              name: step.upgrade,
+              reason: step.folder
+                ? `then, in ${step.folder}, bring the project's code to it`
+                : "then bring the project's code to it",
+            },
+          ]
+        : []),
+    ],
     ERROR_CODES.ERR_PALETTE_GENERATION,
   );
 }
