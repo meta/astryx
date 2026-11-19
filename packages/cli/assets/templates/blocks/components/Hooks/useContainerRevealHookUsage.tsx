@@ -13,7 +13,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {useToast} from '@astryxdesign/core/Toast';
 import {mergeProps} from '@astryxdesign/core/utils';
-import {PencilIcon, TrashIcon} from '@heroicons/react/24/outline';
+import {EditIcon, DeleteIcon} from '@astryxdesign/template-icons';
 
 const styles = stylex.create({
   actions: {
@@ -53,7 +53,7 @@ function FileRow({
             label={`Edit ${name}`}
             variant="ghost"
             isIconOnly
-            icon={<Icon icon={PencilIcon} size="sm" />}
+            icon={<Icon icon={EditIcon} size="sm" />}
             onClick={() =>
               showToast({body: `Demo: ${name} would open for editing here`})
             }
@@ -62,7 +62,7 @@ function FileRow({
             label={`Delete ${name}`}
             variant="ghost"
             isIconOnly
-            icon={<Icon icon={TrashIcon} size="sm" />}
+            icon={<Icon icon={DeleteIcon} size="sm" />}
             onClick={() => onDelete(name)}
           />
         </span>

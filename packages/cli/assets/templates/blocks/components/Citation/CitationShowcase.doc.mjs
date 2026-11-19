@@ -12,7 +12,4 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Citation', 'Icon', 'Layout', 'Text'],
-  icons: {
-    CodeBracketIcon: 'code',
-  },
 };
