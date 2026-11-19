@@ -15,6 +15,7 @@
 export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'alert-dialog': 'dialog',
   'app-shell-sidenav': 'layout-panel',
+  'banner-close': 'button',
   'banner-icon': 'icon',
   'calendar-nav': 'button',
   'chat-send-button': 'button',
@@ -55,6 +56,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   timer: 'text',
   timestamp: 'text',
   'timestamp-copy-button': 'button',
+  'toast-close': 'button',
   'toggle-button': 'button',
   'typeahead-popup': 'popover',
 };

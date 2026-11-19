@@ -16,7 +16,11 @@ import {pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {SHARED_ELEMENT_PARTS} from './sharedElementParts';
 import {defineTheme} from './defineTheme';
-import {generateThemeCSS} from './generateThemeRules';
+import {
+  generateAdaptationCSS,
+  generateOnMediaCSS,
+  generateThemeCSS,
+} from './generateThemeRules';
 
 const SRC = join(__dirname, '..');
 
@@ -156,5 +160,92 @@ describe('shared-element parts', () => {
     expect(component.slice(0, at)).toMatch(
       /\.astryx-button\[data-variant="ghost"\]\s*\{\s*background-color: gray/,
     );
+  });
+  describe('on a surface that flips with the page', () => {
+    // An inverted fill dark on a light page and light on a dark one: a toast
+    // card takes its light side on a dark page.
+    const flipping = {
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    } as const;
+    const flipped = '[data-astryx-media-dark-page="light"]';
+    const modes = {'@dark': {color: '#fafafa'}, '@light': {color: '#121212'}};
+
+    it("follows the dark-page side in a part's root color-mode blocks", () => {
+      const theme = defineTheme({
+        name: 'shared-element-flip',
+        tokens: {...flipping},
+        components: {
+          button: {'variant:ghost': {backgroundColor: 'gray'}},
+          'toggle-button': {base: modes},
+        },
+      });
+      const {component} = generateThemeCSS(theme);
+      const parts = component.slice(component.indexOf('@layer parts {'));
+      expect(parts).toContain(flipped);
+      expect(
+        parts
+          .split('}')
+          .some(
+            rule =>
+              rule.includes(`${flipped} *`) &&
+              rule.includes('.astryx-toggle-button') &&
+              rule.includes('color: #121212'),
+          ),
+      ).toBe(true);
+    });
+
+    it("follows it in a part's adaptation color-mode blocks", () => {
+      const theme = defineTheme({
+        name: 'shared-element-flip-adapt',
+        tokens: {...flipping},
+        components: {button: {'variant:ghost': {backgroundColor: 'gray'}}},
+        adaptations: {
+          rules: [
+            {
+              when: {pointer: 'coarse'},
+              value: {components: {'toggle-button': {base: modes}}},
+            },
+          ],
+        },
+      });
+      const layered = generateAdaptationCSS(theme, [], {layered: true});
+      const unlayered = generateAdaptationCSS(
+        defineTheme({
+          name: 'shared-element-flip-adapt',
+          tokens: {...flipping},
+          adaptations: {
+            rules: [
+              {
+                when: {pointer: 'coarse'},
+                value: {components: {'toggle-button': {base: modes}}},
+              },
+            ],
+          },
+        }),
+      ).component;
+      expect(unlayered).toContain(flipped);
+      expect(layered.parts).toContain(flipped);
+    });
+
+    it("writes a part's on-media rules for the flipped side as its component's are", () => {
+      const theme = defineTheme({
+        name: 'shared-element-flip-media',
+        tokens: {...flipping},
+        onDark: {components: {'toggle-button': {base: {color: '#fafafa'}}}},
+      });
+      const whole = generateOnMediaCSS(theme);
+      const {parts} = generateOnMediaCSS(theme, [], {layered: true});
+      expect(whole).toContain('.astryx-toggle-button');
+      // Every toggle-button rule the single output writes, the parts output
+      // writes too, the dark-page copies included.
+      const rulesOf = (css: string) =>
+        css
+          .split('}')
+          .filter(rule => rule.includes('.astryx-toggle-button'))
+          .map(rule => rule.slice(rule.indexOf(':is([data-astryx-media')));
+      expect(rulesOf(parts)).toEqual(rulesOf(whole));
+    });
   });
 });

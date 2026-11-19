@@ -95,7 +95,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-toast', visualProps: ['type']},
-      {className: 'astryx-toast-close'},
+      {className: 'astryx-toast-close', sitsOn: 'button'},
     ],
     vars: [
       {

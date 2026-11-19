@@ -1739,6 +1739,9 @@ export function generateThemeRulesSplit(
     generateComponentRules(components, parts, {
       sink: diagnosticSink(warnings),
       group: 'parts',
+      darkPageSides: darkPageSides(
+        resolveModes({...theme.localTokens, ...theme.tokens}),
+      ),
     });
   }
   return {component, prose, parts};
@@ -1797,7 +1800,7 @@ export function generateOnMediaCSS(
   if (options?.layered) {
     return {
       component: onMediaCSS(theme, warnings, 'regular'),
-      parts: generateOnMediaPartsCSS(theme, warnings),
+      parts: onMediaCSS(theme, warnings, 'parts'),
     };
   }
   return onMediaCSS(theme, warnings);
@@ -1805,7 +1808,10 @@ export function generateOnMediaCSS(
 
 /**
  * The media-surface CSS of `generateOnMediaCSS`, its component entries
- * limited to one group when `group` is given.
+ * limited to one group when `group` is given. The `parts` group writes the
+ * shared-element parts' component rules alone, flipped surfaces included;
+ * the surfaces' tokens and the rules derived from them stay with the other
+ * group.
  */
 function onMediaCSS(
   theme: DefinedTheme,
@@ -1834,6 +1840,18 @@ function onMediaCSS(
       return;
     }
     const location = side === 'dark' ? 'onDark.' : 'onLight.';
+    if (group === 'parts') {
+      if (onMedia.components) {
+        generateComponentRules(onMedia.components, out, {
+          resetInheritedPaddingSpecificity: true,
+          surface,
+          sink: surfaceSink,
+          location,
+          group,
+        });
+      }
+      return;
+    }
 
     // Token overrides. MediaTheme writes on a descendant surface, so a source
     // alias must be local unless an authored root/adaptation role owns it.
@@ -1937,7 +1955,7 @@ function onMediaCSS(
   }
 
   const adaptationMediaRoleBlocks: string[] = [];
-  for (const [index, rule] of rules.entries()) {
+  for (const [index, rule] of group === 'parts' ? [] : rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
     if (authoredRoles.length === 0) {
       continue;
@@ -1993,35 +2011,6 @@ function onMediaCSS(
 }
 
 /**
- * The shared-element parts' on-media rules alone, lowered as `generateOnMediaCSS`
- * lowers every component entry, for the later `parts` sub-layer.
- */
-function generateOnMediaPartsCSS(
-  theme: DefinedTheme,
-  warnings?: string[],
-): string {
-  const sink = diagnosticSink(warnings);
-  const parts: string[] = [];
-  for (const surface of ['dark', 'light'] as const) {
-    const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
-    if (!onMedia?.components) {
-      continue;
-    }
-    generateComponentRules(onMedia.components, parts, {
-      resetInheritedPaddingSpecificity: true,
-      surface,
-      sink,
-      location: surface === 'dark' ? 'onDark.' : 'onLight.',
-      group: 'parts',
-    });
-  }
-  if (parts.length === 0) {
-    return '';
-  }
-  return `@scope (${themeScopeStart(theme.name)}) to (${THEME_SCOPE_TO}) {\n${parts.join('\n\n')}\n}`;
-}
-
-/**
  * The shared-element parts' adaptation rules alone, one media block for each rule
  * in authored order, for the later `parts` sub-layer.
  */
@@ -2033,6 +2022,11 @@ function generateAdaptationPartsCSS(
   const {rules} = statusRoleGenerationContext(theme);
   const scopeSelector = themeScopeStart(theme.name);
   const blocks: string[] = [];
+  // (A part's color-mode blocks follow a flipped surface's dark-page side as
+  // its component's do.)
+  const flipped = darkPageSides(
+    resolveModes({...theme.localTokens, ...theme.tokens}),
+  );
   for (const [index, rule] of rules.entries()) {
     const components = rule.components;
     if (!components) {
@@ -2044,6 +2038,7 @@ function generateAdaptationPartsCSS(
       sink,
       location: `adaptations[${index}].`,
       group: 'parts',
+      darkPageSides: flipped,
     });
     if (parts.length > 0) {
       blocks.push(
