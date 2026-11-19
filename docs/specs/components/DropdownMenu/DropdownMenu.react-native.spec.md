@@ -185,8 +185,8 @@ The component implements design requirements without copying their rationale.
 
 Platform control (`spec:AST-093` FR2): the system's pull-down menu on iOS
 through the system menu host; on Android, no system menu, so the menu is
-drawn. Guideline pages: Menus, Pull-down buttons and Accessibility in the
-Apple Human Interface Guidelines; Menus in Material 3 (`spec:AST-093` FR3).
+drawn. Guideline pages (`spec:AST-093` FR3): Menus, Pull-down buttons and
+Accessibility in the Apple Human Interface Guidelines.
 
 Theme values read (`spec:AST-093` FR4): the trigger's Button values, the menu
 surface, text, divider and destructive colours, the radius and shadow of the
