@@ -6634,7 +6634,7 @@ async function changeOnce(
             : null))
         : null;
   // A color family whose fill the own source sets as a fixed color grows
-  // every shade from that color, so its setting changes nothing on screen.
+  // every shade from that color, not from the setting.
   const sourceSeed =
     sub === 'set' &&
     PALETTE_DIALS.includes(s.thing) &&
@@ -6646,6 +6646,11 @@ async function changeOnce(
           f => f.dial === s.thing && f.source,
         ) ?? null)
       : null;
+  // Whether this change was compared with a readable last build.
+  const lastBuildCompared = !r.notes.some(
+    n =>
+      n.includes('could not be read') || n.includes('there was no last build'),
+  );
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
@@ -6753,11 +6758,7 @@ async function changeOnce(
     !ownOverToken &&
     !ownPartHits.length &&
     // With the last build unreadable or missing, nothing was compared.
-    !r.notes.some(
-      n =>
-        n.includes('could not be read') ||
-        n.includes('there was no last build'),
-    ) &&
+    lastBuildCompared &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
@@ -6945,15 +6946,13 @@ async function changeOnce(
     const unchangedOnScreen =
       !ctx.unchecked &&
       !r.unchanged &&
-      !r.notes.some(
-        n =>
-          n.includes('could not be read') ||
-          n.includes('there was no last build'),
-      ) &&
+      lastBuildCompared &&
       !r.changed.length &&
       !styled.length;
     const shades =
-      s.thing === 'accent' ? 'links, icons, the tints' : 'text, icons, the tints';
+      s.thing === 'accent'
+        ? 'links, icons, the tints'
+        : 'text, icons, the tints';
     notes.push(
       `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (${shades}) grows from its color, ${sourceSeed.seed}${sameColor(sourceSeed.seed, String(s.value)) ? '' : `, not from ${s.value}`}${unchangedOnScreen ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
     );
