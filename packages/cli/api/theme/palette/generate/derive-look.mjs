@@ -281,6 +281,15 @@ function hueLean(accent, neutral) {
   return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
 }
 /**
+ * A contrast ratio to two decimals, cut down and never rounded up, so a
+ * pair just under the bar never prints as meeting it.
+ * @param {number} ratio
+ * @returns {number}
+ */
+export function ratioDown(ratio) {
+  return Math.floor(ratio * 100 + 1e-9) / 100;
+}
+/**
  * Where a look's card tints start, `[light, dark]`: a strong or dark
  * accent draws them a step deeper, a pale accent a step paler; the
  * official neutral theme's stops otherwise.
@@ -430,7 +439,7 @@ export function deriveLookColors({
           token,
           mode: m,
           stop: best.stop,
-          ratio: Math.round(best.r * 100) / 100,
+          ratio: ratioDown(best.r),
           needs,
         });
       }
@@ -532,16 +541,18 @@ export function deriveLookColors({
         const reads = text(m);
         const s = order
           .filter(x => x >= lo && x <= hi)
-          .find(x => reads.every(c => contrast(c, at(id, m, x).color) >= TEXT));
+          .find(x =>
+            reads.every(c => contrastRatio(c, at(id, m, x).color) >= TEXT),
+          );
         if (s == null) {
           const worst = Math.min(
-            ...reads.map(c => contrast(c, at(id, m, s0).color)),
+            ...reads.map(c => contrastRatio(c, at(id, m, s0).color)),
           );
           unreadable.push({
             token: `--color-background-${h}`,
             mode: m,
             stop: s0,
-            ratio: Math.round(worst * 100) / 100,
+            ratio: ratioDown(worst),
             needs: TEXT,
           });
           return at(id, m, s0);
@@ -791,7 +802,7 @@ export function deriveStatusColors({
           scored.reduce((x, y) => (y.r > x.r ? y : x));
         if (best.r < needs)
           fails.push(
-            `${token} reads at only ${Math.round(best.r * 100) / 100}:1 in ${m} (needs ${needs}:1)`,
+            `${token} reads at only ${ratioDown(best.r)}:1 in ${m} (needs ${needs}:1)`,
           );
         return at(m, best.stop);
       };

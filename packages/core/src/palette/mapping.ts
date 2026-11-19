@@ -42,6 +42,8 @@ export interface StopRef {
   family?: string;
   /** The stop holds the seed's exact color (an exact anchor). */
   exact?: boolean;
+  /** The half is the base theme's own value in that mode (family `literal`): the generated module reads it from the base, so the mode follows the base theme. */
+  base?: boolean;
 }
 
 /** One contrast check behind a stop choice. */
