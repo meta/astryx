@@ -19,14 +19,16 @@
 export function numberedLookValues(family, typed, drawn) {
   return [...new Set([...typed, ...drawn])]
     .filter(v => v.startsWith(`${family}-`) && /-\d+$/.test(v))
-    .sort();
+    .sort((a, b) => Number(/\d+$/.exec(a)?.[0]) - Number(/\d+$/.exec(b)?.[0]));
 }
 
 /**
  * A clause on a plural family ("heavy display headings", and "make them
  * blue" after it) is one answer: its drafts, one per look, become the
- * first one. Each of its options runs that option of every look, in order,
- * with repeated steps said once; the text names each look. A size said for
+ * first one, a sequence of each look's first option, in order, with
+ * repeated steps said once; the looks' other options (a whole-theme dial
+ * offered beside a look's own line) stay out of it, so it changes only the
+ * family. The text names each look. A size said for
  * the family is the largest look's: the others scale by the steps between
  * their sizes now (`sizeOf`), so the type scale keeps its shape.
  * Changes `drafts` in place.
@@ -47,15 +49,12 @@ export function oneAnswerPerFamily(drafts, clauseOf, clauses, families, sizeOf) 
     if (!fam || mine.length < 2) continue;
     const [head, ...rest] = mine;
     const scaled = scaleFamilySizes(mine, fam.whens, sizeOf);
-    head.options = Array.from(
-      {length: Math.max(...mine.map(d => d.options.length))},
-      (_, i) => {
-        const seen = new Set();
-        return mine
-          .flatMap(d => d.options[i] ?? [])
-          .filter(st => !seen.has(JSON.stringify(st)) && seen.add(JSON.stringify(st)));
-      },
-    );
+    const seen = new Set();
+    head.options = [
+      mine
+        .flatMap(d => d.options[0] ?? [])
+        .filter(st => !seen.has(JSON.stringify(st)) && seen.add(JSON.stringify(st))),
+    ];
     head.sequence = true;
     const [attr] = fam.whens[0].split(':');
     head.text = head.text.replace(

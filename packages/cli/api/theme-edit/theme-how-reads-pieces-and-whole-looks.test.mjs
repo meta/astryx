@@ -527,13 +527,18 @@ describe("a part's own piece taken away", () => {
       // them, so the type scale keeps its shape.)
       const sizedData = await answer('display headings 60px');
       const sized = all(sizedData);
-      expect(sized).toMatch(/--text-display-1-size 60px/);
+      expect(sized).toMatch(/font-size 60px --on heading --when type:display-1/);
       for (const n of [2, 3]) {
-        const px = Number(new RegExp(`--text-display-${n}-size (\\d+)px`).exec(sized)?.[1]);
+        const px = Number(new RegExp(`font-size (\\d+)px --on heading --when type:display-${n}\\b`).exec(sized)?.[1]);
         expect(px).toBeGreaterThan(0);
         expect(px).toBeLessThan(60);
       }
       expect(JSON.stringify(sizedData.results)).toMatch(/scaled to keep the steps/);
+      // (A look's other options, a whole-theme dial, stay out of the family's
+      // one answer.)
+      expect(first(await answer('display headings tighter letter spacing'))).not.toContain(
+        'set t headings tight',
+      );
       const georgia = first(await answer('display headings in Georgia'));
       expect(georgia.length).toBe(new Set(georgia).size);
       expect(JSON.stringify((await answer('display headings color')).results)).not.toMatch(
