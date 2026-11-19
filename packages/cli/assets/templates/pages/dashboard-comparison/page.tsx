@@ -547,7 +547,9 @@ function ActiveUsersTrend() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Holds the widest tick label ("1200K") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={56}
             unit="K"
           />
           <Tooltip
