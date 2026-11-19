@@ -110,6 +110,13 @@ function Page() {
   return <p data-testid="row">row</p>;
 }
 
+const pageRef: {current: Document | null} = {current: document};
+
+function PageThroughRef() {
+  read = useFingerScroll(pageRef);
+  return <p data-testid="row">row</p>;
+}
+
 // A phone: the finger-scroll watch listens only where the primary pointer is
 // coarse.
 let restorePointer: () => void;
@@ -222,6 +229,16 @@ describe('useFingerScroll', () => {
 
   it('reads the page’s own scroll through the document', () => {
     const {getByTestId} = render(<Page />);
+    touch('touchstart', getByTestId('row'), true);
+    document.dispatchEvent(new Event('scroll'));
+    expect(read()).toBe(true);
+    touch('touchend', getByTestId('row'), false);
+    document.dispatchEvent(new Event('scrollend'));
+    expect(read()).toBe(false);
+  });
+
+  it('reads the page’s own scroll through a ref that names the document', () => {
+    const {getByTestId} = render(<PageThroughRef />);
     touch('touchstart', getByTestId('row'), true);
     document.dispatchEvent(new Event('scroll'));
     expect(read()).toBe(true);

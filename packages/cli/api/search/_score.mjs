@@ -6,8 +6,8 @@
  */
 
 import {SYNONYM_INDEX} from './_synonyms.mjs';
-import {joined} from './_words.mjs';
-import {phraseWords} from './_query.mjs';
+import {joined, isOrStartsAWordOf, termWords} from './_words.mjs';
+import {phraseWords, samePhraseWord} from './_query.mjs';
 import {compoundHit, compoundOf} from './_compound.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {
@@ -39,11 +39,18 @@ const MIN_TOKEN_SCORE = 50;
  * (synonym hits are discounted so a direct hit always wins).
  * @param {string} tok
  * @param {Candidate} candidate
- * @param {{fuzzy?: boolean, part?: boolean}} [opts] - see scoreCandidate
- * @returns {{score: number, reason: string} | null}
+ * @param {{fuzzy?: boolean, part?: boolean, ownEvidence?: boolean}} [opts] - see scoreCandidate
+ * @param {{score: number, reason: string, used?: true, own?: number} | null} [direct] - scoreCandidate(tok,
+ *   candidate, opts), when the caller already holds it
+ * @returns {{score: number, reason: string, used?: true, own?: number} | null}
  */
-export function bestForToken(tok, candidate, opts = {}) {
-  let best = scoreCandidate(tok, candidate, opts);
+export function bestForToken(tok, candidate, opts = {}, direct = undefined) {
+  let best =
+    direct !== undefined ? direct : scoreCandidate(tok, candidate, opts);
+  // The best hit on the candidate's own text, over the direct hit and every
+  // synonym hit: a used component winning on one reading leaves the own
+  // answer another reading gave (see STRONG_TOKEN_SCORE).
+  let own = best ? (best.used ? (best.own ?? 0) : best.score) : 0;
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
     for (const s of syns) {
@@ -51,12 +58,18 @@ export function bestForToken(tok, candidate, opts = {}) {
       const h = scoreCandidate(s, candidate, {...opts, synonym: true});
       if (h) {
         const score = Math.round(h.score * 0.85);
+        const hOwn = Math.round((h.used ? (h.own ?? 0) : h.score) * 0.85);
+        if (hOwn > own) own = hOwn;
         if (!best || score > best.score)
-          best = {score, reason: `${h.reason} (~${tok})`};
+          best = {
+            score,
+            reason: `${h.reason} (~${tok})`,
+            ...(h.used ? {used: h.used} : {}),
+          };
       }
     }
   }
-  return best;
+  return best?.used ? {...best, own} : best;
 }
 
 /**
@@ -74,7 +87,11 @@ export const FULL_COVERAGE_SCORE = 151;
  * The strongest single-word hit an every-word match needs to take that tier: a
  * keyword substring. Two passing mentions in prose, or the components a page
  * happens to render, are breadth, not relevance; they stay on the token sum,
- * below an exact name or keyword hit on one of the words.
+ * below an exact name or keyword hit on one of the words. Each word must also
+ * be answered by the candidate's own text, or be a word of its own name,
+ * display name or title, or the start of one. A component a template uses names that component: in
+ * search's reading (`ownEvidence`, _named-keywords.mjs) it can make the
+ * template's answer to a word stronger, but it never answers a word alone.
  */
 export const STRONG_TOKEN_SCORE = 70;
 
@@ -84,8 +101,13 @@ export const STRONG_TOKEN_SCORE = 70;
  * @param {Candidate} candidate
  * @param {string[]} [words] - The query's words for compound names (see
  *   compoundHit); empty when the query names an entry outright.
- * @param {{plain?: boolean}} [opts] - `plain`: score without matches on part
- *   of a name or a joined keyword.
+ * @param {{plain?: boolean, named?: () => Set<string>, ownEvidence?: boolean, tokenHits?: Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>}} [opts] - `named`: gives the query's words that name an
+ *   entry outright (see the title tier below), worked out on first call.
+ *   `ownEvidence`: search's reading, where a component a template uses never
+ *   answers a word alone (see STRONG_TOKEN_SCORE). `plain`: score without matches on part
+ *   of a name or a joined keyword. `tokenHits`: gets each content token's
+ *   bestForToken result (`part` set) and the `fuzzy` it was scored with, so
+ *   domainPriority reads them instead of scoring the same words again.
  * @returns {{score: number, reason: string, matched: number, total: number, alias?: 'partial' | 'keyword', aliasWords?: number} | null}
  *   `matched`/`total` are the query concepts this candidate answered, out of
  *   the concepts the query had. Callers that must distinguish "matched one word
@@ -98,7 +120,7 @@ export function scoreQuery(
   tokens,
   candidate,
   words = phraseWords(term),
-  {plain = false} = {},
+  {plain = false, named: namedWords, ownEvidence = false, tokenHits} = {},
 ) {
   const total = Math.max(tokens.length, 1);
   // A whole-phrase hit answered the whole query by definition.
@@ -114,6 +136,7 @@ export function scoreQuery(
   const full = scoreCandidate(term, candidate, {
     fuzzy,
     joins: !plain && words.length > 0,
+    ownEvidence,
   });
   // A query of several words keeps its phrase tiers below even when stopwords
   // leave one content word: "make an integration" is still the phrase an
@@ -131,8 +154,17 @@ export function scoreQuery(
    *  single words), but if stopwords left exactly one DIFFERENT token (e.g.
    *  "pricing page" → "pricing"), score that token too and take the stronger. */
   const fewTokens = () => {
+    // A one-word query whose token is the query itself scores exactly as
+    // `full` did: `joins` only matters for a term with a space in it.
     const single =
-      tokens.length === 1 ? bestForToken(tokens[0], candidate, {fuzzy}) : null;
+      tokens.length === 1
+        ? bestForToken(
+            tokens[0],
+            candidate,
+            {fuzzy, ownEvidence},
+            tokens[0] === term && !/\s/.test(term) ? full : undefined,
+          )
+        : null;
     if (full && (!single || full.score >= single.score)) return asFull(full);
     return single ? asFull(single) : null;
   };
@@ -176,6 +208,27 @@ export function scoreQuery(
   // Multi-word natural language: score each content token, counting only
   // strong hits, then reward coverage so candidates matching more terms win.
   let strongest = 0;
+  // Words the candidate answers with its own text: not only through a
+  // component a template uses (see STRONG_TOKEN_SCORE). A word of its own
+  // name, display name or title, or the start of one, is its own answer,
+  // however short against the whole name.
+  let ownMatched = 0;
+  /** @param {string} tok */
+  const ownName = (/** @type {string} */ tok) => {
+    const word = joined(tok);
+    return [
+      candidate.name,
+      ...(candidate.aliases ?? []),
+      candidate._displayName,
+      ...(candidate.titles ?? []),
+    ].some(label => {
+      if (label == null) return false;
+      const text = String(label);
+      if (isOrStartsAWordOf(termWords(tok), text)) return true;
+      // A word of the label as written ("ChatToolCalls — Expandable").
+      return phraseWords(text).some(w => samePhraseWord(w, word));
+    });
+  };
   let matched = 0;
   let tokenSum = 0;
   /** @type {string[]} */
@@ -188,7 +241,8 @@ export function scoreQuery(
   let alias = false;
   let aliasWords = 0;
   for (const tok of tokens) {
-    let h = bestForToken(tok, candidate, {fuzzy, part: true});
+    let h = bestForToken(tok, candidate, {fuzzy, part: true, ownEvidence});
+    tokenHits?.set(tok, {fuzzy, hit: h});
     if (
       compound?.covered.has(joined(tok)) &&
       compound.score > (h?.score ?? 0)
@@ -201,6 +255,13 @@ export function scoreQuery(
     }
     if (h && h.score >= MIN_TOKEN_SCORE) {
       if (h.score > strongest) strongest = h.score;
+      if (
+        !('used' in h && h.used) ||
+        (h.own ?? 0) >= MIN_TOKEN_SCORE ||
+        ownName(tok)
+      ) {
+        ownMatched++;
+      }
       matched++;
       hitTerms.push(tok);
       tokenSum += h.score;
@@ -210,14 +271,43 @@ export function scoreQuery(
   // of two words or more, so the reader asked a question around the section's
   // name ("how do I add dark mode"). Coverage breaks ties between sections
   // that share a title such as "Best Practices".
+  // A query word that names another entry outright asks for that entry: a
+  // title that leaves it unanswered names only part of the query, so it keeps
+  // the token sum (`drawer side panel` is Drawer, not the side-panels guide).
+  // Kept from the tier, the title still answers its own words, as a keyword
+  // substring hit does (STRONG_TOKEN_SCORE), on the token sum.
   const named = titleInQuery(term, candidate.titles);
-  if (named != null) {
+  // The title answers its own words: a query word all of whose words it holds.
+  const titleWords = named != null ? phraseWords(named) : [];
+  const inTitle = (/** @type {string} */ tok) =>
+    phraseWords(tok).every(w => titleWords.some(t => samePhraseWord(t, w)));
+  const leftNamed =
+    named != null &&
+    namedWords != null &&
+    tokens.some(
+      tok =>
+        !hitTerms.includes(tok) &&
+        !inTitle(tok) &&
+        namedWords().has(joined(tok)),
+    );
+  if (named != null && !leftNamed) {
     return {
       score: TITLE_IN_QUERY_SCORE + Math.min(matched, 9),
       reason: `the query names the title "${named}"`,
       matched,
       total,
     };
+  }
+  if (named != null) {
+    for (const tok of tokens) {
+      if (!hitTerms.includes(tok) && inTitle(tok)) {
+        if (STRONG_TOKEN_SCORE > strongest) strongest = STRONG_TOKEN_SCORE;
+        matched++;
+        ownMatched++;
+        hitTerms.push(tok);
+        tokenSum += STRONG_TOKEN_SCORE;
+      }
+    }
   }
   if (matched === 0) return full ? asFull(full) : null;
 
@@ -237,7 +327,11 @@ export function scoreQuery(
   // (90 + 90 = 180) outranks one matching keyword + prose (90 + 50 = 140).
   // Before this, every all-word match whose strongest hit was a keyword (90)
   // scored 157, burying the better match among dozens of ties.
-  if (matched === tokens.length && strongest >= STRONG_TOKEN_SCORE) {
+  if (
+    matched === tokens.length &&
+    ownMatched === tokens.length &&
+    strongest >= STRONG_TOKEN_SCORE
+  ) {
     return {
       score:
         FULL_COVERAGE_SCORE +

@@ -98,7 +98,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the icon is added, already present, or the matching definitions are listed',
+      when: 'the icon is added, already present, or the matching definitions are listed, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

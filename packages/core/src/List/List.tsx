@@ -60,7 +60,10 @@ export {
 export interface ListProps extends BaseProps<
   HTMLUListElement | HTMLOListElement
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the list element (`<ul>`, or `<ol>` for `listStyle="decimal"`),
+   * with or without a header.
+   */
   ref?: React.Ref<HTMLUListElement | HTMLOListElement>;
   /**
    * List items. Should be ListItem components.
@@ -280,7 +283,7 @@ const styles = stylex.create({
     },
   },
   withDividers: {
-    gap: 0,
+    rowGap: 0,
   },
   withCounter: {
     counterReset: 'astryx-list',

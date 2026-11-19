@@ -7,13 +7,14 @@ export const docs = {
   title: 'Author a theme',
   category: 'guide',
   keywords: ['defineTheme', 'create theme', 'custom theme', 'extends', 'component overrides', 'custom variants', 'adaptations', 'breakpoints', 'theme build', 'theme family', 'tokenVar', 'resolveThemeTokens', 'useTheme', 'palette', 'generate palette', 'seed colors', 'color ramp', 'icon registry'],
-  description: 'Create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
+  description: 'Start here: the experimental theme editor makes and changes themes for you (`astryx experimental theme editor new <name> --like neutral`; see the theme doc), checked against what components read. By hand: create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
 
   sections: [
     {
       id: 'creating-a-custom-theme',
       title: 'Custom themes',
       content: [
+        {type: 'prose', text: 'To make or change a theme (brand colors, fonts, corners), use the theme editor, which checks each change against what components read: `astryx experimental theme editor new <name> --like neutral`, then {@link generic:theme} for the rest. What follows is by hand.'},
         {type: 'prose', text: "Use an installed built theme as the base for ordinary customization. Import it into your source and pass it as `extends` to `defineTheme({extends: importedTheme, ...})`. Build the result, then add the local slug. Only eject when you need to own and maintain a full source fork."},
         {type: 'prose', text: "A local theme is a folder in `src/themes/<slug>/` holding a `<name>Theme.ts` source that exports `<name>Theme`, and a same-stem `<name>Theme.doc.mjs` descriptor that `theme add` reads. The stem must be a valid export name, so a hyphenated slug drops the hyphen: `brand-dark` lives in `src/themes/brand-dark/brandDarkTheme.ts` exporting `brandDarkTheme`, beside `brandDarkTheme.doc.mjs`. The descriptor's `name` is the folder's slug, and it must declare its type or `theme add` and `theme list` refuse it. {@command docs authoring theme-doc} lists every field."},
         {type: 'code', lang: 'js', label: 'src/themes/brand-dark/brandDarkTheme.doc.mjs', code: "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'brand-dark',\n  displayName: 'Brand Dark',\n  description: 'The brand accent, tuned for dark mode.',\n  maintained: false,\n};"},
@@ -42,10 +43,11 @@ export const docs = {
           ['color (existing themes)', '--color-accent, --color-background-*, --color-text-*, --color-border, etc.', 'Supported broad scale: accent? (hex or [light, dark] tuple), neutralStyle? (warm|cool|neutral), contrast? (standard|high). Use theme palette generate for new complete palettes.'],
           ['typography.scale', '--text-heading-*-size/weight/leading, --text-body-size/weight/leading', 'base (px), ratio'],
           ['typography.body/heading/code', '--font-family-body, --font-family-heading, --font-family-code', 'family, fallbacks?, url?, weight?'],
-          ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-chat', 'base (px), multiplier (0–2)'],
+          ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page', 'base (px), multiplier (0–2)'],
           ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (tempo also times the touch springs)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
+        {type: 'prose', text: "A theme with one color mode exports `colorModes` beside it: `export const colorModes = ['light'];` (or `['dark']`). `theme build` copies the export into the built module, and `theme add` reads it so the app wires the theme in that mode. A theme with both modes exports none. Any other value is ignored without a warning, and a `--family` build never writes the export."},
       ],
     },
     {
@@ -74,9 +76,9 @@ export const docs = {
       content: [
         {type: 'prose', text: 'The `components` field in defineTheme uses semantic component keys and style keys, not raw CSS selectors. Use `base` for all instances, `variant:value` or `stateName` for specific props/states, and let the theme pipeline choose the underlying selector. For raw external CSS escape hatches, prefer the data-attribute selector surface documented in {@link generic:styling-advanced}.'},
         {type: 'code', lang: 'tsx', label: 'Component overrides with standard CSS', code: "components: {\n  card: {\n    base: { borderRadius: '20px', padding: '24px' },\n  },\n  button: {\n    base: {\n      borderRadius: '9999px',\n      textTransform: 'uppercase',\n      '--button-focus-offset': '3px',\n    },\n    'variant:ghost': { borderWidth: '2px', borderStyle: 'solid' },\n  },\n}"},
-        {type: 'prose', text: "Run `{@command theme targets}` for every themeable key in the system (`{@command theme targets <Name>}` to scope it, `--json` to lint a theme against it), and `{@command component <Name>}` for one component's theming targets, public CSS variables, and which standard CSS properties are supported."},
+        {type: 'prose', text: "Run `{@command theme targets}` for every themeable key in the system (`{@command theme targets <Name>}` to scope it, `--json` to lint a theme against it), and `{@command component <Name> --detail full}` for one component's theming targets, public CSS variables, and which standard CSS properties are supported."},
         {type: 'list', style: 'do', items: ['Write standard CSS properties (borderRadius, padding); the pipeline expands them into internal vars.', 'Set public CSS vars directly when no standard property equivalent exists.']},
-        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name>}`.']},
+        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name> --detail full}`.']},
       ],
     },
     {

@@ -120,7 +120,6 @@
     "spec:AST-025"
   ],
   "packages/core/src/Chat/ChatComposer.tsx": [
-    "#2072",
     "FR11",
     "FR2",
     "FR5",
@@ -128,7 +127,7 @@
     "INV10",
     "spec:AST-086"
   ],
-  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
+  "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182"],
   "packages/core/src/Chat/ChatComposerInput.tsx": ["FR1", "spec:AST-056"],
   "packages/core/src/Chat/ChatLayout.tsx": ["#2573", "#2573"],
   "packages/core/src/Chat/ChatLayoutScrollButton.tsx": [
@@ -136,7 +135,7 @@
     "architecture:component-theming-surface",
     "spec quote"
   ],
-  "packages/core/src/Chat/ChatMessageBubble.tsx": ["#2072", "#2574"],
+  "packages/core/src/Chat/ChatMessageBubble.tsx": ["#2574"],
   "packages/core/src/Chat/ChatMessageList.tsx": ["FR4", "FR8", "spec:AST-086"],
   "packages/core/src/Chat/ChatSystemMessage.tsx": [
     "FR4",
@@ -477,16 +476,6 @@
     "spec quote",
     "spec:AST-002/DEC-1"
   ],
-  "packages/core/src/Item/ItemSwipeLayer.tsx": [
-    "AST-057",
-    "FR1",
-    "FR2",
-    "FR2",
-    "INV11",
-    "architecture:theme-tokens",
-    "spec quote",
-    "spec:AST-085"
-  ],
   "packages/core/src/Layer/LayerProvider.tsx": ["FR6", "spec:AST-059"],
   "packages/core/src/Layer/clampInlineSize.ts": ["FR7", "spec:AST-059"],
   "packages/core/src/Layer/layerInset.ts": [
@@ -658,12 +647,7 @@
   "packages/core/src/Markdown/plugins/sourceLines.ts": [
     "module:Markdown/sourceLines"
   ],
-  "packages/core/src/MobileNav/MobileNav.tsx": [
-    "#4290",
-    "#4290",
-    "#4290",
-    "#5701"
-  ],
+  "packages/core/src/MobileNav/MobileNav.tsx": ["#4290", "#4290", "#5701"],
   "packages/core/src/MultiSelector/MultiSelector.tsx": [
     "AR1",
     "AR2",
@@ -870,9 +854,7 @@
   "packages/core/src/Selector/useSelectorPresentation.ts": [
     "AR3",
     "AR4",
-    "AR4",
     "spec:AST-055",
-    "spec:Popover",
     "spec:Popover"
   ],
   "packages/core/src/SideNav/SideNav.tsx": [
@@ -1048,8 +1030,6 @@
     "FR1",
     "FR1",
     "FR1",
-    "FR1",
-    "FR2",
     "FR2",
     "FR2",
     "FR2",
@@ -1067,8 +1047,6 @@
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
-    "spec:AST-085",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-086"
@@ -2135,13 +2113,8 @@
     "spec:AST-108",
     "spec:AST-108"
   ],
-  "packages/core/src/theme/expandRadiusScale.ts": ["#2072"],
   "packages/core/src/theme/generateThemeRules.ts": [
     "INV16",
-    "INV16",
-    "INV17",
-    "INV17",
-    "INV17",
     "INV17",
     "INV17",
     "INV17",
@@ -2226,7 +2199,6 @@
     "spec:AST-108"
   ],
   "packages/core/src/theme/tokens.stylex.ts": [
-    "#2072",
     "FR2",
     "INV11",
     "architecture:theme-tokens",
@@ -2505,29 +2477,6 @@
     "FR18",
     "FR18"
   ],
-  "packages/richtext/src/CodeBlockHeaderPlugin.tsx": [
-    "DEC-4",
-    "FR8",
-    "spec quote",
-    "spec:AST-061",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/CodeSyntaxPlugin.tsx": [
-    "FR1",
-    "FR30",
-    "component:Markdown",
-    "spec quote",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/MarkdownExtensionsPlugin.tsx": [
-    "FR11",
-    "FR2",
-    "FR6",
-    "FR8",
-    "FR9",
-    "spec quote",
-    "spec:AST-064"
-  ],
   "packages/richtext/src/RichTextEditor.tsx": [
     "#5335",
     "spec:AST-061",
@@ -2543,16 +2492,6 @@
     "spec:AST-061",
     "spec:AST-061",
     "spec:AST-064"
-  ],
-  "packages/richtext/src/TableColumnFloorPlugin.tsx": [
-    "FR4",
-    "spec quote",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/TaskCheckboxPlugin.tsx": [
-    "FR5",
-    "spec quote",
-    "spec:AST-061"
   ],
   "packages/richtext/src/codeLanguages.ts": ["FR30", "component:Markdown"],
   "packages/richtext/src/editorNodes.ts": ["spec:AST-064"],
@@ -2577,6 +2516,39 @@
     "spec:AST-061"
   ],
   "packages/richtext/src/index.ts": ["spec quote", "spec:AST-061/DEC-8"],
+  "packages/richtext/src/internal/CodeBlockHeaderPlugin.tsx": [
+    "DEC-4",
+    "FR8",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/CodeSyntaxPlugin.tsx": [
+    "FR1",
+    "FR30",
+    "component:Markdown",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/MarkdownExtensionsPlugin.tsx": [
+    "FR11",
+    "FR2",
+    "FR6",
+    "FR8",
+    "FR9",
+    "spec quote",
+    "spec:AST-064"
+  ],
+  "packages/richtext/src/internal/TableColumnFloorPlugin.tsx": [
+    "FR4",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/TaskCheckboxPlugin.tsx": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
   "packages/richtext/src/markdown.ts": [
     "FR12",
     "FR3",

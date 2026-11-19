@@ -25,7 +25,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 import {parseIconSetData} from '../../authoring/doctypes/icon-set/parse.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {assertWithin} from '../fs/path-safety.mjs';
@@ -34,6 +34,12 @@ import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedTypesPath} from './icon-set-paths.mjs';
+import {
+  lookExport,
+  THEME_MAP_NAME,
+  variantThemeMapName,
+  variantThemeMaps,
+} from './icon-set-theme-maps.mjs';
 
 export {generatedTypesPath};
 import {
@@ -50,9 +56,12 @@ import {
   moduleExportOrigin,
   staticExportBindings,
 } from './module-exports.mjs';
+import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
+
+export {iconIdOf};
 
 /**
  * An authoring error with an ERR_* code and suggestions.
@@ -68,35 +77,6 @@ export class IconSetAuthoringError extends Error {
     this.code = code;
     this.suggestions = suggestions;
   }
-}
-
-/**
- * `XMarkIcon` → `x-mark`; `Trash2` → `trash-2`; `ArrowUpDown` →
- * `arrow-up-down`; `Squares2X2Icon` and `Grid2x2` → `squares-2x2`,
- * `grid-2x2`: an icon id from an export name. A dimension (a digit, `x` or
- * `X`, a digit) stays one word.
- * @param {string} name
- */
-export function iconIdOf(name) {
-  return (
-    name
-      .replace(/Icon$/u, '')
-      // `2X2` and `2x2` are one word: lower the x first.
-      .replace(/([0-9])[xX](?=[0-9])/gu, '$1x')
-      // A one-letter word before a digit ends there: `CalendarX2` is
-      // `calendar-x-2`, as its library names it.
-      .replace(/([a-z][A-Z])(?=[0-9])/gu, '$1-')
-      // A lower-case letter before a capital or a digit ends a word, except
-      // the x inside a dimension.
-      .replace(/([a-z])(?=[A-Z0-9])/gu, (match, letter, offset, whole) =>
-        letter === 'x' && /[0-9]/u.test(whole[offset - 1] ?? '')
-          ? letter
-          : `${letter}-`,
-      )
-      .replace(/([0-9])([A-Z])/gu, '$1-$2')
-      .replace(/([A-Z])([A-Z][a-z])/gu, '$1-$2')
-      .toLowerCase()
-  );
 }
 
 /**
@@ -1373,6 +1353,7 @@ const GENERATED_HEADER = [
   '// Edit with those commands; a statement added by hand is kept.',
   '// themeIcons has one entry per built-in icon definition in map (the names Core renders), not one per icon;',
   '// the import lines above it give it local names for the re-exported icons.',
+  '// themeIcons<Variant> draws the same names in that variant, for each variant an icon draws.',
 ];
 
 /**
@@ -1387,6 +1368,39 @@ const GENERATED_HEADER = [
  * @returns {string[]}
  */
 function generatedStatements(text, label) {
+  return statementTexts(text, label).map(normalizedStatement);
+}
+
+/**
+ * The marked form of each statement of a module that carries a pure mark of
+ * its own, keyed by its normalized (unmarked) form: written back as it was,
+ * with the mark spelled as the CLI writes it, so a mark written by hand
+ * survives the next rewrite.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {Map<string, string>}
+ */
+function markedStatements(text, label) {
+  /** @type {Map<string, string>} */
+  const marked = new Map();
+  for (const statement of statementTexts(text, label)) {
+    if (statement.search(PURE_MARK) === -1) continue;
+    marked.set(
+      normalizedStatement(statement),
+      collapsedStatement(statement.replace(PURE_MARK, PURE)),
+    );
+  }
+  return marked;
+}
+
+/**
+ * The text of each top-level statement of a module, as written, with a
+ * separator after each type member a formatter left without one.
+ * @param {string} text
+ * @param {string} label the module's path, for the error
+ * @returns {string[]}
+ */
+function statementTexts(text, label) {
   let ast;
   try {
     ast = parse(text, {sourceType: 'module', plugins: ['jsx', 'typescript']});
@@ -1409,7 +1423,7 @@ function generatedStatements(text, label) {
       const at = end - start;
       statement = `${statement.slice(0, at)};${statement.slice(at)}`;
     }
-    return normalizedStatement(statement);
+    return statement;
   });
 }
 
@@ -1419,6 +1433,15 @@ function generatedStatements(text, label) {
  * @param {string} statement
  */
 function normalizedStatement(statement) {
+  return collapsedStatement(statement.replace(PURE_MARK, ''));
+}
+
+/**
+ * A statement's text with whitespace, quotes, padding and trailing
+ * separators normalized, its comments as written.
+ * @param {string} statement
+ */
+function collapsedStatement(statement) {
   return statement
     .replace(/\s+/gu, ' ')
     .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
@@ -1542,8 +1565,33 @@ export function generatedTypesMatch(actual, expected, label) {
 /** The local name the generated module gives the set's adapter. */
 const ADAPTER_LOCAL = 'adaptIcon';
 
-/** The theme map the generated module writes. */
-export const THEME_MAP_NAME = 'themeIcons';
+/**
+ * A bundler's mark that a call has no side effects (`/* @__PURE__ *\/` or
+ * `/*#__PURE__*\/`), so an app that uses a few icons drops the rest. The
+ * module is written with the marks and read without them, so a module an
+ * older CLI wrote (no marks) reads the same.
+ */
+const PURE_MARK = /\/\*\s*[#@]__PURE__\s*\*\/\s*/gu;
+
+/** The mark the generated module writes before each top-level call. */
+const PURE = '/* @__PURE__ */ ';
+
+/**
+ * A normalized statement as the module writes it: an adapted icon's call
+ * marked pure, and any other statement with the marks it was read with.
+ * @param {string} statement
+ * @param {Map<string, string>} marked the module's statements that carried
+ *   their own marks, from {@link markedStatements}
+ */
+function writtenStatement(statement, marked) {
+  const adapted = `= ${ADAPTER_LOCAL}(`;
+  if (statement.startsWith('export const ') && statement.includes(adapted)) {
+    return statement.replace(adapted, `= ${PURE}${ADAPTER_LOCAL}(`);
+  }
+  return marked.get(statement) ?? statement;
+}
+
+export {THEME_MAP_NAME};
 
 /** How the generated module imports React for its theme map. */
 const REACT_IMPORT = "import {createElement} from 'react'";
@@ -1620,7 +1668,8 @@ export function generatedTypesText(statements) {
     const theme = /^export const (\w+) = \{(.*)\}$/u.exec(statement);
     if (
       theme &&
-      (theme[1] === THEME_MAP_NAME || statement.includes('createElement('))
+      (theme[1].startsWith(THEME_MAP_NAME) ||
+        statement.includes('createElement('))
     ) {
       react.add('ReactElement');
       const keys = [...theme[2].matchAll(/(\w+): createElement\(/gu)].map(
@@ -1687,7 +1736,17 @@ export function generatedModuleText(
     return relative.startsWith('.') ? relative : `./${relative}`;
   };
   const themeName = data.themeMap === THEME_MAP_NAME ? THEME_MAP_NAME : null;
+  // Every theme map the module may hold, one per declared look, so a look's
+  // map no icon draws any more is dropped as well.
+  const themeNames = [
+    THEME_MAP_NAME,
+    ...(data.variants ?? [])
+      .filter(variant => variant !== data.default?.variant)
+      .map(variantThemeMapName),
+  ];
   const lines = before == null ? [] : generatedStatements(before, generated);
+  const marked =
+    before == null ? new Map() : markedStatements(before, generated);
   const lineSet = new Set(lines);
   // Written once, below: the adapter's import, React's createElement, and
   // the theme map. Every lookup below is by name, so a library of twenty
@@ -1712,7 +1771,8 @@ export function generatedModuleText(
     return (
       line === REACT_IMPORT ||
       themeImport(line) ||
-      (themeName != null && line.startsWith(`export const ${themeName} = `))
+      (themeName != null &&
+        themeNames.some(name => line.startsWith(`export const ${name} = `)))
     );
   };
   const imports = new Set(
@@ -1777,22 +1837,42 @@ export function generatedModuleText(
   }
   /** @type {string[]} */
   const theme = [];
+  /** @type {Array<{name: string, entries: string[]}>} */
+  const looks = themeName
+    ? variantThemeMaps({...data, generated}).map(({name}) => ({
+        name,
+        entries: [],
+      }))
+    : [];
   /** @type {Set<string>} */
   const themeImports = new Set();
+  /**
+   * A theme-map entry for one built-in definition, and the import that
+   * gives a re-exported icon its local name.
+   * @param {string} name
+   * @param {string} exportName
+   */
+  const themeEntry = (name, exportName) => {
+    const line = exported.get(exportName);
+    const reexport =
+      line != null && line.startsWith('export {') ? line : undefined;
+    if (reexport) {
+      themeImports.add(`import${reexport.slice('export'.length)}`);
+    }
+    return `  ${name}: ${PURE}createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`;
+  };
   if (themeName) {
-    const byId = new Map(data.icons.map(icon => [icon.id, icon.export]));
+    const byId = new Map(data.icons.map(icon => [icon.id, icon]));
+    const lookVariants = variantThemeMaps({...data, generated});
     for (const name of Object.keys(data.map ?? {}).sort()) {
-      const exportName = byId.get(/** @type {string} */ (data.map?.[name]));
-      if (BUILT_IN.has(name) && exportName) {
-        theme.push(
-          `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`,
-        );
-        const line = exported.get(exportName);
-        const reexport =
-          line != null && line.startsWith('export {') ? line : undefined;
-        if (reexport) {
-          themeImports.add(`import${reexport.slice('export'.length)}`);
-        }
+      const icon = byId.get(/** @type {string} */ (data.map?.[name]));
+      if (BUILT_IN.has(name) && icon) {
+        theme.push(themeEntry(name, icon.export));
+        lookVariants.forEach(({variant}, index) => {
+          looks[index].entries.push(
+            themeEntry(name, lookExport(icon, variant)),
+          );
+        });
       }
     }
   }
@@ -1808,13 +1888,18 @@ export function generatedModuleText(
       ...(themeName ? [REACT_IMPORT] : []),
       ...adapterLine,
       ...[...imports, ...themeImports].sort(),
-      ...[...exports].sort(),
+      ...[...exports].sort().map(line => writtenStatement(line, marked)),
     ].map(terminated),
     ...(themeName
       ? theme.length > 0
         ? [`export const ${themeName} = {`, ...theme, '};']
         : [`export const ${themeName} = {};`]
       : []),
+    ...looks.flatMap(({name, entries}) =>
+      entries.length > 0
+        ? [`export const ${name} = {`, ...entries, '};']
+        : [`export const ${name} = {};`],
+    ),
     '',
   ].join('\n');
   const typesPath = generatedTypesPath(generated);

@@ -50,7 +50,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {Icon} from '../Icon';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
@@ -274,7 +274,6 @@ const menuStyles = stylex.create({
   },
   popover: {
     minWidth: '160px',
-    marginBlock: spacingVars['--spacing-1'],
   },
 });
 
@@ -552,7 +551,9 @@ function BreadcrumbMenuTrigger({
   // to activate the tracking they read, so it activates it itself.
   const {ref: modalityRef} = useInteractionModalityTracking();
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasLightDismiss: true,
     hasCloseButton: false,
     hasAutoFocus: false,
@@ -743,6 +744,9 @@ function BreadcrumbMenuTrigger({
         {
           placement: 'below',
           alignment: 'start',
+          // The layer's own clearance: the layer runtime measures it as the
+          // entrance's room to the trigger and keeps it through a flip.
+          offset: spacingVars['--spacing-1'],
           xstyle: menuStyles.popover,
         },
       )}

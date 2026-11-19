@@ -77,8 +77,11 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
-import {withholdCallerHandlers} from '../utils/disabledInteraction';
-import {devWarn, warnOnce} from '../utils/devWarning';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
+import {devPropError, devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -132,6 +135,12 @@ const CREATE_VALUE_PREFIX = '__astryx_multi_selector_create__';
 function isCreateValue(value: string): boolean {
   return value.startsWith(CREATE_VALUE_PREFIX);
 }
+
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -248,17 +257,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
@@ -275,15 +287,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {
@@ -356,9 +371,14 @@ const styles = stylex.create({
     outline: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Select-all wrapper
@@ -1157,6 +1177,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: MultiSelectorProps<T>) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'MultiSelector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. MultiSelector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -1538,7 +1565,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
@@ -2202,6 +2229,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             themeProps('multi-selector-option', {
               size,
               'select-all': isSelectAll ? 'select-all' : null,
+              highlighted: isHighlighted ? 'highlighted' : null,
               selected: isSelected ? 'selected' : null,
               disabled: item.disabled ? 'disabled' : null,
             }),
@@ -2543,7 +2571,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     const triggerProps: MultiSelectorRenderTriggerProps = {
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
-      ...rest,
+      ...callerProps,
       'aria-describedby': ariaDescribedByProp,
       // Only a caller value is handed back, so a control that names itself
       // with its own aria-labelledby before spreading keeps it.
@@ -2575,6 +2603,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       onKeyDown: isEffectivelyReadOnly
         ? onKeyDownProp
         : composeEventHandlers(onKeyDown, onKeyDownProp),
+      ...(isDisabled ? disabledInteractionProps<HTMLElement>() : undefined),
       onFocus: event => {
         onFocus?.(event);
         surface.onTriggerFocus(event);
@@ -2595,6 +2624,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       'aria-expanded': isEffectivelyReadOnly ? false : surface.isOpen,
       'aria-controls': isEffectivelyReadOnly ? undefined : listboxId,
       'aria-busy': isBusy || undefined,
+      'aria-disabled': isDisabled || callerProps['aria-disabled'],
       // Withholding the disclosure attributes stops the control lying about
       // a panel, but leaves it silent about WHY it does not open. The field
       // path says so through its own chrome; the caller's control has none,

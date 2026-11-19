@@ -18,7 +18,13 @@ import {
   screen,
   type RenderResult,
 } from '@testing-library/react';
-import {useState, type ReactElement} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ReactElement,
+} from 'react';
 import {
   afterEach,
   beforeEach,
@@ -996,5 +1002,39 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     expect(onChange).toHaveBeenLastCalledWith(liftValue);
     expect(onChangeEnd).toHaveBeenCalledTimes(1);
     expect(thumb.style.translate).toBe('');
+  });
+});
+
+describe('Slider touch presentation after a render React discards', () => {
+  // A transition that suspends for good: React renders it, then keeps the
+  // committed tree and never commits that render.
+  const forever = new Promise<never>(() => {});
+  function Forever(): null {
+    use(forever);
+    return null;
+  }
+
+  it('drags a thumb with the committed onChange', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const slider = (onChange: (value: number) => void, isPending = false) => (
+      <Suspense fallback={null}>
+        <Slider label="Level" value={50} onChange={onChange} />
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+    const {rerender} = await renderTouch(slider(committed));
+    await act(async () => {
+      startTransition(() => {
+        rerender(slider(discarded, true));
+      });
+    });
+
+    dragThumb(hitOf(screen.getByRole('slider')), {x: 150, y: 12}, {dx: 30});
+
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {watchAnimations} from '@astryxdesign/interaction-harness';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -178,24 +179,20 @@ async function openStory(page: Page, story: string, rowCount: number) {
   }
 }
 
-/** The glide's length for the content after the Collapsible in `row`. */
+/**
+ * The glide's length for the content after the Collapsible in `row`, read
+ * from a watch taken before the click. The watch catches the glide even once
+ * it has ended.
+ */
 async function glideMs(page: Page, row: string): Promise<number> {
   const section = page.locator(row);
-  await section.getByRole('button', {name: 'Shipping details'}).click();
   const after = section.locator('[data-after-collapsible]');
-  await expect
-    .poll(async () => after.evaluate(element => element.getAnimations().length))
-    .toBeGreaterThan(0);
-  return after.evaluate(element => {
-    const glide = element
-      .getAnimations()
-      .find(animation =>
-        (animation.effect as KeyframeEffect)
-          .getKeyframes()
-          .some(frame => typeof frame.translate === 'string'),
-      );
-    return Number(glide?.effect?.getTiming().duration);
-  });
+  const watch = await watchAnimations(after);
+  await section.getByRole('button', {name: 'Shipping details'}).click();
+  const glide = (await watch.started()).find(run =>
+    run.keyframes.some(frame => typeof frame.translate === 'string'),
+  );
+  return Number(glide?.durationMs);
 }
 
 /** The glide's length in each tempo row, against the tempo 1 row. */

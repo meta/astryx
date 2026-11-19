@@ -219,11 +219,15 @@ results section reaches the reviewer. Neither replaces the other.
 
 `pnpm check:knowledge` validates record structure: frontmatter, required
 sections, schema and template versions, relationship links, and metadata blocks.
-It does not check any rubric item, by design:
+It fails on no rubric item, by design:
 
-- Whether a sentence is narration (R1), research (R2), a ruled question (R6), or
-  project status (R7) is a judgement about meaning, and a check that guesses at
-  it would be argued with and then ignored.
+- Whether a sentence is narration (R1), research (R2), or a ruled question (R6)
+  is a judgement about meaning, and a check that guesses at it would be argued
+  with and then ignored.
+- For project status (R7), `pnpm check:knowledge` prints an advisory warning
+  for each build-status or sequencing phrase in a spec or architecture record
+  (`architecture:knowledge-contracts` INV32). It never fails, because the same
+  words can also describe behavior (DEC-20). The reviewer still decides R7.
 - A pull request reference (R3, R5) is detectable, but records approved before
   this rule carry references that were permitted when they were written, and
   the file cannot tell which of those a future edit is responsible for. A hard

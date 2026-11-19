@@ -224,6 +224,14 @@ export interface ComponentAccessibilityThemeCoverage {
 }
 
 /**
+ * What an example is for. A `demo` example runs on its own, so a docs site may
+ * render it as a live preview. A `setup` example is code to read and copy, such
+ * as an app setup file, a server route, or a snippet that uses variables
+ * defined elsewhere; it is always shown as code only.
+ */
+export type ExampleKind = 'demo' | 'setup';
+
+/**
  * Code example for a component or sub-component.
  */
 export interface ComponentExampleDoc {
@@ -231,6 +239,8 @@ export interface ComponentExampleDoc {
   label?: string;
   /** TSX source for the example. */
   code: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**
@@ -309,6 +319,19 @@ export interface ComponentPlaygroundConfig {
    *  drawer open state interactive, and notes the simulation under the
    *  rendered component (#4983). */
   appShellMobile?: boolean;
+  /** Props merged over `defaults` for a second render at a phone viewport
+   *  for a component whose layout changes at phone width (AppShell's mobile
+   *  layout: its menu button in the top bar, its drawer). The theme editor's
+   *  part census renders it as one more item, so a theme reaches the parts
+   *  only that layout draws. Values are primitives, plain config objects or
+   *  ElementDescriptors, as in `defaults`.
+   *
+   *  @example
+   *  ```
+   *  playground: {mobile: {mobileNav: {defaultIsMobile: true, isOpen: true}}}
+   *  ```
+   */
+  mobile?: Record<string, unknown>;
   /** Required parent wrapper for sub-components that depend on a parent
    *  context provider (e.g. `Tab` calls `useTabListContext()` and throws
    *  standalone). The preview wraps the component in this parent before

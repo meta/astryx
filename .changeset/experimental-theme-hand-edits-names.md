@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor`: one reader takes every settings file and undo step. A null or other non-object entry gets the file refusal, never a crash, and the step back it names works. A damaged mode or base is read as meant by a change and recorded that way in the undo step, so undo works and the history is kept; `like: "none"` is no base. The folder names the theme: a missing or changed `name` in the file is the folder's. A headings value under the wrong half, an unknown half, or a half on another dial is refused with the undo that works, and a half listed twice offers `set <theme> headings <word>` lines that work. A dial listed twice by hand: set names every entry it replaces. A part in other letters or misspelt with `--only` gets the command on that part, `--only` kept. A did-you-mean follows the one typo rule (nothing for one to three letters). The theme-name rule, dashes included, is stated from one text in every refusal and in `new`'s help. `more` or `less` at a dial's last step is refused with the other way. A built-in theme that is not installed is offered with its install line first. A value saved in another form (corners in rem, a fractional text-size) leaves the build current for `compile --check`. `preview <word>` leads with a subcommand the word is a typo of, and offers a theme's pages only for a theme here.
+
+@josephfarina

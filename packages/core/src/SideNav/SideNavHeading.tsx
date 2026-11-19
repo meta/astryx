@@ -32,7 +32,7 @@ import {
 // TODO(#264): Lazy-load usePopover so the popover/layer bundle is not
 // eagerly imported when `menu` is not provided. See Text for an example
 // of lazy loading layer resources.
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {Link} from '../Link';
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
@@ -93,6 +93,10 @@ const styles = stylex.create({
   rootCollapsed: {
     justifyContent: 'center',
     paddingInline: 0,
+  },
+  // The plain collapsed heading keeps root's inline padding and only centres.
+  rootCollapsedCentered: {
+    justifyContent: 'center',
   },
   interactive: {
     cursor: {
@@ -406,7 +410,9 @@ export function SideNavHeading({
   const rootRef = useRef<HTMLDivElement>(null);
   const collapsedItemRef = useRef<HTMLElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     dialogLabel: t('@astryx.sideNav.heading.dialogLabel'),
     // The popup exposes its own role="menu" semantics; a role="dialog"
     // aria-modal wrapper would announce "dialog, Navigation menu" around a
@@ -600,7 +606,7 @@ export function SideNavHeading({
           data-testid={testId}
           {...mergeProps(
             themeProps('side-nav-heading'),
-            stylex.props(styles.root, styles.rootCollapsed, xstyle),
+            stylex.props(styles.root, styles.rootCollapsedCentered, xstyle),
             className,
             style,
           )}

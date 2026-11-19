@@ -26,6 +26,8 @@ import {
   recordResolved,
   recordResolvedIntegrations,
   resolvedPackages,
+  servingRootPackages,
+  hostedPagePackages,
 } from './package-root.mjs';
 
 afterEach(cleanupFixtures);
@@ -427,6 +429,61 @@ describe('where each package a hosted run resolved came from', () => {
     recordResolved('@astryxdesign/cli', '0.7.2', at(set, '@astryxdesign/cli'));
     expect(resolvedPackages()).toEqual([
       {name: '@astryxdesign/cli', version: '0.7.2', source: 'package-set'},
+    ]);
+  });
+});
+
+describe('servingRootPackages', () => {
+  afterEach(() => _resetHostedRun());
+
+  it("names what the starting root's package.json declares, and nothing without a hosted run", () => {
+    const set = tempDir('set');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          '@astryxdesign/cli': '0.7.16',
+          '@heroicons/react': '2.2.0',
+        },
+        optionalDependencies: {'acme-extra': '1.0.0'},
+        devDependencies: {'never-served': '1.0.0'},
+      }),
+    );
+    expect(servingRootPackages()).toEqual([]);
+    activateHostedRun({startingRoot: set});
+    expect(servingRootPackages()).toEqual([
+      '@astryxdesign/cli',
+      '@heroicons/react',
+      'acme-extra',
+    ]);
+  });
+
+  it('names nothing when the starting root has no readable package.json', () => {
+    activateHostedRun({startingRoot: tempDir('bare')});
+    expect(servingRootPackages()).toEqual([]);
+  });
+});
+
+describe('hostedPagePackages', () => {
+  afterEach(() => _resetHostedRun());
+
+  it('names the approved integrations the starting root holds, then what it declares', () => {
+    const set = tempDir('set');
+    fs.writeFileSync(
+      path.join(set, 'package.json'),
+      JSON.stringify({dependencies: {'@heroicons/react': '2.2.0'}}),
+    );
+    const held = path.join(set, 'node_modules', '@acme', 'held-kit');
+    fs.mkdirSync(held, {recursive: true});
+    fs.writeFileSync(path.join(held, 'package.json'), '{}');
+    expect(hostedPagePackages()).toEqual([]);
+    activateHostedRun({
+      startingRoot: set,
+      integrations: ['@acme/held-kit', '@acme/missing-kit'],
+    });
+    expect(hostedPagePackages()).toEqual([
+      '@acme/held-kit',
+      '@heroicons/react',
     ]);
   });
 });

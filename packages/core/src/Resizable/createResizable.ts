@@ -63,6 +63,7 @@ import {separatorAttributes} from './separatorAttributes';
 import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // The English for the two messages it names, and nothing more of the catalog.
 registerEnglishFallback(english);
@@ -326,7 +327,11 @@ interface ResizableInternals {
   followRegion(slot: RegionPaneSlot): () => void;
 }
 
-const internals = new WeakMap<ResizableController, ResizableInternals>();
+// Every copy of Core reads a controller through this one channel.
+const internals = sharedWeakMap<ResizableController, ResizableInternals>(
+  'resizable/create-resizable/internals',
+  1,
+);
 
 /** The factory's internal channel, or undefined for anything else. */
 export function readResizableInternals(

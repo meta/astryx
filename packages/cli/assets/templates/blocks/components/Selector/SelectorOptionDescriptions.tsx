@@ -8,6 +8,7 @@ import {InputGroup} from '@astryxdesign/core/InputGroup';
 import {Button} from '@astryxdesign/core/Button';
 import {Stack} from '@astryxdesign/core/Layout';
 import {LockClosedIcon, GlobeAltIcon} from '@heroicons/react/24/outline';
+import {useToast} from '@astryxdesign/core/Toast';
 
 const VISIBILITY = [
   {
@@ -25,6 +26,7 @@ const VISIBILITY = [
 ];
 
 export default function SelectorOptionDescriptions() {
+  const showToast = useToast();
   const [condensed, setCondensed] = useState<string | undefined>('private');
   const [full, setFull] = useState<string | undefined>('private');
   const [grouped, setGrouped] = useState<string | undefined>('private');
@@ -69,7 +71,12 @@ export default function SelectorOptionDescriptions() {
             />
           )}
         />
-        <Button label="Save" />
+        <Button
+          onClick={() =>
+            showToast({body: 'Demo: your choice would be saved here'})
+          }
+          label="Save"
+        />
       </InputGroup>
     </Stack>
   );

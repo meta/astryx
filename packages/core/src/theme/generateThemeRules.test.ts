@@ -17,6 +17,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function topLevelCSSBlocks(css: string): string[] {
   const blocks: string[] = [];
   let depth = 0;
@@ -188,6 +197,188 @@ describe('generateThemeRules', () => {
       expect(rule).toBeDefined();
       expect(rule).toContain(`var(--text-${type}-size)`);
     }
+  });
+
+  it('writes nothing for a part or surface value left undefined, as for a page token', () => {
+    const theme = defineTheme({
+      name: 'unset-values',
+      tokens: {'--radius-element': undefined},
+      components: {
+        button: {
+          base: {
+            '--radius-element': undefined as unknown as string,
+            padding: undefined as unknown as string,
+            ':hover': {color: undefined as unknown as string},
+          },
+        },
+      },
+      onDark: {
+        tokens: {'--color-accent': undefined},
+        components: {
+          button: {base: {padding: undefined as unknown as string}},
+          card: undefined as unknown as Record<string, Record<string, string>>,
+        },
+      },
+    });
+    const warnings: string[] = [];
+    const css = [
+      ...generateThemeRules(theme, warnings),
+      generateOnMediaCSS(theme, warnings),
+    ].join('\n');
+    expect(css).not.toMatch(/:\s*undefined;/);
+    expect(css).not.toContain('.astryx-card');
+    // A block left with no value writes no empty rule.
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps an inherited part value a child leaves undefined, in a style key and a color-mode block', () => {
+    const base = defineTheme({
+      name: 'unset-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'unset-child',
+      components: {
+        button: {
+          base: {
+            padding: undefined as unknown as string,
+            '@dark': {color: undefined as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBe('8px');
+    expect(merged['@dark']).toEqual({color: 'white'});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: 8px;/);
+    expect(css).toMatch(/color: white;/);
+    expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('writes nothing for a component or style key a rule source leaves undefined', () => {
+    const plain = generateThemeRules({
+      tokens: {},
+      components: {link: {base: {color: 'red'}}},
+    });
+    const unset = generateThemeRules({
+      tokens: {},
+      components: {
+        link: {base: {color: 'red'}},
+        card: {base: undefined as unknown as Record<string, string>},
+        text: undefined as unknown as Record<string, Record<string, string>>,
+      },
+    });
+    expect(unset).toEqual(plain);
+  });
+
+  it('writes no Text, Heading or Link override for a component whose every value is left undefined', () => {
+    const plain = generateThemeRules({tokens: {}});
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {base: undefined as unknown as Record<string, string>},
+          link: {
+            base: {color: undefined as unknown as string},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    const defined = defineTheme({
+      name: 'unset-text',
+      components: {
+        text: {base: undefined as unknown as Record<string, string>},
+      },
+    });
+    expect(defined.components?.text).toBeUndefined();
+    // A color-mode block whose every value is undefined is not set either,
+    // so its component writes no override rules.
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          heading: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          link: {
+            base: {'@light': {color: undefined as unknown as string}},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    // A pseudo-class block whose every value is undefined stays, empty: it
+    // is restated, so its component is themed and writes exactly what a
+    // component given an empty style key writes (its prop override rules),
+    // and the block itself writes nothing.
+    const hover = generateThemeRules({
+      tokens: {},
+      components: {
+        text: {base: {':hover': {color: undefined as unknown as string}}},
+        heading: {base: {':hover': {color: undefined as unknown as string}}},
+        link: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    const themed = generateThemeRules({
+      tokens: {},
+      components: {text: {base: {}}, heading: {base: {}}, link: {base: {}}},
+    });
+    expect(hover).toEqual(themed);
+    expect(themed).not.toEqual(plain);
+  });
+
+  it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
+    const base = defineTheme({
+      name: 'hover-base',
+      components: {
+        button: {base: {':hover': {color: 'red', borderColor: 'blue'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'hover-child',
+      components: {
+        button: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    expect(child.components?.button?.base?.[':hover']).toStrictEqual({});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).not.toMatch(/border-color: blue/);
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+  });
+
+  it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
+    const base = defineTheme({
+      name: 'null-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'null-child',
+      components: {
+        button: {
+          base: {
+            padding: null as unknown as string,
+            '@dark': {color: null as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBeNull();
+    expect(merged['@dark']).toEqual({color: null});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: null;/);
+    expect(css).not.toMatch(/padding: 8px;/);
   });
 
   it('includes explicit component overrides', () => {
@@ -422,6 +613,44 @@ describe('generateThemeRules', () => {
     ).toBe(true);
   });
 
+  it("keeps a link's hover tint of its color prop when a theme styles the link", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-pins',
+        components: {link: {base: {textDecoration: 'underline'}}},
+      }),
+    );
+    const pins = linkRules.join('\n');
+    // At rest the prop's color; on hover Core's tint of it, for the colors
+    // Core tints.
+    for (const name of ['primary', 'secondary', 'accent']) {
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"] { color: var(--color-text-${name}); }`,
+      );
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(in srgb, var(--color-text-${name}), var(--color-tint-hover) 15%); }`,
+      );
+    }
+    expect(pins).not.toContain('[data-color="disabled"]:where(:hover)');
+  });
+
+  it("lets a theme's hover color on a link color key win over the hover pin", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-hover',
+        components: {link: {'color:accent': {':hover': {color: '#0000ff'}}}},
+      }),
+    ).join('\n');
+    // The theme's rule carries :hover itself; the pin's :hover sits in
+    // :where(), so the theme's rule is the heavier one.
+    expect(linkRules).toMatch(
+      /\.astryx-link\[data-color="accent"\]:hover[^{]*\{\s*color: #0000ff;/,
+    );
+    expect(linkRules).toContain(
+      '.astryx-link[data-color="accent"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(',
+    );
+  });
+
   // --- Size-prop overrides (so `size` beats a themed `type`) ---
 
   it('emits Text size-prop font-size overrides in the same layer as type rules', () => {
@@ -644,6 +873,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('re-emits explicit weight overrides after media-specific type rules', () => {
     const themed = defineTheme({
       name: 'media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -670,6 +900,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('carries an authored main weight past a media-specific type rule', () => {
     const themed = defineTheme({
       name: 'inherited-media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -695,6 +926,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('scopes Text color and size guards after each media-surface type rule', () => {
     const themed = defineTheme({
       name: 'media-text-prop-guards',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           text: {'type:large': {color: '#fff', fontSize: '4rem'}},
@@ -955,6 +1187,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('keeps onDark and onLight weight guards after adaptation guards', () => {
     const themed = defineTheme({
       name: 'surface-adapted-heading-weight',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -1185,6 +1418,94 @@ describe('derived var expansion', () => {
     expect(rule).toContain('--astryx-card-padding: 20px');
   });
 
+  it.each([
+    [
+      'padding',
+      'clamp(8px, 2vw, 16px)',
+      ['--astryx-card-padding: clamp(8px, 2vw, 16px);'],
+    ],
+    ['padding', 'max(8px, 2vw)', ['--astryx-card-padding: max(8px, 2vw);']],
+    [
+      'padding',
+      'calc(1px + 2px) min(4px, 1vw)',
+      [
+        '--astryx-card-padding-block-start: calc(1px + 2px);',
+        '--astryx-card-padding-block-end: calc(1px + 2px);',
+        '--astryx-card-padding-inline: min(4px, 1vw);',
+      ],
+    ],
+    [
+      'paddingBlock',
+      'var(--x, 1px 2px)',
+      [
+        '--astryx-card-padding-block-start: var(--x, 1px 2px);',
+        '--astryx-card-padding-block-end: var(--x, 1px 2px);',
+      ],
+    ],
+    [
+      'paddingInline',
+      'calc(1px + 2px) 4px',
+      [
+        '--astryx-card-padding-inline-start: calc(1px + 2px);',
+        '--astryx-card-padding-inline-end: 4px;',
+      ],
+    ],
+  ])(
+    'keeps each %s component whole when it holds spaces: %s',
+    (prop, value, declarations) => {
+      const theme = defineTheme({
+        name: 'test-padding-functions',
+        components: {card: {base: {[prop]: value}}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      for (const declaration of declarations) {
+        expect(rule).toContain(declaration);
+      }
+    },
+  );
+
+  it.each([
+    [
+      {paddingInlineStart: '4px', paddingInline: ''},
+      '--astryx-card-padding-inline-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', paddingBlock: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', padding: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+  ])(
+    'keeps the longhands before an empty shorthand: %j',
+    (base, declaration) => {
+      const theme = defineTheme({
+        name: 'test-padding-empty-shorthand',
+        components: {card: {base}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      expect(rule).toContain(declaration);
+    },
+  );
+
+  it('emits no padding token for an empty padding value', () => {
+    // An empty value has no components, so there is nothing to emit; a
+    // `--astryx-card-padding: ;` declaration would be invalid CSS.
+    const theme = defineTheme({
+      name: 'test-padding-empty',
+      components: {card: {base: {padding: ''}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes('.astryx-card'),
+    );
+    expect(rule ?? '').not.toContain('--astryx-card-padding');
+  });
+
   it('handles variant-specific derived vars', () => {
     const theme = defineTheme({
       name: 'test-variant-derived',
@@ -1286,6 +1607,26 @@ describe('derived var expansion', () => {
     // which an unlayered consumer build wins — the vars have no competitor.
     expect(rule).not.toMatch(/[{;]\s*width: 2px/);
     expect(rule).not.toMatch(/[{;]\s*height: 12px/);
+  });
+});
+
+describe('the room between a control and its label', () => {
+  it.each([
+    ['checkbox-input', '--_checkbox-input-gap'],
+    ['switch-field', '--_switch-field-gap'],
+  ])('routes gap on %s to its row (no raw gap on the field)', (target, v) => {
+    const theme = defineTheme({
+      name: `test-derived-${target}-gap`,
+      components: {[target]: {base: {gap: '3px'}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes(`.astryx-${target}`),
+    );
+    expect(rule).toBeDefined();
+    expect(rule).toContain(`${v}: 3px`);
+    // The field also holds the status message: a raw gap there would space
+    // the row from the status instead of the box from its label.
+    expect(rule).not.toMatch(/[{;]\s*gap: 3px/);
   });
 });
 
@@ -1861,6 +2202,7 @@ describe('declaration assembly keeps values as values', () => {
     const {css} = generate(
       defineTheme({
         name: 'brand',
+        tokens: KEEPS_SIDE,
         components: {heading: {'weight:bold': {fontWeight: payload}}},
         onDark: {components: {heading: {'level:1': {fontSize: '2rem'}}}},
       }),
@@ -1960,5 +2302,99 @@ describe('declaration assembly keeps values as values', () => {
       expect.stringContaining('in onDark.tokens:'),
       expect.stringContaining('in adaptations[0].tokens:'),
     ]);
+  });
+});
+
+describe('a media surface that flips with the page', () => {
+  const surfaces = (tokens: Record<string, [string, string]>) =>
+    generateOnMediaCSS(defineTheme({name: 'flip', tokens}));
+
+  it("writes the light side's rules for a dark page when an inverted surface flips", () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).toContain(
+      ':where(:scope[data-theme="dark"]) [data-astryx-media-dark-page="light"]',
+    );
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\n {2}[^{]*\[data-astryx-media-dark-page="light"\]/,
+    );
+  });
+
+  it('draws a root color-mode block by the side a flipped surface takes on a dark page', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'flip-modes',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        components: {
+          button: {
+            base: {
+              '@dark': {color: '#fafafa'},
+              '@light': {color: '#121212'},
+            },
+          },
+        },
+      }),
+    ).component;
+    const rules = css.split('}').map(rule => rule.trim());
+    const flipped =
+      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"] *';
+    // Inside the flipped surface on a dark page the light block applies...
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(${flipped}`) && rule.includes('color: #121212'),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves it out there.
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(:not(${flipped}`) &&
+          rule.includes('color: #fafafa'),
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves the light-page side's overrides out of a surface a dark page flips", () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'flip-scope',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        onDark: {
+          components: {button: {base: {backgroundColor: '#000000'}}},
+        },
+      }),
+    );
+    const rules = css.split('}').map(rule => rule.trim());
+    const fill = rules.filter(rule =>
+      rule.includes('background-color: #000000'),
+    );
+    expect(fill.length).toBeGreaterThan(0);
+    // Each dark-side fill rule leaves out a surface a dark page flips light.
+    for (const rule of fill)
+      expect(rule).toContain(
+        ':where(:not(:scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+      );
+  });
+
+  it('writes no dark-page rules when every inverted surface keeps its side', () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#0a1317'],
+      '--color-background-error-inverted': ['#a8071e', '#a8071e'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).not.toContain('data-astryx-media-dark-page');
   });
 });

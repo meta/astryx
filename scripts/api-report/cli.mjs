@@ -1,37 +1,33 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `pnpm api:report`: write, check, or compare the published packages' API reports.
+ * @file Write the published packages' API surface, or compare a build with it.
  *
  * @input  the built published packages (run `pnpm build` first)
- * @output `<package>/api-report.md` for each published package; with
- *         `--surface`, the same reports under another directory (the API
- *         surface Main keeps for each commit, or a merge base built in CI);
- *         with `--changes`, `api-changes.md` and `api-changes.json` comparing
- *         the merge base's surface with the reports generated from this build,
- *         and each committed report with this build
+ * @output with `--surface <dir>`, each package's API report under `<dir>` and
+ *         `surface.json` (the surface Main keeps for each commit, or a merge
+ *         base built in CI); with `--changes`, `api-changes.md` and
+ *         `api-changes.json` comparing the merge base's surface with the
+ *         reports generated from this build
  * @position scripts/api-report — the command behind
  *           architecture:public-component-api INV24
  *
  * Usage:
- *   pnpm api:report                      write every published package's report
- *   pnpm api:report --package core       write one (name, short name, or directory)
- *   pnpm api:report --check              exit 1 when a committed report is stale
  *   node scripts/api-report/cli.mjs --surface <dir> [--root <repo>]
- *                                        write the built packages' reports to <dir>
- *                                        (of the checkout at <repo>), committing nothing
+ *       write the built packages' reports to <dir> (of the checkout at <repo>)
  *   node scripts/api-report/cli.mjs --changes --base <ref>
  *       [--base-surface <dir> --base-record main|build] [--out <dir>]
- *                                        CI: write the API changes; always exits 0
+ *       CI: write the API changes; always exits 0
  *
- * The merge base's report for each package comes from, best first: its built
- * surface (`--base-surface`); this build, when the surface lacks it (a merge
+ * The merge base's report for each package comes from its built surface
+ * (`--base-surface`), or from this build when the surface lacks it (a merge
  * base CI built without that package) and neither its directory nor any of
- * SHARED_INPUTS changed since `--base`; the report committed at `--base`.
- * A merge base this run built itself (`--base-record build`) never falls back
- * to the committed report: a package it could not surface is marked unknown,
- * with no rows, because a stale committed report reads as rows the pull
- * request did not make.
+ * SHARED_INPUTS changed since `--base`. A package the surface lists, built
+ * or skipped, but has no report for is marked unknown, with no rows. A
+ * package the surface does not list is new. With no surface, nothing is
+ * compared: each published package whose inputs changed since `--base` (all
+ * of them without `--base`) is marked unknown, so the file never reads as a
+ * pull request with no API change.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -40,20 +36,17 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 import {isStableReleasePackage} from '../release/active-release.mjs';
-import {
-  computeChanges,
-  renderChanges,
-  staleReportWarnings,
-} from './changes.mjs';
+import {computeChanges, renderChanges} from './changes.mjs';
 import {generateReport} from './generate.mjs';
 
+/** Each package's report file inside a surface directory. */
 export const REPORT_FILE = 'api-report.md';
 export const SURFACE_FILE = 'surface.json';
 /**
- * api-changes.json's shape. Version 2 has `baseRecord`, `baseSource`, `staleRows`
- * and `staleOwnRows`; a reader of version 2 accepts a missing `staleOwnRows`
- * and a missing `baseUnknown`. A package with `baseUnknown: true` has
- * `baseline: true`, `baseSource: 'unknown'` and no rows.
+ * api-changes.json's shape. Its readers (the pull request report and
+ * merge-guard) accept version 2 and a missing `baseUnknown`. A package with
+ * `baseUnknown: true` has `baseline: true`, `baseSource: 'unknown'` and no
+ * rows.
  */
 export const CHANGES_VERSION = 2;
 
@@ -68,7 +61,7 @@ export function changesFile(changes, {haveSurface, baseRecord}) {
   return {
     version: CHANGES_VERSION,
     // Where the merge base's surface came from: Main's record of that commit,
-    // a build of it in this run, or neither (committed reports).
+    // a build of it in this run, or neither (nothing compared).
     baseRecord: haveSurface
       ? baseRecord === 'build'
         ? 'build'
@@ -104,11 +97,9 @@ export function publishedPackages(repoRoot) {
 
 function parseArgs(argv) {
   const args = {
-    check: false,
     changes: false,
     base: null,
     out: '.',
-    package: null,
     surface: null,
     root: null,
     baseSurface: null,
@@ -116,35 +107,18 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--check') args.check = true;
-    else if (a === '--changes') args.changes = true;
+    if (a === '--changes') args.changes = true;
     else if (a === '--base') args.base = argv[++i];
     else if (a === '--out') args.out = argv[++i];
-    else if (a === '--package') args.package = argv[++i];
     else if (a === '--surface') args.surface = argv[++i];
     else if (a === '--root') args.root = argv[++i];
     else if (a === '--base-surface') args.baseSurface = argv[++i];
     else if (a === '--base-record') args.baseRecord = argv[++i];
     else throw new Error(`Unknown option: ${a}`);
   }
+  if (!args.surface && !args.changes)
+    throw new Error('Pass --surface <dir> or --changes.');
   return args;
-}
-
-function select(packages, wanted) {
-  if (!wanted) return packages;
-  const dir = path
-    .relative(REPO_ROOT, path.resolve(process.cwd(), wanted))
-    .split(path.sep)
-    .join('/');
-  const hit = packages.filter(
-    p =>
-      p.name === wanted ||
-      p.name === `@astryxdesign/${wanted}` ||
-      p.dir === wanted ||
-      p.dir === dir,
-  );
-  if (!hit.length) throw new Error(`Not a published package: ${wanted}`);
-  return hit;
 }
 
 /** Files an entry point names that the build has not produced. */
@@ -163,19 +137,6 @@ function unbuilt(dir, root = REPO_ROOT) {
   };
   visit(pkg.exports);
   return missing;
-}
-
-function showAt(ref, file) {
-  try {
-    return execFileSync('git', ['show', `${ref}:${file}`], {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -216,30 +177,34 @@ function unchangedSince(ref, dir) {
 
 /**
  * The merge base's report for one package, and where it came from.
- * @param {{surface: string|null, unchanged: boolean, haveSurface: boolean,
- *   selfBuilt?: boolean, listed?: boolean, head: string,
- *   committedAtBase: string|null}} input
- *   `selfBuilt`: the surface is a merge base this run built, not Main's record;
- *   `listed`: its surface.json lists the package (built or skipped), so the
+ * @param {{surface: string|null, unchanged: boolean, listed?: boolean,
+ *   head: string}} input
+ *   `listed`: the surface.json lists the package (built or skipped), so the
  *   package existed at the merge base
- * @returns {{base: string|null, baseSource: 'build'|'head'|'committed'|'unknown',
+ * @returns {{base: string|null, baseSource: 'build'|'head'|'unknown',
  *   baseUnknown?: true}}
  */
-export function chooseBase({
-  surface,
-  unchanged,
-  haveSurface,
-  selfBuilt = false,
-  listed = false,
-  head,
-  committedAtBase,
-}) {
+export function chooseBase({surface, unchanged, listed = false, head}) {
   if (surface != null) return {base: surface, baseSource: 'build'};
   // A merge base built without this package, which has not changed since.
-  if (haveSurface && unchanged) return {base: head, baseSource: 'head'};
-  if (haveSurface && selfBuilt && listed)
-    return {base: null, baseSource: 'unknown', baseUnknown: true};
-  return {base: committedAtBase, baseSource: 'committed'};
+  if (unchanged) return {base: head, baseSource: 'head'};
+  if (listed) return {base: null, baseSource: 'unknown', baseUnknown: true};
+  return {base: null, baseSource: 'build'};
+}
+
+/**
+ * The changes when the merge base has no built surface: each published
+ * package whose report inputs changed is unknown, with no rows. A pull
+ * request that changes no published package lists none.
+ * @param {Array<{name: string, dir: string}>} packages
+ * @param {(dir: string) => boolean} unchanged
+ */
+export function uncomparedChanges(packages, unchanged) {
+  return computeChanges(
+    packages
+      .filter(p => !unchanged(p.dir))
+      .map(p => ({pkg: p.name, base: null, head: '', baseSource: 'unknown'})),
+  );
 }
 
 /**
@@ -295,6 +260,62 @@ function surfaceReport(dir, pkgDir) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
 }
 
+/** Compare this build with the merge base's surface and write the changes. */
+async function writeChanges(args) {
+  const haveSurface =
+    !!args.baseSurface &&
+    fs.existsSync(path.join(args.baseSurface, SURFACE_FILE));
+  const changes = [];
+  if (haveSurface) {
+    const listed = surfaceListing(args.baseSurface);
+    const inputs = [];
+    for (const p of publishedPackages(REPO_ROOT)) {
+      if (unbuilt(p.dir).length) continue;
+      const head = await generateReport({
+        repoRoot: REPO_ROOT,
+        packageDir: p.dir,
+      });
+      inputs.push({
+        pkg: p.name,
+        head,
+        ...chooseBase({
+          surface: surfaceReport(args.baseSurface, p.dir),
+          listed: listed.has(p.dir),
+          unchanged: !!args.base && unchangedSince(args.base, p.dir),
+          head,
+        }),
+      });
+    }
+    changes.push(...computeChanges(inputs));
+  } else {
+    changes.push(
+      ...uncomparedChanges(
+        publishedPackages(REPO_ROOT),
+        dir => !!args.base && unchangedSince(args.base, dir),
+      ),
+    );
+  }
+  fs.mkdirSync(args.out, {recursive: true});
+  fs.writeFileSync(
+    path.join(args.out, 'api-changes.md'),
+    renderChanges(changes, {compared: haveSurface}),
+  );
+  fs.writeFileSync(
+    path.join(args.out, 'api-changes.json'),
+    JSON.stringify(
+      changesFile(changes, {haveSurface, baseRecord: args.baseRecord}),
+      null,
+      2,
+    ) + '\n',
+  );
+  const total = changes.reduce((n, c) => n + c.rows.length, 0);
+  console.log(
+    haveSurface
+      ? `API changes: ${total} row(s) against the merge base's built surface (${args.baseRecord ?? 'main'})`
+      : `API changes: no built surface of the merge base; nothing compared; unknown: ${changes.length ? changes.map(c => c.pkg).join(', ') : 'none (no published package changed)'}`,
+  );
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.surface) {
@@ -304,89 +325,7 @@ async function main() {
     );
     return;
   }
-  const packages = select(publishedPackages(REPO_ROOT), args.package);
-
-  const missing = packages.flatMap(p => unbuilt(p.dir));
-  if (missing.length && !args.changes) {
-    console.error(
-      `Build the packages first (pnpm build). Missing:\n  ${missing.join('\n  ')}`,
-    );
-    process.exit(1);
-  }
-
-  const results = [];
-  for (const p of packages) {
-    const file = `${p.dir}/${REPORT_FILE}`;
-    const head = await generateReport({repoRoot: REPO_ROOT, packageDir: p.dir});
-    const abs = path.join(REPO_ROOT, file);
-    const committed = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : null;
-    results.push({pkg: p.name, file, head, committed});
-  }
-
-  if (args.changes) {
-    const haveSurface =
-      !!args.baseSurface &&
-      fs.existsSync(path.join(args.baseSurface, SURFACE_FILE));
-    const listed = haveSurface ? surfaceListing(args.baseSurface) : new Set();
-    const changes = computeChanges(
-      results.map(r => {
-        const dir = path.posix.dirname(r.file);
-        return {
-          pkg: r.pkg,
-          head: r.head,
-          committed: r.committed,
-          ...chooseBase({
-            surface: haveSurface ? surfaceReport(args.baseSurface, dir) : null,
-            haveSurface,
-            selfBuilt: args.baseRecord === 'build',
-            listed: listed.has(dir),
-            unchanged: !!args.base && unchangedSince(args.base, dir),
-            head: r.head,
-            committedAtBase: args.base
-              ? showAt(args.base, r.file)
-              : r.committed,
-          }),
-        };
-      }),
-    );
-    fs.mkdirSync(args.out, {recursive: true});
-    fs.writeFileSync(
-      path.join(args.out, 'api-changes.md'),
-      renderChanges(changes),
-    );
-    fs.writeFileSync(
-      path.join(args.out, 'api-changes.json'),
-      JSON.stringify(
-        changesFile(changes, {haveSurface, baseRecord: args.baseRecord}),
-        null,
-        2,
-      ) + '\n',
-    );
-    const fileOf = new Map(results.map(r => [r.pkg, r.file]));
-    for (const warning of staleReportWarnings(changes, pkg => fileOf.get(pkg)))
-      console.log(warning);
-    const total = changes.reduce((n, c) => n + c.rows.length, 0);
-    const stale = changes.filter(c => c.stale || c.missing).map(c => c.pkg);
-    console.log(
-      `API changes: ${total} row(s) against the merge base's ${haveSurface ? `built surface (${args.baseRecord ?? 'main'})` : 'committed reports'}; stale reports: ${stale.length ? stale.join(', ') : 'none'}`,
-    );
-    return;
-  }
-
-  if (args.check) {
-    const stale = results.filter(r => r.committed !== r.head);
-    for (const r of stale)
-      console.error(`stale: ${r.file} (run pnpm api:report)`);
-    process.exit(stale.length ? 1 : 0);
-  }
-
-  for (const r of results) {
-    if (r.committed !== r.head)
-      fs.writeFileSync(path.join(REPO_ROOT, r.file), r.head);
-    console.log(
-      `${r.committed === r.head ? 'unchanged' : 'wrote'} ${r.file} (${r.head.split('\n').length - 1} lines)`,
-    );
-  }
+  await writeChanges(args);
 }
 
 if (

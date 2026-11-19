@@ -7,9 +7,8 @@
  * @output Browser proofs that a segment's touch target grows toward 44 px
  *   through an invisible band, stops halfway to a neighbor, and changes no
  *   box (spec:AST-094 FR42)
- * @position Browser layer of SegmentedControlItem's hit band and
- *   useSegmentedTouchTracking's lift bounds; the band itself is
- *   internal/touchHitArea.stylex.ts
+ * @position Browser layer of SegmentedControlItem's hit band and of a held
+ *   drag past it. The band itself is internal/touchHitArea.stylex.ts
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -101,20 +100,40 @@ test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger
     expect(insets.top).toBeGreaterThan(0);
   });
 
-  test('a drag that lifts past a segment’s band, in the button’s half of the gap, commits nothing', async ({
+  test('a drag that lifts past a segment’s band, in the button’s half of the gap, still selects that segment and leaves the button alone', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
     await waitForHitArea(page);
     const driver = await touchDriver(page);
     const {segment, button, insets} = await measure(page);
-    const month$ = page.locator('#storybook-root [data-value="month"]');
+    const day$ = page.locator('#storybook-root [data-value="day"]');
+    const refreshed = page.getByText(/Refreshed \d+ times/);
+    const count = async () =>
+      Number((await refreshed.textContent())?.match(/\d+/)?.[0] ?? '0');
+    const before = await count();
     const x = Math.min(centerX(segment), (button.left + button.right) / 2);
-    const from = {x, y: (segment.top + segment.bottom) / 2};
-    const to = {x, y: segment.top - insets.top - 2};
-    await driver.play(drag(from, to, {durationMs: 160}));
-    await page.waitForTimeout(400);
-    await expect(month$).toHaveAttribute('aria-checked', 'true');
+    const y = (segment.top + segment.bottom) / 2;
+    // Sideways inside the segment first, past the pan's start: the drag then
+    // holds the finger, so the page does not take it for a scroll.
+    const start = {x: Math.min(x + 24, segment.right - 4), y};
+    if (start.x - x < 16) {
+      throw new Error('the segment is too narrow to start a sideways drag');
+    }
+    const sideways = drag(start, {x, y}, {durationMs: 120}).slice(0, -1);
+    const lastT = sideways[sideways.length - 1].t;
+    const up = drag(
+      {x, y},
+      {x, y: segment.top - insets.top - 2},
+      {
+        durationMs: 160,
+      },
+    )
+      .slice(1)
+      .map(frame => ({...frame, t: frame.t + lastT}));
+    await driver.play([...sideways, ...up]);
+    await expect(day$).toHaveAttribute('aria-checked', 'true');
+    expect(await count()).toBe(before);
   });
 
   test('a tap on the band below a segment selects it', async ({page}) => {

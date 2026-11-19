@@ -22,7 +22,7 @@
  * which is why every spread gets the TODO.
  */
 
-import {transformProp} from '../../transform-prop.mjs';
+import {importedComponents, transformProp} from '../../transform-prop.mjs';
 
 export const meta = {
   title: 'Rename emptySearchResultsText to emptySearchText',
@@ -33,6 +33,10 @@ export const meta = {
     '`triggers`. Leaves a TODO where the new name is already set, on every ' +
     'spread onto these elements, where the triggers value is not written ' +
     'inline, and on a trigger object with a spread or computed key.',
+  // A file changes only where it imports one of these components, which
+  // writes its name (`Typeahead` covers BaseTypeahead)
+  // (assets/codemods/run-codemod.mjs).
+  mentions: ['Tokenizer', 'Typeahead', 'ChatComposerInput'],
 };
 
 const OLD_NAME = 'emptySearchResultsText';
@@ -201,6 +205,15 @@ export default function transform(fileInfo, api) {
   // `triggers`): the spread may carry the removed key, so it gets the TODO.
   for (const [component, props] of COMPONENTS) {
     const sentinel = `__astryx_spread_${component}`;
+    const only = {
+      matchesImport: (/** @type {string} */ source) =>
+        CORE_IMPORT_RE.test(source),
+      components: new Map([[component, new Set([sentinel])]]),
+    };
+    // A file that does not import the component holds no element of it: the
+    // check below would match nothing, so it is skipped.
+    const imported = importedComponents(root, j, only);
+    if (imported.direct.size === 0 && imported.namespaces.size === 0) continue;
     root
       .find(j.JSXOpeningElement)
       .filter((/** @type {any} */ path) =>
@@ -222,17 +235,9 @@ export default function transform(fileInfo, api) {
         const marker = j.jsxAttribute(j.jsxIdentifier(sentinel));
         path.node.attributes = [...attributes, marker];
         let matched = false;
-        transformProp(
-          root,
-          j,
-          {
-            matchesImport: source => CORE_IMPORT_RE.test(source),
-            components: new Map([[component, new Set([sentinel])]]),
-          },
-          propPath => {
-            if (propPath.node === marker) matched = true;
-          },
-        );
+        transformProp(root, j, only, propPath => {
+          if (propPath.node === marker) matched = true;
+        });
         path.node.attributes = attributes;
         if (!matched) return;
         const spread = attributes.find(

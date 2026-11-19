@@ -349,6 +349,7 @@ const SLOT_HELPERS = {
 const HELPER_FILES = new Set([
   'packages/core/src/utils/sharedRealm.ts',
   'packages/core/src/utils/sharedContext.ts',
+  'packages/core/src/utils/sharedForReact.ts',
   'packages/core/src/Layer/layerScopedContext.tsx',
 ]);
 

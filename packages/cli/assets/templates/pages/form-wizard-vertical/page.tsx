@@ -54,6 +54,7 @@ import {useId, useMemo, useRef, useState, type CSSProperties} from 'react';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
@@ -348,6 +349,7 @@ const footerLean: CSSProperties = {
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
 export default function FormWizardVerticalPage() {
+  const showToast = useToast();
   // The rail needs ~280px plus a readable form beside it. Below that it costs
   // more than it explains, so the header takes over as the progress indicator.
   // Three tiers, and the panels go in order of what the form can least afford
@@ -585,9 +587,28 @@ export default function FormWizardVerticalPage() {
       return;
     }
 
-    if (Object.keys(errorsByStep[step]).length === 0 && !isLastStep) {
-      setStep(s => s + 1);
+    if (Object.keys(errorsByStep[step]).length > 0) {
+      return;
     }
+    if (isLastStep) {
+      // An earlier step can still have problems after a jump through the
+      // stepper. Send the person to the first one instead of finishing.
+      const firstBroken = errorsByStep.findIndex(
+        errors => Object.keys(errors).length > 0,
+      );
+      if (firstBroken !== -1) {
+        markAttempted(firstBroken);
+        setStep(firstBroken);
+        return;
+      }
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your audiobook would be submitted for review here',
+        uniqueID: 'submit-review',
+      });
+      return;
+    }
+    setStep(s => s + 1);
   };
 
   const goTo = (index: number) => {
@@ -707,11 +728,27 @@ export default function FormWizardVerticalPage() {
                     types. */}
                 <Text type="label">Publish audiobook</Text>
               </StackItem>
-              <Button label="Cancel" variant="ghost" onClick={() => {}} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving the audiobook flow would return you to the app here',
+                    uniqueID: 'cancel-audiobook',
+                  })
+                }
+              />
               <Button
                 label="Save & exit"
                 variant="secondary"
-                onClick={() => {}}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that saves the draft.
+                  showToast({
+                    body: 'Demo: the draft would be saved here',
+                    uniqueID: 'save-exit',
+                  })
+                }
               />
             </HStack>
             {!hasRail && headerStepper}
@@ -737,7 +774,7 @@ export default function FormWizardVerticalPage() {
         )
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <Center axis="horizontal">
             <VStack
               gap={6}
@@ -894,14 +931,26 @@ export default function FormWizardVerticalPage() {
                               variant="secondary"
                               size="sm"
                               isDisabled={!hasCover}
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that opens the crop tool.
+                                showToast({
+                                  body: 'Demo: the cover crop would open here',
+                                  uniqueID: 'crop-cover',
+                                })
+                              }
                             />
                             <Button
                               label="Preview on device"
                               variant="ghost"
                               size="sm"
                               isDisabled={!hasCover}
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that opens the device preview.
+                                showToast({
+                                  body: 'Demo: the device preview would open here',
+                                  uniqueID: 'preview-device',
+                                })
+                              }
                             />
                             {hasCover && (
                               <Button

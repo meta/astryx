@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Colocated types for `astryx experimental render`: the source of truth
+ * @file Colocated types for `astryx experimental export`: the source of truth
  * for its response shapes.
  *
  * @position api/render — typedefs for api/render/render.mjs
@@ -22,12 +22,23 @@
  * author meant.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'not-carried' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
 /**
- * `astryx --json experimental render <page>`.
+ * A run of text in a rendered file that differs from the text the render
+ * wrote: someone edited the HTML after the render.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} RenderEdit
+ * @property {string | null} was - The text as rendered; null for text added after the render.
+ * @property {string | null} now - The text the file holds now; null for text removed after the render.
+ * @property {string} [file] - The restored module or JSON file that holds the text as rendered, when it appears exactly once across them.
+ * @property {number} [line] - The line of `file` where that text starts.
+ */
+
+/**
+ * `astryx --json experimental export <page>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderPageResponse
  * @property {'render.page'} type
@@ -35,16 +46,32 @@
  * @property {string} data.input - The page module, relative to cwd when inside it.
  * @property {string} data.output - The HTML file written.
  * @property {number} data.bytes - Size of the HTML file.
- * @property {string[]} data.files - Local files the page loaded (modules, stylesheets, images, JSON), relative to the folder that holds them all (the page's folder unless it imports from above it), page first; each is embedded so --reverse can give it back.
+ * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder or by a path from the site's root, read from `public/`; each is embedded so an import can give it back.
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
+ * @property {string[]} [data.notCarried] - Files the page uses that the file does not carry, so experimental import cannot give them back: a name that reads as a tool's configuration, a file a test or story runner would run, a file outside the carried folder (imported by a relative path or a path alias), an image it cannot carry, or a Sass or Less stylesheet, which a render does not compile. Each also has a warning. Present only when there are some.
+ * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
+ * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
 
 /**
- * `astryx --json experimental render --reverse <file.html>`.
+ * The imports a restored page makes through a path alias: those no alias in
+ * the receiving project leads to the page's copy, with the `paths` entries
+ * that let them build, and those whose file the project already has.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} RenderAliased
+ * @property {string} [config] - With `imports`: the tsconfig.json or jsconfig.json the entries belong in, from the current folder: the one TypeScript reads for the page, else a new one at the project's root (or the current folder outside a project).
+ * @property {Record<string, string[]>} [paths] - With `imports`: the whole `paths` it needs, relative to its `baseUrl`, else to its folder: the entries it has now, its own or inherited (a `paths` of its own replaces inherited ones), with every target the imports need (`{"@/*": ["./report-restored/*"]}`), and an entry of its own for each import through a pattern with more than one target, which TypeScript reads first.
+ * @property {{import: string, file: string}[]} imports - Each import as the page writes it (`@/components/Header`) that needs the `paths` entries, with the file it came back as, from the current folder. Empty when every alias import reaches the project's own copy.
+ * @property {{import: string, file: string}[]} [sameAsProject] - Each import this project's alias leads to a file outside the new folder that is byte for byte the page's copy, as is every carried file it reaches where the project has it: the page uses that file, and neither its copy nor theirs is written.
+ * @property {{import: string, project: string, exists: boolean, file: string, changed?: string[], projectWide: true, instead: {file: string, import: string}[]}[]} [differs] - Each import this project's alias leads to a file outside the new folder that differs from the page's copy, or is the same but reaches files of the project that differ (`changed`, from the current folder), or is not there (`exists` false): `project` is the file the import reaches today, and `file` the page's copy, which came back in its layout and is in `imports`. The `paths` entries apply to the whole project: `projectWide` says that with them every other file that imports it gets the page's copy (instead of `project`, when it exists); `instead` gives the narrower fix: each restored file that makes the import (the page, a file it imports, or another restored copy), and the relative import of the copy to use there.
+ */
+
+/**
+ * `astryx --json experimental import <file.html>` (or `experimental export --reverse`).
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderReverseResponse
  * @property {'render.reverse'} type
@@ -53,12 +80,21 @@
  * @property {'embedded' | 'rebuilt'} data.mode - `embedded`: the file carried its source, written back byte for byte. `rebuilt`: rebuilt from Astryx markup (text and layout only).
  * @property {string} data.output - The page module written: `out`, or by default inside a new folder beside the HTML file named after it (`report.html` gives `report-restored/`).
  * @property {string[]} data.files - Every file written, page first.
- * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered.
- * @property {string[]} [data.missing] - Embedded only: relative imports the file did not carry (files a render never embeds), so the restored page needs them before it renders.
+ * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered. A file the rendered file records as not carried makes it false too, also when no import names it.
+ * @property {string[]} [data.missing] - Embedded only: imports the file did not carry (files a render never embeds), and the files the render recorded as not carried (such as a module an alias names from outside the carried folder), so the restored page needs them before it renders.
+ * @property {RenderAliased} [data.aliased] - Embedded only: the imports the page makes through a path alias. A file the project's alias already reaches with the same bytes is used as it is (`sameAsProject`). Every other one comes back in the page's own layout inside the new folder, and the page needs the alias to build or render again: `config` names the tsconfig.json or jsconfig.json TypeScript reads for the page (or the new one to create), `paths` the whole `paths` it needs, `imports` each import with the file it came back as, and `differs` each one the project's alias leads to a different or missing file.
  * @property {string[]} [data.components] - Rebuilt only: the components the page uses.
  * @property {number} [data.elements] - Rebuilt only: how many component elements were rebuilt.
  * @property {string[]} [data.unknown] - Rebuilt only: Astryx class names no installed component claims; their content is kept as plain elements.
  * @property {string[]} [data.omitted] - Rebuilt only: component kinds left out because the markup cannot give them back (such as icons).
+ * @property {number} [data.format] - Embedded only: the render format of the file's embedded source.
+ * @property {string} [data.renderedBy] - Embedded only: the version of the CLI that rendered the file, when the file names it.
+ * @property {string[]} [data.packages] - Embedded only, when the file records them: the packages the page rendered with, as `name@version`.
+ * @property {string} [data.title] - Embedded only: the title given with --title when the page was rendered, which a render again needs too.
+ * @property {boolean} [data.edited] - Embedded only, when the file records the page as rendered: whether someone changed its markup, title or styles after the render. The restored files are always the page as rendered, without those changes.
+ * @property {boolean} [data.stylesEdited] - With `edited`: whether the styles (the <style> element) changed after the render.
+ * @property {RenderEdit[]} [data.edits] - When `edited`: each run of text that changed after the render (at most 50, the title first), so the change can be made in the source. Empty when only styles, attributes, elements or formatting changed.
+ * @property {number} [data.moreEdits] - When `edits` stops at 50: how many more changes there are.
  */
 
 export {};

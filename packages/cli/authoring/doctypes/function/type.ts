@@ -12,6 +12,7 @@
 
 import type {
   AuthoredDocGraphFields,
+  ExampleKind,
   HookParamDoc,
   UsageDoc,
 } from '../base/type.js';
@@ -41,6 +42,8 @@ export interface FunctionExampleDoc {
   code: string;
   /** Optional sample result. */
   result?: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**

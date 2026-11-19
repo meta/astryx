@@ -12,7 +12,7 @@ export const doc = {
   componentsUsed: ['Button', 'ButtonGroup', 'Icon', 'IconButton', 'Layout'],
   icons: {
     ChevronDownIcon: 'chevronDown',
-    ClipboardDocumentIcon: 'clipboard',
+    ClipboardDocumentIcon: 'copy',
     ClipboardIcon: 'clipboard',
     ScissorsIcon: 'cut',
   },
