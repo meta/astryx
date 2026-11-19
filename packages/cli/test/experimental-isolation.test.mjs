@@ -280,14 +280,25 @@ const COMPUTER_CHECKS = new Set([
 ]);
 
 /**
- * A doctor JSON report with the computer's checks reduced to their ids, and
- * the summary counting only the project's: those checks answer from this
- * machine's cache and search path, which no golden can hold.
+ * The checks that report only on a computer in a given state: a folder an
+ * earlier CLI left in this user's cache. Whether one appears says nothing
+ * about the project, so the golden leaves it out.
+ */
+const COMPUTER_STATE_CHECKS = new Set(['old-transpile-cache']);
+
+/**
+ * A doctor JSON report with the computer's checks reduced to their ids, the
+ * checks only some computers report left out, and the summary counting only
+ * the project's: those checks answer from this machine's cache and search
+ * path, which no golden can hold.
  * @param {string} stdout
  */
 function withoutComputerChecks(stdout) {
   const report = JSON.parse(stdout);
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
+  report.data.checks = report.data.checks.filter(
+    (/** @type {any} */ check) => !COMPUTER_STATE_CHECKS.has(check.id),
+  );
   report.data.checks = report.data.checks.map((/** @type {any} */ check) => {
     if (COMPUTER_CHECKS.has(check.id)) return {id: check.id};
     summary[/** @type {keyof typeof summary} */ (check.status)] += 1;
