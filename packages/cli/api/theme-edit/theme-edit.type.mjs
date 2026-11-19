@@ -132,6 +132,7 @@
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [section] - Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
  * @property {boolean} [png] - Also take PNG pictures of the previews.
+ * @property {string} [on] - Only what one part shows, as a lookup that writes nothing (`themeEdit.showPart`); the theme may then be any theme the project builds.
  */
 
 /**
@@ -166,6 +167,33 @@
  * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
  * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
  * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
+ */
+
+/**
+ * `astryx --json experimental theme editor show <theme> --on <part>`: what one
+ * part of a theme shows. Nothing is written.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditShowPartResponse
+ * @property {'themeEdit.showPart'} type
+ * @property {object} data
+ * @property {string} data.theme
+ * @property {'editor' | 'local' | 'package' | 'bundled'} data.kind - Where the theme comes from: the editor's themes/ folder, a local theme of the app, an installed package's theme, or a bundled theme package.
+ * @property {string} data.part
+ * @property {ThemeEditPartValue[]} data.values - Each CSS property the part reads, at rest (`when` null) and in each variant.
+ */
+
+/**
+ * One property of a part, as `show --on` gives it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPartValue
+ * @property {string} property - The CSS property.
+ * @property {string | null} when - The variant, as `set` takes `--when` (`variant:outlined`); null at rest.
+ * @property {string | null} state - The state, as `set` takes `--state`; null for none.
+ * @property {string | {light: string | null, dark: string | null} | null} value - The final value, every token written out; per mode when the modes differ; null when a token it reads has no value.
+ * @property {string} expression - The declaration that gives it, as written: Core's, or the rule on the part.
+ * @property {string[] | {light: string[], dark: string[]}} tokens - The tokens it reads, and the tokens those read in turn, in order; per mode when the modes read different ones.
+ * @property {'core' | 'base' | 'theme'} source - Who decides it: Core's default, the base theme the theme extends, or the theme's own file.
+ * @property {'token' | 'dial' | 'part' | 'value'} via - How: a token's value, a dial (an editor theme's), a rule on the part, or a plain value Core writes.
  */
 
 /**

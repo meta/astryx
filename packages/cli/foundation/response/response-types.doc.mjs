@@ -143,6 +143,12 @@ export const doc = {
         'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `openProblems` (every contrast problem the theme has now, each with the command that fixes it; the text shows the first eight and counts the rest), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `missed` (the parts the changes the theme makes did not reach, most flagged first, each with why and the line that reaches it), `unreached` (the parts with a fill of their own the theme leaves on the base look, most visible first: no setting on them and their fill or text color as the base gives it), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures` with the two to open (`look`, left out when none was taken), and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
     },
     {
+      value: 'themeEdit.showPart',
+      stability: 'experimental',
+      description:
+        'What one part of a theme shows (`show <theme> --on <part>`, which writes nothing): the `theme`, its `kind` (editor, local, package or bundled), the `part`, and `values`: each CSS `property` at rest and per variant (`when`, `state`), its final `value` (per mode when the modes differ), the `expression` that gives it, the `tokens` it reads, and who decides it (`source`: core, base or theme; `via`: token, dial, part or value). Experimental: may change or be removed in a patch release.',
+    },
+    {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:

@@ -23,6 +23,12 @@ export const doc = {
   ],
   options: [
     {
+      flag: '--on <part>',
+      param: 'options.on',
+      description:
+        "Only what one part shows, as a lookup that writes nothing: each CSS property the part reads, at rest and in each variant, with its final value (per mode when the modes differ), the declaration that gives it, the tokens it reads, and who decides it (`source`: core, the base theme it extends, or the theme's own file; `via`: a token, a dial, a rule on the part, or a plain value Core writes). The theme may be any theme the project builds: an editor theme, a local theme or an installed theme package. The text lists the part at rest and the variants that change something; --json carries every value",
+    },
+    {
       flag: '--section <name>',
       param: 'options.section',
       description:
@@ -44,6 +50,10 @@ export const doc = {
       label: 'With pictures',
       cli: 'astryx experimental theme editor show brand --png',
     },
+    {
+      label: "One part's resolved values, for any theme",
+      cli: 'astryx experimental theme editor show neutral --on card',
+    },
   ],
   outsideProject: 'refuse',
   requires: ['themes.compile'],
@@ -56,11 +66,11 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the settings are listed and both pages are written',
+      when: "the settings are listed and both pages are written, or, with --on, the part's values are listed",
     },
     {
       code: 1,
-      when: 'the theme does not exist or its base theme package is not installed (ERR_UNKNOWN_THEME), an unknown --section (ERR_INVALID_ARGUMENT), a theme source that does not build or parse or a token in it that is not text (ERR_THEME_INVALID), a folder where a built file goes (ERR_FILE_EXISTS), a built file that cannot be read or written (ERR_WRITE_FAILED), another command changing the theme (ERR_THEME_BUSY), a page that does not render (ERR_RENDER_FAILED), or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
+      when: 'the theme does not exist or its base theme package is not installed (ERR_UNKNOWN_THEME), an unknown --section, an --on that names no part or a group, or --on with --png or --section (ERR_INVALID_ARGUMENT), a theme source that does not build or parse or a token in it that is not text (ERR_THEME_INVALID), a folder where a built file goes (ERR_FILE_EXISTS), a built file that cannot be read or written (ERR_WRITE_FAILED), another command changing the theme (ERR_THEME_BUSY), a page that does not render (ERR_RENDER_FAILED), or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],

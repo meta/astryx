@@ -662,7 +662,9 @@ export const themeEditUndo = (theme, options = {}) =>
 export const themeEditShow = (theme, options = {}) =>
   inProject(
     options,
-    lockName(theme),
+    // A lookup of one part writes nothing, and may name a theme that is not
+    // the editor's: it takes no theme lock.
+    options.on != null ? null : lockName(theme),
     o => edit.themeEditShow(theme, o),
     true,
     words(

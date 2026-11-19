@@ -734,6 +734,87 @@ function changeFields(data) {
   ];
 }
 
+/** How many variant lines the text of `show --on` gives before it counts the rest. */
+const VARIANT_LINES = 4;
+
+/**
+ * A part value's final value as one short text.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue['value']} v
+ */
+function valueText(v) {
+  if (v == null) return 'no value';
+  if (typeof v === 'string') return v;
+  return `light ${v.light ?? 'no value'}, dark ${v.dark ?? 'no value'}`;
+}
+
+/**
+ * The text of `show --on`: the part at rest, one line per property, then
+ * the variants' values that differ from rest, a few, counted; the JSON
+ * carries every value.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowPartResponse['data']} d
+ */
+function partValueBlocks(d) {
+  const rest = d.values.filter(v => v.when == null && v.state == null);
+  const restOf = new Map(rest.map(v => [v.property, valueText(v.value)]));
+  // (A token a variant sets on the part is in the JSON; the text gives the
+  // properties it draws.)
+  const variants = d.values.filter(
+    v =>
+      (v.when != null || v.state != null) &&
+      !v.property.startsWith('--') &&
+      valueText(v.value) !== restOf.get(v.property),
+  );
+  // A combined condition that draws what one of its conditions draws alone
+  // (`variant:blue+selected:true` as `variant:blue`) says nothing more.
+  const alone = new Set(
+    variants.map(
+      v => `${v.when}|${v.state}|${v.property}|${valueText(v.value)}`,
+    ),
+  );
+  const shown = variants.filter(
+    v =>
+      !(v.when ?? '')
+        .split('+')
+        .some(
+          w =>
+            w !== v.when &&
+            alone.has(`${w}|${v.state}|${v.property}|${valueText(v.value)}`),
+        ),
+  );
+  /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
+  const who = v => (v.via === 'value' ? 'core value' : `${v.source} ${v.via}`);
+  /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditPartValue} v */
+  const from = v => {
+    // A declaration through Core's own variables reads clearer as the
+    // public tokens it reads.
+    if (/var\(--(?:_|astryx-)/.test(v.expression)) {
+      const tokens = Array.isArray(v.tokens)
+        ? v.tokens
+        : [...new Set([...v.tokens.light, ...v.tokens.dark])];
+      return tokens.length ? `${tokens.join(' ')}, ` : '';
+    }
+    return v.expression !== valueText(v.value) ? `${v.expression}, ` : '';
+  };
+  const lines = [
+    `${d.part} in ${d.theme} (${d.kind} theme): ${rest.length} value${rest.length === 1 ? '' : 's'} at rest${shown.length ? `, ${shown.length} that differ in variants` : ''}`,
+    ...rest.map(
+      v => `  ${v.property}: ${valueText(v.value)} (${from(v)}${who(v)})`,
+    ),
+    ...shown
+      .slice(0, VARIANT_LINES)
+      .map(
+        v =>
+          `  ${[v.when, v.state].filter(Boolean).join(' ')}: ${v.property}: ${valueText(v.value)} (${from(v)}${who(v)})`,
+      ),
+    ...(shown.length > VARIANT_LINES
+      ? [
+          `  and ${shown.length - VARIANT_LINES} more in variants (--json lists every value)`,
+        ]
+      : []),
+  ];
+  return [lines.join('\n')];
+}
+
 /**
  * The text of `show`: the theme, then each color with its seed and the shade
  * each token uses, the notes on moved shades, and the generated files last.
@@ -2432,6 +2513,23 @@ export function registerExperimentalTheme(group, program) {
               },
             )
           : null) ??
+        // One part's values: a lookup of one part.
+        (new Set(flagValues('on')).size > 1
+          ? cliError(
+              `--on looks up one part, and was given ${flagValues('on').length} (${flagValues('on').join(', ')}); give one.`,
+              {
+                suggestions: [
+                  {
+                    name: cmd(
+                      `${EDITOR} show ${name} --on ${flagValues('on')[0]}`,
+                    ),
+                    reason: 'do this instead',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
         run(
           program,
           () =>
@@ -2439,8 +2537,12 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               png: o.png ?? false,
               section: o.section,
+              ...(o.on != null ? {on: o.on} : {}),
             }),
-          r => showBlocks(r.data),
+          r =>
+            r.type === 'themeEdit.showPart'
+              ? partValueBlocks(r.data)
+              : showBlocks(/** @type {any} */ (r).data),
         ),
     }),
     showDoc,
