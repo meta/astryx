@@ -148,6 +148,7 @@ export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+export {generatedSource} from '../../foundation/fs/file-protection.mjs';
 
 // What the authoring-docs check reads (./_authoring-audit.mjs), reached only
 // through this adapter.
