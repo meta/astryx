@@ -137,6 +137,33 @@ describe('BottomSheet close order for focus', () => {
     expect(done).toHaveFocus();
   });
 
+  it('runs no capture handler inside the sheet for a key or a click during the exit', () => {
+    const captured: string[] = [];
+    function Search() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <div
+            onKeyDownCapture={event => captured.push(`key ${event.key}`)}
+            onClickCapture={() => captured.push('click')}>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Done
+            </button>
+          </div>
+        </BottomSheet>
+      );
+    }
+    render(<Search />);
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    captured.length = 0;
+    fireEvent.keyDown(done, {key: 'Enter'});
+    fireEvent.click(done);
+    expect(captured).toEqual([]);
+    expect(done).toHaveFocus();
+  });
+
   it('does not pass Enter or Space to the focused control during the exit', () => {
     let submits = 0;
     function Search() {
@@ -255,6 +282,25 @@ describe('BottomSheet close order for focus', () => {
 
     expect(opener).toHaveFocus();
     expect(sheet()).not.toHaveAttribute('open');
+  });
+
+  it('opens again usable after a close that returned focus to the opener', async () => {
+    const opener = openFilters();
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    finishExit();
+    // The hold's focus check, queued as focus left the sheet, runs now.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(opener).toHaveFocus();
+
+    fireEvent.click(opener);
+
+    expect(sheet()).toHaveAttribute('open');
+    expect(sheet()).not.toHaveAttribute('inert');
+    expect(sheet()).not.toHaveAttribute('aria-hidden');
   });
 
   it('marks a closing sheet inert and hidden at once when focus is elsewhere', () => {

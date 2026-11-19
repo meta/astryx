@@ -16,6 +16,8 @@ import {
   listThemes,
   listUnmigratedThemeCopies,
   readThemeListState,
+  themeInPackage,
+  themeOwnerInstalled,
   themeRecordOwner,
 } from '../_adapter.mjs';
 
@@ -52,9 +54,7 @@ export async function themeListCopySources(options = {}) {
   return {
     type: 'theme.list',
     data: themes
-      .filter(
-        theme => options.package == null || theme.package === options.package,
-      )
+      .filter(theme => themeInPackage(theme, options.package))
       .map(theme => ({
         slug: theme.slug,
         displayName: theme.displayName,
@@ -75,11 +75,10 @@ export async function themeListAvailable(options = {}) {
   const state = readThemeListState(cwd);
   const {themes, skipped} = await listAvailableThemeState(cwd);
   const data = themes
-    .filter(
-      theme => options.package == null || theme.package === options.package,
-    )
+    .filter(theme => themeInPackage(theme, options.package))
     .map(theme => {
-      const added = state.themes[theme.slug] === themeRecordOwner(theme);
+      const owner = themeRecordOwner(theme);
+      const added = state.themes[theme.slug] === owner;
       return {
         slug: theme.slug,
         displayName: theme.displayName,
@@ -89,6 +88,20 @@ export async function themeListAvailable(options = {}) {
         added,
         default: added && state.defaultSlug === theme.slug,
         source: theme.source,
+        // The package wires its themes with its own provider component, not
+        // with Astryx's Theme: the app renders that component.
+        ...(theme.provider
+          ? {
+              wiredBy: {
+                export: theme.provider.export,
+                from: theme.provider.from,
+              },
+            }
+          : {}),
+        // What `theme add` records and the app imports: a bundled theme's
+        // descriptor ships in the CLI, its built output in its own package.
+        owner,
+        installed: themeOwnerInstalled(theme, state.projectDir),
       };
     });
   const upgradeCommand = `${getCliInvocation(state.projectDir)} upgrade --from 0.6.4 --path . --apply`;

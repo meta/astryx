@@ -108,18 +108,45 @@ describe('CircleCheckIndicator ships the table', () => {
     return el;
   }
 
-  it('paints the touch press image only under a coarse pointer, so a held pen draws its press once', () => {
-    // A pen on a fine-pointer page draws the mouse `:active` fill; the press
-    // image as well would paint the press twice. CheckboxInput's own layer
-    // gates its image the same way.
+  it('paints the press image on every pointer, and its :active fill yields to it, so a held press paints once', () => {
+    // A CheckboxInput row hands the image down only while the press
+    // controller paints its press, and then sets `--_indicator-active-press`
+    // to transparent. So a mouse's or a pen's press paints the image alone.
+    const el = circle('md');
     const images = [
-      ...(declarationsOf(circle('md')).get('background-image') ??
+      ...(declarationsOf(el).get('background-image') ??
         new Map<string | null, string>()),
     ];
     expect(images.length).toBeGreaterThan(0);
     for (const [media, value] of images) {
-      expect(media).toContain('(pointer: coarse)');
+      expect(media ?? '').not.toContain('pointer');
       expect(value).toContain('--_indicator-press-image');
+    }
+    const classes = el.className
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(name => `.${name}`);
+    const activeFills: string[] = [];
+    const walk = (rules: CSSRuleList, media: string | null) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSMediaRule) {
+          walk(rule.cssRules, rule.media.mediaText);
+        } else if (
+          rule instanceof CSSStyleRule &&
+          media == null &&
+          rule.selectorText.includes(':active') &&
+          classes.some(cls => rule.selectorText.startsWith(cls))
+        ) {
+          activeFills.push(rule.style.getPropertyValue('background-color'));
+        }
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      walk(sheet.cssRules, null);
+    }
+    expect(activeFills.length).toBeGreaterThan(0);
+    for (const fill of activeFills) {
+      expect(fill).toMatch(/^var\(--_indicator-active-press,/);
     }
   });
 

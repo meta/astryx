@@ -47,7 +47,13 @@ function writePackage(icons, source) {
       name: '@acme/blocks',
       version: '1.0.0',
       peerDependencies: {'@astryxdesign/cli': '>=0.7.4'},
+      // A logo, so no listing note is drawn.
+      marketplace: {logo: {light: 'logo.svg'}},
     }),
+  );
+  write(
+    'logo.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>',
   );
   write(
     'astryx.integration.mjs',

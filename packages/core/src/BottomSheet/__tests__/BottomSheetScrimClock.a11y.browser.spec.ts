@@ -96,13 +96,6 @@ test("a touch drag's close and its scrim's fade start together", async ({
     throw new Error('no sheet box');
   }
   const x = Math.round(box.x + box.width / 2);
-  // A short flick down from the grabber, about 1,500 px/s: the sheet closes,
-  // and the drag leaves the scrim where it was.
-  const driver = await touchDriver(page);
-  const y = Math.round(box.y + 12);
-  await driver.play(drag({x, y}, {x, y: y + 60}, {durationMs: 40}), {
-    pacing: 'spacing',
-  });
   const read = async () =>
     page.evaluate(
       () =>
@@ -112,6 +105,32 @@ test("a touch drag's close and its scrim's fade start together", async ({
           }
         ).clockWatch,
     );
+  // A short flick down from the grabber, about 1,500 px/s: the sheet closes,
+  // and the drag leaves the scrim where it was. Under load the harness can
+  // deliver it too slowly to count as a flick; the sheet then settles back,
+  // and one more flick closes it. The watch is read only once the close has
+  // started.
+  const driver = await touchDriver(page);
+  const y = Math.round(box.y + 12);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await driver.play(drag({x, y}, {x, y: y + 60}, {durationMs: 40}), {
+      pacing: 'spacing',
+    });
+    // Only a close clears the scrim: a flick that settles back starts a
+    // sheet motion but no fade.
+    const isClosing = await expect
+      .poll(async () => Number.isFinite((await read()).fade), {
+        timeout: 3000,
+      })
+      .toBe(true)
+      .then(
+        () => true,
+        () => false,
+      );
+    if (isClosing) {
+      break;
+    }
+  }
   await expect.poll(async () => (await read()).done).toBe(true);
   const {fade, close} = await read();
   expect(Math.abs(fade - close)).toBeLessThan(1);

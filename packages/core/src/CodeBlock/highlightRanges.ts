@@ -72,8 +72,10 @@ function ensureDynamicHighlightType(tokenType: string): void {
   const name = CSS.escape(`astryx-${tokenType}`);
   const colorVar = `var(${CSS.escape(`--color-syntax-${tokenType}`)}, currentColor)`;
   try {
+    // The rule goes in the astryx-base layer, as the static rules do, so
+    // theme and app syntax colours win over it.
     dynamicStyleSheet.insertRule(
-      `.astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; }`,
+      `@layer astryx-base { .astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; } }`,
     );
   } catch {
     // An engine that still refuses the rule costs that type its colour
@@ -122,8 +124,8 @@ interface RangeEntry {
 
 /**
  * Apply highlight ranges for a single line's tokens.
- * The line div is expected to contain a single text node as its
- * first child (or a zero-width space placeholder for empty lines).
+ * The line div holds its text directly, or inside one content element, as a
+ * single text node (a zero-width space placeholder for an empty line).
  */
 function applyLineRanges(
   lineDiv: Element,
@@ -135,9 +137,11 @@ function applyLineRanges(
     return;
   }
 
-  // The text node is the first child of the line div.
-  // In range mode, lines render plain text so this is always a Text node.
-  const textNode = lineDiv.firstChild;
+  // A line holds its text directly, or inside one content element (CodeBlock
+  // wraps each line's code in a dir="auto" span).
+  const first = lineDiv.firstChild;
+  const textNode =
+    first?.nodeType === Node.ELEMENT_NODE ? first.firstChild : first;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
     return;
   }

@@ -21,6 +21,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Stack, VStack} from '@astryxdesign/core/Stack';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ShoppingBagIcon,
   ShoppingCartIcon,
@@ -133,6 +134,7 @@ function MegaFeatured(props: {
 }
 
 export default function ShellTopNav() {
+  const showToast = useToast();
   return (
     <AppShell
       variant="surface"
@@ -190,13 +192,37 @@ export default function ShellTopNav() {
                 tooltip="Search"
                 variant="ghost"
                 icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: product search would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
-              <Button label="Sign in" variant="ghost" />
+              <Button
+                label="Sign in"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: sign-in would open here',
+                    uniqueID: 'sign-in',
+                  })
+                }
+              />
               <Button
                 label="Checkout"
                 variant="primary"
                 icon={<Icon icon={ShoppingCartIcon} size="sm" />}
                 endContent={<Badge label={3} />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: checkout would open here',
+                    uniqueID: 'checkout',
+                  })
+                }
               />
             </>
           }

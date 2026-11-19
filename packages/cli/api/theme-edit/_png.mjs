@@ -9,6 +9,7 @@
  */
 
 import * as zlib from 'node:zlib';
+import {wordTable} from './_tables.mjs';
 
 const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -25,20 +26,24 @@ export const MAX_PIXELS_16 = 20_000_000;
 const SAMPLE_BUDGET = 4_000_000;
 
 /** The bit depths each PNG color type allows. */
-const DEPTHS = /** @type {Record<number, number[]>} */ ({
-  0: [1, 2, 4, 8, 16],
-  2: [8, 16],
-  3: [1, 2, 4, 8],
-  4: [8, 16],
-  6: [8, 16],
-});
-const CHANNELS = /** @type {Record<number, number>} */ ({
-  0: 1,
-  2: 3,
-  3: 1,
-  4: 2,
-  6: 4,
-});
+const DEPTHS = wordTable(
+  /** @type {Record<number, number[]>} */ ({
+    0: [1, 2, 4, 8, 16],
+    2: [8, 16],
+    3: [1, 2, 4, 8],
+    4: [8, 16],
+    6: [8, 16],
+  }),
+);
+const CHANNELS = wordTable(
+  /** @type {Record<number, number>} */ ({
+    0: 1,
+    2: 3,
+    3: 1,
+    4: 2,
+    6: 4,
+  }),
+);
 
 /** @typedef {{width: number, height: number, rgba: Uint8Array}} Picture */
 
@@ -296,4 +301,179 @@ export function mainColors(pic, count) {
         where,
       };
     });
+}
+
+/** The keyword of the text chunk the theme editor stamps its pictures with. */
+export const EDITOR_STAMP = 'astryx-theme-editor';
+
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+/**
+ * The `tEXt` chunks of a PNG, keyword to text; empty for a file that is not
+ * a PNG or cannot be read whole.
+ * @param {Buffer} bytes
+ * @returns {Record<string, string>}
+ */
+export function pngTexts(bytes) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE))
+    return out;
+  for (let at = 8; at + 8 <= bytes.length;) {
+    const len = bytes.readUInt32BE(at);
+    const type = bytes.toString('latin1', at + 4, at + 8);
+    const end = at + 12 + len;
+    if (end > bytes.length) break;
+    if (type === 'tEXt') {
+      const data = bytes.subarray(at + 8, at + 8 + len);
+      const nul = data.indexOf(0);
+      if (nul > 0)
+        out[data.toString('latin1', 0, nul)] = data.toString('latin1', nul + 1);
+    }
+    if (type === 'IEND') break;
+    at = end;
+  }
+  return out;
+}
+
+/**
+ * A PNG with a `tEXt` chunk added right after its header (any chunk with the
+ * same keyword replaced), or the bytes as they were when they are not a PNG.
+ * @param {Buffer} bytes
+ * @param {string} keyword
+ * @param {string} text
+ * @returns {Buffer}
+ */
+export function withPngText(bytes, keyword, text) {
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE))
+    return bytes;
+  /** @type {Buffer[]} */
+  const chunks = [];
+  for (let at = 8; at + 8 <= bytes.length;) {
+    const len = bytes.readUInt32BE(at);
+    const type = bytes.toString('latin1', at + 4, at + 8);
+    const end = at + 12 + len;
+    if (end > bytes.length) return bytes;
+    const data = bytes.subarray(at + 8, at + 8 + len);
+    const same =
+      type === 'tEXt' &&
+      data.indexOf(0) > 0 &&
+      data.toString('latin1', 0, data.indexOf(0)) === keyword;
+    if (!same) chunks.push(bytes.subarray(at, end));
+    if (type === 'IHDR') {
+      const body = Buffer.concat([
+        Buffer.from('tEXt', 'latin1'),
+        Buffer.from(keyword, 'latin1'),
+        Buffer.from([0]),
+        Buffer.from(text, 'latin1'),
+      ]);
+      const head = Buffer.alloc(4);
+      head.writeUInt32BE(body.length - 4);
+      const crc = Buffer.alloc(4);
+      crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+      chunks.push(Buffer.concat([head, body, crc]));
+    }
+    if (type === 'IEND') break;
+    at = end;
+  }
+  return Buffer.concat([PNG_SIGNATURE, ...chunks]);
+}
+
+/**
+ * The bytes of a PNG holding a picture's RGBA pixels, 8 bits a channel, each
+ * row unfiltered.
+ * @param {Picture} pic
+ * @returns {Buffer}
+ */
+export function encodePng({width, height, rgba}) {
+  /** @param {string} type @param {Buffer} data */
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const stride = width * 4;
+  const rows = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++)
+    rows.set(rgba.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(rows)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/**
+ * A tall picture cut into pictures, in order, each cut only at the top of a
+ * row of parts: the end of a run of at least `gap` rows of one color (the
+ * page between two rows of cells; a cell's dashed edge breaks every run
+ * inside it). A piece ends at the lowest row top within `most` pixels; a
+ * row taller than that is a piece of its own, never cut through. A last
+ * piece shorter than `least` joins the one before it. A picture no taller
+ * than `most` is itself alone.
+ * @param {Picture} pic
+ * @param {number} most
+ * @param {{gap?: number, least?: number}} [options]
+ * @returns {Picture[]}
+ */
+export function cutTall(pic, most, {gap = 10, least = 300} = {}) {
+  const {width, height, rgba} = pic;
+  if (height <= most) return [pic];
+  const stride = width * 4;
+  /** @param {number} y */
+  const plain = y => {
+    const row = new Uint32Array(
+      rgba.buffer,
+      rgba.byteOffset + y * stride,
+      width,
+    );
+    const first = row[0];
+    for (let x = 1; x < width; x++) if (row[x] !== first) return false;
+    return true;
+  };
+  // Where a row of parts starts: the end of each run of `gap` plain rows.
+  /** @type {number[]} */
+  const rowTops = [];
+  for (let y = 0, run = 0; y < height; y++) {
+    if (plain(y)) run++;
+    else {
+      if (run >= gap && y - run > 0) rowTops.push(y);
+      run = 0;
+    }
+  }
+  /** Where each piece ends. @type {number[]} */
+  const ends = [];
+  for (let top = 0; top < height;) {
+    const limit = top + most;
+    let end = height;
+    if (limit < height) {
+      // The lowest row top the piece reaches; a row taller than `most`
+      // is a piece of its own, never cut.
+      const within = rowTops.filter(y => y > top && y <= limit);
+      end = within.length
+        ? within[within.length - 1]
+        : (rowTops.find(y => y > limit) ?? height);
+    }
+    ends.push(end);
+    top = end;
+  }
+  if (ends.length > 1 && height - ends[ends.length - 2] < least)
+    ends.splice(ends.length - 2, 1);
+  return ends.map((end, i) => {
+    const top = i ? ends[i - 1] : 0;
+    return {
+      width,
+      height: end - top,
+      rgba: rgba.slice(top * stride, end * stride),
+    };
+  });
 }

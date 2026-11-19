@@ -60,9 +60,9 @@ import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   useScrollableArea,
-  type ScrollAxisState,
   type UseScrollableAreaResult,
 } from '../hooks/useScrollableArea';
+import {scrollEdgeFadeStyles} from '../hooks/scrollEdgeFade';
 import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
@@ -426,11 +426,13 @@ const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
  * padding.
  */
 const TRACK_FADE_INSET = `calc(${TOKEN_ROW_INSET} + ${spacingVars['--spacing-6']})`;
-const TRACK_FADE_FROM_LEFT = `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
-const TRACK_FADE_FROM_RIGHT = `linear-gradient(to left, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
 // Kept in sync with useEndLaneReserve: wrapperWithTokens reads the custom
 // property directly, to keep token rows and the input short of the lane.
 const END_LANE_RESERVE_VAR = '--_tokenizer-end-lane-reserve';
+const INPUT_TEXT_INSET = `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`;
+// The content width an empty, focused input has beyond its inset, so its
+// caret has room to draw.
+const INPUT_CARET_ROOM = '2px';
 
 const styles = stylex.create({
   wrapper: {
@@ -506,14 +508,17 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     zIndex: 0,
     // The input follows the last token in flow, so a focused empty input's
-    // caret sits where typed text will start. Empty, it asks only for that
-    // inset, and only while focused and editable: blurred or read-only (a
-    // disabled field with a disabledMessage stays focusable), it claims no
+    // caret sits where typed text will start. Empty, it takes only that inset
+    // from the row, and only while focused and editable: blurred or read-only
+    // (a disabled field with a disabledMessage stays focusable), it claims no
     // room at all, not even the column gap, so it never grows the field a
     // blank row. Typing restores the full editing width, which may wrap.
     minWidth: {
       default: '40px',
-      ':placeholder-shown': 0,
+      ':placeholder-shown:is(:not(:focus), :read-only)': 0,
+      // In a field with no spare room on the row, a zero-width content box
+      // hides the caret.
+      ':placeholder-shown:focus:not(:read-only)': `calc(${INPUT_TEXT_INSET} + ${INPUT_CARET_ROOM})`,
     },
     flex: {
       default: '1 1 40px',
@@ -524,10 +529,16 @@ const styles = stylex.create({
       default: 0,
       ':placeholder-shown:is(:not(:focus), :read-only)': `calc(-1 * ${spacingVars['--spacing-1']})`,
     },
+    // Gives the caret room back to the row, so the field keeps its width and
+    // the input does not wrap.
+    marginInlineEnd: {
+      default: 0,
+      ':placeholder-shown:focus:not(:read-only)': `calc(-1 * ${INPUT_CARET_ROOM})`,
+    },
     // Restore normal text inset when input follows tokens, since the
     // wrapper padding is reduced for border concentricity.
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`,
+      default: INPUT_TEXT_INSET,
       ':placeholder-shown:is(:not(:focus), :read-only)': 0,
     },
     // wrapperWithTokens already keeps the in-flow input short of the lane.
@@ -569,6 +580,10 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'thin',
     },
     scrollPaddingInline: TRACK_FADE_INSET,
+    // The shared edge fade keeps a clear band across the strip's focus-ring
+    // bleed, so a faded edge never paints into the row's focus ring.
+    '--_scroll-fade-inset': TOKEN_ROW_INSET,
+    '--_scroll-fade-length': spacingVars['--spacing-6'],
   },
   inGroupTrackContent: {
     display: 'flex',
@@ -582,34 +597,6 @@ const styles = stylex.create({
   inGroupTrackContentTruncated: {
     // The "+N more" summary measures this box, so it holds the track's width.
     width: '100%',
-  },
-  // Each fade masks an edge that hides tokens. Forced colors drop the fades,
-  // since the native scrollbar is back there.
-  trackFadeStart: {
-    maskImage: {
-      default: TRACK_FADE_FROM_LEFT,
-      ':dir(rtl)': {
-        default: TRACK_FADE_FROM_RIGHT,
-        '@media (forced-colors: active)': 'none',
-      },
-      '@media (forced-colors: active)': 'none',
-    },
-  },
-  trackFadeEnd: {
-    maskImage: {
-      default: TRACK_FADE_FROM_RIGHT,
-      ':dir(rtl)': {
-        default: TRACK_FADE_FROM_LEFT,
-        '@media (forced-colors: active)': 'none',
-      },
-      '@media (forced-colors: active)': 'none',
-    },
-  },
-  trackFadeBoth: {
-    maskImage: {
-      default: `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET}, black calc(100% - ${TRACK_FADE_INSET}), transparent calc(100% - ${TOKEN_ROW_INSET}))`,
-      '@media (forced-colors: active)': 'none',
-    },
   },
   inGroupInput: {
     // Always in flow after the last token. The empty-query hit surface of
@@ -643,6 +630,7 @@ const styles = stylex.create({
     flexShrink: 0,
     whiteSpace: 'nowrap',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     paddingInline: spacingVars['--spacing-1'],
   },
@@ -916,19 +904,6 @@ function EndLane({
   );
 }
 
-function trackFade(inline: ScrollAxisState) {
-  if (!inline.isScrollable) {
-    return null;
-  }
-  if (!inline.atStart && !inline.atEnd) {
-    return styles.trackFadeBoth;
-  }
-  if (!inline.atStart) {
-    return styles.trackFadeStart;
-  }
-  return inline.atEnd ? null : styles.trackFadeEnd;
-}
-
 /**
  * Keyboard focus in a grouped track brings the whole item it lands in into
  * view, clear of the fades: the track's scroll padding is the fade width.
@@ -976,7 +951,10 @@ function TokenTrack({
       {...scrollArea.getViewportProps<HTMLDivElement>({
         ref: trackRef,
         onFocus: revealFocusedItem,
-        xstyle: [styles.inGroupTrack, trackFade(scrollArea.state.inline)],
+        xstyle: [
+          styles.inGroupTrack,
+          scrollEdgeFadeStyles(scrollArea.state.inline, 'hidden'),
+        ],
       })}>
       <div
         {...scrollArea.getContentProps<HTMLDivElement>(

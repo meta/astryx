@@ -9,6 +9,7 @@ import {Center} from '@astryxdesign/core/Center';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Card} from '@astryxdesign/core/Card';
 import {Link} from '@astryxdesign/core/Link';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -71,6 +72,7 @@ export default function LoginSimple() {
   const [password, setPassword] = useState('');
   const [loginFailed, setLoginFailed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const showToast = useToast();
 
   const handleLogin = () => {
     if (!email || !password) {
@@ -86,7 +88,7 @@ export default function LoginSimple() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <VStack gap={4} hAlign="center" style={contentStyle}>
         {/* Logo */}
         <VStack gap={2} hAlign="center">
@@ -101,7 +103,9 @@ export default function LoginSimple() {
           <VStack gap={4} hAlign="stretch">
             {/* Header */}
             <VStack gap={1} hAlign="center">
-              <Heading level={2}>Welcome back</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                Welcome back
+              </Heading>
               <Text type="body" color="secondary" size="sm">
                 Sign in to your account
               </Text>
@@ -172,12 +176,26 @@ export default function LoginSimple() {
                 variant="secondary"
                 icon={<AppleIcon />}
                 size="lg"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that starts Apple sign-in.
+                  showToast({
+                    body: 'Demo: Apple sign-in would start here',
+                    uniqueID: 'sign-in-apple',
+                  })
+                }
               />
               <Button
                 label="Login with Google"
                 variant="secondary"
                 icon={<GoogleIcon />}
                 size="lg"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that starts Google sign-in.
+                  showToast({
+                    body: 'Demo: Google sign-in would start here',
+                    uniqueID: 'sign-in-google',
+                  })
+                }
               />
             </VStack>
 

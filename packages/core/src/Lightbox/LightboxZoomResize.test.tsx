@@ -4,9 +4,9 @@
  * @file LightboxZoomResize.test.tsx
  * @input Lightbox with `hasZoom`, mounted closed with no media, given its
  *   photos, then opened; the shared resize observer watched
- * @output Pins that the zoom follows a resize of its stage however the viewer
- *   first rendered. A stage that mounts after the viewer is subscribed once
- *   it exists
+ * @output Pins that the zoom follows a resize of its stage's track however
+ *   the viewer first rendered. A track that mounts after the viewer is
+ *   subscribed once it exists
  * @position Unit test for useZoomCore.ts's resize subscription
  */
 
@@ -51,12 +51,15 @@ describe('Lightbox zoom and resizes', () => {
     rerender(
       <Lightbox isOpen={true} onOpenChange={() => {}} media={photos} hasZoom />,
     );
-    // The zoom target is the stage: a rotation while zoomed keeps the same
-    // photo point centred only if its resizes reach the zoom.
+    // The zoom target is the stage, on its page of the track. A rotation
+    // while zoomed keeps the same photo point centred only if the track's
+    // resizes reach the zoom.
     const stage = screen.getByRole('button', {name: 'Zoom'});
+    const track = stage.closest('[data-lightbox-page]')?.parentElement;
     const observed = vi
       .mocked(observeResize)
       .mock.calls.map(([element]) => element);
-    expect(observed).toContain(stage);
+    expect(track).toBeInstanceOf(HTMLElement);
+    expect(observed).toContain(track);
   });
 });

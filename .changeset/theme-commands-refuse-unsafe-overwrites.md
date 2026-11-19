@@ -1,7 +1,0 @@
----
-'@astryxdesign/cli': patch
----
-
-[fix] Theme commands no longer replace files they do not own, and they report the right errors. `theme template --overwrite` replaces only an earlier copy of the template or a theme source file, and refuses folders, blank paths and paths that are not `.ts`. `theme eject --overwrite` never writes into another theme's folder or a theme the theme editor made, and the result names the packages the fork needs (`missingPackages`, `installCommand`). `theme build --out <folder>` writes `<name>.css` into the folder; a build never replaces its source, or a file at a path `--out` names that it did not write, and two themes with one name in one run are refused (a header-less output of a CLI before 0.6.7 at the default paths, family outputs included, is still replaced). When `--out` names a file that a CLI before 0.6.7 wrote, the build says so: delete that file and run the same build again. Two `theme add`, `use` or `remove` commands at once keep both changes. A theme whose local folder or package is gone no longer blocks `use`, `add` or `remove` of other themes; it is left out with a note; one broken local theme folder no longer hides every other theme from `list` and `add`. `add` says which owner it chose when a local theme shadows a package theme. An option without its value is `ERR_MISSING_ARGUMENT` with the command's usage, and `astryx help <group> <command>` prints that command's help.
-
-@josephfarina

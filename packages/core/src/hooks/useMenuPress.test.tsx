@@ -14,7 +14,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
-import {useRef, useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
   MENU_PRESS_LONG_PRESS_MS,
@@ -196,6 +196,20 @@ function fireTouchEnd(target: Element): Event {
   return event;
 }
 
+/** A cancelable touch event at `target` whose one changed touch has `identifier`. */
+function fireTouch(
+  target: Element,
+  type: 'touchstart' | 'touchend',
+  identifier: number,
+): Event {
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  Object.defineProperty(event, 'changedTouches', {
+    value: [{identifier, target}],
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 beforeEach(() => {
   __resetMenuPressForTest();
 });
@@ -361,6 +375,46 @@ describe('useMenuPress — tracking inside the menu', () => {
       onHighlight.mock.calls.map(([el]) => el?.textContent ?? null),
     ).toEqual(['A', 'B', null]);
     expect(row('A')).not.toHaveFocus();
+  });
+
+  it('drives the committed highlight callback after React discards a render with another', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Screen({
+      onHighlight,
+      isPending = false,
+    }: {
+      onHighlight: (row: HTMLElement | null) => void;
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <Harness onHighlight={onHighlight} />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    const onHighlight = vi.fn<(row: HTMLElement | null) => void>();
+    const discardedOnHighlight = vi.fn<(row: HTMLElement | null) => void>();
+    const {rerender} = render(<Screen onHighlight={onHighlight} />);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen onHighlight={discardedOnHighlight} isPending />);
+      });
+    });
+
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(row('B'), touch());
+
+    expect(
+      onHighlight.mock.calls.map(([el]) => el?.textContent ?? null),
+    ).toEqual(['A', 'B']);
+    expect(discardedOnHighlight).not.toHaveBeenCalled();
   });
 
   it('carries the release button and modifiers on the dispatched activation', () => {
@@ -715,6 +769,26 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     fireEvent.pointerUp(row('B'), touch(2));
     fireEvent.pointerDown(screen.getByTestId('outside'), touch(3));
     expect(fireTouchEnd(row('B')).defaultPrevented).toBe(false);
+  });
+
+  it("leaves another finger's touchend alone and cancels the lifted touch's own", () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch(7));
+    fireTouch(row('A'), 'touchstart', 7);
+    fireEvent.pointerUp(row('A'), touch(7));
+    expect(fireTouch(row('A'), 'touchend', 99).defaultPrevented).toBe(false);
+    expect(fireTouch(row('A'), 'touchend', 7).defaultPrevented).toBe(true);
+    expect(onSelect.mock.calls).toEqual([['A']]);
+  });
+
+  it('names the touch by its place in the touchstart when its identifier is not the pointer id', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), touch(2));
+    fireTouch(row('A'), 'touchstart', 0);
+    fireEvent.pointerUp(row('A'), touch(2));
+    expect(fireTouch(row('A'), 'touchend', 1).defaultPrevented).toBe(false);
+    expect(fireTouch(row('A'), 'touchend', 0).defaultPrevented).toBe(true);
   });
 });
 

@@ -20,6 +20,7 @@ import {
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
+  docText,
   emit,
   formatDeprecation,
   section,
@@ -29,6 +30,7 @@ import {
   records,
 } from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {build as buildApi} from '../../../api/build/build.mjs';
@@ -103,9 +105,9 @@ export function registerBuild(program) {
           /** @type {import('../../../api/build/build.type.mjs').BuildHelpResponse} */ (
             await buildApi(undefined, {cwd: process.cwd()})
           );
-        // The playbook is a document, not a lookup: one doc, always the same
-        // one. Counting it as a result keeps "what did this run answer with"
-        // true for the no-argument form too.
+        // The playbook is a document, not a lookup: one doc, whose theme
+        // wiring follows the project. Counting it as a result keeps "what did
+        // this run answer with" true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
         pointToSearch(options.type, json);
         if (json) {
@@ -180,11 +182,21 @@ export function registerBuild(program) {
       }
 
       // Four sections, one job each: the TEMPLATE to scaffold, OTHER
-      // TEMPLATES if its layout is wrong, BLOCKS for parts it lacks, and
-      // COMPONENTS for the rest. Descriptions stop at their first sentence and
+      // TEMPLATES if its layout is wrong, BLOCK EXAMPLES to read, and
+      // COMPONENTS for the parts. Descriptions stop at their first sentence and
       // blocks and components share one command line in their heading; the
       // JSON and --verbose carry everything.
       const verbose = Boolean(options.verbose);
+      /**
+       * A template record names an unready template `<name> (not ready)`.
+       * @template {{name: string, isReady?: boolean}} T
+       * @param {T} item
+       * @returns {T}
+       */
+      const tagged = item =>
+        item.isReady === false
+          ? {...item, name: markNotReady(item.name, false)}
+          : item;
       /** @type {import('../formatters/index.mjs').RecordOptions} */
       const full = {
         fields: [
@@ -199,14 +211,19 @@ export function registerBuild(program) {
           'description',
           'command',
         ],
-        format: {command: formatCliCommand, deprecated: formatDeprecation},
+        format: {
+          command: formatCliCommand,
+          description: docText,
+          deprecated: formatDeprecation,
+        },
       };
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
         format: {
           command: formatCliCommand,
-          description: firstSentence,
+          description: (/** @type {string} */ value) =>
+            docText(firstSentence(value)),
           deprecated: formatDeprecation,
         },
       });
@@ -226,8 +243,8 @@ export function registerBuild(program) {
         section(`Build kit for "${q}"`),
         text(
           start
-            ? 'Start from the TEMPLATE, fill it with BLOCKS, and use COMPONENTS only for what is left.\n' +
-                'Changing a page you already have? Keep it, and use only the blocks and components.'
+            ? 'Start from the TEMPLATE and build its parts with COMPONENTS. A BLOCK EXAMPLE shows how a part is built.\n' +
+                'Changing a page you already have? Keep it, and add components; read a block example when it helps.'
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
@@ -238,12 +255,12 @@ export function registerBuild(program) {
             'TEMPLATE',
             `${start.reason} ${
               start.basis === 'fallback'
-                ? 'Scaffold it, then put blocks inside it.'
+                ? 'For a new page, scaffold it and build inside it.'
                 : 'Scaffold it, then replace its content. Keep its layout and spacing.'
             }`,
           ),
           record(
-            start,
+            tagged(start),
             verbose
               ? {
                   fields: [
@@ -251,9 +268,10 @@ export function registerBuild(program) {
                     'package',
                     'displayName',
                     'description',
+                    'fit',
                     'command',
                   ],
-                  format: {command: formatCliCommand},
+                  format: {command: formatCliCommand, description: docText},
                 }
               : brief(['name', 'package', 'description', 'command']),
           ),
@@ -266,7 +284,7 @@ export function registerBuild(program) {
               `If the layout is wrong, scaffold one of these instead. All page templates: ${formatCliCommand('template --list --type page')}`,
             ),
             records(
-              start.alternatives,
+              start.alternatives.map(tagged),
               verbose
                 ? full
                 : brief(['name', 'package', 'description', 'command']),
@@ -284,28 +302,24 @@ export function registerBuild(program) {
                 'Page templates keyword search matched, best first.',
               )
             : text(
-                `Keyword search matched these page templates: ${pages.map(p => `${p.name} (${p.package})`).join(', ')}.`,
+                `Keyword search matched these page templates: ${pages.map(p => `${markNotReady(p.name, p.isReady)} (${p.package})`).join(', ')}.`,
               ),
         );
-        if (verbose) out.push(records(pages, full));
+        if (verbose) out.push(records(pages.map(tagged), full));
       }
       if (blocks.length) {
         out.push(
           section(
-            'BLOCKS',
-            `Ready-made sections for parts the template lacks${more(blocks)}. Print one: ${formatCliCommand('template <name>')}`,
+            'BLOCK EXAMPLES',
+            `Examples of parts like yours, for reference only${more(blocks)}. Read one: ${formatCliCommand('template <name>')}`,
           ),
           records(
-            shown(blocks),
+            shown(blocks.map(tagged)),
             verbose ? full : brief(['name', 'package', 'description']),
           ),
         );
       }
-      out.push(
-        section(
-          'COMPONENTS',
-          `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
-        ),
+      const componentLines = [
         ...(domain.length
           ? [
               records(
@@ -316,8 +330,20 @@ export function registerBuild(program) {
               ),
             ]
           : []),
-        record({frame, foundation}),
-      );
+        ...(frame.length + foundation.length
+          ? [record({frame, foundation})]
+          : []),
+      ];
+      // A section with no lines under it is left out.
+      if (componentLines.length > 0) {
+        out.push(
+          section(
+            'COMPONENTS',
+            `For the parts you build in the template${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+          ),
+          ...componentLines,
+        );
+      }
 
       // Last, so it is the line the reader leaves with — and only when the kit
       // was thin enough that "the package has nothing" is the wrong conclusion.

@@ -90,7 +90,7 @@ interface Viewer {
 }
 
 async function openViewer(page: Page): Promise<Viewer> {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), 'core-lightbox--default');

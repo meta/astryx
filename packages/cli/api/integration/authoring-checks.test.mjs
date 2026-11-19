@@ -166,6 +166,12 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
+/** The listing notes a fixture with no logo draws; package-listing-check.test.mjs covers them. */
+const LISTING_CODES = new Set([
+  'package_without_logo',
+  'package_without_example',
+]);
+
 describe('integrationTemplateConflicts', () => {
   it('warns on an id shared with Core and gives the package-qualified command', async () => {
     const [core] = await discoverCoreTemplates();
@@ -1271,6 +1277,50 @@ describe('links in component docs and topic descriptions', () => {
     ]);
   });
 
+  it("notes a template description's link that names no doc, marked next, and passes one to its own topic", async () => {
+    writeLinkedComponent({
+      usage: 'A button.',
+      topicDescription: 'Install Acme.',
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {components: './components', docs: './docs', templates: './templates'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'templates'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'templates', 'acme-hero.doc.mjs'),
+      `export default ${JSON.stringify({
+        type: 'block',
+        name: 'Acme hero',
+        description:
+          'Set it up as {@link generic:acme-setup} says, then {@link generic:acme-nothing}.',
+      })};\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'templates', 'acme-hero.tsx'),
+      'export default function AcmeHero() { return null; }\n',
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const links = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'invalid_doc_graph',
+    );
+    expect(links).toEqual([
+      {
+        code: 'invalid_doc_graph',
+        message: expect.stringMatching(
+          /^template acme-hero \(description\): "generic:acme-nothing" names no doc\./,
+        ),
+        next: true,
+      },
+    ]);
+    expect(
+      data.issues.filter(
+        (/** @type {any} */ issue) => issue.code === 'invalid_doc_graph',
+      ),
+    ).toEqual([]);
+  });
+
   it("warns on a topic description's link that names no doc", async () => {
     writeLinkedComponent({
       usage: 'A button.',
@@ -1557,7 +1607,8 @@ describe('validateIntegration runner-command notes', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     const notes = (data.notes ?? []).filter(
-      (/** @type {any} */ note) => note.code !== 'runner_command',
+      (/** @type {any} */ note) =>
+        note.code !== 'runner_command' && !LISTING_CODES.has(note.code),
     );
 
     expect(
@@ -1677,7 +1728,11 @@ describe('validateIntegration runner-command notes', () => {
     );
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
-    expect(data.notes ?? []).toEqual([]);
+    expect(
+      (data.notes ?? []).filter(
+        (/** @type {any} */ note) => !LISTING_CODES.has(note.code),
+      ),
+    ).toEqual([]);
   });
 
   it('lists nothing for bare commands and the scoped install step', async () => {

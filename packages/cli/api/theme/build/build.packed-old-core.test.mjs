@@ -118,11 +118,19 @@ function filesHeld(dir, rel = '') {
 
 /** Runtime dependencies the packed CLI resolves from its install root. */
 const RUNTIME_DEPS = [
+  '@babel/core',
   '@babel/parser',
+  '@babel/plugin-transform-typescript',
+  '@babel/plugin-transform-react-jsx',
   'commander',
+  'css-tree',
+  'globals',
   'ignore',
   'jiti',
   'jscodeshift',
+  'postcss',
+  'postcss-selector-parser',
+  'recast',
   'zod',
 ];
 
@@ -892,14 +900,14 @@ export const spreadPlainBaseTheme = defineTheme({
 });
 `,
   );
-  // Direct `extends` of a raw object literal, no import at all.
+  // Direct `extends` of a base defined inline, no import at all.
   theme(
     'direct-extends.ts',
     `import {defineTheme} from '@astryxdesign/core/theme';
 export const directExtendsTheme = defineTheme({
   name: 'direct-extends',
   tokens: {'--color-accent': '#09f'},
-  extends: {name: 'inline-base', tokens: {}, adaptations: ${ADAPTATIONS}},
+  extends: defineTheme({name: 'inline-base', adaptations: ${ADAPTATIONS}}),
 });
 `,
   );
