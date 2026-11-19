@@ -268,34 +268,74 @@ describe('table-row parity in a children-mode table', () => {
     }
   });
 
-  it('gives header and footer rows no parity or striped state', () => {
-    const {container} = render(<ChildrenTable body={row('Ada')} />);
-    for (const row of container.querySelectorAll('thead tr, tfoot tr')) {
-      expect(row).not.toHaveAttribute('data-parity');
-      expect(row).not.toHaveAttribute('data-striped');
+  it('marks every footer row of a striped table striped, the rows Core may stripe, and gives none parity', () => {
+    const {container} = render(
+      <Table isStriped>
+        <TableHeader>
+          <TableRow isHeaderRow>
+            <TableHeaderCell>Name</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>{row('Ada')}</TableBody>
+        <TableFooter>
+          {row('Subtotal')}
+          {row('Total')}
+        </TableFooter>
+      </Table>,
+    );
+    const header = container.querySelector('thead tr')!;
+    expect(header).not.toHaveAttribute('data-parity');
+    expect(header).not.toHaveAttribute('data-striped');
+    const footer = [...container.querySelectorAll('tfoot tr')];
+    expect(footer).toHaveLength(2);
+    for (const tr of footer) {
+      expect(tr).toHaveAttribute('data-striped', 'striped');
+      expect(tr).not.toHaveAttribute('data-parity');
     }
+    // The footer row Core paints with its stripe is one a theme's striped
+    // rule reaches.
+    expect(
+      footer.map(tr =>
+        tr.matches(
+          '[data-striped="striped"]:nth-child(even of :not([data-expansion-panel]))',
+        ),
+      ),
+    ).toEqual([false, true]);
   });
 
   it('starts a table nested in a body cell outside any body', () => {
+    // The outer table is data-driven, so its rows hand down a stripe; the
+    // inner table's header and footer rows must not take it.
     const {container} = render(
-      <ChildrenTable
-        body={
-          <TableRow>
-            <TableCell>
+      <Table
+        data={[{id: 'a', name: 'Ada'}]}
+        idKey="id"
+        isStriped
+        columns={[
+          {
+            key: 'name',
+            header: 'Name',
+            renderCell: () => (
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow isHeaderRow>
                     <TableHeaderCell>Inner</TableHeaderCell>
                   </TableRow>
                 </TableHeader>
+                <TableFooter>{row('Inner total')}</TableFooter>
               </Table>
-            </TableCell>
-          </TableRow>
-        }
+            ),
+          },
+        ]}
       />,
     );
-    const inner = container.querySelector('table table thead tr')!;
-    expect(inner).not.toHaveAttribute('data-parity');
+    const outer = container.querySelector('table tbody tr')!;
+    expect(outer).toHaveAttribute('data-parity', 'odd');
+    for (const tr of container.querySelectorAll('table table tr')) {
+      expect(tr).not.toHaveAttribute('data-parity');
+      // The inner table is not striped.
+      expect(tr).not.toHaveAttribute('data-striped');
+    }
   });
 
   it('adds nothing to a row outside a Table', () => {

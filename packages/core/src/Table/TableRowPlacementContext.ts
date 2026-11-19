@@ -3,18 +3,11 @@
 'use client';
 
 /**
- * @file TableRowPlacementContext.ts
- * @input Layer-scoped React context
- * @output Exports TableRowPlacementContext and its fixed values
- * @position Context layer; tells a TableRow whether it is a body row and
- * which stripe it is, so it can carry the `table-row` target's `parity`
- * visual prop and `striped` state
+ * @file Tells a TableRow whether it is a body row and which stripe it is, for
+ * the `table-row` target's `parity`.
  *
- * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Table/TableBody.tsx (children-mode provider)
- * - /packages/core/src/Table/BaseTable.tsx (data-mode provider)
- * - /packages/core/src/Table/Table.tsx (reset for nested tables)
- * - /packages/core/src/Table/TableRow.tsx (consumer)
+ * SYNC: TableBody.tsx and BaseTable.tsx provide it, Table.tsx resets it for a
+ * nested table, TableRow.tsx reads it.
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';

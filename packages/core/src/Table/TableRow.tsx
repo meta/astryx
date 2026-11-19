@@ -230,24 +230,17 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
-  // A body row reports its stripe and whether its table is striped. A theme
-  // can then style one stripe (`parity:odd`) or only striped tables
-  // (`striped`). Core paints `parity:even` itself.
-  const isBodyRow = placement.isBodyRow && !isHeaderRow;
+  // `striped` marks every row Core may stripe above, footer rows included;
+  // `parity` only a body row whose place Core knows.
   return (
     <tr
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps(
-          'table-row',
-          isBodyRow
-            ? {
-                parity: placement.parity,
-                striped: ctx.isStriped ? 'striped' : null,
-              }
-            : undefined,
-        ),
+        themeProps('table-row', {
+          parity: placement.isBodyRow && !isHeaderRow ? placement.parity : null,
+          striped: ctx.isStriped && !isHeaderRow ? 'striped' : null,
+        }),
         stylex.props(tableRowMarker, ...rowStyles),
         incomingClassName,
         incomingStyle,
