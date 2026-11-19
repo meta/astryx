@@ -837,6 +837,41 @@ describe("a stripe is only a table row's", () => {
   });
 });
 
+describe('stripe answers keep to the stripe', () => {
+  /** @param {string} question */
+  const commandsFor = async question => {
+    const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+    return (data.results ?? [])
+      .flatMap((/** @type {{commands: string[]}} */ r) => r.commands)
+      .join('\n');
+  };
+  // A hover cleared beside a one-mode fill clears in every mode: only a
+  // stripe's other stripe follows the stripe's mode.
+  it.each([
+    'white cards, transparent on hover',
+    'white cards, hover background none',
+  ])('%s', async question => {
+    expect(await commandsFor(question)).toMatch(
+      /--on card --state hover(?! --mode)/,
+    );
+  });
+  it("reads a stripe ask that names no part as a table row's", async () => {
+    expect(await commandsFor('zebra stripes')).toMatch(
+      /--on table-row --when parity:even/,
+    );
+  });
+  it('reads "odd table rows" as the odd stripe', async () => {
+    expect(await commandsFor('odd table rows #fafafa')).toMatch(
+      /'#fafafa' --on table-row --when parity:odd/,
+    );
+  });
+  it('never darkens the even stripe for "odd rows darker"', async () => {
+    expect(await commandsFor('odd rows darker background')).not.toMatch(
+      /parity:even|--color-background-muted/,
+    );
+  });
+});
+
 describe('how answers plain-words questions', () => {
   for (const [question, want] of QUESTIONS)
     it(question, async () => {

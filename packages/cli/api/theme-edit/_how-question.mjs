@@ -20949,11 +20949,18 @@ export function draftAnswer(ctx, env, question) {
         // clause's own part is that row: the values are the part data's, so
         // an ask naming one as a row qualifier ("odd rows", "the even ones")
         // is a stripe ask too. A part with no stripe ("card background even
-        // lighter", "alternate button background") never is.
+        // lighter", "alternate button background") never is. A stripe ask
+        // that names no part ("zebra stripes") is a table row's.
         const ownPart = on ? one(on) : null;
-        const parityOn =
-          ownPart && (C.variantValues(ownPart)?.parity ?? []).length
+        /** @param {string} p */
+        const striping = p => (C.variantValues(p)?.parity ?? []).length > 0;
+        const rowParity = striping('table-row') ? 'table-row' : null;
+        const parityOn = ownPart
+          ? striping(ownPart)
             ? ownPart
+            : null
+          : /\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text)
+            ? rowParity
             : null;
         const parities = parityOn
           ? /** @type {string[]} */ (C.variantValues(parityOn).parity)
@@ -20961,9 +20968,9 @@ export function draftAnswer(ctx, env, question) {
         /** @param {string} text */
         const paritiesSaid = text =>
           parities.filter(v =>
-            new RegExp(`\\b${v}(?:-numbered)?\\s+(?:rows?|ones?)\\b`).test(
-              noMode(text),
-            ),
+            new RegExp(
+              `\\b${v}(?:-numbered)?\\s+(?:table\\s+)?(?:rows?|ones?)\\b`,
+            ).test(noMode(text)),
           );
         const paritySaid = paritiesSaid(c.text);
         if (
@@ -21040,6 +21047,18 @@ export function draftAnswer(ctx, env, question) {
             : /\b(dark(?:er|en)?|deeper)\b/.test(noMode(c.text))
               ? -1
               : 0;
+          // "odd rows darker" on a Core that stripes the even rows: the odd
+          // rows have no stripe to shift, so they need a color of their own.
+          if (
+            parityOn &&
+            paritySaid.length === 1 &&
+            paritySaid[0] !== coreParity &&
+            way
+          )
+            return {
+              text: `the ${paritySaid[0]} rows of ${parityOn} carry no stripe of Core's to make ${way > 0 ? 'lighter' : 'darker'}; give them a color: background-color <color> --on ${parityOn} --when parity:${paritySaid[0]}`,
+              options: [],
+            };
           if (stripeOn && stripe && way) {
             const steps = perMode(
               stripe,
@@ -21084,9 +21103,10 @@ export function draftAnswer(ctx, env, question) {
               ],
             };
           return {
-            text: parityOn
-              ? `a stripe on table rows is set on the stripe: background-color <color> --on ${parityOn} --when parity:odd (or parity:even)`
-              : 'striped rows need a style on every other row, and this Core marks no stripe on its rows (a newer Core does: then --when parity:odd); a row background colors every row',
+            text:
+              (parityOn ?? rowParity)
+                ? `a stripe on table rows is set on the stripe: background-color <color> --on ${parityOn ?? rowParity} --when parity:odd (or parity:even)`
+                : 'striped rows need a style on every other row, and this Core marks no stripe on its rows (a newer Core does: then --when parity:odd); a row background colors every row',
             options: [],
           };
         }
@@ -24490,22 +24510,27 @@ export function draftAnswer(ctx, env, question) {
             `(in ${kind} mode only: a ${kind} fill, and the ${other} mode keeps its own so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`,
           );
         }
-      // A step that takes the same part's fill away in the same answer (a
-      // stripe's other stripe cleared) holds in the mode that fill took, so
-      // the other mode keeps its fill too.
+      // A stripe's other stripe cleared in the same answer holds in the
+      // mode the stripe took, so the other mode keeps Core's stripe too.
       for (const o of d.options) {
-        const fillMode = o.find(
-          x => x.mode && x.on && /^background(?:-color)?$/.test(x.thing),
+        const stripe = o.find(
+          x =>
+            x.mode &&
+            x.on &&
+            /^background(?:-color)?$/.test(x.thing) &&
+            /^parity:/.test(String(x.when ?? '')),
         );
-        if (!fillMode) continue;
+        if (!stripe) continue;
         for (const st of o)
           if (
             !st.mode &&
-            st.on === fillMode.on &&
+            st.on === stripe.on &&
             /^background(?:-color)?$/.test(st.thing) &&
-            /^(?:transparent|none)$/.test(String(st.value))
+            st.value === 'transparent' &&
+            /^parity:/.test(String(st.when ?? '')) &&
+            st.when !== stripe.when
           )
-            st.mode = fillMode.mode;
+            st.mode = stripe.mode;
       }
       for (const n of notes) if (!d.text.includes(n)) d.text += ` ${n}`;
     }
