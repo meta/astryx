@@ -11,8 +11,8 @@
  *   it, or a task item's checkbox in its place. It also says whether their
  *   List has a marker gutter whose outside counters keep the themed inset.
  *   ListEdgeScope sets the row edge treatment for the items inside it.
- *   ListStaticScope marks the Lists inside it as static, without the inline
- *   clip that swiped rows need
+ *   ListStaticScope marks the next List inside it as static, without the
+ *   inline clip that swiped rows need
  * @position Internal context. Consumed by List.tsx and ListItem.tsx
  */
 
@@ -157,8 +157,8 @@ export function ListEdgeScope({
 }
 
 /**
- * Whether the Lists inside a ListStaticScope are static; internal. List reads
- * it for its own inline clip.
+ * Whether the next List is static, set by ListStaticScope; internal. List
+ * reads it for its own inline clip and resets it for its rows.
  */
 export const ListStaticContext = createLayerScopedContext<boolean>(
   'ListStaticContext',
@@ -168,10 +168,11 @@ export const ListStaticContext = createLayerScopedContext<boolean>(
 ListStaticContext.displayName = 'ListStaticContext';
 
 /**
- * Marks the Lists inside it as static: their rows never swipe aside, so each
- * List paints without its inline clip, and a focus ring on the list's edge
- * draws whole; internal. Markdown's task lists use it around the CheckboxList
- * they render, as Markdown's other lists drop the clip through `xstyle`.
+ * Marks the next List inside it as static; internal. Its rows never swipe
+ * aside, so the List paints without its inline clip. A focus ring or an
+ * outside counter on the list's edge then draws whole. The List resets the
+ * mark for its rows, so a List nested in a row keeps its clip. Markdown wraps
+ * each of its lists, task lists included, in this scope.
  */
 export function ListStaticScope({
   children,

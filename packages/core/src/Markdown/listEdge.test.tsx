@@ -5,7 +5,8 @@
  * @input Markdown ordered, unordered, nested, and task lists
  * @output Unit proof that Markdown's lists use List's `flush` edge, so a
  *   list fits its column instead of stepping out past both edges, and that
- *   the task list drops List's inline clip, so an edge focus ring draws whole
+ *   every Markdown list drops List's inline clip through one scope that a
+ *   nested List does not inherit
  * @position Markdown regression test; real-browser widths are in
  *   __tests__/MarkdownListBounds.a11y.chromium.spec.ts
  */
@@ -13,6 +14,7 @@
 import {render} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {List} from '../List/List';
+import {ListStaticScope} from '../List/ListContext';
 import {ListItem} from '../List/ListItem';
 import {Markdown} from './Markdown';
 
@@ -37,11 +39,16 @@ describe('Markdown lists fit their column', () => {
   });
 });
 
-describe('Markdown task lists keep focus rings whole', () => {
-  it('drops the inline clip on the task list only', () => {
-    const {container} = render(<Markdown>{'- [x] done\n- [ ] open'}</Markdown>);
-    const list = container.querySelector('ul');
-    expect(list?.className).toMatch(/noInlineClip/);
+describe('Markdown lists drop the inline clip through one scope', () => {
+  it.each([
+    ['unordered', '- one\n- two'],
+    ['ordered', '1. one\n2. two'],
+    ['task', '- [x] done\n- [ ] open'],
+  ])('%s list drops the inline clip', (_, markdown) => {
+    const {container} = render(<Markdown>{markdown}</Markdown>);
+    expect(container.querySelector('ul, ol')?.className).toMatch(
+      /noInlineClip/,
+    );
   });
 
   it('keeps the inline clip on a plain List', () => {
@@ -53,5 +60,24 @@ describe('Markdown task lists keep focus rings whole', () => {
     expect(container.querySelector('ul')?.className).not.toMatch(
       /noInlineClip/,
     );
+  });
+
+  it('keeps the inline clip on a List inside a static list row', () => {
+    const {container} = render(
+      <ListStaticScope>
+        <List>
+          <ListItem
+            label={
+              <List>
+                <ListItem label="inner" />
+              </List>
+            }
+          />
+        </List>
+      </ListStaticScope>,
+    );
+    const [outer, inner] = container.querySelectorAll('ul');
+    expect(outer?.className).toMatch(/noInlineClip/);
+    expect(inner?.className).not.toMatch(/noInlineClip/);
   });
 });

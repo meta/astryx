@@ -642,14 +642,6 @@ const styles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
   },
-  // Static Markdown lists never host swipe actions. Let outside counter ink
-  // paint through both ordered and unordered ancestors; general List and
-  // swipe-capable rows retain their own inline clip (component:List FR9).
-  // List's `overflowInline` compiles to overflow-x, which this replaces;
-  // StyleX's xstyle types name only the physical property.
-  blockIndent: {
-    overflowX: 'visible',
-  },
   // HR
   hr: {
     borderWidth: 0,
@@ -1810,8 +1802,8 @@ function renderBlock(
                 isLast && styles.noMarginBlockEnd,
               ),
             )}>
-            {/* Task rows never swipe, so the list drops its inline clip and
-                each checkbox's focus ring draws whole on the column edge. */}
+            {/* Task rows never swipe, so each checkbox's focus ring draws
+                whole on the column edge. */}
             <ListStaticScope>
               <CheckboxList
                 label={t('@astryx.markdown.taskList')}
@@ -1909,121 +1901,125 @@ function renderBlock(
               isLast && styles.noMarginBlockEnd,
             ),
           )}>
-          <List
-            listStyle={node.ordered ? 'decimal' : 'disc'}
-            density="compact"
-            edge="flush"
-            start={node.ordered ? node.start : undefined}
-            xstyle={styles.blockIndent}>
-            {node.children.map((item, i) => {
-              const firstChild = item.children[0];
-              const isInline =
-                item.children.length === 1 && firstChild?.type === 'paragraph';
+          {/* Static Markdown lists never host swipe actions, so outside
+              counter ink paints through the list's inline edge. */}
+          <ListStaticScope>
+            <List
+              listStyle={node.ordered ? 'decimal' : 'disc'}
+              density="compact"
+              edge="flush"
+              start={node.ordered ? node.start : undefined}>
+              {node.children.map((item, i) => {
+                const firstChild = item.children[0];
+                const isInline =
+                  item.children.length === 1 &&
+                  firstChild?.type === 'paragraph';
 
-              // Check if this entire list item is "new" — if so, fade the
-              // whole item as a block instead of fading individual text spans.
+                // Check if this entire list item is "new" — if so, fade the
+                // whole item as a block instead of fading individual text spans.
 
-              const label = isInline ? (
-                <>
-                  {firstChild.children.map((c, j) =>
-                    renderInline(
-                      c,
-                      j,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                    ),
-                  )}
-                </>
-              ) : (
-                <>
-                  {item.children.map((c, j) =>
-                    renderBlock(
-                      c,
-                      j,
-                      item.children.length,
-                      density,
-                      headingLevelStart,
-                      onLinkClick,
-                      cursor,
-                      citationCtx,
-                      contentWidthValue,
-                      contentAlign,
-                      linkComponent,
-                      inlinePlugins,
-                      components,
-                      preparedPlugins,
-                      t,
-                      codeLanguages,
-                      headingProjection,
-                      listDepth + 1,
-                      innerDirectionScope(item, directionScope),
-                    ),
-                  )}
-                </>
-              );
+                const label = isInline ? (
+                  <>
+                    {firstChild.children.map((c, j) =>
+                      renderInline(
+                        c,
+                        j,
+                        onLinkClick,
+                        cursor,
+                        citationCtx,
+                        linkComponent,
+                        inlinePlugins,
+                        components,
+                        preparedPlugins,
+                      ),
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {item.children.map((c, j) =>
+                      renderBlock(
+                        c,
+                        j,
+                        item.children.length,
+                        density,
+                        headingLevelStart,
+                        onLinkClick,
+                        cursor,
+                        citationCtx,
+                        contentWidthValue,
+                        contentAlign,
+                        linkComponent,
+                        inlinePlugins,
+                        components,
+                        preparedPlugins,
+                        t,
+                        codeLanguages,
+                        headingProjection,
+                        listDepth + 1,
+                        innerDirectionScope(item, directionScope),
+                      ),
+                    )}
+                  </>
+                );
 
-              // Each task item on this shared list path keeps its checked state
-              // (FR23): it shows a read-only checkbox where its marker
-              // would be, named by its text.
-              const firstParagraph = item.children.find(
-                block => block.type === 'paragraph',
-              );
-              const task =
-                item.checked == null
-                  ? undefined
-                  : {
-                      isChecked: item.checked,
-                      label:
-                        firstParagraph?.type === 'paragraph'
-                          ? markdownAstText(
-                              firstParagraph.children,
-                              extension =>
-                                markdownExtensionText(
-                                  preparedPlugins,
-                                  extension,
-                                ),
-                            )
-                          : t('@astryx.markdown.taskList'),
-                    };
+                // Each task item on this shared list path keeps its checked state
+                // (FR23): it shows a read-only checkbox where its marker
+                // would be, named by its text.
+                const firstParagraph = item.children.find(
+                  block => block.type === 'paragraph',
+                );
+                const task =
+                  item.checked == null
+                    ? undefined
+                    : {
+                        isChecked: item.checked,
+                        label:
+                          firstParagraph?.type === 'paragraph'
+                            ? markdownAstText(
+                                firstParagraph.children,
+                                extension =>
+                                  markdownExtensionText(
+                                    preparedPlugins,
+                                    extension,
+                                  ),
+                              )
+                            : t('@astryx.markdown.taskList'),
+                      };
 
-              const itemDirection = blockDirection(item, directionScope);
-              // A numbered item that reads against its list keeps its counter
-              // beside its own text, so its text never widens the counter
-              // column that the other rows share.
-              const readsAgainstList =
-                node.ordered &&
-                itemDirection != null &&
-                directionScope != null &&
-                itemDirection !== directionScope.around;
+                const itemDirection = blockDirection(item, directionScope);
+                // A numbered item that reads against its list keeps its counter
+                // beside its own text, so its text never widens the counter
+                // column that the other rows share.
+                const readsAgainstList =
+                  node.ordered &&
+                  itemDirection != null &&
+                  directionScope != null &&
+                  itemDirection !== directionScope.around;
 
-              return (
-                <ListMarkerScope
-                  // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
-                  key={i}
-                  marker={
-                    (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
-                      listDepth % 3
-                    ]
-                  }
-                  task={task}
-                  hasMarkerGutter={node.ordered}
-                  isOutsideNumberColumns={readsAgainstList}>
-                  <ListItem
-                    label={label}
-                    dir={itemDirection}
-                    {...(recordsSourceLines
-                      ? sourceLineAttributes(blockSourceLines(item))
-                      : undefined)}
-                  />
-                </ListMarkerScope>
-              );
-            })}
-          </List>
+                return (
+                  <ListMarkerScope
+                    // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
+                    key={i}
+                    marker={
+                      (node.ordered ? NUMBER_MARKERS : BULLET_MARKERS)[
+                        listDepth % 3
+                      ]
+                    }
+                    task={task}
+                    hasMarkerGutter={node.ordered}
+                    isOutsideNumberColumns={readsAgainstList}>
+                    <ListItem
+                      label={label}
+                      dir={itemDirection}
+                      {...(recordsSourceLines
+                        ? sourceLineAttributes(blockSourceLines(item))
+                        : undefined)}
+                    />
+                  </ListMarkerScope>
+                );
+              })}
+            </List>
+          </ListStaticScope>
         </div>
       );
     }

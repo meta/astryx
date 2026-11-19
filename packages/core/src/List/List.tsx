@@ -213,9 +213,8 @@ const styles = stylex.create({
     // mouse nothing rises, so the list keeps its stacking.
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
   },
-  // A static list (ListStaticScope) has no swiped rows to cut, so it drops
-  // the inline clip, and a focus ring on its edge draws whole. `overflowX`
-  // replaces the physical longhand `overflowInline` compiles to.
+  // A static list has no swiped rows to cut, so it drops the inline clip.
+  // StyleX compiles `overflowInline` to `overflow-x`, so this sets `overflowX`.
   noInlineClip: {
     overflowX: 'visible',
   },
@@ -459,7 +458,13 @@ export function List({
         className,
         style,
       )}>
-      {children}
+      {isStatic ? (
+        // The scope marks only this List. A List a caller draws in a row
+        // keeps its own clip unless its own scope marks it.
+        <ListStaticContext value={false}>{children}</ListStaticContext>
+      ) : (
+        children
+      )}
     </Tag>
   );
 
