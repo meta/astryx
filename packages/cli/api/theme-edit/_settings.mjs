@@ -15535,7 +15535,14 @@ function loadedForm(data) {
  * @returns {{key: string, pseudo: string | null}}
  */
 export function stateSlot(own, state, when, wrapsControl = false, values = {}) {
-  const pieces = state ? String(state).split('+') : [];
+  // A part that marks its chosen one as active (a pagination dot) takes a
+  // selected look in that state: no :selected pseudo-class exists, so the
+  // look would never show. An asked active stays the press it names.
+  const chosen = (/** @type {string} */ p) =>
+    p === 'selected' && !own.includes(p) && own.includes('active')
+      ? 'active'
+      : p;
+  const pieces = state ? String(state).split('+').map(chosen) : [];
   const keyed = pieces
     .filter(p => own.includes(p))
     .map(p => (values[p] && values[p] !== p ? `${p}:${values[p]}` : p));
