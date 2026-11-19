@@ -294,7 +294,7 @@ Platform-specific details stay inside that compiler.
   `font-size: var(--text-body-size)` and `line-height:
 var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
   inside it that sets neither of its own (plain text in a card, a quote, a
-  table cell) draws at the theme's body size on the theme's body lines and
+  host's own table cell) draws at the theme's body size on the theme's body lines and
   follows a theme that changes them. The leading is a multiple of the text's
   own size, so text that sets only a size keeps the theme's proportion. Core's
   reset sets no font size on `html` or `body`, so installing Astryx leaves a
