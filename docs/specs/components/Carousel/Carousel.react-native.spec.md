@@ -42,7 +42,7 @@ system_specs: [spec:AST-082, spec:AST-093, spec:AST-112]
 | Builder impact          | A builder picks peeking cards, a shelf or full-width pages with `itemWidth` instead of sizing items with CSS, and turns on page dots with `hasPageDots`.                                                                                                                                                                                                                              |
 | Compatibility/readiness | Not yet released; additive. Draft. Where the carousel differs from this record or `component:Carousel`, a gap line under Current-state impact says so.                                                                                                                                                                                                                                |
 | Review checks           | Reject a row that snaps with `hasSnap` off, momentum that is not the platform's, a row that pages, buttons shown with `hasButtons` off, an edge button shown where the row cannot scroll that way, a drag owned in a direction the row cannot scroll, a colour, radius, shadow or spacing not from the theme, or a prop the carousel accepts and ignores.                             |
-| Governing rules         | `component:Carousel` FR1, FR2, FR4–FR6 and AR1–AR3; `spec:AST-124` FR3; `spec:AST-082` FR3, FR4, FR7; `spec:AST-093` FR2–FR4; DEC-1–DEC-3 below.                                                                                                                                                                                                                                      |
+| Governing rules         | `component:Carousel` FR1, FR2, FR4–FR6 and AR1–AR3; `spec:AST-124` FR3; `spec:AST-082` FR3, FR4, FR7; `spec:AST-093` FR2–FR4; DEC-1–DEC-4 below.                                                                                                                                                                                                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -122,8 +122,8 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR3 | Without `hasSnap`, the row scrolls freely with the platform's normal deceleration. With `hasSnap`, it rests at each item's start less the padding, clamped to the scroll range, so every item is a stop and the platform's momentum, at its fast rate, picks the rest (`component:Carousel` FR6); items that cannot reach the leading edge share the end's stop. `page` follows the same rules: with `hasSnap` it rests on a page's start where the momentum picks, and without it it scrolls freely; the row never pages (`component:Carousel` FR5). Under right-to-left every stop counts from the start edge, so the next item lies to the left.                                                                                                                                                                                                                                                       | `component:Carousel` FR5, FR6; DEC-1, DEC-2 | verify             |
 | FR4 | With `hasEdgeFade`, the row MUST fade its leading and trailing edges where content overflows, to show that more items lie past them (`component:Carousel`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `component:Carousel`                        | verify             |
 | FR5 | While the row overflows and `hasButtons` is set, it MUST show a previous button where it can scroll back and a next button where it can scroll on (`component:Carousel` FR1, FR4); with `hasLoop` both show, and next at the end returns to the start and previous at the start goes to the end. Each is a small ghost `IconButton` in a pill of `color.backgroundPopover` with `radius.full` and the theme's medium shadow, `space.s1` in from the row's edge and centred on the row. Next brings the first item not fully in view to the start edge, and previous does the reverse; the row scrolls there with motion, and at once under Reduce Motion. A drag that starts on a pill moves the row, and with snapping it rests on the next or previous stop for a flick and the nearest one otherwise. When the focused button goes away at an edge, focus moves to the row (`component:Carousel` FR2). | `component:Carousel` FR1, FR2, FR4          | verify             |
-| FR6 | With `hasPageDots`, while the row overflows, page dots MUST sit centred `space.s2` under the row: one dot per item start the row can bring to its leading edge (FR3's stops, also on a row that scrolls freely), the current one the stop nearest the row's offset. The dots are `space.s1_5` circles in `color.border`, `space.s1` apart, and the current one is a `space.s4` pill in `color.accent` with `radius.full` that grows over the theme's fast duration, at once under Reduce Motion; the dots' row is at least the touch minimum tall. A tap on the trailing or leading half of the dots' row, or a dot's adjustment, scrolls the row one stop.                                                                                                                                                                                                                                               | DEC-3                                       | verify             |
-| FR7 | The row MUST own a horizontal drag only in a direction it can still scroll (`spec:AST-124` FR3). `backGesture` decides the back direction: `atLeadingEdge`, the default, gives a drag toward the back direction to the back gesture once the row shows its first item, and until then the drag scrolls; `always` gives it from any position, while the other direction still scrolls; `never` keeps every horizontal drag. On iOS the leading screen-edge back swipe goes back under every value; on Android the system back gesture starts only at the screen edge and goes back under every value, and under `always` and `atLeadingEdge` a back-direction drag inside the row that the row gives away goes to an enclosing stack's back swipe where one exists, and otherwise the row keeps it and scrolls.                                                                                            | `spec:AST-124` FR3                          | verify             |
+| FR6 | With `hasPageDots`, while the row overflows, page dots MUST sit centred `space.s2` under the row: one dot per item start the row can bring to its leading edge (FR3's stops, also on a row that scrolls freely), the current one the stop nearest the row's offset. The dots are `space.s1_5` circles in `color.border`, `space.s1` apart, and the current one is a `space.s4` pill in `color.accent` with `radius.full` that grows over the theme's fast duration, at once under Reduce Motion; the dots' row is at least the touch minimum tall. A tap on the trailing or leading half of the dots' row, or a dot's adjustment, scrolls the row one stop.                                                                                                                                                                                                                                               | DEC-3, DEC-4                                | verify             |
+| FR7 | The row MUST own a horizontal drag only in a direction it can still scroll (`spec:AST-124` FR3). `backGesture` decides the back direction: `atLeadingEdge`, the default, gives a drag toward the back direction to the back gesture once the row shows its first item, and until then the drag scrolls; `always` gives it from any position, while the other direction still scrolls; `never` starts no back gesture from a drag on the row. On iOS the leading screen-edge back swipe goes back under every value; on Android the system back gesture starts only at the screen edge and goes back under every value, and a back-direction drag inside the row that the row gives away goes to an enclosing stack's back swipe where one exists; where none does, under `always` the row keeps the drag and scrolls, and under `atLeadingEdge`, at the first item, the drag moves nothing.               | `spec:AST-124` FR3                          | verify             |
 
 ### Allowed variation
 
@@ -135,21 +135,21 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Representative states
 
-| State                                       | Required invariant                                         | Allowed variation |
-| ------------------------------------------- | ---------------------------------------------------------- | ----------------- |
-| `auto`, no snap                             | free scroll; items at their own width                      | AV1               |
-| `peek` with `hasSnap`                       | rests on an item start; the next one peeking               | AV1               |
-| `shelf`                                     | two or more items per view; the next one peeking           | none              |
-| `page` with `hasSnap`                       | rests on a page's start the momentum picks; never pages    | AV1               |
-| `page` without `hasSnap`                    | free scroll                                                | AV1               |
-| at the start, `atLeadingEdge`               | a drag toward the back direction goes back                 | none              |
-| mid-row                                     | the drag scrolls in both directions                        | none              |
-| at an edge                                  | that edge's button gone                                    | none              |
-| `hasLoop` at the end                        | next returns to the start                                  | none              |
-| a screen reader running, `hasButtons` false | no buttons; the row's next and previous actions            | none              |
-| page dots                                   | one per item start the row can reach; the current one long | none              |
-| right-to-left                               | the next item to the left                                  | none              |
-| content that fits                           | no buttons, no dots                                        | none              |
+| State                                       | Required invariant                                                         | Allowed variation |
+| ------------------------------------------- | -------------------------------------------------------------------------- | ----------------- |
+| `auto`, no snap                             | free scroll; items at their own width                                      | AV1               |
+| `peek` with `hasSnap`                       | rests on an item start; the next one peeking                               | AV1               |
+| `shelf`                                     | two or more items per view; the next one peeking                           | none              |
+| `page` with `hasSnap`                       | rests on a page's start the momentum picks; never pages                    | AV1               |
+| `page` without `hasSnap`                    | free scroll                                                                | AV1               |
+| at the start, `atLeadingEdge`               | a drag toward the back direction goes to the back gesture where one exists | none              |
+| mid-row                                     | the drag scrolls in both directions                                        | none              |
+| at an edge                                  | that edge's button gone                                                    | none              |
+| `hasLoop` at the end                        | next returns to the start                                                  | none              |
+| a screen reader running, `hasButtons` false | no buttons; the row's next and previous actions                            | none              |
+| page dots                                   | one per item start the row can reach; the current one long                 | none              |
+| right-to-left                               | the next item to the left                                                  | none              |
+| content that fits                           | no buttons, no dots                                                        | none              |
 
 ### Transformation and precedence order
 
@@ -180,19 +180,21 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                          | Representation authority   | Hierarchy role | Component contract |
-| ---------------- | ------------------------------------------- | -------------------------- | -------------- | ------------------ |
-| Row              | a horizontal row of items                   | prescribed by core         | prominent      | FR2, FR3           |
-| Peek             | the next item showing at the trailing edge  | prescribed by the platform | supporting     | FR2                |
-| Edge buttons     | previous and next pills over the row's ends | prescribed by core         | supporting     | FR5                |
-| Page dots        | where the row is                            | prescribed by the platform | supporting     | FR6                |
+| Anatomy or state | Design requirement                                           | Representation authority          | Hierarchy role | Component contract |
+| ---------------- | ------------------------------------------------------------ | --------------------------------- | -------------- | ------------------ |
+| Row              | a horizontal row of items                                    | prescribed by core                | prominent      | FR2, FR3           |
+| Peek             | the next item showing at the trailing edge                   | prescribed by the platform        | supporting     | FR2                |
+| Edge buttons     | previous and next pills over the row's ends                  | prescribed by core                | supporting     | FR5                |
+| Page dots        | where the row is, with the platform page control's behaviour | prescribed by this record (DEC-4) | supporting     | FR6                |
 
 The component implements design requirements without copying their rationale.
 
 Platform control (`spec:AST-093` FR2): the platform's horizontal scroll view,
 UIScrollView on iOS and the horizontal scroll view on Android, through React
 Native's `ScrollView`, with its snapping. Neither platform has a
-carousel control of its own in React Native. Guideline pages (`spec:AST-093`
+carousel control of its own in React Native. For the page dots, iOS offers
+UIPageControl and Android has no page control; the record draws its own dots on
+both platforms with UIPageControl's behaviour (DEC-4). Guideline pages (`spec:AST-093`
 FR3): Scroll views, Page controls and Accessibility in the Apple Human
 Interface Guidelines; Carousel in Material 3.
 
@@ -257,6 +259,17 @@ or full-width pages for the caller.
 A phone carousel of peeking cards or full-width pages shows where it is with
 page dots, and the dots are also its adjustable control for screen readers.
 `hasPageDots` turns them on.
+
+### DEC-4 — The page dots are drawn the same on both platforms
+
+**Reference:** `component:react-native/Carousel/DEC-4`
+**Decider:** imdreamrunner, 2026-11-18
+
+Android has no page control, and UIPageControl takes only a tint, so it cannot
+draw the theme's long current dot. The carousel draws its own dots on both
+platforms from the theme, and keeps UIPageControl's behaviour: a tap on either
+side of the current dot moves one place, and the dots are one adjustable
+element.
 
 ## Open questions
 
