@@ -231,18 +231,24 @@ const isLocal = file =>
 /**
  * The real folders of the packages that a `node_modules` folder links to
  * inside the folder whose modules the page carries (`npm link`, a `file:`
- * dependency). Node loads such a package's modules by their real path, so
- * they read as the page's own. They compile as the page's own do, but the
- * file does not carry them, because the page imports them by the package's
+ * dependency, a workspace package). Node loads such a package's modules by
+ * their real path, so they read as the page's own. They compile as the
+ * page's own do, but the file carries only what the page reaches by a path
+ * (see dropLinkedPackageFiles), because the page imports the package by its
  * name. The search covers each `node_modules` folder that Node reads for the
- * page's imports, from the page's folder up. A link to a folder that holds
- * the page is not a package of the page's. Empty when no link leads into
- * the carried folder.
+ * page's imports, from the page's folder up, and the `node_modules` folders
+ * of each linked package and of the folders above it, as a workspace links
+ * one package into another. A link to a folder that holds the page is not a
+ * package of the page's. Empty when no link leads into the carried folder.
  * @returns {string[]} each folder, with a trailing separator
  */
 function linkedPackageRoots() {
   /** @type {Set<string>} */
   const roots = new Set();
+  /** @type {Set<string>} */
+  const scanned = new Set();
+  /** @type {string[]} */
+  const found = [];
   /** @param {string} link */
   const addIfLinkedIn = link => {
     let real;
@@ -253,37 +259,50 @@ function linkedPackageRoots() {
       return;
     }
     const folder = real + path.sep;
-    if (isLocal(folder) && !entry.startsWith(folder)) roots.add(folder);
+    if (isLocal(folder) && !entry.startsWith(folder) && !roots.has(folder)) {
+      roots.add(folder);
+      found.push(real);
+    }
   };
-  for (let dir = path.dirname(entry); ; dir = path.dirname(dir)) {
-    const modules = path.join(dir, 'node_modules');
-    /** @type {string[]} */
-    let names = [];
-    try {
-      names = fs.readdirSync(modules);
-    } catch {
-      // No node_modules folder here.
-    }
-    for (const name of names) {
-      const at = path.join(modules, name);
-      if (!name.startsWith('@')) {
-        addIfLinkedIn(at);
-        continue;
+  /** Read the links in `dir`'s `node_modules` folder and in those above it, up to `top`. @param {string} dir @param {string | null} top */
+  const scanUp = (dir, top) => {
+    for (let at = dir; ; at = path.dirname(at)) {
+      if (!scanned.has(at)) {
+        scanned.add(at);
+        const modules = path.join(at, 'node_modules');
+        /** @type {string[]} */
+        let names = [];
+        try {
+          names = fs.readdirSync(modules);
+        } catch {
+          // No node_modules folder here.
+        }
+        for (const name of names) {
+          const link = path.join(modules, name);
+          if (!name.startsWith('@')) {
+            addIfLinkedIn(link);
+            continue;
+          }
+          try {
+            for (const scoped of fs.readdirSync(link)) addIfLinkedIn(path.join(link, scoped));
+          } catch {
+            // A scope that cannot be read holds no package that Node can load.
+          }
+        }
       }
-      try {
-        for (const scoped of fs.readdirSync(at)) addIfLinkedIn(path.join(at, scoped));
-      } catch {
-        // A scope that cannot be read holds no package that Node can load.
-      }
+      if (at === top || path.dirname(at) === at) break;
     }
-    if (path.dirname(dir) === dir) break;
-  }
+  };
+  scanUp(path.dirname(entry), null);
+  // A linked package resolves its own imports from its folder up.
+  for (let next = found.shift(); next !== undefined; next = found.shift()) scanUp(next, scope);
   return [...roots];
 }
+
 const LINKED_ROOTS = linkedPackageRoots();
 
 /** A file of a package linked into the carried folder (see linkedPackageRoots). @param {string} file */
-const inLinkedPackage = file => LINKED_ROOTS.length > 0 && LINKED_ROOTS.some(root => file.startsWith(root));
+const inLinkedPackage = file => LINKED_ROOTS.some(root => file.startsWith(root));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -1661,6 +1680,7 @@ function describeFile(file) {
  * carried or named as not carried. A file that no module imports by a path
  * (one Node loaded by itself) and is not a linked package's stays, as do the
  * images, which the page's script reads from the file.
+ * @returns {string[]} the modules left out, whose image names the script may still draw
  */
 function dropLinkedPackageFiles() {
   /** @type {Map<string, Set<string>>} */
@@ -1694,10 +1714,12 @@ function dropLinkedPackageFiles() {
   /** @param {string} file */
   const kept = file =>
     reached.has(file) || assetsInlined.has(file) || (!importers.has(file) && !inLinkedPackage(file));
+  const dropped = localFiles.filter(file => !kept(file) && /\.[cm]?[jt]sx?$/.test(file));
   const keptLocal = localFiles.filter(kept);
   localFiles.splice(0, localFiles.length, ...keptLocal);
   const keptOutside = outsideFiles.filter(kept);
   outsideFiles.splice(0, outsideFiles.length, ...keptOutside);
+  return dropped;
 }
 
 /**
@@ -1999,7 +2021,7 @@ try {
       }
     }
   }
-  if (LINKED_ROOTS.length > 0) dropLinkedPackageFiles();
+  const linkedModules = LINKED_ROOTS.length > 0 ? dropLinkedPackageFiles() : [];
   parentPort?.postMessage({
     ok: true,
     markup,
@@ -2015,6 +2037,7 @@ try {
     files: localFiles,
     uncarried: outsideFiles,
     linkedRoots: LINKED_ROOTS,
+    linkedModules,
     aliasImports,
     texts,
     fnTexts,

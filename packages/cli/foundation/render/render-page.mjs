@@ -1506,6 +1506,9 @@ export async function renderPage(entry, options = {}) {
           path.relative(named, f).split(path.sep).join('/'),
         )),
   );
+  // A linked package's modules the file does not carry may still name images
+  // the script draws later: those images are carried and shown the same way.
+  carriedText.push(...(/** @type {string[]} */ (message.linkedModules ?? [])));
   for (const file of carriedText) {
     let text;
     try {

@@ -661,6 +661,46 @@ export default function Page() {
     expect(againMarkup).toBe(markup);
   }, 120_000);
 
+  it('treats a workspace package that another linked package links in as a package too', async () => {
+    put('ws-nest/package.json', JSON.stringify({name: 'ws-nest', private: true, workspaces: ['packages/*']}));
+    putLinkedPackage('ws-nest/packages/utils', '@acme/nest-utils');
+    putLinkedPackage('ws-nest/packages/ui', '@acme/nest-ui');
+    put(
+      'ws-nest/packages/ui/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from '@acme/nest-utils/src/parts/label.js';\nexport function Badge() { return jsx('strong', {children: `ui ${label}`}); }\n",
+    );
+    put(
+      'ws-nest/packages/utils/package.json',
+      JSON.stringify({name: '@acme/nest-utils', version: '1.0.0', type: 'module', exports: {'.': './src/index.js', './src/parts/label.js': './src/parts/label.js'}}),
+    );
+    // pnpm links a workspace dependency into the package's own node_modules.
+    linkFolder('ws-nest/node_modules/@acme/nest-ui', 'ws-nest/packages/ui');
+    linkFolder('ws-nest/packages/ui/node_modules/@acme/nest-utils', 'ws-nest/packages/utils');
+    put('ws-nest/src/page.tsx', "import {Badge} from '@acme/nest-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('ws-nest/src/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(markup).toContain('ui @acme/nest-utils badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it("carries an image that only a linked package's module names, for the script to draw later", async () => {
+    put('late-img/package.json', '{"name":"late-img","private":true}');
+    put('late-img/public/pics/late.png', PNG);
+    putLinkedPackage('late-img/vendor/kit', '@acme/late-img');
+    put(
+      'late-img/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {useEffect, useState} from 'react';\nexport function Badge() {\n  const [on, setOn] = useState(false);\n  useEffect(() => setOn(true), []);\n  return on ? jsx('img', {src: '/pics/late.png', alt: 'later'}) : jsx('span', {children: 'before the script'});\n}\n",
+    );
+    linkFolder('late-img/node_modules/@acme/late-img', 'late-img/vendor/kit');
+    put('late-img/page.tsx', "import {Badge} from '@acme/late-img';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back} = await roundTrip('late-img/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
+    const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
+    expect(html.slice(html.lastIndexOf('<script>'))).not.toContain("'/pics/late.png'");
+    expect(back.data.exact).toBe(true);
+  }, 120_000);
+
   it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
     put('link-assets/package.json', '{"name":"link-assets","private":true}');
     putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
