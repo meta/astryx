@@ -1,0 +1,299 @@
+{
+  "recipe": "astryx-oklch-v2",
+  "vibrancy": 60,
+  "neutralProfile": "custom",
+  "modeStrategy": "dark-only",
+  "stops": [
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
+    95, 100
+  ],
+  "families": [
+    {
+      "id": "neutral",
+      "name": "Glass Navy",
+      "seed": "#5c6688",
+      "kind": "neutral",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 5,
+          "color": "#060a17",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 10,
+          "color": "#0a1022",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 15,
+          "color": "#0e1630",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#141d3c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#1f2a52",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#5c6688",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#98a3c7",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#c3cbe6",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 95,
+          "color": "#eef1ff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "blue",
+      "name": "Glass Blue",
+      "seed": "#6ea8ff",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#5082ff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#6ea8ff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#a6c8ff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "cyan",
+      "name": "Glass Cyan",
+      "seed": "#4fd8ee",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#28c8e6",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#4fd8ee",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#8aeaf7",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "green",
+      "name": "Glass Green",
+      "seed": "#5bd67f",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#46d278",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#5bd67f",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#9df2b5",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "orange",
+      "name": "Glass Orange",
+      "seed": "#ffa25e",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#ff8c3c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#ffa25e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#ffc490",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "pink",
+      "name": "Glass Pink",
+      "seed": "#ff7fa0",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#ff5a8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#ff7fa0",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#ffaec0",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "purple",
+      "name": "Glass Purple",
+      "seed": "#b18cff",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#9664ff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#b18cff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#cfbaff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "red",
+      "name": "Glass Red",
+      "seed": "#ff6b6b",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#ff5050",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#ff6b6b",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#ffa3a3",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "teal",
+      "name": "Glass Teal",
+      "seed": "#3fd6bd",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#28d2b4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#3fd6bd",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#86f2dc",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "yellow",
+      "name": "Glass Yellow",
+      "seed": "#ffd25e",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#ffc846",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#ffd25e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#ffe39a",
+          "policy": "exact"
+        }
+      ]
+    }
+  ]
+}

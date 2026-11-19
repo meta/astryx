@@ -17,6 +17,13 @@
       "package": "@astryxdesign/cli"
     },
     {
+      "slug": "glass",
+      "displayName": "Glass",
+      "description": "A deep navy canvas with glass cards and one vivid hue per colored card. Dark only, for dashboards and data-dense apps.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
       "slug": "gothic",
       "displayName": "Gothic",
       "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",

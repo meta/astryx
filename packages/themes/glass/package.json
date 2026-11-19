@@ -1,0 +1,91 @@
+{
+  "name": "@astryxdesign/theme-glass",
+  "version": "0.7.17",
+  "displayName": "Glass Theme",
+  "private": false,
+  "description": "A deep navy canvas with glass cards and one vivid hue per colored card. Dark only, for dashboards and data-dense apps.",
+  "author": "Meta Open Source",
+  "license": "MIT",
+  "homepage": "https://github.com/meta/astryx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/astryx.git",
+    "directory": "packages/themes/glass"
+  },
+  "bugs": {
+    "url": "https://github.com/meta/astryx/issues"
+  },
+  "keywords": [
+    "astryx",
+    "theme",
+    "design-system",
+    "lucide",
+    "design-tokens"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "type": "module",
+  "main": "./dist/source.cjs",
+  "types": "./dist/source.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/source.d.ts",
+        "default": "./dist/source.mjs"
+      },
+      "require": {
+        "types": "./dist/source.d.cts",
+        "default": "./dist/source.cjs"
+      }
+    },
+    "./built": {
+      "types": "./dist/glass.d.ts",
+      "import": "./dist/glass.js",
+      "require": "./dist/glass.js"
+    },
+    "./theme.css": {
+      "types": "./theme.css.d.ts",
+      "default": "./dist/theme.css"
+    },
+    "./fonts.css": {
+      "types": "./fonts.css.d.ts",
+      "default": "./fonts.css"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "fonts.css",
+    "fonts.css.d.ts",
+    "theme.css.d.ts",
+    "palette.config.json",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
+  ],
+  "scripts": {
+    "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-glass-palette-refs.mjs --check && astryx theme build src/glassTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/emit-commonjs-declarations.mjs dist/source.d.ts && node ../../../scripts/check-fully-specified.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^1.66.0"
+  },
+  "peerDependencies": {
+    "@astryxdesign/core": "0.7.17",
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@astryxdesign/cli": "0.7.17"
+  },
+  "module": "./dist/source.mjs"
+}

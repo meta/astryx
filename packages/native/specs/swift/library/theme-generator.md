@@ -314,7 +314,7 @@ re-implements theme logic.
   scale (`font.family`, `font.size`, `font.weight`).
 - Core's `resolveThemeTokens` returns shared tokens per mode and no local
   tokens; neutral declares local tokens, stored as `light-dark(…)` strings.
-- Published theme packages: butter, chocolate, gothic, matcha, neutral, stone,
+- Published theme packages: butter, chocolate, glass, gothic, matcha, neutral, stone,
   y2k (probe is private). Their raw values use `oklch()` and `color-mix()` outside the G5 groups
   (component styles), neutral's shadows use `oklch()` with an inset ring, and
   `color-mix()` appears inside the groups only in

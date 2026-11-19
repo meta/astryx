@@ -257,6 +257,12 @@ export const categories: SandboxCategory[] = [
           'Gothic dark-only theme — atmospheric blue-gray, distressed display heading, pastel categorical accents',
       },
       {
+        name: 'Glass Palette',
+        href: '/pages/glass-palette/',
+        description:
+          'Glass dark-only theme — deep navy canvas, glass cards, one vivid hue per colored card',
+      },
+      {
         name: 'Butter Palette',
         href: '/pages/butter-palette/',
         description:

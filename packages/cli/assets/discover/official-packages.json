@@ -360,6 +360,19 @@
       ]
     },
     {
+      "package": "@astryxdesign/theme-glass",
+      "description": "A deep navy canvas with glass cards and one vivid hue per colored card. Dark only, for dashboards and data-dense apps.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "glass",
+          "title": "Glass",
+          "summary": "A deep navy canvas with glass cards and one vivid hue per colored card. Dark only, for dashboards and data-dense apps."
+        }
+      ]
+    },
+    {
       "package": "@astryxdesign/theme-gothic",
       "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",
       "releasedWithCore": true,

@@ -16,6 +16,7 @@
 
 import {butterTheme} from '../../packages/themes/butter/src/butterTheme.ts';
 import {chocolateTheme} from '../../packages/themes/chocolate/src/chocolateTheme.ts';
+import {glassTheme} from '../../packages/themes/glass/src/glassTheme.ts';
 import {gothicTheme} from '../../packages/themes/gothic/src/gothicTheme.ts';
 import {matchaTheme} from '../../packages/themes/matcha/src/matchaTheme.ts';
 import {neutralTheme} from '../../packages/themes/neutral/src/neutralTheme.ts';
@@ -30,6 +31,7 @@ import {parseColor} from '../../packages/core/src/utils/color.ts';
 export const FIRST_PARTY_THEMES = {
   butter: butterTheme,
   chocolate: chocolateTheme,
+  glass: glassTheme,
   gothic: gothicTheme,
   matcha: matchaTheme,
   neutral: neutralTheme,
