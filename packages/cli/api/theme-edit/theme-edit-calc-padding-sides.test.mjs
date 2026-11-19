@@ -154,4 +154,35 @@ describe('a padding of several lengths where only one works', () => {
     },
     T,
   );
+
+  it(
+    'names every side a later group setting hides',
+    async () => {
+      await set('5px 0');
+      const r = await themeEditSet('t', 'padding', '3px 2px', {
+        cwd,
+        on: 'menus',
+      });
+      const notes = r.data.notes.join('\n');
+      expect(notes).toMatch(
+        /padding-block = 5px on dropdown-menu no longer shows/,
+      );
+      expect(notes).toMatch(
+        /padding-inline = 0 on dropdown-menu no longer shows/,
+      );
+      await themeEditUndo('t', {cwd});
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
+
+  it(
+    'writes the same value on every side as sides when it is no one length',
+    async () => {
+      await set('10% 10%');
+      expect(saved()).toEqual(['padding-block 10%', 'padding-inline 10%']);
+      await themeEditUndo('t', {cwd});
+    },
+    T,
+  );
 });

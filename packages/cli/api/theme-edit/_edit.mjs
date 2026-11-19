@@ -7755,7 +7755,10 @@ async function changeOnce(
   // An earlier setting this one now covers (through a spread too) is named.
   else if (sub === 'set')
     for (const [m, why] of maskedSettings(data, ctx))
-      if (m !== s && why.startsWith(describe(s)))
+      if (
+        !written.includes(m) &&
+        written.some(w => why.startsWith(describe(w)))
+      )
         notes.push(`${describe(m)} no longer shows: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(

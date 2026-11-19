@@ -285,8 +285,8 @@ export const setLine = (slug, thing, value, s, unset = false) =>
 /**
  * The sides a box shorthand of two to four values gives out, as CSS does
  * (`5px 0`: block 5px, inline 0), each with the value typed for it, which
- * that side's own check reads; one value said for every side is that value
- * alone (side ''); null for any other property or value.
+ * that side's own check reads; one working length said for every side is
+ * that length alone (side ''); null for any other property or value.
  * @param {string} prop
  * @param {string} v
  * @returns {Array<[string, string]> | null}
@@ -295,7 +295,7 @@ function boxSides(prop, v) {
   if (prop !== 'padding' && prop !== 'margin') return null;
   const w = splitTop(v.trim(), ' ').filter(Boolean);
   if (w.length < 2 || w.length > 4) return null;
-  if (new Set(w).size === 1) return [['', w[0]]];
+  if (new Set(w).size === 1 && oneLength(w[0])) return [['', w[0]]];
   return w.length === 2
     ? [
         ['block', w[0]],
