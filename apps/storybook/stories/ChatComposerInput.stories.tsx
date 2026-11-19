@@ -384,6 +384,11 @@ export const MentionTrigger: Story = {
       character: '@',
       searchSource: userSource,
       hasMultiWordQuery: true,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       renderItem: item => (
         <TypeaheadItem
           item={item}
@@ -479,6 +484,11 @@ export const AsyncSearch: Story = {
     const asyncTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: asyncUserSource,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? asyncTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       onSelect: item => ({
         value: `@${item.id}`,
         label: item.label,
@@ -510,6 +520,11 @@ export const MultipleTriggers: Story = {
       character: '@',
       searchSource: userSource,
       hasMultiWordQuery: true,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       onSelect: item => ({
         value: `@${item.id}`,
         label: item.label,
@@ -561,6 +576,11 @@ export const CustomRenderItem: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       renderItem: item => (
         <TypeaheadItem
           item={item}
@@ -628,6 +648,11 @@ export const TokenVariants: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       onSelect: item => ({
         value: `@${item.id}`,
         label: item.label,
@@ -664,6 +689,11 @@ export const CustomRender: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      deserialize: value => {
+        const item = USERS.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       renderItem: item => (
         <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
           <div
@@ -732,7 +762,7 @@ export const CustomRender: Story = {
 /** Grouped menu items — items with auxiliaryData.group render under headings */
 export const GroupedItems: Story = {
   render: () => {
-    const groupedUsers = createStaticSource([
+    const groupedItems: SearchableItem[] = [
       {
         id: 'cindy',
         label: 'Cindy Zhang',
@@ -763,11 +793,17 @@ export const GroupedItems: Story = {
         label: 'Jordan Lee',
         auxiliaryData: {group: 'Product', role: 'Product Manager'},
       },
-    ] as SearchableItem[]);
+    ];
+    const groupedUsers = createStaticSource(groupedItems);
 
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: groupedUsers,
+      deserialize: value => {
+        const item = groupedItems.find(item => `@${item.id}` === value);
+        const token = item ? mentionTrigger.onSelect(item) : null;
+        return typeof token === 'string' ? null : token;
+      },
       renderItem: item => (
         <TypeaheadItem
           item={item}
