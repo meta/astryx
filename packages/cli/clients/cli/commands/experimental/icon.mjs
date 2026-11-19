@@ -105,6 +105,24 @@ const templateMeaningsLines = (data, set) => {
   return line ? [text(`[next] ${line}`)] : [];
 };
 
+/** The most related definitions a text answer names. */
+const RELATED_SHOWN = 4;
+
+/**
+ * Related definitions as one short line: up to four, each with what it means.
+ * @param {import('../../../../api/icon/icon.type.mjs').IconDefinitionRelative[]} relatives
+ * @returns {string}
+ */
+function relatedText(relatives) {
+  const shown = relatives
+    .slice(0, RELATED_SHOWN)
+    .map(
+      each => `${each.definition} (${each.description.replace(/\.$/u, '')})`,
+    );
+  const more = relatives.length - shown.length;
+  return `${shown.join('; ')}${more > 0 ? `; ${more} more` : ''}`;
+}
+
 /**
  * Register `icon` and its subcommands under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
@@ -164,6 +182,7 @@ export function registerExperimentalIcon(group, program) {
           definitions.map(each => {
             const marks = [
               each.builtIn ? 'built-in' : 'optional',
+              ...(each.group ? [`group ${each.group}`] : []),
               ...(each.templates > 0
                 ? [
                     `${each.templates} ${each.templates === 1 ? 'template' : 'templates'}`,
@@ -231,6 +250,13 @@ export function registerExperimentalIcon(group, program) {
                 list(others.map(each => `${each.name}: ${each.description}`)),
               ]
             : []),
+          ...(definitions[0]?.relatives
+            ? [
+                text(
+                  `Related to ${definitions[0].name}: ${relatedText(definitions[0].relatives)}`,
+                ),
+              ]
+            : []),
           text(
             `[next] ${prefixCliCommands(result.data.next, getCliInvocation())}`,
           ),
@@ -254,8 +280,13 @@ export function registerExperimentalIcon(group, program) {
         // its default look; its other variants are named with their
         // exports and read with `icon <set>/<id>`.
         records(
-          matches.map(({variants, look, ...match}) => ({
+          matches.map(({variants, look, relatives, ...match}, at) => ({
             ...match,
+            // Only the first match names its related definitions, so the
+            // answer stays short.
+            ...(at === 0 && relatives
+              ? {relatives: relatedText(relatives)}
+              : {}),
             ...(look
               ? {
                   look: `no ${look.asked} look; draws ${look.used ?? 'its one look'}`,
@@ -278,6 +309,7 @@ export function registerExperimentalIcon(group, program) {
               'look',
               'words',
               'definitions',
+              'relatives',
               'variant',
               'reason',
             ],

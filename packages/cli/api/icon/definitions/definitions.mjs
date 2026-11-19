@@ -38,6 +38,7 @@ export async function iconDefinitions({cwd, set: selector}) {
         builtIn: doc.builtIn === true,
         description: doc.description,
         words: doc.words,
+        ...(doc.group ? {group: doc.group} : {}),
         templates: templates.get(doc.name) ?? 0,
         ...(checked
           ? {

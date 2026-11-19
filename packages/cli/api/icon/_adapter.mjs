@@ -41,6 +41,7 @@ export {
 export {
   astryxDefinitionCoverage,
   astryxIconDefinitions,
+  definitionRelatives,
 } from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
