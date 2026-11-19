@@ -81,6 +81,12 @@
         "fix": "<text>"
       },
       {
+        "id": "core-props",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 0"
+      },
+      {
         "id": "agent-docs",
         "label": "<text>",
         "status": "info",
@@ -140,7 +146,7 @@
       }
     ],
     "summary": {
-      "pass": 11,
+      "pass": 12,
       "warn": 4,
       "fail": 0,
       "info": 5
