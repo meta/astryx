@@ -7,7 +7,9 @@
  * a sidebar's mode pair is its fill, and the text after it the theme's; a
  * part's "<ink> text on <color>" is that part's fill; a fill for every
  * button keeps the destructive one's red, and each look whose text would
- * not read gets its text line.
+ * not read gets its text line. A hex counts as typed only in the clause
+ * that drafted its step, and "works in dark mode" keeps an ask joined
+ * after it by "and" or "&".
  *
  * @position api/theme-edit — tests
  */
@@ -140,6 +142,33 @@ describe('long asks keep each change where it was said', () => {
           /^--color-background-body/.test(x),
         ),
       ).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'a hex counts as typed only in the clause that drafted its step',
+    async test => {
+      needsBases(test);
+      // The page's #ffffff is not the buttons' white text: that text would
+      // read at 1.11:1 on #fef3c7, so it is never written "as typed".
+      const r = await answer('page #ffffff, buttons #fef3c7 with white text');
+      expect(r.text).not.toMatch(/written as you typed/);
+      expect(r.all).not.toContain("color '#ffffff' --on button");
+    },
+    T,
+  );
+
+  it(
+    '"works in dark mode" keeps an ask joined after it by "and" or "&"',
+    async test => {
+      needsBases(test);
+      const corners = await answer(
+        'a calm theme that works in dark mode and has rounded corners',
+      );
+      expect(corners.all.some(x => /^corners /.test(x))).toBe(true);
+      const compact = await answer('works in dark mode & compact spacing');
+      expect(compact.all).toContain('spacing compact');
     },
     T,
   );

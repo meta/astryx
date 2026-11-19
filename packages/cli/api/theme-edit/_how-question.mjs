@@ -4599,9 +4599,10 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("a theme that works in dark mode": a theme with both modes, which it
     // has; never an ask scoped to dark. Both modes said, "works in light
-    // and dark mode", are read below as both modes.)
+    // and dark mode", are read below as both modes; any other clause after
+    // "and" or "&" is its own ask and stays.)
     .replace(
-      /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:dark|light)\s+modes?\b(?!\s*(?:and|&))/gi,
+      /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:dark|light)\s+modes?\b(?!\s*(?:and|&)\s+(?:in\s+)?(?:light|dark)\b)/gi,
       ' ',
     )
     // ("green text on a black page": the text's color and the page's, each
@@ -27962,6 +27963,24 @@ export function draftAnswer(ctx, env, question) {
         if (!d.text.includes(said))
           d.text += ` (${said}, the variants this fill reaches; the ${kept.join(', ')} ${st.on} keep their own text)`;
       }
+  /**
+   * Whether a step's value is a hex color written out in the clause that
+   * drafted the step; a hex said in another clause of the ask is not.
+   * @param {Step} st
+   */
+  const typedHere = st => {
+    const v = String(st.value ?? '').toLowerCase();
+    if (!/^#[0-9a-f]{3,8}$/.test(v)) return false;
+    return tops.some(
+      t =>
+        t.steps.some(
+          x => x.thing === st.thing && x.on === st.on && x.value === st.value,
+        ) &&
+        colorsFound(t.clause.text.toLowerCase()).some(
+          ([, c, written]) => written && c.toLowerCase() === v,
+        ),
+    );
+  };
   for (const d of result)
     for (const o of d.options)
       for (let i = o.length - 1; i >= 0; i--) {
@@ -28010,11 +28029,10 @@ export function draftAnswer(ctx, env, question) {
         const mixed = TINT_MIX.exec(String(fill.value ?? '').trim());
         // ("code #eb5757 text on #f7f6f3": both colors typed as solid
         // values are the look asked; they are written as typed, and the
-        // answer says how they read.)
-        const typedHere = (/** @type {unknown} */ v) =>
-          /^#[0-9a-f]{3,8}$/i.test(String(v)) &&
-          new RegExp(`${String(v)}(?![0-9a-f])`, 'i').test(String(question));
-        if (!mixed && typedHere(st.value) && typedHere(fill.value)) {
+        // answer says how they read. A color counts as typed only in the
+        // clause that drafted its step: "page #ffffff, buttons #fef3c7
+        // with white text" types no button text.)
+        if (!mixed && typedHere(st) && typedHere(fill)) {
           const said = `${st.value} text on ${fill.value} reads at`;
           if (!d.text.includes(said))
             d.text += ` (${said} ${Math.min(...fails.map(x => x.ratio)).toFixed(2)}:1, under the 4.5:1 text needs; both are written as you typed them)`;
