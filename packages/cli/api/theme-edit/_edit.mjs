@@ -1908,23 +1908,33 @@ function borderWidthOf(res, data) {
 }
 
 /**
- * The sheet of every component as the theme's build draws it now, written
- * to the project's cache to be measured: before a change is built, it is
- * the theme as it was. Null when it cannot be made (the measure then says
- * so).
+ * The sheet as the theme's build draws it now, written to the project's
+ * cache to be measured: before a change is built, it is the theme as it
+ * was. Only the section of the measured part's family is drawn when the
+ * part sits in one (its boxes are the same there as on the whole sheet);
+ * the whole sheet otherwise. Null when it cannot be made (the measure then
+ * says so).
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {'before' | 'after'} tag
+ * @param {import('./_settings.mjs').Setting} measured the setting whose part is measured
  * @returns {Promise<{file: string} | {problem: string}>}
  */
-async function sizeSheet(ctx, slug, data, tag) {
+async function sizeSheet(ctx, slug, data, tag, measured) {
   const out = path.join(
     ctx.project.cacheDir,
     `size-${slug}-${process.pid}-${tag}.html`,
   );
+  const families = touchedFamilies(ctx, {
+    ...data,
+    settings: [measured],
+  });
   try {
-    await renderSheet(ctx, slug, data, {out});
+    await renderSheet(ctx, slug, data, {
+      out,
+      ...(families.length === 1 ? {group: families[0]} : {}),
+    });
     return {file: out};
   } catch (e) {
     if (/** @type {any} */ (e)?.lockLost) throw e;
@@ -1950,7 +1960,7 @@ async function borderSizeNote(ctx, slug, data, added, before) {
   const unmeasured = (/** @type {string} */ why) =>
     `the size change the added border makes on ${added.on} was not measured: ${why}`;
   if ('problem' in before) return unmeasured(before.problem);
-  const after = await sizeSheet(ctx, slug, data, 'after');
+  const after = await sizeSheet(ctx, slug, data, 'after', added);
   try {
     if ('problem' in after) return unmeasured(after.problem);
     const parts = partsOf(ctx, added);
@@ -6711,7 +6721,7 @@ async function changeOnce(
   // Measured every time, a rare path: the result says, never leaves it to
   // be asked for.
   const sizeBefore = borderAdded
-    ? await sizeSheet(ctx, slug, data, 'before')
+    ? await sizeSheet(ctx, slug, data, 'before', borderAdded)
     : null;
   const r = await commitTheme(ctx, slug, data, {history: true});
   await sayNextStepClears(ctx, slug, s, r);
