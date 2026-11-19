@@ -69,10 +69,13 @@ owns response fields and compatibility.
   score band and one kind (doc or not); a band is a range of lexical scores,
   so inside one a lower score can lead a higher one. A match never moves past a
   match of another band or kind; between runs, the lexical order holds,
-  including its domain priority. Inside a run, a family's root leads a part of
-  its own family when the part answers no query word the root does not, and no
-  query word, in any plural or stem form, is a word of the part's name that
-  does not start a word of the root's name. Among matches of the first
+  including its domain priority. The lexical ranker marks a family's root
+  as leading a part of its own family when the part answers no query word the
+  root does not, no query word, in any plural or stem form, is a word of the
+  part's name that does not start a word of the root's name, and the query
+  does not write the part's name of two or more words as one word, as is or
+  misspelled. Such a root counts in its part's run, whatever its score, and
+  leads the part there. Among matches of the first
   result's domain that tie with it on score and on the query words they
   matched, the match whose own name holds more query words leads. A first
   result that matched the whole query (a name, keyword, or title hit), or

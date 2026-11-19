@@ -52,14 +52,21 @@
  * queries they have nothing to do with.
  */
 
-import {spellIdentifiers, joined} from './_words.mjs';
+import {spellIdentifiers, joined, sameWord, typoDistance} from './_words.mjs';
 import {tokenizeQuery, phraseWords, pluralOf} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
 import {heldTitle} from './_titles.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
-import {toResult, searchedComponentsOf, namedLeadsOf} from './_result.mjs';
+import {
+  toResult,
+  searchedComponentsOf,
+  namedLeadsOf,
+  rootLeadsOf,
+  answeredTerms,
+} from './_result.mjs';
+import {nameWords} from './_query-words.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
 
@@ -584,6 +591,52 @@ export function rankLexical(query, options, catalog) {
     scored.sort((a, b) => Number(leads.has(b)) - Number(leads.has(a)));
   }
 
+  // A family's root leads a part of its own family (its doc lists the part
+  // in the root's family) when the part adds nothing the reader asked for:
+  // the root answers every query word the part answers, no query word is,
+  // in any plural or stem form, a word of the part's name that does not
+  // start a word of the root's name, and the query does not write the part's
+  // name of two or more words as one word: as typedSpan reads it, or
+  // misspelled as the scorer reads a misspelled name (typoDistance). `tabs`
+  // asks for TabList before its Tab, and `code sample` for CodeBlock before
+  // its Code, whatever their scores; a query holding
+  // "item" keeps ListItem before List, and `breadcrumbitm` keeps
+  // BreadcrumbItem first. The scores and this order stay as they are: the
+  // order of matches places the root just ahead of its part, in the part's
+  // run (rootLeadsOf).
+  /** @type {Map<object, object>} */
+  const rootLeads = new Map();
+  if (ranked.some(r => r.candidate._family)) {
+    /** @type {Map<string, (typeof ranked)[number]>} */
+    const byName = new Map();
+    for (const r of ranked) {
+      const key = `${r.result.domain}:${r.result.name}`;
+      if (!byName.has(key)) byName.set(key, r);
+    }
+    const asked = nameWords(String(query));
+    const typedJoined = String(query).trim().split(/\s+/).map(joined);
+    /** @param {(typeof ranked)[number]} r */
+    const misspelled = r =>
+      phraseWords(spellIdentifiers(String(r.candidate.name))).length >= 2 &&
+      typedJoined.some(t => typoDistance(t, joined(r.candidate.name)) != null);
+    for (const r of ranked) {
+      const family = r.candidate._family;
+      const root = family && byName.get(`${r.result.domain}:${family}`);
+      if (!root || root === r || typedSpan(r) || misspelled(r)) continue;
+      const ofPart = answeredTerms(r.result.reason);
+      const ofRoot = answeredTerms(root.result.reason);
+      if (ofRoot && (!ofPart || [...ofPart].some(w => !ofRoot.has(w)))) {
+        continue;
+      }
+      const rootWords = nameWords(String(family));
+      const own = nameWords(String(r.result.name)).filter(
+        w => !rootWords.some(word => word.startsWith(w)),
+      );
+      if (own.some(w => asked.some(q => sameWord(q, w)))) continue;
+      rootLeads.set(r.result, root.result);
+    }
+  }
+
   // `results` is bounded by `limit` so a caller (and the recorded run that
   // quotes it) never carries an unbounded payload. `matchCount` is the number
   // of matches that bound was applied TO — reporting `results.length` there
@@ -612,6 +665,7 @@ export function rankLexical(query, options, catalog) {
     };
   }
   if (leads.size) namedLeadsOf.set(response, leads);
+  if (rootLeads.size) rootLeadsOf.set(response, rootLeads);
   if (catalog.searchedComponents) {
     searchedComponentsOf.set(
       response,
