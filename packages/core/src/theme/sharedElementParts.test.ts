@@ -248,4 +248,45 @@ describe('shared-element parts', () => {
       expect(rulesOf(parts)).toEqual(rulesOf(whole));
     });
   });
+  it("keeps Text's color and size props over a part's entry on Text's element", () => {
+    // Timestamp and Timer draw on Text's element: an explicit `color` or
+    // `size` (`data-color`, `data-size` on that element) still wins over the
+    // theme's `timestamp` entry in the later sub-layer, as it wins over a
+    // `text` entry.
+    const theme = defineTheme({
+      name: 'shared-element-text-props',
+      tokens: {},
+      components: {
+        text: {base: {color: 'black'}},
+        timestamp: {base: {color: 'red', fontSize: '20px'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const parts = component.slice(component.indexOf('@layer parts {'));
+    const part = parts.indexOf('.astryx-timestamp');
+    const color = parts.indexOf(
+      '.astryx-text[data-color="secondary"] { color: var(--color-text-secondary); }',
+    );
+    const size = parts.indexOf(
+      '.astryx-text[data-size="sm"] { font-size: var(--font-size-sm); }',
+    );
+    expect(part).toBeGreaterThan(-1);
+    expect(color).toBeGreaterThan(part);
+    expect(size).toBeGreaterThan(part);
+  });
+
+  it("writes no Text prop rules in the parts sub-layer without a part on Text's element", () => {
+    const theme = defineTheme({
+      name: 'shared-element-no-text-part',
+      tokens: {},
+      components: {
+        text: {base: {color: 'black'}},
+        'toggle-button': {base: {color: 'red'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    expect(component.slice(component.indexOf('@layer parts {'))).not.toContain(
+      '[data-color=',
+    );
+  });
 });

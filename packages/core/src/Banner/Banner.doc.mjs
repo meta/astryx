@@ -253,6 +253,7 @@ export const docsZh = {
       },
       {
         className: 'astryx-banner-icon',
+        sitsOn: 'icon',
         visualProps: [
           'status',
         ],

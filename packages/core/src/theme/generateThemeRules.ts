@@ -64,7 +64,7 @@ import {
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
-import {isSharedElementPart} from './sharedElementParts';
+import {isSharedElementPart, SHARED_ELEMENT_PARTS} from './sharedElementParts';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
@@ -1196,6 +1196,23 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
 }
 
 /**
+ * The components a theme's shared-element part entries sit on (Timestamp's
+ * `timestamp` on Text's element), each as a key. A prop override gated on a
+ * theme touching that component (Text's `color` and `size`) follows such a
+ * part into the parts sub-layer, after its rules, so an explicit prop still
+ * wins over the part's entry there as it wins over the component's.
+ */
+function partHosts(
+  components: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.keys(components ?? {})
+      .filter(isSharedElementPart)
+      .map(part => [SHARED_ELEMENT_PARTS[part], {}]),
+  );
+}
+
+/**
  * Generate component override rules using stable `.astryx-*` target classes
  * and reflected `data-*` selectors for prop/state keys. Handles derived var
  * expansion and container padding mapping for every theme layer.
@@ -1743,6 +1760,8 @@ export function generateThemeRulesSplit(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
     });
+    generateColorOverrides(partHosts(components), parts);
+    generateSizeOverrides(partHosts(components), parts);
   }
   return {component, prose, parts};
 }
@@ -1849,6 +1868,8 @@ function onMediaCSS(
           location,
           group,
         });
+        generateColorOverrides(partHosts(onMedia.components), out, surface);
+        generateSizeOverrides(partHosts(onMedia.components), out, surface);
       }
       return;
     }
@@ -2040,6 +2061,8 @@ function generateAdaptationPartsCSS(
       group: 'parts',
       darkPageSides: flipped,
     });
+    generateColorOverrides(partHosts(components), parts);
+    generateSizeOverrides(partHosts(components), parts);
     if (parts.length > 0) {
       blocks.push(
         generateAdaptationMediaBlock(rule.query, parts, scopeSelector),
