@@ -345,11 +345,12 @@ var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
   entry therefore wins over the theme's entries for the component it sits on
   by layer order, whatever either selector's specificity, and each sub-layer
   keeps the compiler's root, adaptation, media-surface order. An explicit prop
-  still wins over a part's entry: the prop overrides the compiler writes for
-  the component a part sits on (Text's `color` and `size`, for Timestamp and
-  Timer on Text's element) follow the part into `parts`, after its rules,
-  except the color the part gives Text with no color prop (`secondary`), so the
-  part's own color paints there. The
+  still wins over a part's entry: for a part on Text's element (Timestamp,
+  Timer) the compiler writes Text's `color` and `size` prop overrides again
+  on the part's own target, in `parts` after its rules, so they reach only
+  that part and the theme's `text` entries keep their order on every other
+  Text. The color the part gives Text with no color prop (`secondary`) is
+  left out, so the part's own color paints there. The
   color-scheme rules stay outside both sub-layers. A theme with no such entry keeps the
   single layer, byte for byte, and so does a CLI build with a core whose
   `generateThemeRulesSplit` returns no `parts`.

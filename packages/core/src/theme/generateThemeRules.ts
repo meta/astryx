@@ -1200,37 +1200,39 @@ function inGroup(component: string, group: ComponentGroup | undefined) {
 }
 
 /**
- * The Text colors the theme's parts on Text's element give with no color
- * prop. Text reflects them like an explicit one, so the Text color overrides
- * written after those parts leave them out, and the part's own color applies
+ * Text's `color` and `size` prop overrides for the theme's parts on Text's
+ * element (Timestamp's `timestamp`, Timer's `timer`), written on the part's
+ * own target after its rules in the parts sub-layer. An explicit prop then
+ * wins over the part's entry, as Text's own overrides let it win over a
+ * `text` entry, and no other Text is reached: the theme's `text` entries
+ * elsewhere keep their order. The color a part gives Text with no color prop
+ * (`TEXT_PART_DEFAULT_COLOR`) is left out, so the part's own color applies
  * there.
  */
-function partDefaultColors(
+function generatePartTextPropOverrides(
   components: Record<string, unknown> | undefined,
-): ReadonlySet<string> {
+  parts: string[],
+  surface?: MediaSurface,
+): void {
   const defaults: Readonly<Record<string, string>> = TEXT_PART_DEFAULT_COLOR;
-  return new Set(
-    Object.keys(components ?? {})
-      .filter(part => Object.hasOwn(defaults, part))
-      .map(part => defaults[part]),
-  );
-}
-
-/**
- * The components a theme's shared-element part entries sit on (Timestamp's
- * `timestamp` on Text's element), each as a key. A prop override gated on a
- * theme touching that component (Text's `color` and `size`) follows such a
- * part into the parts sub-layer, after its rules, so an explicit prop still
- * wins over the part's entry there as it wins over the component's.
- */
-function partHosts(
-  components: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.keys(components ?? {})
-      .filter(isSharedElementPart)
-      .map(part => [SHARED_ELEMENT_PARTS[part], {}]),
-  );
+  for (const part of Object.keys(components ?? {})) {
+    if (SHARED_ELEMENT_PARTS[part] !== 'text') {
+      continue;
+    }
+    for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
+      if (colorName === defaults[part]) {
+        continue;
+      }
+      parts.push(
+        `  ${componentSelector(part, parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
+      );
+    }
+    for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {
+      parts.push(
+        `  ${componentSelector(part, parseStyleKey(`size:${sizeName}`), surface)} { font-size: ${sizeValue}; }`,
+      );
+    }
+  }
 }
 
 /**
@@ -1626,6 +1628,18 @@ function generateProseRules(
  */
 const LINK_HOVER_TINTED = new Set(['primary', 'secondary', 'accent']);
 
+/** Text `color` prop values and the color each one paints. */
+const TEXT_COLOR_MAP: Record<string, string> = {
+  primary: 'var(--color-text-primary)',
+  secondary: 'var(--color-text-secondary)',
+  disabled: 'var(--color-text-disabled)',
+  placeholder: 'var(--color-text-secondary)',
+  accent: 'var(--color-text-accent)',
+  // A label that follows its owner's color, such as a Link's, keeps doing
+  // so when a theme styles the target's base color.
+  inherit: 'inherit',
+};
+
 /**
  * Generate prop-level color override rules for text/heading/link components.
  * These ensure color prop classes override theme token changes.
@@ -1634,28 +1648,13 @@ function generateColorOverrides(
   components: Record<string, unknown>,
   parts: string[],
   surface?: MediaSurface,
-  skipColors: ReadonlySet<string> = new Set(),
 ): void {
-  const TEXT_COLOR_MAP: Record<string, string> = {
-    primary: 'var(--color-text-primary)',
-    secondary: 'var(--color-text-secondary)',
-    disabled: 'var(--color-text-disabled)',
-    placeholder: 'var(--color-text-secondary)',
-    accent: 'var(--color-text-accent)',
-    // A label that follows its owner's color, such as a Link's, keeps doing
-    // so when a theme styles the target's base color.
-    inherit: 'inherit',
-  };
-
   const touchesText = 'text' in components;
   const touchesHeading = 'heading' in components;
   const touchesLink = 'link' in components;
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
-      if (skipColors.has(colorName)) {
-        continue;
-      }
       if (touchesText) {
         parts.push(
           `  ${componentSelector('text', parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
@@ -1785,13 +1784,7 @@ export function generateThemeRulesSplit(
         resolveModes({...theme.localTokens, ...theme.tokens}),
       ),
     });
-    generateColorOverrides(
-      partHosts(components),
-      parts,
-      undefined,
-      partDefaultColors(components),
-    );
-    generateSizeOverrides(partHosts(components), parts);
+    generatePartTextPropOverrides(components, parts);
   }
   return {component, prose, parts};
 }
@@ -1898,13 +1891,7 @@ function onMediaCSS(
           location,
           group,
         });
-        generateColorOverrides(
-          partHosts(onMedia.components),
-          out,
-          surface,
-          partDefaultColors(onMedia.components),
-        );
-        generateSizeOverrides(partHosts(onMedia.components), out, surface);
+        generatePartTextPropOverrides(onMedia.components, out, surface);
       }
       return;
     }
@@ -2096,13 +2083,7 @@ function generateAdaptationPartsCSS(
       group: 'parts',
       darkPageSides: flipped,
     });
-    generateColorOverrides(
-      partHosts(components),
-      parts,
-      undefined,
-      partDefaultColors(components),
-    );
-    generateSizeOverrides(partHosts(components), parts);
+    generatePartTextPropOverrides(components, parts);
     if (parts.length > 0) {
       blocks.push(
         generateAdaptationMediaBlock(rule.query, parts, scopeSelector),

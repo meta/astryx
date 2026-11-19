@@ -252,7 +252,8 @@ describe('shared-element parts', () => {
     // Timestamp and Timer draw on Text's element: an explicit `color` or
     // `size` (`data-color`, `data-size` on that element) still wins over the
     // theme's `timestamp` entry in the later sub-layer, as it wins over a
-    // `text` entry.
+    // `text` entry. The overrides name the part's own target, so no other
+    // Text is reached.
     const theme = defineTheme({
       name: 'shared-element-text-props',
       tokens: {},
@@ -263,12 +264,12 @@ describe('shared-element parts', () => {
     });
     const {component} = generateThemeCSS(theme);
     const parts = component.slice(component.indexOf('@layer parts {'));
-    const part = parts.indexOf('.astryx-timestamp');
+    const part = parts.indexOf('.astryx-timestamp {');
     const color = parts.indexOf(
-      '.astryx-text[data-color="primary"] { color: var(--color-text-primary); }',
+      '.astryx-timestamp[data-color="primary"] { color: var(--color-text-primary); }',
     );
     const size = parts.indexOf(
-      '.astryx-text[data-size="sm"] { font-size: var(--font-size-sm); }',
+      '.astryx-timestamp[data-size="sm"] { font-size: var(--font-size-sm); }',
     );
     expect(part).toBeGreaterThan(-1);
     expect(color).toBeGreaterThan(part);
@@ -277,6 +278,32 @@ describe('shared-element parts', () => {
     // no override for it follows the part, so the theme's timestamp color
     // paints there, and an explicit color beats it.
     expect(parts).not.toContain('[data-color="secondary"]');
+  });
+
+  it("leaves a theme's own multi-key text entries in charge of every other Text", () => {
+    // A `timestamp` entry puts the part in the later sub-layer; nothing that
+    // selects every Text may follow it there, or it would outrank the theme's
+    // `text` entries for body text keyed on color or size.
+    const theme = defineTheme({
+      name: 'shared-element-text-entries',
+      tokens: {},
+      components: {
+        text: {
+          'type:body+color:primary': {color: 'green'},
+          'type:body+size:lg': {fontSize: '30px'},
+        },
+        timestamp: {base: {color: 'red'}},
+        timer: {base: {color: 'red'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const at = component.indexOf('@layer parts {');
+    expect(at).toBeGreaterThan(-1);
+    const parts = component.slice(at);
+    expect(parts).not.toMatch(/\.astryx-text[[.:\s{]/);
+    expect(component.slice(0, at)).toMatch(
+      /\.astryx-text\.type-body\[data-color="primary"\]|\.astryx-text[^{]*\[data-color="primary"\][^{]*\{[^}]*color: green/,
+    );
   });
 
   it("writes no Text prop rules in the parts sub-layer without a part on Text's element", () => {
