@@ -183,6 +183,7 @@ export interface PaletteMapping {
     mode: PaletteMode;
     colors: [string, string];
     page?: string;
+    pages?: string[];
   }>;
   /** The code colors that keep the base theme's because none of their family's stops reads on the code background and the page. */
   code: string[];
@@ -2042,6 +2043,20 @@ export function mapPalette(
   function statusClashes(): PaletteMapping['cvd'] {
     const out: PaletteMapping['cvd'] = [];
     const words = ['info', 'success', 'warning', 'error'];
+    // (Every mode's page: a status color set with no mode shows on each.)
+    const pages = modes.map(m => {
+      const c = parseColor(
+        String(
+          tokens['--color-background-body']?.[m]?.color ??
+            t.colorIn(
+              String(base?.[m]?.['--color-background-body'] ?? ''),
+              m,
+            ) ??
+            (m === 'light' ? '#ffffff' : '#000000'),
+        ),
+      );
+      return c ? hex(c) : m === 'light' ? '#ffffff' : '#000000';
+    });
     for (const m of modes) {
       const fills: Record<string, string> = {};
       for (const w of words) {
@@ -2070,7 +2085,13 @@ export function mapPalette(
       const page = pageOf ? hex(pageOf) : m === 'light' ? '#ffffff' : '#000000';
       for (const c of cvdClashes(fills)) {
         if (changed(c.a) || changed(c.b)) {
-          out.push({...c, mode: m, colors: [fills[c.a], fills[c.b]], page});
+          out.push({
+            ...c,
+            mode: m,
+            colors: [fills[c.a], fills[c.b]],
+            page,
+            pages,
+          });
         }
       }
     }

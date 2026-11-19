@@ -28414,11 +28414,11 @@ export function draftAnswer(ctx, env, question) {
     );
     for (const w of new Set(qWords)) {
       // ("too playful", "less minimal", "not playful", "I don't want it
-      // busy", "without being loud": the feel is what the ask moves away
-      // from, never a move toward it.)
+      // busy", "without being loud", "keep it from looking busy": the feel
+      // is what the ask moves away from, never a move toward it.)
       if (
         new RegExp(
-          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing)[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
+          String.raw`\b(?:too|less|not|no|never|overly|so|un|without|avoid(?:ing)?|don'?t\s+(?:want|like|need)|doesn'?t\s+(?:need|have)|isn'?t|aren'?t|shouldn'?t|nothing|from|stop|prevent)[\s-]+(?:[\w']+\s+){0,3}${w}\b`,
         ).test(q.toLowerCase())
       )
         continue;
@@ -28427,7 +28427,9 @@ export function draftAnswer(ctx, env, question) {
           !ownDials.has(m.dial) &&
           !clauses.some(
             c =>
-              (c.parts.length || c.aspects.length) &&
+              // ("bright red errors": a feel word said of a color, a status
+              // or the accent, describes that color.)
+              (c.parts.length || c.aspects.length || c.colors.length) &&
               new RegExp(`\\b${w}\\b`).test(c.text),
           ),
       );

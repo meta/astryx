@@ -61,7 +61,6 @@ import {
   dialFamily,
   fillAt,
   grownGrays,
-  grownFamilies,
   isGray,
   isLookToken,
   mapPalette,
@@ -70,7 +69,12 @@ import {
   sameColor,
   shade,
 } from '../theme/palette/generate/mapping.mjs';
-import {isLookFamily} from '../theme/palette/generate/derive-look.mjs';
+import {
+  cvdClashes,
+  isLookFamily,
+  lookSeeds,
+  statusSeeds,
+} from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
  * _settings (which imports this module) when it loads.
@@ -327,7 +331,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
- * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string], page?: string}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
+ * @property {Array<{a: string, b: string, vision: 'red-weak' | 'green-weak', mode: Mode, colors: [string, string], page?: string, pages?: string[]}>} [cvd] - Status fills someone red-weak or green-weak may not tell apart.
  * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {Array<{token: string, mode: Mode, pair: import('../theme/palette/generate/mapping.mjs').BasePair, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
@@ -834,8 +838,6 @@ function paletteContext(cwd, slug, data, base, tokenDefaults = {}) {
   return {
     base,
     has: token => token in tokenDefaults,
-    // The editor's own rules (Core's context.editor).
-    editor: true,
     defaults: tokenDefaults,
     reader: {
       rgb: value =>
@@ -1063,6 +1065,12 @@ function planPalette(cwd, slug, data, base) {
   // The hues the editor grew for the look (lookSeeds) go, and are grown
   // again below while the theme has a color; any other hue the config
   // holds is the author's, and stays as written.
+  const derived = fams.length
+    ? lookSeeds(
+        fams.find(f => f.id === 'accent')?.seed,
+        fams.find(f => f.id === 'neutral')?.seed,
+      )
+    : null;
   const grown = isLookFamily;
   for (let i = families.length - 1; i >= 0; i--)
     if (grown(families[i])) families.splice(i, 1);
@@ -1079,15 +1087,34 @@ function planPalette(cwd, slug, data, base) {
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
   // The category and chart hues grow with the look, after the theme's own
-  // colors, and so do the status roles the theme leaves unset (Core's
-  // grownFamilies); a family the author's config already holds stays
-  // theirs. A status family that is not a setting is the editor's, grown
-  // again at every plan.
-  for (const family of grownFamilies(fams, {
-    base,
-    reader: {rgb: parseColor, alpha: alphaOf},
-  }))
-    if (!families.some(f => f?.id === family.id)) families.push(family);
+  // colors; a hue the author's config already holds stays theirs.
+  if (derived && fams.length)
+    for (const [id, seed] of Object.entries(derived))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each (statusSeeds). They are grown again at every plan: a
+  // status family that is not a setting is the editor's.
+  if (fams.length) {
+    const unset = Object.keys(STATUS_TOKEN).filter(
+      d => !fams.some(f => f.id === d),
+    );
+    /** @type {Record<string, string>} */
+    const baseColors = {};
+    for (const d of unset) {
+      const v = base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+      const rgb = v ? parseColor(v) : null;
+      if (rgb && alphaOf(String(v)) >= 1)
+        baseColors[d] = hex(/** @type {number[]} */ (rgb));
+    }
+    const seeds = statusSeeds(
+      baseColors,
+      fams.find(f => f.id === 'accent')?.seed,
+    );
+    for (const [id, seed] of Object.entries(seeds))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
+  }
   // A color change on a palette made with the first recipe says what the
   // newer one does, and how to choose it.
   /** @param {any} c */
@@ -2136,11 +2163,15 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
     // The one to move and its way: the second of the pair first, away
     // from the first in lightness, then the other way, then the first of
     // the pair; the first move that keeps the moved fill standing out from
-    // the page (3:1, in each mode the pair clashes in) is the line. None
+    // the page (3:1, in every mode the theme shows) is the line. None
     // that does: the note names no line.
-    const pages = (pal.cvd ?? [])
-      .filter(z => z.a === c.a && z.b === c.b && z.page)
-      .map(z => /** @type {string} */ (z.page));
+    const pages = [
+      ...new Set(
+        (pal.cvd ?? [])
+          .filter(z => z.a === c.a && z.b === c.b)
+          .flatMap(z => z.pages ?? (z.page ? [z.page] : [])),
+      ),
+    ];
     const tries = /** @type {Array<[number, number]>} */ ([
       [1, 1],
       [1, -1],
@@ -2148,16 +2179,28 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
       [0, -1],
     ]);
     const [p0, p1] = c.colors.map(v => hexToOklch(v));
-    const move = tries
-      .map(([who, way]) => {
-        const [me, other] = who === 1 ? [p1, p0] : [p0, p1];
-        const sign = (me.L >= other.L ? 1 : -1) * way;
-        const L = me.L + sign * 0.15;
-        if (L < 0.15 || L > 0.95) return null;
-        const to = oklchClampedHex(L, me.C, me.H);
-        if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT)) return null;
-        return {role: who === 1 ? c.b : c.a, to, lighter: sign > 0};
-      })
+    // (The smallest move, in steps of lightness, that sets the pair apart
+    // for color-blind readers and still stands out from every page.)
+    const steps = [0.06, 0.09, 0.12, 0.15, 0.18, 0.21, 0.24, 0.27, 0.3];
+    const move = steps
+      .flatMap(d =>
+        tries.map(([who, way]) => {
+          const [me, other] = who === 1 ? [p1, p0] : [p0, p1];
+          const sign = (me.L >= other.L ? 1 : -1) * way;
+          const L = me.L + sign * d;
+          if (L < 0.15 || L > 0.95) return null;
+          const to = oklchClampedHex(L, me.C, me.H);
+          if (!pages.every(pg => contrastRatio(to, pg) >= NON_TEXT)) return null;
+          const role = who === 1 ? c.b : c.a;
+          const pair = {
+            [c.a]: role === c.a ? to : c.colors[0],
+            [c.b]: role === c.b ? to : c.colors[1],
+          };
+          if (cvdClashes(pair).some(x => x.a === c.a && x.b === c.b))
+            return null;
+          return {role, to, lighter: sign > 0};
+        }),
+      )
       .find(Boolean);
     const dial = move ? (move.role === 'error' ? 'danger' : move.role) : '';
     out.push(

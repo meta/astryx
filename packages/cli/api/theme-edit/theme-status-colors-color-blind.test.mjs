@@ -58,6 +58,47 @@ describe('status colors for color-blind readers', () => {
     );
   }, 240_000);
 
+  it('offers a line that stands out from the page in every mode', async () => {
+    await themeEditNew('cb2', {cwd, like: 'neutral'});
+    await themeEditSet('cb2', 'success', '#357d2b', {cwd});
+    const r = /** @type {any} */ (
+      await themeEditSet('cb2', 'warning', '#8a6d00', {cwd})
+    );
+    const note = String(
+      /** @type {string[]} */ (r.data.notes).find(n =>
+        /^for color-blind readers/.test(n),
+      ),
+    );
+    const to = /set cb2 \w+ '(#[0-9a-f]{6})'$/.exec(note)?.[1];
+    if (!to) return;
+    const lum = (/** @type {string} */ h) => {
+      const [r, g, b] = [1, 3, 5].map(i => {
+        const c = parseInt(h.slice(i, i + 2), 16) / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (/** @type {string} */ a, /** @type {string} */ b) => {
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    for (const page of ['#f1f1f1', '#1b1b1b'])
+      expect(ratio(to, page), page).toBeGreaterThanOrEqual(3);
+  }, 240_000);
+
+  it('keeps a change said in the same piece as a color-blind word', async () => {
+    const r = /** @type {any} */ (
+      await themeEditHow('a blue accent for color-blind users', {
+        cwd,
+        theme: 'cb',
+      })
+    );
+    const lines = /** @type {any[]} */ (r.data.results ?? []).flatMap(
+      x => x.commands,
+    );
+    expect(lines.some(c => / set cb accent '#2563eb'$/.test(c))).toBe(true);
+  }, 240_000);
+
   it('how answers a color-blind question', async () => {
     const r = /** @type {any} */ (
       await themeEditHow('are the statuses color-blind safe?', {
