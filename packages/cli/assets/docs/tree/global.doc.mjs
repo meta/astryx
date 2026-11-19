@@ -26,6 +26,7 @@ export const docs = {
     'which version',
     'computer',
   ],
+  describes: 'cli',
   slots: {
     guides: {
       title: 'Global mode, question by question',

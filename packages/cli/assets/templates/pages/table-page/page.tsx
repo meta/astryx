@@ -603,7 +603,7 @@ function DescriptionCell({item}: {item: InvoiceRow}) {
             onClick={() =>
               // Demo only: replace this toast with the call that performs the action.
               showToast({
-                body: `Dispute opened for ${item.description}`,
+                body: `Demo: a dispute for ${item.description} would open here`,
                 uniqueID: `dispute-${item.id}`,
               })
             }
@@ -791,6 +791,7 @@ function TotalRow({
 // ============= PAGE =============
 
 export default function InvoiceLineItemsTemplate() {
+  const showToast = useToast();
   const [query, setQuery] = useState('');
   const [basis, setBasis] = useState<BillingBasis | 'all'>('all');
 
@@ -866,7 +867,7 @@ export default function InvoiceLineItemsTemplate() {
         // holds the table on the same content line as the MetadataList. The
         // padding moves to the VStack, which is a plain flex container and
         // publishes nothing.
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <VStack padding={4} gap={8}>
             {/* Title, actions and document facts are one masthead, and it
                 scrolls. The Layout `header` slot would pin it: with
@@ -885,6 +886,13 @@ export default function InvoiceLineItemsTemplate() {
                   label="Download PDF"
                   variant="secondary"
                   icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the invoice PDF would download here',
+                      uniqueID: 'download-pdf',
+                    })
+                  }
                 />
               </HStack>
               <MetadataList

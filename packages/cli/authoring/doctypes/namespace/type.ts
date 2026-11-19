@@ -72,6 +72,10 @@ export interface NamespaceDoc extends AuthoredDocGraphFields {
   summary: string;
   /** Search terms that are not already present in the title or summary. */
   keywords?: string[];
+  /** `cli` on a root namespace whose pages describe the CLI itself, not the
+   *  components of a base: a run on any base reads it. Every other root of
+   *  the CLI's own docs describes Core, and only a run on Core reads it. */
+  describes?: 'cli';
   /** Named child-placement and collection targets. */
   slots: Record<string, NamespaceSlot>;
   /** Optional source-adoption rules for otherwise-unplaced docs. */

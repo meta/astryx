@@ -31,6 +31,7 @@ import {
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
 import type {CSSProperties, ReactNode} from 'react';
 
 // Custom CSS here is limited to what Astryx components can't express today:
@@ -414,6 +415,7 @@ function SyllabusSection() {
 
 // ─── Instructor ──────────────────────────────────────────────────────────────
 function InstructorSection() {
+  const showToast = useToast();
   return (
     <Section padding={6}>
       <VStack gap={4}>
@@ -457,8 +459,27 @@ function InstructorSection() {
             </HStack>
             <Text type="body">{INSTRUCTOR.bio}</Text>
             <HStack gap={2}>
-              <Button label="View full profile" />
-              <Button label="Follow" variant="ghost" />
+              <Button
+                label="View full profile"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the instructor profile would open here',
+                    uniqueID: 'profile',
+                  })
+                }
+              />
+              <Button
+                label="Follow"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: you would follow the instructor here',
+                    uniqueID: 'follow',
+                  })
+                }
+              />
             </HStack>
           </VStack>
         </Card>
@@ -469,6 +490,7 @@ function InstructorSection() {
 
 // ─── Reviews ─────────────────────────────────────────────────────────────────
 function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
+  const showToast = useToast();
   return (
     <Card padding={4}>
       <VStack gap={3}>
@@ -491,6 +513,13 @@ function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
             variant="ghost"
             size="sm"
             icon={<Icon icon={CheckIcon} size="xsm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: your vote would be counted here',
+                uniqueID: `helpful-${review.name}`,
+              })
+            }
           />
         </HStack>
       </VStack>
@@ -544,7 +573,7 @@ function ReviewsSection() {
             </HStack>
           </VStack>
         </Card>
-        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
+        <Grid columns={{minWidth: 280, max: 4, repeat: 'fit'}} gap={4}>
           {REVIEWS.map(review => (
             <ReviewCard key={review.name} review={review} />
           ))}
@@ -582,6 +611,7 @@ function FaqSection() {
 
 // ─── Enroll rail ─────────────────────────────────────────────────────────────
 function EnrollRail() {
+  const showToast = useToast();
   const [mode, setMode] = useState('self-paced');
   const [pace, setPace] = useState(7);
   const [cohort, setCohort] = useState(COHORTS[0].id);
@@ -609,11 +639,25 @@ function EnrollRail() {
             icon={
               <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
             }
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: enrollment would start here',
+                uniqueID: 'enroll',
+              })
+            }
           />
           <Button
             label="Start lesson one free"
             size="lg"
             icon={<Icon icon={PlayIcon} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: lesson one would play here',
+                uniqueID: 'lesson-one',
+              })
+            }
           />
         </VStack>
         <Text type="supporting" color="secondary">
@@ -678,8 +722,8 @@ export default function CourseDetailTemplate() {
       height="fill"
       contentWidth={1200}
       content={
-        <LayoutContent padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
+        <LayoutContent role="main" padding={6}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={6}>
             <VStack gap={4}>
               <CourseHead />
               <AboutSection />
