@@ -108,13 +108,13 @@ export const docs = {
       name: 'startIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display at the start of the input; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display at the start of the input; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label text; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display before the label text; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'status',
@@ -784,8 +784,8 @@ export const docsDense = {
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
     placeholder: 'Placeholder text.',
     labelTooltip: 'Tooltip text in info icon at label end.',
-    startIcon: 'Icon at input start; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
-    labelIcon: 'Icon before label text; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    startIcon: 'Icon at input start; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    labelIcon: 'Icon before label text; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     status:
       "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
     onEntryErrorChange:

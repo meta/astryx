@@ -164,7 +164,7 @@ export const docs = {
       name: 'labelIcon',
       type: 'ReactNode | IconType',
       description:
-        "Icon displayed before the label text; pass a semantic icon name such as 'search' (see `astryx docs icons`), an icon component, or an icon element.",
+        "Icon displayed before the label text; pass a built-in meaning such as 'search' (see `astryx docs icons`), an icon component, or an icon element.",
     },
     {
       name: 'labelTooltip',
@@ -537,7 +537,7 @@ export const docsDense = {
     onFocus: 'Fired when switch receives focus.',
     onBlur: 'Fired when switch loses focus.',
     labelIcon:
-      "Icon before label text; semantic icon name string OK, e.g. 'search' (`astryx docs icons`), or icon component/element.",
+      "Icon before label text; built-in meaning OK, e.g. 'search' (`astryx docs icons`), or icon component/element.",
     labelTooltip: 'Tooltip text in info icon at label end.',
     labelPosition: 'Which side label appears; "start" places before switch.',
     labelSpacing:

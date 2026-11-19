@@ -45,7 +45,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode | IconType',
       description:
-        'Icon to display before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon to display before the label; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'isDisabled',
@@ -95,7 +95,7 @@ export const docsDense = {
     value: "item's value within the group (matched vs group value)",
     label: 'primary label text',
     description: 'secondary text below label',
-    icon: 'icon before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    icon: 'icon before label; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     isDisabled:
       'disabled (aria-disabled); reached by arrows/typeahead, focusable, inert',
     endContent: 'content after label+description',

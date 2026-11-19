@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Component docs and the icon guide use one icon vocabulary. Prose calls the
- * drawings a theme gives Core's named icons "theme icons"; `IconRegistry` is
- * only the name of their type. "icon pack" is not an Astryx term. Keywords
- * and code keep any spelling a reader may search for or type.
+ * Component docs and the icon guide use one icon vocabulary. A name such as
+ * 'close' is a "built-in meaning", never a "semantic icon name". The drawings
+ * a theme gives those names are its "theme icons", never an "icon registry";
+ * `IconRegistry` is only the name of their type. "icon pack" is not an Astryx
+ * term. Keywords and code keep any spelling a reader may search for or type.
  */
 
 import fs from 'node:fs';
@@ -20,6 +21,7 @@ const ICON_GUIDE = 'packages/cli/assets/docs/icons.doc.mjs';
 const RETIRED = [
   {word: 'icon registry', pattern: /\bicon[- ]registr/i},
   {word: 'icon pack', pattern: /\bicon[- ]packs?\b/i},
+  {word: 'semantic icon name', pattern: /\bsemantic (icon|name)/i},
 ];
 
 /** @param {string} dir @returns {string[]} */

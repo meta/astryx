@@ -20,7 +20,7 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode | IconType',
       description:
-        'Icon displayed before the label; pass a semantic icon name such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
+        'Icon displayed before the label; pass a built-in meaning such as \'search\' (see `astryx docs icons`), an icon component, or an icon element.',
     },
     {
       name: 'description',
@@ -82,7 +82,7 @@ export const docsDense = {
     'Helper component for custom item rendering inside Selector renderOption prop.',
   propDescriptions: {
     label: 'Primary label text for item.',
-    icon: 'Icon displayed before label; semantic icon name string OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
+    icon: 'Icon displayed before label; built-in meaning OK, e.g. \'search\' (`astryx docs icons`), or icon component/element.',
     description: 'Secondary description text below label.',
     endContent: 'Additional content after label+description.',
   },
