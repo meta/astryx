@@ -315,7 +315,7 @@ grantsOrigin?}` (an HTML string).
   baseline behaviour or answers `unsupported` (DEC-4).
 - **FR18 — Native code uses public platform API only.** The web view and its
   core modules (`AstryxWebViewInfo`, `AstryxWebSessions`) use only public
-  platform API (`spec:AST-112/FR4`). One exception exists, and it is off by
+  platform API (`spec:AST-140/FR9`). One exception exists, and it is off by
   default: an app may opt in through its configuration
   (`web.privateHardening`) to private `WKPreferences` setters and WebKit
   feature flags that turn peer connections, media devices, DNS prefetching,
@@ -354,8 +354,8 @@ grantsOrigin?}` (an HTML string).
   own record, and this is the web group's.
 - Relies on `spec:AST-112` FR3 (amended): the `web` capability is a device
   feature an app opts in; Astryx's components link by default.
-- Relies on `spec:AST-112` FR4 (amended): native code uses public platform
-  API only, and a record names any exception (FR18).
+- Relies on `spec:AST-140/FR9` and `spec:AST-140/DEC-9`: native code uses
+  public platform API only, and a record names any exception (FR18).
 - Relies on `spec:AST-140` FR5: contracts grow by named features, which the
   platform info module lists (FR3, FR13, FR17).
 - `spec:AST-093/FR5` (every native component is tested and validated the same
