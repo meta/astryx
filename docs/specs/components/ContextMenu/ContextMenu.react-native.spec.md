@@ -159,7 +159,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | System menu      | the platform's context menu with its lift and dim        | prescribed by the platform | prominent      | FR2, FR3           |
 | Drawn menu       | DropdownMenu's surface and rows at the touch point       | theme intent               | prominent      | FR5                |
 | Touch sheet      | the rows in a bottom sheet                               | `component:BottomSheet`    | prominent      | FR5                |
-| Preview card     | the app's card lifted above the system menu's rows (iOS) | caller content             | supporting     | FR6                |
+| Lifted card      | the app's card lifted above the system menu's rows (iOS) | caller content             | supporting     | FR6                |
 
 The component implements design requirements without copying their rationale.
 
