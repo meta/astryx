@@ -176,6 +176,32 @@ describe('a whole-part state setting on a theme with its own variant rule', () =
     await themeEditUndo('q', {cwd});
   }, 120_000);
 
+  it('keeps a both-modes fill from a one-mode shorthand on every tab', async () => {
+    // A selected tab the theme fills in both modes, then a light-only
+    // shorthand on every tab: a copy in the selected tab's light block
+    // would follow its own fill and replace it in light mode.
+    await themeEditSet('q', 'background-color', '#222222', {
+      cwd,
+      on: 'tab',
+      state: 'selected',
+    });
+    const r = await themeEditSet('q', 'background', '#eeeeee', {
+      cwd,
+      on: 'tab',
+      mode: 'light',
+    });
+    expect(r.data.lifted).toEqual([]);
+    const settings = fs.readFileSync(
+      path.join(cwd, 'themes/q/q.settings.ts'),
+      'utf8',
+    );
+    expect(settings).not.toMatch(
+      /"selected": \{[^]*?"@light": \{[^}]*"background": "#eeeeee"/,
+    );
+    await themeEditUndo('q', {cwd});
+    await themeEditUndo('q', {cwd});
+  }, 120_000);
+
   it('lifts a one-mode setting only onto variants the theme fills in that mode', async () => {
     // A selected tab filled in dark mode only: a light-only tab fill meets
     // nothing there in light, so it is not repeated onto it.
