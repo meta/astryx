@@ -1231,23 +1231,40 @@ function generateComponentRules(
           props,
           resetInheritedPaddingSpecificity,
         );
+        // A Card rule that is not one variant's is measured on each
+        // variant's fill, as the root's Card entries (cardTintTextEntries).
+        const cardWide = component === 'card' && !/^variant:[a-z]+$/.test(key);
         if (
           selectedTint !== undefined &&
+          !cardWide &&
           props.some(([prop]) => prop === '--color-text-secondary')
         ) {
           const own = Object.fromEntries(
             props.filter(([prop]) => prop.startsWith('--')),
           );
-          // Unmeasurable: the rule's own secondary text stays on the tint.
+          const ground =
+            block === styles ? ruleTintGround(component, key) : undefined;
+          // A part's rule reads in a Card of any variant where one colour
+          // does; else on the page. Unmeasurable: the rule's own text stays.
           const derived =
-            deriveSelectedTintText(
-              selectedTint.tokens,
-              selectedTint.localTokens,
-              own,
-              block === styles
-                ? ruleTintGround(component, key)
-                : {kind: 'page'},
-            ) ?? own['--color-text-secondary'];
+            (ground === undefined || ground.kind === 'page'
+              ? (deriveSelectedTintText(
+                  selectedTint.tokens,
+                  selectedTint.localTokens,
+                  own,
+                  {kind: 'page-and-cards'},
+                ) ??
+                deriveSelectedTintText(
+                  selectedTint.tokens,
+                  selectedTint.localTokens,
+                  own,
+                ))
+              : deriveSelectedTintText(
+                  selectedTint.tokens,
+                  selectedTint.localTokens,
+                  own,
+                  ground,
+                )) ?? own['--color-text-secondary'];
           if (derived != null && !derived.includes('--color-text-secondary')) {
             finalProps.push([SELECTED_TEXT_SECONDARY, derived]);
           }
@@ -1464,10 +1481,18 @@ function cardTintTextEntries(
         entry[0].startsWith('--') && typeof entry[1] === 'string',
     ),
   );
+  // Unmeasurable: a Card rule's own concrete text stays on the tint.
+  const ownText = cardBase['--color-text-secondary'];
+  const cardOwnText =
+    ownText != null && !ownText.includes('--color-text-secondary')
+      ? ownText
+      : undefined;
   return Object.entries(CARD_FILLS).flatMap(([variant, fill]) => {
     const own = cardRules[`variant:${variant}`];
     if (
-      (!setsInput && !sets.has(fill)) ||
+      (!setsInput &&
+        !sets.has(fill) &&
+        !('--color-text-secondary' in cardBase)) ||
       (own != null && '--color-text-secondary' in own)
     ) {
       return [];
@@ -1483,6 +1508,7 @@ function cardTintTextEntries(
         kind: 'fill',
         fill,
       }) ??
+      cardOwnText ??
       THEME_TINT_TEXT;
     return [[`${SELECTED_TEXT_SECONDARY}-${variant}`, value]];
   });

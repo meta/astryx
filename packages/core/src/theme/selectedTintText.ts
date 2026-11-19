@@ -57,12 +57,14 @@ export const CARD_FILLS: Readonly<Record<string, string>> = {
 /**
  * Where the tint is measured. `page`: the page grounds. `fill`: the part's
  * fill only. `fill-and-page`: the fill and the page grounds, for a card that
- * keeps the page's text.
+ * keeps the page's text. `page-and-cards`: the page grounds and every Card
+ * variant's fill over them, for a part a rule styles wherever it sits.
  */
 export type TintGround =
   | {kind: 'page'}
   | {kind: 'fill'; fill: string}
-  | {kind: 'fill-and-page'; fill: string};
+  | {kind: 'fill-and-page'; fill: string}
+  | {kind: 'page-and-cards'};
 
 /** The secondary text on the tint in one mode, or null when not concrete. */
 function solveForMode(
@@ -93,7 +95,17 @@ function solveForMode(
   const pageSurface = over(surface, page);
   const pages = [page, pageSurface, over(card, pageSurface)];
   let grounds = pages;
-  if (where.kind !== 'page') {
+  if (where.kind === 'page-and-cards') {
+    // A part outside any one Card can sit in a Card of every variant.
+    const fills = Object.values(CARD_FILLS).map(color);
+    if (fills.some(fill => fill === null)) {
+      return null;
+    }
+    grounds = [
+      ...pages,
+      ...fills.flatMap(fill => pages.map(ground => over(fill as RGBA, ground))),
+    ];
+  } else if (where.kind !== 'page') {
     const own = color(where.fill);
     if (own === null) {
       return null;

@@ -268,6 +268,19 @@ function tintSecondary(theme, part, key, variant) {
     const own = rule(theme, part, key)['--color-text-secondary'];
     if (own) return own;
   }
+  // A rule that sets the part's secondary text measures it again there, in
+  // a Card of any variant where one colour reads, else on the page.
+  const partBase = Object.fromEntries(
+    Object.entries(rule(theme, part)).filter(([name]) => name.startsWith('--')),
+  );
+  if (part !== 'card' && partBase['--color-text-secondary'])
+    return (
+      deriveSelectedTintText(theme.tokens, theme.localTokens, partBase, {
+        kind: 'page-and-cards',
+      }) ??
+      deriveSelectedTintText(theme.tokens, theme.localTokens, partBase) ??
+      partBase['--color-text-secondary']
+    );
   const sets = SELECTED_TINT_INPUTS.some(
     token => token in theme.tokens || token in (theme.localTokens ?? {}),
   );
@@ -289,9 +302,15 @@ function tintSecondary(theme, part, key, variant) {
       },
     );
   // Card reads its variant's entry: Core's, or the theme root's when the
-  // theme sets a colour the measurement reads or that variant's fill.
+  // theme sets a colour the measurement reads, that variant's fill, or a
+  // Card-wide secondary text.
+  const baseRule = Object.fromEntries(
+    Object.entries(rule(theme, 'card')).filter(([name]) =>
+      name.startsWith('--'),
+    ),
+  );
   const setsFill = fill in theme.tokens || fill in (theme.localTokens ?? {});
-  if (!sets && !setsFill) {
+  if (!sets && !setsFill && !baseRule['--color-text-secondary']) {
     return (
       deriveSelectedTintText(
         colorDefaults,
@@ -304,11 +323,6 @@ function tintSecondary(theme, part, key, variant) {
       ) ?? deriveSelectedTintText(colorDefaults, {}, {}, {kind: 'fill', fill})
     );
   }
-  const baseRule = Object.fromEntries(
-    Object.entries(rule(theme, 'card')).filter(([name]) =>
-      name.startsWith('--'),
-    ),
-  );
   return (
     deriveSelectedTintText(theme.tokens, theme.localTokens, baseRule, {
       kind: 'fill-and-page',
@@ -318,6 +332,7 @@ function tintSecondary(theme, part, key, variant) {
       kind: 'fill',
       fill,
     }) ??
+    baseRule['--color-text-secondary'] ??
     themeTokens(theme)['--color-text-secondary']
   );
 }

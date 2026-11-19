@@ -256,6 +256,50 @@ describe('secondary text on the accent tint', () => {
     );
   });
 
+  it('measures a Card-wide rule on each variant and a part rule on every Card fill', () => {
+    const theme = defineTheme({
+      name: 'card-wide',
+      tokens: {},
+      components: {
+        card: {base: {'--color-text-secondary': '#6b6b6b'}},
+        item: {base: {'--color-text-secondary': '#6b6b6b'}},
+      },
+    });
+    const css = generateThemeCSS(theme).component;
+    // No one page-measured value on every Card over its variant's entry.
+    expect(css).not.toMatch(
+      /\.astryx-card[^{,]*\{[^}]*--_selected-text-secondary:/,
+    );
+    const tokens = {
+      ...(colorDefaults as Record<string, string>),
+      '--color-text-secondary': '#6b6b6b',
+    };
+    for (const [variant, fill] of Object.entries(CARD_FILLS)) {
+      const entry = new RegExp(
+        `--_selected-text-secondary-${variant}: (light-dark\\([^;]*\\));`,
+      ).exec(css)?.[1];
+      expect(entry, variant).toBeDefined();
+      expect(
+        lowestRatio(tokens, pair(entry ?? null), fill),
+        variant,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    const onItem =
+      /\.astryx-item[^{]*\{[^}]*--_selected-text-secondary: (light-dark\([^;]*\));/.exec(
+        css,
+      )?.[1];
+    expect(onItem).toBeDefined();
+    expect(lowestRatio(tokens, pair(onItem ?? null))).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    for (const [variant, fill] of Object.entries(CARD_FILLS)) {
+      expect(
+        lowestRatio(tokens, pair(onItem ?? null), fill),
+        variant,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("measures again on a Card variant's fill where the page's text there changes", () => {
     // A translucent tint shows the card's fill through it.
     const tokens = {
