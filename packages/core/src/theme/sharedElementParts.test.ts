@@ -15,7 +15,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {SHARED_ELEMENT_PARTS} from './sharedElementParts';
-import {defineTheme} from './defineTheme';
+import {defineTheme, type TokenName, type TokenValue} from './defineTheme';
 import {
   generateAdaptationCSS,
   generateOnMediaCSS,
@@ -164,11 +164,11 @@ describe('shared-element parts', () => {
   describe('on a surface that flips with the page', () => {
     // An inverted fill dark on a light page and light on a dark one: a toast
     // card takes its light side on a dark page.
-    const flipping = {
+    const flipping: Partial<Record<TokenName, TokenValue>> = {
       '--color-background-inverted': ['#0a1317', '#f4f0e8'],
       '--color-on-dark': ['#ffffff', '#ffffff'],
       '--color-on-light': ['#111111', '#111111'],
-    } as const;
+    };
     const flipped = '[data-astryx-media-dark-page="light"]';
     const modes = {'@dark': {color: '#fafafa'}, '@light': {color: '#121212'}};
 
