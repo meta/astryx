@@ -110,8 +110,8 @@ no navigation host.
     bar items and menus, toolbars, tab bar minimize, the tab accessory,
     scroll-edge and bar behaviour, and the insets they report.
   - The header and tab bar components decide their own rendering in their own
-    component records, through the components' rendering axis
-    (`spec:AST-112/FR21`): the stack host's bar and the tabs host's tab bar are
+    component records, through the components' rendering axis: the stack
+    host's bar and the tabs host's tab bar are
     its `system` form, and a header or tab bar Astryx draws is `drawn`. The
     hosts host either: the stack host carries a screen with the system bar or
     with a header the component draws, and a drawn tab bar renders without the
@@ -121,8 +121,9 @@ no navigation host.
     concerns a route, its `routeKey`.
   - The router reaches the hosts through the package's internal host entry; an
     app imports the router, and the hosts stay internal behind it.
-  - Astryx provides this router so that Astryx's header, tab bar and sheets
-    work with the native hosts and the gesture layer. An app may navigate with
+  - Astryx provides this router so that Astryx's screen header (`TopNav`), tab
+    bar and sheets work with the native hosts and the gesture layer
+    (`spec:AST-112/DEC-9`). An app may navigate with
     another router instead, such as Expo Router: Astryx components work inside
     that router's screens, and its navigation and chrome stay its own (DEC-6).
 - **FR2 — The AstryxRouter protocol.** One view of a root's routes for the
@@ -372,7 +373,7 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
     hears no native pop and the router warns once, in development and in
     release builds.
 - **FR15 — Public platform API, with two named exceptions.** The hosts follow
-  `spec:AST-112/FR4` and use the public API of UIKit, the Android SDK, AndroidX
+  `spec:AST-140/FR9` and use the public API of UIKit, the Android SDK, AndroidX
   and Material Components. The group's exceptions are on Android, each with a
   public-API fallback:
   - Predictive back in a nested stack forwards the gesture's progress to the
@@ -431,9 +432,9 @@ width, height, insets, topBarBottom, verticalBarEdge}`: its size, the room
 - Relies on `spec:AST-140/FR5`: native contracts grow by named features.
 - Relies on `spec:AST-128` FR9: the presentation host's `appearance` styles
   the surfaces a screen presents natively (FR7 here).
-- Relies on `spec:AST-112` FR4 (amended): native code uses public platform API
-  only, and a record names its exceptions (FR15 here).
-- Details `spec:AST-112/FR2` (router and hosts), `spec:AST-112/FR5` (the
+- Relies on `spec:AST-140/FR9` and `spec:AST-140/DEC-9`: native code uses
+  public platform API only, and a record names its exceptions (FR15 here).
+- Details `spec:AST-112/FR5` (the
   `./navigation` entry holds the router), `spec:AST-112/FR7` (FR12 here) and
   `spec:AST-112/DEC-9`, and applies `spec:AST-140/FR2`, `spec:AST-140/FR3`
   (FR12 here) and `spec:AST-140/FR6` (FR11 here).
