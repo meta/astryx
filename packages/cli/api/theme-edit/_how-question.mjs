@@ -177,27 +177,6 @@ const FONTSOURCE_NAMES = new Set(
   FONTSOURCE_FAMILIES.map(name => name.toLowerCase().replace(/\s+/g, ' ')),
 );
 
-/** Fonts every system carries, said by name ("Arial-style font"). */
-const WEB_SAFE_FONTS = new Set([
-  'arial',
-  'helvetica',
-  'verdana',
-  'tahoma',
-  'georgia',
-  'times',
-  'courier',
-  'trebuchet',
-  'calibri',
-  'cambria',
-  'garamond',
-  'futura',
-  'palatino',
-  'consolas',
-  'menlo',
-  'monaco',
-  'segoe',
-]);
-
 const DESIGN_WORDS = [
   'leading',
   // A part's name, never a near miss of "radius".
@@ -5184,17 +5163,16 @@ export function draftAnswer(ctx, env, question) {
           : `${w}, `;
       },
     )
-    // ("Helvetica-style type": a font said as a style of the type is that
-    // font. "Charcoal-style bold system font": any other word said so is
-    // the typeface's likeness, one word, never a color.)
+    // ("Helvetica-style type", "Gotham-style font": a family said as a
+    // style of the type is that family. "Charcoal-style bold system font":
+    // a color word said so is kept as one word, never read as a color.)
     .replace(
       /\b([a-z]+)-(style|styled|like|esque)(?=\s+(?:[a-z-]+\s+){0,3}(?:fonts?|typefaces?|type|lettering)\b)/gi,
       (_m, /** @type {string} */ w, /** @type {string} */ tail) =>
-        new RegExp(`^(?:${FONT_NAMES})$`, 'i').test(w) ||
-        FONTSOURCE_NAMES.has(w.toLowerCase()) ||
-        WEB_SAFE_FONTS.has(w.toLowerCase())
-          ? w
-          : `${w}${tail}`,
+        !new RegExp(`^(?:${FONT_NAMES})$`, 'i').test(w) &&
+        colorsFound(w.toLowerCase()).length
+          ? `${w}${tail}`
+          : w,
     )
     // ("sunny yellow highlights"): a highlight color with no part that
     // draws it is no part's fill; the color is named in the answer as not
@@ -27728,22 +27706,35 @@ export function draftAnswer(ctx, env, question) {
   for (const unmet of result.filter(d => d.unmet)) {
     const [, what, part] =
       /^(.+?)(?: on ([a-z0-9-]+))?$/.exec(String(unmet.unmet ?? '')) ?? [];
-    const undoAt = clauses.indexOf(/** @type {any} */ (draftClause.get(unmet)));
+    const uc = /** @type {any} */ (draftClause.get(unmet));
+    const undoAt = clauses.indexOf(uc);
+    // ("Undo the card and heading changes": every part the undo names;
+    // "Undo the corner change": with no part, the corners on any part.)
+    const named = [
+      ...new Set([
+        ...(part ? [part] : []),
+        ...(uc?.parts ?? []).map((/** @type {{on: string}} */ p) => p.on),
+      ]),
+    ];
+    const aspects = [
+      ...new Set([
+        ...(uc?.aspects ?? []),
+        ...(what === 'everything' ? [] : [what]),
+      ]),
+    ];
     const undone = result.filter(d => {
       const c = /** @type {any} */ (draftClause.get(d));
       if (d === unmet || d.unmet || !d.options.length || !c) return false;
       if (undoAt >= 0 && clauses.indexOf(c) >= undoAt) return false;
-      // (Of the part the undo names; with no part, of the whole theme.)
-      const onPart = part
-        ? c.parts?.some(
-            (/** @type {{on: string}} */ p) =>
-              p.on === part || (FAMILIES[part] ?? []).includes(p.on),
-          )
-        : !c.parts?.length;
+      const onPart =
+        !named.length ||
+        c.parts?.some((/** @type {{on: string}} */ p) =>
+          named.some(n => p.on === n || (FAMILIES[n] ?? []).includes(p.on)),
+        );
       return (
         onPart &&
-        (what === 'everything' ||
-          c.aspects?.includes(what) ||
+        (!aspects.length ||
+          aspects.some(a => c.aspects?.includes(a)) ||
           d.options
             .flat()
             .some(
