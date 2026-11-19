@@ -16,9 +16,10 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {CHART_WIDTHS} from '../../foundation/render/charts.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
-import {renderedMarkupOf} from '../../foundation/render/source-block.mjs';
+import {readSourceBlock, renderedMarkupOf} from '../../foundation/render/source-block.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -87,6 +88,134 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
+const LATER_TEXT_PAGE = `import {useState} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import {Heading, Text} from '@astryxdesign/core/Text';
+
+function Settings() {
+  return (
+    <div>
+      <Heading level={1}>Settings</Heading>
+      <Heading level={2}>Appearance</Heading>
+    </div>
+  );
+}
+
+export default function Page() {
+  const [view, setView] = useState('home');
+  return (
+    <div>
+      <Button label="Settings" onClick={() => setView('settings')} />
+      <Banner status="info" title="What changed">Three fields moved to the settings page.</Banner>
+      <Badge>
+        <Text>Finalized</Text>
+      </Badge>
+      <StatCard title="Q3">
+        <Text>Revenue grew 12%</Text>
+      </StatCard>
+      <ui.Box title="Q4">
+        <Text>Costs fell 3%</Text>
+      </ui.Box>
+      {view === 'settings' ? <Settings /> : <Text>Home</Text>}
+    </div>
+  );
+}
+
+function StatCard({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+function Box({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
+}
+
+const ui = {Box};
+`;
+
+describe('render(): text a component did not draw', () => {
+  /** @type {import('./render.type.mjs').RenderWarning[]} */
+  let dropped;
+
+  beforeAll(async () => {
+    put('later-text.tsx', LATER_TEXT_PAGE);
+    const result = /** @type {any} */ (await render('later-text.tsx', {cwd: dir}));
+    dropped = result.data.warnings.filter(
+      (/** @type {any} */ w) => w.code === 'dropped-children',
+    );
+  }, 60_000);
+
+  it('names the component whose docs list no children, not the text inside it', () => {
+    expect(dropped[0].message).toBe(
+      '<Badge> on line 22 did not render the text "Finalized" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    );
+  });
+
+  it('still warns when a component of the page around the text drops it, by name or as a member', () => {
+    expect(dropped.slice(1).map(w => w.message)).toEqual([
+      '<Text> on line 26 did not render the text "Revenue grew 12%" it was given; it takes that text through a prop (often label=), so check its props.',
+      '<Text> on line 29 did not render the text "Costs fell 3%" it was given; it takes that text through a prop (often label=), so check its props.',
+    ]);
+  });
+
+  it('stays silent for text a later paint shows: a collapsed Banner body, an inactive view', () => {
+    const text = dropped.map(w => w.message).join('\n');
+    expect(text).not.toContain('Three fields moved');
+    expect(text).not.toContain('Appearance');
+  });
+});
+
+describe('render(): text dropped in another file of the page', () => {
+  it('names that file, and not the page itself', async () => {
+    put(
+      'split/parts.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+
+export function Note() {
+  return (
+    <div>
+      <Text>Seen</Text>
+      <Badge>
+        <Text>Beta</Text>
+      </Badge>
+    </div>
+  );
+}
+`,
+    );
+    put(
+      'split/page.tsx',
+      `import {Badge} from '@astryxdesign/core/Badge';
+import {Text} from '@astryxdesign/core/Text';
+import {Note} from './parts';
+
+export default function Page() {
+  return (
+    <div>
+      <Text>Here</Text>
+      <Badge>
+        <Text>Alpha</Text>
+      </Badge>
+      <Note />
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('split/page.tsx', {cwd: dir}));
+    const messages = result.data.warnings
+      .filter((/** @type {any} */ w) => w.code === 'dropped-children')
+      .map((/** @type {any} */ w) => w.message)
+      .sort();
+    expect(messages).toEqual([
+      '<Badge> on line 8 of parts.tsx did not render the text "Beta" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+      '<Badge> on line 9 did not render the text "Alpha" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    ]);
+  }, 60_000);
+});
+
 describe('render(): page to one HTML file', () => {
   /** @type {import('./render.type.mjs').RenderPageResponse} */
   let result;
@@ -143,8 +272,9 @@ describe('render(): page to one HTML file', () => {
   it('warns when a component drops the text it was given', () => {
     const dropped = result.data.warnings.filter(w => w.code === 'dropped-children');
     expect(dropped).toHaveLength(1);
-    expect(dropped[0].message).toContain('ListItem');
-    expect(dropped[0].message).toContain('label=');
+    expect(dropped[0].message).toContain('<ListItem> on line 16');
+    expect(dropped[0].message).toContain('ListItem takes no children');
+    expect(dropped[0].message).toContain('astryx component ListItem');
   });
 
   it('gives the page back byte for byte', async () => {
@@ -365,7 +495,7 @@ describe('render(): every write takes its place in one step', () => {
     60_000,
   );
 
-  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+  it('uses the project\'s own file where an alias leads outside the new folder to the same bytes', async () => {
     put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
     put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
     put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
@@ -373,16 +503,9 @@ describe('render(): every write takes its place in one step', () => {
     put('alias-loop/src/app/page.tsx', page);
     const cwd = path.join(dir, 'alias-loop');
     await render('src/app/page.tsx', {cwd});
-    /** @type {any} */
-    let refused;
-    try {
-      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
-    } catch (e) {
-      refused = e;
-    }
-    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
-    expect(refused.message).toContain('src/app/page.tsx');
-    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    const back = /** @type {any} */ (await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'}));
+    expect(back.data.files).toEqual(['restored/app/page.tsx', 'restored/lib/helper.ts']);
+    expect(back.data.aliased).toEqual({imports: [], sameAsProject: [{import: '@/app/page', file: 'src/app/page.tsx'}]});
     expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
   }, 60_000);
 
@@ -502,6 +625,277 @@ export default function Page() {
     expect(fs.readFileSync(path.join(dir, 'moved/page.html'), 'utf8')).toContain('From JSON');
     expect(again.type).toBe('render.page');
   }, 60_000);
+
+  /**
+   * An ES module package of three files: `src/index.js` re-exports a badge
+   * that imports its label by a relative path.
+   * @param {string} at the package folder, from the test folder
+   * @param {string} name
+   */
+  const putLinkedPackage = (at, name) => {
+    put(`${at}/package.json`, JSON.stringify({name, version: '1.0.0', type: 'module', exports: {'.': './src/index.js'}}));
+    put(`${at}/src/index.js`, "export {Badge} from './parts/badge.js';\n");
+    put(`${at}/src/parts/badge.js`, "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nexport function Badge() { return jsx('strong', {children: label}); }\n");
+    put(`${at}/src/parts/label.js`, `export const label = '${name} badge text';\n`);
+  };
+  /** @param {string} link the link, from the test folder @param {string} target the folder it names, from the test folder */
+  const linkFolder = (link, target) => {
+    fs.mkdirSync(path.dirname(path.join(dir, link)), {recursive: true});
+    fs.symlinkSync(path.join(dir, target), path.join(dir, link), 'junction');
+  };
+  /**
+   * Render a page, give the file back inside the same project, and render the
+   * restored page again: the same markup both times.
+   * @param {string} page the page, from the test folder
+   */
+  const roundTrip = async page => {
+    const first = /** @type {any} */ (await render(page, {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, page.replace(/\.tsx$/, '.html')), 'utf8');
+    const restored = path.join(path.dirname(page), 'restored', path.basename(page)).split(path.sep).join('/');
+    const back = /** @type {any} */ (await render(page.replace(/\.tsx$/, '.html'), {cwd: dir, reverse: true, out: restored}));
+    await render(restored, {cwd: dir});
+    const again = fs.readFileSync(path.join(dir, restored.replace(/\.tsx$/, '.html')), 'utf8');
+    return {first, back, markup: renderedMarkupOf(html), againMarkup: renderedMarkupOf(again)};
+  };
+
+  it('treats a package linked from a folder in the project as a package: the file carries the page, and gives it back exactly', async () => {
+    // `npm link`: node_modules links to a folder that the project holds.
+    put('npm-link/package.json', '{"name":"npm-link","private":true}');
+    putLinkedPackage('npm-link/vendor/badge', '@acme/linked');
+    linkFolder('npm-link/node_modules/@acme/linked', 'npm-link/vendor/badge');
+    put('npm-link/page.tsx', "import {Badge} from '@acme/linked';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    // A `file:` dependency, installed as a link to its folder.
+    put('file-dep/package.json', JSON.stringify({name: 'file-dep', private: true, dependencies: {'@acme/local': 'file:./libs/local'}}));
+    putLinkedPackage('file-dep/libs/local', '@acme/local');
+    linkFolder('file-dep/node_modules/@acme/local', 'file-dep/libs/local');
+    put('file-dep/page.tsx', "import {Badge} from '@acme/local';\nexport default function Page() { return <p><Badge /> after</p>; }\n");
+    for (const [page, name] of [['npm-link/page.tsx', '@acme/linked'], ['file-dep/page.tsx', '@acme/local']]) {
+      const {first, back, markup, againMarkup} = await roundTrip(page);
+      expect(first.data.files).toEqual(['page.tsx']);
+      expect(markup).toContain(`${name} badge text`);
+      expect(back.data.exact).toBe(true);
+      expect(back.data.files).toEqual([path.join(path.dirname(page), 'restored/page.tsx').split(path.sep).join('/')]);
+      expect(againMarkup).toBe(markup);
+    }
+  }, 120_000);
+
+  it('carries the files of a linked folder that the page imports by a relative path, as its own', async () => {
+    put('rel-link/package.json', '{"name":"rel-link","private":true}');
+    putLinkedPackage('rel-link/vendor/badge', '@acme/rel');
+    put('rel-link/vendor/badge/src/parts/badge.css', '.rel-badge { letter-spacing: 4px; }');
+    put(
+      'rel-link/vendor/badge/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'rel-badge', children: label}); }\n",
+    );
+    linkFolder('rel-link/node_modules/@acme/rel', 'rel-link/vendor/badge');
+    put('rel-link/page.tsx', "import {Badge} from './vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('rel-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.css', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/rel badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('carries the files of a linked folder that the page imports through a path alias', async () => {
+    put('alias-link/package.json', '{"name":"alias-link","private":true}');
+    put('alias-link/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@/*': ['./*']}}}));
+    putLinkedPackage('alias-link/vendor/badge', '@acme/aliased');
+    linkFolder('alias-link/node_modules/@acme/aliased', 'alias-link/vendor/badge');
+    put('alias-link/page.tsx', "import {Badge} from '@/vendor/badge/src/index.js';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('alias-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['page.tsx', 'vendor/badge/src/index.js', 'vendor/badge/src/parts/badge.js', 'vendor/badge/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('@acme/aliased badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+    // Outside the project, the file still gives back every file the page imports.
+    fs.copyFileSync(path.join(dir, 'alias-link/page.html'), path.join(dir, 'alias-link-moved.html'));
+    const moved = /** @type {any} */ (await render('alias-link-moved.html', {cwd: dir, reverse: true, out: 'alias-link-moved/page.tsx'}));
+    expect(moved.data.missing ?? []).toEqual([]);
+    expect(moved.data.files).toEqual(expect.arrayContaining(['alias-link-moved/vendor/badge/src/index.js']));
+  }, 120_000);
+
+  it('carries the stylesheets of a linked folder that a carried module reaches after the package loaded', async () => {
+    put('late-link/package.json', '{"name":"late-link","private":true}');
+    putLinkedPackage('late-link/vendor/kit', '@acme/late');
+    put('late-link/vendor/kit/src/parts/badge.css', '.late-badge { letter-spacing: 5px; }');
+    put('late-link/vendor/kit/src/parts/label.css', '.late-label { word-spacing: 6px; }');
+    put(
+      'late-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'late-badge late-label', children: label}); }\n",
+    );
+    put('late-link/vendor/kit/src/parts/label.js', "import './label.css';\nexport const label = '@acme/late badge text';\n");
+    linkFolder('late-link/node_modules/@acme/late', 'late-link/vendor/kit');
+    // The package loads first, by its name; then the page's own module reaches
+    // two of its files by their paths.
+    put('late-link/own.js', "import './vendor/kit/src/parts/badge.css';\nimport {label} from './vendor/kit/src/parts/label.js';\nexport const own = `own ${label}`;\n");
+    put(
+      'late-link/page.tsx',
+      "import {Badge} from '@acme/late';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('late-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['own.js', 'page.tsx', 'vendor/kit/src/parts/badge.css', 'vendor/kit/src/parts/label.css', 'vendor/kit/src/parts/label.js'].sort(),
+    );
+    expect(markup).toContain('own @acme/late badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it("carries a linked folder's stylesheet that a carried stylesheet imports, whichever imported it first", async () => {
+    put('share-link/package.json', '{"name":"share-link","private":true}');
+    putLinkedPackage('share-link/vendor/kit', '@acme/share');
+    put('share-link/vendor/kit/src/parts/tokens.css', '.share-badge { letter-spacing: 7px; }');
+    put('share-link/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.share-badge { word-spacing: 1px; }");
+    put('share-link/vendor/kit/src/parts/more.css', '.share-more { letter-spacing: 8px; }');
+    put('share-link/vendor/kit/src/parts/theme.css', "@import './more.css';\n");
+    put(
+      'share-link/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport './badge.css';\nexport function Badge() { return jsx('strong', {className: 'share-badge share-more', children: label}); }\n",
+    );
+    linkFolder('share-link/node_modules/@acme/share', 'share-link/vendor/kit');
+    // The package's own stylesheet imports tokens.css first; then the page's
+    // own stylesheet imports it too, and the page reaches theme.css by its path.
+    put('share-link/app.css', "@import './vendor/kit/src/parts/tokens.css';\n");
+    put('share-link/own.js', "import './app.css';\nimport './vendor/kit/src/parts/theme.css';\nexport const own = 'own';\n");
+    put(
+      'share-link/page.tsx',
+      "import {Badge} from '@acme/share';\nimport {own} from './own.js';\nexport default function Page() { return <p><Badge /> {own}</p>; }\n",
+    );
+    const {first, back, markup, againMarkup} = await roundTrip('share-link/page.tsx');
+    expect([...first.data.files].sort()).toEqual(
+      ['app.css', 'own.js', 'page.tsx', 'vendor/kit/src/parts/more.css', 'vendor/kit/src/parts/theme.css', 'vendor/kit/src/parts/tokens.css'].sort(),
+    );
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('leaves out a project file that only a linked package imports, as one of the package', async () => {
+    put('reach-out/package.json', '{"name":"reach-out","private":true}');
+    putLinkedPackage('reach-out/vendor/kit', '@acme/reach');
+    put('reach-out/shared/util.js', "export const suffix = 'from shared';\n");
+    put(
+      'reach-out/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport {suffix} from '../../../../shared/util.js';\nexport function Badge() { return jsx('strong', {children: `${label} ${suffix}`}); }\n",
+    );
+    linkFolder('reach-out/node_modules/@acme/reach', 'reach-out/vendor/kit');
+    put('reach-out/page.tsx', "import {Badge} from '@acme/reach';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('reach-out/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(first.data.notCarried ?? []).toEqual([]);
+    expect(markup).toContain('@acme/reach badge text from shared');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('treats a workspace package that another linked package links in as a package too', async () => {
+    put('ws-nest/package.json', JSON.stringify({name: 'ws-nest', private: true, workspaces: ['packages/*']}));
+    putLinkedPackage('ws-nest/packages/utils', '@acme/nest-utils');
+    putLinkedPackage('ws-nest/packages/ui', '@acme/nest-ui');
+    put(
+      'ws-nest/packages/ui/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {label} from '@acme/nest-utils/src/parts/label.js';\nexport function Badge() { return jsx('strong', {children: `ui ${label}`}); }\n",
+    );
+    put(
+      'ws-nest/packages/utils/package.json',
+      JSON.stringify({name: '@acme/nest-utils', version: '1.0.0', type: 'module', exports: {'.': './src/index.js', './src/parts/label.js': './src/parts/label.js'}}),
+    );
+    // pnpm links a workspace dependency into the package's own node_modules.
+    linkFolder('ws-nest/node_modules/@acme/nest-ui', 'ws-nest/packages/ui');
+    linkFolder('ws-nest/packages/ui/node_modules/@acme/nest-utils', 'ws-nest/packages/utils');
+    put('ws-nest/src/page.tsx', "import {Badge} from '@acme/nest-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('ws-nest/src/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx']);
+    expect(markup).toContain('ui @acme/nest-utils badge text');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it("carries an image that only a linked package's module names, for the script to draw later", async () => {
+    put('late-img/package.json', '{"name":"late-img","private":true}');
+    put('late-img/public/pics/late.png', PNG);
+    putLinkedPackage('late-img/vendor/kit', '@acme/late-img');
+    put(
+      'late-img/vendor/kit/src/parts/badge.js',
+      "import {jsx} from 'react/jsx-runtime';\nimport {useEffect, useState} from 'react';\nexport function Badge() {\n  const [on, setOn] = useState(false);\n  useEffect(() => setOn(true), []);\n  return on ? jsx('img', {src: '/pics/late.png', alt: 'later'}) : jsx('span', {children: 'before the script'});\n}\n",
+    );
+    linkFolder('late-img/node_modules/@acme/late-img', 'late-img/vendor/kit');
+    put('late-img/page.tsx', "import {Badge} from '@acme/late-img';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back} = await roundTrip('late-img/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx', 'public/pics/late.png']);
+    const html = fs.readFileSync(path.join(dir, 'late-img/page.html'), 'utf8');
+    // The script draws the image from the file's own data, not from its path.
+    expect(html.slice(html.lastIndexOf('<script>'))).not.toMatch(/["'`]\/pics\/late\.png["'`]/);
+    expect(back.data.exact).toBe(true);
+  }, 120_000);
+
+  it("keeps a linked package's styles, JSON and images in the page, and carries only the images its script reads", async () => {
+    put('link-assets/package.json', '{"name":"link-assets","private":true}');
+    putLinkedPackage('link-assets/vendor/kit', '@acme/kit');
+    put('link-assets/vendor/kit/src/parts/logo.png', PNG);
+    put('link-assets/vendor/kit/src/parts/data.json', '{"count": 7}');
+    put('link-assets/vendor/kit/src/parts/badge.css', "@import './tokens.css';\n.kit-badge { letter-spacing: 3px; }");
+    put('link-assets/vendor/kit/src/parts/tokens.css', '.kit-badge { word-spacing: 2px; }');
+    put(
+      'link-assets/vendor/kit/src/parts/badge.js',
+      "import {jsx, jsxs} from 'react/jsx-runtime';\nimport {label} from './label.js';\nimport logo from './logo.png';\nimport data from './data.json';\nimport './badge.css';\nexport function Badge() { return jsxs('strong', {className: 'kit-badge', children: [jsx('img', {src: logo, alt: ''}), label, ' ', data.count]}); }\n",
+    );
+    linkFolder('link-assets/node_modules/@acme/kit', 'link-assets/vendor/kit');
+    put('link-assets/page.tsx', "import {Badge} from '@acme/kit';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    const {first, back, markup, againMarkup} = await roundTrip('link-assets/page.tsx');
+    expect(first.data.files).toEqual(['page.tsx', 'vendor/kit/src/parts/logo.png']);
+    const html = fs.readFileSync(path.join(dir, 'link-assets/page.html'), 'utf8');
+    expect(html).toMatch(/\.kit-badge ?\{ ?letter-spacing: ?3px/);
+    expect(html).toMatch(/word-spacing: ?2px/);
+    expect(markup).toContain('@acme/kit badge text 7');
+    expect(markup).toContain('data:image/png;base64,');
+    expect(back.data.exact).toBe(true);
+    expect(againMarkup).toBe(markup);
+  }, 120_000);
+
+  it('treats a workspace package linked inside the project as a package, and keeps the layouts that work today', async () => {
+    // A workspace whose root is the project: its package is linked in node_modules.
+    put('ws-root/package.json', JSON.stringify({name: 'ws-root', private: true, workspaces: ['packages/*']}));
+    putLinkedPackage('ws-root/packages/ui', '@acme/ws-ui');
+    linkFolder('ws-root/node_modules/@acme/ws-ui', 'ws-root/packages/ui');
+    put('ws-root/src/page.tsx', "import {Badge} from '@acme/ws-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // A pnpm workspace app: the package is outside the app's project.
+    put('ws-app/pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n  - 'packages/*'\n");
+    putLinkedPackage('ws-app/packages/ui', '@acme/app-ui');
+    put('ws-app/apps/web/package.json', JSON.stringify({name: 'web', private: true, dependencies: {'@acme/app-ui': 'workspace:*'}}));
+    linkFolder('ws-app/apps/web/node_modules/@acme/app-ui', 'ws-app/packages/ui');
+    put('ws-app/apps/web/page.tsx', "import {Badge} from '@acme/app-ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // The pnpm store layout: node_modules links into node_modules/.pnpm.
+    put('pnpm-store/package.json', '{"name":"pnpm-store","private":true}');
+    putLinkedPackage('pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored', '@acme/stored');
+    linkFolder('pnpm-store/node_modules/@acme/stored', 'pnpm-store/node_modules/.pnpm/@acme+stored@1.0.0/node_modules/@acme/stored');
+    put('pnpm-store/page.tsx', "import {Badge} from '@acme/stored';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    // A CommonJS package and an ES module package, installed as folders.
+    put('cjs-pkg/package.json', '{"name":"cjs-pkg","private":true}');
+    put('cjs-pkg/node_modules/acme-cjs/package.json', JSON.stringify({name: 'acme-cjs', version: '1.0.0', main: './lib/index.js'}));
+    put('cjs-pkg/node_modules/acme-cjs/lib/index.js', "exports.Badge = require('./badge.js').Badge;\n");
+    put('cjs-pkg/node_modules/acme-cjs/lib/badge.js', "const {jsx} = require('react/jsx-runtime');\nexports.Badge = function Badge() { return jsx('strong', {children: 'acme-cjs badge text'}); };\n");
+    put('cjs-pkg/page.tsx', "import {Badge} from 'acme-cjs';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    put('esm-pkg/package.json', '{"name":"esm-pkg","private":true}');
+    putLinkedPackage('esm-pkg/node_modules/@acme/esm', '@acme/esm');
+    put('esm-pkg/page.tsx', "import {Badge} from '@acme/esm';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    for (const [page, text] of [
+      ['ws-root/src/page.tsx', '@acme/ws-ui badge text'],
+      ['ws-app/apps/web/page.tsx', '@acme/app-ui badge text'],
+      ['pnpm-store/page.tsx', '@acme/stored badge text'],
+      ['cjs-pkg/page.tsx', 'acme-cjs badge text'],
+      ['esm-pkg/page.tsx', '@acme/esm badge text'],
+    ]) {
+      const {first, back, markup, againMarkup} = await roundTrip(page);
+      expect(first.data.files).toEqual(['page.tsx']);
+      expect(markup).toContain(text);
+      expect(back.data.exact).toBe(true);
+      expect(againMarkup).toBe(markup);
+    }
+  }, 180_000);
 
   it('uses an explicit --title', async () => {
     const r = /** @type {any} */ (await render('page.tsx', {cwd: dir, out: 'titled.html', title: 'Q3 <report>'}));
@@ -693,7 +1087,9 @@ describe('render(): every write stays inside the current folder', () => {
     put('aliased-to/package.json', '{"name":"aliased-to","private":true}');
     fs.copyFileSync(path.join(dir, 'aliased-src/src/app/page.html'), path.join(dir, 'aliased-to/page.html'));
     const cwd = path.join(dir, 'aliased-to');
-    // Into the project's existing folders: refused, without a suggestion that cannot work.
+    // The alias leads into an existing folder that lacks the file: its copy
+    // goes in the page's layout, which from here is outside the folder the
+    // restore creates, so it is refused with a new folder to use.
     put('aliased-to/src/keep.txt', 'existing\n');
     /** @type {any} */
     let refused;
@@ -703,8 +1099,8 @@ describe('render(): every write stays inside the current folder', () => {
       refused = e;
     }
     expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
-    expect(refused.message).toContain('path alias');
-    expect(refused.suggestions ?? []).toEqual([]);
+    expect(refused.suggestions?.[0]?.name).toBe('--out restored/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'src/components'))).toBe(false);
     fs.rmSync(path.join(cwd, 'src'), {recursive: true});
     // Into a new folder the alias points into: the page and its import come back.
     const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true, out: 'src/app/page.tsx'}));
@@ -729,6 +1125,247 @@ describe('render(): every write stays inside the current folder', () => {
     expect(fs.readFileSync(path.join(dir, 'no-alias/page-restored/components/Header.tsx'))).toEqual(
       fs.readFileSync(path.join(dir, 'aliased-src/src/components/Header.tsx')),
     );
+  }, 60_000);
+
+  it('restores an aliased page in its own project again and again', async () => {
+    put('alias-home/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-home/package.json', '{"name":"alias-home","private":true}');
+    const header = 'export function Header() { return <p>Home header</p>; }\n';
+    put('alias-home/src/components/Header.tsx', header);
+    put('alias-home/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const cwd = path.join(dir, 'alias-home');
+    await render('src/app/page.tsx', {cwd, out: 'page.html'});
+    // The project's alias reaches the same file: the page uses it, and only the page is written.
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    expect(back.data).toMatchObject({exact: true, files: ['page-restored/app/page.tsx']});
+    expect(back.data.aliased).toEqual({imports: [], sameAsProject: [{import: '@/components/Header', file: 'src/components/Header.tsx'}]});
+    // Render it again, and give that back too.
+    await render('page-restored/app/page.tsx', {cwd, out: 'page.html'});
+    expect(fs.readFileSync(path.join(cwd, 'page.html'), 'utf8')).toContain('Home header');
+    const twice = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    // The new render carries the page from where it now sits, beside the project's file.
+    expect(twice.data.files).toEqual(['page-restored-2/page-restored/app/page.tsx']);
+    // The project's file changed since the render: the page's own copy comes
+    // back in its layout, the result names the project's file, and the
+    // `paths` lead the import to the copy first.
+    put('alias-home/src/components/Header.tsx', 'export function Header() { return <p>Changed header</p>; }\n');
+    const changed = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    const copy = 'page-restored-3/src/components/Header.tsx';
+    expect(changed.data.files).toEqual(['page-restored-3/page-restored/app/page.tsx', copy]);
+    expect(changed.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {'@/*': ['./src/*', './page-restored-3/src/*'], '@/components/Header': [`./${copy}`]},
+      imports: [{import: '@/components/Header', file: copy}],
+      differs: [
+        {
+          import: '@/components/Header',
+          project: 'src/components/Header.tsx',
+          exists: true,
+          file: copy,
+          projectWide: true,
+          instead: [{file: 'page-restored-3/page-restored/app/page.tsx', import: '../../src/components/Header'}],
+        },
+      ],
+    });
+    expect(fs.readFileSync(path.join(cwd, copy), 'utf8')).toBe(header);
+    expect(fs.readFileSync(path.join(cwd, 'src/components/Header.tsx'), 'utf8')).toContain('Changed header');
+    put('alias-home/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: changed.data.aliased.paths}}));
+    await render('page-restored-3/page-restored/app/page.tsx', {cwd, out: 'again.html'});
+    expect(fs.readFileSync(path.join(cwd, 'again.html'), 'utf8')).toContain('Home header');
+    // The aliased file is the same, but a file it imports changed in the
+    // project: using the project's file would render the changed import, so
+    // the page's copies of both come back.
+    put('alias-deep/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-deep/package.json', '{"name":"alias-deep","private":true}');
+    put('alias-deep/src/components/Header.tsx', "import {mark} from './mark';\nexport function Header() { return <p>Deep header {mark}</p>; }\n");
+    const mark = "export const mark = 'sent mark';\n";
+    put('alias-deep/src/components/mark.ts', mark);
+    put('alias-deep/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const deep = path.join(dir, 'alias-deep');
+    await render('src/app/page.tsx', {cwd: deep, out: 'page.html'});
+    // Unchanged: the page uses the project's files, and only the page is written.
+    const same = /** @type {any} */ (await render('page.html', {cwd: deep, reverse: true}));
+    expect(same.data.files).toEqual(['page-restored/app/page.tsx']);
+    expect(same.data.aliased).toEqual({imports: [], sameAsProject: [{import: '@/components/Header', file: 'src/components/Header.tsx'}]});
+    put('alias-deep/src/components/mark.ts', "export const mark = 'changed mark';\n");
+    const below = /** @type {any} */ (await render('page.html', {cwd: deep, reverse: true}));
+    expect(below.data.exact).toBe(true);
+    expect(below.data.files).toEqual([
+      'page-restored-2/app/page.tsx',
+      'page-restored-2/components/Header.tsx',
+      'page-restored-2/components/mark.ts',
+    ]);
+    expect(below.data.aliased.differs).toEqual([
+      {
+        import: '@/components/Header',
+        project: 'src/components/Header.tsx',
+        exists: true,
+        file: 'page-restored-2/components/Header.tsx',
+        changed: ['src/components/mark.ts'],
+        projectWide: true,
+        instead: [{file: 'page-restored-2/app/page.tsx', import: '../components/Header'}],
+      },
+    ]);
+    expect(fs.readFileSync(path.join(deep, 'page-restored-2/components/mark.ts'), 'utf8')).toBe(mark);
+    const {stdout} = await runCli(['experimental', 'export', '--reverse', 'page.html'], {cwd: deep});
+    expect(stdout).toContain("is the same as the page's copy, but files it imports differ here (src/components/mark.ts)");
+    expect(stdout).toContain('The "paths" below apply to the whole project');
+    expect(stdout).toContain("in page-restored-3/app/page.tsx, import '../components/Header'");
+    // The narrower fix, as the answer gives it: the restored page imports the copy by a relative path.
+    const restoredPage = path.join(deep, 'page-restored-2/app/page.tsx');
+    fs.writeFileSync(restoredPage, fs.readFileSync(restoredPage, 'utf8').replace("'@/components/Header'", "'../components/Header'"));
+    await render('page-restored-2/app/page.tsx', {cwd: deep, out: 'narrow.html'});
+    expect(fs.readFileSync(path.join(deep, 'narrow.html'), 'utf8')).toContain('sent mark');
+  }, 90_000);
+
+  it('gives the relative imports for a chain of restored copies, and for an alias whose file is not there', async () => {
+    const config = '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n';
+    put('alias-chain/tsconfig.json', config);
+    put('alias-chain/package.json', '{"name":"alias-chain","private":true}');
+    put('alias-chain/src/components/Icon.tsx', 'export function Icon() { return <i>sent icon</i>; }\n');
+    put('alias-chain/src/components/Header.tsx', "import {Icon} from '@/components/Icon';\nexport function Header() { return <p>Chain header <Icon /></p>; }\n");
+    put('alias-chain/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const cwd = path.join(dir, 'alias-chain');
+    await render('src/app/page.tsx', {cwd, out: 'page.html'});
+    // Both files the alias reaches changed in the project since the render.
+    put('alias-chain/src/components/Icon.tsx', 'export function Icon() { return <i>changed icon</i>; }\n');
+    put('alias-chain/src/components/Header.tsx', "import {Icon} from '@/components/Icon';\nexport function Header() { return <p>Changed header <Icon /></p>; }\n");
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    expect(back.data.files).toEqual(['page-restored/app/page.tsx', 'page-restored/components/Header.tsx', 'page-restored/components/Icon.tsx']);
+    expect(back.data.aliased.differs).toEqual([
+      {
+        import: '@/components/Header',
+        project: 'src/components/Header.tsx',
+        exists: true,
+        file: 'page-restored/components/Header.tsx',
+        projectWide: true,
+        instead: [{file: 'page-restored/app/page.tsx', import: '../components/Header'}],
+      },
+      {
+        import: '@/components/Icon',
+        project: 'src/components/Icon.tsx',
+        exists: true,
+        file: 'page-restored/components/Icon.tsx',
+        projectWide: true,
+        instead: [{file: 'page-restored/components/Header.tsx', import: './Icon'}],
+      },
+    ]);
+    // Following every `instead`, the restored page renders the page's own copies, not the project's changed files.
+    for (const {instead, import: spec} of back.data.aliased.differs) {
+      for (const {file, import: relative} of instead) {
+        const at = path.join(cwd, file);
+        fs.writeFileSync(at, fs.readFileSync(at, 'utf8').replace(`'${spec}'`, `'${relative}'`));
+      }
+    }
+    await render('page-restored/app/page.tsx', {cwd, out: 'narrow.html'});
+    const narrow = fs.readFileSync(path.join(cwd, 'narrow.html'), 'utf8');
+    expect(narrow).toContain('Chain header');
+    expect(narrow).toContain('sent icon');
+    expect(narrow).not.toContain('changed icon');
+    expect(fs.readFileSync(path.join(cwd, 'tsconfig.json'), 'utf8')).toBe(config);
+    // The alias is there but its file is not: the text names the whole-project reach and the relative import too.
+    put('alias-gone/tsconfig.json', config);
+    put('alias-gone/package.json', '{"name":"alias-gone","private":true}');
+    put('alias-gone-src/tsconfig.json', config);
+    put('alias-gone-src/package.json', '{"name":"alias-gone-src","private":true}');
+    put('alias-gone-src/src/components/Header.tsx', 'export function Header() { return <p>Gone header</p>; }\n');
+    put('alias-gone-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    await render('alias-gone-src/src/app/page.tsx', {cwd: dir});
+    fs.copyFileSync(path.join(dir, 'alias-gone-src/src/app/page.html'), path.join(dir, 'alias-gone/page.html'));
+    const gone = path.join(dir, 'alias-gone');
+    const missing = /** @type {any} */ (await render('page.html', {cwd: gone, reverse: true}));
+    expect(missing.data.aliased.differs).toEqual([
+      {
+        import: '@/components/Header',
+        project: 'src/components/Header.tsx',
+        exists: false,
+        file: 'page-restored/components/Header.tsx',
+        projectWide: true,
+        instead: [{file: 'page-restored/app/page.tsx', import: '../components/Header'}],
+      },
+    ]);
+    const {stdout} = await runCli(['experimental', 'export', '--reverse', 'page.html'], {cwd: gone});
+    expect(stdout).toContain('@/components/Header reaches src/components/Header.tsx in this project, which is not there');
+    expect(stdout).toContain('The "paths" below apply to the whole project: with them, every file that imports @/components/Header gets the page\'s copy.');
+    expect(stdout).toContain("in page-restored-2/app/page.tsx, import '../components/Header'");
+    expect(fs.readFileSync(path.join(gone, 'tsconfig.json'), 'utf8')).toBe(config);
+  }, 90_000);
+
+  it('never edits a tsconfig.json: a reverse that needs an alias entry names the entry, the file it belongs in, and why', async () => {
+    put('tsc-src/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('tsc-src/package.json', '{"name":"tsc-src","private":true}');
+    put('tsc-src/src/components/Header.tsx', 'export function Header() { return <p>Sent header</p>; }\n');
+    put('tsc-src/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    await render('tsc-src/src/app/page.tsx', {cwd: dir});
+    const sent = path.join(dir, 'tsc-src/src/app/page.html');
+    // A project whose config has other aliases, with a comment and its own layout, that no tool may rewrite.
+    const config = '{\n  // the project\'s own aliases\n  "compilerOptions": {"baseUrl": ".", "paths": {"$lib/*": ["./lib/*"]}},\n}\n';
+    put('tsc-to/package.json', '{"name":"tsc-to","private":true}');
+    put('tsc-to/tsconfig.json', config);
+    fs.copyFileSync(sent, path.join(dir, 'tsc-to/page.html'));
+    const cwd = path.join(dir, 'tsc-to');
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    expect(back.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {'$lib/*': ['./lib/*'], '@/*': ['./page-restored/*']},
+      imports: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}],
+    });
+    expect(fs.readFileSync(path.join(cwd, 'tsconfig.json'), 'utf8')).toBe(config);
+    const {stdout} = await runCli(['experimental', 'export', '--reverse', 'page.html'], {cwd});
+    expect(stdout).toContain('through a path alias that does not reach it in this project');
+    expect(stdout).toContain('set the "paths" of tsconfig.json');
+    expect(stdout).toContain('"$lib/*": ["./lib/*"], "@/*": ["./page-restored-2/*"]');
+    expect(fs.readFileSync(path.join(cwd, 'tsconfig.json'), 'utf8')).toBe(config);
+    // The project's alias reaches a different file: that file and the config stay as they are, and the answer says why.
+    const aliased = '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n';
+    const own = 'export function Header() { return <p>Own header</p>; }\n';
+    put('tsc-own/package.json', '{"name":"tsc-own","private":true}');
+    put('tsc-own/tsconfig.json', aliased);
+    put('tsc-own/src/components/Header.tsx', own);
+    fs.copyFileSync(sent, path.join(dir, 'tsc-own/page.html'));
+    const ownCwd = path.join(dir, 'tsc-own');
+    const differs = /** @type {any} */ (await render('page.html', {cwd: ownCwd, reverse: true}));
+    expect(differs.data.aliased.differs).toEqual([
+      {
+        import: '@/components/Header',
+        project: 'src/components/Header.tsx',
+        exists: true,
+        file: 'page-restored/components/Header.tsx',
+        projectWide: true,
+        instead: [{file: 'page-restored/app/page.tsx', import: '../components/Header'}],
+      },
+    ]);
+    expect(differs.data.aliased.config).toBe('tsconfig.json');
+    const text = (await runCli(['experimental', 'export', '--reverse', 'page.html'], {cwd: ownCwd})).stdout;
+    expect(text).toContain('@/components/Header reaches src/components/Header.tsx in this project, which differs from the copy the page carries');
+    expect(text).toContain('every file that imports @/components/Header gets the page\'s copy instead of src/components/Header.tsx');
+    expect(fs.readFileSync(path.join(ownCwd, 'tsconfig.json'), 'utf8')).toBe(aliased);
+    expect(fs.readFileSync(path.join(ownCwd, 'src/components/Header.tsx'), 'utf8')).toBe(own);
+  }, 60_000);
+
+  it('names the paths for an alias import from a file that records none', async () => {
+    put('alias-old/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-old/package.json', '{"name":"alias-old","private":true}');
+    put('alias-old/src/components/Header.tsx', 'export function Header() { return <p>Old header</p>; }\n');
+    put('alias-old/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    await render('alias-old/src/app/page.tsx', {cwd: dir});
+    // A CLI before the alias record wrote the same block without it.
+    const html = fs.readFileSync(path.join(dir, 'alias-old/src/app/page.html'), 'utf8');
+    const open = '<script type="application/x-astryx-source">';
+    const start = html.indexOf(open) + open.length;
+    const end = html.indexOf('</script>', start);
+    const block = JSON.parse(html.slice(start, end));
+    expect(block.aliases).toBeDefined();
+    delete block.aliases;
+    const json = JSON.stringify(block).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    put('alias-old-to/package.json', '{"name":"alias-old-to","private":true}');
+    put('alias-old-to/page.html', html.slice(0, start) + json + html.slice(end));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'alias-old-to'), reverse: true}));
+    expect(back.data).toMatchObject({
+      exact: true,
+      files: ['page-restored/app/page.tsx', 'page-restored/components/Header.tsx'],
+      aliased: {config: 'tsconfig.json', paths: {'@/*': ['./page-restored/*']}, imports: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}]},
+    });
   }, 60_000);
 
   it('names the whole paths a page needs: every target of an alias, and the entries a config inherits', async () => {
@@ -1114,6 +1751,58 @@ describe('render(): every write stays inside the current folder', () => {
     expect(byId(doc, 'q').children[0].text).toBe('Q');
     expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('remote-asset');
     expect(r.data.files).toEqual(expect.arrayContaining(['a.png', 'b.png']));
+    // The check names what the written file loads; it never stops the write.
+    expect(r.data.checks.outside).toEqual(['https://example.com/x.png']);
+    expect(r.data.checks.roundTrip).toEqual({exact: true, files: 3, differs: []});
+    // The size parts add up to no more than the file.
+    const {bytes, scriptBytes, cssBytes, markupBytes, sourceBytes} = r.data;
+    expect(Math.min(scriptBytes, cssBytes, markupBytes, sourceBytes)).toBeGreaterThan(0);
+    expect(scriptBytes + cssBytes + markupBytes + sourceBytes).toBeLessThanOrEqual(bytes);
+    const cli = await runCli(['experimental', 'export', 'styleattr/page.tsx', '--out', 'styleattr/again.html'], {cwd: dir});
+    expect(cli.status).toBe(0);
+    expect(fs.existsSync(path.join(dir, 'styleattr/again.html'))).toBe(true);
+    expect(cli.stdout).toMatch(/outside:\s+https:\/\/example\.com\/x\.png/);
+    expect(cli.stdout).toContain('loads 1 reference from outside the file when it opens (outside, above), so it does not stand alone.');
+    expect(cli.stdout).not.toContain('Share this one file');
+    // A file beside the page the render leaves for the browser is from outside
+    // the file too, not from the network; a reference that loads nothing is
+    // not counted.
+    put('relref/page.tsx', 'export default function Page() { return (<main><link rel="icon" href="./bg.png" /><iframe src="about:blank" title="x" /><h1>R</h1></main>); }\n');
+    const rel = await runCli(['experimental', 'export', 'relref/page.tsx'], {cwd: dir});
+    expect(rel.status).toBe(0);
+    expect(rel.stdout).toMatch(/^outside:\s+\.\/bg\.png$/m);
+    expect(rel.stdout).toContain('loads 1 reference from outside the file when it opens (outside, above), so it does not stand alone.');
+    expect(rel.stdout).not.toContain('about:blank');
+  }, 60_000);
+
+  it('carries a srcset of local images as data: URIs, and the file still stands alone', async () => {
+    put('srcset/dot.png', PNG);
+    put('srcset/dot2.png', PNG);
+    put('srcset/page.tsx', 'export default function Page() { return (<main><h1>S</h1><img src="./dot.png" srcSet="./dot.png 1x, ./dot2.png 2x" alt="" /></main>); }\n');
+    const r = /** @type {any} */ (await render('srcset/page.tsx', {cwd: dir}));
+    expect(fs.readFileSync(path.join(dir, 'srcset/page.html'), 'utf8')).toMatch(/srcset="data:image\/png;base64,[^"]+ 1x, data:image\/png;base64,[^"]+ 2x"/i);
+    expect(r.data.checks.outside).toEqual([]);
+  }, 60_000);
+
+  it('names the element a style attribute sits on, caps the outside list in text, and prints an absolute output once', async () => {
+    const imgs = Array.from({length: 12}, (_, i) => `<img src="https://img.example/${i}.png" alt="" />`).join('');
+    put(
+      'many/page.tsx',
+      `export default function Page() { return (<main><div style={{backgroundImage: 'image-set("https://img.example/set.png" 1x)'}}>S</div>${imgs}</main>); }\n`,
+    );
+    const r = /** @type {any} */ (await render('many/page.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.message)).toContain(
+      'The page renders a <div> that loads https://img.example/set.png, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.',
+    );
+    expect(r.data.checks.outside).toHaveLength(13);
+    // An --out outside the current folder is shown as its absolute path, once.
+    const abs = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-abs-')), 'abs.html');
+    const cli = await runCli(['experimental', 'export', 'many/page.tsx', '--out', abs], {cwd: dir});
+    expect(cli.status).toBe(0);
+    expect(cli.stdout).toMatch(/^outside:\s+.+, \.\.\. and 3 more( in \S+)?$/m);
+    const line = cli.stdout.split('\n').find(l => l.startsWith(`${abs} (`));
+    expect(line).toBeDefined();
+    expect(line?.split(abs).length).toBe(2);
   }, 60_000);
 
   it('carries a stylesheet pulled in by @import and gives it back, and says when one is missing', async () => {
@@ -2173,6 +2862,28 @@ describe('render(): refusals', () => {
     }
   }, 60_000);
 
+  it("names a package Astryx releases with Core at the project's Core release in the run folder's integration line", async () => {
+    // theme-stone is released with Core and is not linked into the fixture.
+    put('core-app/package.json', '{"name":"core-app","private":true}');
+    put('core-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    put('core-app/page.tsx', "import stone from '@astryxdesign/theme-stone';\nexport default () => <p>{String(stone)}</p>;\n");
+    const app = path.join(dir, 'core-app');
+    recordDeclaredSettings(app, [{name: '@acme/a', installGuidance: 'acme add {packages}'}]);
+    try {
+      /** @type {any} */
+      let error;
+      try {
+        await render('page.tsx', {cwd: app});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+      expect(error?.suggestions?.[0]?.name).toBe(`acme add @astryxdesign/theme-stone@${CLI_VERSION}`);
+    } finally {
+      recordDeclaredSettings(app, []);
+    }
+  }, 60_000);
+
   it("suggests one install line for every missing package, in the project's package manager", async () => {
     put('pnpm-app/package.json', '{"name":"pnpm-app","private":true}');
     put('pnpm-app/pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
@@ -2463,6 +3174,54 @@ describe('render(): a page outside a project', () => {
   afterAll(() => {
     fs.rmSync(away, {recursive: true, force: true});
   });
+
+  it('uses a .js file that exists under the name as written, not the TypeScript file beside it', () => {
+    const tree = path.join(away, 'own-js-exists');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'fmt.js'), "export const fmt = value => `js:${value}`;\n");
+    fs.writeFileSync(path.join(tree, 'fmt.ts'), "export const fmt = (value: string): string => `ts:${value}`;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import {fmt} from './fmt.js';\nexport default function Page() {\n  return <p>{fmt('128')}</p>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx', 'fmt.js']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('js:128');
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 1}});
+  }, 60_000);
+
+  it('loads the page\'s own modules imported TypeScript-style by .js names, and gives them back exactly', () => {
+    const tree = path.join(away, 'own-ts-js');
+    fs.mkdirSync(path.join(tree, 'parts'), {recursive: true});
+    const files = {
+      'parts/fmt.ts': "export const fmt = (value: string): string => `#${value}`;\n",
+      'parts/later.tsx': 'export const Later = () => <p>Later</p>;\n',
+      'parts/Kpi.tsx':
+        "import {fmt} from './fmt.js';\nexport const loadLater = () => import('./later.js');\nexport function Kpi({label, value}: {label: string; value: string}) {\n  return <p>{label}: {fmt(value)}</p>;\n}\n",
+      'page.tsx':
+        "import {Kpi} from './parts/Kpi.js';\nexport default function Page() {\n  return <main><Kpi label=\"Signups\" value=\"128\" /></main>;\n}\n",
+    };
+    for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tree, name), text);
+    const run = runBin(tree, ['experimental', 'export', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    expect([...run.json.data.files].sort()).toEqual(['page.tsx', 'parts/Kpi.tsx', 'parts/fmt.ts', 'parts/later.tsx']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    expect(html).toContain('Signups: #128');
+    // Earlier CLIs cannot follow a .js name to its TypeScript file, so the
+    // file says a render format they do not read, and they name this CLI.
+    expect(readSourceBlock(html)).toMatchObject({found: true, source: {version: 3}});
+    expect(html).toContain('render format 3.');
+    const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, format: 3});
+    expect(back.json.data).not.toHaveProperty('missing');
+    for (const [name, text] of Object.entries(files)) {
+      expect(fs.readFileSync(path.join(tree, 'page-restored', name), 'utf8'), name).toBe(text);
+    }
+  }, 60_000);
 
   it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
     fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
@@ -2958,6 +3717,78 @@ describe('render(): a page outside a project', () => {
     expect(back.status).toBe(0);
     expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
+
+  describe('a served package whose subpath exports one condition', () => {
+    /** @type {string} */
+    let set;
+    /** @type {string} */
+    let page;
+    beforeAll(() => {
+      set = path.join(away, 'served-conditions');
+      const nm = path.join(set, 'node_modules');
+      for (const name of ['react', 'react-dom']) {
+        const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+        fs.mkdirSync(nm, {recursive: true});
+        fs.cpSync(target, path.join(nm, name), {recursive: true, dereference: true});
+      }
+      const pkg = path.join(nm, 'demo-conditions');
+      fs.mkdirSync(path.join(pkg, 'themes'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: 'demo-conditions',
+          type: 'module',
+          exports: {
+            './themes/demo': {import: './themes/demo.js'},
+            './legacy': {require: './legacy.cjs'},
+          },
+        }),
+      );
+      fs.writeFileSync(path.join(pkg, 'themes', 'demo.js'), "export const label = 'from the import condition';\n");
+      fs.writeFileSync(path.join(pkg, 'legacy.cjs'), "exports.label = 'from the require condition';\n");
+      fs.mkdirSync(path.join(set, 'core'), {recursive: true});
+      fs.writeFileSync(path.join(set, 'core', 'package.json'), '{"name":"@astryxdesign/core"}');
+      page = path.join(away, 'served-conditions-page');
+      fs.mkdirSync(page, {recursive: true});
+    });
+    /** @param {string} name @param {string} spec */
+    const exportOf = async (name, spec) => {
+      fs.writeFileSync(
+        path.join(page, `${name}.jsx`),
+        `import {label} from '${spec}';\nexport default function Page() {\n  return <p>{label}</p>;\n}\n`,
+      );
+      const {renderPage} = await import('../../foundation/render/render-page.mjs');
+      try {
+        const rendered = await renderPage(path.join(page, `${name}.jsx`), {
+          served: {dir: path.join(set, 'core'), integrations: ['demo-conditions']},
+          markupOnly: true,
+        });
+        return {html: rendered.html};
+      } catch (e) {
+        return {code: /** @type {any} */ (e).code, message: /** @type {any} */ (e).message};
+      }
+    };
+
+    it('loads a subpath exported only under import', async () => {
+      const result = /** @type {any} */ (await exportOf('import-only', 'demo-conditions/themes/demo'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the import condition');
+    }, 60_000);
+
+    it('loads a subpath exported only under require as before', async () => {
+      const result = /** @type {any} */ (await exportOf('require-only', 'demo-conditions/legacy'));
+      expect(result.code, JSON.stringify(result)).toBeUndefined();
+      expect(result.html).toContain('from the require condition');
+    }, 60_000);
+
+    it('keeps the answer for a subpath the package does not export', async () => {
+      const result = /** @type {any} */ (await exportOf('missing', 'demo-conditions/themes/none'));
+      expect(result).toEqual({
+        code: 'ERR_RENDER_MISSING_DEPENDENCY',
+        message: 'The page imports demo-conditions, which is not installed',
+      });
+    }, 60_000);
+  });
 
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
@@ -3464,6 +4295,42 @@ export default function Page() {
     // What the page prints is reported once, from the server render.
     const printed = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'page-output');
     expect(printed.filter((/** @type {any} */ w) => w.message.includes('rendered once'))).toHaveLength(1);
+  }, 60_000);
+
+  it("logs no render timings while it draws a chart, so a chart's props are never copied into them", async () => {
+    put(
+      'charts-timings.tsx',
+      `import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+// React's development build logs each render with console.timeStamp when it can.
+let timings = 0;
+const timeStamp = console.timeStamp;
+console.timeStamp = (...args: any[]) => {
+  timings += 1;
+  return timeStamp?.apply(console, args);
+};
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} timings {timings}</text>;
+}
+function OnlyOnServer() {
+  // Throws once a document exists, so each chart is drawn by itself, one after the other.
+  if (typeof document !== 'undefined') throw new Error('drawn alone');
+  return null;
+}
+export default function Page() {
+  return (
+    <div>
+      <OnlyOnServer />
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-timings.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-timings.html'), 'utf8');
+    expect(html.match(/a timings \d+/g)).toEqual(['a timings 0', 'a timings 0']);
   }, 60_000);
 
   it('says so when it draws each chart by itself', async () => {

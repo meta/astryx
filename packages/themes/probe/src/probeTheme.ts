@@ -3797,6 +3797,18 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(5.5 92% 25%)',
         outlineColor: 'hsl(181.6 72% 25%)',
       },
+      first: {
+        backgroundColor: 'hsl(69.6 80% 49%)',
+        color: 'hsl(321.6 89% 12%)',
+        borderColor: 'hsl(105.3 73% 25%)',
+        outlineColor: 'hsl(35.1 94% 25%)',
+      },
+      last: {
+        backgroundColor: 'hsl(288.3 84% 56%)',
+        color: 'hsl(292.7 76% 12%)',
+        borderColor: 'hsl(229.3 73% 25%)',
+        outlineColor: 'hsl(116.0 92% 25%)',
+      },
     },
     'pagination-list': {
       base: {
@@ -4774,6 +4786,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(202.4 90% 25%)',
         outlineColor: 'hsl(333.9 88% 25%)',
       },
+      selected: {
+        backgroundColor: 'hsl(264.5 86% 61%)',
+        color: 'hsl(167.6 88% 12%)',
+        borderColor: 'hsl(39.7 75% 25%)',
+        outlineColor: 'hsl(0.2 70% 25%)',
+      },
     },
     'step-bar': {
       base: {
@@ -4806,6 +4824,12 @@ export const probeTheme = defineTheme({
         borderColor: 'hsl(109.9 93% 25%)',
         outlineColor: 'hsl(179.2 75% 25%)',
       },
+      selected: {
+        backgroundColor: 'hsl(340.2 88% 52%)',
+        color: 'hsl(106.2 80% 12%)',
+        borderColor: 'hsl(8.4 83% 25%)',
+        outlineColor: 'hsl(248.1 87% 25%)',
+      },
     },
     'step-label': {
       base: {
@@ -4813,6 +4837,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(323.4 90% 12%)',
         borderColor: 'hsl(185.0 92% 25%)',
         outlineColor: 'hsl(186.3 83% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(18.5 89% 56%)',
+        color: 'hsl(355.6 93% 12%)',
+        borderColor: 'hsl(186.4 76% 25%)',
+        outlineColor: 'hsl(332.2 84% 25%)',
       },
     },
     stepper: {

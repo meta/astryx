@@ -27,8 +27,11 @@ import {assertWithin} from '../fs/path-safety.mjs';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {
+  astryxDefinitionNames,
   astryxDefinitionsByName,
+  currentDefinitionName,
   readDefinitionsDir,
+  withReplacements,
 } from './icon-definition-discovery.mjs';
 import {
   isIgnoredThemeEntry,
@@ -88,7 +91,12 @@ export function hasLicenseNotice(dir) {
  * @property {IconSetData} data the validated data file
  * @property {string[]} notices license and notice files in the set directory
  * @property {import('./icon-definition-discovery.mjs').DiscoveredIconDefinition[]} definitions
- *   the set's own definitions, from its `definitions` folder
+ *   the set's own current definitions, from its `definitions` folder
+ * @property {import('./replacement-aliases.mjs').ReplacementAliases} [definitionAliases]
+ *   the old names the set's own definitions replaced
+ * @property {Array<{key: string, definition: string}>} [replacedKeys] each
+ *   `map` key that names a replaced definition, and the current definition
+ *   it now maps; `data.map` holds the current name instead
  * @property {string | null} [moduleFile] the file `data.module` resolves to
  *   from the project, when it resolves
  */
@@ -253,23 +261,46 @@ function readIconSet(root, name, owner) {
 
   // The set's own definitions, one file each in its `definitions` folder. A file
   // that does not read makes the set invalid, like its descriptor.
-  const own = readDefinitionsDir(path.join(dir, 'definitions'), owner);
+  const own = withReplacements(
+    readDefinitionsDir(path.join(dir, 'definitions'), owner),
+    astryxDefinitionNames(),
+  );
   if (own.errors.length > 0) {
     throw new Error(
       `${label}: ${own.errors.map(error => error.message).join(' ')}`,
     );
   }
-  // Every key of `map` is Astryx's definition or one the set declares.
+  // Every key of `map` is Astryx's definition or one the set declares. A key
+  // that names a replaced definition maps its successor, unless the map
+  // already names the successor itself.
   const astryx = astryxDefinitionsByName();
   const declared = new Set(
     own.definitions.map(definition => definition.doc.name),
   );
-  for (const [name, id] of Object.entries(data.map ?? {})) {
-    if (astryx.has(name) || declared.has(name)) continue;
-    throw new Error(
-      `${label} data file is invalid: map "${name}" (icon "${id}") is not an icon definition. Declare it in definitions/${name}.doc.mjs, or use an Astryx icon definition (astryx docs cli/experimental/icon-definitions).`,
-    );
+  const ownDefinitions = {
+    definitions: own.definitions,
+    definitionAliases: own.aliases,
+  };
+  /** @type {Array<{key: string, definition: string}>} */
+  const replacedKeys = [];
+  /** @type {Record<string, string>} */
+  const map = {};
+  const entries = Object.entries(data.map ?? {});
+  for (const [name, id] of entries) {
+    if (astryx.has(name) || declared.has(name)) map[name] = id;
   }
+  for (const [name, id] of entries) {
+    if (astryx.has(name) || declared.has(name)) continue;
+    const current = currentDefinitionName(name, ownDefinitions);
+    if (current == null) {
+      throw new Error(
+        `${label} data file is invalid: map "${name}" (icon "${id}") is not an icon definition. Declare it in definitions/${name}.doc.mjs, or use an Astryx icon definition (astryx docs cli/experimental/icon-definitions).`,
+      );
+    }
+    replacedKeys.push({key: name, definition: current});
+    if (!Object.hasOwn(map, current)) map[current] = id;
+  }
+  if (replacedKeys.length > 0) data.map = map;
 
   const notices = fs
     .readdirSync(dir, {withFileTypes: true})
@@ -290,6 +321,8 @@ function readIconSet(root, name, owner) {
     data,
     notices,
     definitions: own.definitions,
+    definitionAliases: own.aliases,
+    ...(replacedKeys.length > 0 ? {replacedKeys} : {}),
   };
 }
 

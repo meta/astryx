@@ -218,6 +218,149 @@ describe("a render, which carries the page's script", () => {
     dom.window.close();
   });
 
+  it('keeps a link to a place in the page inside the file, in a frame whose address is the viewer\u2019s', async () => {
+    put(
+      'src/places.tsx',
+      `import {useEffect, useState} from 'react';
+export default function Page() {
+  const [hash, setHash] = useState('none');
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash || 'top');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  return (
+    <main>
+      <span id="big" />
+      <span id="café" />
+      <span id="100%" />
+      <button id="opener" onClick={() => setHash('opened')}>Opener</button>
+      <a href="#big">Big only</a>
+      <div onClick={() => setHash('card')}>
+        <a href="#big" onClick={e => e.stopPropagation()}>Stopped</a>
+      </div>
+      <div id="plain-card" />
+      <a href="#café" onClick={() => document.getElementById('opener')?.click()}>Open then go</a>
+      <a href="#café">Café</a>
+      <a href="#100%">Hundred</a>
+      <a href="#">All</a>
+      <a href="#own" onClick={e => { e.preventDefault(); setHash('handled'); }}>Own</a>
+      <p id="hash">{hash}</p>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/places.tsx', {cwd: dir, out: 'places.html'});
+    // A frame given its document inline (srcdoc) has the viewer's address as
+    // its base, so a bare "#big" would navigate the frame to the viewer.
+    const file = read('places.html').replace(
+      '<head>',
+      '<head><base href="https://viewer.test/board">',
+    );
+    const dom = new JSDOM(file, {
+      url: 'about:srcdoc',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    const doc = dom.window.document;
+    const click = (/** @type {string} */ text) => {
+      const link = [...doc.querySelectorAll('a')].find(
+        a => a.textContent === text,
+      );
+      // A mouse press focuses a link before its click, as in a browser.
+      /** @type {any} */ (link)?.focus();
+      const event = new dom.window.MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      link?.dispatchEvent(event);
+      return event;
+    };
+    // A first click on "#", while the address has no fragment yet, is a move
+    // to the top inside the same document, never a load of the file again.
+    /** @type {any} */ (dom.window).stillHere = true;
+    const entries = dom.window.history.length;
+    expect(click('All').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#');
+    expect(/** @type {any} */ (dom.window).stillHere).toBe(true);
+    // A new place adds a history entry, as in a tab, so Back stays in the file.
+    expect(dom.window.history.length).toBe(entries + 1);
+    // A link whose handler stops the click on its way still moves inside the
+    // file, and the card around it never hears the click.
+    expect(click('Stopped').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    expect(doc.getElementById('hash')?.textContent).toBe('#big');
+    expect(click('Big only').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    expect(doc.getElementById('hash')?.textContent).toBe('#big');
+    // A link whose handler stops the click and cancels it without
+    // preventDefault (\`return false\`, \`returnValue = false\`) stays put.
+    const card = /** @type {HTMLElement} */ (doc.getElementById('plain-card'));
+    card.innerHTML =
+      '<a id="falsy" href="#café" onclick="event.stopPropagation(); return false">False</a>' +
+      '<a id="rv" href="#café" onclick="event.stopPropagation(); event.returnValue = false">Return value</a>';
+    click('False');
+    click('Return value');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    // The same link again is a move to the same place, still inside the file.
+    expect(click('Big only').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#big');
+    // An id the address encodes, and one that is not encoded text.
+    click('Café');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#caf%C3%A9');
+    expect(click('Café').defaultPrevented).toBe(true);
+    click('Hundred');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#100%');
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    // A link whose own handler clicks another element first still moves
+    // inside the file once its own click reaches the window.
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(click('Open then go').defaultPrevented).toBe(true);
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href).toBe('about:srcdoc#caf%C3%A9');
+    click('Big only');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    // A listener the page adds on the window after the file's script still
+    // cancels the move.
+    const cancel = (/** @type {Event} */ e) => e.preventDefault();
+    dom.window.addEventListener('click', cancel);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    dom.window.removeEventListener('click', cancel);
+    // A handler the page adds on the document after the file's script still
+    // cancels the move.
+    const stop = (/** @type {Event} */ e) => e.preventDefault();
+    doc.addEventListener('click', stop);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.hash).toBe('#big');
+    doc.removeEventListener('click', stop);
+    click('All');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(dom.window.location.href.startsWith('about:srcdoc')).toBe(true);
+    expect(dom.window.location.hash).toBe('');
+    // A link the page handles itself keeps its own way.
+    click('Own');
+    await new Promise(resolve => dom.window.setTimeout(resolve, 20));
+    expect(doc.getElementById('hash')?.textContent).toBe('handled');
+    expect(dom.window.location.hash).toBe('');
+    dom.window.close();
+  }, 120_000);
+
   it('asks for no focus in its first paint, and the drawn page focuses as the app does', async () => {
     put(
       'src/focus.tsx',
@@ -1027,7 +1170,9 @@ export default function Page() {
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^scriptBytes:\s+[\d.]+ KB$/m);
+    expect(page.stdout).toMatch(/^bytes:\s+[\d.]+ KB/m);
+    for (const key of ['scriptBytes', 'cssBytes', 'markupBytes', 'sourceBytes'])
+      expect(page.stdout).toMatch(new RegExp(`^${key}:\\s+[\\d.]+ (?:KB|B)$`, 'm'));
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     for (const flag of ['--static', '--interactive']) {
       const refused = await runCli(

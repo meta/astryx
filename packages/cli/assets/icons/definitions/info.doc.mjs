@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'info',
+  group: 'status',
   description: 'Give more information or help.',
   words: ['information', 'help', 'about', 'information circle'],
   builtIn: true,

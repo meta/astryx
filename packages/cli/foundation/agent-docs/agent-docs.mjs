@@ -687,7 +687,7 @@ export function generateCompressedIndex(
   // template it names. build/template/component are covered here, so they are
   // intentionally omitted from the command reference below.
   lines.push(WORKFLOW_TITLE, ...WORKFLOW_STEPS);
-  lines.push('Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.');
+  lines.push('Changing an existing page? Keep it: skip step 2 and add components inside its sections; read a block example when it helps.');
   // Only for a project whose recorded releases have `doctor --built`
   // (projectHasBuiltCheck): a newer copy may write this block in a project
   // whose install then brings an older CLI, which rejects the option. The computer-level
