@@ -41,7 +41,6 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import {resolveAgentDocsRoot} from '../../foundation/agent-docs/agent-docs-target.mjs';
 import {placeSkillFiles, renderProjectSkill} from '../../foundation/agent-docs/skill-places.mjs';
 import {managedFileState} from '../../foundation/agent-docs/managed-skill-file.mjs';
@@ -103,6 +102,8 @@ import {
   CLI_ROOT,
   findProjectCoreDir,
   findInstalledPackage,
+  findPackageRoot,
+  findWorkspaceRoot,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {
@@ -391,6 +392,7 @@ const BUILD_JSX_RUNTIME =
  */
 const CSS_PROP_TRANSFORMS = new Set([
   '@emotion/babel-preset-css-prop',
+  'gatsby-plugin-emotion',
   'babel-plugin-styled-components',
   '@swc/plugin-styled-components',
   '@compiled/babel-plugin',
@@ -401,24 +403,9 @@ const CSS_PROP_TRANSFORMS = new Set([
 ]);
 
 /**
- * The folder at or above the project folder that holds its workspace: the
- * first with version control (`.git`), a `pnpm-workspace.yaml`, a
- * `lerna.json`, or a package.json with `workspaces`. The project folder when
- * none does, up to the home folder.
- * @param {string} projectDir
- */
-function workspaceRootOf(projectDir) {
-  const home = os.homedir();
-  for (let dir = projectDir; ; dir = path.dirname(dir)) {
-    if (['.git', 'pnpm-workspace.yaml', 'lerna.json'].some(name => fs.existsSync(path.join(dir, name)))) return dir;
-    if (readPackageJson(path.join(dir, 'package.json'))?.workspaces != null) return dir;
-    if (dir === home || dir === path.dirname(dir)) return projectDir;
-  }
-}
-
-/**
  * What compiles the JSX of a page other than as React does, in the folder of
- * the page or a folder above it, up to the workspace root: a build config
+ * the page or a folder above it, up to the project's workspace root (as
+ * `findWorkspaceRoot` reads it): a build config
  * that sets another runtime or factory (a config file, or the `babel` key of
  * a `package.json`), a `package.json` that depends on a transform that
  * compiles a `css` prop, or such a transform installed where the project
@@ -429,7 +416,7 @@ function workspaceRootOf(projectDir) {
  *   the config, and the transform it depends on or has installed
  */
 function buildJsxRuntime(pages, projectDir) {
-  const top = workspaceRootOf(projectDir);
+  const top = findWorkspaceRoot(projectDir);
   /** @type {Map<string, {file: string, transform: string | null, installed?: boolean} | null>} */
   const configIn = new Map();
   const read = (/** @type {string} */ dir) => {
@@ -558,21 +545,6 @@ export async function findUnknownCoreProps(projectDir) {
     configs.set(config.file, config);
     configOf.set(file, config.file);
   }
-  for (const {options} of configs.values()) {
-    const runtime = otherJsxRuntime(options);
-    if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
-  }
-  const build = buildJsxRuntime(corePages, projectDir);
-  if (build?.transform) {
-    return notChecked(
-      `${build.installed ? `\`${build.transform}\` is installed` : `the project depends on \`${build.transform}\``}, which compiles a \`css\` prop that every component can take`,
-    );
-  }
-  if (build) {
-    return notChecked(
-      `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
-    );
-  }
   // Each page is read as TypeScript reads it: with its config, and with Core
   // and React found from the page's own folder. Pages that share a config and
   // an installed Core share one read. A page whose config maps a Core module
@@ -593,6 +565,25 @@ export async function findUnknownCoreProps(projectDir) {
     }
     return coreFrom.get(dir) ?? null;
   };
+  // Pages that import Core and find no installed Core have no types to read.
+  if (corePages.length > 0 && corePages.every(page => !coreDirFrom(path.dirname(page)))) {
+    return notChecked('Core is not installed where the pages that import it can find it');
+  }
+  for (const {options} of configs.values()) {
+    const runtime = otherJsxRuntime(options);
+    if (runtime) return notChecked(`the project compiles JSX with \`${runtime}\`, which can give every component props of its own`);
+  }
+  const build = buildJsxRuntime(corePages, projectDir);
+  if (build?.transform) {
+    return notChecked(
+      `${build.installed ? `\`${build.transform}\` is installed` : `the project depends on \`${build.transform}\``}, which compiles a \`css\` prop that every component can take`,
+    );
+  }
+  if (build) {
+    return notChecked(
+      `the build config \`${relative(build.file)}\` sets another JSX runtime or compiles a \`css\` prop, which can give every component props of its own`,
+    );
+  }
   /** @type {Map<string, {configFile: string, from: string, uses: typeof uses}>} */
   const groups = new Map();
   for (const use of uses) {
@@ -604,9 +595,6 @@ export async function findUnknownCoreProps(projectDir) {
     const key = `${configFile}\0${coreDir}`;
     const group = groups.get(key) ?? /** @type {any} */ (groups.set(key, {configFile, from, uses: []}).get(key));
     group.uses.push(use);
-  }
-  if (uses.length > 0 && groups.size === 0 && uses.every(use => !projectMapsImport(use.source, use.path))) {
-    return notChecked('Core is not installed where the pages that import it can find it');
   }
   /** @type {UnknownCoreProp[]} */
   const found = [];
@@ -630,11 +618,22 @@ export async function findUnknownCoreProps(projectDir) {
       return props != null && !props.includes(use.prop);
     });
     if (candidates.length === 0) continue;
-    const augmentations = projectAugmentations(projectDir, candidates[0].path);
-    if (!augmentations.complete) return notChecked("the files that may add to Core's types could not all be read");
+    // What augments Core for a page: the project's files and installed
+    // packages, and those of the page's own package, as a workspace member
+    // installs its own.
+    const memberDir = findPackageRoot(group.from) ?? projectDir;
+    const reads = [projectAugmentations(projectDir, candidates[0].path)];
+    if (memberDir !== projectDir) reads.push(projectAugmentations(memberDir, candidates[0].path));
+    if (reads.some(read => !read.complete)) return notChecked("the files that may add to Core's types could not all be read");
+    const augmentations = {files: [...new Set(reads.flatMap(read => read.files))]};
     /** @type {Map<string, Set<string>>} */
     const asked = new Map();
-    for (const use of candidates) (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
+    /** @type {Map<string, string>} */
+    const sources = new Map();
+    for (const use of candidates) {
+      (asked.get(use.component) ?? asked.set(use.component, new Set()).get(use.component))?.add(use.prop);
+      if (!sources.has(use.component)) sources.set(use.component, use.source);
+    }
     const types = readCorePropTypes({
       ts: compiler.ts,
       projectDir: group.from,
@@ -642,6 +641,7 @@ export async function findUnknownCoreProps(projectDir) {
       options: configs.get(group.configFile)?.options ?? {},
       augmentations: [...augmentations.files, ...jsxDeclarations],
       props: asked,
+      sources,
     });
     if (types.unread) return notChecked(types.unread);
     for (const use of candidates) {

@@ -126,6 +126,36 @@ describe('doctor core-props', () => {
       const rootBabel = await check(member);
       expect(rootBabel?.status).toBe('info');
       expect(rootBabel?.message).toMatch(/^Not checked: the build config `\.\.\/\.\.\/babel\.config\.js` sets another JSX runtime/);
+      fs.rmSync(path.join(root, 'babel.config.js'));
+      // A theme package the member installs that adds the prop to Core's
+      // types, read when doctor runs from the workspace root.
+      write({
+        'apps/web/package.json': JSON.stringify({name: 'web', private: true, dependencies: {'@astryxdesign/core': '*', react: '*', '@acme/theme': '*'}}),
+        'apps/web/node_modules/@acme/theme/package.json': JSON.stringify({name: '@acme/theme', types: 'index.d.ts', dependencies: {'@astryxdesign/core': '*'}}),
+        'apps/web/node_modules/@acme/theme/index.d.ts': "import '@astryxdesign/core';\ndeclare module '@astryxdesign/core' {\n  interface TabListProps {\n    selectedID?: string;\n  }\n}\n",
+      });
+      expect((await check(root))?.status).toBe('pass');
+    },
+    SLOW,
+  );
+
+  it(
+    'reads a component from the module path the page imports it from, and says it did not run without an installed Core',
+    async () => {
+      const subpath = await propsCheck({
+        'src/App.tsx': ["import {ToastViewport} from '@astryxdesign/core/Toast';", 'export default function App() {', '  return <ToastViewport placementGap="x" />;', '}', ''].join('\n'),
+      });
+      expect(subpath?.status).toBe('warn');
+      expect(subpath?.message).toContain('ToastViewport has no `placementGap`');
+      // A page imports Core, gives it no prop, and finds no installed Core.
+      const app = fs.mkdtempSync(path.join(tmp, 'no-core-'));
+      fs.writeFileSync(path.join(app, 'package.json'), JSON.stringify({name: 'app', private: true, dependencies: {'@astryxdesign/core': '*', react: '*'}}));
+      fs.mkdirSync(path.join(app, 'src'));
+      fs.writeFileSync(path.join(app, 'src/App.tsx'), ["import {Divider} from '@astryxdesign/core';", 'export default function App() {', '  return <Divider />;', '}', ''].join('\n'));
+      link(app, 'typescript', path.join(REPO, 'node_modules', 'typescript'));
+      const noCore = (await runChecks({cwd: app})).checks.find(each => each.id === 'core-props');
+      expect(noCore?.status).toBe('info');
+      expect(noCore?.message).toMatch(/^Not checked: Core is not installed where the pages that import it can find it/);
     },
     SLOW,
   );

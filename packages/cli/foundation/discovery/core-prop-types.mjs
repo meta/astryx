@@ -20,16 +20,21 @@ import {propsTypeTakes} from './prop-drift.mjs';
 const CORE_PACKAGE = '@astryxdesign/core';
 
 /**
- * A module that exists only for this read: it names each component, imported
- * from Core's own module as the app imports it; the HTML and SVG elements
- * React's types know, whose prop names the read lists; and what JSX gives
- * every component (`React.JSX`, or the global `JSX` of older React types),
- * which a project's own declarations can widen (a `css` prop).
+ * A module that exists only for this read: it names Core's main module and
+ * each component, imported from the module path a page imports it from (a
+ * component such as `ToastViewport` is exported only by its subpath); the
+ * HTML and SVG elements React's types know, whose prop names the read lists;
+ * and what JSX gives every component (`React.JSX`, or the global `JSX` of
+ * older React types), which a project's own declarations can widen (a `css`
+ * prop).
  * @param {string[]} components
+ * @param {Map<string, string>} sources each component's module path
  */
-function queryText(components) {
-  const imports = components.map((name, i) => `import type {${name} as Component${i}Value} from '${CORE_PACKAGE}';`);
+function queryText(components, sources) {
+  const imports = components.map((name, i) => `import type {${name} as Component${i}Value} from '${sources.get(name) ?? CORE_PACKAGE}';`);
   return [
+    `import type * as CoreModule from '${CORE_PACKAGE}';`,
+    'export type Core = typeof CoreModule;',
     ...imports,
     "import type * as React from 'react';",
     'export type Elements = React.JSX.IntrinsicElements;',
@@ -76,7 +81,7 @@ function isGeneric(ts, checker, type) {
 /**
  * Read Core's own published types with the project's TypeScript, as the
  * project's pages see them: Core and React resolved from the project folder,
- * each component from Core's own module, with the files that
+ * each component from the module path a page imports it from, with the files that
  * augment Core's modules or React's JSX read too, and the type packages the
  * pages' config names (`types` and `typeRoots`; every package under the
  * type roots when it names none, as TypeScript reads them). Nothing is
@@ -93,12 +98,14 @@ function isGeneric(ts, checker, type) {
  *   as their config writes them, with `typeRoots` absolute
  * @param {string[]} input.augmentations files that augment Core or React's JSX
  * @param {Map<string, Set<string>>} input.props for each component, the props to judge
+ * @param {Map<string, string>} [input.sources] for each component, the module
+ *   path a page imports it from (Core's main module when none is given)
  * @returns {CorePropTypes}
  */
-export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props}) {
+export function readCorePropTypes({ts, projectDir, configDir, options: configOptions, augmentations, props, sources = new Map()}) {
   const components = [...props.keys()];
   const file = path.join(projectDir, '__astryx_core_props__.ts');
-  const text = queryText(components);
+  const text = queryText(components, sources);
   const strings = (/** @type {unknown} */ list) =>
     Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : undefined;
   const options = {
@@ -154,20 +161,21 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
   if (attributes.size === 0) {
     return {takes, attributes, unread: "TypeScript could not read React's types from this project"};
   }
-  let readAny = false;
+  // Core's types are unread only when its main module does not load; a
+  // component whose own type TypeScript cannot read is not judged.
+  const core = aliases.get('Core');
+  if (!core || unreadable(ts, core)) {
+    return {takes, attributes, unread: `TypeScript could not read ${CORE_PACKAGE}'s types from this project`};
+  }
   components.forEach((name, i) => {
     const own = aliases.get(`Component${i}`);
     const propsType = aliases.get(`Props${i}`);
     if (!own || !propsType || unreadable(ts, own) || unreadable(ts, propsType)) return;
-    readAny = true;
     if (isGeneric(ts, checker, own)) return;
     /** @type {Map<string, boolean>} */
     const verdicts = new Map();
     for (const prop of props.get(name) ?? []) verdicts.set(prop, takesEveryName || propsTypeTakes(ts, checker, propsType, prop));
     takes.set(name, verdicts);
   });
-  if (components.length > 0 && !readAny) {
-    return {takes, attributes, unread: `TypeScript could not read ${CORE_PACKAGE}'s types from this project`};
-  }
   return {takes, attributes, unread: null};
 }
