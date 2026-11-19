@@ -1482,6 +1482,10 @@ describe('render(): every write stays inside the current folder', () => {
     // The check names what the written file loads; it never stops the write.
     expect(r.data.checks.outside).toEqual(['https://example.com/x.png']);
     expect(r.data.checks.roundTrip).toEqual({exact: true, files: 3, differs: []});
+    // The size parts add up to no more than the file.
+    const {bytes, scriptBytes, cssBytes, markupBytes, sourceBytes} = r.data;
+    expect(Math.min(scriptBytes, cssBytes, markupBytes, sourceBytes)).toBeGreaterThan(0);
+    expect(scriptBytes + cssBytes + markupBytes + sourceBytes).toBeLessThanOrEqual(bytes);
     const cli = await runCli(['experimental', 'export', 'styleattr/page.tsx', '--out', 'styleattr/again.html'], {cwd: dir});
     expect(cli.status).toBe(0);
     expect(fs.existsSync(path.join(dir, 'styleattr/again.html'))).toBe(true);

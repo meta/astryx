@@ -79,14 +79,16 @@ export function printRendered(d, run) {
     record({
       input: d.input,
       output: d.output,
-      bytes: kb(d.bytes),
+      bytes: `${kb(d.bytes)}${d.scriptBytes > d.bytes / 2 ? ' (most is the script: the page as a live app, with React and the packages it imports)' : ''}`,
+      scriptBytes: kb(d.scriptBytes),
       cssBytes: kb(d.cssBytes),
+      markupBytes: kb(d.markupBytes),
+      sourceBytes: kb(d.sourceBytes),
       classes: d.classes,
       images: d.images,
       files: fileList(d.files),
       ...(d.notCarried?.length ? {notCarried: fileList(d.notCarried)} : {}),
       stylesheets: d.stylesheets.join(', ') || 'none',
-      scriptBytes: kb(d.scriptBytes),
       scriptModules: d.scriptModules,
     }),
     ...(d.warnings.length > 0
