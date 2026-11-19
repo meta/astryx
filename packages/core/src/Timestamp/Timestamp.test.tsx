@@ -85,6 +85,118 @@ describe('Timestamp', () => {
     vi.useRealTimers();
   });
 
+  // A relative timestamp's name starts with the words it shows, so a control
+  // named from its content keeps those words in its name (WCAG 2.5.3, FR5).
+  describe('label in name', () => {
+    const TWO_HOURS_AGO = '2026-03-25T10:00:00Z';
+
+    it('pauses a live refresh while a control it names has focus, keeping its words and name in step', () => {
+      const now = Date.now() / 1000;
+      render(
+        <>
+          <button type="button">
+            Pushed <Timestamp value={now - 5} format="relative" isLive />
+          </button>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const pushed = screen.getByRole('button', {name: /^Pushed/});
+      act(() => {
+        pushed.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      // Neither the words nor the name change under the focused control.
+      expect(pushed).toHaveTextContent('Pushed now');
+      expect(pushed).toHaveAccessibleName(/^Pushed now, /);
+
+      act(() => {
+        screen.getByRole('button', {name: 'Elsewhere'}).focus();
+      });
+      expect(pushed).toHaveTextContent('Pushed 35 seconds ago');
+      expect(pushed).toHaveAccessibleName(/^Pushed 35 seconds ago, /);
+    });
+
+    it('keeps ticking inside a focused control that has a name of its own', () => {
+      const now = Date.now() / 1000;
+      render(
+        <button type="button" aria-label="Latest push">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </button>,
+      );
+      const button = screen.getByRole('button', {name: 'Latest push'});
+      act(() => {
+        button.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(button).toHaveTextContent('Pushed 35 seconds ago');
+    });
+
+    it('keeps ticking inside a focused log region', () => {
+      const now = Date.now() / 1000;
+      render(
+        <div role="log" tabIndex={0} aria-label="Activity">
+          Pushed <Timestamp value={now - 5} format="relative" isLive />
+        </div>,
+      );
+      const log = screen.getByRole('log');
+      act(() => {
+        log.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(log).toHaveTextContent('Pushed 35 seconds ago');
+    });
+
+    it('names a standalone relative timestamp by its visible text, then the full date', () => {
+      render(
+        <Timestamp
+          value={TWO_HOURS_AGO}
+          format="relative"
+          hasTooltip={false}
+          data-testid="ts"
+        />,
+      );
+      const time = screen.getByTestId('ts');
+      const label = time.getAttribute('aria-label') ?? '';
+      expect(time.textContent).toBe('2 hours ago');
+      expect(label.startsWith('2 hours ago, ')).toBe(true);
+      expect(label).toContain('2026');
+    });
+
+    it('keeps the visible words in the name of a button that contains it', () => {
+      render(
+        <button type="button">
+          Pushed <Timestamp value={TWO_HOURS_AGO} format="relative" />
+        </button>,
+      );
+      expect(screen.getByRole('button')).toHaveAccessibleName(
+        /^Pushed 2 hours ago, .*2026/,
+      );
+    });
+
+    it('keeps the visible words in the name of a radio whose label contains it', () => {
+      render(
+        <label>
+          <input type="radio" name="version" />
+          Pushed{' '}
+          <Timestamp
+            value={TWO_HOURS_AGO}
+            format="relative_short"
+            hasTooltip={false}
+          />
+        </label>,
+      );
+      expect(screen.getByRole('radio')).toHaveAccessibleName(
+        /^Pushed 2h ago, .*2026/,
+      );
+    });
+  });
+
   it('renders a <time> element with ISO datetime attribute', () => {
     render(
       <Timestamp
@@ -1105,10 +1217,11 @@ describe('Timestamp', () => {
           data-testid="ts"
         />,
       );
-      const label = screen.getByTestId('ts').getAttribute('aria-label');
-      expect(label).toBeTruthy();
-      // The label is the full absolute string, not the relative text.
-      expect(label).not.toContain('ago');
+      const time = screen.getByTestId('ts');
+      const label = time.getAttribute('aria-label') ?? '';
+      // The label is the visible relative text, then the full absolute date.
+      expect(label.startsWith(`${time.textContent ?? ''}, `)).toBe(true);
+      expect(label).toMatch(/\d{4}/);
     });
   });
 
@@ -1839,8 +1952,9 @@ describe('Timestamp', () => {
           .formatToParts(date)
           .find(p => p.type === 'timeZoneName')?.value ?? '';
       const [line] = formatTooltipLines(date, [{format: 'full'}], 'en');
-      expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
-        line.value.replace(tzPart('short'), tzPart('long')),
+      const time = screen.getByTestId('ts');
+      expect(time.getAttribute('aria-label')).toBe(
+        `${time.textContent ?? ''}, ${line.value.replace(tzPart('short'), tzPart('long'))}`,
       );
     });
   });
@@ -2354,12 +2468,14 @@ describe('Timestamp calendar systems', () => {
     vi.setSystemTime(new Date(INSTANT.getTime() + 2 * 3600 * 1000));
     try {
       renderTimestamp({locale: 'en', calendar: 'hebrew'}, 'relative');
-      const name = screen.getByTestId('ts').getAttribute('aria-label') ?? '';
+      const time = screen.getByTestId('ts');
+      const name = time.getAttribute('aria-label') ?? '';
       expect(name).toBe(
-        formatInstant(INSTANT, 'full', 'en', {
-          calendar: 'hebrew',
-          timeZoneNameStyle: 'long',
-        }),
+        `${time.textContent ?? ''}, ` +
+          formatInstant(INSTANT, 'full', 'en', {
+            calendar: 'hebrew',
+            timeZoneNameStyle: 'long',
+          }),
       );
       expect(name).toContain('5787');
       expect(screen.getByTestId('ts').textContent).toBe('2 hours ago');

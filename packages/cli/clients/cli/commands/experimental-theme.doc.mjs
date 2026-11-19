@@ -56,5 +56,5 @@ export const doc = {
       when: 'an unknown subcommand, a refused change, or a subcommand failure',
     },
   ],
-  related: ['theme build', 'experimental render'],
+  related: ['theme build', 'experimental export'],
 };

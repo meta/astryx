@@ -55,6 +55,9 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'borderRadius', vars: ['--_chat-composer-radius']},
     {property: 'padding', vars: ['--_chat-composer-padding']},
   ],
+  'checkbox-input': [
+    {property: 'gap', vars: ['--_checkbox-input-gap'], replaces: true},
+  ],
   dialog: [
     {property: 'borderRadius', vars: ['--_dialog-radius']},
     {property: 'padding', expand: 'container'},
@@ -89,6 +92,12 @@ export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
     {property: 'borderRadius', vars: ['--_segmented-control-radius']},
     {property: 'padding', vars: ['--_segmented-control-padding']},
   ],
+  'switch-field': [
+    {property: 'gap', vars: ['--_switch-field-gap'], replaces: true},
+  ],
+  // A pinned column replays its row's fill from --table-row-overlay: a
+  // theme's row background reaches it through the same variable.
+  'table-row': [{property: 'backgroundColor', vars: ['--table-row-overlay']}],
   'text-area': [
     {
       property: 'paddingInline',

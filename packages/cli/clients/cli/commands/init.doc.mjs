@@ -55,6 +55,15 @@ export const doc = {
         'Install all features (agents, theme, template); refused with --features. Prints their guidance instead of the getting-started steps',
     },
     {
+      flag: '--to <places>',
+      param: 'options.to',
+      description:
+        'Where the Astryx skill goes, a comma list: agents-md (the AGENTS.md block, the default), skills (.agents/skills/astryx-project and .claude/skills/astryx-project in the project), ' +
+        'user (this computer, same as --user), or a folder written as a path (./team-skills, ~/team-skills). The choice is saved: in astryx.config `skills.to` for the project, so a later init writes the same places; ' +
+        'in the settings file for a folder outside it, whose copy the CLI installed for the computer refreshes after each of its upgrades while it is there. Moving a project off a place removes the skill there. ' +
+        'An unknown place exits 1 with ERR_INVALID_ARGUMENT',
+    },
+    {
       flag: '--remove-agents',
       param: 'options.removeAgents',
       description:
@@ -90,7 +99,8 @@ export const doc = {
     {label: 'Default setup', cli: 'astryx init'},
     {label: 'All features, no prompts', cli: 'astryx init --all'},
     {label: 'Machine-readable receipt', cli: 'astryx init --json'},
-    {label: 'Agent text for the whole computer', cli: 'astryx init --user'},
+    {label: 'The skill in the project skills folders', cli: 'astryx init --to skills'},
+    {label: 'Agent text for the whole computer', cli: 'astryx init --to user'},
     {label: 'Remove the computer-level agent text and turn it off', cli: 'astryx init --user --remove-agents'},
   ],
   outsideProject: 'own',
@@ -101,7 +111,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written)',
+      when: 'an unknown --agent (ERR_UNKNOWN_AGENT) or feature, an --agent-docs-path outside the project, or options that cannot be combined (ERR_INVALID_ARGUMENT); at the project root, an agent file 0.7.1 also wrote there that resolves outside the project (ERR_PATH_TRAVERSAL, nothing written); with --user, a folder of the computer-level agent text the user cannot write (ERR_WRITE_FAILED)',
     },
   ],
   related: ['doctor', 'upgrade', 'build', 'theme'],
@@ -132,7 +142,7 @@ export const doc = {
     },
     {
       type: 'prose',
-      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
+      text: "In global mode: outside a project, init writes the agent docs (AGENTS.md) into the folder and prints no getting-started steps. `init --user` (or `--to user`) writes the agent guide for your computer, in any folder, and is never handed to a project's own CLI. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
     },
   ],
 };

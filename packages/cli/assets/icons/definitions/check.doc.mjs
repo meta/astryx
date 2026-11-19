@@ -4,6 +4,7 @@
 export default {
   type: 'icon-definition',
   name: 'check',
+  group: 'checks',
   description: 'Mark something done, selected or confirmed.',
   words: ['done', 'tick', 'confirm', 'selected'],
   builtIn: true,

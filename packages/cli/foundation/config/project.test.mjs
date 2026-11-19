@@ -8,6 +8,7 @@ import {Project, DEFAULT_ISSUES_URL, findConfigPath} from './project.mjs';
 import {InMemoryConfigCache} from './config-cache.mjs';
 import {getCliInvocation} from '../env/package-manager.mjs';
 import {warnOnIntegrationIssues} from '../integrations/integration-warnings.mjs';
+import {installCommandFor} from '../discovery/template-needs.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
 import {discoverCoreTemplates} from '../discovery/template-adapter.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
@@ -36,6 +37,7 @@ function scaffold({
   unknownKeys = null,
   agentDocs = null,
   cliCommand = null,
+  installGuidance = null,
   integrationIssuesUrl = 'https://example.com/widgets/issues',
 } = {}) {
   fs.writeFileSync(
@@ -63,6 +65,7 @@ function scaffold({
   if (docs) manifest.docs = './docs';
   if (agentDocs != null) manifest.agentDocs = agentDocs;
   if (cliCommand != null) manifest.cliCommand = cliCommand;
+  if (installGuidance != null) manifest.installGuidance = installGuidance;
   if (unknownKeys) Object.assign(manifest, unknownKeys);
   if (integrationIssuesUrl) manifest.issuesUrl = integrationIssuesUrl;
   fs.writeFileSync(
@@ -312,6 +315,42 @@ describe('Project.issues leaves out a near-miss manifest key', () => {
       issue => issue.code === 'unknown_manifest_key',
     );
     expect(keys).toEqual([]);
+  });
+});
+
+describe('Project.load and the installGuidance an integration gives', () => {
+  const guidance = 'Add {packages} to package.json, commit, then run the relock script';
+
+  it('records it, so install steps print it with the packages filled in', async () => {
+    scaffold({installGuidance: guidance});
+    const project = await Project.load(tmpDir);
+    expect(project.loadedIntegrations[0].installGuidance).toBe(guidance);
+    const {installGuidance, installCommand} = installCommandFor(['recharts'], tmpDir);
+    expect(installGuidance).toBe(
+      'Add recharts to package.json, commit, then run the relock script',
+    );
+    // The package-manager command stays beside it for older readers.
+    expect(installCommand).toMatch(/recharts/);
+  });
+
+  it('ignores an invalid one with a warning and keeps the rest of the package', async () => {
+    scaffold({installGuidance: 'two\nlines'});
+    const project = await Project.load(tmpDir);
+    const [widgets] = project.loadedIntegrations;
+    expect(widgets.__loadError).toBeUndefined();
+    expect(widgets.installGuidance).toBeUndefined();
+    expect(widgets.components).toBeDefined();
+    expect(installCommandFor(['recharts'], tmpDir).installGuidance).toBeNull();
+    const issues = await project.issues();
+    expect(issues).toContainEqual(
+      expect.objectContaining({code: 'invalid_install_guidance', severity: 'warning'}),
+    );
+  });
+
+  it('gives no guidance where no integration sets one', async () => {
+    scaffold();
+    await Project.load(tmpDir, {fresh: true});
+    expect(installCommandFor(['recharts'], tmpDir).installGuidance).toBeNull();
   });
 });
 

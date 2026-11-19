@@ -51,7 +51,7 @@ import {
 import {CLI_ROOT, findAstryxProject, findPackageRoot} from '../fs/paths.mjs';
 import {readDeclaredDependencies} from '../integrations/declared-dependencies.mjs';
 import {satisfiesRange, semverCompare} from '../env/semver.mjs';
-import {isInReleaseCache, isReleaseVersion} from './cache.mjs';
+import {isInReleaseCache, isReleaseVersion, isVersionRange} from './cache.mjs';
 import {pinnedVersion, runningCopy} from './choose.mjs';
 import {
   knownLatest,
@@ -69,6 +69,7 @@ import {
 import {installsPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
+import {installGuidanceFor} from '../env/cli-command.mjs';
 
 /** A notice prints at most once in this long. */
 export const NOTICE_INTERVAL_MS = 24 * 60 * 60_000;
@@ -406,14 +407,51 @@ const ADD = {
  * @returns {string}
  */
 export function addVerbFor(root, version = null) {
+  return addVerb(
+    root,
+    pinnedVersion(version) ? readReleaseFacts(root) : null,
+    version,
+  );
+}
+
+/**
+ * {@link addVerbFor} with the release facts of the project at `root` already
+ * read, or null when `version` is not one version.
+ * @param {string} root
+ * @param {import('./project.mjs').ReleaseFacts | null} facts
+ * @param {string | null} version
+ * @returns {string}
+ */
+function addVerb(root, facts, version) {
   const pm = detectPackageManager(root);
   const add = ADD[pm] ?? ADD.npm;
-  if (!pinnedVersion(version)) return add;
-  const facts = readReleaseFacts(root);
-  if (!pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange)) {
-    return add;
-  }
-  return `${add} ${pm === 'bun' ? '--exact' : '-E'}`;
+  return facts && savesExactly(facts, version)
+    ? `${add} ${exactAddFlag(pm)}`
+    : add;
+}
+
+/**
+ * Whether a project with the release facts `facts` saves a package it adds at
+ * `version` exactly ({@link addVerbFor}): `version` is one version, and the
+ * project pins its Core (or, with no Core, its CLI) to one version.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @param {string | null} version
+ * @returns {boolean}
+ */
+function savesExactly(facts, version) {
+  return Boolean(
+    pinnedVersion(version) &&
+    pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange),
+  );
+}
+
+/**
+ * The flag that makes the package manager `pm` save an added version exactly.
+ * @param {string} pm
+ * @returns {string}
+ */
+export function exactAddFlag(pm) {
+  return pm === 'bun' ? '--exact' : '-E';
 }
 
 /**
@@ -475,20 +513,78 @@ function releasedWithCoreIn(root) {
  * @returns {string}
  */
 export function addMatchingCore(cwd, name) {
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  const facts = readReleaseFacts(root);
+  const {root, facts} = projectFacts(cwd);
   const release = releasedWithCorePackages().has(name)
-    ? (coreVersionOf(facts) ??
-      facts.declaredCoreRange ??
-      runningCopy(CLI_ROOT).version)
+    ? coreRelease(facts)
     : null;
-  const verb = addVerbFor(root, release);
-  if (!release) return `${verb} ${name}`;
-  // A range is quoted: `^`, `<`, `>`, `|` and spaces mean something to a
-  // shell.
-  return pinnedVersion(release)
-    ? `${verb} ${name}@${release}`
-    : `${verb} "${name}@${release}"`;
+  // The guidance names the same version the command would add.
+  const guidance = installGuidanceFor(
+    [release ? releaseSpec(name, release) : name],
+    cwd,
+  );
+  if (guidance != null) return guidance;
+  const verb = addVerb(root, release ? facts : null, release);
+  return `${verb} ${release ? releaseSpec(name, release) : name}`;
+}
+
+/**
+ * The root of the project a run in `cwd` belongs to, or `cwd` when it belongs
+ * to none, and that folder's release facts.
+ * @param {string} cwd
+ * @returns {{root: string, facts: import('./project.mjs').ReleaseFacts}}
+ */
+function projectFacts(cwd) {
+  const here = readReleaseFacts(cwd);
+  const root = projectRootOf(here) ?? cwd;
+  return {root, facts: samePath(root, cwd) ? here : readReleaseFacts(root)};
+}
+
+/**
+ * The release at which a project with the release facts `facts` adds a
+ * package Astryx releases with Core: the Core it installed or locked, else
+ * the one its package.json pins, else the Core range it declares, else the
+ * release of the CLI that answers. A declared range counts only when it is a
+ * plain version range: a `workspace:` or `file:` spec would make the command
+ * fail, and nothing a project declares may reach a shell.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @returns {string}
+ */
+function coreRelease(facts) {
+  const declared = facts.declaredCoreRange;
+  return (
+    coreVersionOf(facts) ??
+    (declared && isVersionRange(declared) ? declared : null) ??
+    runningCopy(CLI_ROOT).version
+  );
+}
+
+/**
+ * The release at which the project a run in `cwd` belongs to adds `name`, and
+ * whether it saves it exactly, when Astryx releases `name` with Core
+ * ({@link releasedWithCorePackages}): such a package names Core's exact
+ * release as its peer, so it is added at the project's Core release, as
+ * {@link addMatchingCore} names it. Null for any other package, which the
+ * package manager adds at the version it picks.
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {{release: string, exact: boolean} | null}
+ */
+export function coreMatchedAdd(cwd, name) {
+  if (!releasedWithCorePackages().has(name)) return null;
+  const {facts} = projectFacts(cwd);
+  const release = coreRelease(facts);
+  return {release, exact: savesExactly(facts, release)};
+}
+
+/**
+ * `name` at `release` as an install command names it. A range is quoted:
+ * `^`, `<`, `>`, `|` and spaces mean something to a shell.
+ * @param {string} name
+ * @param {string} release
+ * @returns {string}
+ */
+export function releaseSpec(name, release) {
+  return pinnedVersion(release) ? `${name}@${release}` : `"${name}@${release}"`;
 }
 
 /**
@@ -525,7 +621,7 @@ export function projectAddCommand(cwd) {
   const target = installFolder(cwd);
   if (target == null || target.moved) return null;
   const add = ADD[detectPackageManager(cwd)] ?? ADD.npm;
-  return name => `${add} ${name}`;
+  return name => installGuidanceFor([name], cwd) ?? `${add} ${name}`;
 }
 
 /**
