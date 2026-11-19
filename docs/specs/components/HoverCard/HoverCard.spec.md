@@ -64,7 +64,8 @@ Consumer usage lives in `HoverCard.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: yes. `touchTrigger` keeps its released values
+- Released default preserved: yes, except `spec:AST-059` FR5's hide for a
+  layer that no person is using. `touchTrigger` keeps its released values
   and its default `auto`. A disabled control is not an action, so its reason
   opens on a tap (FR5); that restoration ships on its own as a patch `[fix]`
 - Compatibility class: no public prop, default, or styling change. Text
