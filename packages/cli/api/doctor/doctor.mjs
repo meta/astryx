@@ -127,6 +127,7 @@ import {
   computerIntegrationsOutside,
   findIconImports,
   findIconPlaceholders,
+  findUnknownCoreProps,
   iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
@@ -220,6 +221,10 @@ import {
  *   Each file in the project's own source with icon imports that do not
  *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
+ * @property {{found: import('./_adapter.mjs').UnknownCoreProp[], uses: number, skipped: string | null}|null} [coreProps]
+ *   The props the project's own source gives Core components that they do
+ *   not take, with how many props it read, or why it checked none; null when
+ *   the project reads no Core or the scan failed.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.
@@ -1804,6 +1809,51 @@ export function checkIconPlaceholders(ctx) {
   };
 }
 
+/** How many props the warning names before it counts the rest. */
+const PROPS_NAMED = 8;
+
+/**
+ * The props the project's own source gives Core components that the
+ * component does not take (see `findUnknownCoreProps`): each with its file,
+ * line and component, and a documented prop with the same words when there
+ * is one. A prop a component does not take does nothing, and unless the build
+ * type-checks, no build step reports it.
+ * When the project has no TypeScript to read Core's types with, the check
+ * says it did not run.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkCoreProps(ctx) {
+  const scan = ctx.coreProps;
+  if (scan == null) return null;
+  const id = 'core-props';
+  const label = 'Core props';
+  if (scan.skipped) return {id, label, status: 'info', message: `Not checked: ${scan.skipped}`};
+  const count = scan.found.length;
+  if (count === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `No prop was found that a Core component does not take (${scan.uses} prop${scan.uses === 1 ? '' : 's'} read).`,
+    };
+  }
+  const named = scan.found
+    .slice(0, PROPS_NAMED)
+    .map(
+      use =>
+        `${use.file}:${use.line} ${use.component} has no \`${use.prop}\`${use.suggestion ? ` (did you mean \`${use.suggestion}\`?)` : ''}`,
+    );
+  const rest = count - named.length;
+  return {
+    id,
+    label,
+    status: 'warn',
+    message: `${count} prop${count === 1 ? '' : 's'} a Core component does not take: ${named.join(', ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
+    fix: 'Give each component a prop it takes: `astryx component <Name>` lists them. A prop the component does not take does nothing.',
+  };
+}
+
 /**
  * The icon imports in the project's own source that do not match its icon
  * sets (AST-084): each file and import, with the icon of the list that draws
@@ -3158,6 +3208,7 @@ export const SYNC_CHECKS = [
   checkIconSets,
   checkIconPlaceholders,
   checkIconImports,
+  checkCoreProps,
   checkAgentDocs,
   checkSkillPlaces,
   checkPeerDeps,
@@ -3384,6 +3435,7 @@ export async function runChecks(options = {}) {
     // Set after the docs checks, below.
     iconPlaceholders: null,
     iconImports: null,
+    coreProps: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -3413,6 +3465,16 @@ export async function runChecks(options = {}) {
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;
+    }
+  }
+
+  // The props scan reads the app's source, Core's docs, and Core's types
+  // with the project's TypeScript; a scan that fails leaves the check out.
+  if (readsCore) {
+    try {
+      ctx.coreProps = await findUnknownCoreProps(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      ctx.coreProps = null;
     }
   }
 
