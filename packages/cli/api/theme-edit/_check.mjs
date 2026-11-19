@@ -5361,7 +5361,13 @@ function checkOne(
     if (
       !onlyFits(
         // (The source is read from the thing here: a CSS property is one.)
-        {...s, thing, source: propertySpelling(thing) ? 'property' : s.source},
+        // (A property in any spelling, Height or paddingBlock, is the CSS
+        // property it names.)
+        {
+          ...s,
+          thing: propertySpelling(thing) ?? thing,
+          source: propertySpelling(thing) ? 'property' : s.source,
+        },
         /** @type {any} */ (ctx.C?.MAP ?? {}),
       )
     ) {

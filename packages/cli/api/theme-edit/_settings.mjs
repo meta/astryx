@@ -2460,7 +2460,7 @@ export function onlyFits(s, map = null) {
   return (
     s.source === 'property' &&
     typeof s.thing === 'string' &&
-    BAR_REACH_THINGS.test(s.thing) &&
+    BAR_REACH_THINGS.test(propertySpelling(s.thing) ?? s.thing) &&
     typeof s.on === 'string' &&
     (map == null || barRows(map, s.on).length === 1)
   );
@@ -8067,6 +8067,19 @@ export function compileTheme(ctx, data, base) {
   return theme;
 }
 
+/**
+ * Whether a bar's height is a length a row can be given less the bar's
+ * padding: a non-zero length, or a calc(), var(), min(), max() or clamp()
+ * of one; never a keyword (auto, fit-content, 0).
+ * @param {string} v
+ */
+function barLength(v) {
+  const t = v.trim();
+  if (/^(calc|var|min|max|clamp)\(/i.test(t)) return true;
+  const n = sizePx(t);
+  return n != null && n > 0;
+}
+
 /** The block-direction padding keys of a compiled rule block. */
 const BLOCK_PADDING_KEYS = [
   'padding',
@@ -8101,7 +8114,11 @@ function barReach(ctx, theme, data) {
   for (const [holder, keys] of Object.entries(comps)) {
     const b = keys?.base;
     if (!b || typeof b !== 'object') continue;
-    const height = b.height ?? b.blockSize ?? b.minHeight;
+    // (Only a length makes a bar's height: a keyword such as auto,
+    // fit-content or 0 sizes the bar by what it holds, and a row given
+    // calc(auto - …) would be dropped by the browser.)
+    const given = b.height ?? b.blockSize ?? b.minHeight;
+    const height = given != null && barLength(String(given)) ? given : null;
     const pads = BLOCK_PADDING_KEYS.filter(k => b[k] != null);
     /** @param {string} prop */
     const ownSide = prop =>
@@ -8117,7 +8134,7 @@ function barReach(ctx, theme, data) {
         x.source === 'property' &&
         !x.when &&
         !x.state &&
-        BAR_REACH_THINGS.test(x.thing) &&
+        BAR_REACH_THINGS.test(propertySpelling(x.thing) ?? x.thing) &&
         partsOf(ctx, x).includes(holder),
     );
     if (exact) continue;
@@ -8156,7 +8173,8 @@ function barReach(ctx, theme, data) {
       // A bar of a fixed height holds its row at that height (its items
       // center in it, and anything taller shows past both edges alike); a
       // bar with a least height gives its row that least height.
-      const key = (b.height ?? b.blockSize) != null ? 'height' : 'minHeight';
+      const key =
+        (b.height ?? b.blockSize) === height ? 'height' : 'minHeight';
       rb[key] = sides.length
         ? `calc(${height} - ${sides.join(' - ')})`
         : String(height);
@@ -11910,7 +11928,7 @@ function barFitProblems(ctx, data, res) {
       .find(
         x =>
           x.source === 'property' &&
-          x.thing === prop &&
+          (propertySpelling(x.thing) ?? x.thing) === prop &&
           !x.when &&
           !x.state &&
           (!x.mode || x.mode === 'light') &&
@@ -11937,7 +11955,7 @@ function barFitProblems(ctx, data, res) {
   for (const holder of Object.keys(map)) {
     const height = own(holder, 'height') ?? own(holder, 'block-size');
     const barPx = height == null ? null : pxOf(height);
-    if (barPx == null) continue;
+    if (barPx == null || barPx <= 0) continue;
     const rows = barRows(map, holder);
     if (rows.length !== 1) continue;
     const row = rows[0];
@@ -11953,7 +11971,7 @@ function barFitProblems(ctx, data, res) {
         x.source === 'property' &&
         !x.when &&
         !x.state &&
-        BAR_REACH_THINGS.test(x.thing) &&
+        BAR_REACH_THINGS.test(propertySpelling(x.thing) ?? x.thing) &&
         partsOf(ctx, x).includes(holder),
     );
     const rowPad = ownsPadding(row)

@@ -150,7 +150,7 @@ describe("a bar's height", () => {
   );
 
   it(
-    'reaches only a bar: never a list\'s items, a menu\'s divider, a trigger or an avatar',
+    'reaches only a bar, from a length: never a list\'s items, a menu\'s divider, a trigger or an avatar, nor a keyword height',
     async () => {
       for (const [prop, value, on] of [
         ['padding', '12px', 'dropdown-menu'],
@@ -158,6 +158,8 @@ describe("a bar's height", () => {
         ['height', '300px', 'context-menu'],
         ['height', '200px', 'collapsible'],
         ['height', '64px', 'avatar'],
+        ['height', 'auto', 'app-shell-header'],
+        ['height', 'fit-content', 'app-shell-header'],
       ]) {
         const r = /** @type {any} */ (
           await themeEditSet('b', prop, value, {cwd, on})
@@ -176,6 +178,26 @@ describe("a bar's height", () => {
       // (The two item settings left, then the height.)
       for (let i = 0; i < 3; i++) await themeEditUndo('b', {cwd});
       expect(built('top-nav')).not.toMatch(/calc\(40px/);
+    },
+    T,
+  );
+
+  it(
+    'with --only stays on the bar in any spelling of the property',
+    async () => {
+      for (const thing of ['Height', 'paddingBlock']) {
+        const r = /** @type {any} */ (
+          await themeEditSet('b', thing, thing === 'Height' ? '48px' : '4px', {
+            cwd,
+            on: 'app-shell-header',
+            only: true,
+          })
+        ).data;
+        expect(said(r)).not.toMatch(/saved without it/);
+        expect(said(r)).not.toMatch(/the row inside it/);
+        expect(built('top-nav')).not.toMatch(/"paddingBlock": "0"/);
+        await themeEditUndo('b', {cwd});
+      }
     },
     T,
   );
