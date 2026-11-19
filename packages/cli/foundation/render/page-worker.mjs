@@ -167,7 +167,7 @@ const assetsInlined = new Set();
 /** @type {Set<string>} */
 const packages = new Set();
 /** Static JSX text per element, for the dropped-children warning. */
-/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number}[]} */
+/** @type {{file: string, component: string, text: string, hidden: boolean, fn: string, line: number, chain: {component: string, line: number, from: string | null, name: string}[]}[]} */
 const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
@@ -245,6 +245,23 @@ const jsxName = node => {
     : n.type === 'JSXMemberExpression'
       ? `${n.object.name}.${n.property.name}`
       : '';
+};
+
+/**
+ * The module a JSX component name is imported from, and the name that module
+ * exports it under; `from` is null for a component the page defines itself.
+ * @param {any} p a JSX element path
+ * @param {string} name the element's name as the page writes it
+ * @returns {{from: string | null, name: string}}
+ */
+const importOf = (p, name) => {
+  const binding = p.scope.getBinding(name);
+  if (binding?.kind !== 'module') return {from: null, name};
+  const spec = binding.path.node;
+  return {
+    from: binding.path.parent.source.value,
+    name: spec.type === 'ImportSpecifier' ? (spec.imported.name ?? spec.imported.value) : name,
+  };
 };
 
 /** @type {Record<string, string>} */
@@ -1206,6 +1223,17 @@ function pagePlugin(filename, browser = false) {
             }
           }
         }
+        // The element and the components around it in the same JSX tree,
+        // innermost first: any of them can be the one that drops the text.
+        /** @type {{component: string, line: number, from: string | null, name: string}[]} */
+        const chain = [];
+        for (let up = p; up && (up.isJSXElement() || up.isJSXFragment()); up = up.parentPath) {
+          if (!up.isJSXElement()) continue;
+          const name = jsxName(up.node);
+          // Host elements are not components; a member name (`ui.Box`) is.
+          if (!/^[A-Z]/.test(name) && !name.includes('.')) continue;
+          chain.push({component: name, line: up.node.loc?.start.line ?? 0, ...importOf(up, name)});
+        }
         texts.push({
           file: filename,
           component,
@@ -1213,6 +1241,7 @@ function pagePlugin(filename, browser = false) {
           hidden: hidden || conditional,
           fn: fnKey(p),
           line: p.node.loc?.start.line ?? 0,
+          chain,
         });
       },
     },
