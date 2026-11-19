@@ -237,22 +237,32 @@ export function luminance(hex) {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 /**
- * A see-through color over an opaque one, as the eye sees it. `alpha` is two hex digits; both colors are opaque hex.
- * @param {string} color
- * @param {string} alpha
- * @param {string} under
+ * A hex color's red, green and blue, 0 to 255.
+ * @param {string} hex
+ * @returns {ColorTriple}
+ */
+export function hexToRgbTriple(hex) {
+  return hexToRgb(hex);
+}
+/**
+ * Red, green and blue (0 to 255, rounded) as a lowercase hex.
+ * @param {ReadonlyArray<number>} rgb
  * @returns {string}
  */
-export function compositeOver(color, alpha, under) {
-  const a = parseInt(alpha, 16) / 255;
-  const top = hexToRgb(color);
-  const below = hexToRgb(under);
-  const mix =
-    /**
-     * @param {number} i
-     */
-    i => Math.round(a * top[i] + (1 - a) * below[i]);
-  return rgbToHex(mix(0), mix(1), mix(2));
+export function rgbTripleToHex(rgb) {
+  return rgbToHex(Math.round(rgb[0]), Math.round(rgb[1]), Math.round(rgb[2]));
+}
+/**
+ * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
+ * @param {ReadonlyArray<number>} over
+ * @param {number} alpha
+ * @param {ReadonlyArray<number>} under
+ * @returns {ColorTriple}
+ */
+export function compositeOver(over, alpha, under) {
+  return /** @type {ColorTriple} */ (
+    over.map((x, n) => x * alpha + under[n] * (1 - alpha))
+  );
 }
 /**
  * The WCAG contrast ratio of two opaque colors.
