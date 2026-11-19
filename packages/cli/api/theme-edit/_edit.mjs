@@ -2770,6 +2770,8 @@ async function withSavedRepair(e, slug, cwd) {
         when: scoped.when,
         state: scoped.state,
         mode: scoped.mode,
+        // Checked as `set` runs the line: a box shorthand as its sides.
+        sides: true,
       },
       false,
     );

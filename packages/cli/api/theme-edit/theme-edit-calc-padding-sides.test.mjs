@@ -9,7 +9,7 @@
  * length said for every side is that one length.
  */
 
-import {readFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
@@ -322,6 +322,46 @@ describe('a padding of several lengths where only one works', () => {
       expect(line?.reason).toBeDefined();
       expect(line.reason).not.toMatch(/still needs a fix/);
       expect(saved()).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    'offers a hand-edited padding of two lengths back as the line set runs',
+    async () => {
+      const file = join(cwd, 'themes', 't', 't.settings.json');
+      const before = readFileSync(file, 'utf8');
+      const d = JSON.parse(before);
+      d.settings = [
+        {
+          thing: 'padding',
+          value: '2px 6px',
+          source: 'property',
+          on: 'dropdown-menu',
+        },
+      ];
+      writeFileSync(file, JSON.stringify(d, null, 2));
+      try {
+        /** @type {any} */
+        let error = null;
+        try {
+          await themeEditSet('t', '--spacing-4', '12px', {cwd});
+        } catch (e) {
+          error = e;
+        }
+        expect(error).not.toBeNull();
+        const names = (error.suggestions ?? []).map(
+          (/** @type {any} */ x) => x.name,
+        );
+        expect(names).toContainEqual(
+          expect.stringMatching(/ set t padding '2px 6px' --on dropdown-menu$/),
+        );
+        expect(names).not.toContainEqual(
+          expect.stringMatching(/ set t padding 2px --on dropdown-menu$/),
+        );
+      } finally {
+        writeFileSync(file, before);
+      }
     },
     T,
   );
