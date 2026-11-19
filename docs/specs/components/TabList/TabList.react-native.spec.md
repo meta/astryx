@@ -42,7 +42,7 @@ system_specs: [spec:AST-082, spec:AST-093]
 | Behavior                | A strip of tabs under a page or card header that switches between related views. An overflowing `hug` strip scrolls sideways and keeps the selected tab in view; a `fill` strip shares its width. An accent indicator slides to the selected tab. With `overflow="menu"`, tabs that do not fit move into a trailing More menu and the selected tab stays in the row.                              |
 | End-user impact         | A person swipes along a strip that is wider than the screen, always sees the selected tab, hears each tab's selected state and place, and feels the platform's selection feedback.                                                                                                                                                                                                                |
 | Builder impact          | An app writes the same `TabList`, `Tab` and `TabMenu` call site as on the web; the strip reads its look from the theme.                                                                                                                                                                                                                                                                           |
-| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged.                                                                                                                                                                                                                                                                                                                      |
+| Compatibility/readiness | Not yet released; additive. Draft. The core and web contracts are unchanged. Gaps are listed under Current-state impact.                                                                                                                                                                                                                                                                          |
 | Review checks           | Reject a web-only prop accepted and ignored, a selected tab left out of view, an indicator that moves under Reduce Motion or drawn under a stacked tab, a tab that reads its place only by its position, a `menu` strip that hides the selected tab, a `bleed` strip that clips a tab, its indicator or its divider, a visual value not taken from the theme, or a third-party native dependency. |
 | Governing rules         | `component:TabList` FR1–FR6 and AR1–AR2; `component:Tab` FR7; `component:TabMenu`; `component:MoreMenu`; `architecture:container-padding` INV9–INV11; `spec:AST-082` FR3, FR4 and FR7; `spec:AST-093` FR2–FR4; DEC-1–DEC-5 below.                                                                                                                                                                 |
 
@@ -65,6 +65,15 @@ Native adds to `component:TabList` or does differently.
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- FR1 gap: the package does not offer `edge`; it takes `isFullBleed` alone.
+- FR8 gap: `edge="bleed"` is not offered, so its geometry applies only through
+  `isFullBleed`.
+- FR7 gap: the place words count a `TabMenu` part as a tab, and the `TabMenu`
+  part reads a place of its own; under `overflow="menu"` they count the tabs
+  left in the row and the More button instead of every `Tab` in the strip.
 
 ## Ownership boundary
 
