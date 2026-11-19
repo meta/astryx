@@ -1323,7 +1323,7 @@ export function checkSkillPlaces(ctx) {
       ...base,
       status: 'warn',
       message: `Not checked: ${report.linkedOut.join(' ')}`,
-      fix: 'Make each folder a real folder inside the project, or choose another place with `astryx init --to`.',
+      fix: `Make each folder a real folder inside the project, or choose another place with ${init('--to <places>')}.`,
     };
   }
   const missing = report.files.filter(file => file.state === 'absent');
@@ -1349,7 +1349,7 @@ export function checkSkillPlaces(ctx) {
       ...base,
       status: 'warn',
       message: `${(missingNote + staleNote).trim()}${keptNote}${codexNote}`,
-      fix: `Run ${init('')} to write the saved places (\`astryx upgrade --apply\` also refreshes them after an Astryx update).`,
+      fix: `Run ${init('')} to write the saved places (\`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` also refreshes them after an Astryx update).`,
     };
   }
   const current = report.files.filter(file => file.state === 'current');
@@ -2752,10 +2752,10 @@ export function checkComputerAgentText(ctx) {
       ? ` Also in the folders \`init --to\` saved: ${folders.map(f => f.path).join(', ')}.`
       : '') +
     (staleFolders.length > 0
-      ? ` From another release there: ${staleFolders.map(f => f.path).join(', ')}; the CLI installed for the computer refreshes them after its next upgrade, and \`astryx init --to <folder>\` writes one now.`
+      ? ` From another release there: ${staleFolders.map(f => f.path).join(', ')}; the CLI installed for the computer refreshes them after its next upgrade, and \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one now.`
       : '') +
     (deletedFolders.length > 0
-      ? ` Deleted there, so not refreshed: ${deletedFolders.map(f => f.path).join(', ')}; \`astryx init --to <folder>\` writes one again.`
+      ? ` Deleted there, so not refreshed: ${deletedFolders.map(f => f.path).join(', ')}; \`${formatCliCommand('init --to <folder>', ctx.cwd)}\` writes one again.`
       : '') +
     (keptFolders.length > 0
       ? ` Kept as they are (edited, or not written by Astryx): ${keptFolders.map(f => f.path).join(', ')}.`

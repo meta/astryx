@@ -181,7 +181,7 @@ export function skillPlaceEscape(place, projectRoot) {
       assertWithin(path.relative(projectRoot, file), projectRoot, {label: 'skill file'});
     } catch (err) {
       if (err instanceof PathSafetyError) {
-        return `${err.message} Astryx writes the project skill only inside the project; make that folder a real folder in the project, or choose another place with \`astryx init --to\`.`;
+        return `${err.message} Astryx writes the project skill only inside the project; make that folder a real folder in the project, or choose another place with \`--to\`.`;
       }
       throw err;
     }
