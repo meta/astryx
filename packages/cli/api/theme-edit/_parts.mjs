@@ -122,7 +122,7 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide, within?: string[]}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide, within?: string[], conds?: string[]}} TextPair
  *   `over`: the region the part sits in (a header), whose background shows
  *   through a see-through background of the part's own, else the page
  * @typedef {{censusKey: string, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
@@ -1472,12 +1472,21 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     for (const anc of stack)
       for (const at of anc.all ?? (anc.target ? [anc.target] : []))
         if (at !== target) within.add(at);
+    // (The conditions the text's own part was drawn in there, its variant
+    // and state attributes: a top nav link in the phone menu is
+    // `mode=drawer`.)
+    const conds = new Set(pairs.get(k)?.conds ?? []);
+    const own = [...stack]
+      .reverse()
+      .find(a => (a.all ?? (a.target ? [a.target] : [])).includes(target));
+    conds.add(own?.cond ?? '');
     pairs.set(k, {
       text: target,
       fg,
       bg,
       sample: sample.slice(0, 30),
       within: [...within],
+      conds: [...conds],
     });
   };
   /** The parts whose paint is a line inside them. @type {Set<string>} */
@@ -2292,7 +2301,16 @@ export function partHeightPx(map, part, own, tokens, pxOf) {
   const len = v => (v == null ? 0 : (px(v) ?? 0));
   const pad = blockSides(reader(/^padding/), 'padding');
   const border = blockSides(reader(/^border/), 'border-width');
-  const sizes = reader(/^(min-)?height$|block-size$/);
+  // (A height Core gives the part only in a placement or state of its own,
+  // such as a top nav link's row in the phone menu, is not its height at
+  // rest.)
+  const sizesFamily = /^(min-)?height$|block-size$/;
+  const ownsSize = [...Object.keys(map[part]?.at ?? {}), ...FAMILY_PROPS]
+    .filter(k => sizesFamily.test(k))
+    .some(k => own(k) != null);
+  /** @param {string} prop */
+  const sizes = prop =>
+    ownsSize ? own(prop) : (map[part]?.at?.[prop]?.always ?? null);
   const explicit = [sizes('height'), sizes('min-height'), sizes('block-size')]
     .map(v => (v == null ? null : px(v)))
     .filter(n => n != null);
