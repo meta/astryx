@@ -124,6 +124,9 @@ describe('doctor core-props', () => {
         'src/Panel.tsx': 'export function Panel(props: {tone: string}) { return null; }\n',
         // A test file is not read.
         'src/App.test.tsx': app('TabList', '<TabList selectedID="a" />'),
+        // A custom element declared with any props, and a catch-all entry, hide no HTML attribute.
+        'src/elements.d.ts':
+          "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicElements {\n      'model-viewer': any;\n      [element: string]: any;\n    }\n  }\n}\n",
       });
       expect(check?.status).toBe('pass');
       expect(check?.message).toMatch(/^No prop was found that a Core component does not take \(\d+ props read\)\.$/);
@@ -134,6 +137,12 @@ describe('doctor core-props', () => {
   it(
     "reads a project's own declaration that gives every component a prop, and judges no module or project on another JSX runtime",
     async () => {
+      // A string index on what JSX gives every component makes JSX take every name.
+      const everyName = await propsCheck({
+        'src/every-name.d.ts': "import 'react';\ndeclare module 'react' {\n  namespace JSX {\n    interface IntrinsicAttributes {\n      [name: string]: unknown;\n    }\n  }\n}\n",
+        'src/App.tsx': app('TabList', '<TabList selectedID="a" />'),
+      });
+      expect(everyName?.status).toBe('pass');
       // A library's css prop, declared for every component by the project's own types.
       const declared = await propsCheck({
         'src/css-prop.d.ts': "import 'react';\ndeclare module 'react' {\n  interface Attributes {\n    css?: unknown;\n  }\n}\n",

@@ -64,10 +64,10 @@ function subpathsByComponent(projectDir) {
 
 /**
  * A module that exists only for this read: it names each component's props
- * type, imported from the module that declares it; every prop name of every
- * HTML and SVG element React's types know; and the props JSX gives every
- * component (`React.JSX`, or the global `JSX` of older React types), which a
- * project's own declarations can widen (a `css` prop).
+ * type, imported from the module that declares it; the HTML and SVG elements
+ * React's types know, whose prop names the read lists; and what JSX gives
+ * every component (`React.JSX`, or the global `JSX` of older React types),
+ * which a project's own declarations can widen (a `css` prop).
  * @param {string[]} components
  * @param {Map<string, string>} modules each component's module
  */
@@ -76,10 +76,10 @@ function queryText(components, modules) {
   return [
     ...imports,
     "import type * as React from 'react';",
-    'export type Attributes = {[K in keyof React.JSX.IntrinsicElements]: keyof React.JSX.IntrinsicElements[K]}[keyof React.JSX.IntrinsicElements];',
-    'export type GlobalAttributes = {[K in keyof JSX.IntrinsicElements]: keyof JSX.IntrinsicElements[K]}[keyof JSX.IntrinsicElements];',
-    'export type Everywhere = keyof (React.JSX.IntrinsicAttributes & React.JSX.IntrinsicClassAttributes<unknown>);',
-    'export type GlobalEverywhere = keyof (JSX.IntrinsicAttributes & JSX.IntrinsicClassAttributes<unknown>);',
+    'export type Elements = React.JSX.IntrinsicElements;',
+    'export type GlobalElements = JSX.IntrinsicElements;',
+    'export type Everywhere = React.JSX.IntrinsicAttributes & React.JSX.IntrinsicClassAttributes<unknown>;',
+    'export type GlobalEverywhere = JSX.IntrinsicAttributes & JSX.IntrinsicClassAttributes<unknown>;',
     ...components.flatMap((_, i) => [
       `export type Component${i} = typeof Component${i}Value;`,
       `export type Props${i} = React.ComponentProps<typeof Component${i}Value>;`,
@@ -172,21 +172,28 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
   const checker = program.getTypeChecker();
   /** @type {Map<string, any>} */
   const aliases = new Map();
-  for (const statement of program.getSourceFile(file)?.statements ?? []) {
+  const source = program.getSourceFile(file);
+  for (const statement of source?.statements ?? []) {
     if (ts.isTypeAliasDeclaration(statement)) {
       aliases.set(statement.name.text, checker.getTypeAtLocation(statement.name));
     }
   }
   /** @type {Map<string, Map<string, boolean>>} */
   const takes = new Map();
-  const attributesType = [aliases.get('Attributes'), aliases.get('GlobalAttributes')].find(type => type && !unreadable(ts, type));
-  /** @type {any[]} */
-  const names = attributesType?.isUnion() ? attributesType.types : attributesType ? [attributesType] : [];
-  const attributes = new Set(names.filter(type => type.isStringLiteral()).map(type => type.value));
-  const everywhere = [aliases.get('Everywhere'), aliases.get('GlobalEverywhere')].find(type => type && !unreadable(ts, type));
-  for (const type of everywhere?.isUnion() ? everywhere.types : everywhere ? [everywhere] : []) {
-    if (type.isStringLiteral()) attributes.add(type.value);
+  // Named members only: an element the project declares with `any` props, or
+  // a catch-all index entry, names no attribute and must not hide the rest.
+  /** @type {Set<string>} */
+  const attributes = new Set();
+  const elements = [aliases.get('Elements'), aliases.get('GlobalElements')].find(type => type && !unreadable(ts, type));
+  for (const element of elements ? checker.getPropertiesOfType(elements) : []) {
+    const type = checker.getTypeOfSymbolAtLocation(element, source);
+    if (unreadable(ts, type)) continue;
+    for (const attribute of checker.getPropertiesOfType(type)) attributes.add(attribute.getName());
   }
+  const everywhere = [aliases.get('Everywhere'), aliases.get('GlobalEverywhere')].find(type => type && !unreadable(ts, type));
+  for (const each of everywhere ? checker.getPropertiesOfType(everywhere) : []) attributes.add(each.getName());
+  // A string index on what JSX gives every component takes every name.
+  const takesEveryName = everywhere != null && checker.getIndexInfoOfType(everywhere, ts.IndexKind.String) != null;
   if (attributes.size === 0) {
     return {takes, attributes, unread: "TypeScript could not read React's types from this project"};
   }
@@ -199,7 +206,7 @@ export function readCorePropTypes({ts, projectDir, configDir, options: configOpt
     if (isGeneric(ts, checker, own)) return;
     /** @type {Map<string, boolean>} */
     const verdicts = new Map();
-    for (const prop of props.get(name) ?? []) verdicts.set(prop, propsTypeTakes(ts, checker, propsType, prop));
+    for (const prop of props.get(name) ?? []) verdicts.set(prop, takesEveryName || propsTypeTakes(ts, checker, propsType, prop));
     takes.set(name, verdicts);
   });
   if (components.length > 0 && !readAny) {
