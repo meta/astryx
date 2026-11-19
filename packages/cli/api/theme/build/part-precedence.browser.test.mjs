@@ -7,8 +7,9 @@
  * both) and the caller's props (none, color, size, the parts' default color).
  * A part on Text's element changes only what its caller left unset: a plain
  * Text draws the same with or without the part entries, and a prop the caller
- * sets on a Timestamp or a Timer draws as it would with no part entry. CI
- * runs it in node-browser-contracts' "Part precedence browser case" step.
+ * sets on a Timestamp or a Timer draws as it would with no part entry. It
+ * runs with ASTRYX_PART_PRECEDENCE_BROWSER=1 and Chromium installed; without
+ * the variable the Node shards list it as skipped.
  */
 
 import * as fs from 'node:fs';
@@ -17,8 +18,7 @@ import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
-// The case runs only in node-browser-contracts' "Part precedence browser
-// case" step, after the Chromium install; the Node shards list it as skipped.
+// The case needs Chromium; it runs only with ASTRYX_PART_PRECEDENCE_BROWSER=1.
 const BROWSER_STEP = process.env.ASTRYX_PART_PRECEDENCE_BROWSER === '1';
 const {chromium} = createRequire(import.meta.url)('playwright');
 

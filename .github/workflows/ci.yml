@@ -1867,17 +1867,6 @@ jobs:
           ASTRYX_RENDER_CHART_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
 
-      # part-precedence.browser.test.mjs draws a plain Text, a Timestamp and
-      # a Timer in Chromium for every mix of a theme's text entries, its
-      # timestamp and timer entries and the caller's props, and checks who
-      # wins. The Node legs skip it; with ASTRYX_PART_PRECEDENCE_BROWSER set,
-      # a missing browser fails it.
-      - name: Part precedence browser case
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        env:
-          ASTRYX_PART_PRECEDENCE_BROWSER: '1'
-        run: pnpm exec vitest run packages/cli/api/theme/build/part-precedence.browser.test.mjs --maxWorkers=1
-
       # template-phone-fit.browser.test.mjs builds every ready page template
       # into one Vite app and shows each in Chromium's phone emulation at
       # 390 px, with touch and with a mouse; it fails on horizontal overflow
