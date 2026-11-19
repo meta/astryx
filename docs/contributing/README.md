@@ -15,3 +15,5 @@ contracts, or component contracts.
 - [Writing specification records](spec-writing.md): the six-month test, the
   rubric an author runs over a record before review, and the results a record
   pull request reports.
+- [Measure first-load JavaScript](first-load.md): compare a change's first
+  load with `pnpm size:pages` and, across bundlers, `pnpm size:matrix`.
