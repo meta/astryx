@@ -657,6 +657,43 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     expect(onSelect).toHaveBeenCalledWith('A');
   });
 
+  it('a finger that begins on a row of a menu whose rows fit has its moves cancelled until it lifts, so its touchend stays cancelable (spec:AST-094 FR19, FR21)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch());
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    row('A').dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(true);
+    fireEvent.pointerMove(row('B'), touch());
+    fireEvent.pointerUp(row('B'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(onSelect).toHaveBeenCalledWith('B');
+    // The gesture ended, so the page's moves are its own again.
+    const after = new Event('touchmove', {bubbles: true, cancelable: true});
+    document.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('a finger that begins on a row of a menu that scrolls keeps its moves, so the menu pans (module:DropdownMenu/useMenuPress FR4)', () => {
+    let scroller: HTMLElement | null = null;
+    render(<Harness getScroller={() => scroller} />);
+    scroller = screen.getByRole('menu');
+    fireEvent.pointerDown(row('A'), touch());
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    row('A').dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(false);
+    fireEvent.pointerUp(row('A'), touch());
+  });
+
+  it('a mouse press on a row cancels no touch moves', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), mouse());
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    document.dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(false);
+    fireEvent.pointerUp(row('A'), mouse());
+  });
+
   it('a finger that slides onto another row and lifts there cancels its touchend', () => {
     const onSelect = vi.fn();
     render(<Harness onSelect={onSelect} />);

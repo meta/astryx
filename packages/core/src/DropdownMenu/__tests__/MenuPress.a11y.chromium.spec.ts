@@ -344,6 +344,62 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     expect(activations).toEqual(['Delete clicked']);
   });
 
+  test('touch: a finger that begins on a row of a menu whose rows fit has every move and its lift cancelled, and acts once (spec:AST-094 FR19, FR21)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await presented(page);
+    // Read each touch event last, at the window, after every listener ran.
+    await page.evaluate(() => {
+      const seen = {
+        moves: 0,
+        cancelledMoves: 0,
+        endCancelled: null as boolean | null,
+      };
+      (window as unknown as {__touches: typeof seen}).__touches = seen;
+      window.addEventListener('touchmove', event => {
+        seen.moves += 1;
+        if (event.defaultPrevented) {
+          seen.cancelledMoves += 1;
+        }
+      });
+      window.addEventListener('touchend', event => {
+        seen.endCancelled = event.defaultPrevented;
+      });
+    });
+
+    const edit = await center(page, 'menuitem', 'Edit');
+    const del = await center(page, 'menuitem', 'Delete');
+    await touch.start(cdp, edit);
+    await touch.slide(cdp, edit, del);
+    await touch.end(cdp);
+
+    const seen = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __touches: {
+              moves: number;
+              cancelledMoves: number;
+              endCancelled: boolean | null;
+            };
+          }
+        ).__touches,
+    );
+    expect(seen.moves).toBeGreaterThan(0);
+    // An uncancelled move lets the browser make the lift uncancelable.
+    expect(seen.cancelledMoves).toBe(seen.moves);
+    expect(seen.endCancelled).toBe(true);
+    await expect.poll(() => activations).toEqual(['Delete clicked']);
+    await page.waitForTimeout(500);
+    expect(activations).toEqual(['Delete clicked']);
+  });
+
   test('touch: a tap on a row acts exactly once', async ({page}) => {
     const activations = collectActivations(page);
     const cdp = await enableTouch(page);

@@ -1024,8 +1024,22 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         },
         native,
       );
+      // A finger that begins on a row of a menu whose rows fit is this
+      // menu's, as a trigger-opened one is: the page does not pan here, and
+      // a move left uncancelled lets the browser make the lift's touchend
+      // uncancelable. A menu that scrolls keeps its moves for its own pan.
+      if (pointerType !== 'mouse' && getScroller() == null) {
+        installTouchMovePreventer();
+      }
     },
-    [attach, optionsRef, resolvePoint, step],
+    [
+      attach,
+      getScroller,
+      installTouchMovePreventer,
+      optionsRef,
+      resolvePoint,
+      step,
+    ],
   );
 
   const isTriggerClickFromPress = useCallback((): boolean => {
