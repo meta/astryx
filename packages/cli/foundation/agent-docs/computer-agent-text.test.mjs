@@ -92,6 +92,18 @@ const isLinkToFolder = at =>
   fs.lstatSync(at).isSymbolicLink() &&
   fs.realpathSync(at) === fs.realpathSync(FOLDER());
 
+describe('the computer text defers to a project\'s own Astryx text', () => {
+  it('says so right after its opening sentence, and names no command', () => {
+    const text = renderComputerAgentText({command: 'astryx'});
+    const line =
+      "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.";
+    expect(text).toContain(
+      `Astryx, a design system and UI library, is available on this computer.\n${line}\n`,
+    );
+    expect(line).not.toMatch(/`astryx /u);
+  });
+});
+
 describe('renderComputerAgentText', () => {
   it('a skill named astryx with a one-sentence when-to-use description, in strict YAML', () => {
     {
@@ -148,7 +160,7 @@ describe('renderComputerAgentText', () => {
   it('gives the build workflow: a project with Astryx installed and init run, the shared template steps, then check and deliver the build', () => {
     const text = renderComputerAgentText({command: 'astryx'});
     expect(text).toContain(
-      'To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). Run `astryx init` there and follow the agent docs it writes.',
+      "To build UI, work in a project folder (create one if there is none). In a new project, add `@astryxdesign/core` and `@astryxdesign/cli`; in an existing app that doesn't use Astryx, keep its current UI stack unless the user asks for Astryx, and then add both. To a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version, pinned exactly when Core is (no `^` or `~`). In a project that has or adds Astryx, run `astryx init` and follow the agent docs it writes; the WORKFLOW below is for that project.",
     );
     for (const line of [WORKFLOW_TITLE, ...WORKFLOW_STEPS]) {
       expect(text).toContain(line);

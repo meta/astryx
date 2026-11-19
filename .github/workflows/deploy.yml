@@ -346,6 +346,14 @@ jobs:
           export VITEST_SHARD_WATCHDOG_SECONDS
           pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs
 
+      # An early warning, never a failure: past one Node test file in twenty
+      # without a recorded time, the run's summary says so and names the
+      # count. The record refresh (node-record-refresh.yml) corrects it.
+      - name: Warn when the Node test record misses more than one file in twenty
+        if: ${{ always() && matrix.shard == 1 }}
+        continue-on-error: true
+        run: node .github/scripts/node-record-refresh.mjs warn
+
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its
   # push only runs the suite) undetected — then break the `build` check on

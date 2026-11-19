@@ -560,7 +560,9 @@ describe('theme build adaptations', () => {
       'utf-8',
     );
     const js = fs.readFileSync(path.join(themesDir, 'points-only.js'), 'utf-8');
-    expect(css).not.toContain('@media');
+    // No width rule; a flipped toast surface's dark-page rules may read the
+    // reader's color scheme.
+    expect(css).not.toMatch(/@media \(width/);
     expect(js).toMatch(/"xl": 1400/);
     expect(js).toContain('__adaptations');
   });

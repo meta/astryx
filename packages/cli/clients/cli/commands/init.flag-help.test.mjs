@@ -58,15 +58,17 @@ async function initJson(args) {
 const exitWhen = code => initDoc.exitCodes?.find(e => e.code === code)?.when ?? '';
 
 describe('astryx init flag interactions', () => {
-  it('--remove-agents: help says it only removes the block, and it ignores every install flag', async () => {
-    const help = (await initOptions())['--remove-agents'];
+  it('--remove (and --remove-agents, the same option): help says what it removes, and it ignores every install flag', async () => {
+    const options = await initOptions();
+    expect(options['--remove-agents']).toContain('--remove');
+    const help = options['--remove'];
     for (const flag of ['--features', '--all', '--agent', '--agent-docs-path']) {
       expect(help).toContain(flag);
     }
     for (const file of ['AGENTS.md', '.claude/CLAUDE.md', '.cursorrules', '.hermes.md', 'HERMES.md']) {
       expect(help).toContain(file);
     }
-    expect(help).toMatch(/--agent-docs-path are refused/);
+    expect(help).toMatch(/--agent-docs-path and --once are refused/);
     expect(help).toMatch(/at the project root \(where init writes them\) and in this folder/);
 
     await initJson(['--agent-docs-path', 'docs/AI.md']);
@@ -90,7 +92,7 @@ describe('astryx init flag interactions', () => {
   it('--all: help says it overrides --features, and an unknown feature beside it is not checked', async () => {
     const options = await initOptions();
     expect(options['--all']).toMatch(/refused with --features/);
-    expect(options['--features']).toMatch(/Refused with --all or --remove-agents/);
+    expect(options['--features']).toMatch(/Refused with --all or --remove/);
     expect(options['--features']).toContain('ERR_UNKNOWN_FEATURE');
 
     const {status, envelope} = await initJson(['--all', '--features', 'bogus']);

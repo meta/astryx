@@ -90,6 +90,7 @@ import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
  * @property {string} [_title]
  * @property {string} [_topic] - A doc result's topic or docs-tree route.
  * @property {string} [_section] - A doc result's section key, when it is one section.
+ * @property {boolean} [_experimentalGuide] - An experimental guide search returns (spec:AST-017 FR27): only where its folder may see it.
  * @property {string} [_command] - The command that reads exactly this doc part.
  * @property {string} [_parent] - The command that opens the level above a doc
  *   part: its topic's section list, or the docs-tree namespace it sits in.

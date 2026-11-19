@@ -163,6 +163,7 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     cursor: {
       default: 'pointer',

@@ -48,8 +48,10 @@ const SURFACE_TEXT = {
 };
 
 /**
- * The selector Core's TableRow gives a striped table's painted rows (its
- * even rows, not counting expansion panels); the striped-row rule repeats it.
+ * The selector Core's TableRow gives a striped table's painted rows: its
+ * even rows, not counting expansion panels. The striped-row rule repeats it
+ * under the row's `striped` state, so a plain table's rows keep the text
+ * around them.
  */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
@@ -80,7 +82,7 @@ const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
   ['avatar-group-overflow', 'base'],
   ['segmented-control-item', 'selected'],
   ['step-indicator', 'progress:not-started'],
-  ['table-row', 'base', STRIPED_ROW],
+  ['table-row', 'striped', STRIPED_ROW],
   ['banner-content', 'base'],
   ['input-group-text', 'base'],
   ['text-input', 'base'],
@@ -245,6 +247,9 @@ const SECONDARY_COMPLEX_SELECTOR = {
   ':hover:not(:has(> :is(:disabled, [aria-disabled="true"])))':
     SECONDARY_BUTTON[':hover'],
 } as const;
+
+/** The color modes y2k draws: light and dark. */
+export const colorModes = ['light', 'dark'] as const;
 
 export const y2kTheme = defineTheme({
   name: 'y2k',
@@ -442,6 +447,9 @@ export const y2kTheme = defineTheme({
     '--radius-container': '0px',
     '--radius-page': '0px',
     '--radius-full': '0px',
+    // Set, so a theme that extends Y2K and sets its own container radius
+    // keeps square chat surfaces.
+    '--radius-chat': '0px',
 
     // =========================================================================
     // Shadows — warm cream neutral

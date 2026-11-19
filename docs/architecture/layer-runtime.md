@@ -100,7 +100,8 @@ changes live in `spec:AST-003`; they are not current architecture.
 
 ## Purpose
 
-Layered UI must escape clipping, stay positioned against its trigger, preserve
+Layered UI must escape clipping, stay positioned against its anchor (the
+trigger unless a separate anchor is named), preserve
 nearby theme and writing context, and reconcile browser-owned visibility with
 React state.
 
@@ -146,15 +147,16 @@ owns Theme provider behavior; this record owns where a layer's DOM is hosted.
 
 `useLayer` has three positioning modes:
 
-- **context / anchor:** the trigger receives a unique CSS `anchor-name`; the
+- **context / anchor:** the anchor (the trigger unless a separate anchor is
+  named) receives a unique CSS `anchor-name`; the
   surface receives `position-anchor`, logical `position-area`, and ordered
   fallback positions;
-- **context / custom:** the trigger and `position-anchor` relationship remain,
+- **context / custom:** the anchor and `position-anchor` relationship remain,
   while the caller owns geometry, fallback, offset, and direction handling; and
 - **fixed:** the caller supplies viewport `x` and `y` coordinates and receives no
   CSS-anchor geometry.
 
-Anchor names form a list so several layers may share one trigger without
+Anchor names form a list so several layers may share one anchor without
 clobbering one another. Standard placement uses the `self-*` logical keyword
 family so inherited direction controls RTL behavior. Every anchored placement
 can flip across either axis. Centered placements also gain span fallbacks so the
@@ -196,9 +198,9 @@ the larger of the two block gutters — so a bar declared on one block edge keep
 a layer the same distance from the opposite edge.
 
 The layer box is capped to the viewport minus both gutters on both axes, never
-to the span of viewport beside the trigger, and never exceeds that cap. An
+to the span of viewport beside the anchor, and never exceeds that cap. An
 explicit size renders at its size up to the cap; a content-sized layer wraps to
-the room beside its trigger when its content can wrap and keeps its size up to
+the room beside its anchor when its content can wrap and keeps its size up to
 the cap when it cannot. Content that cannot fit the cap overflows inside the
 layer box, where the composing component scrolls or clips it (Popover scrolls
 once it measures overflow); the box itself stays on screen. A consumer caps its
@@ -209,15 +211,15 @@ expression, because a CSS minimum otherwise wins over a maximum.
 The fallback order is the runtime's: preferred position; flip across the
 placement axis; flip across the alignment axis; both; then, while the anchor is
 in view, the slide: named `@position-try` options (`Layer/layerSlideRules.ts`)
-whose area spans the whole alignment axis, same side of the trigger first,
+whose area spans the whole alignment axis, same side of the anchor first,
 opposite side second, each carrying the gutter on both alignment-axis edges and
 the clearance-and-gutter pair of the side it lands on, which the browser's
 overflow alignment shifts the least distance that brings the margin box inside
 the viewport. Centered layers keep their one-sided spans ahead of the full
 span. The slide is its own option because a layer wider than the room on either
-side of its trigger overflows every flipped option on the alignment axis, and
+side of its anchor overflows every flipped option on the alignment axis, and
 the browser would otherwise keep the base option and never move the layer to
-the side of the trigger with room on the placement axis. The rules are one
+the side of the anchor with room on the placement axis. The rules are one
 static style sheet the runtime installs in the layer's document head before
 the layer's first paint — never inside the layer, where a role-bearing layer's
 text would name them to assistive technology, and never beside it, where they
@@ -315,8 +317,9 @@ Public `useLayer` defaults to `popover="manual"`; Popover-family APIs normally
 select `popover="auto"`. Browser-initiated closes are observed through the queued
 `toggle` event. The browser may already have hidden the surface before `isOpen`,
 `onHide`, or controlled-state synchronization catches up. A show from another
-trigger while such a close is in flight moves the layer to that trigger; that
-close is not reported.
+trigger while such a close is in flight moves the layer to that trigger, and
+a `usePopover` `show()` moves it to the element its `anchorRef` holds
+(`spec:AST-116` FR9; FR9 gap there); that close is not reported.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
 `useLayer` records the gesture and the trigger associated with a browser close,
@@ -545,7 +548,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV7 — Existing native-light-dismiss guards identify gestures.** The press
   that closes a layer cannot reopen it from the trigger it was open for; a press
   on another trigger of the same layer may show it, anchored to that trigger: a
-  show in the same gesture from another trigger moves the layer to that trigger;
+  show in the same gesture from another trigger moves the layer to that trigger,
+  and a `usePopover` `show()` in the same gesture moves the layer to the
+  element its `anchorRef` holds, or keeps it open there when that element is
+  unchanged (`spec:AST-116` FR9; FR9 gap there);
   menu-hover also
   suppresses exposure-induced hover. A one-finger touch that starts outside an
   open light-dismiss popover and travels the shared pan distance is a gesture,
@@ -597,7 +603,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   each layer carries the overflow its surface takes under it, so a surface
   that reads it scrolls from the frame the cap lands, and its content never
   paints past the capped box. A layer the keyboard does not reach, a layer
-  placed above its trigger, and a layer in custom or fixed mode stay as they
+  placed above its anchor, and a layer in custom or fixed mode stay as they
   are. A layer that reads the keyboard inset and was placed while a keyboard is
   reported keeps its top until it closes: when the cap lifts it grows downward
   in place; when the keyboard rises it moves up above it and then holds.
@@ -692,18 +698,19 @@ layers use Layer rendering without joining Escape/platform dismissal.
   layer stops at its own root. The native event is not stopped, so document
   and window listeners and light dismiss still receive it. Keyboard, focus,
   input, wheel, and drag events are out of scope.
-- **INV18 — Only a shown layer's trigger is an anchor.**
-  A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
+- **INV18 — Only a shown layer's anchor carries an anchor name.**
+  The element a layer anchors to, its trigger unless the caller names a separate anchor (`spec:AST-116` FR1), carries its CSS anchor name only while its layer is shown; a closed layer's anchor is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
 - **INV20 — An entrance starts from the side its layer lands on.** An
   anchored layer's shared entrance (`layerAnimations`) slides from, and
   scales about, the side it lands on after any flip. So it never slides onto
-  its trigger. It scales about the point where the layer meets its trigger:
-  on the edge that faces the trigger, on the trigger's center line. A layer
-  that covers its trigger's center has no side: its entrance scales about
+  its anchor (its trigger unless a separate anchor is named). It scales about
+  the point where the layer meets its anchor: on the edge that faces the
+  anchor, on the anchor's center line. A layer
+  that covers its anchor's center has no side: its entrance scales about
   that center and does not slide. A show that leaves the layer in place
   reads the side in its one measurement pass. Popover's touch growth starts
-  from the same point. Over its trigger's center it has no side to lengthen
+  from the same point. Over its anchor's center it has no side to lengthen
   along, so it only scales.
 
 - **INV21 — Script never moves a layer to follow its anchor.** An anchored
@@ -715,8 +722,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
 
 - **INV22 — A layer never inherits its trigger's press transform.** Press
   feedback scales only the trigger's own visual; a layer renders outside that
-  scaled subtree and anchors to the trigger's untransformed box
-  (`spec:AST-059` DEC-10).
+  scaled subtree and anchors to its anchor's untransformed box, the trigger's
+  unless a separate anchor is named (`spec:AST-059` DEC-10).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -842,7 +849,7 @@ it on the surface inside the layer and run no layout while it plays.
 - `Layer/useLayer.tsx` owns Popover API lifecycle, state reconciliation,
   anchor/fixed/custom rendering, trigger source, and current same-gesture memory.
 - `Layer/layerHost.ts` owns safe inline versus nearest corrective portal placement.
-- `Layer/anchorName.ts` owns composition of anchor names on one trigger.
+- `Layer/anchorName.ts` owns composition of anchor names on one anchor.
 - `Layer/layerTextReset.stylex.ts` owns the text baseline and
   `Layer/layerStructureReset.stylex.ts` owns the named structural custom-property
   reset applied on layer content roots.
