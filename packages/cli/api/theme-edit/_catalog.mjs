@@ -284,8 +284,27 @@ export const OPEN_SCENES = Object.freeze([
         {id: '2', name: 'Bob', role: 'Designer', status: 'Away'},
         {id: '3', name: 'Charlie', role: 'Manager', status: 'Active'},
       ],
+      // (A cell that holds a supporting line under its value, as a
+      // dashboard's often does: its secondary text sits on the selected
+      // row's fill too.)
       columns: [
-        {key: 'name', header: 'Name', sortable: true},
+        {
+          key: 'name',
+          header: 'Name',
+          sortable: true,
+          renderCell: {
+            __render: h(
+              'VStack',
+              {},
+              h('Text', {}, 'Bob'),
+              h(
+                'Text',
+                {color: 'secondary', type: 'supporting'},
+                'Design team',
+              ),
+            ),
+          },
+        },
         {key: 'role', header: 'Role', sortable: true},
         {key: 'status', header: 'Status'},
       ],
@@ -511,7 +530,12 @@ export function pageSource({
     'const SAMPLE_SOURCE = {search: q => SAMPLE_ITEMS.filter(i => i.label.toLowerCase().includes(String(q).toLowerCase())), bootstrap: () => SAMPLE_ITEMS, cancel: () => {}};',
   );
   lines.push(
-    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
+    // (A render prop named as data ({__render: tree}), a column's renderCell,
+    // is a function that draws that tree.)
+    'const rendered = v => Array.isArray(v) ? v.map(rendered) : v && typeof v === "object" && !v.__element ? (v.__render ? () => el(v.__render) : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rendered(x)]))) : v;',
+  );
+  lines.push(
+    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : rendered(v); for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
   );
   lines.push(`const ITEMS = ${JSON.stringify(items)};`);
   lines.push(
@@ -561,7 +585,7 @@ export function openLayerElements() {
 export default function Page() {
   if (LAYOUT === 'catalog') {
     return h('div', null, ITEMS.map((it, i) => {
-      const markup = html(it.tree);
+      const markup = html(it.tree, MODE, it.mounted ? 'mounted' : false);
       return markup == null ? null : h('section', {key: i, 'data-cat': it.name, dangerouslySetInnerHTML: {__html: markup}});
     }));
   }

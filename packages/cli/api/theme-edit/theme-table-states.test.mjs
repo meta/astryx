@@ -49,8 +49,11 @@ describe('a table on the open states page', () => {
   it('names the hooks its plugins call, so the page imports them', () => {
     const table = OPEN_SCENES.find(s => s.name === 'Table');
     expect(table).toBeTruthy();
+    // (Its name cell renders a value with a supporting line under it.)
     expect([...elementNames(table?.tree)].sort()).toEqual([
       'Table',
+      'Text',
+      'VStack',
       'useTableSelection',
       'useTableSortable',
     ]);

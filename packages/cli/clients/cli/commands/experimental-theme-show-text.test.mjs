@@ -88,14 +88,27 @@ describe('experimental theme editor show text output', () => {
     ).toBe(true);
   });
 
-  it('lists the generated files last, each on one line', () => {
+  it('lists the generated files last, each on one line, then the problems the theme has now', () => {
+    // (Show ends with what the theme still gets wrong: a violet accent's
+    // dark wash under a selected table row leaves its secondary text
+    // faint, so the files come right before that list.)
     const lines = text.trimEnd().split('\n');
-    const tail = lines.slice(-3).map(l => l.replace(/\s+/g, ' '));
+    const at = lines.findIndex(l => l.startsWith('openProblems:'));
+    const before = at < 0 ? lines : lines.slice(0, at).filter(l => l.trim());
+    const tail = before.slice(-3).map(l => l.replace(/\s+/g, ' '));
     expect(tail).toEqual([
       `config: ${json.colorFiles.config}`,
       `module: ${json.colorFiles.module}`,
       `receipt: ${json.colorFiles.receipt}`,
     ]);
+    expect(json.openProblems.map((/** @type {any} */ p) => p.problem)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^text in text \(.*\) is [\d.]+:1 in dark \(--color-text-secondary on table-row's #[0-9a-f]{6}\)/,
+        ),
+      ]),
+    );
+    expect(lines.slice(at + 1).join('\n')).toMatch(/ on table-row's /);
   });
 
   it('says colors, never palette or family, before the file names', () => {
