@@ -24,6 +24,9 @@ nested `AGENTS.md`.
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
   before opening or reviewing a mixed change. Before you request review, run
   `pnpm review:pre` and its checklist from a fresh session.
+- Before you mark a pull request ready: `pnpm preflight` runs `pnpm review:pre`
+  and CI's checks scoped to the change (`--browser` adds the browser specs;
+  `--quick` is a fast subset, not CI-equivalent).
 - Component work: derive the review's semantic triggers, load matching `current`
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers
@@ -241,7 +244,7 @@ astryx template --list # available page templates
 ON DEMAND:
 astryx docs <topic> --index # section index: one line per section, with its key
 astryx docs <topic> <section> # one section, by key or title
-astryx component <Name> --dense # props, variants, usage, anatomy for one component
+astryx component <Name> --dense # import, usage and props for one component; --detail full adds anatomy and theming
 astryx template <name> # emit full page source
 astryx template <name> --skeleton # layout skeleton with spatial annotations
 astryx swizzle <Name> # eject component source for deep customization

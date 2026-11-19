@@ -33,6 +33,13 @@ const mockItems = [
   },
 ];
 
+/** A finger tap: a touch press, then its click. */
+function tap(el: HTMLElement) {
+  fireEvent.pointerDown(el, {pointerType: 'touch'});
+  fireEvent.pointerUp(el, {pointerType: 'touch'});
+  fireEvent.click(el, {detail: 1});
+}
+
 describe('TopNavMenu', () => {
   it.each([
     'javascript:alert(1)',
@@ -193,6 +200,111 @@ describe('keyboard navigation (APG menu pattern)', () => {
 
     await user.click(screen.getByRole('menuitem', {hidden: true}));
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('closes the menu and returns focus to the trigger after Enter on an item', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(<TopNavMenu label="Menu" items={[{title: 'Action', onClick}]} />);
+    const trigger = screen.getByRole('button', {name: 'Menu'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    const item = screen.getByRole('menuitem', {hidden: true});
+    item.focus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes the menu and returns focus to the trigger after a tap on a link item', async () => {
+    const user = userEvent.setup();
+    render(<TopNavMenu label="Products" items={mockItems} />);
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const item = screen.getByRole('menuitem', {
+      name: /Analytics/,
+      hidden: true,
+    });
+    item.addEventListener('click', event => event.preventDefault());
+    tap(item);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the menu open after a mouse click on an item', async () => {
+    const user = userEvent.setup();
+    render(<TopNavMenu label="Products" items={mockItems} />);
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    const item = screen.getByRole('menuitem', {
+      name: /Analytics/,
+      hidden: true,
+    });
+    item.addEventListener('click', event => event.preventDefault());
+    await user.click(item);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the menu open after a pick on an item that sets hasCloseOnSelect to false', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMenu
+        label="Menu"
+        items={[{title: 'Copy link', onClick, hasCloseOnSelect: false}]}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Menu'});
+    await user.click(trigger);
+
+    tap(screen.getByRole('menuitem', {hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('does not reopen a hover-opened menu closed by a pick until the pointer leaves and returns', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <TopNavMenu
+          label="Menu"
+          items={[{title: 'Action', onClick: () => {}}]}
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Menu'});
+      await user.hover(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      screen.getByRole('menuitem', {hidden: true}).focus();
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The closing popup puts the trigger back under a still pointer, and
+      // the browser fires a new mouseenter: it must not reopen the menu.
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // A real leave and return opens it again.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('closes the menu with Escape', async () => {

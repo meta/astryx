@@ -8,7 +8,9 @@
  * The signature periwinkle and neon green remain exact anchors.
  */
 
+import {parseStyleKey} from '@astryxdesign/core/utils';
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {y2kIconRegistry} from './icons';
 import {y2kPaletteRefs} from './y2kPaletteRefs.generated';
 
@@ -28,22 +30,163 @@ const {
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
+/**
+ * Secondary text on the accent tint (a selected row, a dropzone's hint, a
+ * numbered citation): the nearest stop that reads on the tint over the page,
+ * a card and the muted fill. Inside a coloured card, a selected row and a
+ * numbered citation take a dark stop like the rest of the card's ink.
+ */
+const LIFTED_ON_PAGE = `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`;
+const LIFTED_ON_COLOURED_CARD = `light-dark(${neutral.light[30]}, ${neutral.dark[35]})`;
+
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
+const SURFACE_TEXT = {
+  '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
+  '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[70]})`,
+  '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
+};
+
+/**
+ * The selector Core's TableRow gives a striped table's painted rows (its
+ * even rows, not counting expansion panels); the striped-row rule repeats it.
+ */
+const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill) and draw text on it, each as
+ * `[part, rule, selector?]`. A coloured card's ink must not reach them, so
+ * each sets the theme's own text and link colours again. A transparent card
+ * is left out: it paints nothing, so it keeps its parent's ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string, string?]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['app-shell', 'variant:surface'],
+  ['app-shell', 'variant:section'],
+  ['app-shell-header', 'variant:surface'],
+  ['app-shell-sidenav', 'variant:surface'],
+  ['layout-panel', 'base'],
+  ['layout-content', 'base'],
+  ['code', 'base'],
+  ['avatar', 'base'],
+  ['avatar-group-overflow', 'base'],
+  ['segmented-control-item', 'selected'],
+  ['step-indicator', 'progress:not-started'],
+  ['table-row', 'base', STRIPED_ROW],
+  ['banner-content', 'base'],
+  ['input-group-text', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['dropdown-menu-radio', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+  ['chat-composer-drawer', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key, selector] of OWN_FILL_RULES) {
+    const rule = out[part]?.[key] ?? {};
+    out[part] = {
+      ...out[part],
+      [key]: selector
+        ? {
+            ...rule,
+            // A table sets its text color on its root, so a painted row
+            // sets it again as well as the tokens.
+            [selector]: {
+              ...SURFACE_TEXT,
+              color: 'var(--color-text-primary)',
+              ...((rule as Record<string, object>)[selector] ?? {}),
+            },
+          }
+        : {...SURFACE_TEXT, ...rule},
+    };
+  }
+  return out;
+}
+
+/** The coloured card variants: a pastel fill with dark ink in both modes. */
+const COLOURED_CARDS = [
+  'blue',
+  'cyan',
+  'gray',
+  'green',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'teal',
+  'yellow',
+];
+
+/** The selector Core gives a part's rule key. */
+function ruleSelector(part: string, key: string): string {
+  return `.astryx-${part}${parseStyleKey(key)}`;
+}
+
+/**
+ * Inside a coloured card and not inside a part with a fill of its own
+ * between that card and the element: where a part draws on the card's
+ * pastel fill. A part with its own fill above the card does not count.
+ */
+const COLOURED_CARD = `:is(${COLOURED_CARDS.map(
+  variant => `.astryx-card[data-variant="${variant}"]`,
+).join(', ')})`;
+const OWN_FILL = `:is(${OWN_FILL_RULES.filter(([, , selector]) => !selector)
+  .map(([part, key]) => ruleSelector(part, key))
+  .join(', ')})`;
+const IN_COLOURED_CARD = `:where(${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} *))`;
+/**
+ * The same one level down: a coloured card inside a part with its own fill
+ * that itself sits in a coloured card. The dark stop holds two coloured
+ * cards deep.
+ */
+const IN_NESTED_COLOURED_CARD = `:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} *):not(:where(${COLOURED_CARD} ${OWN_FILL} ${COLOURED_CARD} ${OWN_FILL} *))`;
+
 const y2kSyntax = defineSyntaxTheme({
   name: 'astryx-y2k',
   tokens: {
     keyword: [purple.light[40], purple.dark[75]],
-    string: [green.light[40], green.dark[65]],
-    comment: [neutral.light[40], neutral.dark[70]],
-    number: [orange.light[40], orange.dark[80]],
-    function: [blue.light[40], blue.dark[75]],
+    string: [green.light[35], green.dark[65]],
+    comment: [neutral.light[35], neutral.dark[70]],
+    number: [orange.light[35], orange.dark[80]],
+    function: [blue.light[35], blue.dark[75]],
     type: [purple.light[40], purple.dark[75]],
-    variable: [neutral.light[40], neutral.dark[70]],
-    operator: [neutral.light[40], neutral.dark[70]],
-    constant: [orange.light[40], orange.dark[80]],
+    variable: [neutral.light[35], neutral.dark[70]],
+    operator: [neutral.light[35], neutral.dark[70]],
+    constant: [orange.light[35], orange.dark[80]],
     tag: [red.light[35], red.dark[75]],
-    attribute: [yellow.light[40], yellow.dark[70]],
-    property: [teal.light[40], teal.dark[70]],
-    punctuation: [neutral.light[40], neutral.dark[70]],
+    attribute: [yellow.light[35], yellow.dark[70]],
+    property: [teal.light[35], teal.dark[70]],
+    punctuation: [neutral.light[35], neutral.dark[70]],
     background: [neutral.light[95], neutral.dark[5]],
     // Markers stay readable on diff tints in both modes. The closest pairing
     // is the dark added marker, which remains above the 4.5:1 text threshold.
@@ -228,7 +371,7 @@ export const y2kTheme = defineTheme({
     '--color-border-emphasized': [neutral.light[20], neutral.dark[45]],
 
     // Effects
-    '--color-skeleton': [neutral.light[80], neutral.dark[25]],
+    '--color-skeleton': [neutral.light[75], neutral.dark[25]],
     '--color-shadow': [
       withAlpha(neutral.light[15], '1A'),
       withAlpha(neutral.dark[0], '4D'),
@@ -299,6 +442,9 @@ export const y2kTheme = defineTheme({
     '--radius-container': '0px',
     '--radius-page': '0px',
     '--radius-full': '0px',
+    // Set, so a theme that extends Y2K and sets its own container radius
+    // keeps square chat surfaces.
+    '--radius-chat': '0px',
 
     // =========================================================================
     // Shadows — warm cream neutral
@@ -313,7 +459,43 @@ export const y2kTheme = defineTheme({
     '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[30], '50')}`,
   },
 
-  components: {
+  components: withOwnFillText({
+    // In light mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+        [IN_COLOURED_CARD]: {'--color-text-secondary': LIFTED_ON_COLOURED_CARD},
+        [IN_NESTED_COLOURED_CARD]: {
+          '--color-text-secondary': LIFTED_ON_COLOURED_CARD,
+        },
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': LIFTED_ON_PAGE,
+      },
+    },
     // Display sizes use a Crimson Text serif, distinct from the Poppins
     // used for body/headings.
     text: {
@@ -367,8 +549,12 @@ export const y2kTheme = defineTheme({
       },
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
-    selector: {'variant:secondary': SECONDARY_SELECTOR},
-    'multi-selector': {'variant:secondary': SECONDARY_SELECTOR},
+    selector: {
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
+    'multi-selector': {
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
 
     badge: {
@@ -428,10 +614,62 @@ export const y2kTheme = defineTheme({
       },
     },
 
+    // Coloured cards keep their pastel fill in dark mode, so their text
+    // takes dark ink there: the nearest neutral stops that read at 4.5:1.
     card: {
       base: {
         borderRadius: '0px',
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:cyan': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:gray': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:green': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:orange': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:pink': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:purple': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:red': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:teal': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:yellow': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
     },
 
@@ -440,7 +678,7 @@ export const y2kTheme = defineTheme({
         padding: 'var(--spacing-3)',
       },
     },
-  },
+  }),
 
   icons: y2kIconRegistry,
 });

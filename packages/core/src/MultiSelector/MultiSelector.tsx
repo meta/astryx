@@ -81,7 +81,7 @@ import {
   disabledInteractionProps,
   withholdCallerHandlers,
 } from '../utils/disabledInteraction';
-import {devWarn, warnOnce} from '../utils/devWarning';
+import {devPropError, devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -371,9 +371,14 @@ const styles = stylex.create({
     outline: 'none',
   },
 
-  // Popover container (for anchor positioning)
+  // Clamp the trigger width with the viewport cap. A CSS minimum otherwise
+  // wins over the layer's maximum.
   popover: {
-    minWidth: 'anchor-size(width)',
+    minWidth: stylex.firstThatWorks(
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSize})`,
+      `min(anchor-size(width), ${layerViewportInset.maxInlineSizeFallback})`,
+      'anchor-size(width)',
+    ),
   },
 
   // Select-all wrapper
@@ -1172,6 +1177,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: MultiSelectorProps<T>) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(options)) {
+    throw devPropError(
+      'MultiSelector',
+      'options',
+      "must be an array of options, for example options={[{value: 'nyc', label: 'New York'}]}. MultiSelector does not read <option> children.",
+    );
+  }
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;

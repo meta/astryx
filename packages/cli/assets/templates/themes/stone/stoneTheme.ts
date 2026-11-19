@@ -302,6 +302,8 @@ export const stoneTheme = defineTheme({
     '--radius-element': '0.5rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // Shadows
@@ -449,9 +451,78 @@ export const stoneTheme = defineTheme({
     typeahead: INPUT_STATUS_VARS,
     tokenizer: INPUT_STATUS_VARS,
 
+    // Secondary text on a muted or coloured card steps to the nearest
+    // neutral stop that reads at 4.5:1 on that fill, and on the accent tint
+    // of a selected row or a numbered citation over it.
     card: {
       base: {
         padding: 'var(--spacing-3)',
+      },
+      'variant:muted': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[80],
+        ),
+      },
+      'variant:blue': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:cyan': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:gray': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:green': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:orange': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:pink': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:purple': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:red': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[90],
+        ),
+      },
+      'variant:teal': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
+      },
+      'variant:yellow': {
+        '--color-text-secondary': lightDark(
+          neutral.light[35],
+          neutral.dark[95],
+        ),
       },
     },
 

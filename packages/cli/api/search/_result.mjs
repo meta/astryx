@@ -77,6 +77,7 @@ export function toResult(
         displayName: c._displayName,
         kind: c._kind,
         command: `astryx template ${c._commandName ?? c.name} --type ${c._kind}`,
+        isReady: !c._notReady,
       };
       break;
     case 'theme':
@@ -139,6 +140,14 @@ export function checkSearchArgs(query, options) {
  * @type {WeakMap<object, {name: string, keywords: string[], category: string}[]>}
  */
 export const searchedComponentsOf = new WeakMap();
+
+/**
+ * The results each search response leads with because the query names them
+ * (see rankLexical): the order of matches keeps them first in their run.
+ * Module-private, so they never enter search's JSON.
+ * @type {WeakMap<object, Set<object>>}
+ */
+export const namedLeadsOf = new WeakMap();
 
 /**
  * The components (name, keywords and category) a search response was scored against, or

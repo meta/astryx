@@ -76,6 +76,92 @@ function TooltipChart({showLineDots = false}: {showLineDots?: boolean}) {
  *  column highlight for bars and hover dots on lines. */
 export const Default: StoryObj = {
   render: () => <TooltipChart />,
+  play: async ({canvasElement}) => {
+    const hoveredMonth = 'Apr';
+    const datum = monthlyData.find(row => row.month === hoveredMonth);
+    expect(datum).toEqual({month: 'Apr', revenue: 61, costs: 38, trend: 48});
+    const expectedText = ['Apr', 'Revenue', '61', 'Costs', '38', 'Trend', '48'];
+
+    const getEventSurface = () =>
+      canvasElement.querySelector<SVGRectElement>(
+        'svg rect[fill="transparent"]',
+      );
+    const getMonthTick = () =>
+      Array.from(
+        canvasElement.querySelectorAll<SVGTextElement>(
+          'g[aria-label="bottom axis"] text',
+        ),
+      ).find(tick => tick.textContent === hoveredMonth);
+    const getTooltip = () =>
+      canvasElement.querySelector<HTMLElement>('[role="tooltip"]');
+    const isTooltipOpen = () =>
+      getTooltip()?.parentElement?.matches(':popover-open') ?? false;
+    const tooltipText = () =>
+      Array.from(getTooltip()?.querySelectorAll('*') ?? [])
+        .filter(
+          element =>
+            element.childElementCount === 0 && element.textContent?.trim(),
+        )
+        .map(element => element.textContent?.trim());
+
+    // The tooltip host renders only after the tooltip subscribes to the
+    // chart's pointer events. A pointer move before that is lost.
+    await waitFor(() => {
+      expect(getEventSurface()?.getBoundingClientRect().width).toBeGreaterThan(
+        0,
+      );
+      expect(getMonthTick()).toBeDefined();
+      expect(getTooltip()).not.toBeNull();
+    });
+    const eventSurface = getEventSurface();
+    const monthTick = getMonthTick();
+    if (!eventSurface || !monthTick) {
+      throw new Error('Chart event surface or axis tick is missing');
+    }
+
+    const tickRect = monthTick.getBoundingClientRect();
+    const plotRect = eventSurface.getBoundingClientRect();
+    const x = tickRect.left + tickRect.width / 2;
+    const y = plotRect.top + plotRect.height / 2;
+    // A real pointer reaches the layer only if nothing painted above it,
+    // such as the hover highlight, takes the hit.
+    const pointerTarget = () => {
+      const hit = canvasElement.ownerDocument.elementFromPoint(x, y);
+      return hit === eventSurface
+        ? 'chart pointer layer'
+        : `<${hit?.tagName ?? 'nothing'}>`;
+    };
+
+    expect(isTooltipOpen()).toBe(false);
+    expect(pointerTarget()).toBe('chart pointer layer');
+
+    eventSurface.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: x,
+        clientY: y,
+        pointerType: 'mouse',
+      }),
+    );
+    await waitFor(() => {
+      expect(isTooltipOpen()).toBe(true);
+      expect(tooltipText()).toEqual(expectedText);
+    });
+    expect(pointerTarget()).toBe('chart pointer layer');
+
+    // React derives onPointerLeave from pointerout and its relatedTarget.
+    eventSurface.dispatchEvent(
+      new PointerEvent('pointerout', {
+        bubbles: true,
+        relatedTarget: canvasElement.ownerDocument.body,
+        pointerType: 'mouse',
+      }),
+    );
+    await waitFor(() => {
+      expect(isTooltipOpen()).toBe(false);
+      expect(tooltipText()).toEqual([]);
+    });
+  },
 };
 
 function ModalLayeringFixture() {

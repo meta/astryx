@@ -522,6 +522,28 @@ const toLinear = c => {
   return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 };
 
+/**
+ * A color in OKLab (lightness, a, b), from its sRGB channels: what the eye
+ * sees as close or far ({@link oklabDistance}).
+ * @param {[number, number, number]} rgb
+ * @returns {number[]}
+ */
+export function oklabOf(rgb) {
+  return linearToOklab(rgb.map(toLinear));
+}
+
+/**
+ * How far apart two colors look: their distance in OKLab (0 the same; about
+ * 0.02 the least a person tells apart).
+ * @param {[number, number, number]} a
+ * @param {[number, number, number]} b
+ */
+export function oklabDistance(a, b) {
+  const x = oklabOf(a);
+  const y = oklabOf(b);
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
 /** Linear sRGB to OKLab. @param {number[]} lin @returns {number[]} */
 function linearToOklab([r, g, b]) {
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
@@ -985,6 +1007,15 @@ export function ratio(a, b) {
 }
 
 /**
+ * A value that is one var() of a custom property and nothing else, with
+ * any spaces inside its brackets as CSS reads them (`var( --x )`).
+ */
+export const LONE_VAR = /^var\(\s*--[a-z0-9-]+\s*\)$/i;
+
+/** A var() of a custom property with a fallback: the fallback, captured. */
+const VAR_FALLBACK = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i;
+
+/**
  * Whether a value is one CSS color: a hex, a color function, a named or
  * system color, a color keyword, or a variable. A function with plain
  * numbers must be well formed; one with `var()`, `calc()`, `env()` or a
@@ -1007,10 +1038,10 @@ export const isColorValue = v => {
   return (
     /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ||
     FUNCTIONS.test(s) ||
-    /^var\(--[a-z0-9-]+\)$/i.test(s) ||
+    LONE_VAR.test(s) ||
     // A variable with a color to fall back to.
-    (/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.test(s) &&
-      isColorValue(/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.exec(s)?.[1] ?? '')) ||
+    (VAR_FALLBACK.test(s) &&
+      isColorValue(/** @type {string} */ (VAR_FALLBACK.exec(s)?.[1]))) ||
     Object.hasOwn(NAMED, s.toLowerCase()) ||
     KEYWORDS.includes(s.toLowerCase()) ||
     SYSTEM.includes(s.toLowerCase())
@@ -1033,7 +1064,7 @@ export const isSize = (v, name = '') => {
   const n = cssNumber(s);
   if (n && n.unit && matchType('length-percentage', s) != null)
     return n.value >= 0 || /offset|tracking|letter-spacing|indent/.test(name);
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;
 };
@@ -1047,7 +1078,7 @@ export const isSize = (v, name = '') => {
  */
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   const n = cssNumber(s);
   // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
@@ -1079,14 +1110,21 @@ export function withoutCssEscapes(v) {
   return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
 }
 
+/** What a value isSafeValue refuses holds, for the refusal's words. */
+export const UNSAFE_VALUE =
+  'it has a ; { } < > or a newline, a comment, !important, an unclosed bracket or quote, or an old browser hack (\\9, \\0) at its end';
+
 /**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
- * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
- * and a base64 data URL are values, and nothing can end the declaration.
+ * `url(data:…)`, no `;{}`; brackets and quotes closed; no old browser hack's
+ * escape at its end (`8px\9`: a browser reads it as part of the last word
+ * and drops the value). So `content: "a;b"` and a base64 data URL are
+ * values, and nothing can end the declaration.
  * @param {string} v
  */
 export function isSafeValue(v) {
+  if (/\\[09]\s*$/.test(v)) return false;
   // A shell comment ("# direct"), as a command run without a shell passes
   // it, is a comment too.
   // `</` (a closing tag), control characters, comments and !important are

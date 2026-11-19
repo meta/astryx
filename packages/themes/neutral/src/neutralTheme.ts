@@ -165,7 +165,7 @@ export const neutralTheme = defineTheme({
     '--color-border-emphasized': [neutral.light[85], neutral.dark[35]],
 
     // Effects
-    '--color-skeleton': [neutral.light[95], neutral.dark[35]],
+    '--color-skeleton': [neutral.light[85], neutral.dark[35]],
     '--color-shadow': [
       withAlpha(neutral.light[0], '1A'),
       withAlpha(neutral.dark[0], '4D'),
@@ -233,6 +233,8 @@ export const neutralTheme = defineTheme({
     '--radius-element': '0.625rem',
     '--radius-container': '0.75rem',
     '--radius-page': '1.75rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================
@@ -394,9 +396,38 @@ export const neutralTheme = defineTheme({
       },
     },
 
+    // Secondary text on a coloured card steps to the nearest neutral stop
+    // that reads at 4.5:1 on that fill, and under a hover, in dark mode.
     card: {
       base: {
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:cyan': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:green': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:orange': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:pink': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:purple': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:red': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:teal': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+      'variant:yellow': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
     },
 

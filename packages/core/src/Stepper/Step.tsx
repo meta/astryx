@@ -346,6 +346,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    // A flex item's default `min-width: auto` keeps the body at least as wide
+    // as its content. A wide field then pushes the body past the step. Zero
+    // releases that floor.
+    minWidth: 0,
   },
 
   // ===================== HORIZONTAL LAYOUT =====================
@@ -837,7 +841,9 @@ const styles = stylex.create({
   // Flexible segment (below the node) — grows to fill the step height and
   // meets the next node's leading segment.
   otSegFlexV: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '0%',
     minHeight: spacingVars['--spacing-2'],
   },
   // Fixed leading segment (above the node) — its height offsets the node down

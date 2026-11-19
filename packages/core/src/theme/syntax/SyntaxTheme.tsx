@@ -19,7 +19,6 @@ import {
   type SyntaxThemeDefinition,
   type SyntaxThemeTokenKey,
 } from './defineSyntaxTheme';
-import {useMediaQuery} from '../../hooks/useMediaQuery';
 import {useTheme} from '../useTheme';
 import {formatColor, parseColor} from '../../utils/color';
 import {createSharedContext} from '../../utils/sharedContext';
@@ -98,8 +97,8 @@ function mixWithTransparent(
 export function useSyntaxTheme(): UseSyntaxThemeReturn | null {
   const ctx = use(SyntaxThemeContext);
   const page = useTheme();
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const effectiveMode: 'light' | 'dark' = prefersDark ? 'dark' : 'light';
+  // The nearest Theme's effective mode, the side the code blocks paint.
+  const effectiveMode = page.mode;
 
   const tokens = useMemo(() => {
     if (!ctx) {

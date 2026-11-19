@@ -71,11 +71,15 @@ own ranking and output, and template owners own what each template is.
   lead, the start MUST be the app shell, or a blank page template when the
   project has no shell. The app shell is the ready, shown Shell-family
   template the request describes when one leads, and otherwise the default
-  shell. The start never falls back to "compose from components".
+  shell; a request describes a shell variant only when it names one of that
+  variant's own keywords as a whole phrase. The start never falls back to "compose from components".
 - **FR3 — A part starts where it lives.** A request for a part of a page (a
   control, a state, a widget, a section) MUST start from the page template the
   request places that part in, when the request gives that page, and from the
-  app shell (FR2) when it gives no page. The blocks and components in the kit
+  app shell (FR2) when it gives no page. A family's base template is that page
+  only when the ranker leads with it, and never when the family word heads the
+  request and also ends a component's name: the request then asks for that
+  piece, not for a part of the family's page (DEC-13). The blocks and components in the kit
   carry the part itself. A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
   no template scaffolds it. A request that adds something to a place that
@@ -150,16 +154,23 @@ own ranking and output, and template owners own what each template is.
   directory that declares a workspace, by a `pnpm-workspace.yaml` or a
   package.json `workspaces` field; outside a workspace it is the directory of
   the nearest package.json, and with no package.json the project declares
-  nothing. `missingPackages` MUST list each needed package (FR14) that the
-  project does not declare, once, and is empty when none is missing.
+  nothing. Outside a project, in a hosted run, each package that the
+  `package.json` of the root serving the run lists in `dependencies` or
+  `optionalDependencies` counts as declared too (`spec:AST-081` FR3).
+  `missingPackages` MUST list each needed package (FR14) that the project does
+  not declare, once, and is empty when none is missing.
 - **FR16 — Astryx packages count like any other.** An Astryx package MUST count
   under FR14 and FR15 like any other package: a source that imports one the
   project does not declare lists it in `missingPackages`, and in the install
   command when there is one (FR17). No package is exempt by name.
 - **FR17 — One install command, in the project's package manager.** When
-  `missingPackages` is not empty and the package manager is not ambiguous
-  (FR19), `installCommand` MUST be one command that installs every missing
-  package with the project's package manager; otherwise it is null. The nearest
+  `missingPackages` is not empty, the package manager is not ambiguous (FR19),
+  and a package.json holds the target directory, `installCommand` MUST be one
+  command that installs every missing package with the project's package
+  manager; otherwise it is null. In a target directory that no package.json
+  holds, an install would make the directory a project (`spec:AST-081` FR3), so
+  `notes` names the missing packages for the project that uses the source
+  instead. The nearest
   directory, from the target directory up to the workspace root, that has a
   package.json `packageManager` field or a lockfile decides the package manager.
   The field names it. Without the field, the lockfiles name the package manager
@@ -202,8 +213,10 @@ own ranking and output, and template owners own what each template is.
   fields, with the values the receipt carries when that template is scaffolded
   into the directory where build ran, from the source its scaffold command (FR5)
   writes. `notes` holds one line for each thing the project lacks: the missing
-  packages with their install command or the reason there is none (FR19), and a
-  missing StyleX compiler (FR20); the receipt's `notes` is empty when the
+  packages with their install command, or in its place the install guidance a
+  loaded integration gives (`spec:AST-039` FR16), the reason there is none
+  (FR19), or the project that installs them (FR17), and a missing StyleX
+  compiler (FR20); the receipt's `notes` is empty when the
   project lacks nothing. One exception keeps build's response additive (FR22):
   on build's start and alternatives, `notes` is present only when it holds a
   line. Text shows each template's readiness beside it, as FR12 and
@@ -440,6 +453,24 @@ the edit-phrase check belongs to DEC-10's shell lift, not to the page pick.
 Rejected: sending every start the ranker cannot lead alone to the app shell,
 which leaves more whole pages on the empty shell than it keeps parts off a page
 template.
+
+### DEC-13 — A family base hosts a part only as the place it goes
+
+**Reference:** `spec:AST-048/DEC-13`
+**Decider:** `josephfarina`, `2026-11-16`
+
+A part starts from a family's base template only when the ranker leads with
+that base and the request names the family as where the part goes. A family
+word that heads the request and also ends a component's name names the piece
+itself: "a sortable table" asks for a table, not for a part of the table page.
+Both facts come from the catalog: the families from the page templates, and
+the piece words from the components' names. So a new family or a new component
+follows the rule with no list to update.
+
+Rejected: hosting on any base whose family word appears anywhere in the
+request, which starts every request that mentions a table from the table page
+once a table base is ready; and a list of family words that never host, which
+needs an update for each new family.
 
 ## Open questions
 

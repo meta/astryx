@@ -528,3 +528,54 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 });
+
+describe('Heading without a valid level', () => {
+  it('renders an h2 at the level 2 scale and warns in development', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // A JavaScript caller or a generated page can omit the required level.
+    const props = {children: 'Overview'} as unknown as Parameters<
+      typeof Heading
+    >[0];
+    render(<Heading {...props} />);
+    const heading = screen.getByRole('heading', {name: 'Overview'});
+    expect(heading.tagName).toBe('H2');
+    expect(heading).toHaveAttribute('data-level', '2');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(
+      'Heading: level must be 1, 2, 3, 4, 5 or 6, but it is undefined.',
+    );
+    warn.mockRestore();
+  });
+
+  it('reads a level given as a numeric string, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {level: '3', children: 'Details'} as unknown as Parameters<
+      typeof Heading
+    >[0];
+    render(<Heading {...props} />);
+    expect(screen.getByRole('heading', {name: 'Details'}).tagName).toBe('H3');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('but it is "3".');
+    warn.mockRestore();
+  });
+
+  it('renders an h2 for a bare level, which passes true, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {level: true, children: 'Summary'} as unknown as Parameters<
+      typeof Heading
+    >[0];
+    render(<Heading {...props} />);
+    expect(screen.getByRole('heading', {name: 'Summary'}).tagName).toBe('H2');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('but it is true.');
+    warn.mockRestore();
+  });
+
+  it('does not warn for a valid level', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<Heading level={4}>Notes</Heading>);
+    expect(screen.getByRole('heading', {name: 'Notes'}).tagName).toBe('H4');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

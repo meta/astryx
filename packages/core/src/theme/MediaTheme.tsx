@@ -42,6 +42,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from './tokens.stylex';
 import {dataAttr} from '../naming';
 import {useAutoMediaMode} from '../hooks/useAutoMediaMode';
+import {MediaDarkPage, useMediaDarkPageAttribute} from './MediaDarkPage';
 
 const styles = stylex.create({
   root: {
@@ -98,6 +99,9 @@ export function MediaTheme({
   // means the parent is the element that actually paints the surface.
   const detected = useAutoMediaMode(ref, mode === 'auto');
   const resolved = mode === 'auto' ? (detected ?? fallback) : mode;
+  // A surface whose side differs on a dark page names that side too, until
+  // it knows the page's scheme.
+  const darkPage = useMediaDarkPageAttribute();
 
   // "off" keeps the element — and therefore the React tree and the DOM
   // structure — identical, so a surface can switch its media context on and
@@ -106,8 +110,11 @@ export function MediaTheme({
     <div
       ref={ref}
       {...(resolved === 'off' ? null : {[dataAttr('media')]: resolved})}
+      {...(resolved === 'off' ? null : darkPage)}
       {...stylex.props(styles.root, resolved !== 'off' && styles.active)}>
-      {children}
+      {/* Surfaces nested inside take their own sides. Always rendered, so
+          the children keep their place in the tree when the side clears. */}
+      <MediaDarkPage side={null}>{children}</MediaDarkPage>
     </div>
   );
 }

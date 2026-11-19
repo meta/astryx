@@ -20,6 +20,7 @@ import {
   moduleGraphStats,
   comparePages,
   formatComparison,
+  USAGE,
   parseArgs,
   parseReferencePages,
   rolldownPageStats,
@@ -480,6 +481,7 @@ describe('parseArgs', () => {
       extraPages: {shell: ['AppShell', 'Text']},
       json: true,
       bundler: 'esbuild',
+      help: false,
     });
   });
 
@@ -492,6 +494,30 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--base', 'main', '--bundler', 'webpack'])).toThrow(
       /--bundler must be one of esbuild, rolldown/,
     );
+  });
+
+  it('asks for help with --help or -h, before any other check', () => {
+    expect(parseArgs(['--help']).help).toBe(true);
+    expect(parseArgs(['-h', '--fast']).help).toBe(true);
+    expect(parseArgs(['--fast', '--help']).help).toBe(true);
+    expect(parseArgs(['--base', 'main', '--fsat', '-h']).help).toBe(true);
+    expect(parseArgs(['--base', 'main']).help).toBe(false);
+  });
+
+  it('documents every flag, the limit and an example', () => {
+    for (const text of [
+      '--base',
+      '--head',
+      '--unused-on',
+      '--page',
+      '--bundler',
+      '--json',
+      '--help',
+      `0.3 KB gzip (${UNUSED_FEATURE_LIMIT_BYTES} B)`,
+      'pnpm size:pages --base origin/main --unused-on table,menu',
+    ]) {
+      expect(USAGE).toContain(text);
+    }
   });
 
   it('refuses an unknown argument', () => {

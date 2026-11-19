@@ -17,6 +17,15 @@ import {
   type DefinedTheme,
 } from './index';
 
+/**
+ * Inverted surfaces that keep one side in both page modes, so a test about
+ * other rules sees no dark-page scoping (INV21 has its own tests).
+ */
+const KEEPS_SIDE = {
+  '--color-background-inverted': '#0a1317',
+  '--color-background-error-inverted': '#a8071e',
+};
+
 function topLevelCSSBlocks(css: string): string[] {
   const blocks: string[] = [];
   let depth = 0;
@@ -864,6 +873,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('re-emits explicit weight overrides after media-specific type rules', () => {
     const themed = defineTheme({
       name: 'media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -890,6 +900,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('carries an authored main weight past a media-specific type rule', () => {
     const themed = defineTheme({
       name: 'inherited-media-heading-weight',
+      tokens: KEEPS_SIDE,
       components: {
         heading: {
           'weight:bold': {fontWeight: '900'},
@@ -915,6 +926,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('scopes Text color and size guards after each media-surface type rule', () => {
     const themed = defineTheme({
       name: 'media-text-prop-guards',
+      tokens: KEEPS_SIDE,
       onDark: {
         components: {
           text: {'type:large': {color: '#fff', fontSize: '4rem'}},
@@ -1175,6 +1187,7 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
   it('keeps onDark and onLight weight guards after adaptation guards', () => {
     const themed = defineTheme({
       name: 'surface-adapted-heading-weight',
+      tokens: KEEPS_SIDE,
       adaptations: {
         rules: [
           {
@@ -1594,6 +1607,26 @@ describe('derived var expansion', () => {
     // which an unlayered consumer build wins — the vars have no competitor.
     expect(rule).not.toMatch(/[{;]\s*width: 2px/);
     expect(rule).not.toMatch(/[{;]\s*height: 12px/);
+  });
+});
+
+describe('the room between a control and its label', () => {
+  it.each([
+    ['checkbox-input', '--_checkbox-input-gap'],
+    ['switch-field', '--_switch-field-gap'],
+  ])('routes gap on %s to its row (no raw gap on the field)', (target, v) => {
+    const theme = defineTheme({
+      name: `test-derived-${target}-gap`,
+      components: {[target]: {base: {gap: '3px'}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes(`.astryx-${target}`),
+    );
+    expect(rule).toBeDefined();
+    expect(rule).toContain(`${v}: 3px`);
+    // The field also holds the status message: a raw gap there would space
+    // the row from the status instead of the box from its label.
+    expect(rule).not.toMatch(/[{;]\s*gap: 3px/);
   });
 });
 
@@ -2169,6 +2202,7 @@ describe('declaration assembly keeps values as values', () => {
     const {css} = generate(
       defineTheme({
         name: 'brand',
+        tokens: KEEPS_SIDE,
         components: {heading: {'weight:bold': {fontWeight: payload}}},
         onDark: {components: {heading: {'level:1': {fontSize: '2rem'}}}},
       }),
@@ -2268,5 +2302,99 @@ describe('declaration assembly keeps values as values', () => {
       expect.stringContaining('in onDark.tokens:'),
       expect.stringContaining('in adaptations[0].tokens:'),
     ]);
+  });
+});
+
+describe('a media surface that flips with the page', () => {
+  const surfaces = (tokens: Record<string, [string, string]>) =>
+    generateOnMediaCSS(defineTheme({name: 'flip', tokens}));
+
+  it("writes the light side's rules for a dark page when an inverted surface flips", () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).toContain(
+      ':where(:scope[data-theme="dark"]) [data-astryx-media-dark-page="light"]',
+    );
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\n {2}[^{]*\[data-astryx-media-dark-page="light"\]/,
+    );
+  });
+
+  it('draws a root color-mode block by the side a flipped surface takes on a dark page', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'flip-modes',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        components: {
+          button: {
+            base: {
+              '@dark': {color: '#fafafa'},
+              '@light': {color: '#121212'},
+            },
+          },
+        },
+      }),
+    ).component;
+    const rules = css.split('}').map(rule => rule.trim());
+    const flipped =
+      ':scope[data-theme="dark"] [data-astryx-media-dark-page="light"] *';
+    // Inside the flipped surface on a dark page the light block applies...
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(${flipped}`) && rule.includes('color: #121212'),
+      ),
+    ).toBe(true);
+    // ...and the dark block's nearest-surface rule leaves it out there.
+    expect(
+      rules.some(
+        rule =>
+          rule.includes(`:where(:not(${flipped}`) &&
+          rule.includes('color: #fafafa'),
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves the light-page side's overrides out of a surface a dark page flips", () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'flip-scope',
+        tokens: {
+          '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+          '--color-on-dark': ['#ffffff', '#ffffff'],
+          '--color-on-light': ['#111111', '#111111'],
+        },
+        onDark: {
+          components: {button: {base: {backgroundColor: '#000000'}}},
+        },
+      }),
+    );
+    const rules = css.split('}').map(rule => rule.trim());
+    const fill = rules.filter(rule =>
+      rule.includes('background-color: #000000'),
+    );
+    expect(fill.length).toBeGreaterThan(0);
+    // Each dark-side fill rule leaves out a surface a dark page flips light.
+    for (const rule of fill)
+      expect(rule).toContain(
+        ':where(:not(:scope[data-theme="dark"] [data-astryx-media-dark-page="light"]',
+      );
+  });
+
+  it('writes no dark-page rules when every inverted surface keeps its side', () => {
+    const css = surfaces({
+      '--color-background-inverted': ['#0a1317', '#0a1317'],
+      '--color-background-error-inverted': ['#a8071e', '#a8071e'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+    });
+    expect(css).not.toContain('data-astryx-media-dark-page');
   });
 });
