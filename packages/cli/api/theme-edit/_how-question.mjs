@@ -65,6 +65,7 @@ import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
   selfSizedBox,
+  selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
   pillShapes,
@@ -25857,61 +25858,51 @@ export function draftAnswer(ctx, env, question) {
             const step = c.dir === 'less' ? -4 : 4;
             // (A group's members step each from its own size: one group line
             // where they agree, a line per member where they differ.)
-            const members = (FAMILIES[on] ?? [one(on)]).filter(m =>
-              sizesItsOwnBox(C, m),
-            );
             /** @type {Step[]} */
             const steps = [];
             /** @type {string[]} */
             const said = [];
             /** @type {Array<{sz: string | undefined, why: string}>} */
             const unknown = [];
+            const built = selfSizedBoxLines(
+              ctx,
+              env.data.settings,
+              FAMILIES[on] ? on : one(on),
+              sizes,
+              box =>
+                box.w + step > 0 && box.h + step > 0
+                  ? {w: box.w + step, h: box.h + step}
+                  : null,
+              all.length > 1,
+            );
+            unknown.push(...built.unknown);
+            const same = (/** @type {string | undefined} */ sz) =>
+              built.lines
+                .filter(l => l.sz === sz)
+                .every(l => l.m === (FAMILIES[on] ? on : one(on)));
             for (const sz of sizes) {
-              const boxes = members.map(m => ({
-                m,
-                box: selfSizedBox(ctx, env.data.settings, m, sz),
-              }));
-              const missing = boxes.find(x => !x.box);
-              if (missing) {
-                unknown.push({
-                  sz,
-                  why:
-                    selfSizedWhy(ctx, env.data.settings, missing.m, sz) ??
-                    'no size the editor knows',
-                });
-                continue;
-              }
-              const first = /** @type {{w: number, h: number}} */ (
-                boxes[0].box
-              );
-              const same = boxes.every(
-                x => x.box?.w === first.w && x.box?.h === first.h,
-              );
-              const groups = same ? [{m: on, box: first}] : boxes;
-              /** @type {Step[]} */
-              const sizeSteps = [];
-              /** @type {string[]} */
-              const sizeSaid = [];
-              for (const g of groups) {
-                const box = /** @type {{w: number, h: number}} */ (g.box);
-                const [w, h] = [box.w + step, box.h + step];
-                if (w <= 0 || h <= 0) continue;
+              const here = built.lines.filter(l => l.sz === sz);
+              if (!here.length) continue;
+              // (set adds the member's only itself.)
+              for (const l of here) {
                 const flags = {
                   ...f,
-                  ...(g.m !== on ? {on: g.m} : {}),
-                  ...(sz && all.length > 1 ? {when: `size:${sz}`} : {}),
+                  on: l.flags.on,
+                  ...(l.flags.when ? {when: l.flags.when} : {}),
                 };
-                sizeSteps.push(
-                  set('width', `${w}px`, flags),
-                  set('height', `${h}px`, flags),
-                );
-                sizeSaid.push(
-                  `${same ? '' : `${g.m} `}${w === h ? `${w}px` : `${w}px by ${h}px`} (now ${box.w === box.h ? `${box.w}px` : `${box.w}px by ${box.h}px`})`,
+                steps.push(
+                  set('width', `${l.next.w}px`, flags),
+                  set('height', `${l.next.h}px`, flags),
                 );
               }
-              if (!sizeSteps.length) continue;
-              steps.push(...sizeSteps);
-              said.push(`${sz ? `${sz} ` : ''}${sizeSaid.join(', ')}`);
+              said.push(
+                `${sz ? `${sz} ` : ''}${here
+                  .map(
+                    l =>
+                      `${same(sz) ? '' : `${l.m} `}${l.next.w === l.next.h ? `${l.next.w}px` : `${l.next.w}px by ${l.next.h}px`} (now ${l.box.w === l.box.h ? `${l.box.w}px` : `${l.box.w}px by ${l.box.h}px`})`,
+                  )
+                  .join(', ')}`,
+              );
             }
             // (A size it cannot read keeps its own, and says why, with the
             // line that gives that size; with no size read at all, nothing

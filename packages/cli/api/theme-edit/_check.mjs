@@ -70,6 +70,7 @@ import {
   THING_HINTS,
   TYPE_STYLES,
   familyOf,
+  onlyMeans,
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
@@ -5356,7 +5357,8 @@ function checkOne(
   // for what the change does anyway: the change is made, without it, and
   // said, so the escape always works.
   if (s.only && (!s.on || TARGET.has(s.on) || groupsOf(ctx)[s.on])) {
-    if (!s.on || groupsOf(ctx)[s.on])
+    // (One predicate with the settings reader: onlyMeans.)
+    if (onlyMeans(s.on) === 'group')
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',

@@ -44,6 +44,7 @@ import {
   baseRedraws,
   groupsOf,
   selfSizedBox,
+  selfSizedBoxLines,
   selfSizedWhy,
   sizesItsOwnBox,
 } from './_settings.mjs';
@@ -2213,8 +2214,8 @@ function pictureColors(file, cwd, at, count) {
  * The aspects a setting changes, so a dial and the tokens it writes count as
  * one: corners (the corners dial and every radius token), the control size
  * (its size tokens, and the spacing dial, which scales control heights), the
- * spacing tokens (and the spacing dial), the line height (the leading dial
- * and the leading tokens), the text size (the text-size dial and the text
+ * spacing tokens (and the spacing dial), the line height (the leading
+ * tokens), the text size (the text-size dial and the text
  * size tokens), and the heading weight (the headings dial, and the type
  * dial, which sets it). A checks size is its box: its width and its height.
  * Anything else is its own aspect.
@@ -2226,11 +2227,7 @@ function aspectsOf(thing) {
   if (/^--size-element-/.test(thing)) return ['control-size'];
   if (thing === 'spacing') return ['control-size', 'spacing'];
   if (/^--spacing-/.test(thing)) return ['spacing'];
-  if (
-    thing === 'leading' ||
-    /^--text-[\w-]*leading$|^--line-height/.test(thing)
-  )
-    return ['leading'];
+  if (/^--text-[\w-]*leading$|^--line-height/.test(thing)) return ['leading'];
   if (thing === 'text-size' || /^--text-[\w-]*-size$/.test(thing))
     return ['text-size'];
   if (thing === 'headings' || thing === 'type') return ['heading-weight'];
@@ -2266,39 +2263,23 @@ function checksBoxSteps(ctx, settings, px) {
   const sizes = /** @type {string[]} */ (
     C.variantValues(members[0])?.size ?? []
   );
-  const each = sizes.length > 1 ? sizes : [undefined];
-  /** @type {import('./_how-commands.mjs').Step[]} */
-  const steps = [];
-  /** @type {string[]} */
-  const kept = [];
-  for (const sz of each) {
-    const boxes = members.map(m => ({
-      m,
-      box: selfSizedBox(ctx, settings, m, sz),
-    }));
-    const missing = boxes.find(x => !x.box);
-    if (missing) {
-      kept.push(
-        `${sz ? `size ${sz}: ` : ''}${selfSizedWhy(ctx, settings, missing.m, sz) ?? 'no size the editor knows'}`,
-      );
-      continue;
-    }
-    const first = /** @type {{w: number, h: number}} */ (boxes[0].box);
-    const same = boxes.every(x => x.box?.w === first.w && x.box?.h === first.h);
-    for (const g of same ? [{m: 'checks', box: first}] : boxes) {
-      const box = /** @type {{w: number, h: number}} */ (g.box);
+  const {lines, unknown} = selfSizedBoxLines(
+    ctx,
+    settings,
+    'checks',
+    sizes.length > 1 ? sizes : [undefined],
+    box => {
       const side = Math.max(1, Math.round(Math.max(box.w, box.h) + step));
-      const flags = {
-        on: g.m,
-        ...(g.m !== 'checks' ? {only: true} : {}),
-        ...(sz ? {when: `size:${sz}`} : {}),
-      };
-      steps.push(
-        {verb: 'set', thing: 'width', value: `${side}px`, ...flags},
-        {verb: 'set', thing: 'height', value: `${side}px`, ...flags},
-      );
-    }
-  }
+      return {w: side, h: side};
+    },
+    sizes.length > 1,
+  );
+  const kept = unknown.map(u => `${u.sz ? `size ${u.sz}: ` : ''}${u.why}`);
+  /** @type {import('./_how-commands.mjs').Step[]} */
+  const steps = lines.flatMap(l => [
+    {verb: 'set', thing: 'width', value: `${l.next.w}px`, ...l.flags},
+    {verb: 'set', thing: 'height', value: `${l.next.h}px`, ...l.flags},
+  ]);
   if (!steps.length) return {why: kept.join('; ')};
   return {steps, kept};
 }
@@ -2327,23 +2308,28 @@ async function pictureLook(cwd, name, read) {
     // What the theme sets itself wins over a reading of the same aspect
     // (the corners dial and the radius tokens are one aspect, as are the
     // control size tokens), unless the two are on different parts.
-    const kept = own.find(
-      s =>
-        aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
-        (!s.on || !step.on || s.on === step.on),
+    // A checks size is its box: width and height at the same px, per size.
+    const checksSize = step.on === 'checks' && step.thing === 'height';
+    // (A box the theme sizes, on the checks or on any one of them with
+    // --only, its width or its height, is the theme's own.)
+    const kept = own.find(s =>
+      checksSize
+        ? /^(?:width|height)$/.test(s.thing) &&
+          (s.on === 'checks' ||
+            (FAMILIES.checks ?? []).includes(String(s.on ?? '')))
+        : aspectsOf(s.thing).some(a => aspectsOf(step.thing).includes(a)) &&
+          (!s.on || !step.on || s.on === step.on),
     );
+    const box = checksSize
+      ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
+      : null;
     if (kept) {
       unsure.push({
         text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${env.slug} sets ${kept.thing}${kept.on ? ` on ${kept.on}` : ''} ${kept.value} already, which stays`,
-        options: [render(step, env.slug)],
+        options: (box?.steps ?? [step]).map(st => render(st, env.slug)),
       });
       continue;
     }
-    // A checks size is its box: width and height at the same px, per size.
-    const box =
-      step.on === 'checks' && step.thing === 'height'
-        ? checksBoxSteps(ctx, own, Number.parseFloat(String(step.value)))
-        : null;
     if (box?.why) {
       unsure.push({
         text: `${tr.trait} on ${tr.on}: the picture reads ${tr.value} (${tr.read}); ${box.why}, so the box is not written`,

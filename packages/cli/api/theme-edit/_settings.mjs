@@ -94,6 +94,7 @@ import {
   SHOWCASE_GROUPS,
   COLOR_PROP_PARTS,
   onlyMeans,
+  GROUP_ROLES,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -4490,17 +4491,7 @@ export function groupsOf(ctx) {
   return table;
 }
 
-/** The family roles `--on` takes as groups. */
-export const GROUP_ROLES = /** @type {const} */ ([
-  'button-like',
-  'overlays',
-  'option-rows',
-  'selected-items',
-  'accent-fills',
-  'inset-fields',
-  'status-surfaces',
-  'overlay-headers',
-]);
+export {GROUP_ROLES};
 
 /**
  * A part name or a group's members.
@@ -13944,6 +13935,67 @@ export function selfSizedBox(ctx, settings, part, size) {
 export function selfSizedWhy(ctx, settings, part, size) {
   const r = readSelfSized(ctx, settings, part, size);
   return r && 'why' in r ? r.why : null;
+}
+
+/**
+ * The width and height lines that give a part or group its new box, from
+ * each member's own box (selfSizedBox) at each size: one line for the
+ * group where its members agree, else a line per member (with only, where
+ * the member's group spreads), and a size condition when `bySize`. A size
+ * a member has no box for is named in `unknown`, never given another's.
+ * @param {Ctx} ctx
+ * @param {Setting[]} settings the theme's settings, in order
+ * @param {string} on the part or group asked
+ * @param {Array<string | undefined>} sizes the sizes to write
+ * @param {(box: {w: number, h: number}) => {w: number, h: number} | null} next
+ *   the new box for an old one; null skips it
+ * @param {boolean} bySize whether each line names its size
+ */
+export function selfSizedBoxLines(ctx, settings, on, sizes, next, bySize) {
+  const C = /** @type {any} */ (ctx).C;
+  const members = (FAMILIES[on] ?? [on]).filter(m => sizesItsOwnBox(C, m));
+  /** @type {Array<{sz: string | undefined, m: string, box: {w: number, h: number}, next: {w: number, h: number}, flags: {on: string, only?: true, when?: string}}>} */
+  const lines = [];
+  /** @type {Array<{sz: string | undefined, why: string}>} */
+  const unknown = [];
+  for (const sz of sizes) {
+    const boxes = members.map(m => ({
+      m,
+      box: selfSizedBox(ctx, settings, m, sz),
+    }));
+    const missing = boxes.find(x => !x.box);
+    if (missing) {
+      unknown.push({
+        sz,
+        why:
+          selfSizedWhy(ctx, settings, missing.m, sz) ??
+          'no size the editor knows',
+      });
+      continue;
+    }
+    const first = /** @type {{w: number, h: number}} */ (boxes[0]?.box);
+    if (!first) continue;
+    const same = boxes.every(x => x.box?.w === first.w && x.box?.h === first.h);
+    for (const g of same ? [{m: on, box: first}] : boxes) {
+      const box = /** @type {{w: number, h: number}} */ (g.box);
+      const n = next(box);
+      if (!n) continue;
+      lines.push({
+        sz,
+        m: g.m,
+        box,
+        next: n,
+        flags: {
+          on: g.m,
+          ...(g.m !== on && onlyMeans(g.m) === 'member'
+            ? {only: /** @type {true} */ (true)}
+            : {}),
+          ...(sz && bySize ? {when: `size:${sz}`} : {}),
+        },
+      });
+    }
+  }
+  return {lines, unknown, members};
 }
 
 /**
