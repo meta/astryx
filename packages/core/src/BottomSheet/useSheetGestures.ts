@@ -267,6 +267,35 @@ export function isInsideNestedLayer(
 }
 
 /**
+ * Whether an element between `target` and the body forbids the vertical pan
+ * through its own `touch-action`, as a menu whose rows fit does with
+ * `pinch-zoom`. A pan recognizer leaves a touch there to the element that
+ * declared it. The body and the sheet's own surfaces above it do not count.
+ */
+export function forbidsVerticalPan(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  for (
+    let element = target instanceof Element ? target : null;
+    element != null && element !== body;
+    element = element.parentElement
+  ) {
+    // An engine without `touch-action` reports no value: that is `auto`.
+    const touchAction = getComputedStyle(element).touchAction ?? '';
+    if (
+      touchAction !== '' &&
+      touchAction !== 'auto' &&
+      touchAction !== 'manipulation' &&
+      !/\bpan-(y|up|down)\b/.test(touchAction)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * The scrollers a gesture that lands on `target` can scroll, innermost first
  * and the body last: every scrollable box between the target and the body,
  * then the body itself.
@@ -1687,7 +1716,11 @@ export function useSheetGestures({
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
       releaseContentHold(touchDragRef.current);
-      if (!touch || isInsideNestedLayer(event.target, body)) {
+      if (
+        !touch ||
+        isInsideNestedLayer(event.target, body) ||
+        forbidsVerticalPan(event.target, body)
+      ) {
         touchDragRef.current = null;
         return;
       }

@@ -14,6 +14,7 @@ import {act, renderHook} from '@testing-library/react';
 import {useState} from 'react';
 import {rubberBand} from '../motion/rubberBand';
 import {
+  forbidsVerticalPan,
   isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
@@ -172,6 +173,52 @@ describe('isInsideNestedLayer', () => {
     ownDialog.append(body);
     expect(isInsideNestedLayer(own, body)).toBe(false);
     expect(isInsideNestedLayer(null, body)).toBe(false);
+  });
+});
+
+/** jsdom has no `touch-action`, so these cases read it from this map. */
+function stubTouchAction(values: Map<Element, string>) {
+  const original = window.getComputedStyle.bind(window);
+  return vi
+    .spyOn(window, 'getComputedStyle')
+    .mockImplementation((element, pseudo) => {
+      const style = original(element, pseudo);
+      const touchAction = values.get(element);
+      return touchAction == null ? style : {...style, touchAction};
+    });
+}
+
+describe('forbidsVerticalPan', () => {
+  it('is true under an element whose touch-action excludes a vertical pan, and false under auto, manipulation and pan-y', () => {
+    const body = document.createElement('div');
+    const menu = document.createElement('div');
+    const row = document.createElement('div');
+    menu.append(row);
+    body.append(menu);
+    document.body.append(body);
+    const values = new Map<Element, string>();
+    const spy = stubTouchAction(values);
+    for (const [value, forbids] of [
+      ['pinch-zoom', true],
+      ['none', true],
+      ['pan-x', true],
+      ['pan-x pinch-zoom', true],
+      ['pan-y', false],
+      ['pan-y pinch-zoom', false],
+      ['pan-down', false],
+      ['manipulation', false],
+      ['auto', false],
+    ] as const) {
+      values.set(menu, value);
+      expect(forbidsVerticalPan(row, body), value).toBe(forbids);
+    }
+    // The body's own touch-action, and the sheet surface above it, do not count.
+    values.delete(menu);
+    values.set(body, 'pinch-zoom');
+    expect(forbidsVerticalPan(row, body)).toBe(false);
+    expect(forbidsVerticalPan(null, body)).toBe(false);
+    spy.mockRestore();
+    body.remove();
   });
 });
 
@@ -1372,6 +1419,50 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 50);
       });
       expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('leaves a finger to a menu inside the body whose touch-action forbids the vertical pan, and still drags under a pan-y element (spec:AST-094 FR18)', () => {
+      for (const [value, drags] of [
+        ['pinch-zoom', false],
+        ['pan-y pinch-zoom', true],
+      ] as const) {
+        const {hook} = setup({snapHeights: () => [200]});
+        const el = makeScroller({
+          scrollTop: 0,
+          clientHeight: 200,
+          scrollHeight: 200,
+        });
+        const menu = document.createElement('div');
+        const spy = stubTouchAction(new Map([[menu, value]]));
+        const row = document.createElement('div');
+        menu.append(row);
+        el.append(menu);
+        act(() => hook.result.current.sheetRef(el));
+        act(() => hook.result.current.bodyProps.ref(el));
+        const fire = (type: string, y: number) => {
+          const ev = new Event(type, {bubbles: true, cancelable: true});
+          const contact = {identifier: 1, clientX: 0, clientY: y};
+          Object.defineProperty(ev, 'changedTouches', {value: [contact]});
+          Object.defineProperty(ev, 'touches', {
+            value: type === 'touchend' ? [] : [contact],
+          });
+          row.dispatchEvent(ev);
+          return ev;
+        };
+        let pull!: Event;
+        act(() => {
+          fire('touchstart', 0);
+          fire('touchmove', 20);
+          pull = fire('touchmove', 50);
+        });
+        expect(hook.result.current.isDragging, value).toBe(drags);
+        expect(pull.defaultPrevented, value).toBe(drags);
+        act(() => {
+          fire('touchend', 50);
+        });
+        spy.mockRestore();
+        el.parentElement?.remove();
+      }
     });
 
     it('cancels the native pan of a top pull-down past a tap wobble, before the drag begins', () => {
