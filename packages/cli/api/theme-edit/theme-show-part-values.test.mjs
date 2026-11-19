@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {themeAdd} from '../theme/add/add.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
@@ -40,6 +41,8 @@ beforeAll(async () => {
   await themeEditNew('roomy', {cwd, like: 'neutral'});
   await themeEditSet('roomy', 'spacing', 'roomy', {cwd, on: 'card'});
   await themeEditSet('roomy', 'corners', 'pill', {cwd, on: 'card'});
+  await themeEditNew('outlined', {cwd, like: 'neutral'});
+  await themeEditSet('outlined', 'surfaces', 'outlined', {cwd});
 }, 240_000);
 
 afterAll(() => {
@@ -216,6 +219,24 @@ describe('show --on: what one part of a theme shows', () => {
     });
   }, 120_000);
 
+  it('credits the card rules a whole-theme dial writes to that dial', async () => {
+    const r = /** @type {any} */ (
+      await themeEditShow('outlined', {cwd, on: 'card'})
+    );
+    // `surfaces outlined` writes the card's own border and shadow rules.
+    const ruled = r.data.values.filter(
+      (/** @type {any} */ v) =>
+        v.when == null &&
+        v.state == null &&
+        v.source === 'theme' &&
+        /^(border-style|border-width|border-color|box-shadow)$/.test(
+          v.property,
+        ),
+    );
+    expect(ruled.length).toBeGreaterThan(0);
+    for (const v of ruled) expect(v.via).toBe('dial');
+  }, 120_000);
+
   it('gives a button’s corner radius once, not once per corner', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('neutral', {cwd, on: 'button'})
@@ -248,5 +269,107 @@ describe('show --on: what one part of a theme shows', () => {
     expect(
       await refusal(() => themeEditShow('nothing-here', {cwd, on: 'card'})),
     ).toMatchObject({code: 'ERR_UNKNOWN_THEME'});
+  }, 120_000);
+});
+
+describe('show --on: a theme slug two installed packages provide', () => {
+  /** @type {string} */
+  let dir;
+
+  /**
+   * An installed integration package that provides one theme, `ocean`.
+   * @param {string} name
+   * @param {string} radius the theme's container corners
+   */
+  function installOcean(name, radius) {
+    const pkg = path.join(
+      path.dirname(dir),
+      'node_modules',
+      ...name.split('/'),
+    );
+    const themeDir = path.join(pkg, 'themes', 'ocean');
+    fs.mkdirSync(themeDir, {recursive: true});
+    fs.mkdirSync(path.join(pkg, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({
+        name,
+        version: '1.0.0',
+        type: 'module',
+        exports: {
+          './themes/ocean': './dist/ocean.js',
+          './themes/ocean.css': './dist/ocean.css',
+        },
+      }),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'astryx.integration.mjs'),
+      "export default {themes: './themes'};\n",
+    );
+    fs.writeFileSync(
+      path.join(themeDir, 'oceanTheme.doc.mjs'),
+      "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'ocean', displayName: 'Ocean', description: 'An installed theme.', maintained: true};\n",
+    );
+    fs.writeFileSync(
+      path.join(themeDir, 'oceanTheme.ts'),
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const oceanTheme = defineTheme({name: 'ocean', tokens: {'--radius-container': '${radius}'}});\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'dist', 'ocean.js'),
+      `export const oceanTheme = {name: 'ocean', tokens: {'--radius-container': '${radius}'}};\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'dist', 'ocean.css'),
+      '[data-astryx-theme="ocean"] {}\n',
+    );
+  }
+
+  beforeAll(() => {
+    dir = makeLinkedFixture('astryx-theme-show-part-shared-', FIXTURE_PACKAGES);
+    writeFixtureBaseTheme(dir, 'neutral');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    manifest.dependencies = {
+      ...manifest.dependencies,
+      '@acme/sea': '1.0.0',
+      '@acme/lake': '1.0.0',
+    };
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+    installOcean('@acme/sea', '3px');
+    installOcean('@acme/lake', '5px');
+  });
+
+  afterAll(() => {
+    removeLinkedFixture(dir);
+  });
+
+  it('is refused while the app records neither, with a theme add for each package', async () => {
+    const r = await refusal(() =>
+      themeEditShow('ocean', {cwd: dir, on: 'card'}),
+    );
+    expect(r.code).toBe('ERR_AMBIGUOUS_THEME');
+    expect(r.message).toMatch(/more than one package/);
+    expect(r.run).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/theme add ocean --package @acme\/sea$/),
+        expect.stringMatching(/theme add ocean --package @acme\/lake$/),
+      ]),
+    );
+  }, 120_000);
+
+  it('reads the package the app records', async () => {
+    await themeAdd('ocean', {cwd: dir, import: true, package: '@acme/lake'});
+    const r = /** @type {any} */ (
+      await themeEditShow('ocean', {cwd: dir, on: 'card'})
+    );
+    expect(r.data.kind).toBe('package');
+    expect(valueOf(r, 'border-radius')).toMatchObject({
+      value: '5px',
+      source: 'theme',
+    });
   }, 120_000);
 });

@@ -51,7 +51,8 @@ import {FAMILIES, P} from './_tables.mjs';
  *   part's own rule sets it
  * @property {(property: string, part: string) => 'dial' | 'part'} [propertyVia] -
  *   for an editor theme: what writes a CSS property the theme's own rule on
- *   the part sets: a property setting that covers it, else a dial on the part
+ *   the part sets: a property setting on the part that covers it, else a
+ *   dial (on the part or on the whole theme)
  */
 
 /**
@@ -160,15 +161,25 @@ async function loadNamedTheme(ctx, cwd, name) {
         if (mine.some(st => st.source === 'dial')) return 'dial';
         return onPart ? 'part' : 'token';
       },
+      // A rule the theme writes on a part comes from a property setting
+      // on it, else from a dial: one on the part, or a whole-theme dial
+      // that writes part rules (`surfaces outlined` writes the card's
+      // border).
       propertyVia: (property, part) => {
-        const mine = data.settings.filter(st => reaches(st, part));
         if (
-          mine.some(
-            st => st.source === 'property' && sets(String(st.thing), property),
+          data.settings.some(
+            st =>
+              reaches(st, part) &&
+              st.source === 'property' &&
+              sets(String(st.thing), property),
           )
         )
           return 'part';
-        return mine.some(st => st.source === 'dial') ? 'dial' : 'part';
+        return data.settings.some(
+          st => st.source === 'dial' && (st.on == null || reaches(st, part)),
+        )
+          ? 'dial'
+          : 'part';
       },
     };
   }
