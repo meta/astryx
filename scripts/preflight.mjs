@@ -472,6 +472,9 @@ function quickChecks({scope, mergeBase, changed, tmp}) {
   ];
 }
 
+const MISSING_BUILDS =
+  'skipped, workspace builds missing; run `pnpm build` first';
+
 /** A missing module that is a workspace package's build output. */
 const BUILD_OUTPUT =
   /error TS2307: Cannot find module '(?:@astryxdesign\/[^']+\/built(?:\/[^']*)?|[^']*\/dist(?:\/[^']*)?)'/;
@@ -487,7 +490,7 @@ export function missingBuilds(text) {
   const errors = text.split('\n').filter(line => /error TS\d+/.test(line));
   if (errors.length === 0 || !errors.every(line => BUILD_OUTPUT.test(line)))
     return null;
-  return 'skipped, workspace builds missing; run `pnpm build` first';
+  return MISSING_BUILDS;
 }
 
 function skip(id, why) {
@@ -598,13 +601,20 @@ export function formatTable(rows, {quick = false} = {}) {
     lines.push('', 'Failing commands:');
     for (const row of failed) lines.push(`  ${row.id}: ${row.failed}`);
   }
+  // A typecheck skipped for missing builds checked nothing, so the verdict
+  // says so instead of reading as a pass.
+  const unbuilt = rows.filter(
+    row => row.result === 'SKIP' && row.note === MISSING_BUILDS,
+  );
   lines.push(
     '',
     failed.length
       ? `not ready: ${failed.length}`
-      : quick
-        ? 'quick checks pass; run `pnpm preflight` before you flip'
-        : 'ready to flip',
+      : unbuilt.length
+        ? `not checked: ${unbuilt.map(row => row.id).join(', ')} (workspace builds missing); run \`pnpm build\`, then run again before you flip`
+        : quick
+          ? 'quick checks pass; run `pnpm preflight` before you flip'
+          : 'ready to flip',
     quick
       ? 'Quick mode is not CI-equivalent: it skips the build, dependent packages, the tests the change reaches and the guards.'
       : NOT_RUN,

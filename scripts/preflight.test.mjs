@@ -327,7 +327,13 @@ describe('--quick with workspace builds missing', () => {
       note: 'skipped, workspace builds missing; run `pnpm build` first',
       failed: null,
     });
-    expect(formatTable([skipped], {quick: true})).not.toContain('not ready');
+    const verdict = formatTable([skipped], {quick: true});
+    expect(verdict).not.toContain('not ready');
+    // A skipped typecheck checked nothing: the verdict says so, never a pass.
+    expect(verdict).toContain(
+      'not checked: typecheck (workspace builds missing); run `pnpm build`, then run again before you flip',
+    );
+    expect(verdict).not.toContain('quick checks pass');
     const [failed] = runChecks(check(), {exec: exec(real), now: () => 0});
     expect(failed).toMatchObject({result: 'FAIL', failed: 'tsc'});
   });
