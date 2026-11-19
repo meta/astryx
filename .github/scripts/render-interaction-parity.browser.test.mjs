@@ -219,6 +219,7 @@ export default function Page() {
     </main>
   );
 }
+import '@astryxdesign/core/astryx.css';
 `;
 
 // What a viewer may do in the frame it shows a file in: cancel every link to a
