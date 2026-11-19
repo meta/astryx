@@ -699,7 +699,6 @@ function diagnose(): string {
   const cs = getComputedStyle(layer);
   const read = (prop: string) => cs.getPropertyValue(prop).trim();
   return [
-    `position-area=${read('position-area')}`,
     `fallbacks=${read('position-try-fallbacks')}`,
     `justify-self=${read('justify-self')} align-self=${read('align-self')}`,
     `inset t/r/b/l=${read('top')}/${read('right')}/${read('bottom')}/${read('left')}`,
@@ -1048,6 +1047,51 @@ export const AnchorAlreadyOffScreen: Story = {
       );
     }
     assertOnScreen(back, 'anchor back in view');
+  },
+};
+
+export const AnchorStaysInViewWhileScrolling: Story = {
+  name: 'Viewport inset: anchor stays in view while the page scrolls',
+  parameters: viewportParameters,
+  render: () => (
+    <ViewportLayer
+      at={{top: 120, left: 400}}
+      width={240}
+      canvasXstyle={viewportStyles.wideCanvas}
+      caption="FR4 — The page is scrolled so the trigger sits inside the start gutter, and the layer opens held at the gutter. Scroll back a little: the trigger stays in view and clears the gutter. Once the scroll stops, the layer is placed again, aligned to the trigger, not where the old gutter hold left it.">
+      Re-placed at each scroll stop
+    </ViewportLayer>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="trigger"]',
+    );
+    if (!trigger) {
+      throw new Error('No trigger');
+    }
+    // Put the trigger 6px from the start edge, inside the 16px gutter.
+    const start = window.scrollX + trigger.getBoundingClientRect().left - 6;
+    await scrollAndSettle(start);
+    const held = await open(canvasElement);
+    if (held.layer.left < held.trigger.left + 4) {
+      throw new Error(
+        `Fixture: the layer ${fmt(held.layer)} is not held at the gutter past its trigger ${fmt(held.trigger)}`,
+      );
+    }
+    // Scroll back 50px: the trigger clears the gutter and stays in view.
+    await scrollAndSettle(start - 50);
+    const after = rects(canvasElement);
+    if (after.trigger.left < 16 || after.trigger.right > window.innerWidth) {
+      throw new Error(
+        `Fixture: trigger at ${after.trigger.left}..${after.trigger.right} is not clear of the gutter and in view`,
+      );
+    }
+    assertOnScreen(after, 'after a scroll with the anchor in view');
+    if (Math.abs(after.layer.left - after.trigger.left) > TOLERANCE) {
+      fail(
+        `The layer ${fmt(after.layer)} kept the old gutter hold instead of aligning to its trigger ${fmt(after.trigger)} once the scroll stopped`,
+      );
+    }
   },
 };
 

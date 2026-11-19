@@ -411,6 +411,14 @@ describe('viewport inset (spec:AST-059)', () => {
     vi.unstubAllGlobals();
   });
 
+  it('writes its own zero keyboard lift on every anchored layer, so a layer nested in a lifted layer does not inherit the lift (FR9)', async () => {
+    const user = userEvent.setup();
+    const {container} = render(<ContextLayerHarness placement="below" />);
+    await user.click(container.querySelector('button')!);
+    const layerEl = container.querySelector('[popover]') as HTMLElement;
+    expect(layerEl.style.getPropertyValue('--_astryx-layer-lift')).toBe('0px');
+  });
+
   it('places every anchor-mode layer with anchor insets, caps it, and keeps the gutter on both axes (FR1, FR3)', async () => {
     const user = userEvent.setup();
     const cases: [LayerPlacement, LayerAlignment, string[], string[]][] = [

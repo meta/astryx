@@ -152,7 +152,7 @@ function measureSelectedItem(
     // toward it. A block flip mirrors that self alignment, so the computed
     // value names the block end once a fallback flipped the layer. An engine
     // without anchor positioning keeps the block-start value.
-    isAboveAnchor = /self-end$/.test(layerStyle.alignSelf);
+    isAboveAnchor = layerStyle.alignSelf.endsWith('self-end');
     blockEndGutter = Math.max(
       0,
       parseFloat(

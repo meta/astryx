@@ -55,6 +55,7 @@ import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
 import {
   LAYER_CLEARANCE_PROPERTY,
+  LAYER_LIFT_PROPERTY,
   ensureSlideRules,
   anchorClearAlignment,
   getAnchorClearFallbacks,
@@ -139,7 +140,7 @@ const styles = stylex.create({
   // The margin box is what must fit a position option and what the browser's
   // overflow shift keeps inside the viewport, so a layer that would end
   // inside the gutter — or under a declared bar — does not fit there and the
-  // next option is tried. A flip tactic swaps the two values with the area,
+  // next option is tried. A flip tactic swaps the two values with the insets,
   // so the clearance stays on the anchor side and the gutter on the far side
   // (#4803); for the same reason the gutter is one value for both edges, the
   // larger of the two block gutters.
@@ -185,9 +186,8 @@ const styles = stylex.create({
     ),
   },
   // Anchor geometry. Insets that call `anchor()` place an anchored layer
-  // against the viewport itself. A
-  // position area would grow to include an anchor that runs past the
-  // viewport, so an option could fit there while the layer left the screen.
+  // against the viewport itself, so an option fits only where the layer stays
+  // on screen, even when the anchor runs past the viewport.
   // Every block-start inset subtracts the keyboard lift and every block-end
   // inset adds it. The flip tactics mirror insets, margins, and self
   // alignment together; `getSelfAlignment` writes the self alignment inline.
@@ -909,13 +909,15 @@ function observeScrollStop(
  * paint), the viewport resizing (before paint), and a scroll of the anchor
  * stopping (`observeScrollStop`, in the first frame painted after it). Each
  * calls `keepAnchorClear` for this layer and anchor while `isCurrent` says
- * they are still the live pair. Returns the function that removes every
- * observer and listener it added.
+ * they are still the live pair, except that a scroll stop with the anchor in
+ * view (`isAnchorInView`) places the layer afresh. Returns the function that
+ * removes every observer and listener it added.
  */
 function observeAnchorClearance(
   layer: HTMLElement,
   anchor: HTMLElement,
   isCurrent: () => boolean,
+  isAnchorInView: () => boolean,
 ): () => void {
   const view = layer.ownerDocument.defaultView;
   if (!view) {
@@ -936,7 +938,18 @@ function observeAnchorClearance(
     observer.observe(anchor);
   }
   view.addEventListener('resize', reread);
-  const stopObservingScrollStop = observeScrollStop(view, anchor, reread);
+  // At a scroll stop a layer whose anchor is in view is placed afresh, as
+  // every anchored layer is; otherwise it is checked against its anchor.
+  const stopObservingScrollStop = observeScrollStop(view, anchor, () => {
+    if (!isCurrent()) {
+      return;
+    }
+    if (isAnchorInView() && layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+      placeAfresh(layer);
+    } else {
+      keepAnchorClear(layer, anchor);
+    }
+  });
   return () => {
     observer?.disconnect();
     stopObservingScrollStop();
@@ -2119,6 +2132,7 @@ function useLayerImplementation(
             layer,
             el,
             () => popoverRef.current === layer && triggerRef.current === el,
+            () => isAnchorInViewRef.current,
           );
           keepAnchorClear(layer, el);
         }
@@ -2491,6 +2505,7 @@ function useLayerImplementation(
       layer,
       anchor,
       () => popoverRef.current === layer && triggerRef.current === anchor,
+      () => isAnchorInViewRef.current,
     );
     return () => {
       clearObserversRef.current?.();
@@ -2501,14 +2516,20 @@ function useLayerImplementation(
   // An anchored layer's `anchor()` insets are resolved against the scroll
   // offsets the browser recorded when it last placed the layer, and a scroll
   // only translates the result. While the anchor is out of view the aligned
-  // inset follows the anchor, which a translation keeps right. Once the
-  // anchor is back in view the inset holds the gutter, which a translation
-  // does not, so a layer whose anchor came back into view during a scroll is
-  // placed afresh once the scroll stops (`observeScrollStop`). Nothing reads
-  // or forces layout during the scroll itself.
-  const placedInViewRef = useRef(true);
+  // inset follows the anchor, which a translation keeps right. While the
+  // anchor is in view the aligned inset can hold a gutter and the browser can
+  // pick another try option, and a translation updates neither. So a layer
+  // whose anchor is in view when a scroll stops is placed afresh
+  // (`observeScrollStop`). Nothing reads or forces layout during the scroll
+  // itself. A layer that keeps its anchor clear has its own scroll-stop
+  // listener (`observeAnchorClearance`), which places it afresh in the same
+  // way, so it is not placed twice.
+  // Effect: syncs the browser's last placement of the layer with the scroll
+  // position at each scroll stop. The scroll-stop listeners are bound while
+  // the layer is open and removed when it closes, unmounts or is remounted by
+  // a moved render call (`mountGeneration`).
   useIsomorphicLayoutEffect(() => {
-    if (!isOpen || mode !== 'context') {
+    if (!isOpen || mode !== 'context' || keepsAnchorClear) {
       return;
     }
     const layer = popoverRef.current;
@@ -2517,20 +2538,16 @@ function useLayerImplementation(
     if (!layer || !anchor || !view) {
       return;
     }
-    placedInViewRef.current = isAnchorInViewRef.current;
     return observeScrollStop(view, anchor, () => {
-      const inView = isAnchorInViewRef.current;
-      const cameBack = inView && !placedInViewRef.current;
-      placedInViewRef.current = inView;
       if (
-        cameBack &&
+        isAnchorInViewRef.current &&
         popoverRef.current === layer &&
         layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
       ) {
         placeAfresh(layer);
       }
     });
-  }, [isOpen, mode, mountGeneration]);
+  }, [isOpen, mode, keepsAnchorClear, mountGeneration]);
 
   // Render function for context mode
   const renderContext = useCallback(
@@ -2644,7 +2661,13 @@ function useLayerImplementation(
           style={{
             ...stylexResult.style,
             ...anchorStyle,
-            ...keyboardLiftStyle(keyboardLift),
+            // Each anchored layer writes its own lift, so a layer nested in a
+            // lifted layer does not inherit the host's lift.
+            ...(positioning === 'anchor'
+              ? (keyboardLiftStyle(keyboardLift) ?? {
+                  [LAYER_LIFT_PROPERTY]: '0px',
+                })
+              : null),
             ...clearanceProperty,
             ...layerInsetProperties(declaredInset),
             ...mount.portalStyle,
