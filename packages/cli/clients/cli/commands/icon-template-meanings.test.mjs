@@ -19,6 +19,7 @@ import {
   writeIconSetProject,
 } from '../../../test-utils/icon-set-fixture.mjs';
 import {templateIconMeanings} from '../../../foundation/discovery/template-icon-meanings.mjs';
+import {meaningWithFallbacks} from '../../../foundation/discovery/template-placeholders.mjs';
 import {astryxIconDefinitions} from '../../../foundation/discovery/icon-definition-discovery.mjs';
 
 /** @type {string} */
@@ -221,6 +222,15 @@ describe('experimental icon --definitions marks template use and the set', () =>
     expect(byName.get('close').mapped).toBe(true);
     expect(byName.get('document').mapped).toBe(false);
     expect(byName.get('document').templates).toBeGreaterThan(0);
+    // A definition the set does not map names the fallback it draws by.
+    for (const [name, each] of byName) {
+      const drawnBy = each.mapped
+        ? undefined
+        : meaningWithFallbacks(name)
+            .slice(1)
+            .find(other => byName.get(other)?.mapped);
+      expect(each.fallback).toBe(drawnBy);
+    }
 
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
     expect(text.stdout).toContain('checked against @acme/glyphs/glyphs');
@@ -313,7 +323,10 @@ describe('integration check lists the template meanings a set leaves unmapped', 
     const [coverage] = validate.response.data.iconSets;
     const mapped = new Set(Object.keys(complete.data.map));
     expect(coverage.templateMeanings.unmapped).toEqual(
-      meanings.filter(each => !mapped.has(each.definition)),
+      meanings.filter(
+        each =>
+          !meaningWithFallbacks(each.definition).some(name => mapped.has(name)),
+      ),
     );
     expect(
       coverage.templateMeanings.unmapped.map(
