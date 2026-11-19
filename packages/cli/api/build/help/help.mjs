@@ -89,7 +89,7 @@ export async function buildHelp(options = {}) {
           title: 'Find the page template to start from',
           commands: [{command: 'build "<what you\'re building>"'}],
           returns:
-            'the [page] template to start from (always one: the closest match, or the app shell when nothing matches), the next two templates, and the [block]s and [component]s for the parts it lacks',
+            'the [page] template to start from (always one: the closest match, or the app shell when nothing matches), the next two templates, the [component]s for the parts it lacks, and [block] examples to read',
         },
         {
           title: 'Scaffold that template into your project',

@@ -182,8 +182,8 @@ export function registerBuild(program) {
       }
 
       // Four sections, one job each: the TEMPLATE to scaffold, OTHER
-      // TEMPLATES if its layout is wrong, BLOCKS for parts it lacks, and
-      // COMPONENTS for the rest. Descriptions stop at their first sentence and
+      // TEMPLATES if its layout is wrong, BLOCK EXAMPLES to read, and
+      // COMPONENTS for the parts. Descriptions stop at their first sentence and
       // blocks and components share one command line in their heading; the
       // JSON and --verbose carry everything.
       const verbose = Boolean(options.verbose);
@@ -243,7 +243,7 @@ export function registerBuild(program) {
         section(`Build kit for "${q}"`),
         text(
           start
-            ? "Start from the TEMPLATE and build its parts with COMPONENTS. The BLOCK EXAMPLES show how parts like yours are built: read one for reference, then write your part in the template's style.\n" +
+            ? 'Start from the TEMPLATE and build its parts with COMPONENTS. A BLOCK EXAMPLE shows how a part is built.\n' +
                 'Changing a page you already have? Keep it, and add components; read a block example when it helps.'
             : 'This kit is narrowed by --type, so it names no template.',
         ),
@@ -255,7 +255,7 @@ export function registerBuild(program) {
             'TEMPLATE',
             `${start.reason} ${
               start.basis === 'fallback'
-                ? 'Scaffold it, then build the page inside it.'
+                ? 'For a new page, scaffold it and build inside it.'
                 : 'Scaffold it, then replace its content. Keep its layout and spacing.'
             }`,
           ),
@@ -311,7 +311,7 @@ export function registerBuild(program) {
         out.push(
           section(
             'BLOCK EXAMPLES',
-            `Examples of parts like yours, for reference: read one, then write your own part; don't paste it${more(blocks)}. Read one: ${formatCliCommand('template <name>')}`,
+            `Examples of parts like yours, for reference only${more(blocks)}. Read one: ${formatCliCommand('template <name>')}`,
           ),
           records(
             shown(blocks.map(tagged)),
@@ -339,7 +339,7 @@ export function registerBuild(program) {
         out.push(
           section(
             'COMPONENTS',
-            `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+            `For the parts you build in the template${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
           ),
           ...componentLines,
         );

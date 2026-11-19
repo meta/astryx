@@ -79,8 +79,8 @@ own ranking and output, and template owners own what each template is.
   app shell (FR2) when it gives no page. A family's base template is that page
   only when the ranker leads with it, and never when the family word heads the
   request and also ends a component's name: the request then asks for that
-  piece, not for a part of the family's page (DEC-13). The blocks and components in the kit
-  carry the part itself. A request that changes a page the builder already has
+  piece, not for a part of the family's page (DEC-13). The components in the kit carry the
+  part itself, and its block examples show how such a part is built (DEC-14). A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
   no template scaffolds it. A request that adds something to a place that
   names no page, only the app or product as a whole, changes no page the
@@ -127,7 +127,8 @@ own ranking and output, and template owners own what each template is.
   values (which templates, blocks, or components appear, and in what order);
   it does not change a field's shape or meaning.
 - **FR12 — Text leads with the start.** Build's text output MUST lead with the
-  start, then the alternatives, then the blocks, then the components. Every
+  start, then the alternatives, then the block examples, then the components.
+  Every
   response field keeps a text projection as `spec:AST-017` requires: short by
   default, and whole under `--verbose`.
 - **FR13 — Every agent-facing surface agrees.** The build playbook, the
@@ -305,8 +306,8 @@ This record changes these surfaces:
 **Decider:** `josephfarina`, `2026-09-28`
 
 Templates carry the spacing judgment and a kit of loose parts does not, so the
-recommendation is always a full page template, and blocks and components fill
-it.
+recommendation is always a full page template, and components fill it; blocks
+are examples to read (DEC-14).
 
 Rejected: naming a template only on an exact match and a layout reference
 otherwise, which leaves most builders composing from primitives.
@@ -339,7 +340,7 @@ Rejected: a single pick with no alternatives.
 
 A part is built inside a page. When the request gives that page, its template
 is where the part goes; when it gives none, the app shell is the frame, and the
-blocks and components carry the part. A change to an existing page is the same
+components carry the part, with block examples to read (DEC-14). A change to an existing page is the same
 case: the page is the builder's own, so no template is its start.
 
 Rejected: starting a part from whichever page template shares a word with it,
