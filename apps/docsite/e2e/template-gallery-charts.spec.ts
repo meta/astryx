@@ -5,10 +5,10 @@
  * @input Production docsite's template gallery, which shows each template
  *   scaled down in a tile
  * @output App-level proof that the Dashboard tile shows its chart lines
- *   complete on every frame
+ *   complete on every frame, and that a series' own dash pattern stays
  * @position Docsite integration regression. A chart that draws its lines in
- *   draws them to a wrong length in a scaled tile, so the tile needs the lines
- *   complete at once.
+ *   draws them to a wrong length in a scaled tile, so the tile shows the
+ *   lines complete at once.
  */
 
 import {expect, test} from '@playwright/test';
@@ -45,7 +45,9 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
           frames.longest,
           ...lines.map(line => line.getTotalLength()),
         );
-        if (lines.some(line => line.hasAttribute('stroke-dasharray'))) {
+        if (
+          lines.some(line => getComputedStyle(line).strokeDasharray !== 'none')
+        ) {
           frames.partlyDrawn += 1;
         }
       }
@@ -56,9 +58,8 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
 
   await page.goto('/templates');
 
-  // The animation, when a chart has one, starts on the chart's first frame.
-  // The gallery renders its tiles one at a time in idle time, so a slow
-  // machine shows this tile late.
+  // The animation starts on the chart's first frame. The gallery renders its
+  // tiles one at a time in idle time, so a slow machine shows this tile late.
   await expect
     .poll(() => page.evaluate(() => window.galleryLineFrames.withLine), {
       timeout: 60_000,
@@ -68,4 +69,21 @@ test('the Dashboard tile shows complete chart lines on every frame', async ({
 
   expect(frames.longest).toBeGreaterThan(0);
   expect(frames.partlyDrawn).toBe(0);
+
+  // A dashed series, such as a target line, sets a pattern with no unit.
+  const ownPattern = await page.evaluate(() => {
+    const line = document.querySelector<SVGPathElement>(
+      '[inert] path.recharts-line-curve',
+    );
+    if (line == null) {
+      throw new Error('no chart line in a gallery tile');
+    }
+    const dashed = line.cloneNode() as SVGPathElement;
+    dashed.setAttribute('stroke-dasharray', '4 4');
+    line.after(dashed);
+    const pattern = getComputedStyle(dashed).strokeDasharray;
+    dashed.remove();
+    return pattern;
+  });
+  expect(ownPattern).toBe('4px, 4px');
 });
