@@ -4,7 +4,7 @@
 
 [experimental] `astryx experimental theme editor show` names the base theme's own text contrast failures as notes, one for each text color on each ground, with the line that fixes it in your theme where one does; they are never listed as your theme's problems, and a change says them only when it brings them. Text on a part that writes its own text colors (butter's colored cards) is measured in those colors.
 
-- `astryx experimental theme editor`: whole-theme dials reach every part they name. Corners move the chat surfaces' radius (the composer drawer's top corners), the headings dial and a heading font reach a part drawn as a heading element that reads none of the headings' tokens (an empty state's title), and the file input is one of the inputs.
+- `astryx experimental theme editor`: whole-theme dials reach every part they name. Corners give the chat surfaces' radius back to the container radius (the composer drawer's top corners follow), the headings dial and a heading font reach a part drawn as a heading element that reads none of the headings' tokens (an empty state's title), and the file input is one of the inputs.
 
 - `astryx experimental theme editor set` says when a fill token set on main content does not paint it inside an app shell (where it is drawn with no fill of its own and the shell's fill shows), with the `background-color` line that paints it everywhere.
 

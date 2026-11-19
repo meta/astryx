@@ -6850,6 +6850,13 @@ export function compileTheme(ctx, data, base) {
                 `var(${token})`,
               );
           }
+          // Chat surfaces (a composer, its drawer, a message bubble) read
+          // --radius-chat, which Core defaults to the container radius and
+          // the bundled themes pin to a value of their own: the dial gives it
+          // back to the container radius, as Core's own default does, so it
+          // follows whatever container radius the theme ends up with (the
+          // dial's, or an exact one set after it).
+          putTok('--radius-chat', 'var(--radius-container)');
         }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
@@ -12839,17 +12846,12 @@ export function positionalCornerToken(ctx, part) {
   return null;
 }
 
-/**
- * The radius tokens the corners dial moves: every step Core's radius scale
- * derives from its base (all but none and full), the chat surfaces' too,
- * which track the page step.
- */
+/** The radius tokens the corners dial moves. */
 export const DIAL_RADII = [
   '--radius-element',
   '--radius-inner',
   '--radius-container',
   '--radius-page',
-  '--radius-chat',
 ];
 
 /**
@@ -13457,8 +13459,7 @@ export function radiusAt(base, value, token) {
       pill ? atPill : Math.min(atPill, px * ratio(token, 1.25)),
     );
   }
-  // (The chat surfaces track the page step, as Core's scale draws them.)
-  if (token === '--radius-page' || token === '--radius-chat') {
+  if (token === '--radius-page') {
     const atPill = Math.max(32, 1.5 * roundPx * ratio(token, 2.5));
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }
