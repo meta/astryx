@@ -5161,6 +5161,16 @@ export function draftAnswer(ctx, env, question) {
         (m, lead, run) => (cued(run) ? `${lead}font ${run}` : m),
       );
   }
+  // (A look said, then taken away by a pronoun: "the copy button border is
+  // ugly, hide it", "the header has a shadow, remove it". The pronoun is
+  // that look, never the part: only the look goes.)
+  question = String(question).replace(
+    /^(.*?)\s*(?:'s\s+|\s+has\s+(?:a\s+|an\s+)?)?\b(borders?|shadows?|outlines?|underlines?|backgrounds?|gradients?)\b[^,;.]*[,;.]\s*(?:so\s+|and\s+|then\s+|please\s+|just\s+)*(?:hide|remove|drop|lose|get\s+rid\s+of)\s+(?:it|them)\b\s*[.!]?$/i,
+    (m, part, look) =>
+      part.trim()
+        ? `no ${look.toLowerCase().replace(/s$/, '')} on ${part.trim()}`
+        : m,
+  );
   question = String(question)
     .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
       const mode = modeNear(w);
@@ -11409,7 +11419,9 @@ export function draftAnswer(ctx, env, question) {
       if (
         side &&
         p.on === 'top-nav-item' &&
-        !/\b(?:top ?nav|navbar|top bar|header nav)/.test(c.text)
+        // (A nav said as a bar is the top nav: "nav bar links", "navigation
+        // bar"; a bare "nav items" in a sidebar ask is the side nav's.)
+        !/\b(?:top ?nav|top bar|header nav|nav(?:igation)? ?bar)/.test(c.text)
       )
         p.on = 'side-nav-item';
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
@@ -19004,8 +19016,8 @@ export function draftAnswer(ctx, env, question) {
       const inButton = (/** @type {string} */ k) =>
         Object.values(C.MAP).some(
           v =>
-            /** @type {any} */ ((v).contains ?? []).includes(k) &&
-            /** @type {any} */ ((v).tags ?? []).includes('button'),
+            /** @type {any} */ (v.contains ?? []).includes(k) &&
+            /** @type {any} */ (v.tags ?? []).includes('button'),
         );
       if (
         pieces.length === 1 &&
