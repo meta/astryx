@@ -225,27 +225,39 @@ const INITIAL_ITEMS: WorkItem[] = [
 // on card controls still register normally.
 const DRAG_THRESHOLD = 5;
 
+// A finger lifts a card with a long press, so a swipe that starts on a card
+// still scrolls the board. The press holds for 0.5 s within 10 px, as a
+// native long press does.
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP = 10;
+
 // Shared width for every board column, so they stay visually aligned.
 const COLUMN_WIDTH = 300;
+
+// Below this width the lanes stack top to bottom at the full width, so a
+// phone shows whole lanes instead of one lane and a cut edge of the next.
+const SIDE_BY_SIDE = '@media (min-width: 768px)';
 
 // ============= STYLES =============
 
 const styles = stylex.create({
   boardColumns: {
-    overflowX: 'auto',
-    overflowY: 'hidden',
+    flexDirection: {default: 'column', [SIDE_BY_SIDE]: 'row'},
+    overflowX: {default: 'hidden', [SIDE_BY_SIDE]: 'auto'},
+    overflowY: {default: 'auto', [SIDE_BY_SIDE]: 'hidden'},
     height: '100%',
     padding: 'var(--spacing-4)',
   },
   columnShell: {
     flexShrink: 0,
-    flexBasis: COLUMN_WIDTH,
-    height: '100%',
+    flexBasis: {default: 'auto', [SIDE_BY_SIDE]: COLUMN_WIDTH},
+    width: {default: '100%', [SIDE_BY_SIDE]: null},
+    height: {default: 'auto', [SIDE_BY_SIDE]: '100%'},
   },
   card: {
     cursor: 'grab',
     userSelect: 'none',
-    touchAction: 'none',
+    touchAction: 'manipulation',
     transition: 'box-shadow 120ms ease',
     ':hover': {
       boxShadow: 'var(--shadow-med)',
@@ -449,6 +461,8 @@ export default function KanbanBoardTemplate() {
     new Map<string, (el: HTMLDivElement | null) => void>(),
   );
   const teardownRef = useRef<(() => void) | null>(null);
+  // True while a finger carries a card.
+  const fingerDragRef = useRef(false);
 
   // Stable ref callbacks so registering an element never churns across renders.
   const getColumnRef = (id: ColumnId) => {
@@ -583,27 +597,51 @@ export default function KanbanBoardTemplate() {
 
     let started = false;
     let target: DropTarget | null = null;
+    const isFinger = e.pointerType === 'touch';
+    let pressTimer: number | undefined;
 
-    const onMove = (ev: PointerEvent) => {
-      if (
-        !started &&
-        Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) <
-          DRAG_THRESHOLD
-      ) {
-        return;
-      }
+    const follow = (x: number, y: number) => {
       started = true;
-      target = computeTarget(ev.clientX, ev.clientY, id);
+      fingerDragRef.current = isFinger;
+      target = computeTarget(x, y, id);
       setDrag({
         id,
         width,
         height,
         offsetX,
         offsetY,
-        pointerX: ev.clientX,
-        pointerY: ev.clientY,
+        pointerX: x,
+        pointerY: y,
         target,
       });
+    };
+
+    if (isFinger) {
+      pressTimer = window.setTimeout(
+        () => follow(startX, startY),
+        LONG_PRESS_MS,
+      );
+    }
+
+    const onMove = (ev: PointerEvent) => {
+      const travel =
+        Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY);
+      if (!started && isFinger) {
+        // The finger moved before the long press: it is a scroll.
+        if (travel > LONG_PRESS_SLOP) {
+          teardownRef.current?.();
+        }
+        return;
+      }
+      if (!started && travel < DRAG_THRESHOLD) {
+        return;
+      }
+      follow(ev.clientX, ev.clientY);
+    };
+
+    const onCancel = () => {
+      teardownRef.current?.();
+      setDrag(null);
     };
 
     const onUp = () => {
@@ -615,14 +653,18 @@ export default function KanbanBoardTemplate() {
     };
 
     const teardown = () => {
+      window.clearTimeout(pressTimer);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      fingerDragRef.current = false;
       teardownRef.current = null;
     };
     teardownRef.current = teardown;
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
   };
 
   const draggedItem = drag ? items.find(it => it.id === drag.id) : undefined;
@@ -641,6 +683,19 @@ export default function KanbanBoardTemplate() {
   }, [isDragging]);
 
   useEffect(() => () => teardownRef.current?.(), []);
+
+  // While a finger carries a card, the board must not scroll under it. The
+  // browser sends a touch's moves to this listener only when the listener
+  // exists before the touch starts, so it stays attached for the page's life.
+  useEffect(() => {
+    const holdScroll = (ev: TouchEvent) => {
+      if (fingerDragRef.current) {
+        ev.preventDefault();
+      }
+    };
+    window.addEventListener('touchmove', holdScroll, {passive: false});
+    return () => window.removeEventListener('touchmove', holdScroll);
+  }, []);
 
   // Card nodes for a column, or null when the column should show its empty
   // state. A dashed ghost box marks the landing slot during a drag.
