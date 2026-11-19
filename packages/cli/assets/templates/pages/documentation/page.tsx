@@ -3,7 +3,6 @@
 'use client';
 
 import type {CSSProperties} from 'react';
-import * as stylex from '@stylexjs/stylex';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -12,26 +11,7 @@ import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {useToast} from '@astryxdesign/core/Toast';
-
-const styles = stylex.create({
-  // The empty half keeps the hero text to a readable width on a wide screen.
-  // On a phone it would squeeze the title until a word breaks, so it goes.
-  heroSpacer: {
-    display: {default: null, '@media (max-width: 640px)': 'none'},
-  },
-  // A phone also gets a narrower card inset, so the display title's longest
-  // word fits its line. The default keeps the card's own inset.
-  hero: {
-    paddingInlineStart: {
-      default: 'var(--container-padding-inline-start)',
-      '@media (max-width: 640px)': 'var(--spacing-6)',
-    },
-    paddingInlineEnd: {
-      default: 'var(--container-padding-inline-end)',
-      '@media (max-width: 640px)': 'var(--spacing-6)',
-    },
-  },
-});
+import {useMediaQuery} from '@astryxdesign/core/hooks';
 
 const previewCard: CSSProperties = {
   borderRadius: 'var(--radius-element)',
@@ -230,6 +210,11 @@ const COMPONENT_CATEGORIES = [
 
 export default function DocumentationOverviewPage() {
   const showToast = useToast();
+  // The empty half keeps the hero text to a readable width on a wide screen.
+  // On a phone it would squeeze the title until a word breaks, so a phone
+  // drops it and narrows the card inset. Mobile first, so a page that runs no
+  // script gets the phone layout.
+  const isNarrow = useMediaQuery('(max-width: 640px)', true);
   return (
     <Layout
       height="fill"
@@ -237,7 +222,7 @@ export default function DocumentationOverviewPage() {
       content={
         <LayoutContent role="main" padding={8}>
           <VStack gap={10}>
-            <Card variant="gray" padding={10} xstyle={styles.hero}>
+            <Card variant="gray" padding={isNarrow ? 6 : 10}>
               <HStack gap={8} vAlign="center">
                 <StackItem size="fill">
                   <VStack gap={4}>
@@ -258,7 +243,7 @@ export default function DocumentationOverviewPage() {
                     </HStack>
                   </VStack>
                 </StackItem>
-                <StackItem size="fill" xstyle={styles.heroSpacer} />
+                {!isNarrow && <StackItem size="fill" />}
               </HStack>
             </Card>
 
