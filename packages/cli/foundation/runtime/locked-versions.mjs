@@ -3,8 +3,8 @@
 /**
  * @file The versions a project would install for the Astryx packages it
  * declares (architecture:cli-surface INV30): for each `@astryxdesign/*`
- * dependency, the value its package.json declares, the version its lockfile
- * records, and the version installed for it.
+ * dependency, the value its package.json declares, the version installed for
+ * it, and, when nothing is installed for it, the version its lockfile records.
  *
  * @input A project folder.
  * @output One pin per declared `@astryxdesign/*` package.
@@ -13,7 +13,7 @@
  */
 
 import * as path from 'node:path';
-import {findLockfile, lockedVersion, readJson} from '../release/project.mjs';
+import {findLockfile, lockedVersions, readJson} from '../release/project.mjs';
 import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 
 const SCOPE = '@astryxdesign/';
@@ -23,7 +23,8 @@ const FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'];
  * @typedef {object} AstryxPin
  * @property {string} name
  * @property {string} declared the value the project's package.json declares
- * @property {string | null} locked the version the project's lockfile records
+ * @property {string | null} locked the version the project's lockfile records,
+ *   read only when nothing is installed for the package
  * @property {string | null} installed the version installed for the project
  */
 
@@ -36,8 +37,7 @@ const FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'];
 export function projectAstryxPins(projectDir) {
   const pkg = readJson(path.join(projectDir, 'package.json'));
   if (!pkg || typeof pkg !== 'object') return [];
-  const lockfile = findLockfile(projectDir);
-  /** @type {AstryxPin[]} */
+  /** @type {Array<Omit<AstryxPin, 'locked'>>} */
   const pins = [];
   const seen = new Set();
   for (const field of FIELDS) {
@@ -54,12 +54,20 @@ export function projectAstryxPins(projectDir) {
       pins.push({
         name,
         declared,
-        locked: lockfile
-          ? lockedVersion(lockfile, projectDir, name, declared)
-          : null,
         installed: typeof version === 'string' ? version : null,
       });
     }
   }
-  return pins;
+  // Read the lockfile only for a package that is not installed, and read it
+  // once for all of them.
+  const open = pins.filter(pin => pin.installed === null);
+  const lockfile = open.length > 0 ? findLockfile(projectDir) : null;
+  const locked = lockfile
+    ? lockedVersions(
+        lockfile,
+        projectDir,
+        open.map(pin => ({name: pin.name, range: pin.declared})),
+      )
+    : new Map();
+  return pins.map(pin => ({...pin, locked: locked.get(pin.name) ?? null}));
 }

@@ -18,6 +18,8 @@ import {
 } from '../../foundation/runtime/css-tree.mjs';
 
 export {coversProperty, longhandsOf};
+export {cssNumber, splitTop} from '../../foundation/color/css-color.mjs';
+import {splitTop} from '../../foundation/color/css-color.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -782,55 +784,6 @@ export function initialOf(prop) {
     matchValue(prop, initial)
     ? initial
     : null;
-}
-
-/**
- * One CSS number, percentage or dimension, read by css-tree's tokenizer as
- * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
- * or null for anything else.
- * @param {string} value
- * @returns {{value: number, unit: string} | null}
- */
-export function cssNumber(value) {
-  /** @type {any} */
-  let ast;
-  try {
-    ast = csstree().parse(value.trim(), {context: 'value'});
-  } catch {
-    return null;
-  }
-  const nodes = ast.children?.toArray?.() ?? [];
-  if (nodes.length !== 1) return null;
-  const [n] = nodes;
-  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
-  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
-  if (n.type === 'Dimension')
-    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
-  return null;
-}
-
-/**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' ' | '/'} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
 }
 
 /**

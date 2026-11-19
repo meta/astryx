@@ -47,6 +47,7 @@ export const calendarStyles = stylex.create({
     textAlign: 'center',
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-label-size'],
+    lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
   },
   // The month is not known yet (server render, hydration): keep the space.
@@ -91,6 +92,7 @@ export const monthGridStyles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-secondary'],
   },
@@ -114,6 +116,7 @@ export const monthGridStyles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
   },
   weekRow: {
@@ -224,6 +227,7 @@ export const dayCellStyles = stylex.create({
     },
     fontFamily: 'inherit',
     fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
     padding: 0,
     position: 'relative',
     zIndex: 1,

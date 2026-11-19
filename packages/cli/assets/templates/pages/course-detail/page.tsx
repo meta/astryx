@@ -13,8 +13,8 @@
 // and every value rides a token or a component prop. The one custom block is
 // the sticky purchase rail below — Astryx layout primitives expose no sticky
 // prop yet (core issue #2613) — and nothing else in the file is styled by
-// hand. The glyphs draw from @heroicons/react through the Icon wrapper (each
-// mapped in template.doc.mjs); directional icons mirror under RTL; sample
+// hand. The glyphs draw from @astryxdesign/template-icons through the Icon
+// wrapper; directional icons mirror under RTL; sample
 // media rides the shipped fixture images.
 
 'use client';
@@ -62,19 +62,19 @@ import {
   StarIcon,
   ClockIcon,
   UsersIcon,
-  GlobeAltIcon,
+  GlobeIcon,
   BoltIcon,
   ArrowRightIcon,
-  BookOpenIcon,
+  BookIcon,
   HeartIcon,
   ShareIcon,
-  MagnifyingGlassIcon,
+  SearchIcon,
   ChevronRightIcon,
-} from '@heroicons/react/24/outline';
+} from '@astryxdesign/template-icons';
 import {
   StarIcon as StarIconSolid,
   HeartIcon as HeartIconSolid,
-} from '@heroicons/react/24/solid';
+} from '@astryxdesign/template-icons/24/solid';
 
 // The one piece of custom styling the page needs: Astryx layout primitives
 // expose no sticky prop yet, and a purchase rail that scrolls away stops
@@ -298,11 +298,11 @@ const FAQS = [
 const FACTS = [
   {icon: ClockIcon, label: COURSE.runtime, detail: 'self-paced'},
   {
-    icon: BookOpenIcon,
+    icon: BookIcon,
     label: `${COURSE.lessonCount} lessons`,
     detail: 'video, text and PDF',
   },
-  {icon: GlobeAltIcon, label: COURSE.language, detail: 'with English captions'},
+  {icon: GlobeIcon, label: COURSE.language, detail: 'with English captions'},
   {icon: BoltIcon, label: 'Self-paced or cohort', detail: 'you set the pace'},
 ];
 // The dialog lists the syllabus's preview lessons, so the badges are the
@@ -511,7 +511,7 @@ function CourseHead() {
           <Button
             label="See the preview lessons"
             variant="secondary"
-            icon={<Icon icon={BookOpenIcon} size="sm" />}
+            icon={<Icon icon={BookIcon} size="sm" />}
             onClick={() => setPreviewOpen(true)}
           />
           <Text type="supporting" color="secondary">
@@ -629,7 +629,7 @@ function SyllabusSection() {
               value={query}
               onChange={handleQueryChange}
               hasClear
-              startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+              startIcon={<Icon icon={SearchIcon} size="sm" />}
             />
           </StackItem>
           <Button
@@ -733,7 +733,7 @@ function InstructorSection() {
                 </Text>
               </HStack>
               <HStack gap={1} vAlign="center">
-                <Icon icon={BookOpenIcon} size="sm" />
+                <Icon icon={BookIcon} size="sm" />
                 <Text type="body" color="secondary">
                   {INSTRUCTOR.courses} courses
                 </Text>
@@ -1089,7 +1089,7 @@ function ReviewsSection() {
               value={query}
               onChange={handleQueryChange}
               hasClear
-              startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+              startIcon={<Icon icon={SearchIcon} size="sm" />}
             />
           </StackItem>
           <SegmentedControl

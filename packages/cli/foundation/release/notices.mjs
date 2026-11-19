@@ -51,7 +51,7 @@ import {
 import {CLI_ROOT, findAstryxProject, findPackageRoot} from '../fs/paths.mjs';
 import {readDeclaredDependencies} from '../integrations/declared-dependencies.mjs';
 import {satisfiesRange, semverCompare} from '../env/semver.mjs';
-import {isInReleaseCache, isReleaseVersion} from './cache.mjs';
+import {isInReleaseCache, isReleaseVersion, isVersionRange} from './cache.mjs';
 import {pinnedVersion, runningCopy} from './choose.mjs';
 import {
   knownLatest,
@@ -66,7 +66,11 @@ import {
   isGlobalCopy,
   projectRootOf,
 } from './choose.mjs';
-import {installsPackage, readReleaseFacts} from './project.mjs';
+import {
+  CORE_PACKAGE_NAME,
+  installsPackage,
+  readReleaseFacts,
+} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 import {installGuidanceFor} from '../env/cli-command.mjs';
@@ -407,27 +411,63 @@ const ADD = {
  * @returns {string}
  */
 export function addVerbFor(root, version = null) {
-  const pm = detectPackageManager(root);
-  const add = ADD[pm] ?? ADD.npm;
-  if (!pinnedVersion(version)) return add;
-  const facts = readReleaseFacts(root);
-  if (!pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange)) {
-    return add;
-  }
-  return `${add} ${pm === 'bun' ? '--exact' : '-E'}`;
+  return addVerb(
+    root,
+    pinnedVersion(version) ? readReleaseFacts(root) : null,
+    version,
+  );
 }
 
 /**
- * The packages Astryx releases with Core, such as its themes, as the official
- * package list this CLI carries marks them. Each names Core's exact release
- * as its peer. Empty when the CLI carries no readable list.
- * @returns {Set<string>}
+ * {@link addVerbFor} with the release facts of the project at `root` already
+ * read, or null when `version` is not one version.
+ * @param {string} root
+ * @param {import('./project.mjs').ReleaseFacts | null} facts
+ * @param {string | null} version
+ * @returns {string}
  */
-function releasedWithCorePackages() {
+function addVerb(root, facts, version) {
+  const pm = detectPackageManager(root);
+  const add = ADD[pm] ?? ADD.npm;
+  return facts && savesExactly(facts, version)
+    ? `${add} ${exactAddFlag(pm)}`
+    : add;
+}
+
+/**
+ * Whether a project with the release facts `facts` saves a package it adds at
+ * `version` exactly ({@link addVerbFor}): `version` is one version, and the
+ * project pins its Core (or, with no Core, its CLI) to one version.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @param {string | null} version
+ * @returns {boolean}
+ */
+function savesExactly(facts, version) {
+  return Boolean(
+    pinnedVersion(version) &&
+    pinnedVersion(facts.declaredCoreRange ?? facts.declaredCliRange),
+  );
+}
+
+/**
+ * The flag that makes the package manager `pm` save an added version exactly.
+ * @param {string} pm
+ * @returns {string}
+ */
+export function exactAddFlag(pm) {
+  return pm === 'bun' ? '--exact' : '-E';
+}
+
+/**
+ * The official packages this CLI carries a list of, which `discover` reads,
+ * each with whether Astryx releases it with Core. Empty when the CLI carries
+ * no readable list.
+ * @returns {Array<{name: string, withCore: boolean}>}
+ */
+function officialPackages() {
   /** @type {any} */
   let list;
   try {
-    // The official package list this CLI carries, which `discover` reads.
     // Built here, not at load: paths.mjs and this module load each other.
     const file = path.join(
       CLI_ROOT,
@@ -437,12 +477,27 @@ function releasedWithCorePackages() {
     );
     list = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return new Set();
+    return [];
   }
+  return (Array.isArray(list?.packages) ? list.packages : [])
+    .filter((/** @type {any} */ pkg) => typeof pkg?.package === 'string')
+    .map((/** @type {any} */ pkg) => ({
+      name: pkg.package,
+      withCore: pkg.releasedWithCore === true,
+    }));
+}
+
+/**
+ * The packages Astryx releases with Core, such as its themes, as the official
+ * package list this CLI carries marks them. Each names Core's exact release
+ * as its peer.
+ * @returns {Set<string>}
+ */
+function releasedWithCorePackages() {
   return new Set(
-    (Array.isArray(list?.packages) ? list.packages : [])
-      .filter((/** @type {any} */ pkg) => pkg?.releasedWithCore === true)
-      .map((/** @type {any} */ pkg) => pkg.package),
+    officialPackages()
+      .filter(pkg => pkg.withCore)
+      .map(pkg => pkg.name),
   );
 }
 
@@ -463,39 +518,131 @@ function releasedWithCoreIn(root) {
 
 /**
  * The command that adds the package `name` to the project a run in `cwd`
- * belongs to, with its package manager. A package Astryx releases with Core
- * ({@link releasedWithCorePackages}) names Core's exact release as its peer,
- * so it is added at the project's Core release: the Core it installed or
- * locked, else the one its package.json pins, else the Core range it
- * declares, else, with no Core at all, the release of the CLI that answers,
- * whose Core the package then brings; it is saved exactly in a project that
- * pins Core (see {@link addVerbFor}). Any other package is added at the
- * version the package manager picks.
+ * belongs to, with its package manager. A package that moves with Core
+ * ({@link movesWithCore}), such as a theme or the CLI that bundles a theme,
+ * is added at the project's Core release: the Core it installed or locked,
+ * else the one its package.json pins, else the Core range it declares, else,
+ * with no Core at all, the release of the CLI that answers, whose Core the
+ * package then brings; it is saved exactly in a project that pins Core (see
+ * {@link addVerbFor}). Any other package is added at the version the package
+ * manager picks.
  * @param {string} cwd
  * @param {string} name
  * @returns {string}
  */
 export function addMatchingCore(cwd, name) {
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  const facts = readReleaseFacts(root);
-  const release = releasedWithCorePackages().has(name)
-    ? (coreVersionOf(facts) ??
-      facts.declaredCoreRange ??
-      runningCopy(CLI_ROOT).version)
-    : null;
+  const {root, facts} = projectFacts(cwd);
+  const release = movesWithCore(name) ? coreRelease(facts) : null;
   // The guidance names the same version the command would add.
   const guidance = installGuidanceFor(
-    [release ? `${name}@${release}` : name],
+    [release ? releaseSpec(name, release) : name],
     cwd,
   );
   if (guidance != null) return guidance;
-  const verb = addVerbFor(root, release);
-  if (!release) return `${verb} ${name}`;
-  // A range is quoted: `^`, `<`, `>`, `|` and spaces mean something to a
-  // shell.
-  return pinnedVersion(release)
-    ? `${verb} ${name}@${release}`
-    : `${verb} "${name}@${release}"`;
+  const verb = addVerb(root, release ? facts : null, release);
+  return `${verb} ${release ? releaseSpec(name, release) : name}`;
+}
+
+/**
+ * The root of the project a run in `cwd` belongs to, or `cwd` when it belongs
+ * to none, and that folder's release facts.
+ * @param {string} cwd
+ * @returns {{root: string, facts: import('./project.mjs').ReleaseFacts}}
+ */
+function projectFacts(cwd) {
+  const here = readReleaseFacts(cwd);
+  const root = projectRootOf(here) ?? cwd;
+  return {root, facts: samePath(root, cwd) ? here : readReleaseFacts(root)};
+}
+
+/**
+ * The release at which a project with the release facts `facts` adds a
+ * package Astryx releases with Core: the Core it installed or locked, else
+ * the one its package.json pins, else the Core range it declares, else the
+ * release of the CLI that answers. A declared range counts only when it is a
+ * plain version range: a `workspace:` or `file:` spec would make the command
+ * fail, and nothing a project declares may reach a shell.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @returns {string}
+ */
+function coreRelease(facts) {
+  return projectCoreRelease(facts) ?? runningCopy(CLI_ROOT).version;
+}
+
+/**
+ * The Core release a project with the release facts `facts` names itself:
+ * the Core it installed or locked, else the one its package.json pins, else
+ * the Core range it declares when that is a plain version range. Null when it
+ * names none.
+ * @param {import('./project.mjs').ReleaseFacts} facts
+ * @returns {string | null}
+ */
+function projectCoreRelease(facts) {
+  const declared = facts.declaredCoreRange;
+  return (
+    coreVersionOf(facts) ??
+    (declared && isVersionRange(declared) ? declared : null)
+  );
+}
+
+/**
+ * Whether the package `name` is added at the project's Core release: Core
+ * itself; the CLI, which answers a project with the docs and templates of its
+ * own release, so a project keeps it at its Core's release; and each package
+ * Astryx releases with Core ({@link releasedWithCorePackages}), which names
+ * Core's exact release as its peer.
+ * @param {string} name
+ * @returns {boolean}
+ */
+function movesWithCore(name) {
+  if (name === CORE_PACKAGE_NAME || name === CLI_PACKAGE) return true;
+  if (!PLACEHOLDER.test(name)) return releasedWithCorePackages().has(name);
+  // A name with a placeholder, as `@astryxdesign/theme-<name>`, stands for
+  // the official packages a reader can fill it with. It moves with Core only
+  // when each of them does.
+  const pattern = name
+    .split(PLACEHOLDER)
+    .map(part => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
+    .join('[a-z0-9][a-z0-9.-]*');
+  const filled = new RegExp(`^${pattern}$`, 'u');
+  const fills = officialPackages().filter(pkg => filled.test(pkg.name));
+  return fills.length > 0 && fills.every(pkg => pkg.withCore);
+}
+
+/** A placeholder in a package name a doc writes, as `<name>`. */
+const PLACEHOLDER = /<[\w-]+>/u;
+
+/**
+ * The release at which the project a run in `cwd` belongs to adds `name`, and
+ * whether it saves it exactly, when `name` moves with Core
+ * ({@link movesWithCore}): Core, the CLI and the packages Astryx releases
+ * with Core are added at one release, the project's Core release, as
+ * {@link addMatchingCore} names them. Null for any other package, which the
+ * package manager adds at the version it picks.
+ * With `projectOnly`, null also when the project names no Core release
+ * itself, where the release of the CLI that answers would stand in.
+ * @param {string} cwd
+ * @param {string} name
+ * @param {{projectOnly?: boolean}} [options]
+ * @returns {{release: string, exact: boolean} | null}
+ */
+export function coreMatchedAdd(cwd, name, {projectOnly = false} = {}) {
+  if (!movesWithCore(name)) return null;
+  const {facts} = projectFacts(cwd);
+  const release = projectOnly ? projectCoreRelease(facts) : coreRelease(facts);
+  if (release == null) return null;
+  return {release, exact: savesExactly(facts, release)};
+}
+
+/**
+ * `name` at `release` as an install command names it. A range is quoted:
+ * `^`, `<`, `>`, `|` and spaces mean something to a shell.
+ * @param {string} name
+ * @param {string} release
+ * @returns {string}
+ */
+export function releaseSpec(name, release) {
+  return pinnedVersion(release) ? `${name}@${release}` : `"${name}@${release}"`;
 }
 
 /**
