@@ -86,6 +86,7 @@ import {
 } from '../../foundation/discovery/button-actions.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {packageImportTarget} from '../../foundation/discovery/package-exports.mjs';
+import {projectAugmentations} from '../../foundation/discovery/core-augmentation-points.mjs';
 import {
   resolveProjectTypeScript,
   TYPESCRIPT_FIX,
@@ -1025,10 +1026,7 @@ export async function findUnknownCoreProps(projectDir) {
       return props != null && !props.includes(use.prop);
     });
     if (candidates.length === 0) continue;
-    const [{projectAugmentations}, {readCorePropTypes}] = await Promise.all([
-      import('../../foundation/discovery/core-augmentation-points.mjs'),
-      import('../../foundation/discovery/core-prop-types.mjs'),
-    ]);
+    const {readCorePropTypes} = await import('../../foundation/discovery/core-prop-types.mjs');
     // What augments Core for a page: the project's files and installed
     // packages, and those of the page's own package, as a workspace member
     // installs its own.
