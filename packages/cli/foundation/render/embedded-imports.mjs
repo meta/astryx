@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {babelParse as parse, postcss} from '../runtime/lazy-dependencies.mjs';
 import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import {builtinModules} from 'node:module';
-import {matchPath, pathsFor} from './ts-paths.mjs';
+import {matchPath, pathsFor, typeScriptSourcesOf} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 import {climbsOut} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
@@ -286,16 +286,18 @@ export function receivingAliases(file) {
 
 /**
  * The tree paths a relative import may name, in the order a reverse resolves
- * it: the path as written, then with each extension an extensionless import
- * stands for, then as its folder's index file with each.
+ * it: the path as written, then the TypeScript source a `.js`-family name
+ * stands for (`fmt.js` for fmt.ts), then with each extension an
+ * extensionless import stands for, then as its folder's index file with each.
  * @param {string} spec a tree path, `/`-separated
  * @returns {string[]}
  */
 export function resolutionCandidates(spec) {
   return [
     spec,
-    ...RESOLVE_EXTENSIONS.map(ext => spec + ext),
-    ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`),
+    ...typeScriptSourcesOf(spec),
+    ...RESOLVE_EXTENSIONS.map(x => spec + x),
+    ...RESOLVE_EXTENSIONS.map(x => `${spec}/index${x}`),
   ];
 }
 

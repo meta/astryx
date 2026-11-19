@@ -267,6 +267,24 @@ describe('area', () => {
     const fillPath = plot.querySelector('path')!;
     expect(fillPath.getAttribute('fill')).toBe(`url(#${gradient.id})`);
   });
+
+  it("gives each chart on a page its own gradient, so a fill never takes another chart's", () => {
+    // Same series index and key in both charts: the id must still differ.
+    const first = renderMarks([area('v', {gradient: true})]);
+    const second = renderMarks([area('v', {gradient: true})]);
+    const ids = [first.plot, second.plot].map(
+      plot => plot.querySelector('linearGradient')!.id,
+    );
+    expect(ids[0]).not.toBe(ids[1]);
+    for (const [index, plot] of [first.plot, second.plot].entries()) {
+      expect(plot.querySelector('path')!.getAttribute('fill')).toBe(
+        `url(#${ids[index]})`,
+      );
+      // A url(#id) reference cannot hold a colon.
+      expect(ids[index]).toMatch(/^[a-zA-Z0-9_-]+$/);
+    }
+    expect(document.querySelectorAll(`[id="${ids[1]}"]`)).toHaveLength(1);
+  });
 });
 
 describe('band', () => {

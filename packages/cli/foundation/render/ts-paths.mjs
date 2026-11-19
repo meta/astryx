@@ -458,6 +458,19 @@ export function matchPath(patterns, spec) {
 export const candidatesOf = match => match.pattern.targets.map(t => t.replace('*', match.capture));
 
 /**
+ * The TypeScript sources a path with a JavaScript extension stands for, in
+ * TypeScript's order (`helper.js` for helper.ts, then helper.tsx); none for
+ * any other path. Works on platform and `/`-separated paths alike.
+ * @param {string} file
+ * @returns {string[]}
+ */
+export function typeScriptSourcesOf(file) {
+  const ext = path.posix.extname(file);
+  const stem = file.slice(0, file.length - ext.length);
+  return (TS_SOURCES[ext] ?? []).map(x => stem + x);
+}
+
+/**
  * The file a candidate path stands for: itself, the TypeScript source its
  * JavaScript extension names (TS_SOURCES), itself with an extension, or its
  * folder's index; null when none exists.
@@ -474,11 +487,7 @@ export function existingFile(candidate, extensions = EXTENSIONS) {
     }
   };
   if (isFile(candidate)) return candidate;
-  // As TypeScript does, a JavaScript name stands for its TypeScript source:
-  // `./helper.js` for helper.ts or helper.tsx.
-  const jsExt = path.extname(candidate);
-  const stem = candidate.slice(0, candidate.length - jsExt.length);
-  for (const ext of TS_SOURCES[jsExt] ?? []) if (isFile(stem + ext)) return stem + ext;
+  for (const source of typeScriptSourcesOf(candidate)) if (isFile(source)) return source;
   for (const ext of extensions) if (isFile(candidate + ext)) return candidate + ext;
   for (const ext of extensions) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
   return null;

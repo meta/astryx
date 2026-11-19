@@ -18,6 +18,8 @@ import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
 import {SOURCE_TYPE} from './source-block.mjs';
+import {showsImage} from './image-attributes.mjs';
+import {formatSrcset, parseSrcset} from './srcset.mjs';
 
 /** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
@@ -36,7 +38,9 @@ export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
  * event: the file cancels the browser's own submission and fires the event
  * itself, since a frame that blocks form submission never fires it, and a
  * file has no server to send a form to; a form whose action is another
- * site's address submits as the browser submits it. Enter in a form's only text field
+ * site's address submits as the browser submits it. A link to a place in the
+ * page (`#id`) is moved by VIEWER_MOVES, which runs in the script's first
+ * module. Enter in a form's only text field
  * submits a form with no submit button, as a browser does; with a button,
  * the browser clicks it.
  */
@@ -78,6 +82,181 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   submit(field.form, null);
 });
+}`;
+
+/**
+ * The move to a place in the page (`#id`) in a frame whose address is not
+ * the document's own, as in a `srcdoc` viewer frame. It runs in the script's
+ * first module, before any of the page's own modules, so its click listeners
+ * see a click after the listeners of the frame that hosts the file and before
+ * the page's.
+ */
+export const VIEWER_MOVES = `{
+// Whether a click on this link is one the file moves itself: a link to a
+// place in the page, in a frame whose address is not the document's own.
+const movesInFile = (event, link) => {
+  const href = link.getAttribute('href').trim();
+  return (
+    href.startsWith('#') &&
+    !link.hasAttribute('target') &&
+    !link.hasAttribute('download') &&
+    event.button === 0 &&
+    !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) &&
+    document.baseURI.split('#')[0] !== location.href.split('#')[0]
+  );
+};
+// The browser moves to the place against the frame's own address, so it
+// scrolls, sets :target, fires hashchange, moves focus and adds a history
+// entry as in a tab. The same address again is replaced, which a browser also
+// treats as a move to the place, never a load of the file again.
+const moveTo = link => {
+  const place = new URL(link.getAttribute('href').trim(), location.href).href;
+  if (place !== location.href) location.href = place;
+  else location.replace(place);
+};
+// The move is decided after every click listener the page has, even one it
+// adds later: a capture listener on the window, which runs first, adds a
+// listener for this click that runs last and is removed once it decides. A page that stops the click on its way (a
+// card's handler that calls stopPropagation) has the browser's own move held
+// at that point, and the file decides once every handler has run: it moves
+// unless the page cancelled the click, by preventDefault, \`returnValue =
+// false\` or an onclick handler that returns false.
+//
+// This runs before any of the page's own modules. A cancel made before the
+// click reaches this script's listener on the window, or before it reaches its
+// marker on the document, comes from the frame that hosts the file (a viewer
+// that scrolls to the place itself and leaves the address alone), not from the
+// page: it holds the browser's own move, and the file still moves, so a page
+// that routes on its address sees the new place. A viewer may add its document
+// listener from a DOMContentLoaded listener, after this script ran, so the
+// marker goes on the document at that point: after the viewer's listener, and
+// before the listeners the page adds once it is mounted. A cancel from the
+// page's own listeners keeps the page's way. A click listener the page adds on
+// the document or the window while the document loads (from its modules, an
+// \`import()\` or a promise callback) comes before that marker too, so it runs
+// marked as the page's while it handles the click.
+const add = EventTarget.prototype.addEventListener;
+const pastHost = new WeakSet();
+const markPastHost = () => add.call(document, 'click', event => pastHost.add(event), true);
+if (document.readyState === 'loading') add.call(document, 'DOMContentLoaded', markPastHost, {once: true});
+else markPastHost();
+let inPage = 0;
+// The page's modules load until the document has loaded: this capture listener
+// on the window runs before any listener a viewer adds on the document for the
+// same event, and after every module and promise callback that ran while the
+// document was still loading (an \`import()\` included).
+let loading = document.readyState === 'loading';
+if (loading) add.call(window, 'DOMContentLoaded', () => {
+  loading = false;
+}, {capture: true, once: true});
+// One wrapper per click handler. Once a handler has one, every later click add
+// and remove of it uses that wrapper, so a handler added at load and again
+// once mounted registers once, as in a tab. Only \`click\` is wrapped.
+const asPage = new WeakMap();
+for (const target of [document, window]) {
+  const remove = target.removeEventListener;
+  target.addEventListener = function (type, listener, options) {
+    if (type !== 'click' || !listener) return add.call(this, type, listener, options);
+    let marked = asPage.get(listener);
+    if (!marked) {
+      if (!loading) return add.call(this, type, listener, options);
+      marked = function (event) {
+        inPage += 1;
+        try {
+          return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event);
+        } finally {
+          inPage -= 1;
+        }
+      };
+      asPage.set(listener, marked);
+    }
+    return add.call(this, type, marked, options);
+  };
+  target.removeEventListener = function (type, listener, options) {
+    return remove.call(this, type, (type === 'click' && listener && asPage.get(listener)) || listener, options);
+  };
+}
+add.call(window, 'click', event => {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!link || !movesInFile(event, link)) return;
+  const cancel = Event.prototype.preventDefault;
+  let cancelled = false;
+  let hostHeld = event.defaultPrevented;
+  let stopped = false;
+  let decided = false;
+  // An onclick handler's \`return false\` cancels without calling
+  // preventDefault, so each one on the click's way is read as it returns.
+  const onclicks = event.composedPath().flatMap(node => {
+    const handler = node.onclick;
+    if (typeof handler !== 'function') return [];
+    const read = function (...args) {
+      const result = handler.apply(this, args);
+      if (result === false) cancelled = true;
+      return result;
+    };
+    node.onclick = read;
+    return [[node, handler, read]];
+  });
+  const restore = () => {
+    for (const [node, handler, read] of onclicks) if (node.onclick === read) node.onclick = handler;
+  };
+  const decide = () => {
+    if (decided) return;
+    decided = true;
+    window.removeEventListener('click', last);
+    restore();
+    if (cancelled || (event.defaultPrevented && !hostHeld && !stopped)) return;
+    cancel.call(event);
+    moveTo(link);
+  };
+  const byHost = () =>
+    event.eventPhase === Event.CAPTURING_PHASE && event.currentTarget === document && !pastHost.has(event);
+  event.preventDefault = function () {
+    if (!inPage && byHost()) hostHeld = true;
+    else cancelled = true;
+    return cancel.call(this);
+  };
+  const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
+  Object.defineProperty(event, 'returnValue', {
+    get() {
+      return returnValue.get.call(this);
+    },
+    set(value) {
+      if (!value) this.preventDefault();
+    },
+  });
+  for (const name of ['stopPropagation', 'stopImmediatePropagation']) {
+    const stop = Event.prototype[name];
+    event[name] = function () {
+      stop.call(this);
+      if (decided || stopped) return;
+      stopped = true;
+      cancel.call(event);
+      setTimeout(decide);
+    };
+  }
+  // The old way to stop a click, \`cancelBubble = true\`, stops it the same way.
+  const bubble = Object.getOwnPropertyDescriptor(Event.prototype, 'cancelBubble');
+  Object.defineProperty(event, 'cancelBubble', {
+    get() {
+      return bubble.get.call(this);
+    },
+    set(value) {
+      if (value) this.stopPropagation();
+    },
+  });
+  const last = later => {
+    // A click the page dispatches while this one is still on its way (a
+    // handler that clicks another element first) leaves it waiting.
+    if (later === event) decide();
+    else if (event.eventPhase === Event.NONE && !decided) {
+      decided = true;
+      window.removeEventListener('click', last);
+      restore();
+    }
+  };
+  window.addEventListener('click', last);
+}, true);
 }`;
 
 /**
@@ -218,7 +397,7 @@ if (clipboard == null) {
 }
 }`;
 
-/** The namespace of the module that fills in what a viewer's frame blocks: storage and the clipboard. */
+/** The namespace of the module that fills in what a viewer's frame blocks (storage and the clipboard) and moves a link to a place in the page. */
 const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
@@ -252,6 +431,158 @@ function locatedFile(file) {
   if (file.startsWith(`${MOUNT}:`)) return null;
   if (file.startsWith(`${PAGE}:`)) return file.slice(PAGE.length + 1);
   return path.resolve(file);
+}
+
+/**
+ * What the file's script does so that an image it draws from an address the
+ * file carries shows with no network. Where the browser takes an image's
+ * address (showsImage: an `<img>`'s or an `<input>`'s `src`, an `<img>`'s or
+ * a `<source>`'s `srcset`, a `<video>`'s `poster`) and in a CSS `url()` in a
+ * style the script sets, the script gives it the carried data instead. The
+ * address must be one the file carries, also with a fragment added; one with
+ * another query is another image. The page's code keeps
+ * every address as it wrote it, so a link, a text, a comparison or the URL
+ * API reads the page's own address.
+ * @param {[string, string][]} entries each carried address with its data: URI
+ * @returns {string} a statement that runs before the page's script
+ */
+export function imageSinks(entries) {
+  return scriptSafe(`${SINKS}(new Map(${JSON.stringify(entries)}));`);
+}
+
+/**
+ * A function's source as the browser runs it: its comments and indents go,
+ * since the file carries every byte.
+ * @param {Function} fn
+ */
+const compact = fn =>
+  String(fn)
+    .replace(/\/\*\*[^]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/\n\s*/g, '\n')
+    .replace(/\n+/g, '\n');
+
+/** The installer, with the srcset reader and the image rule it uses, as one expression. */
+const SINKS = `(carried => (${compact(installImageSinks)})(carried, ${compact(parseSrcset)}, ${compact(formatSrcset)}, ${compact(showsImage)}))`;
+
+/**
+ * Put the carried data where the browser takes an image's address; see
+ * imageSinks. This runs in the browser, before the page's script.
+ * @param {Map<string, string>} carried
+ * @param {typeof parseSrcset} parse
+ * @param {typeof formatSrcset} format
+ * @param {typeof showsImage} shows
+ */
+function installImageSinks(carried, parse, format, shows) {
+  const g = /** @type {any} */ (globalThis);
+  // A fragment names no other file; a query can (`/40?u=alex`), so an
+  // address with another query is another image.
+  /** @param {string} address */
+  const lookup = address => {
+    const whole = address.trim();
+    return carried.get(whole) ?? carried.get(whole.split('#')[0]);
+  };
+  /** @param {unknown} value */
+  const one = value => (typeof value === 'string' && lookup(value)) || value;
+  /** @param {unknown} value */
+  const set = value => {
+    if (typeof value !== 'string') return value;
+    let found = false;
+    const candidates = parse(value).map(candidate => {
+      const uri = lookup(candidate.url);
+      if (!uri) return candidate;
+      found = true;
+      return {url: uri, descriptor: candidate.descriptor};
+    });
+    return found ? format(candidates) : value;
+  };
+  /** @param {unknown} value */
+  const css = value =>
+    typeof value !== 'string'
+      ? value
+      : value.replace(
+          /url\(\s*(["']?)([^"')\s]+)\1\s*\)/g,
+          (whole, _quote, url) => {
+            const uri = lookup(url);
+            return uri ? `url("${uri}")` : whole;
+          },
+        );
+  /** @param {any} element @param {unknown} name @param {unknown} value */
+  const forAttribute = (element, name, value) => {
+    const attr = String(name).toLowerCase();
+    if (attr === 'style') return css(value);
+    if (!shows(String(element.localName), attr)) return value;
+    return attr === 'srcset' ? set(value) : one(value);
+  };
+  const element = g.Element.prototype;
+  const setAttribute = element.setAttribute;
+  element.setAttribute = function (
+    /** @type {string} */ name,
+    /** @type {unknown} */ value,
+  ) {
+    return setAttribute.call(this, name, forAttribute(this, name, value));
+  };
+  const setAttributeNS = element.setAttributeNS;
+  element.setAttributeNS = function (
+    /** @type {string | null} */ ns,
+    /** @type {string} */ name,
+    /** @type {unknown} */ value,
+  ) {
+    return setAttributeNS.call(this, ns, name, forAttribute(this, name, value));
+  };
+  // A setter the browser defines on a prototype, wrapped where it is found.
+  /** @param {any} start @param {string} prop @param {(value: unknown) => unknown} map */
+  const wrap = (start, prop, map) => {
+    for (let at = start; at; at = Object.getPrototypeOf(at)) {
+      const descriptor = Object.getOwnPropertyDescriptor(at, prop);
+      if (!descriptor) continue;
+      const setter = descriptor.set;
+      if (setter) {
+        Object.defineProperty(at, prop, {
+          ...descriptor,
+          set(/** @type {unknown} */ value) {
+            setter.call(this, map(value));
+          },
+        });
+      }
+      return;
+    }
+  };
+  for (const [type, tag] of /** @type {[any, string][]} */ ([
+    [g.HTMLImageElement, 'img'],
+    [g.HTMLInputElement, 'input'],
+    [g.HTMLSourceElement, 'source'],
+    [g.HTMLVideoElement, 'video'],
+  ])) {
+    for (const prop of ['src', 'srcset', 'poster']) {
+      if (type && shows(tag, prop)) wrap(type.prototype, prop, prop === 'srcset' ? set : one);
+    }
+  }
+  // A style the script sets reaches the element's `style` attribute: some
+  // browsers give no setter for a property such as `backgroundImage`. The
+  // swap runs before the browser next draws; a layout read in the same task
+  // can still start one request for a carried background.
+  /** @param {any} node */
+  const restyle = node => {
+    const written = node.getAttribute?.('style');
+    // A style that names only data: URIs needs no swap; the test reads no
+    // further than each `url(`.
+    if (!written || !/url\(\s*(?!["']?data:)/i.test(written)) return;
+    const swapped = css(written);
+    if (swapped !== written) setAttribute.call(node, 'style', swapped);
+  };
+  if (g.MutationObserver && g.document) {
+    new g.MutationObserver((/** @type {any[]} */ records) => {
+      for (const record of records) {
+        if (record.type === 'attributes') restyle(record.target);
+        for (const node of record.addedNodes ?? []) {
+          if (node.nodeType !== 1) continue;
+          restyle(node);
+          for (const styled of node.querySelectorAll('[style]')) restyle(styled);
+        }
+      }
+    }).observe(g.document, {subtree: true, childList: true, attributes: true, attributeFilter: ['style']});
+  }
 }
 
 /** @param {string} file */
@@ -440,7 +771,7 @@ export async function bundleForBrowser({
       }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
       build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
-      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}\n${VIEWER_MOVES}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

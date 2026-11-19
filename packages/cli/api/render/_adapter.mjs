@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -52,6 +51,7 @@ import {climbsOut, findCoreDir, findPackageRoot, isInside as liesInside, require
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {outsideRequests, roundTrip} from '../../foundation/render/share-checks.mjs';
 import {hostedPagePackages, recordResolved} from '../../foundation/runtime/package-root.mjs';
 import {installCommandFor} from '../../foundation/discovery/template-needs.mjs';
 import {component} from '../component/component.mjs';
@@ -432,20 +432,22 @@ function asAstryxError(e, pageDir, cwd = process.cwd()) {
       const pageRoot = findPackageRoot(pageDir);
       const runRoot = findPackageRoot(cwd);
       const samePackage = pageRoot !== null && runRoot !== null && path.resolve(runRoot) === path.resolve(pageRoot);
-      const guidance = samePackage ? installGuidanceFor(packages, cwd) : undefined;
+      // At installCommandFor's versions: a package Astryx releases with Core
+      // at the project's Core release, in the guidance too; any other at the
+      // CLI's range in the command, bare in the guidance; no command when the
+      // project's lockfiles disagree.
+      const step = pageRoot == null ? null : installCommandFor(packages, pageDir, cwd);
+      const guidance = samePackage ? step?.installGuidance : null;
       if (guidance) {
         suggestions.push({name: guidance, reason: needs});
       } else if (typeof e.detail.install === 'string') {
         suggestions.push({name: e.detail.install, reason: needs});
-      } else if (pageRoot == null) {
+      } else if (pageRoot == null || step == null) {
         // In a folder no package.json holds, an install would make the folder
         // a project, so the message names the packages for the project that
         // uses the page instead, as template and build do.
         message = `${message}. Install ${packages.length === 1 ? 'it' : 'them'} in the project that uses this page.`;
       } else {
-        // With the CLI's version ranges, as template and build give it; none
-        // when the project's lockfiles disagree.
-        const step = installCommandFor(packages, pageDir, cwd);
         const line = step.installGuidance ?? step.installCommand;
         if (line && samePackage) {
           suggestions.push({name: line, reason: what});
@@ -643,6 +645,9 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     }
   }
   writeOutput(output, page.html, cwd, {replace: true, ...(existingMode === undefined ? {} : {mode: existingMode & 0o7777})});
+  // The checks read the bytes on disk, not the string in memory: they vouch
+  // for the file that will be shared.
+  const written = fs.readFileSync(output, 'utf8');
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -651,11 +656,15 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
     stylesheets: page.stylesheets,
     classes: page.classes,
     cssBytes: page.cssBytes,
+    markupBytes: page.markupBytes,
+    sourceBytes: page.sourceBytes,
     images: page.images,
     warnings: page.warnings,
     ...(page.notCarried ? {notCarried: page.notCarried} : {}),
     scriptBytes: page.scriptBytes ?? 0,
     scriptModules: page.scriptModules ?? 0,
+    checks: {outside: outsideRequests(written), roundTrip: roundTrip(written, input, page.files)},
+    ...(page.remoteImages ? {remoteImages: page.remoteImages} : {}),
   };
 }
 

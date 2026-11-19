@@ -172,7 +172,7 @@ export const doc = {
       value: 'render.page',
       stability: 'experimental',
       description:
-        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `markupBytes` (the page\u2019s inlined images included), `sourceBytes` (the embedded source), `images` inlined, the page\u2019s script (`scriptBytes`, and `scriptModules`: how many modules it holds), the https images the page names (`remoteImages`: each address `fetched` into the file, and each one `failed`, with its `reason`; present when the page names one), `warnings` (`{code, message}`; empty when nothing looked wrong), and `checks` run on the written file (`outside`: every reference its markup and stylesheets load from outside the file, a remote address or a file beside it, empty when the file stands alone; `roundTrip`: `{exact, files, differs}`, whether the embedded source gives back every carried file byte for byte, and the carried paths that differ or are missing on either side). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'render.reverse',
@@ -381,12 +381,12 @@ export const doc = {
     {
       value: 'theme.build',
       description:
-        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), notices (advisories about a correct theme, such as a named font it does not load), and settingIssues (the page-rule settings the browser does not show as written, also among the warnings; their fields are in the themeBuild doc). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
+        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), notices (advisories, such as an unloaded font), and settingIssues (page-rule settings the browser does not show as written, each also a warning or, from a generated file, in one notice; fields in the themeBuild doc). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
     },
     {
       value: 'theme.build.check',
       description:
-        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues as on the build receipt when any. Writes nothing.',
+        'The --check receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: missing | outdated}), the full list of checked paths, when any is stale or missing, code ERR_THEME_STALE, and settingIssues and notices as on the build receipt when any. Writes nothing.',
     },
     {
       value: 'theme.build.batch',

@@ -1233,6 +1233,105 @@ describe('generateThemeRules with an explicit Heading weight prop', () => {
 // =============================================================================
 
 describe('derived var expansion', () => {
+  /** The rule for one selector text, by its start. */
+  const ruleAt = (css: string, start: string) => {
+    const at = css.indexOf(start);
+    return at < 0 ? undefined : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('lowers a pseudo-class block like its resting rule: a normal mapping', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-mapping',
+        components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-button:hover');
+    expect(hover).toContain('border-radius: 9px');
+    expect(hover).toContain('--_button-radius: 9px');
+  });
+
+  it('lowers a pseudo-class block like its resting rule: replaces', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-replaces',
+        components: {icon: {base: {':hover': {width: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-icon:hover');
+    expect(hover).toContain('--_icon-width: 20px');
+    expect(hover).not.toMatch(/(^|[\s;])width: 20px/);
+  });
+
+  it('lowers a pseudo-class block like its resting rule: container padding', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-class-container',
+        components: {card: {base: {':hover': {padding: '20px'}}}},
+      }),
+    ).component;
+    const hover = ruleAt(css, '.astryx-card:hover');
+    expect(hover).toContain('--astryx-card-padding: 20px');
+  });
+
+  it('lowers a pseudo-class block on a media surface too', () => {
+    const css = generateOnMediaCSS(
+      defineTheme({
+        name: 'pseudo-class-media',
+        onDark: {
+          components: {button: {base: {':hover': {borderRadius: '9px'}}}},
+        },
+      }),
+    );
+    expect(css).toMatch(/:hover[^{]*\{[^}]*--_button-radius: 9px/);
+  });
+
+  it('reports a rejected pseudo-class declaration once, under the name the theme wrote', () => {
+    const warnings: string[] = [];
+    const css = generateThemeRules(
+      defineTheme({
+        name: 'pseudo-class-boundary',
+        components: {
+          icon: {base: {':hover': {width: '20px} .x { color: red'}}},
+          button: {base: {':hover': {borderRadius: '9px} .x { color: red'}}},
+        },
+      }),
+      warnings,
+    ).join('\n');
+    expect(css).not.toContain('.x {');
+    expect(warnings.filter(w => w.includes('"width"'))).toHaveLength(1);
+    expect(warnings.filter(w => w.includes('"border-radius"'))).toHaveLength(1);
+    // No private name reaches the author.
+    expect(warnings.join('\n')).not.toMatch(/--_/);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('writes a pseudo-element block as authored', () => {
+    const css = generateThemeCSS(
+      defineTheme({
+        name: 'pseudo-element-as-written',
+        components: {
+          card: {base: {'::before': {padding: '4px'}}},
+          icon: {base: {'::after': {width: '2px'}}},
+          section: {base: {':after': {padding: '6px'}}},
+          button: {base: {':hover::after': {borderRadius: '3px'}}},
+        },
+      }),
+    ).component;
+    const before = ruleAt(css, '.astryx-card::before');
+    expect(before).toContain('padding: 4px');
+    expect(before).not.toContain('--astryx-card-padding');
+    const after = ruleAt(css, '.astryx-icon::after');
+    expect(after).toContain('width: 2px');
+    expect(after).not.toContain('--_icon-width');
+    // (A CSS2 one-colon pseudo-element too.)
+    const oneColon = ruleAt(css, '.astryx-section:after');
+    expect(oneColon).toContain('padding: 6px');
+    expect(oneColon).not.toContain('--astryx-section-padding');
+    expect(css).toMatch(/:hover[^{]*::after[^{]*\{[^}]*border-radius: 3px/);
+    expect(css).not.toContain('--_button-radius: 3px');
+  });
+
   it('emits borderRadius AND internal var for card', () => {
     const theme = defineTheme({
       name: 'test-derived',
