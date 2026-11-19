@@ -277,12 +277,20 @@ describe('part words read in place', () => {
       'action items 8px corners',
       'action items blue',
       'the actions column bold',
+      'actions 8px corners',
     ]) {
       const w = writes(await how('q0', ask));
       expect(
         w.some(c => / --on button\b/.test(c)),
         ask,
       ).toBe(false);
+    }
+    // (A bare "actions" before a look is named as no part, never the whole
+    // theme's corners.)
+    {
+      const rs = await how('q0', 'actions 8px corners');
+      expect(writes(rs)).toEqual([]);
+      expect(rs.some(r => /no part is called "action/.test(r.text))).toBe(true);
     }
     // ("very tight" before a type word is that type's, never the theme's
     // spacing dial at its far rung.)

@@ -24474,6 +24474,11 @@ export function draftAnswer(ctx, env, question) {
           new RegExp(String.raw`\b${DET}([a-z]{3,})\s+${THING}\b`).exec(
             text,
           )?.[1],
+          // (The word that starts a clause before an amount and a look,
+          // "widgets 8px corners", is its subject.)
+          new RegExp(
+            String.raw`^(?:${DET})?([a-z]{3,})\s+\d[\w.%]*\s+${THING}\b`,
+          ).exec(text.trim())?.[1],
           // (The subject of an elided clause that starts with it, "… and the
           // gizmo red".)
           subject

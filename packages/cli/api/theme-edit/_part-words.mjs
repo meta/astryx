@@ -19,10 +19,11 @@ export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
   // (An action, "a toast's action", is the button it holds: before
   // "button" or at the end of a phrase only. "Action items", "the actions
-  // column" and "an actions menu" are other parts. A call to action is the
+  // column", "an actions menu" and "actions 8px corners" are not the
+  // button: how names the word as no part. A call to action is the
   // primary button, below.)
   [
-    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*(?:$|[,.;:!?)])))/,
+    /(?<!\bcalls? to )\bactions?(?:\s+buttons?\b|(?=\s*[,.;:!?)]|$))/,
     {on: 'button'},
   ],
   // (The page's main panel, the area its content sits in.)
