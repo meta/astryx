@@ -1334,13 +1334,8 @@ export async function docsLinkProblems(
    * @param {LinkProblem} problem
    * @param {string | undefined} provider the provider of the doc it sits in
    */
-  const leftOut = (problem, provider) => {
-    if (absent == null) return false;
-    const target = parseLinkTarget(problem.target);
-    if ('error' in target) return false;
-    const owning = target.provider ?? provider;
-    return owning != null && absent({...target, provider: owning});
-  };
+  const leftOut = (problem, provider) =>
+    leftOutOfRun(absent, problem, provider);
   /**
    * @param {string} where
    * @param {string | undefined} provider
@@ -1380,6 +1375,58 @@ export async function docsLinkProblems(
         node.route,
         node.provider,
         (await nodeContent(catalog, tree, node)).problems,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * Whether a link problem names a target the run leaves out on purpose.
+ * @param {((target: {provider: string, kind: string, name: string}) => boolean) | undefined} absent
+ * @param {LinkProblem} problem
+ * @param {string | undefined} provider the provider of the doc it sits in
+ * @returns {boolean}
+ */
+function leftOutOfRun(absent, problem, provider) {
+  if (absent == null) return false;
+  const target = parseLinkTarget(problem.target);
+  if ('error' in target) return false;
+  const owning = target.provider ?? provider;
+  return owning != null && absent({...target, provider: owning});
+}
+
+/**
+ * Every link in a template's description that names no doc. Each description
+ * is checked against the docs of the package that wrote it, with the provider
+ * a component doc's links use.
+ * @param {DocsCatalog} catalog
+ * @param {{owner?: string, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only this package's templates. `absent`: as in
+ *   {@link docsLinkProblems}.
+ * @returns {Promise<string[]>}
+ */
+export async function templateLinkProblems(catalog, {owner, absent} = {}) {
+  const contributions = await catalog.contributions();
+  /** @type {string[]} */
+  const problems = [];
+  for (const record of contributions?.templates ?? []) {
+    if (owner != null && record.package !== owner) continue;
+    if (!record.description?.includes('{@link')) continue;
+    let provider;
+    try {
+      provider = componentLinkProvider(record.package, record.providerId);
+    } catch {
+      // An owner that is not a provider id has no docs to check against.
+      continue;
+    }
+    const linked = await linkComponentDoc(catalog, provider, {
+      description: record.description,
+    });
+    for (const problem of linked.problems) {
+      if (leftOutOfRun(absent, problem, provider)) continue;
+      problems.push(
+        `template ${record.id}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
     }
   }
@@ -1430,6 +1477,26 @@ export async function packageComponentLinkProblems(integration, discovered) {
   return (await componentLinkProblems(catalog, integration.name)).map(
     message => ({severity: /** @type {const} */ ('warning'), message}),
   );
+}
+
+/**
+ * Each link in one integration's own template descriptions that names no doc.
+ * `validate` lists each as a `next` note.
+ * @param {any} integration a loaded integration
+ * @param {Parameters<typeof packageCatalog>[1]} discovered the package's own
+ *   docs, which its templates' links may name; null when it ships none
+ * @returns {Promise<string[]>}
+ */
+export async function packageTemplateLinkProblems(integration, discovered) {
+  // A package with no provider id has no docs to check against.
+  try {
+    normalizeProviderId(integration.providerId ?? integration.name);
+  } catch {
+    return [];
+  }
+  return templateLinkProblems(packageCatalog(integration, discovered), {
+    owner: integration.name,
+  });
 }
 
 /**
