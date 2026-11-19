@@ -44,7 +44,7 @@ describe('Rating', () => {
     expect(stars().map(s => s.tabIndex)).toEqual([-1, -1, -1, 0, -1]);
   });
 
-  it('returns Tab focus to the checked star when a caller ignores onChange', async () => {
+  it('leaves on one Tab and returns to the checked star when a caller ignores onChange', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -62,14 +62,26 @@ describe('Rating', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith(2);
     expect(checked).toBeChecked();
     expect(previous).not.toBeChecked();
-    expect(stars().map(s => s.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
-    await user.tab();
-    expect(checked).toHaveFocus();
+    // The focused star holds the stop while focus is inside the group.
+    expect(stars().map(s => s.tabIndex)).toEqual([-1, 0, -1, -1, -1]);
     await user.tab();
     expect(screen.getByRole('button', {name: 'After rating'})).toHaveFocus();
+    expect(stars().map(s => s.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
     await user.tab({shift: true});
     expect(checked).toHaveFocus();
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends the hover preview on a key choice until the pointer moves', async () => {
+    const user = userEvent.setup();
+    render(<Rating label="r" value={2} onChange={() => {}} />);
+    const star = stars()[3];
+    const withPreview = star.className;
+    await user.click(stars()[1]);
+    await user.keyboard('{ArrowRight}');
+    expect(star.className).not.toBe(withPreview);
+    fireEvent.pointerMove(screen.getByRole('radiogroup'));
+    expect(star.className).toBe(withPreview);
   });
 
   it('chooses a star on click', async () => {

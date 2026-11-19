@@ -17,7 +17,7 @@
  * - /apps/storybook/stories/Rating.stories.tsx (examples)
  */
 
-import {useRef, type Ref} from 'react';
+import {useRef, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useListFocus, useMergedRefs} from '@astryxdesign/core/hooks';
@@ -116,6 +116,14 @@ const styles = stylex.create({
       },
     },
   },
+  interactiveStarStill: {
+    '--rating-color': {
+      default: `var(--rating-selected-color, ${colorVars['--color-border-emphasized']})`,
+      '@media (forced-colors: active)':
+        'var(--rating-selected-color, CanvasText)',
+    },
+    '--rating-fill': 'var(--rating-selected-fill, none)',
+  },
   selectedStar: {
     '--rating-selected-fill': 'currentColor',
     '--rating-selected-color': colorVars['--color-icon-yellow'],
@@ -134,6 +142,15 @@ const styles = stylex.create({
 });
 
 export type RatingSize = 'sm' | 'md' | 'lg';
+
+const NAVIGATION_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+]);
 
 export type RatingProps = Omit<
   BaseProps<HTMLDivElement>,
@@ -221,6 +238,8 @@ export function Rating({
   getStarLabel,
   onKeyDown: onKeyDownProp,
   onFocus: onFocusProp,
+  onBlur: onBlurProp,
+  onPointerMove: onPointerMoveProp,
   xstyle,
   className,
   style,
@@ -251,6 +270,12 @@ export function Rating({
   // Tab, a pointer and a script move focus and select nothing.
   const isNavigating = useRef(false);
   const focusedStar = useRef<number | null>(null);
+  // While focus is inside the group, the focused star holds the tab stop,
+  // so Tab leaves in one press even when the caller ignores onChange.
+  const [activeStar, setActiveStar] = useState<number | null>(null);
+  // A key choice ends the hover preview until the pointer moves again, so
+  // the preview never paints a count other than the value.
+  const [previewsHover, setPreviewsHover] = useState(true);
   const stars = Array.from({length: count}, (_, index) => index + 1);
   const choose = (star: number) => {
     if (!isEditable) {
@@ -271,6 +296,8 @@ export function Rating({
         role="img"
         onKeyDown={onKeyDownProp}
         onFocus={onFocusProp}
+        onBlur={onBlurProp}
+        onPointerMove={onPointerMoveProp}
         aria-label={t('@astryx.rating.readOnlyLabel', {
           label,
           rating: starLabel(Number(rating.toFixed(1))),
@@ -316,11 +343,27 @@ export function Rating({
         ) {
           return;
         }
+        if (NAVIGATION_KEYS.has(event.key)) {
+          setPreviewsHover(false);
+        }
         isNavigating.current = true;
         try {
           handleKeyDown(event);
         } finally {
           isNavigating.current = false;
+        }
+      }}
+      onPointerMove={event => {
+        onPointerMoveProp?.(event);
+        if (!previewsHover) {
+          setPreviewsHover(true);
+        }
+      }}
+      onBlur={event => {
+        onBlurProp?.(event);
+        const next = event.relatedTarget;
+        if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+          setActiveStar(null);
         }
       }}
       onFocus={event => {
@@ -358,15 +401,19 @@ export function Rating({
           aria-checked={star === rating}
           aria-label={starLabel(star)}
           aria-disabled={isDisabled || undefined}
-          tabIndex={star === tabStop ? 0 : -1}
+          tabIndex={star === (activeStar ?? tabStop) ? 0 : -1}
           onFocus={() => {
             focusedStar.current = star;
+            setActiveStar(star);
           }}
           onClick={() => choose(star)}
           {...stylex.props(
             styles.star,
             isEditable && ratingStar,
-            isEditable && styles.interactiveStar,
+            isEditable &&
+              (previewsHover
+                ? styles.interactiveStar
+                : styles.interactiveStarStill),
             star <= rating && styles.selectedStar,
             interactionOverlayStyles.backgroundColor,
             focusOutlineStyles.focusVisible,
