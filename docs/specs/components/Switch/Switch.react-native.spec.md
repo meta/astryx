@@ -42,7 +42,7 @@ system_specs: [spec:AST-082, spec:AST-085, spec:AST-093, spec:AST-112]
 | Builder impact          | Web code that drives a Switch from app state ports with two exceptions: `size` is not offered, and on iOS `labelPosition` and `labelSpacing` are type errors. A form posts the value from app state, since React Native has no HTML form.                                                                                                                                                                                                                                                                                                                                                         |
 | Compatibility/readiness | Not yet released; additive. Draft. Current-state impact lists where the library differs from this record.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Review checks           | Reject a drawn switch where the platform's switch is present, a visual prop on Switch, a web prop accepted and ignored, a `labelPosition` or `labelSpacing` on iOS, a change reported twice or per movement, a drag as the only way to toggle, a disabled switch that does not report its disabled state or reason, or a third-party native library that Switch needs.                                                                                                                                                                                                                            |
-| Governing rules         | `component:Switch` FR3–FR7, FR10, FR13–FR16 and AR1–AR3; `spec:AST-082` FR3–FR5, FR7, FR11 and DEC-2; `spec:AST-085` FR1, FR2 and FR5; `spec:AST-093` FR2–FR4; `spec:AST-112` FR5, FR16 and FR19; `spec:AST-124` FR3; `spec:AST-130` FR6; DEC-1 and DEC-2 below.                                                                                                                                                                                                                                                                                                                                  |
+| Governing rules         | `component:Switch` FR3–FR7, FR10, FR13–FR16, AR1 and AR2; `component:Tooltip` FR5; `spec:AST-082` FR3–FR5, FR7, FR11 and DEC-2; `spec:AST-085` FR1, FR2 and FR5; `spec:AST-093` FR2–FR4; `spec:AST-112` FR5, FR16 and FR19; `spec:AST-124` FR3; `spec:AST-130` FR6; DEC-1 and DEC-2 below.                                                                                                                                                                                                                                                                                                        |
 
 This table is a review projection; the body below is authoritative.
 
@@ -95,6 +95,8 @@ The library differs from this record in these places:
 - AR1 gap: under a form whose default is required, a switch that is not
   marked optional reads as required.
 - AR3 gap: a disabled switch with a reason reports itself as enabled.
+- AR3 gap: a disabled switch with a reason shows it on a long press, not on a
+  tap.
 
 ## Ownership boundary
 
@@ -155,17 +157,17 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Representative states
 
-| State                                                | Required invariant                                                       | Allowed variation   |
-| ---------------------------------------------------- | ------------------------------------------------------------------------ | ------------------- |
-| iOS and Android, platform present                    | the platform's switch, tinted by the theme                               | the platform's look |
-| platform switch absent or the platform off           | core's drawn switch                                                      | none                |
-| iOS row                                              | label leading, switch trailing, across the row                           | none                |
-| Android row, each `labelPosition` and `labelSpacing` | core's placement                                                         | none                |
-| largest text size                                    | the label across the row, the switch under it                            | none                |
-| drag on the drawn track inside a stack               | the thumb follows; the back swipe does not start                         | none                |
-| busy                                                 | no change; the spinner shows; the state reads busy                       | none                |
-| disabled with a reason                               | reachable, reported disabled, the reason in its hint and on a long press | none                |
-| right-to-left, drawn                                 | the thumb travels toward the inline end                                  | none                |
+| State                                                | Required invariant                                                | Allowed variation   |
+| ---------------------------------------------------- | ----------------------------------------------------------------- | ------------------- |
+| iOS and Android, platform present                    | the platform's switch, tinted by the theme                        | the platform's look |
+| platform switch absent or the platform off           | core's drawn switch                                               | none                |
+| iOS row                                              | label leading, switch trailing, across the row                    | none                |
+| Android row, each `labelPosition` and `labelSpacing` | core's placement                                                  | none                |
+| largest text size                                    | the label across the row, the switch under it                     | none                |
+| drag on the drawn track inside a stack               | the thumb follows; the back swipe does not start                  | none                |
+| busy                                                 | no change; the spinner shows; the state reads busy                | none                |
+| disabled with a reason                               | reachable, reported disabled, the reason in its hint and on a tap | none                |
+| right-to-left, drawn                                 | the thumb travels toward the inline end                           | none                |
 
 ### Transformation and precedence order
 
@@ -184,7 +186,8 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 - **AR1 — One switch element.** The switch is the one accessibility element:
   the switch role, its on or off state and its busy state; its name is the
-  label, with the required and error words where they apply; its hint is the
+  label, with the required word when `isRequired` is set and the error word
+  with an error status; its hint is the
   description, any other status and the disabled reason (`component:Switch`
   FR4; `spec:AST-112` FR19). The platform's switch is that element when it
   draws.
@@ -192,8 +195,9 @@ intentional decision. A `current` contract contains no unresolved rows.
   the drag is never the only way to change it.
 - **AR3 — Disabled with a reason.** With `disabledMessage`, a disabled switch
   stays reachable and reports its disabled state, the reason is in its hint,
-  changes stay blocked, and a long press on the row shows the reason
-  (`spec:AST-085` FR1, FR5; `component:Switch` AR1).
+  changes stay blocked, and a tap on the row shows the reason, since a disabled
+  switch takes no toggle; a long press opens nothing (`spec:AST-085` FR1, FR5;
+  `component:Switch` AR1; `component:Tooltip` FR5).
 - **AR4 — Text size and motion.** The label follows the text size, and at large
   text sizes it takes the row (FR5). Under Reduce Motion the drawn thumb
   settles at once and still follows a dragging finger.
@@ -243,15 +247,15 @@ switch, `space.s2`, the theme's motion, and the theme's `toggle` haptic.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                    | Representative states                                                                                                                                             | Mutation or failure expectation                                                                                                         | Audit section                        |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| FR1      | Type tests of the iOS and Android exports against core's contract; a contract drift test                                        | each prop; `labelIcon` with an icon name and an SVG component refused; `labelPosition` and `labelSpacing` on each platform; `size` and each web-only prop refused | a missing core prop, a different default, an accepted web-only prop or `size`, or a layout prop accepted on iOS fails                   | `audit:react-native/Switch/api`      |
-| FR2, FR3 | Unit tests of the switch choice through the package's testing doubles; Simulator and emulator captures                          | platform present; platform absent; the platform off; light and dark; an accent near the thumb's colour                                                            | a drawn switch where the platform's is present, a platform switch where it is absent, or an untinted platform switch fails              | `audit:react-native/Switch/platform` |
-| FR4, PR1 | Simulator and emulator captures with the platform switch absent; frame checks of the slide                                      | on and off; disabled; right-to-left; Reduce Motion                                                                                                                | a wrong box, a square thumb, a layout change on toggle, or JavaScript work per animation frame fails                                    | `audit:react-native/Switch/drawn`    |
-| FR5      | Simulator and emulator captures at the default and the largest text sizes                                                       | the iOS row; each Android placement; busy; a status message                                                                                                       | a layout prop honoured on iOS, a label broken inside a word, or a row shorter than the touch minimum fails                              | `audit:react-native/Switch/row`      |
-| FR6      | Touch checks on the Simulator, the emulator and devices; unit tests of the release rule                                         | a drag that commits; one that returns; a vertical drag in a list; a drag in a stack; an edge swipe                                                                | a change per movement, a back swipe taking a drag on the drawn track, a list that does not scroll, or a drag taken while disabled fails | `audit:react-native/Switch/drag`     |
-| FR7      | Unit tests of change reporting and haptics                                                                                      | a tap on the row; a drag; a screen reader's activation; disabled; busy                                                                                            | two `onChange` calls for one change, a haptic for a screen reader's activation, or a change while disabled or busy fails                | `audit:react-native/Switch/change`   |
-| AR1–AR4  | VoiceOver and TalkBack checks on devices with the platform's switch and the drawn switch; the largest text sizes; Reduce Motion | on; off; busy; required; an error; disabled with and without a reason                                                                                             | a missing role, state, name part or hint, a drag-only change, or a disabled switch that does not report its state or reason fails       | `audit:react-native/Switch/a11y`     |
+| Contract | Verification                                                                                                                    | Representative states                                                                                                                                             | Mutation or failure expectation                                                                                                                                                            | Audit section                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| FR1      | Type tests of the iOS and Android exports against core's contract; a contract drift test                                        | each prop; `labelIcon` with an icon name and an SVG component refused; `labelPosition` and `labelSpacing` on each platform; `size` and each web-only prop refused | a missing core prop, a different default, an accepted web-only prop or `size`, or a layout prop accepted on iOS fails                                                                      | `audit:react-native/Switch/api`      |
+| FR2, FR3 | Unit tests of the switch choice through the package's testing doubles; Simulator and emulator captures                          | platform present; platform absent; the platform off; light and dark; an accent near the thumb's colour                                                            | a drawn switch where the platform's is present, a platform switch where it is absent, or an untinted platform switch fails                                                                 | `audit:react-native/Switch/platform` |
+| FR4, PR1 | Simulator and emulator captures with the platform switch absent; frame checks of the slide                                      | on and off; disabled; right-to-left; Reduce Motion                                                                                                                | a wrong box, a square thumb, a layout change on toggle, or JavaScript work per animation frame fails                                                                                       | `audit:react-native/Switch/drawn`    |
+| FR5      | Simulator and emulator captures at the default and the largest text sizes                                                       | the iOS row; each Android placement; busy; a status message                                                                                                       | a layout prop honoured on iOS, a label broken inside a word, or a row shorter than the touch minimum fails                                                                                 | `audit:react-native/Switch/row`      |
+| FR6      | Touch checks on the Simulator, the emulator and devices; unit tests of the release rule                                         | a drag that commits; one that returns; a vertical drag in a list; a drag in a stack; an edge swipe                                                                | a change per movement, a back swipe taking a drag on the drawn track, a list that does not scroll, or a drag taken while disabled fails                                                    | `audit:react-native/Switch/drag`     |
+| FR7      | Unit tests of change reporting and haptics                                                                                      | a tap on the row; a drag; a screen reader's activation; disabled; busy                                                                                            | two `onChange` calls for one change, a haptic for a screen reader's activation, or a change while disabled or busy fails                                                                   | `audit:react-native/Switch/change`   |
+| AR1–AR4  | VoiceOver and TalkBack checks on devices with the platform's switch and the drawn switch; the largest text sizes; Reduce Motion | on; off; busy; required; an error; disabled with and without a reason; a tap and a long press on a disabled row                                                   | a missing role, state, name part or hint, a drag-only change, a disabled switch that does not report its state or reason, or a reason that a tap does not show or a long press opens fails | `audit:react-native/Switch/a11y`     |
 
 ## Decision log
 
