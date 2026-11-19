@@ -236,7 +236,12 @@ describe('secondary text on the accent tint', () => {
       }),
     ).component;
     expect(css).toContain(
-      '.astryx-table-row[data-striped="striped"]:nth-child(even)[data-selected="selected"] {\n    --color-text-secondary: var(--_selected-text-secondary);',
+      '.astryx-table-row[data-striped="striped"]:nth-child(even)[data-selected="selected"][data-astryx-selection-wash] {\n    --color-text-secondary: var(--_selected-text-secondary);',
+    );
+    // A row selected without the wash (`hasRowHighlight: false`) keeps the
+    // theme's own row text.
+    expect(css).not.toContain(
+      '.astryx-table-row[data-striped="striped"]:nth-child(even)[data-selected="selected"] {',
     );
     const own = generateThemeCSS(
       defineTheme({

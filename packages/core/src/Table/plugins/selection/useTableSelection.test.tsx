@@ -15,7 +15,7 @@ import {Table} from '../../Table';
 import {useTableSelection} from './useTableSelection';
 import {colorVars} from '../../../theme/tokens.stylex';
 import * as stylex from '@stylexjs/stylex';
-import {selectedTintTextVars} from '../../../theme/selectedTintText.stylex';
+import {selectionWashTextStyles} from '../../../privateAttributes/selectionWash.stylex';
 import {defineTheme} from '../../../theme/defineTheme';
 import {generateThemeCSS} from '../../../theme/generateThemeRules';
 import type {BodyRowRenderProps, TableColumn} from '../../types';
@@ -101,18 +101,10 @@ function SelectionTable({
   );
 }
 
-// The declaration TableRow sets for a selected row; StyleX emits the same
-// atomic class for the same declaration.
-const textOnTintProbe = stylex.create({
-  row: {
-    '--color-text-secondary': {
-      default: null,
-      ':is([aria-selected="true"])':
-        selectedTintTextVars['--_selected-text-secondary'],
-    },
-  },
-});
-const textOnTintClasses = (stylex.props(textOnTintProbe.row).className ?? '')
+// The style TableRow spreads for a selected row's text on the wash.
+const textOnTintClasses = (
+  stylex.props(selectionWashTextStyles.row).className ?? ''
+)
   .split(' ')
   // Debug class names name their source file; only the atoms matter.
   .filter(name => name !== '' && !name.includes('__'));
@@ -132,6 +124,20 @@ describe('useTableSelection', () => {
     for (const name of textOnTintClasses) {
       expect(row.classList.contains(name)).toBe(true);
     }
+  });
+
+  it('marks a selected row for the text on the tint only while it paints the wash', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<SelectionTable isStriped />);
+    await user.click(screen.getAllByLabelText('Select row')[1]);
+    const row = screen.getByText('Bob').closest('tr')!;
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    expect(row).toHaveAttribute('data-astryx-selection-wash');
+    rerender(<SelectionTable isStriped hasRowHighlight={false} />);
+    // Still selected, but no wash: the row keeps its own secondary text.
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    expect(row).not.toHaveAttribute('data-astryx-selection-wash');
+    expect(row.style.backgroundColor).toBe('');
   });
 
   it('renders selection checkboxes in header and body rows', () => {

@@ -21,6 +21,8 @@ applies_to:
     packages/core/src/theme/Theme.tsx,
     packages/core/src/privateAttributes/scheme.ts,
     packages/core/src/privateAttributes/mediaDarkPage.ts,
+    packages/core/src/privateAttributes/selectionWash.ts,
+    packages/core/src/privateAttributes/selectionWash.stylex.ts,
     packages/core/src/theme/invertedSurfaceSide.ts,
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
@@ -333,8 +335,10 @@ var(--text-body-leading)` for its own theme (`component:Theme` FR1), so text
 - **INV22 — Secondary text on the accent tint reads at 4.5:1.** Every part
   that paints the accent tint (`--color-accent-muted`) behind secondary text
   reads the private `--_selected-text-secondary`: a selected list item, tree
-  row, table row and command, a checked checkbox row, a numbered citation, and
-  a dropzone's hint while a file is dragged over it. Theme generation sets it
+  row and command, a selected table row while the table paints its selection
+  wash, a checked checkbox row, a numbered citation, and a dropzone's hint
+  while a file is dragged over it. A table row selected without the wash
+  (`hasRowHighlight` off) keeps its own secondary text. Theme generation sets it
   to the theme's own `--color-text-secondary`, moved along its own lightness
   by the least amount that reads at 4.5:1 on the tint and on the tint's hover
   over the page, the surface and a card, in each mode. A theme that sets none

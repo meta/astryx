@@ -25,7 +25,7 @@ import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {selectedTintTextVars} from '../theme/selectedTintText.stylex';
+import {selectionWashTextStyles} from '../privateAttributes/selectionWash.stylex';
 import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
@@ -55,20 +55,6 @@ export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
  * the rows keep their parity whatever is open.
  */
 const NOT_PANEL_ROW = ':nth-child(even of :not([data-expansion-panel]))';
-
-// A selected row's secondary text reads at 4.5:1 on the selection wash
-// (selectedTintText.ts). The selection plugin writes `aria-selected`, which
-// React leaves alone when the row re-renders. A theme's own selected-row text
-// wins: theme rules sit in a later layer.
-const selectedRowStyles = stylex.create({
-  row: {
-    '--color-text-secondary': {
-      default: null,
-      ':is([aria-selected="true"])':
-        selectedTintTextVars['--_selected-text-secondary'],
-    },
-  },
-});
 
 const logicalStripedRowStyles = stylex.create({
   row: {
@@ -206,7 +192,7 @@ export function TableRow({
     );
   }
 
-  const rowStyles: StyleXStyles[] = [selectedRowStyles.row];
+  const rowStyles: StyleXStyles[] = [selectionWashTextStyles.row];
 
   // Striped + hover styling is for body rows only — the header row must not
   // pick up the hover highlight (or striping) even when hasHover/isStriped.

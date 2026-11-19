@@ -403,9 +403,9 @@ export const LIFT_PARTS = OFFICIAL_NEUTRAL_LIFTED.map(([part, block]) => [
   liftGround(part, block),
 ]);
 /**
- * What a lifted block's secondary text sits on: a card's own fill for a
- * card colour (the card variant rule lifts it there), the translucent
- * neutral track under segmented-control labels, else the accent tint.
+ * What a lifted block's secondary text sits on: the translucent neutral
+ * track under segmented-control labels, else the card variant's own fill
+ * (the card variant rule lifts it there).
  * @param {string} part
  * @param {string} block
  * @returns {string}
@@ -414,8 +414,8 @@ function liftGround(part, block) {
   if (part === 'segmented-control-item') {
     return '--color-neutral';
   }
-  const color = part === 'card' ? /^variant:([\w-]+)$/.exec(block)?.[1] : null;
-  return color ? `--color-background-${color}` : '--color-accent-muted';
+  const color = /^variant:([\w-]+)$/.exec(block)?.[1] ?? block;
+  return `--color-background-${color}`;
 }
 /**
  * What each lifted background is, and the parts on it, for notes.

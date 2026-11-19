@@ -9739,9 +9739,9 @@ export async function contrastProblems(ctx, data, res) {
       : side;
   };
   /**
-   * Text on a lifted background (the accent tint, the neutral track) as
-   * the part sets it for itself: the official themes lift secondary text
-   * there, and so does a generated theme.
+   * Text on a lifted background (the neutral track, a card fill) as the
+   * part sets it for itself: the official themes lift secondary text there,
+   * and so does a generated theme.
    * @param {TextPair} p @param {string} m
    */
   const onTint = (p, m) => {

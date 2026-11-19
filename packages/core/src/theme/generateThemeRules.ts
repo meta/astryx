@@ -74,6 +74,7 @@ import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {ROOT_SCHEME_UNNAMED, rootSchemeIs} from '../privateAttributes/scheme';
 import {mediaDarkPageIs} from '../privateAttributes/mediaDarkPage';
+import {SELECTION_WASH_SELECTOR} from '../privateAttributes/selectionWash';
 import {darkPageSides} from './invertedSurfaceSide';
 
 /**
@@ -1288,7 +1289,7 @@ function generateComponentRules(
           themeSetsTintText(rules, tintState) ||
           parseStyleKey(key).includes(parseStyleKey(tintState))
             ? undefined
-            : parseStyleKey(tintState);
+            : `${parseStyleKey(tintState)}${TINT_PAINTED[component] ?? ''}`;
         if (
           tintSuffix !== undefined &&
           props.some(([prop]) => prop === '--color-text-secondary')
@@ -1477,6 +1478,14 @@ const TINT_STATES: Record<string, string> = {
   'tree-list-item': 'selected',
   'table-row': 'selected',
   'command-palette-item': 'selected',
+};
+
+/**
+ * What else a part's tinted state needs before the tint is painted: a
+ * selected table row paints it only while the table shows its selection wash.
+ */
+const TINT_PAINTED: Record<string, string> = {
+  'table-row': SELECTION_WASH_SELECTOR,
 };
 
 /**

@@ -424,7 +424,8 @@ export interface DefineThemeInput<
    * Colors made from a few seeds by `themePalette()` from
    * `@astryxdesign/core/palette`: the color tokens the theme editor maps for
    * its color settings, and the part styles that keep secondary text
-   * readable on the accent tint, the neutral track and the colored cards.
+   * readable on the neutral track and the colored cards (Core measures the
+   * secondary text on the accent tint itself).
    * `tokens` and
    * `components` still win, one by one.
    *
