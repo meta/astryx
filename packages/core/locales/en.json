@@ -1507,6 +1507,10 @@
     "defaultMessage": "{count} tool calls",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
   },
+  "@astryx.chatTriggerMenu.noResults": {
+    "defaultMessage": "No results",
+    "description": "Shown in a chat composer's @-mention or slash-command menu when the typed query matches no suggestion and the trigger sets no empty message of its own. Very short (2 words); neutral tone."
+  },
   "@astryx.chatTriggerMenu.searching": {
     "defaultMessage": "Searching…",
     "description": "Shown, and announced politely to screen readers, while a chat composer's @-mention or slash-command menu waits for async search results. Present participle; trailing `…` is one character."
