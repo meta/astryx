@@ -92,7 +92,7 @@ describe('definitionRelatives', () => {
 
 describe('experimental icon --definitions names the group', () => {
   it(
-    'JSON has `group` only when a definition names one; text shows it',
+    'JSON has `group` only when a meaning names one; text shows it',
     async () => {
       const cwd = writeIconSetProject(path.join(tmp, 'definitions'), {
         packages: [],
@@ -119,7 +119,7 @@ describe('experimental icon --definitions names the group', () => {
   );
 });
 
-describe('the finder names related definitions', () => {
+describe('the finder names related meanings', () => {
   it(
     'each match gains `relatives` from Astryx and the set; text names them under the first match only',
     async () => {
@@ -157,7 +157,7 @@ describe('the finder names related definitions', () => {
   );
 
   it(
-    'with no set, each definition gains `group` and `relatives`; text adds one related line',
+    'with no set, each meaning gains `group` and `relatives`; text adds one related line',
     async () => {
       const cwd = writeIconSetProject(path.join(tmp, 'none'), {packages: []});
       const body = await json(
@@ -186,7 +186,7 @@ describe('the finder names related definitions', () => {
   );
 });
 
-describe("a definition's docs page names its group", () => {
+describe("a meaning's docs page names its group", () => {
   it(
     'a Group row names the group and the other members with their routes',
     async () => {

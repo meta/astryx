@@ -1172,7 +1172,10 @@ export function checkAgentDocs(ctx) {
   const places = ctx.skillPlaces?.places ?? ['agents-md'];
   if (ctx.skillPlaces && !places.includes('agents-md')) {
     const astryx = ctx.skillPlaces.files.filter(
-      file => file.state === 'current' || file.state === 'differs' || file.state === 'edited',
+      file =>
+        file.state === 'current' ||
+        file.state === 'differs' ||
+        file.state === 'edited',
     );
     return {
       id: 'agent-docs',
@@ -1273,7 +1276,8 @@ export function checkAgentDocs(ctx) {
 export function checkSkillPlaces(ctx) {
   const report = ctx.skillPlaces;
   if (!report) return null;
-  const blockOnly = report.places.length === 1 && report.places[0] === 'agents-md';
+  const blockOnly =
+    report.places.length === 1 && report.places[0] === 'agents-md';
   if (
     blockOnly &&
     report.skillFiles.length === 0 &&
@@ -1283,7 +1287,8 @@ export function checkSkillPlaces(ctx) {
     return null;
   }
   const base = {id: 'skill-places', label: 'Astryx skill places'};
-  const init = (/** @type {string} */ args) => `\`${formatCliCommand(`astryx init ${args}`.trim(), ctx.cwd)}\``;
+  const init = (/** @type {string} */ args) =>
+    `\`${formatCliCommand(`astryx init ${args}`.trim(), ctx.cwd)}\``;
   const saved = report.places.join(',');
   if (report.renderError) {
     return {
@@ -1309,7 +1314,9 @@ export function checkSkillPlaces(ctx) {
   const savesSkill = report.places.some(place => place !== 'agents-md');
   // Both saved is the person's choice: the note in the pass line says so.
   const doubled =
-    report.blockFiles.length > 0 && report.skillFiles.length > 0 && !(savesBlock && savesSkill);
+    report.blockFiles.length > 0 &&
+    report.skillFiles.length > 0 &&
+    !(savesBlock && savesSkill);
   if (doubled) {
     return {
       ...base,
@@ -1327,14 +1334,21 @@ export function checkSkillPlaces(ctx) {
   /** @param {{place: string, skill?: string}} file */
   const copiesOf = file => `${file.place}\0${file.skill ?? ''}`;
   const splitKeys = [...new Set(report.files.map(copiesOf))].filter(key => {
-    const states = report.files.filter(file => copiesOf(file) === key).map(file => file.state);
+    const states = report.files
+      .filter(file => copiesOf(file) === key)
+      .map(file => file.state);
     return (
       states.some(state => state === 'edited' || state === 'foreign') &&
-      states.some(state => state === 'current' || state === 'differs' || state === 'absent')
+      states.some(
+        state =>
+          state === 'current' || state === 'differs' || state === 'absent',
+      )
     );
   });
   if (splitKeys.length > 0) {
-    const files = report.files.filter(file => splitKeys.includes(copiesOf(file)));
+    const files = report.files.filter(file =>
+      splitKeys.includes(copiesOf(file)),
+    );
     const names = splitKeys.map(key => {
       const [place, skill] = key.split('\0');
       return skill ? `${skill} in ${place}` : place;
@@ -1342,8 +1356,11 @@ export function checkSkillPlaces(ctx) {
     return {
       ...base,
       status: 'warn',
-      message: `The copies of ${names.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : 'Astryx\'s'})`).join(', ')}, so agents read different texts.`,
-      fix: 'Make the copies the same: copy your file over the other, or delete both and run ' + init('') + '.',
+      message: `The copies of ${names.join(', ')} differ: ${files.map(file => `${file.path} (${file.state === 'edited' ? 'edited' : file.state === 'foreign' ? 'not written by Astryx' : file.state === 'absent' ? 'missing' : "Astryx's"})`).join(', ')}, so agents read different texts.`,
+      fix:
+        'Make the copies the same: copy your file over the other, or delete both and run ' +
+        init('') +
+        '.',
     };
   }
   if (report.linkedOut.length > 0) {
@@ -1356,7 +1373,9 @@ export function checkSkillPlaces(ctx) {
   }
   const missing = report.files.filter(file => file.state === 'absent');
   const stale = report.files.filter(file => file.state === 'differs');
-  const kept = report.files.filter(file => file.state === 'edited' || file.state === 'foreign');
+  const kept = report.files.filter(
+    file => file.state === 'edited' || file.state === 'foreign',
+  );
   const leftoverNote =
     report.leftovers.length > 0
       ? ` Skills Astryx wrote for an integration this project no longer has: ${report.leftovers.join(', ')}; \`${formatCliCommand('upgrade --from <old version> --apply', ctx.cwd)}\` or ${init('')} removes them.`
@@ -1369,14 +1388,19 @@ export function checkSkillPlaces(ctx) {
     report.blockFiles.length > 0 && report.skillFiles.length > 0
       ? ` The project saves both the block and the skill (${saved}), so agents that read both get it twice.`
       : '';
-  const codexNote = report.computerSkill && report.skillsFolderFiles.length > 0
-    ? ' This computer also has the computer-level `astryx` skill, so Codex lists both skills.'
-    : '';
+  const codexNote =
+    report.computerSkill && report.skillsFolderFiles.length > 0
+      ? ' This computer also has the computer-level `astryx` skill, so Codex lists both skills.'
+      : '';
   if (missing.length > 0 || stale.length > 0 || report.leftovers.length > 0) {
     const missingNote =
-      missing.length > 0 ? ` An Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.` : '';
+      missing.length > 0
+        ? ` An Astryx skill is missing from ${missing.map(file => file.path).join(', ')}.`
+        : '';
     const staleNote =
-      stale.length > 0 ? ` The Astryx skill is from another release in ${stale.map(file => file.path).join(', ')}.` : '';
+      stale.length > 0
+        ? ` The Astryx skill is from another release in ${stale.map(file => file.path).join(', ')}.`
+        : '';
     return {
       ...base,
       status: 'warn',
@@ -1679,7 +1703,7 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one variant.`
           : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
@@ -1728,15 +1752,15 @@ export function checkIconSets(ctx) {
       id,
       label,
       status: 'warn',
-      message: `${renamed.join(' | ')}. Each entry maps the definition that replaced it.`,
-      fix: 'In the package that ships the set, rename each map key to the definition that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
+      message: `${renamed.join(' | ')}. Each entry maps the meaning that replaced it.`,
+      fix: 'In the package that ships the set, rename each map key to the meaning that replaced it (any `astryx experimental icon map` run there writes it), or install a release of the package that has.',
     };
   }
   return {
     id,
     label,
     status: 'pass',
-    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" look where its set has one.` : ''}`,
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" variant where its set has one.` : ''}`,
   };
 }
 
@@ -1810,7 +1834,7 @@ export function checkIconPlaceholders(ctx) {
     label,
     status: 'warn',
     message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
-    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
+    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the meanings they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
   };
 }
 
@@ -1833,7 +1857,8 @@ export function checkCoreProps(ctx) {
   if (scan == null) return null;
   const id = 'core-props';
   const label = 'Core props';
-  if (scan.skipped) return {id, label, status: 'info', message: `Not checked: ${scan.skipped}`};
+  if (scan.skipped)
+    return {id, label, status: 'info', message: `Not checked: ${scan.skipped}`};
   const count = scan.found.length;
   if (count === 0) {
     return {
@@ -1904,10 +1929,12 @@ export function checkButtonActions(ctx) {
       message: `No Astryx button that does nothing when pressed (${scan.files} source file${scan.files === 1 ? '' : 's'} read).`,
     };
   }
-  const named = scan.found.slice(0, BUTTONS_NAMED).map(
-    button =>
-      `${button.file}:${button.line} ${button.label == null ? button.component : `"${button.label}"`}${button.note ? ` (${button.note})` : ''}`,
-  );
+  const named = scan.found
+    .slice(0, BUTTONS_NAMED)
+    .map(
+      button =>
+        `${button.file}:${button.line} ${button.label == null ? button.component : `"${button.label}"`}${button.note ? ` (${button.note})` : ''}`,
+    );
   const rest = count - named.length;
   return {
     id,
@@ -2931,12 +2958,12 @@ export function checkComputerAgentText(ctx) {
     label: 'Computer-level agent text',
     status: /** @type {const} */ ('info'),
   };
-  const folders =
-    ctx.agentTextFolders ??
-    (state ? state.folders : []);
+  const folders = ctx.agentTextFolders ?? (state ? state.folders : []);
   const staleFolders = folders.filter(f => f.state === 'differs');
   const deletedFolders = folders.filter(f => f.state === 'absent');
-  const keptFolders = folders.filter(f => f.state === 'edited' || f.state === 'foreign');
+  const keptFolders = folders.filter(
+    f => f.state === 'edited' || f.state === 'foreign',
+  );
   const folderNote =
     (folders.length > 0
       ? ` Also in the folders \`init --to\` saved: ${folders.map(f => f.path).join(', ')}.`
@@ -2953,8 +2980,7 @@ export function checkComputerAgentText(ctx) {
   if (!settings.install) {
     return {
       ...base,
-      message:
-        `The computer-level agent text is turned off (\`astryx init --user --remove-agents\`), so the CLI installed for the computer does not write it.${folderNote}`,
+      message: `The computer-level agent text is turned off (\`astryx init --user --remove-agents\`), so the CLI installed for the computer does not write it.${folderNote}`,
       fix: `To turn it back on, run \`${formatCliCommand('astryx init --user', ctx.cwd)}\`.`,
     };
   }

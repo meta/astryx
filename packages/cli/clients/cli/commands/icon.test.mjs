@@ -69,7 +69,7 @@ describe('astryx experimental icon', () => {
     expect(JSON.parse(many.stdout).data.query).toBe('magni fier');
   });
 
-  it('prints the import that names the icon by its meaning when a definition names it', async () => {
+  it('prints the import that names the icon by its meaning when a meaning names it', async () => {
     const close = await runCli(['experimental', 'icon', 'close'], cwd);
     expect(close.stdout).toMatch(
       /meaningImport: +import \{XIcon as CloseIcon\} from '@acme\/glyphs';/,
@@ -139,7 +139,7 @@ describe('astryx experimental icon with no icon set installed', () => {
     bare = writeIconSetProject(path.join(tmp, 'bare'), {packages: []});
   });
 
-  it('says no set is installed, names the matching definitions, built-in first, and how to get a set', async () => {
+  it('says no set is installed, names the matching meanings, built-in first, and how to get a set', async () => {
     const res = await runCli(['experimental', 'icon', 'close'], bare);
     expect(res.code).toBe(0);
     expect(res.stdout).toContain(
@@ -165,12 +165,12 @@ describe('astryx experimental icon with no icon set installed', () => {
     });
     const text = await runCli(['experimental', 'icon', 'delete'], bare);
     expect(text.stdout).toContain(
-      'Icon definitions that match; an icon set draws them once one is installed:',
+      'Icon meanings that match; an icon set draws them once one is installed:',
     );
     expect(text.stdout).not.toContain('Core draws these names');
   });
 
-  it('lists built-in names before other definitions, at most --limit', async () => {
+  it('lists built-in names before other meanings, at most --limit', async () => {
     const json = JSON.parse(
       (
         await runCli(
@@ -330,7 +330,7 @@ describe('astryx experimental icon when every installed set is withdrawn', () =>
   });
 });
 
-describe('astryx experimental icon in the look the project picks', () => {
+describe('astryx experimental icon in the variant the project picks', () => {
   /** @type {string} */
   let solid;
   beforeEach(() => {
@@ -342,7 +342,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     });
   });
 
-  it('prints the import of the chosen look when the icon has it', async () => {
+  it('prints the import of the chosen variant when the icon has it', async () => {
     const res = await runCli(
       ['experimental', 'icon', 'trash', '--set', 'glyphs'],
       solid,
@@ -368,7 +368,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(json.data.matches[0]).not.toHaveProperty('look');
   });
 
-  it('keeps the default import, and says so, when the icon lacks the look', async () => {
+  it('keeps the default import, and says so, when the icon lacks the variant', async () => {
     const res = await runCli(
       ['experimental', 'icon', 'close', '--set', 'glyphs'],
       solid,
@@ -376,7 +376,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(res.stdout).toMatch(
       /import: +import \{XIcon\} from '@acme\/glyphs';/,
     );
-    expect(res.stdout).toMatch(/look: +no solid look; draws outline/);
+    expect(res.stdout).toMatch(/look: +no solid variant; draws outline/);
     const json = JSON.parse(
       (
         await runCli(
@@ -391,7 +391,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     });
   });
 
-  it('leaves a set outside the project list in its default look', async () => {
+  it('leaves a set outside the project list in its default variant', async () => {
     const json = JSON.parse(
       (
         await runCli(
@@ -404,7 +404,7 @@ describe('astryx experimental icon in the look the project picks', () => {
     expect(json.data.matches[0]).not.toHaveProperty('look');
   });
 
-  it('answers as before when the project picks no look', async () => {
+  it('answers as before when the project picks no variant', async () => {
     const json = JSON.parse(
       (await runCli(['experimental', 'icon', 'trash', '--json'], cwd)).stdout,
     );

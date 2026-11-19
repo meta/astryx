@@ -80,8 +80,8 @@ function data(change) {
   return value;
 }
 
-describe('a definition that replaces another', () => {
-  it('answers each old name with the newest definition: one, two and three replacements back', () => {
+describe('a meaning that replaces another', () => {
+  it('answers each old name with the newest meaning: one, two and three replacements back', () => {
     const read = folder(CHAIN);
     expect(read.errors).toEqual([]);
     expect(read.definitions.map(each => each.doc.name)).toEqual(['meteor']);
@@ -138,19 +138,19 @@ describe('a definition that replaces another', () => {
       dismiss: definitionSource('dismiss', {replaces: 'close'}),
     });
     expect(builtIn.errors.map(each => each.message)).toEqual([
-      expect.stringContaining('replaces the built-in definition "close"'),
+      expect.stringContaining('replaces the built-in meaning "close"'),
     ]);
     const loop = folder({
       orbit: definitionSource('orbit', {replaces: 'comet'}),
       comet: definitionSource('comet', {replaces: 'orbit'}),
     });
     expect(loop.errors.map(each => each.message)).toEqual([
-      expect.stringContaining('never reaches a current definition'),
-      expect.stringContaining('never reaches a current definition'),
+      expect.stringContaining('never reaches a current meaning'),
+      expect.stringContaining('never reaches a current meaning'),
     ]);
   });
 
-  it("maps a set's old key to the newest definition, and the check names the key to rename", () => {
+  it("maps a set's old key to the newest meaning, and the check names the key to rename", () => {
     writeIconPackage(dir, {
       data: data(d => (d.map.planet = 'home')),
       definitions: CHAIN,
@@ -170,14 +170,14 @@ describe('a definition that replaces another', () => {
       }),
     ]);
     expect(issues[0].message).toContain(
-      'maps "planet", an icon definition that "meteor" replaced',
+      'maps "planet", an icon meaning that "meteor" replaced',
     );
     expect(issues[0].message).toContain(
       'astryx experimental icon map meteor home --set glyphs',
     );
   });
 
-  it('keeps the entry the map already has for the newest definition', () => {
+  it('keeps the entry the map already has for the newest meaning', () => {
     writeIconPackage(dir, {
       data: data(d => {
         d.map.orbit = 'trash';
@@ -199,11 +199,11 @@ describe('a definition that replaces another', () => {
     for (const old of ['orbit', 'planet']) {
       const [first] = rankIcons([set], old);
       expect(first).toMatchObject({id: 'home', score: 100});
-      expect(first.reason).toBe(`definition "meteor" (replaced "${old}")`);
+      expect(first.reason).toBe(`meaning "meteor" (replaced "${old}")`);
     }
   });
 
-  it('`experimental icon map` writes an old key under the newest definition', async () => {
+  it('`experimental icon map` writes an old key under the newest meaning', async () => {
     writeIconPackage(dir, {
       data: data(d => (d.map.planet = 'home')),
       definitions: CHAIN,
@@ -226,7 +226,7 @@ describe('a definition that replaces another', () => {
     const byOld = await iconMap('comet', 'trash', {cwd: dir});
     expect(byOld.data.definition).toBe('meteor');
   });
-  it("refuses a set's own definition that replaces an Astryx definition", () => {
+  it("refuses a set's own meaning that replaces an Astryx meaning", () => {
     writeIconPackage(dir, {
       data: data(d => (d.map.dismiss = 'x')),
       definitions: {dismiss: definitionSource('dismiss', {replaces: 'close'})},
@@ -237,7 +237,7 @@ describe('a definition that replaces another', () => {
     );
     expect(read.sets).toEqual([]);
     expect(read.errors.map(each => each.message).join(' ')).toContain(
-      'replaces "close", an Astryx icon definition',
+      'replaces "close", an Astryx icon meaning',
     );
   });
 

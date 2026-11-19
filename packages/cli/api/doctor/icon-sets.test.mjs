@@ -88,7 +88,7 @@ describe('icon-sets check', () => {
     expect(check?.message).toContain('"@acme/lines/lines" as backup');
   });
 
-  it('passes with a variant the main set declares, and says each icon draws that look', async () => {
+  it('passes with a variant the main set declares, and says each icon draws that variant', async () => {
     const check = await iconCheckOf({
       packages: [{}, {name: '@acme/lines'}],
       config: {
@@ -97,7 +97,7 @@ describe('icon-sets check', () => {
     });
     expect(check).toMatchObject({status: 'pass'});
     expect(check?.message).toContain(
-      'Each icon draws its "solid" look where its set has one.',
+      'Each icon draws its "solid" variant where its set has one.',
     );
   });
 
@@ -118,7 +118,7 @@ describe('icon-sets check', () => {
     });
   });
 
-  it('an unlisted set fails with a fix that keeps the look', async () => {
+  it('an unlisted set fails with a fix that keeps the variant', async () => {
     const check = await iconCheckOf({
       packages: [{}, {name: '@acme/lines'}],
       config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
@@ -129,7 +129,7 @@ describe('icon-sets check', () => {
     );
   });
 
-  it('fails a variant for a main set with one look, with the command that removes it', async () => {
+  it('fails a variant for a main set with one variant, with the command that removes it', async () => {
     const {variants, default: _default, ...data} = glyphsData();
     const check = await iconCheckOf({
       packages: [
@@ -146,7 +146,7 @@ describe('icon-sets check', () => {
     expect(check).toMatchObject({
       status: 'fail',
       message:
-        'experimental.iconVariant names "solid", but the main set glyphs declares no variants: it draws one look.',
+        'experimental.iconVariant names "solid", but the main set glyphs declares no variants: it draws one variant.',
       fix: 'Remove experimental.iconVariant: run `astryx experimental icon use glyphs`.',
     });
   });
@@ -279,7 +279,7 @@ describe('icon-placeholders check', () => {
     );
   });
 
-  it("keeps the project's look in the fix that adds a backup", async () => {
+  it("keeps the project's variant in the fix that adds a backup", async () => {
     const check = await placeholderCheckOf(
       {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
       {'src/page.tsx': PAGE},
@@ -632,7 +632,11 @@ describe('icon-imports check', () => {
       {
         'tsconfig.json': JSON.stringify({compilerOptions: {baseUrl: '.'}}),
         'src/rows.tsx': 'export const RowsIcon = () => null;\n',
-        'src/page.tsx': ["import {RowsIcon} from 'src/rows.js';", 'export const A = () => <RowsIcon />;', ''].join('\n'),
+        'src/page.tsx': [
+          "import {RowsIcon} from 'src/rows.js';",
+          'export const A = () => <RowsIcon />;',
+          '',
+        ].join('\n'),
       },
     );
     expect(check).toMatchObject({status: 'pass'});

@@ -74,7 +74,7 @@ describe('icon-set guide', () => {
       '--new-definition',
       formatCliCommand('docs cli/experimental/icon-definitions'),
       'icon_builtin_definition_missing',
-      'Unmapped icon definitions (optional)',
+      'Unmapped icon meanings (optional)',
       'unmappedDefinitions',
       'icon_module_not_public',
       'icon_not_component',
@@ -163,7 +163,7 @@ describe('icon-set guide', () => {
   // A set's own definitions join the namespace once its package is
   // installed, with or without `experimental.iconSet`, as FR4 says;
   // Astryx's are always there.
-  it("lists a set's own icon definitions once its package is installed, with or without experimental.iconSet", async () => {
+  it("lists a set's own icon meanings once its package is installed, with or without experimental.iconSet", async () => {
     const definition = `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Launch something.', words: ['launch', 'liftoff']};
 `;

@@ -63,8 +63,7 @@ function proseOf(value, out = []) {
       value
         .replace(/`[^`]*`/g, '')
         .replace(/\S*\/\S*/g, '')
-        .replace(/'icon-definition'/g, '')
-        .replace(/"[^"]*\(optional\)"/g, ''),
+        .replace(/'icon-definition'/g, ''),
     );
   } else if (Array.isArray(value)) {
     for (const each of value) proseOf(each, out);
@@ -72,7 +71,12 @@ function proseOf(value, out = []) {
     const record = /** @type {Record<string, unknown>} */ (value);
     if (record.type === 'code') return out;
     for (const [key, each] of Object.entries(record)) {
-      if (['keywords', 'code', 'id', 'name', 'group', 'into', 'kinds'].includes(key)) continue;
+      if (
+        ['keywords', 'code', 'id', 'name', 'group', 'into', 'kinds'].includes(
+          key,
+        )
+      )
+        continue;
       proseOf(each, out);
     }
   }
@@ -92,7 +96,8 @@ describe('icon words in guides', () => {
       for (const {word, pattern, allow = []} of rules) {
         for (const text of prose) {
           const rest = allow.reduce((each, ok) => each.replace(ok, ''), text);
-          if (pattern.test(rest)) found.push(`${base}: "${word}" in ${rest.slice(0, 80)}`);
+          if (pattern.test(rest))
+            found.push(`${base}: "${word}" in ${rest.slice(0, 80)}`);
         }
       }
     }

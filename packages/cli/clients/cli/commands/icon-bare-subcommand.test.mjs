@@ -76,7 +76,7 @@ describe('a bare icon subcommand', () => {
     );
   });
 
-  it('answers with a definition that matches the whole name when no set is installed', async () => {
+  it('answers with a meaning that matches the whole name when no set is installed', async () => {
     const none = writeIconSetProject(path.join(tmp, 'none'), {packages: []});
     const json = await runCli(['experimental', 'icon', 'add', '--json'], none);
     expect(json.code).toBe(0);
@@ -159,7 +159,7 @@ describe('an icon subcommand with an argument or an option', () => {
     const map = await icon(['map', '--remove', '--json']);
     expect(map.code).toBe(1);
     expect(JSON.parse(map.stdout)).toMatchObject({
-      error: 'Name the icon definition to map',
+      error: 'Name the icon meaning to map',
       code: 'ERR_MISSING_ARGUMENT',
     });
     expect(JSON.parse(map.stdout).suggestions).toHaveLength(1);

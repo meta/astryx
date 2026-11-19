@@ -1147,7 +1147,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           export: imported,
           reason:
             record.definitions.length > 0
-              ? `${icons.set} maps no icon to the icon definition "${record.definitions.join('", "')}"${record.setName ? ', and none is a reviewed match for it' : ''}`
+              ? `${icons.set} maps no icon to the icon meaning "${record.definitions.join('", "')}"${record.setName ? ', and none is a reviewed match for it' : ''}`
               : `no icon in ${targets.length > 1 ? 'any set in your list' : icons.set} is a reviewed match for it`,
           ...(likely
             ? {
@@ -1247,7 +1247,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         reason:
           wrapper === target
             ? `it already comes from ${from}, which ${icons.set} wraps`
-            : `no set in your list maps its icon definition, and it already comes from ${from}, which ${wrapper.package}/${wrapper.name} wraps`,
+            : `no set in your list maps its icon meaning, and it already comes from ${from}, which ${wrapper.package}/${wrapper.name} wraps`,
       });
     }
   }

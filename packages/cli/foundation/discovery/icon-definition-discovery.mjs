@@ -65,7 +65,7 @@ export function readDefinitionsDir(dir, owner) {
   for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (!entry.name.endsWith('.doc.mjs')) continue;
     const file = path.join(dir, entry.name);
-    const label = `Icon definition ${entry.name} in ${owner}`;
+    const label = `Icon meaning ${entry.name} in ${owner}`;
     try {
       if (!entry.isFile()) {
         throw new Error(`${label} must be a regular file.`);
@@ -79,7 +79,7 @@ export function readDefinitionsDir(dir, owner) {
       const stem = entry.name.slice(0, -'.doc.mjs'.length);
       if (doc.name !== stem) {
         throw new Error(
-          `${label} names "${doc.name}"; a definition file is named after its definition (${doc.name}.doc.mjs).`,
+          `${label} names "${doc.name}"; an icon meaning's file is named after the meaning (${doc.name}.doc.mjs).`,
         );
       }
       definitions.push({doc, file, package: owner});
@@ -131,17 +131,17 @@ export function withReplacements({definitions, errors}, others = new Set()) {
     if (earlier != null) {
       problems.push({
         file,
-        message: `Icon definition "${doc.name}" replaces "${old}", which "${earlier}" already replaces. A name has one successor.`,
+        message: `Icon meaning "${doc.name}" replaces "${old}", which "${earlier}" already replaces. A name has one successor.`,
       });
     } else if (others.has(old)) {
       problems.push({
         file,
-        message: `Icon definition "${doc.name}" replaces "${old}", an Astryx icon definition. A set's own definition replaces only another of the set's own.`,
+        message: `Icon meaning "${doc.name}" replaces "${old}", an Astryx icon meaning. A set's own meaning replaces only another of the set's own.`,
       });
     } else if (byName.get(old)?.doc.builtIn) {
       problems.push({
         file,
-        message: `Icon definition "${doc.name}" replaces the built-in definition "${old}". A built-in definition is a name Core renders, so nothing replaces it.`,
+        message: `Icon meaning "${doc.name}" replaces the built-in meaning "${old}". A built-in meaning is a name Core renders, so nothing replaces it.`,
       });
     } else {
       successors.set(old, doc.name);
@@ -155,7 +155,7 @@ export function withReplacements({definitions, errors}, others = new Set()) {
     if (aliases.resolve(old, name => currentNames.has(name)) == null) {
       problems.push({
         file: /** @type {DiscoveredIconDefinition} */ (byName.get(next)).file,
-        message: `Icon definition "${next}" replaces "${old}", but the chain of replacements from "${old}" never reaches a current definition.`,
+        message: `Icon meaning "${next}" replaces "${old}", but the chain of replacements from "${old}" never reaches a current meaning.`,
       });
     }
   }

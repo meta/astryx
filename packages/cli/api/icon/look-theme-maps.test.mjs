@@ -110,8 +110,8 @@ function themeIssues(dir) {
   };
 }
 
-describe('the theme map for each look', () => {
-  it('is written once an icon draws the look, with the built-in entries in it, and typed', async () => {
+describe('the theme map for each variant', () => {
+  it('is written once an icon draws the variant, with the built-in entries in it, and typed', async () => {
     const dir = await makePackage();
     // No icon draws solid yet: only themeIcons.
     expect(generated(dir)).not.toContain('themeIconsSolid');
@@ -144,7 +144,7 @@ describe('the theme map for each look', () => {
     expect(themeIssues(dir)).toEqual({issues: [], notChecked: []});
   });
 
-  it("draws an icon's own export for a built-in that has no export in the look", async () => {
+  it("draws an icon's own export for a built-in that has no export in the variant", async () => {
     const dir = await makePackage();
     await iconAdd('Bin', {
       cwd: dir,
@@ -175,7 +175,7 @@ describe('the theme map for each look', () => {
     expect(themeIssues(dir).issues).toEqual([
       [
         'icon_theme_map_mismatch',
-        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid look an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
+        `Icon set "glyphs": its generated module ./${GENERATED} has no theme map "themeIconsSolid", which draws the built-in icons in the solid variant an icon draws. Rewrite the module: \`astryx experimental icon add --variant solid --from ${FROM}/solid --all --set glyphs\`.`,
       ],
     ]);
     await iconAdd(undefined, {
@@ -225,7 +225,7 @@ describe('the theme map for each look', () => {
     ]);
   });
 
-  it('lookThemeMap names the map a theme takes for a look', () => {
+  it('lookThemeMap names the map a theme takes for a variant', () => {
     const data = /** @type {any} */ ({
       generated: './glyphs.generated.js',
       themeMap: 'themeIcons',

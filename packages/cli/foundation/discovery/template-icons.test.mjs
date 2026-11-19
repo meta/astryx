@@ -41,7 +41,7 @@ const map = (source, declared = {}, choice = SELECTED, sets = [SET]) =>
   mapTemplateIcons(source, {sets, choice}, declared);
 
 describe('matchIcon', () => {
-  it("maps by the project set's map for the declared definition, and never by name", () => {
+  it("maps by the project set's map for the declared meaning, and never by name", () => {
     expect(
       matchIcon(
         {
@@ -488,7 +488,7 @@ describe('icons another installed set ships', () => {
     expect(source).toContain("import {BinIcon} from '@acme/lines';");
   });
 
-  it('a reviewed exact match beats the definition, and a likely one is only suggested', () => {
+  it('a reviewed exact match beats the meaning, and a likely one is only suggested', () => {
     const REVIEWED = /** @type {any} */ ({
       ...SET,
       data: {
@@ -659,7 +659,7 @@ describe('a main set with backups', () => {
     ]);
   });
 
-  it('keeps the look a source asks for when the set has it, and reports the default look when it does not', () => {
+  it('keeps the variant a source asks for when the set has it, and reports the default variant when it does not', () => {
     const SOLID = /** @type {any} */ ({
       name: 'solidlib',
       package: '@acme/solidlib',
@@ -775,11 +775,11 @@ describe("a set that wraps the template's library", () => {
     expect(icons?.kept.map(each => [each.export, each.reason])).toEqual([
       [
         'FrameGlyph',
-        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+        'no set in your list maps its icon meaning, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
       ],
       [
         'ScissorsGlyph',
-        'no set in your list maps its icon definition, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
+        'no set in your list maps its icon meaning, and it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
       ],
     ]);
   });
@@ -832,7 +832,7 @@ describe("a set that wraps the template's library", () => {
     };
     const asBackup = map(subpath, DECLARED, backup, [SET, WRAPPER]);
     expect(asBackup.icons?.kept.map(each => each.reason)).toContain(
-      'no set in your list maps its icon definition, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
+      'no set in your list maps its icon meaning, and it already comes from @acme/library/solid, part of @acme/library, which @acme/wrapper/wrapper wraps',
     );
   });
 
@@ -920,7 +920,7 @@ describe('the local placeholder', () => {
     ).toEqual([{local: 'MissingIcon', meanings: null}]);
   });
 
-  it('placeholderUses ignores a look-alike, a commented-out copy and a quoted copy', () => {
+  it('placeholderUses ignores a variant-alike, a commented-out copy and a quoted copy', () => {
     const lookAlike = placeholderDeclaration('MissingIcon').replace(
       'width="1em"',
       'width="2em"',

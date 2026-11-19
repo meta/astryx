@@ -9,7 +9,7 @@
  * @position packages/cli/foundation/text — read by the `icon` leaves
  */
 
-/** The discover query that finds the icon packs a project could add. */
+/** The discover query that finds the icon sets a project could add. */
 export const ICON_PACK_QUERY = 'icon set';
 
 /** The discover search the sentence names. */
@@ -32,6 +32,6 @@ export const ICON_SET_GUIDE_COMMAND = 'astryx docs cli/experimental/icon-sets';
 export function noIconSetNext(discoverListsPacks) {
   const use = `then run \`${ICON_USE_COMMAND}\`. To make your own set, read \`${ICON_SET_GUIDE_COMMAND}\`.`;
   return discoverListsPacks
-    ? `Find an icon pack with \`${ICON_PACK_FIND_COMMAND}\`, install it, ${use}`
+    ? `Find an icon set with \`${ICON_PACK_FIND_COMMAND}\`, install it, ${use}`
     : `Install a package that ships an icon set, ${use}`;
 }
