@@ -34,6 +34,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  MARKER_END,
   MARKER_START,
   PROJECT_SKILL_FOLDERS,
   PROJECT_SKILL_NAME,
@@ -240,24 +241,21 @@ export function projectPlacesValue(projectPlaces) {
 }
 
 /**
- * The skill files a place holds, absolute. `agents-md` holds none: its files
- * are the agent docs. `user` holds the computer-level skill, which
- * `computer-agent-text.mjs` writes with its links.
+ * The files one skill has in a place, absolute: `<folder>/<name>/SKILL.md`
+ * in each of its skills folders. Without `skill`, the Astryx skill: the
+ * project skill in a project place, the computer-level skill in a folder
+ * outside the project. `agents-md` holds none: its files are the agent docs.
+ * `user` holds the computer-level skill, which `computer-agent-text.mjs`
+ * writes with its links.
  * @param {SkillPlace} place
  * @param {string | null} projectRoot
+ * @param {string} [skill] an integration skill's name
  * @returns {string[]}
  */
-export function placeSkillFiles(place, projectRoot) {
-  if (place.kind === 'skills' && projectRoot != null) {
-    return PROJECT_SKILL_FOLDERS.map(folder =>
-      path.join(projectRoot, folder, PROJECT_SKILL_NAME, 'SKILL.md'),
-    );
-  }
-  if (place.kind === 'folder') {
-    const name = place.scope === 'project' ? PROJECT_SKILL_NAME : COMPUTER_SKILL_NAME;
-    return [path.join(place.dir, name, 'SKILL.md')];
-  }
-  return [];
+export function placeSkillFiles(place, projectRoot, skill) {
+  const name =
+    skill ?? (place.scope === 'computer' ? COMPUTER_SKILL_NAME : PROJECT_SKILL_NAME);
+  return placeFolders(place, projectRoot).map(folder => path.join(folder, name, 'SKILL.md'));
 }
 
 /**
@@ -280,6 +278,44 @@ export function renderProjectSkill(block) {
       '---',
       '',
       block,
+      '',
+    ].join('\n'),
+  );
+}
+
+/**
+ * The skills folders a place holds: both project skills folders for
+ * `skills`, the folder itself for a folder place, none for the others.
+ * @param {SkillPlace} place
+ * @param {string | null} projectRoot
+ * @returns {string[]}
+ */
+export function placeFolders(place, projectRoot) {
+  if (place.kind === 'skills' && projectRoot != null) {
+    return PROJECT_SKILL_FOLDERS.map(folder => path.join(projectRoot, folder));
+  }
+  if (place.kind === 'folder') return [place.dir];
+  return [];
+}
+
+/**
+ * An integration's skill: its doc as text under skill frontmatter, inside the
+ * Astryx markers, with the hash line that tells an edited file from an older
+ * rendering.
+ * @param {{name: string, description: string, body: string}} skill
+ * @returns {string}
+ */
+export function renderIntegrationSkill({name, description, body}) {
+  return withHash(
+    [
+      '---',
+      `name: ${name}`,
+      `description: ${JSON.stringify(description)}`,
+      '---',
+      '',
+      MARKER_START,
+      body.trimEnd(),
+      MARKER_END,
       '',
     ].join('\n'),
   );

@@ -1507,6 +1507,10 @@
     "defaultMessage": "{count} tool calls",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
   },
+  "@astryx.chatTriggerMenu.noResults": {
+    "defaultMessage": "No results",
+    "description": "Shown in a chat composer's @-mention or slash-command menu when the typed query matches no suggestion and the trigger sets no empty message of its own. Very short (2 words); neutral tone."
+  },
   "@astryx.chatTriggerMenu.searching": {
     "defaultMessage": "Searching…",
     "description": "Shown, and announced politely to screen readers, while a chat composer's @-mention or slash-command menu waits for async search results. Present participle; trailing `…` is one character."
@@ -1942,6 +1946,10 @@
   "@astryx.timestamp.copied": {
     "defaultMessage": "Copied",
     "description": "Aria label on a Timestamp copy button for ~1.5s after a successful copy, and the text announced to a polite live region. Past-participle (\"has been copied\"); pairs with `timestamp.copyValue`."
+  },
+  "@astryx.timestamp.relativeLabel": {
+    "defaultMessage": "{relative}, {date}",
+    "description": "Accessible name of a relative Timestamp: the words it shows, then the full date (\"2 hours ago, March 25, 2026 at 10:00:00 AM Coordinated Universal Time\"). {relative} must come first and stay unchanged, so voice control can find a control named by it. Translators may change the separator."
   },
   "@astryx.timestamp.detailsLabel": {
     "defaultMessage": "Timestamp details",

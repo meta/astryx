@@ -438,7 +438,6 @@ export default defineConfig(
             ],
             // Pre-existing hardcoded text awaiting catalog keys.
             'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
-            'Chat/useTriggerMenu.tsx': ['No results'],
             'CodeBlock/CodeBlock.tsx': [' diff'],
             'MultiSelector/MultiSelector.tsx': [' selected'],
             'PowerSearch/PowerSearch.tsx': [

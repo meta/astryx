@@ -574,6 +574,34 @@ function isFolder(dir) {
 }
 
 /**
+ * Every doc file under an integration's docs root, sorted: the files
+ * {@link discoverIntegrationDocs} reads, and the skill places read for the
+ * docs that declare a skill.
+ * @param {string} docsDir
+ * @returns {string[]}
+ */
+export function docsRootFiles(docsDir) {
+  /** @type {string[]} */
+  const files = [];
+  /** @param {string} dirPath */
+  function scanDir(dirPath) {
+    for (const entry of listDirEntries(dirPath)) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+      const full = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        scanDir(full);
+      } else if (
+        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
+      ) {
+        files.push(full);
+      }
+    }
+  }
+  if (isFolder(docsDir)) scanDir(docsDir);
+  return files.sort();
+}
+
+/**
  * Discover the topics contributed by a single loaded integration. Mirrors
  * `discoverIntegrationComponents`: walk the resolved root, take every
  * conventional doc file, and record what it declares. Unlike component
@@ -610,24 +638,7 @@ export async function discoverIntegrationDocs(
   }
   const providerId = integration.providerId ?? integration.name;
 
-  /** @type {string[]} */
-  const files = [];
-  /** @param {string} dirPath */
-  function scanDir(dirPath) {
-    for (const entry of listDirEntries(dirPath)) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
-      const full = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        scanDir(full);
-      } else if (
-        INTEGRATION_DOC_SUFFIXES.some(suffix => entry.name.endsWith(suffix))
-      ) {
-        files.push(full);
-      }
-    }
-  }
-  scanDir(docsDir);
-  files.sort();
+  const files = docsRootFiles(docsDir);
 
   /** @type {Map<string, string>} */
   const seen = new Map();

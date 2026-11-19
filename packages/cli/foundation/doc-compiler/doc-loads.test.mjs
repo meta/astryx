@@ -385,6 +385,10 @@ const RUNNERS = {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
+  'foundation/discovery/integration-skills.mjs': {
+    runs: "each configured integration's doc modules, to read the skills they declare",
+    sites: ['docsRootFiles', 'loadTopicModule'],
+  },
   'foundation/agent-docs/skill-place-files.mjs': {
     runs: 'astryx.config, through the config parser, to read the skill places it saves (only the config, not its integrations)',
     sites: ['loadModuleWithParser(..., parseConfig)'],

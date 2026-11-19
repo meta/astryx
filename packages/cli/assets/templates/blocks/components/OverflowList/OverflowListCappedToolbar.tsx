@@ -2,15 +2,44 @@
 
 'use client';
 
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
 import {Button} from '@astryxdesign/core/Button';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
+import {useToast} from '@astryxdesign/core/Toast';
+
+// Archive and Delete ask first, as a real destructive action would.
+const destructive: Record<string, {verb: string; done: string}> = {
+  Archive: {verb: 'archive', done: 'archived'},
+  Delete: {verb: 'delete', done: 'deleted'},
+};
 
 const actions = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
 
 export default function OverflowListCappedToolbar() {
+  const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
+  const runAction = (action: string) => {
+    const destructiveAction = destructive[action];
+    if (destructiveAction == null) {
+      showToast({body: `Demo: ${action} would run here`});
+      return;
+    }
+    confirm.show({
+      title: `${action} this item?`,
+      description: `This demo won't ${destructiveAction.verb} anything.`,
+      actionLabel: action,
+      onAction: () => {
+        confirm.hide();
+        // Demo only: replace this toast with the call that performs the action.
+        showToast({
+          body: `Demo: the item would be ${destructiveAction.done} here`,
+        });
+      },
+    });
+  };
   return (
     <Center width={420} maxWidth="100%">
       <Card padding={2}>
@@ -26,13 +55,20 @@ export default function OverflowListCappedToolbar() {
               }}
               items={overflowItems.map(({index}) => ({
                 label: actions[index],
+                onClick: () => runAction(actions[index]),
               }))}
             />
           )}>
           {actions.map(action => (
-            <Button key={action} label={action} size="sm" />
+            <Button
+              key={action}
+              label={action}
+              size="sm"
+              onClick={() => runAction(action)}
+            />
           ))}
         </OverflowList>
+        {confirm.element}
       </Card>
     </Center>
   );
