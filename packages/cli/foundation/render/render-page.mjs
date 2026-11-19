@@ -45,7 +45,7 @@ import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf, fileNamed} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
-import {CHART_CSS} from './charts.mjs';
+import {CHART_CSS, smallSvgText} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
@@ -1724,6 +1724,14 @@ export async function renderPage(entry, options = {}) {
       message: script
         ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
         : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+    });
+  }
+  // Text inside a drawing that scales to its box shrinks with it on a phone.
+  const smallText = smallSvgText(markup);
+  if (smallText) {
+    warnings.push({
+      code: 'chart-size',
+      message: `${smallText.count === 1 ? 'An SVG drawing scales' : `${smallText.count} SVG drawings scale`} to fit ${smallText.count === 1 ? 'its' : 'their'} box with text inside, so on a 375 px phone that text shows at about ${smallText.px} px. Put the labels in HTML beside the drawing, or draw the chart with recharts in a ResponsiveContainer, which keeps its text size.`,
     });
   }
   if (message.chartsAlone) {
