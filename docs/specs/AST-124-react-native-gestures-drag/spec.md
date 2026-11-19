@@ -53,7 +53,8 @@ handles of `spec:AST-112/FR18`.
   Android's `RecyclerView`, and React Native lists are scroll views.
 - Zoomable pager: the native paging and zoom behind `Lightbox` (FR8).
 - Pan and zoom surface: a programmatic camera with native-driven frames and
-  the same zoom on iOS and Android; its public face is OQ3.
+  the same zoom on iOS and Android; a designed Astryx component in the React
+  Native lab is its public face (DEC-8).
 - Pinch around a scroller: a pinch-to-resize grid scales the list's content
   natively while the list keeps its own scroll view, so a large title keeps
   collapsing with it (FR17, DEC-6).
@@ -75,7 +76,7 @@ handles of `spec:AST-112/FR18`.
 | `AstryxDropZone`         | native component (Fabric Native Component)      | `DropZone`, `ReorderableList`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A column shows where the card lands, scrolls at its edges, and takes the drop.                                                                                                |
 | `AstryxDragSnap`         | native component (Fabric Native Component)      | `BottomSheet` (and the components that render one, such as `ActionSheet`, `Selector`, `DropdownMenu`, `CommandPalette`, `DateInput`), `InlineSheet`, `Toast`.                                                                                                                                                                                                                                                                                                                                                                                                                             | A sheet follows the finger, rubber-bands at its ends, and snaps to a stop; a notification flicks away.                                                                        |
 | `AstryxSwipeRow`         | native component (Fabric Native Component)      | `Item` rows with swipe actions; `List`, `CheckboxList`, `RadioList`, `TreeList`, and `Selector` render their rows with `Item`.                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A row slides open to show its actions, or a full swipe fires the outer action.                                                                                                |
-| `AstryxPanZoomView`      | native component (Fabric Native Component)      | No Astryx component; the create command's `maps` template uses it (OQ3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A map-like canvas or a large diagram pans with a glide and zooms about the fingers.                                                                                           |
+| `AstryxPanZoomView`      | native component (Fabric Native Component)      | A designed Astryx component in the React Native lab (`./unstable/*`, `spec:AST-112/FR5`) renders it, and the view itself is not exported (DEC-8); the create command's `maps` template uses it.                                                                                                                                                                                                                                                                                                                                                                                           | A map-like canvas or a large diagram pans with a glide and zooms about the fingers.                                                                                           |
 | `AstryxPinchScaleView`   | native component (Fabric Native Component)      | The scrollers whose records decide its public face: `List` (data mode included), `ScrollView`, and `FlatList`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A photo grid grows or shrinks under two fingers and settles at a new column count while its large title keeps collapsing.                                                     |
 | `AstryxZoomPager`        | native component (Fabric Native Component)      | `Lightbox` (its public face; internal native contract). The create command's `gallery` template.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A full-screen photo viewer pages, zooms, and closes on a drag down.                                                                                                           |
 
@@ -560,6 +561,17 @@ so each platform has one drag path, the one this record specifies. Where the
 view is absent they take no drag, keep their accessibility actions and warn in
 development; the accessibility actions keep every move reachable.
 
+### DEC-8 — Pan and zoom reach apps through a lab component
+
+**Reference:** `spec:AST-124/DEC-8`
+**Decider:** imdreamrunner, 2026-11-19
+
+Free pan and zoom of large content reaches apps through a component with an
+Astryx API, so `AstryxPanZoomView`'s public face is a designed Astryx component
+that renders it, and the native view itself is not exported. That component
+starts in the React Native lab (`./unstable/*`, `spec:AST-112/FR5`), and its own
+component record brings its name and props.
+
 ## Open questions
 
 - **OQ2 — What does `backGesture` do on Android?** (`human-design`) Options:
@@ -572,7 +584,3 @@ development; the accessibility actions keep every move reachable.
   navigation, in which a Carousel at its first item, a Slider at the screen
   edge, and a Toast dragged toward an edge each keep the system back swipe
   except over an `ownsEdge` frame.
-- **OQ3 — Which Astryx component is the public face of `AstryxPanZoomView`?**
-  (`human-design`) No library component uses it. Options: a library component
-  for maps or large diagrams renders it; or `spec:AST-112` FR5 exports it from
-  `./controls` as app API.
