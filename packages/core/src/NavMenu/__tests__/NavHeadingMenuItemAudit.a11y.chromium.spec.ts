@@ -378,6 +378,13 @@ cases.push({
       row?.outlined === true,
       `forced colors: focused row draws no outline (${row?.outline})`,
     );
+    check(
+      row?.outlineInside === true,
+      'forced colors: outline is not inside the row',
+    );
+    for (const other of rows.filter(r => !r.focused)) {
+      check(!other.outlined, `${other.name}: unfocused row draws an outline`);
+    }
     await frame('keyboard-focus', {rows});
   },
 });

@@ -52,12 +52,13 @@ function expectSharedFocusRing(row: HTMLElement) {
   expect(ring).toContain('outline-width: var(--focus-outline-width)');
   expect(ring).toContain('outline-style: var(--focus-outline-style)');
   expect(ring).toContain('outline-color: var(--focus-outline-color)');
-  expect(rowDeclarations(row, '').replace(/\s+/g, '')).toContain(
-    'outline-offset:calc(-1*var(--focus-outline-width))',
-  );
+  const rest = rowDeclarations(row, '').replace(/\s+/g, '');
+  expect(rest).toContain('outline-offset:calc(-1*var(--focus-outline-width))');
+  // At rest and after pointer focus the row draws no ring.
+  expect(rest).toContain('outline-style:none');
 }
 
-describe('a focused NavHeadingMenuItem draws the shared focus ring (architecture:interaction-modality INV1)', () => {
+describe('a focused NavHeadingMenuItem draws the shared focus ring (WCAG 2.4.7)', () => {
   it('link, action, and disabled rows, in every size', () => {
     for (const size of ['sm', 'md', 'lg'] as const) {
       const {unmount} = render(
