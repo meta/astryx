@@ -25,7 +25,8 @@ import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutFooter} from '../Layout/LayoutFooter';
 import {ToggleButton} from '../ToggleButton/ToggleButton';
 import {ToggleButtonGroup} from '../ToggleButton/ToggleButtonGroup';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 
 describe('parts inside a component carry their own target', () => {
   it('gives each key badge kbd-key', () => {

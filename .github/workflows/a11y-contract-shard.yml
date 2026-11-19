@@ -1,11 +1,12 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Runs one leg of the release-check accessibility contracts at a commit on
-# main, on a runner of the release-check's size. A failure that reproduces
-# only on CI runners can then be bisected one commit at a time, without a
-# whole release-check. The leg runs the commit's own scripts, so it tests what
-# that commit's release-check ran. It keeps the leg's Playwright results and
-# the frames and receipts each component audit writes.
+# Runs the release-check accessibility contract leg that holds one spec file,
+# at a commit on main, on a runner of the release-check's size. A failure that
+# reproduces only on CI runners can then be counted and bisected one commit at
+# a time, without a whole release-check. The leg comes from the commit's own
+# split, so it runs what that commit's release-check ran with that spec. It
+# counts each case of the spec in every pass, fails by name when the spec did
+# not run, and keeps the Playwright results and each audit's evidence.
 
 name: A11y contract shard
 
@@ -16,12 +17,12 @@ on:
         description: Full SHA of a commit on main
         required: true
         type: string
-      a11y-shard:
-        description: The leg to run, 1 to 6; it matches the release-check's leg at a commit that splits the contracts six ways
+      spec:
+        description: A contract spec file name, such as MoreMenuAudit.a11y.chromium.spec.ts; the leg that holds it at that commit runs
         required: true
         type: string
       repeat:
-        description: Times to run each test in the leg (1 to 10)
+        description: Passes of the leg, run one after another (1 to 10)
         required: false
         default: '1'
         type: string
@@ -29,7 +30,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: a11y-contract-shard-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ inputs.repeat }}
+  group: a11y-contract-shard-${{ inputs.expected-head }}-${{ inputs.spec }}-${{ inputs.repeat }}
   cancel-in-progress: false
 
 jobs:
@@ -46,12 +47,12 @@ jobs:
       - name: Check the inputs
         env:
           SHA: ${{ inputs.expected-head }}
-          SHARD: ${{ inputs.a11y-shard }}
+          SPEC: ${{ inputs.spec }}
           REPEAT: ${{ inputs.repeat }}
         run: |
           set -euo pipefail
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::expected-head must be a full 40-character SHA, not '$SHA'."; exit 1; }
-          [[ "$SHARD" =~ ^[1-6]$ ]] || { echo "::error::a11y-shard must be 1 to 6, not '$SHARD'."; exit 1; }
+          [[ "$SPEC" =~ ^[A-Za-z0-9._-]+\.spec\.ts$ ]] || { echo "::error::spec must be a spec file name such as MoreMenuAudit.a11y.chromium.spec.ts, not '$SPEC'."; exit 1; }
           [[ "$REPEAT" =~ ^([1-9]|10)$ ]] || { echo "::error::repeat must be 1 to 10, not '$REPEAT'."; exit 1; }
 
       - name: Check out the admission action
@@ -78,14 +79,15 @@ jobs:
           max-looks: 30
 
   shard:
-    name: Accessibility spec-test contracts (${{ inputs.a11y-shard }}/6) at ${{ inputs.expected-head }}
+    name: Accessibility spec-test contracts with ${{ inputs.spec }} at ${{ inputs.expected-head }}
     needs: [room]
     # A free standard runner: the same four vCPUs and 16 GB as the release
     # check's paid 4-core-ubuntu pool.
     runs-on: ubuntu-latest
-    # About 12 minutes of tests a pass, after about 20 of install and build.
+    # About 13 minutes a pass of one leg, after about 20 of install and build;
+    # a spec cut across two legs takes twice as long a pass, so ask fewer.
     # Expressions have no arithmetic, so the limit steps with `repeat`.
-    timeout-minutes: ${{ fromJSON(inputs.repeat) > 5 && 150 || fromJSON(inputs.repeat) > 2 && 90 || 60 }}
+    timeout-minutes: ${{ fromJSON(inputs.repeat) > 5 && 200 || fromJSON(inputs.repeat) > 2 && 100 || 60 }}
     permissions:
       contents: read
     steps:
@@ -111,8 +113,36 @@ jobs:
       - name: Build packages and Storybook
         run: node .github/scripts/build-packages-and-storybook.mjs
 
+      # The component audits refuse a Storybook build without this stamp, as
+      # in ci.yml's build.
+      - name: Stamp Storybook source revision
+        run: git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt
+
       - name: Install Playwright
         run: npx playwright install chromium
+
+      # The legs move between commits as recorded times change, so the leg is
+      # found by the spec file in this commit's own six-way split. A spec cut
+      # across legs runs with every leg that holds part of it.
+      - name: Find the leg that holds the spec
+        id: legs
+        env:
+          SPEC: ${{ inputs.spec }}
+          SHA: ${{ inputs.expected-head }}
+        run: |
+          set -euo pipefail
+          found=""
+          for leg in 1 2 3 4 5 6; do
+            node .github/scripts/a11y-contract-shard.mjs --shard "$leg/6" > "leg-$leg.txt"
+            if grep -qF "/$SPEC" "leg-$leg.txt"; then found="$found $leg"; fi
+          done
+          if [ -z "$found" ]; then
+            echo "::error::$SPEC did not run: no contract leg lists it at $SHA."
+            exit 1
+          fi
+          for leg in $found; do cat "leg-$leg.txt"; done | awk '!seen[$0]++' > contract-tests.txt
+          echo "legs=${found# }" >> "$GITHUB_OUTPUT"
+          echo "$SPEC is in leg(s)${found} of 6 at $SHA."
 
       # The same command and settings as the release-check's leg in ci.yml.
       - name: Run accessibility spec-test contracts
@@ -121,20 +151,90 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ inputs.expected-head }}
           A11Y_CONTRACT_WORKERS: 4
           ASTRYX_TABLE_TIMING_GATE: '0'
-          SHARD: ${{ inputs.a11y-shard }}
           REPEAT: ${{ inputs.repeat }}
         run: |
           set -euo pipefail
-          node .github/scripts/a11y-contract-shard.mjs --shard "$SHARD/6" > contract-tests.txt
-          pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --repeat-each "$REPEAT"
+          mkdir -p pass-results
+          # One pass at a time: a component audit writes one evidence folder,
+          # which two passes running together would share. Each pass keeps
+          # its own results and evidence.
+          status=0
+          for pass in $(seq 1 "$REPEAT"); do
+            echo "::group::Pass $pass of $REPEAT"
+            PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/pass-results/pass-$pass.json" \
+              pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium --output "test-results/pass-$pass" --reporter=list,github,json || status=1
+            # Audits write their evidence at the root (*-audit-evidence) or in a
+            # folder of their own under test-results/; every folder there but
+            # the passes' own outputs moves, so the next pass cannot reset it.
+            for folder in *-audit-evidence test-results/*; do
+              case "$folder" in test-results/pass-*) continue ;; esac
+              if [ -d "$folder" ]; then
+                mkdir -p "audit-evidence/pass-$pass"
+                mv "$folder" "audit-evidence/pass-$pass/"
+              fi
+            done
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+      # The report reader comes from the dispatched ref: an older commit under
+      # test may predate it.
+      - name: Check out the report reader
+        if: always() && steps.contracts.outcome != 'skipped'
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          path: .report-reader
+          persist-credentials: false
+
+      # Counts each case of the spec over the passes, keyed by its title path.
+      # A spec whose cases never ran (all skipped, or absent) fails by name,
+      # never a quiet zero.
+      - name: Count the spec's cases
+        if: always() && steps.contracts.outcome != 'skipped'
+        uses: actions/github-script@v9
+        env:
+          SPEC: ${{ inputs.spec }}
+          REPORT_READER: ${{ github.workspace }}/.report-reader/.github/scripts/webkit-a11y-report.mjs
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {pathToFileURL} = require('node:url');
+            const {testsOf} = await import(pathToFileURL(process.env.REPORT_READER).href);
+            const spec = process.env.SPEC;
+            const counts = new Map();
+            const passes = fs.existsSync('pass-results') ? fs.readdirSync('pass-results').filter(name => name.endsWith('.json')).sort() : [];
+            for (const name of passes) {
+              const report = JSON.parse(fs.readFileSync(path.join('pass-results', name), 'utf8'));
+              for (const test of testsOf(report)) {
+                if (path.basename(test.file ?? '') !== spec) continue;
+                const count = counts.get(test.title) ?? {passed: 0, failed: 0, skipped: 0};
+                if (!test.ran || test.status === 'skipped') count.skipped += 1;
+                else if (test.status === 'unexpected') count.failed += 1;
+                else count.passed += 1;
+                counts.set(test.title, count);
+              }
+            }
+            const lines = [...counts].map(([title, c]) => `${spec} › ${title}: passed ${c.passed}, failed ${c.failed}, skipped ${c.skipped}`);
+            for (const line of lines) core.info(line);
+            await core.summary.addHeading(`${spec} over ${passes.length} passes`, 3).addList(lines.length ? lines : ['no case of the spec ran']).write();
+            const ran = [...counts.values()].reduce((sum, c) => sum + c.passed + c.failed, 0);
+            if (ran === 0) {
+              core.setFailed(`${spec} did not run: ${passes.length ? 'every case was skipped or absent' : 'no pass wrote a report'} in ${passes.length} passes.`);
+            }
 
       - name: Keep the leg's Playwright results
         if: always() && steps.contracts.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
-          name: a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.a11y-shard }}-${{ github.run_attempt }}
+          name: a11y-contract-shard-results-${{ inputs.expected-head }}-${{ inputs.spec }}-${{ github.run_attempt }}
           path: |
             test-results/
-            *-audit-evidence/
+            audit-evidence/
+            pass-results/
+            contract-tests.txt
           retention-days: 14
           if-no-files-found: ignore
