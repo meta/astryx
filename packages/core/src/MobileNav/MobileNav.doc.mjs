@@ -195,6 +195,8 @@ export const docs = {
     targets: [
       {className: 'astryx-mobile-nav', visualProps: ['side']},
       {className: 'astryx-mobile-nav-drawer', visualProps: ['side']},
+      {className: 'astryx-mobile-nav-close'},
+      {className: 'astryx-mobile-nav-toggle'},
     ],
   },
   usage: {
@@ -309,6 +311,8 @@ export const docsZh = {
     targets: [
       {className: 'astryx-mobile-nav', visualProps: ['side']},
       {className: 'astryx-mobile-nav-drawer', visualProps: ['side']},
+      {className: 'astryx-mobile-nav-close'},
+      {className: 'astryx-mobile-nav-toggle'},
     ],
   },
   usage: {
