@@ -426,3 +426,25 @@ export const MenuRowsWithRoundedBottomRightRtl: Story = {
     </Theme>
   ),
 };
+
+/** A theme that rounds only a Card's top-left corner, written physically. */
+const topLeftCard = defineTheme({
+  name: 'container-corners-top-left-card',
+  components: {card: {base: {borderRadius: '12px 0 0 0'}}},
+});
+
+/**
+ * A physical corner in a right-to-left page: the table rounds the top-left
+ * corner, where the card does.
+ */
+export const TableInCardWithTopLeftRtl: Story = {
+  render: () => (
+    <Theme theme={topLeftCard} mode="light">
+      <div dir="rtl" style={{width: 360}}>
+        <Card>
+          <OrdersTable />
+        </Card>
+      </div>
+    </Theme>
+  ),
+};

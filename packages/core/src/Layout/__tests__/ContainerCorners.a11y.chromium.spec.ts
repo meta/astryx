@@ -398,4 +398,13 @@ test.describe('Container corners (Chromium)', () => {
       ]);
     }
   });
+
+  test('a physical corner a theme rounds reaches the table at that corner in a right-to-left page', async ({
+    page,
+  }) => {
+    await mount(page, 'table-in-card-with-top-left-rtl', TABLE_REGION);
+    const card = await radii(page, '#storybook-root .astryx-card');
+    expect(card).toEqual(['12px', '0px', '0px', '0px']);
+    expect(await radii(page, TABLE_REGION)).toEqual(card);
+  });
 });

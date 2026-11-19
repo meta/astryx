@@ -8,11 +8,11 @@
  * @position Shared by DropdownMenu's item, checkbox item, radio item and
  *   sub-menu row (and so the context menu, which renders them)
  *
- * Each corner follows the menu corner it sits inside: a theme that gives the
- * menu corners of different radii (a corner variable the theme pipeline
- * writes for each) gives the rows the same shape. A logical corner is read
- * first, else the physical corner it is in this direction, else the menu's
- * one radius.
+ * Each row corner follows the menu corner it sits in. The theme pipeline
+ * writes a variable for each menu corner. A row reads the logical corner,
+ * then the physical corner for this direction, then the menu's one radius.
+ * Menus stay outside container geometry, and a row subtracts the menu
+ * padding, so rows keep this reading of their own.
  */
 
 import * as stylex from '@stylexjs/stylex';
