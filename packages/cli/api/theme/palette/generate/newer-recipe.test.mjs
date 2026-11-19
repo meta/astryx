@@ -97,8 +97,11 @@ describe('a palette a newer CLI made', () => {
       /^npm install -E @astryxdesign\/core@\S+ @astryxdesign\/cli@\S+$/,
     );
     expect(error.message).toContain(
-      `Update the CLI: ${step.install}, then run astryx upgrade --from 0.7.1 --apply; then run the command again. Nothing was changed.`,
+      "Update the CLI and bring the project's code to it with the commands below, in order; then run the command again. Nothing was changed.",
     );
+    // A command the CLI names is a suggestion, never in the message: printed
+    // there, it would lack the command name the picker chooses.
+    expect(error.message).not.toMatch(/(^|[\s:;,])astryx\s/);
     expect(error.suggestions?.map((/** @type {any} */ s) => s.name)).toEqual([
       step.install,
       'astryx upgrade --from 0.7.1 --apply',
