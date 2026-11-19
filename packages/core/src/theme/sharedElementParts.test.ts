@@ -164,6 +164,25 @@ describe('shared-element parts', () => {
       /\.astryx-button\[data-variant="ghost"\]\s*\{\s*background-color: gray/,
     );
   });
+  it("lets a side nav item's icon entry beat a keyed icon entry on its element", () => {
+    const theme = defineTheme({
+      name: 'shared-element-side-nav-icon',
+      tokens: {},
+      components: {
+        icon: {'size:sm': {color: 'gray'}},
+        'side-nav-item-icon': {base: {color: 'blue'}},
+      },
+    });
+    const {component} = generateThemeCSS(theme);
+    const at = component.indexOf('@layer parts {');
+    expect(at).toBeGreaterThan(-1);
+    expect(component.slice(at)).toMatch(
+      /\.astryx-side-nav-item-icon\s*\{\s*color: blue/,
+    );
+    expect(component.slice(0, at)).toMatch(
+      /\.astryx-icon\[data-size="sm"\]\s*\{\s*color: gray/,
+    );
+  });
   describe('on a surface that flips with the page', () => {
     // An inverted fill dark on a light page and light on a dark one: a toast
     // card takes its light side on a dark page.

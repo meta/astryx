@@ -53,6 +53,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'selector-indicator-icon': 'icon',
   'selector-option': 'item',
   'selector-popup': 'popover',
+  'side-nav-item-icon': 'icon',
   'switch-label': 'field-label',
   'timestamp-copy-button': 'button',
   'toast-close': 'button',
