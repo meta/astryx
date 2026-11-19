@@ -316,6 +316,21 @@ const PREVIEW_LESSONS = MODULES.flatMap(module =>
       note: 'Free preview',
     })),
 );
+// The copy counts that list rather than naming a fixed number, and it
+// says "the preview lessons" rather than "the first lessons", so it stays
+// true when a copy badges a lesson further down the syllabus.
+function previewCount(count: number): string {
+  if (count === 1) {
+    return 'one';
+  }
+  if (count === 2) {
+    return 'two';
+  }
+  if (count === 3) {
+    return 'three';
+  }
+  return String(count);
+}
 const STAR_COUNTS = [
   {stars: 5, count: 1042},
   {stars: 4, count: 186},
@@ -500,7 +515,8 @@ function CourseHead() {
             onClick={() => setPreviewOpen(true)}
           />
           <Text type="supporting" color="secondary">
-            {PREVIEW_LESSONS.length} preview lessons · no card needed
+            {previewCount(PREVIEW_LESSONS.length)} preview lessons · no card
+            needed
           </Text>
         </HStack>
       </VStack>
@@ -514,7 +530,9 @@ function CourseHead() {
           header={
             <DialogHeader
               title="Preview lessons"
-              subtitle={`The first ${PREVIEW_LESSONS.length} lessons are free — no card needed.`}
+              subtitle={`The ${previewCount(
+                PREVIEW_LESSONS.length,
+              )} preview lessons are free — no card needed.`}
               hasDivider
               onOpenChange={setPreviewOpen}
             />
@@ -1184,8 +1202,9 @@ function ClosingBand() {
               Watch lesson one tonight. Decide in the morning.
             </Heading>
             <Text type="body" color="secondary">
-              {PREVIEW_LESSONS.length} preview lessons are free, the project
-              ships with your enrolment, and the first cohort starts in March.
+              The {previewCount(PREVIEW_LESSONS.length)} preview lessons are
+              free, the project ships with your enrolment, and the first cohort
+              starts in March.
             </Text>
             <HStack gap={2} wrap="wrap">
               <Button
