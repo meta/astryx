@@ -202,4 +202,17 @@ describe('a family whose fill the source sets', () => {
       /z\.theme\.ts wins over the setting for accent/,
     );
   }, 240_000);
+
+  it('says nothing about the screen when there is no last build to compare', async () => {
+    if (unbuilt) return;
+    await withAccent('q', "['#9333ea', '#d8b4fe']");
+    fs.rmSync(path.join(cwd, 'themes/q/q.js'), {force: true});
+    const r = /** @type {any} */ (
+      await themeEditSet('q', 'accent', '#2563eb', {cwd})
+    );
+    const notes = /** @type {string[]} */ (r.data?.notes ?? []);
+    const note = notes.find(n => /grows from its color, #9333ea/.test(n));
+    expect(note).toBeDefined();
+    expect(String(note)).not.toMatch(/changes nothing you see/);
+  }, 240_000);
 });

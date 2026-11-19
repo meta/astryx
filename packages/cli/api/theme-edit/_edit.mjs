@@ -6940,10 +6940,24 @@ async function changeOnce(
       k !== sourceSeed?.source,
   );
   const ownSet = new Set(ownSourceTokens(cwd, slug));
-  if (sourceSeed?.source)
+  if (sourceSeed?.source) {
+    // Only a change compared with the last build can say nothing moved.
+    const unchangedOnScreen =
+      !ctx.unchecked &&
+      !r.unchanged &&
+      !r.notes.some(
+        n =>
+          n.includes('could not be read') ||
+          n.includes('there was no last build'),
+      ) &&
+      !r.changed.length &&
+      !styled.length;
+    const shades =
+      s.thing === 'accent' ? 'links, icons, the tints' : 'text, icons, the tints';
     notes.push(
-      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (links, icons, the tints) grows from its color, ${sourceSeed.seed}, not from ${s.value}${!r.changed.length && !styled.length ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
+      `${slug}.theme.ts sets ${sourceSeed.source} itself, and every ${s.thing} shade (${shades}) grows from its color, ${sourceSeed.seed}${sameColor(sourceSeed.seed, String(s.value)) ? '' : `, not from ${s.value}`}${unchangedOnScreen ? ', so this setting changes nothing you see' : ''}; ${ownTakeOut(slug, s.thing, [sourceSeed.source], data)}`,
     );
+  }
   if (ownWins.length)
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; ${ownTakeOut(slug, s.thing, ownWins, data)}`,
