@@ -55,7 +55,7 @@ export const docs = {
       name: 'config.comparators',
       type: 'Partial<Record<TSortKey, (a: T, b: T) => number>>',
       description:
-        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending.',
+        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending. Arrays and objects have no sort text and compare as equal, so give a key such as tags a comparator.',
       required: false,
     },
     {
@@ -102,7 +102,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.",
+      "Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable. Options: data: T[] (required); defaultSort?: TableSortState<TSortKey> (default []); sort and onSortChange for controlled state; comparators?: Partial<Record<TSortKey, (a: T, b: T) => number>>, ascending comparators per sort key, as in `comparators: {status: (a, b) => rank[a.status] - rank[b.status]}`; allowUnsortedState?: boolean (default true); isMultiSortEnabled?: boolean (default false). Pass the rows in, render sortedData, and hand sortConfig to useTableSortable. The hook keeps the state (or reads it from sort and onSortChange when controlled), so header clicks re-sort the rows with no sort code in the component. With isMultiSortEnabled, Shift+click adds tiebreaker columns. For data sorted on a server, use useTableSortable directly and sort where the data lives.",
     bestPractices: [
       {
         guidance: true,
@@ -112,7 +112,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Add a comparator for values whose order is not their string or number value, such as a status rank.',
+          'Add a comparator for values whose order is not their string or number value, such as a status rank, and for arrays such as tags, which otherwise compare as equal.',
       },
       {
         guidance: false,
@@ -139,7 +139,7 @@ export const docsDense = {
     'config.sort': 'controlled sort state; pair with onSortChange.',
     'config.onSortChange': 'called with next sort state; required with sort.',
     'config.comparators':
-      'ascending comparators per key (flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN last ascending, first descending.',
+      'ascending comparators per key (flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN last ascending, first descending; arrays/objects compare equal, so give them a comparator.',
     'config.allowUnsortedState':
       'to useTableSortable: third click returns to unsorted.',
     'config.isMultiSortEnabled':
@@ -153,7 +153,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Local sort state + sorted rows for Table over useTableSortable: render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
+      'Local sort state + sorted rows for Table over useTableSortable. Options: data (required), defaultSort (default []), sort + onSortChange (controlled), comparators: {key: (a, b) => number} ascending, allowUnsortedState (default true), isMultiSortEnabled (default false). Render sortedData, pass sortConfig to useTableSortable. Shift+click adds tiebreakers with isMultiSortEnabled. Server-sorted data: use useTableSortable.',
     bestPractices: [
       {
         guidance: true,

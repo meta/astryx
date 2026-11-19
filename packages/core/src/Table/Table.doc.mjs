@@ -193,7 +193,7 @@ export const docs = {
     ],
   },
   description:
-    'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',
+    'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. It has no row-click prop: open a row from a Link or Button in its main cell. T must extend Record<string, unknown>.',
   props: [
     {
       name: 'data',
@@ -318,7 +318,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Table has no row-click prop (no onRowClick): to open a row, put a Link or Button in the row\'s main cell with renderCell, as the best practices show. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -421,7 +421,7 @@ const columns = [
 export const docsZh = {
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Table 没有行点击属性（没有 onRowClick）：要打开某一行，请用 renderCell 在该行的主单元格中放一个 Link 或 Button，如最佳实践所示。 Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
@@ -469,7 +469,7 @@ export const docsDense = {
     'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
-      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
+      'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. No row-click prop (no onRowClick): open a row via a Link/Button in its main cell (renderCell). Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
       {
         guidance: true,
