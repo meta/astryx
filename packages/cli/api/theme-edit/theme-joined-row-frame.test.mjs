@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A border or corners asked of a part that draws no edge of its own,
+ * @file A border, corners, shadow, fill or outline asked of a part that draws no edge of its own,
  * whose controls sit side by side in a row of the same component that
  * frames them (a pager's control row around its page cells), go on that
  * row: one strip, never a border or corners on each control. A part whose
@@ -64,6 +64,27 @@ describe('a border or corners on a row of joined controls', () => {
     );
     expect(corners.run.join('\n')).not.toMatch(/--on (pagination-item|button)/);
     expect(corners.run[0]).toMatch(/ how pagination-list$/);
+    const shadow = await refusal(() =>
+      themeEditSet('p', 'box-shadow', '0 1px 2px rgba(0, 0, 0, 0.05)', {
+        cwd,
+        on: 'pagination',
+      }),
+    );
+    expect(shadow.run).toEqual([
+      expect.stringMatching(
+        / set p box-shadow '0 1px 2px rgba\(0, 0, 0, 0\.05\)' --on pagination-list$/,
+      ),
+    ]);
+    for (const [thing, value] of [
+      ['background-color', '#ffffff'],
+      ['outline', '1px solid #dddddd'],
+    ]) {
+      const box = await refusal(() =>
+        themeEditSet('p', thing, value, {cwd, on: 'pagination'}),
+      );
+      expect(box.run).toHaveLength(1);
+      expect(box.run[0]).toMatch(/ --on pagination-list$/);
+    }
     // Once the row has its border, the corners go on it.
     await themeEditSet('p', 'border', '1px solid #dddddd', {
       cwd,
