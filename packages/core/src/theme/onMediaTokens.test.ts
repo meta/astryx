@@ -925,3 +925,63 @@ describe('reset.css baseline media rules', () => {
     expect(darkMatch![1]).not.toContain('--color-accent');
   });
 });
+
+describe('generateOnMediaCSS restatements on a surface a dark page flips', () => {
+  // An inverted fill, dark on a light page and light on a dark page, flips a
+  // toast card: the card names the dark side for a light page and takes the
+  // light side on a dark page. The light side holds its own border; the dark
+  // side re-declares the border, and a rule changes the accent it reads.
+  const flipping = defineTheme({
+    name: 'media-scheme-replay-flip',
+    tokens: {
+      '--color-background-inverted': ['#0a1317', '#f4f0e8'],
+      '--color-on-dark': ['#ffffff', '#ffffff'],
+      '--color-on-light': ['#111111', '#111111'],
+      '--color-accent': ['#111111', '#eeeeee'],
+      '--color-border-emphasized': 'var(--color-accent)',
+      '--color-border': 'var(--color-accent)',
+    },
+    onLight: {tokens: {'--color-border-emphasized': '#333333'}},
+    adaptations: {
+      rules: [
+        {
+          when: {contrast: 'more'},
+          value: {tokens: {'--color-accent': '#ff0000'}},
+        },
+      ],
+    },
+  });
+  const css = generateOnMediaCSS(flipping);
+  const query = css.slice(css.indexOf('\n@media '));
+  const rulesWith = (declaration: string) =>
+    [...query.matchAll(/([^{};]+)\{([^{}]*)\}/g)]
+      .filter(match => match[2].includes(declaration))
+      .map(match => match[1].trim());
+
+  it("keeps the light side's own border on a card a dark page flips to light", () => {
+    // The dark side restates the border under the rule, on a selector that
+    // also matches the flipped card. Its light dark-page copy, written later,
+    // restores the light side's own value there.
+    const rules = [...query.matchAll(/([^{};]+)\{([^{}]*)\}/g)];
+    const darkRestated = rules.findIndex(
+      match =>
+        match[1].trim() === '[data-astryx-media="dark"]' &&
+        match[2].includes('--color-border-emphasized: #ff0000;'),
+    );
+    const lightKept = rules.findIndex(
+      match =>
+        match[1].includes('[data-astryx-media-dark-page="light"]') &&
+        match[2].includes('--color-border-emphasized: #333333;'),
+    );
+    expect(darkRestated).toBeGreaterThanOrEqual(0);
+    expect(lightKept).toBeGreaterThan(darkRestated);
+  });
+
+  it('restates a value both sides re-declare on the card a dark page flips', () => {
+    expect(
+      rulesWith('--color-border: #ff0000;').some(selector =>
+        selector.includes('[data-astryx-media-dark-page="light"]'),
+      ),
+    ).toBe(true);
+  });
+});

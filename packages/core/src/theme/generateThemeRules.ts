@@ -2119,10 +2119,25 @@ function overlappingRuleBlocks(
     ruleSurfaceReplays: ReadonlyArray<RuleSurfaceReplays>;
     surfaceReplays: ReadonlyMap<'dark' | 'light', [string, string][]>;
     sink: DiagnosticSink;
+    /** Each rule's own values per side (the surface's tokens and roles). */
+    ruleOwnBySide: ReadonlyArray<ReadonlyMap<MediaSide, ReadonlyMap<string, string>>>;
+    /** The dark-page copies of a query's restatements. */
+    darkPageRestatements: (
+      restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
+      ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+      location: string,
+    ) => string[];
   },
 ): string[] {
-  const {rootValues, ruleRootValues, ruleSurfaceReplays, surfaceReplays, sink} =
-    context;
+  const {
+    rootValues,
+    ruleRootValues,
+    ruleSurfaceReplays,
+    surfaceReplays,
+    sink,
+    ruleOwnBySide,
+    darkPageRestatements,
+  } = context;
   const later = ruleSurfaceReplays[laterIndex];
   const blocks: string[] = [];
   for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++) {
@@ -2133,6 +2148,7 @@ function overlappingRuleBlocks(
       ...ruleRootValues[laterIndex],
     };
     const parts: string[] = [];
+    const overlapBySide = new Map<MediaSide, [string, string][]>();
     for (const surface of ['dark', 'light'] as const) {
       const laterReplays = later.get(surface);
       const earlierReplays = earlier.get(surface);
@@ -2197,8 +2213,16 @@ function overlappingRuleBlocks(
           sink,
         );
         parts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+        overlapBySide.set(surface, overlapEntries);
       }
     }
+    parts.push(
+      ...darkPageRestatements(
+        overlapBySide,
+        ruleOwnBySide[laterIndex] ?? new Map(),
+        `adaptations[${laterIndex}]`,
+      ),
+    );
     if (parts.length > 0) {
       blocks.push(
         `@media ${rules[earlierIndex].query} {\n${generateAdaptationMediaBlock(
@@ -2374,12 +2398,56 @@ export function generateOnMediaCSS(
     }
   }
 
+  /**
+   * The dark-page copies of one query's restatements. A restatement is written
+   * for a side's own selector, which also reaches a surface that a dark page
+   * flips to the other side. So, for each side a dark page flips a surface to,
+   * the copy writes that side's restatements and, for a token the other side
+   * restates but this side holds, this side's own value.
+   */
+  const darkPageRestatements = (
+    restatedBySide: ReadonlyMap<MediaSide, [string, string][]>,
+    ownBySide: ReadonlyMap<MediaSide, ReadonlyMap<string, string>>,
+    location: string,
+  ): string[] => {
+    const copies: string[] = [];
+    for (const side of flipped) {
+      const other: MediaSide = side === 'dark' ? 'light' : 'dark';
+      const restated = restatedBySide.get(side) ?? [];
+      const restatedNames = new Set(restated.map(([name]) => name));
+      const own = ownBySide.get(side) ?? new Map<string, string>();
+      const kept = (restatedBySide.get(other) ?? []).flatMap(
+        ([name]): [string, string][] => {
+          const value = own.get(name);
+          return value === undefined || restatedNames.has(name)
+            ? []
+            : [[name, value]];
+        },
+      );
+      const entries = [...restated, ...kept];
+      if (entries.length === 0) {
+        continue;
+      }
+      const declarations = joinDeclarations(
+        entries,
+        `${location}.on${side}.tokens.`,
+        quiet,
+      );
+      copies.push(
+        `  ${mediaSelector(`${side}@dark-page`)} {\n${declarations}\n  }`,
+        `  @media (prefers-color-scheme: dark) {\n  ${mediaSelector(`${side}@dark-page-preference`)} {\n${declarations}\n  }\n  }`,
+      );
+    }
+    return copies;
+  };
+
   const adaptationMediaRoleBlocks: string[] = [];
   const adaptationAliases = adaptationStatusRoleDefaults(context);
   // Per rule: the values it writes on the theme root, and per surface the
   // tokens its block restates and the names the surface keeps as its own.
   const ruleRootValues: Record<string, string>[] = [];
   const ruleSurfaceReplays: RuleSurfaceReplays[] = [];
+  const ruleOwnBySide: Map<MediaSide, Map<string, string>>[] = [];
   for (const [index, rule] of rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
     // The values this rule writes on the theme root under its query.
@@ -2392,6 +2460,9 @@ export function generateOnMediaCSS(
     const surfaceReplaysOfRule: RuleSurfaceReplays = new Map();
     ruleSurfaceReplays.push(surfaceReplaysOfRule);
     const roleParts: string[] = [];
+    const restatedBySide = new Map<MediaSide, [string, string][]>();
+    const ownBySide = new Map<MediaSide, Map<string, string>>();
+    ruleOwnBySide.push(ownBySide);
     for (const surface of ['dark', 'light'] as const) {
       const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
       if (!onMedia) {
@@ -2461,6 +2532,8 @@ export function generateOnMediaCSS(
         restated: new Map(schemeEntries),
         excluded,
       });
+      restatedBySide.set(surface, schemeEntries);
+      ownBySide.set(surface, new Map(ownSurfaceEntries));
       if (schemeEntries.length > 0) {
         const declarations = joinDeclarations(
           schemeEntries,
@@ -2485,6 +2558,13 @@ export function generateOnMediaCSS(
         );
       }
     }
+    roleParts.push(
+      ...darkPageRestatements(
+        restatedBySide,
+        ownBySide,
+        `adaptations[${index}]`,
+      ),
+    );
     if (roleParts.length > 0) {
       adaptationMediaRoleBlocks.push(
         generateAdaptationMediaBlock(rule.query, roleParts, scopeSelector),
@@ -2497,6 +2577,8 @@ export function generateOnMediaCSS(
         ruleSurfaceReplays,
         surfaceReplays,
         sink,
+        ruleOwnBySide,
+        darkPageRestatements,
       }),
     );
   }

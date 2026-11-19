@@ -87,15 +87,44 @@ function declarations(body) {
   return map;
 }
 
-/** The theme root's token declarations and each media surface's, in order. */
+/** A selector list split at its top-level commas. */
+function selectorList(list) {
+  const selectors = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const char = list[i];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    } else if (char === ',' && depth === 0) {
+      selectors.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  selectors.push(list.slice(start).trim());
+  return selectors;
+}
+
+/**
+ * The theme root's token declarations and each media surface's, in order. A
+ * surface's rules are those with a selector that starts with its own side
+ * attribute, on its own or in a list: a minifier can join a band's rule with
+ * another rule that holds the same declarations, such as its dark-page copy.
+ */
 function blocks(source) {
   const root = source.match(/:scope\s*\{([^}]*--color-text-primary[^}]*)\}/);
   /** @type {Record<string, Record<string, string>>} */
   const surfaces = {dark: {}, light: {}};
-  for (const match of source.matchAll(
-    /\[data-astryx-media="(dark|light)"\]\s*\{([^}]*)\}/g,
-  )) {
-    Object.assign(surfaces[match[1]], declarations(match[2]));
+  for (const match of source.matchAll(/([^{};]+)\{([^{}]*)\}/g)) {
+    for (const selector of selectorList(match[1])) {
+      const side = /^\[data-astryx-media="(dark|light)"\]/.exec(selector)?.[1];
+      if (side !== undefined) {
+        Object.assign(surfaces[side], declarations(match[2]));
+        break;
+      }
+    }
   }
   return {root: declarations(root ? root[1] : ''), surfaces};
 }
