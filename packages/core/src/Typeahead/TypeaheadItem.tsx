@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file TypeaheadItem.tsx
  * @input Uses React, StyleX, SearchableItem
@@ -11,7 +13,7 @@
  * - /packages/cli/assets/templates/blocks/components/Typeahead/ (showcase blocks)
  */
 
-import React, {type ReactNode} from 'react';
+import React, {useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -23,6 +25,7 @@ import type {SearchableItem} from './types';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 
 // =============================================================================
 // Types
@@ -48,7 +51,8 @@ export interface TypeaheadItemProps<
   description?: string;
 
   /**
-   * Whether this item is disabled.
+   * Whether this item is disabled. A disabled item is dimmed, its option is
+   * announced as disabled, and it is never picked. Arrow keys still reach it.
    * @default false
    */
   isDisabled?: boolean;
@@ -139,6 +143,21 @@ export function TypeaheadItem<T extends SearchableItem>({
   style,
   ...rest
 }: TypeaheadItemProps<T>) {
+  // A disabled item marks the option that holds it, so the option is
+  // announced as disabled and a pick reads the mark when it happens.
+  const markOption = useCallback(
+    (node: HTMLDivElement | null) => {
+      const option = isDisabled ? node?.closest('[role="option"]') : null;
+      if (option == null) {
+        return;
+      }
+      option.setAttribute('aria-disabled', 'true');
+      return () => option.removeAttribute('aria-disabled');
+    },
+    [isDisabled],
+  );
+  const mergedRef = useMergedRefs(ref, markOption);
+
   // If item has a pre-rendered element, use it
   if (item.element) {
     return <>{item.element}</>;
@@ -146,7 +165,7 @@ export function TypeaheadItem<T extends SearchableItem>({
 
   return (
     <div
-      ref={ref}
+      ref={mergedRef}
       {...mergeProps(
         themeProps('typeahead-item'),
         stylex.props(styles.container, isDisabled && styles.disabled, xstyle),
