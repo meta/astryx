@@ -45,6 +45,7 @@ import {
  * @property {string} [alpha] Two hex digits of opacity.
  * @property {string} [family] The family the stop is from when it is not the token's own: `neutral` for text on a fill, `black` or `white` for the palette's own ends, `literal` for a color outside the palette.
  * @property {boolean} [exact] The stop holds the seed's exact color (an exact anchor).
+ * @property {boolean} [base] The half is the base theme's own value in that mode (family `literal`): the generated module reads it from the base, so the mode follows the base theme.
  */
 
 /**
