@@ -151,9 +151,15 @@ export function colorOpacitiesIn(value) {
   const text = String(value ?? '');
   /** @type {Array<{index: number, typed: string, color: string | null}>} */
   const out = [];
+  // (A url() holds a path, `url(/img/white/24.png)`, never a color.)
+  const urls = [
+    ...text.matchAll(/\burl\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\)/gi),
+  ].map(u => [u.index ?? 0, (u.index ?? 0) + u[0].length]);
   for (const m of text.matchAll(
     /(?<![\w#.])(#[0-9a-f]{3,8}|[a-z]+(?:-\d{2,3})?)(?=\/)/gi,
   )) {
+    if (urls.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b))
+      continue;
     const at = (m.index ?? 0) + m[0].length;
     const op = opacitySuffixAt(text, at);
     if (!op) continue;
