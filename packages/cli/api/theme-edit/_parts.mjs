@@ -1431,6 +1431,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     ]
       .filter(x => x[2] !== 'false')
       .map(x => `${x[1]}=${x[2]}`);
+    const open = context.includes('aria-expanded=true');
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
@@ -1510,6 +1511,10 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         : parent.cond;
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
+        // (An element drawn open is never disabled: what opens it is
+        // enabled. Its disabled rules are recorded where Core draws it
+        // closed, never as open and disabled at once.)
+        if (open && d.cond && /disabled/.test(d.cond)) continue;
         // (An inherited background paints nothing of its own: it reads no
         // token, and what shows is its parent's.)
         const toks = expand(d.value, env, tokens);
